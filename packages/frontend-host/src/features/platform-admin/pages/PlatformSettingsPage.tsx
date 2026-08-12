@@ -63,6 +63,7 @@ import {
   PlatformPermission,
   PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS,
 } from '../../../shared/auth/permissions';
+import { configurationOwnershipDescription } from '../identityAccessCopy';
 
 const AccessControl = React.lazy(() => import('./AccessControl'));
 const AuthzPolicies = React.lazy(() => import('./AuthzPolicies'));
@@ -172,6 +173,18 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const gitProvidersManageUnavailableReason = hasPermissionSnapshot && !gitProvidersManageDecision.allowed ? gitProvidersManageDecision.reason : null;
 
   const { data: settings, isLoading, error } = usePlatformSettings({ enabled: canReadSettings });
+  const settingsSectionOwnership = (sectionName: string) => settings?.sectionOwnership?.find((entry) => entry.section === sectionName);
+  const isSettingsSectionLocked = (sectionName: string) => {
+    const ownership = settingsSectionOwnership(sectionName);
+    return Boolean(ownership?.sourceRef && ownership.ownershipMode === 'config_locked');
+  };
+  const canManageSettingsSection = (sectionName: string) => canManageSettings && !isSettingsSectionLocked(sectionName);
+  const settingsSectionUnavailableReason = (sectionName: string) => {
+    const ownership = settingsSectionOwnership(sectionName);
+    return ownership?.sourceRef && ownership.ownershipMode === 'config_locked'
+      ? configurationOwnershipDescription(ownership.ownershipMode, ownership.sourceRef)
+      : settingsManageUnavailableReason;
+  };
   const hasServerActionAvailability = Boolean(permissionSnapshot?.platformActionAvailability);
   const legacyGovernanceSettingsConfigLocked = settings?.governanceBehavior?.governanceSettingsMutations === 'blocked'
     || settings?.accessGovernanceOwnershipMode === 'config_locked';
@@ -375,12 +388,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
                       assignEngineOwner.isPending || assignEngineDelegate.isPending;
 
   const handleToggle = (key: 'syncPushEnabled' | 'syncPullEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => {
-    if (!canManageSettings) return;
+    if (!canManageSettingsSection('git_sync')) return;
     updateSettings.mutate({ [key]: value });
   };
 
   const handleDeployRoleToggle = (role: string, checked: boolean) => {
-    if (!canManageSettings || !settings) return;
+    if (!canManageSettingsSection('deployment') || !settings) return;
     const current = Array.isArray(settings.defaultDeployRoles) ? settings.defaultDeployRoles : [];
     const updated = checked
       ? [...current, role]
@@ -414,7 +427,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const handleCredentiallessCustomerSidecarsEnabledChange = (enabled: boolean) => {
-    if (!canManageSettings) return;
+    if (!canManageSettingsSection('deployment')) return;
     updateSettings.mutate({ credentiallessCustomerSidecarsEnabled: enabled });
   };
 
@@ -434,8 +447,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         if (!canManageGitProviders) return;
         await updateGitProvider.mutateAsync({ id, updates });
       }}
-      canManageSettings={canManageSettings}
-      settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageSettings={canManageSettingsSection('git_sync')}
+      settingsUnavailableReason={settingsSectionUnavailableReason('git_sync')}
       canManageGitProviders={canManageGitProviders}
       gitProvidersUnavailableReason={gitProvidersManageUnavailableReason}
     />
@@ -468,10 +481,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       addInviteDomain={addInviteDomain}
       removeInviteDomain={removeInviteDomain}
       onToggleInviteAllowAll={(checked) => {
-        if (canManageSettings) updateSettings.mutate({ inviteAllowAllDomains: checked } as any);
+        if (canManageSettingsSection('invitations')) updateSettings.mutate({ inviteAllowAllDomains: checked } as any);
       }}
-      canManageSettings={canManageSettings}
-      settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageSettings={canManageSettingsSection('invitations')}
+      settingsUnavailableReason={settingsSectionUnavailableReason('invitations')}
     />
   );
 
@@ -479,10 +492,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     <PiiRedactionSettingsSection
       settings={settings}
       saving={piiSaving || updateSettings.isPending}
-      canManageSettings={canManageSettings}
-      settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageSettings={canManageSettingsSection('pii')}
+      settingsUnavailableReason={settingsSectionUnavailableReason('pii')}
       onSave={async (updates) => {
-        if (!canManageSettings) return;
+        if (!canManageSettingsSection('pii')) return;
         setPiiSaving(true);
         try {
           await updateSettings.mutateAsync(updates);
@@ -525,6 +538,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       onDragEnd={handleDragEnd}
       canManageSettings={canManageSettings}
       settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageDeploymentSettings={canManageSettingsSection('deployment')}
+      deploymentSettingsUnavailableReason={settingsSectionUnavailableReason('deployment')}
       canManageGovernanceSettings={canManageGovernanceSettings}
       governanceSettingsUnavailableReason={governanceSettingsUnavailableReason}
       canReadGovernance={canReadGovernance}
@@ -540,9 +555,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       localPasswordLoginMode: settings.localPasswordLoginMode,
       ssoProviderSelectionMode: settings.ssoProviderSelectionMode,
     } : null}
-    canManageLoginPolicy={canManageSettings}
-    loginPolicyUnavailableReason={settingsManageUnavailableReason}
-    onLoginPolicyChange={(change) => updateSettings.mutate(change)}
+    canManageLoginPolicy={canManageSettingsSection('login')}
+    loginPolicyUnavailableReason={settingsSectionUnavailableReason('login')}
+    onLoginPolicyChange={(change) => {
+      if (canManageSettingsSection('login')) updateSettings.mutate(change);
+    }}
   />;
   const renderIdentityMappings = () => <IdentityMappingsSettingsTab />;
   const renderConfiguration = () => <ConfigurationBundleSettingsTab />;
@@ -637,7 +654,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const inviteAllowAll = (settings as any)?.inviteAllowAllDomains ?? true;
 
   const addInviteDomain = () => {
-    if (!canManageSettings) return;
+    if (!canManageSettingsSection('invitations')) return;
     const raw = String(inviteDomainInput || '').trim().toLowerCase();
     if (!raw) return;
     const domain = raw.includes('@') ? raw.split('@').pop() || '' : raw;
@@ -649,7 +666,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const removeInviteDomain = (domain: string) => {
-    if (!canManageSettings) return;
+    if (!canManageSettingsSection('invitations')) return;
     const next = (normalizedInviteDomains || []).filter((d) => d !== domain);
     updateSettings.mutate({ inviteAllowedDomains: next } as any);
   };

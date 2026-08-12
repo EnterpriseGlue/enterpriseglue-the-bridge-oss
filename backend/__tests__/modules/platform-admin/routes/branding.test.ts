@@ -13,6 +13,19 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformBrandingService.js', () => ({
+  platformBrandingService: {
+    get: vi.fn().mockResolvedValue({
+      logoUrl: 'https://example.com/logo.png', loginLogoUrl: null,
+      loginTitleVerticalOffset: 0, loginTitleColor: null, logoTitle: 'Test Platform', logoScale: 100,
+      titleFontUrl: null, titleFontWeight: '600', titleFontSize: 14, titleVerticalOffset: 0,
+      menuAccentColor: null, faviconUrl: null, ownership: null,
+    }),
+    update: vi.fn().mockResolvedValue(undefined),
+    reset: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));

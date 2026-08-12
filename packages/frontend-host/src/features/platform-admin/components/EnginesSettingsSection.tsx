@@ -11,6 +11,7 @@ import type {
   PlatformSettings,
   ProjectEngineTargetPolicyMode,
 } from '../../../api/platform-admin'
+import { configurationOwnershipDescription, configurationOwnershipLabel } from '../identityAccessCopy'
 
 interface EnginesSettingsSectionProps {
   settings: PlatformSettings | undefined
@@ -43,6 +44,8 @@ interface EnginesSettingsSectionProps {
   onDragEnd: () => void
   canManageSettings?: boolean
   settingsUnavailableReason?: string | null
+  canManageDeploymentSettings?: boolean
+  deploymentSettingsUnavailableReason?: string | null
   canManageGovernanceSettings?: boolean
   governanceSettingsUnavailableReason?: string | null
   canReadGovernance?: boolean
@@ -161,6 +164,8 @@ export function EnginesSettingsSection({
   onDragEnd,
   canManageSettings = true,
   settingsUnavailableReason,
+  canManageDeploymentSettings = canManageSettings,
+  deploymentSettingsUnavailableReason,
   canManageGovernanceSettings = canManageSettings,
   governanceSettingsUnavailableReason,
   canReadGovernance = true,
@@ -176,8 +181,11 @@ export function EnginesSettingsSection({
   const selectedProjectAccessAuthority = settings?.projectAccessAuthority || 'manual'
   const engineRuntimeAuthorizationMode = settings?.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative'
   const settingsDisabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
+  const deploymentSettingsDisabledReason = deploymentSettingsUnavailableReason || settingsDisabledReason
   const governanceSettingsDisabledReason = governanceSettingsUnavailableReason || settingsDisabledReason
   const governanceAssignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
+  const environmentOrderingLocked = Boolean(envTags?.some((tag) => tag.sourceRef && tag.ownershipMode === 'config_locked'))
+  const canReorderEnvironments = canManageSettings && !environmentOrderingLocked
   const canAssignGovernance = canReadGovernance && canManageGovernance
 
   return (
@@ -319,8 +327,8 @@ export function EnginesSettingsSection({
                   labelText="Allow peer-authenticated customer sidecars without engine credentials"
                   checked={settings?.credentiallessCustomerSidecarsEnabled === true}
                   onChange={(_event, { checked }) => onCredentiallessCustomerSidecarsEnabledChange(Boolean(checked))}
-                  disabled={!canManageSettings}
-                  title={!canManageSettings ? settingsDisabledReason : undefined}
+                  disabled={!canManageDeploymentSettings}
+                  title={!canManageDeploymentSettings ? deploymentSettingsDisabledReason : undefined}
                 />
                 <p style={{ margin: 'var(--spacing-2) 0 0 1.75rem', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
                   For customer-managed sidecars authenticated with peer-to-peer service tokens. The sidecar does not store engine credentials; EnterpriseGlue still makes every authorization decision.
@@ -463,11 +471,11 @@ export function EnginesSettingsSection({
             <p style={{ margin: '0 0 var(--spacing-4) 0', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
               Project roles that can deploy to engines by default.
             </p>
-            {!canManageSettings && (
+            {!canManageDeploymentSettings && (
               <InlineNotification
                 kind="warning"
                 title="Default deploy permissions are read-only"
-                subtitle={settingsDisabledReason}
+                subtitle={deploymentSettingsDisabledReason}
                 hideCloseButton
                 lowContrast
                 style={{ marginBottom: 'var(--spacing-4)' }}
@@ -484,9 +492,9 @@ export function EnginesSettingsSection({
                     labelText={role.charAt(0).toUpperCase() + role.slice(1)}
                     checked={isChecked}
                     onChange={(_, { checked }) => {
-                      if (canManageSettings) onDeployRoleToggle(role, checked)
+                      if (canManageDeploymentSettings) onDeployRoleToggle(role, checked)
                     }}
-                    disabled={!canManageSettings}
+                    disabled={!canManageDeploymentSettings}
                   />
                 )
               })}
@@ -526,6 +534,16 @@ export function EnginesSettingsSection({
                 style={{ marginBottom: 'var(--spacing-4)' }}
               />
             )}
+            {canManageSettings && environmentOrderingLocked && (
+              <InlineNotification
+                kind="info"
+                title="Environment ordering is managed by configuration"
+                subtitle="Reordering is disabled while one or more environment tags are configuration-locked. Manual tags can still be added or edited."
+                hideCloseButton
+                lowContrast
+                style={{ marginBottom: 'var(--spacing-4)' }}
+              />
+            )}
 
             {envLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
@@ -536,24 +554,29 @@ export function EnginesSettingsSection({
               </div>
             ) : Array.isArray(envTags) && envTags.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
-                {envTags.map((tag) => (
+                {envTags.map((tag) => {
+                  const configLocked = Boolean(tag.sourceRef && tag.ownershipMode === 'config_locked')
+                  const tagDisabledReason = configLocked
+                    ? configurationOwnershipDescription(tag.ownershipMode, tag.sourceRef)
+                    : settingsDisabledReason
+                  return (
                   <div
                     key={tag.id}
-                    draggable={canManageSettings}
+                    draggable={canReorderEnvironments}
                     onDragStart={(e) => {
-                      if (canManageSettings) onDragStart(e, tag.id)
+                      if (canReorderEnvironments) onDragStart(e, tag.id)
                     }}
                     onDragOver={(e) => {
-                      if (canManageSettings) onDragOver(e, tag.id)
+                      if (canReorderEnvironments) onDragOver(e, tag.id)
                     }}
                     onDragLeave={() => {
-                      if (canManageSettings) onDragLeave()
+                      if (canReorderEnvironments) onDragLeave()
                     }}
                     onDrop={(e) => {
-                      if (canManageSettings) onDrop(e, tag.id)
+                      if (canReorderEnvironments) onDrop(e, tag.id)
                     }}
                     onDragEnd={() => {
-                      if (canManageSettings) onDragEnd()
+                      if (canReorderEnvironments) onDragEnd()
                     }}
                     style={{
                       display: 'flex',
@@ -571,25 +594,35 @@ export function EnginesSettingsSection({
                           ? '2px dashed var(--cds-interactive-01, #0f62fe)'
                           : '1px solid var(--cds-border-subtle-01, #e0e0e0)',
                       gap: 'var(--spacing-3)',
-                      cursor: canManageSettings ? 'grab' : 'default',
+                      cursor: canReorderEnvironments ? 'grab' : 'default',
                       opacity: draggedTagId === tag.id ? 0.5 : 1,
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    <Draggable size={16} style={{ color: 'var(--color-text-secondary)', flexShrink: 0, cursor: canManageSettings ? 'grab' : 'default' }} />
+                    <Draggable size={16} style={{ color: 'var(--color-text-secondary)', flexShrink: 0, cursor: canReorderEnvironments ? 'grab' : 'default' }} />
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: tag.color ?? 'var(--cds-border-strong-01)', flexShrink: 0 }} />
                     <span style={{ flex: 1, fontWeight: 500, fontSize: '14px' }}>{tag.name}</span>
                     <Tag type={tag.manualDeployAllowed ? 'green' : 'red'} size="sm">
                       {tag.manualDeployAllowed ? 'Manual OK' : 'CI/CD Only'}
                     </Tag>
+                    {tag.ownershipMode !== 'manual' && (
+                      <Tag
+                        type={tag.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'}
+                        size="sm"
+                        title={configurationOwnershipDescription(tag.ownershipMode, tag.sourceRef)}
+                      >
+                        {configurationOwnershipLabel(tag.ownershipMode)}
+                      </Tag>
+                    )}
+                    {tag.driftStatus === 'drifted' && <Tag type="red" size="sm">Drifted</Tag>}
                     <Button
                       kind="ghost"
                       size="sm"
                       hasIconOnly
                       renderIcon={Edit}
                       iconDescription="Edit"
-                      disabled={!canManageSettings}
-                      title={!canManageSettings ? settingsDisabledReason : undefined}
+                      disabled={!canManageSettings || configLocked}
+                      title={!canManageSettings || configLocked ? tagDisabledReason : undefined}
                       onClick={() => onOpenEditModal(tag)}
                     />
                     <Button
@@ -598,12 +631,13 @@ export function EnginesSettingsSection({
                       hasIconOnly
                       renderIcon={TrashCan}
                       iconDescription="Delete"
-                      disabled={!canManageSettings}
-                      title={!canManageSettings ? settingsDisabledReason : undefined}
+                      disabled={!canManageSettings || configLocked}
+                      title={!canManageSettings || configLocked ? tagDisabledReason : undefined}
                       onClick={() => onDeleteTag(tag)}
                     />
                   </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', margin: 0 }}>No environments configured yet.</p>

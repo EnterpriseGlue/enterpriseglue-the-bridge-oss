@@ -1,4 +1,4 @@
-import { type EntityManager } from 'typeorm';
+import { IsNull, type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
@@ -10,12 +10,17 @@ import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { ApiClient } from '@enterpriseglue/shared/infrastructure/persistence/entities/ApiClient.js';
+import { ServiceAccount } from '@enterpriseglue/shared/infrastructure/persistence/entities/ServiceAccount.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
@@ -46,6 +51,10 @@ import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { engineTenantMappingService } from './EngineTenantMappingService.js';
 import { engineBackstopGroupMappingService } from './EngineBackstopGroupMappingService.js';
 import { platformSettingsService } from './PlatformSettingsService.js';
+import { platformBrandingService } from './PlatformBrandingService.js';
+import { environmentTagService } from './EnvironmentTagService.js';
+import { headlessAdminCatalogService } from './HeadlessAdminCatalogService.js';
+import { adminConfigObjectOwnershipService } from './AdminConfigObjectOwnershipService.js';
 import { secretResolver } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
@@ -324,8 +333,18 @@ class ConfigBundleApplyService {
       if (!secretPreflight.valid || !secretPreflight.available || secretPreflight.availabilityHash !== input.expectedSecretPreflightHash) {
         return fail('Secret reference availability changed or is no longer available since preflight', 409);
       }
+    } else if (!secretPreflight.valid || !secretPreflight.available) {
+      return fail('Configuration bundle secret preflight failed', 422);
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-backstop-mappings.json', './engine-tenant-mappings.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => ![
+      './platform-settings.json', './environment-tags.json', './git-providers.json',
+      './email-configurations.json', './email-templates.json', './permissions.json',
+      './authorization-policies.json', './machine-principals.json', './external-engine-systems.json',
+      './roles.json', './groups.json', './engines.json', './engine-backstop-mappings.json',
+      './engine-tenant-mappings.json', './engine-sets.json', './runtime-resource-sets.json',
+      './assignments.json', './project-engine-targets.json', './identity-providers.json',
+      './identity-mappings.json',
+    ].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -396,6 +415,8 @@ class ConfigBundleApplyService {
     const desiredTargets = entries(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
     const desiredIdentityMappings = entries(compilation.files, './identity-mappings.json', 'identityMappings');
     const desiredIdentityProviders = new Map(entries(compilation.files, './identity-providers.json', 'identityProviders').map((provider) => [provider.key, provider]));
+    const desiredEnvironmentTags = entries(compilation.files, './environment-tags.json', 'environmentTags');
+    const desiredPlatformSettings = (compilation.files['./platform-settings.json'] as { platformSettings?: Record<string, any> } | undefined)?.platformSettings;
     const materializeIds: string[] = [];
     const materializeRuntimeResourceSetIds: string[] = [];
     const changedEngineIds: string[] = [];
@@ -422,14 +443,103 @@ class ConfigBundleApplyService {
       const providerRepo = manager.getRepository(IdentityProvider);
       const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
 
+      const environmentChanges = diff.changes.filter((change) => change.objectType === 'environment_tag' && change.operation !== 'noop' && change.operation !== 'conflict');
+      if (environmentChanges.length > 0) {
+        const expectedGenerations = Object.fromEntries(environmentChanges
+          .filter((change) => change.currentId)
+          .map((change) => [change.key, {
+            updatedAt: change.expectedUpdatedAt!,
+            generation: change.expectedOwnershipGeneration!,
+          }]));
+        await environmentTagService.applyConfiguration(manager, desiredEnvironmentTags, {
+          sourceRef: `config_bundle:${manifest.metadata.key}`,
+          tenantId,
+          mode: manifest.mode as 'additive' | 'authoritative',
+          appliedAt: now,
+          expectedGenerations,
+        });
+        for (const change of environmentChanges) {
+          await writeAudit(manager, {
+            tenantId,
+            actorId: input.actorId,
+            action: `authz.config_bundle.environment_tag.${change.operation}`,
+            resourceType: 'environment_tag',
+            resourceId: change.currentId || change.key,
+            details: { bundleKey: manifest.metadata.key, environmentTagKey: change.key, canonicalHash: diff.canonicalHash },
+          });
+          if (change.operation === 'create') created += 1;
+          else if (change.operation === 'archive') archived += 1;
+          else updated += 1;
+        }
+      }
+
+      const catalogChanges = diff.changes.filter((change) => [
+        'git_provider', 'email_configuration', 'email_template', 'permission',
+        'authorization_policy', 'api_client', 'service_account', 'external_engine_system',
+      ].includes(change.objectType));
+      // Permission removals must run after configured roles and their bindings
+      // are retired. Creates and updates remain early because roles can refer
+      // to a permission introduced by this same atomic apply.
+      const earlyCatalogChanges = catalogChanges.filter((change) =>
+        change.objectType !== 'permission' || change.operation !== 'archive');
+      const permissionArchiveChanges = catalogChanges.filter((change) =>
+        change.objectType === 'permission' && change.operation === 'archive');
+      if (earlyCatalogChanges.some((change) => change.operation !== 'noop' && change.operation !== 'conflict')) {
+        await headlessAdminCatalogService.applyChanges(manager, {
+          files: compilation.files!,
+          changes: earlyCatalogChanges,
+          sourceRef: `config_bundle:${manifest.metadata.key}`,
+          tenantId,
+          actorId: input.actorId,
+          appliedAt: now,
+          principalType: policy?.tenantReferencePrincipalType,
+          principalId: policy?.tenantReferencePrincipalId,
+        });
+      }
+
+      const mutablePlatformChanges = diff.changes.filter((change) =>
+        change.objectType === 'platform_settings'
+        && change.operation !== 'noop'
+        && change.operation !== 'conflict'
+        && change.currentId
+        && change.expectedUpdatedAt !== undefined);
+      if (mutablePlatformChanges.length > 0) {
+        const expectedValues = new Set(mutablePlatformChanges.map((change) => change.expectedUpdatedAt));
+        if (expectedValues.size !== 1) fail('Platform settings preview generations are inconsistent', 409);
+        const expectedUpdatedAt = mutablePlatformChanges[0].expectedUpdatedAt!;
+        const claimed = await manager.getRepository(PlatformSettings).update(
+          { id: 'default', updatedAt: expectedUpdatedAt },
+          { id: 'default' },
+        );
+        if (claimed.affected !== 1) fail('Platform settings changed after preview; run diff again', 409);
+      }
+
       for (const change of diff.changes) {
         if (change.operation === 'noop' || change.operation === 'conflict') continue;
+        if (change.objectType === 'environment_tag') continue;
+        if ([
+          'git_provider', 'email_configuration', 'email_template', 'permission',
+          'authorization_policy', 'api_client', 'service_account', 'external_engine_system',
+        ].includes(change.objectType)) {
+          await writeAudit(manager, {
+            tenantId,
+            actorId: input.actorId,
+            action: `authz.config_bundle.${change.objectType}.${change.operation}`,
+            resourceType: change.objectType,
+            resourceId: change.currentId || change.key,
+            details: { bundleKey: manifest.metadata.key, configKey: change.key, canonicalHash: diff.canonicalHash },
+          });
+          if (change.operation === 'create') created += 1;
+          else if (change.operation === 'archive') archived += 1;
+          else updated += 1;
+          continue;
+        }
         if (change.objectType === 'platform_settings') {
           if (change.key === 'login-policy' && manifest.login) {
             await platformSettingsService.update({
               localPasswordLoginMode: manifest.login.localPassword,
               ssoProviderSelectionMode: manifest.login.providerSelection,
-            }, input.actorId, { store: manager });
+            }, input.actorId, { store: manager, bypassOwnership: true });
             await writeAudit(manager, {
               tenantId,
               actorId: input.actorId,
@@ -439,6 +549,87 @@ class ConfigBundleApplyService {
               resourceType: 'platform_settings',
               resourceId: 'default',
               details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash },
+            });
+            if (change.operation === 'create') created += 1;
+            else updated += 1;
+            continue;
+          }
+          if (desiredPlatformSettings && ['general', 'git_sync', 'deployment', 'invitations', 'pii', 'branding'].includes(change.key)) {
+            const sectionName = change.key as 'general' | 'git_sync' | 'deployment' | 'invitations' | 'pii' | 'branding';
+            const sourceRef = `config_bundle:${manifest.metadata.key}`;
+            const sourceSection = sectionName === 'git_sync' ? desiredPlatformSettings.gitSync : desiredPlatformSettings[sectionName];
+            const ownership = {
+              scopeKey: tenantScopeKey(tenantId),
+              sourceRef,
+              ownershipMode: desiredPlatformSettings.ownershipMode as 'manual' | 'config_locked' | 'config_warn',
+              sourceHash: objectFingerprint('platform_settings', sectionName, sourceSection),
+              appliedAt: now,
+              expectedGeneration: change.expectedOwnershipGeneration,
+            };
+            if (sectionName === 'branding') {
+              await platformBrandingService.update(desiredPlatformSettings.branding, input.actorId, {
+                store: manager,
+                sectionOwnership: ownership,
+              });
+            } else {
+              let update: Record<string, unknown>;
+              if (sectionName === 'general') {
+                const defaultKey = desiredPlatformSettings.general.defaultEnvironmentTagKey;
+                const defaultTag = defaultKey
+                  ? await manager.getRepository(EnvironmentTag).findOneBy({ configKey: defaultKey })
+                  : null;
+                if (defaultKey && !defaultTag) fail(`Environment tag ${defaultKey} no longer exists`, 409);
+                update = {
+                  defaultEnvironmentTagId: defaultTag?.id || null,
+                  emailPlatformName: desiredPlatformSettings.general.emailPlatformName,
+                };
+              } else if (sectionName === 'git_sync') {
+                update = {
+                  syncPushEnabled: desiredPlatformSettings.gitSync.pushEnabled,
+                  syncPullEnabled: desiredPlatformSettings.gitSync.pullEnabled,
+                  syncBothEnabled: desiredPlatformSettings.gitSync.bothEnabled,
+                  gitProjectTokenSharingEnabled: desiredPlatformSettings.gitSync.projectTokenSharingEnabled,
+                };
+              } else if (sectionName === 'deployment') {
+                update = {
+                  defaultDeployRoles: desiredPlatformSettings.deployment.defaultDeployRoles,
+                  credentiallessCustomerSidecarsEnabled: desiredPlatformSettings.deployment.credentiallessCustomerSidecarsEnabled,
+                };
+              } else if (sectionName === 'invitations') {
+                update = {
+                  inviteAllowAllDomains: desiredPlatformSettings.invitations.allowAllDomains,
+                  inviteAllowedDomains: desiredPlatformSettings.invitations.allowedDomains,
+                };
+              } else {
+                update = {
+                  piiRegexEnabled: desiredPlatformSettings.pii.regexEnabled,
+                  piiExternalProviderEnabled: desiredPlatformSettings.pii.externalProviderEnabled,
+                  piiExternalProviderType: desiredPlatformSettings.pii.externalProviderType,
+                  piiExternalProviderEndpoint: desiredPlatformSettings.pii.externalProviderEndpoint,
+                  piiExternalProviderAuthHeader: desiredPlatformSettings.pii.externalProviderAuthHeader,
+                  piiExternalProviderAuthToken: desiredPlatformSettings.pii.externalProviderAuthTokenRef
+                    ? `ref:${desiredPlatformSettings.pii.externalProviderAuthTokenRef}`
+                    : null,
+                  piiExternalProviderProjectId: desiredPlatformSettings.pii.externalProviderProjectId,
+                  piiExternalProviderRegion: desiredPlatformSettings.pii.externalProviderRegion,
+                  piiRedactionStyle: desiredPlatformSettings.pii.redactionStyle,
+                  piiScopes: desiredPlatformSettings.pii.scopes,
+                  piiMaxPayloadSizeBytes: desiredPlatformSettings.pii.maxPayloadSizeBytes,
+                };
+              }
+              await platformSettingsService.update(update, input.actorId, {
+                store: manager,
+                sectionOwnership: { sections: [sectionName], ...ownership },
+                bypassOwnership: true,
+              });
+            }
+            await writeAudit(manager, {
+              tenantId,
+              actorId: input.actorId,
+              action: `authz.config_bundle.platform_settings.${change.operation}`,
+              resourceType: 'platform_settings',
+              resourceId: 'default',
+              details: { bundleKey: manifest.metadata.key, section: sectionName, canonicalHash: diff.canonicalHash },
             });
             if (change.operation === 'create') created += 1;
             else updated += 1;
@@ -504,6 +695,7 @@ class ConfigBundleApplyService {
             updated += 1;
           } else if (change.operation === 'archive' && change.currentId) {
             await permissionService.updateConfiguredCustomRole(change.currentId, { isArchived: true, isAssignable: false, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync' }, manager);
+            await manager.getRepository(RbacRolePermission).delete({ roleId: change.currentId });
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.role.archive', resourceType: 'role', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, roleKey: change.key, canonicalHash: diff.canonicalHash } });
             archived += 1;
           }
@@ -718,8 +910,8 @@ class ConfigBundleApplyService {
           .filter((change) => change.objectType === 'engine_backstop_mapping')
           .map((change) => [change.key, change]),
       );
-      const backstopMappingTenantId = tenantId || fail('Backstop mappings require a concrete tenant-scoped configuration bundle', 422);
       for (const mapping of desiredEngineBackstopMappings) {
+        const backstopMappingTenantId = tenantId || fail('Backstop mappings require a concrete tenant-scoped configuration bundle', 422);
         const change = backstopMappingChangesByKey.get(mapping.key);
         if (!change || change.operation === 'noop') continue;
         if (change.operation === 'conflict' || change.operation === 'archive') {
@@ -962,11 +1154,26 @@ class ConfigBundleApplyService {
       const desiredKeys = new Set<string>();
       for (const assignment of desiredAssignments) {
         const sourceHash = objectFingerprint('assignment', assignment.key || hashCanonicalConfig(assignment), assignment);
-        if (assignment.principal.type !== 'group') fail('Config apply currently supports group principals only', 422);
         if (!['platform', 'tenant', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
         const role = roleByKey.get(assignment.roleKey);
-        const group = groupByKey.get(assignment.principal.key);
-        if (!role || !group) fail(`Config assignment references an unresolved role or group: ${assignment.roleKey}`, 422);
+        let principalId: string | null = null;
+        if (assignment.principal.type === 'group') {
+          principalId = groupByKey.get(assignment.principal.key)?.id || null;
+        } else if (assignment.principal.type === 'user') {
+          principalId = (await manager.getRepository(User).findOne({ where: { id: assignment.principal.id, isActive: true }, select: ['id'] }))?.id || null;
+        } else if (assignment.principal.key) {
+          principalId = (await adminConfigObjectOwnershipService.findForConfigKey(
+            manager,
+            assignment.principal.type,
+            tenantId,
+            assignment.principal.key,
+          ))?.objectId || null;
+        } else if (assignment.principal.type === 'api_client' && assignment.principal.id) {
+          principalId = (await manager.getRepository(ApiClient).findOne({ where: { id: assignment.principal.id, isActive: true }, select: ['id'] }))?.id || null;
+        } else if (assignment.principal.type === 'service_account' && assignment.principal.id) {
+          principalId = (await manager.getRepository(ServiceAccount).findOne({ where: { id: assignment.principal.id, isActive: true }, select: ['id'] }))?.id || null;
+        }
+        if (!role || !principalId) fail(`Config assignment references an unresolved role or principal: ${assignment.roleKey}`, 422);
         let scopeId: string | null = assignment.scope.type === 'platform' ? null
           : assignment.scope.type === 'tenant' ? tenantId
           : assignment.scope.type === 'engine' ? engineByKey.get(assignment.scope.engineKey)?.id || null
@@ -984,12 +1191,12 @@ class ConfigBundleApplyService {
           }
         }
         if (assignment.scope.type !== 'platform' && !scopeId) fail('Config assignment references an unresolved scope', 422);
-        const assignmentKey = canonicalRoleAssignmentKey({ tenantId, principalType: 'group', principalId: group.id, roleId: role.id, scopeType: assignment.scope.type, scopeId, source: 'config', sourceRef });
+        const assignmentKey = canonicalRoleAssignmentKey({ tenantId, principalType: assignment.principal.type, principalId, roleId: role.id, scopeType: assignment.scope.type, scopeId, source: 'config', sourceRef });
         desiredKeys.add(assignmentKey);
         const existing = await assignmentRepo.findOne({ where: { assignmentKey } });
         if (!existing) {
-          const assignmentId = await permissionService.createResolvedRoleAssignment(manager, assignmentKey, { principalType: 'group', principalId: group.id }, { tenantId, roleId: role.id, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceRef, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', expiresAt: assignment.expiresAt || null, createdById: input.actorId });
-          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.create', resourceType: 'role_assignment', resourceId: assignmentId, details: { bundleKey: manifest.metadata.key, roleKey: assignment.roleKey, principalGroupKey: assignment.principal.key, scopeType: assignment.scope.type, canonicalHash: diff.canonicalHash } });
+          const assignmentId = await permissionService.createResolvedRoleAssignment(manager, assignmentKey, { principalType: assignment.principal.type, principalId }, { tenantId, roleId: role.id, scopeType: assignment.scope.type, scopeId: scopeId || null, source: 'config', sourceRef, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', expiresAt: assignment.expiresAt || null, createdById: input.actorId });
+          await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.create', resourceType: 'role_assignment', resourceId: assignmentId, details: { bundleKey: manifest.metadata.key, roleKey: assignment.roleKey, principalType: assignment.principal.type, principalReference: assignment.principal.type === 'group' ? assignment.principal.key : assignment.principal.key || assignment.principal.id, scopeType: assignment.scope.type, canonicalHash: diff.canonicalHash } });
           created += 1;
         } else if (existing.expiresAt !== (assignment.expiresAt || null) || existing.ownershipMode !== (assignment.ownershipMode || 'config_locked')) {
           await permissionService.updateResolvedRoleAssignment(manager, existing.id, { expiresAt: assignment.expiresAt || null, ownershipMode: assignment.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', lastSeenAt: now });
@@ -998,13 +1205,32 @@ class ConfigBundleApplyService {
         await assignmentOverrideRepo.delete({ assignmentKey, sourceRef });
       }
       if (manifest.mode === 'authoritative') {
-        const existing = await assignmentRepo.find({ where: { source: 'config', sourceRef } });
+        const existing = await assignmentRepo.find({
+          where: { source: 'config', sourceRef, tenantId: tenantId || IsNull() },
+        });
         const staleIds = existing.filter((assignment) => !desiredKeys.has(assignment.assignmentKey)).map((assignment) => assignment.id);
         if (staleIds.length > 0) {
-          await permissionService.deleteResolvedRoleAssignments(manager, staleIds);
+          await permissionService.deleteResolvedRoleAssignments(manager, staleIds, {
+            tenantId,
+            source: 'config',
+            sourceRef,
+          });
           for (const id of staleIds) await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.assignment.delete', resourceType: 'role_assignment', resourceId: id, details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash } });
           archived += staleIds.length;
         }
+      }
+
+      if (permissionArchiveChanges.length > 0) {
+        await headlessAdminCatalogService.applyChanges(manager, {
+          files: compilation.files!,
+          changes: permissionArchiveChanges,
+          sourceRef,
+          tenantId,
+          actorId: input.actorId,
+          appliedAt: now,
+          principalType: policy?.tenantReferencePrincipalType,
+          principalId: policy?.tenantReferencePrincipalId,
+        });
       }
 
       const targetKeys = new Set<string>();
@@ -1061,7 +1287,9 @@ class ConfigBundleApplyService {
         }
       }
       if (manifest.mode === 'authoritative') {
-        const existing = await targetRepo.find({ where: { source: 'config', sourceRef } });
+        const existing = await targetRepo.find({
+          where: { source: 'config', sourceRef, tenantId: tenantId || IsNull() },
+        });
         for (const target of existing) {
           if (targetKeys.has(`${target.projectId}:${target.engineId}`)) continue;
           await projectEngineTargetService.updateTarget(target.id, { tenantId, status: 'archived', sourceHash: diff.canonicalHash, lastAppliedAt: now, driftStatus: 'in_sync', allowSourceOwnedMutation: true }, manager);

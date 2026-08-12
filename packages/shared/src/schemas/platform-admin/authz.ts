@@ -148,6 +148,10 @@ export const AuthzPolicyResponseSchema = z.object({
   action: z.string().optional(),
   conditions: z.record(z.string(), z.unknown()),
   isActive: z.boolean(),
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
 }).strict();
 
 /** Public policy write contract; persistence-only tenant and actor fields are route-owned. */
@@ -287,6 +291,10 @@ export const PermissionCatalogEntrySchema = z.object({
   createdById: z.string().nullable().optional(),
   createdAt: z.number().optional(),
   updatedAt: z.number().optional(),
+  configKey: z.string().nullable().optional(),
+  sourceRef: z.string().nullable().optional(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']).optional(),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable().optional(),
 });
 
 export const CustomPermissionCreateSchema = z.object({
@@ -516,6 +524,10 @@ export const ApiClientSchema = z.object({
   revokedAt: z.number().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
 });
 
 export const ApiClientCreateSchema = z.object({
@@ -540,6 +552,10 @@ export const ServiceAccountSchema = z.object({
   revokedAt: z.number().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
 });
 
 export const ServiceAccountCreateSchema = z.object({
@@ -619,6 +635,10 @@ export const ExternalEngineSystemSchema = z.object({
   createdById: z.string().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
 });
 
 export const ExternalEngineSystemCreateSchema = z.object({

@@ -14,6 +14,11 @@ import type {
   UpdateGitProviderRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 import { GitProviderIcon } from '../../shared/components/GitProviderIcon';
+import { configurationOwnershipDescription, configurationOwnershipLabel } from '../identityAccessCopy';
+
+function isConfigLocked(provider: GitProviderAdminSummary | null | undefined): boolean {
+  return provider?.ownershipMode === 'config_locked';
+}
 
 interface GitProvidersSettingsProps {
   providers: GitProviderAdminSummary[];
@@ -43,7 +48,7 @@ export default function GitProvidersSettings({
   const disabledReason = unavailableReason || 'Missing permission platform:git-providers:manage';
 
   const handleToggleProvider = async (provider: GitProviderAdminSummary, enabled: boolean) => {
-    if (!canManageProviders) return false;
+    if (!canManageProviders || isConfigLocked(provider)) return false;
 
     if (enabled) {
       try {
@@ -86,7 +91,7 @@ export default function GitProvidersSettings({
 
   const handleConfirmDisable = async () => {
     if (!disableConfirmProvider) return;
-    if (!canManageProviders) return;
+    if (!canManageProviders || isConfigLocked(disableConfirmProvider)) return;
     if (disableConfirmText.trim().toLowerCase() !== 'disable') return;
 
     setDisableSubmitting(true);
@@ -102,7 +107,7 @@ export default function GitProvidersSettings({
   };
 
   const handleOpenConfig = (provider: GitProviderAdminSummary) => {
-    if (!canManageProviders) return;
+    if (!canManageProviders || isConfigLocked(provider)) return;
     setConfigProvider(provider);
     setFormData({
       useCustomUrl: !!provider.customBaseUrl,
@@ -201,11 +206,19 @@ export default function GitProvidersSettings({
                   Custom
                 </Tag>
               )}
+              {provider.ownershipMode !== 'manual' && (
+                <Tag type={provider.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'} size="sm" title={configurationOwnershipDescription(provider.ownershipMode, provider.sourceRef)}>
+                  {configurationOwnershipLabel(provider.ownershipMode)}
+                </Tag>
+              )}
+              {provider.driftStatus === 'drifted' && (
+                <Tag type="red" size="sm">Drifted</Tag>
+              )}
               <Button
                 kind="tertiary"
                 size="sm"
-                disabled={!canManageProviders}
-                title={!canManageProviders ? disabledReason : undefined}
+                disabled={!canManageProviders || isConfigLocked(provider)}
+                title={isConfigLocked(provider) ? configurationOwnershipDescription(provider.ownershipMode, provider.sourceRef) : !canManageProviders ? disabledReason : undefined}
                 onClick={() => handleOpenConfig(provider)}
               >
                 Configure
@@ -222,10 +235,10 @@ export default function GitProvidersSettings({
         primaryButtonText={saving ? 'Saving...' : 'Save changes'}
         secondaryButtonText="Cancel"
         onRequestSubmit={() => {
-          if (!configProvider || !canManageProviders) return;
+          if (!configProvider || !canManageProviders || isConfigLocked(configProvider)) return;
           handleSaveProvider(configProvider.id);
         }}
-        primaryButtonDisabled={!!saving || !canManageProviders}
+        primaryButtonDisabled={!!saving || !canManageProviders || isConfigLocked(configProvider)}
       >
         {configProvider && (
           <div
@@ -236,6 +249,9 @@ export default function GitProvidersSettings({
               paddingTop: 'var(--spacing-4)',
             }}
           >
+            {isConfigLocked(configProvider) && (
+              <InlineNotification kind="info" title="Managed by configuration" subtitle={configurationOwnershipDescription(configProvider.ownershipMode, configProvider.sourceRef)} hideCloseButton lowContrast />
+            )}
             <div>
               <Toggle
                 id={`toggle-${configProvider.id}`}
@@ -253,7 +269,7 @@ export default function GitProvidersSettings({
                   }
                   setConfigProvider(null);
                 }}
-                disabled={!canManageProviders}
+                disabled={!canManageProviders || isConfigLocked(configProvider)}
               />
               <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
                 {configProvider.isActive
@@ -275,7 +291,7 @@ export default function GitProvidersSettings({
               labelText="Use custom URL (for self-hosted instances)"
               checked={formData.useCustomUrl}
               onChange={(_, { checked }) => setFormData({ ...formData, useCustomUrl: checked })}
-              disabled={!canManageProviders}
+              disabled={!canManageProviders || isConfigLocked(configProvider)}
             />
 
             {formData.useCustomUrl && (
@@ -287,7 +303,7 @@ export default function GitProvidersSettings({
                   value={formData.customBaseUrl}
                   onChange={(e) => setFormData({ ...formData, customBaseUrl: e.target.value })}
                   helperText="Enter your self-hosted instance URL"
-                  disabled={!canManageProviders}
+                  disabled={!canManageProviders || isConfigLocked(configProvider)}
                 />
 
                 <TextInput
@@ -297,7 +313,7 @@ export default function GitProvidersSettings({
                   value={formData.customApiUrl}
                   onChange={(e) => setFormData({ ...formData, customApiUrl: e.target.value })}
                   helperText="Enter your self-hosted API endpoint"
-                  disabled={!canManageProviders}
+                  disabled={!canManageProviders || isConfigLocked(configProvider)}
                 />
 
                 <InlineNotification

@@ -66,6 +66,8 @@ export { PasswordResetToken } from './PasswordResetToken.js';
 export { PendingChange } from './PendingChange.js';
 export { PermissionGrant } from './PermissionGrant.js';
 export { PlatformSettings } from './PlatformSettings.js';
+export { PlatformSettingsSectionOwnership } from './PlatformSettingsSectionOwnership.js';
+export { AdminConfigObjectOwnership } from './AdminConfigObjectOwnership.js';
 export { Project } from './Project.js';
 export { ProjectEngineTarget } from './ProjectEngineTarget.js';
 export { ProjectMember } from './ProjectMember.js';

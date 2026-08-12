@@ -3,6 +3,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
 // TenantSettings removed - multi-tenancy is EE-only
 import { decrypt } from '@enterpriseglue/shared/utils/crypto.js';
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
 import { sendEmail as sendWithProvider, type EmailProvider } from '../email-providers.js';
 
 export interface EmailConfig {
@@ -34,7 +35,9 @@ export async function getEmailConfigForTenant(_tenantId?: string): Promise<Email
     if (defaultConfig) {
       return {
         provider: defaultConfig.provider as EmailProvider,
-        apiKey: decrypt(defaultConfig.apiKeyEncrypted),
+        apiKey: defaultConfig.apiKeyEncrypted.startsWith('ref:')
+          ? secretResolver.resolveStored(defaultConfig.apiKeyEncrypted)!
+          : decrypt(defaultConfig.apiKeyEncrypted),
         fromName: defaultConfig.fromName,
         fromEmail: defaultConfig.fromEmail,
         replyTo: defaultConfig.replyTo,

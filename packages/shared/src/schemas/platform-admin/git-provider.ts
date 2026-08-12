@@ -42,6 +42,10 @@ export const GitProviderAdminSummarySchema = GitProviderSchemaRaw.extend({
   gitConnectionsCount: z.number().int().nonnegative(),
   hasProjectConnections: z.boolean(),
   hasGitConnections: z.boolean(),
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
 });
 
 /** Administrator-only mutable provider settings; secret values are write-only. */
@@ -56,7 +60,12 @@ export const UpdateGitProviderRequestSchema = z.object({
 });
 
 /** Sanitized update response: persistent OAuth client settings never leave the route. */
-export const GitProviderAdminUpdateResponseSchema = GitProviderSchemaRaw;
+export const GitProviderAdminUpdateResponseSchema = GitProviderSchemaRaw.extend({
+  configKey: z.string().nullable(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
+});
 
 // Git Provider - Insert schema
 export const GitProviderInsertSchema = z.object({

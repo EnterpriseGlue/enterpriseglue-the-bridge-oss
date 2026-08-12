@@ -25,6 +25,7 @@ import type {
   PlatformBranding,
   UpdatePlatformBrandingRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import { configurationOwnershipDescription } from '../identityAccessCopy';
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
@@ -60,7 +61,7 @@ interface BrandingSettingsTabProps {
 }
 
 export default function BrandingSettingsTab({
-  canManageSettings = true,
+  canManageSettings: permissionCanManageSettings = true,
   settingsUnavailableReason,
 }: BrandingSettingsTabProps = {}) {
   const queryClient = useQueryClient();
@@ -83,12 +84,18 @@ export default function BrandingSettingsTab({
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const fontInputRef = useRef<HTMLInputElement>(null);
-  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage';
-
   const brandingQuery = useQuery({
     queryKey: ['platform-branding'],
     queryFn: fetchBranding,
   });
+  const brandingOwnership = brandingQuery.data?.ownership;
+  const brandingConfigLocked = Boolean(
+    brandingOwnership?.sourceRef && brandingOwnership.ownershipMode === 'config_locked',
+  );
+  const canManageSettings = permissionCanManageSettings && !brandingConfigLocked;
+  const disabledReason = brandingConfigLocked
+    ? configurationOwnershipDescription(brandingOwnership?.ownershipMode, brandingOwnership?.sourceRef) || 'Managed by configuration'
+    : settingsUnavailableReason || 'Missing permission platform:settings:manage';
 
   // Sync local state when data loads
   React.useEffect(() => {

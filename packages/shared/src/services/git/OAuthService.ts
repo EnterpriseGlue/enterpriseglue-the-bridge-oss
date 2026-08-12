@@ -6,7 +6,11 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
-import { decrypt, safeDecrypt } from '../encryption.js';
+import { secretResolver } from '../platform-admin/SecretResolver.js';
+import {
+  fetchAdminIntegrationJson,
+  validateAdminIntegrationEndpointUrl,
+} from '../platform-admin/AdminIntegrationEndpointPolicy.js';
 import crypto from 'crypto';
 
 // OAuth URLs for each provider
@@ -57,6 +61,26 @@ export interface OAuthTokenResult {
   scope?: string;
 }
 
+function optionalBoundedString(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string' && value.length > 0 && value.length <= maxLength ? value : undefined;
+}
+
+function normalizeOAuthTokens(data: Record<string, unknown>): OAuthTokenResult {
+  const accessToken = optionalBoundedString(data.access_token, 16_384);
+  if (!accessToken) throw new Error('OAuth provider returned an invalid access token');
+  const rawExpiry = typeof data.expires_in === 'number' ? data.expires_in : Number(data.expires_in);
+  const expiresIn = Number.isFinite(rawExpiry) && rawExpiry > 0
+    ? Math.min(86_400, Math.trunc(rawExpiry))
+    : undefined;
+  return {
+    accessToken,
+    refreshToken: optionalBoundedString(data.refresh_token, 16_384),
+    expiresIn,
+    tokenType: optionalBoundedString(data.token_type, 64) || 'Bearer',
+    scope: optionalBoundedString(data.scope, 4096),
+  };
+}
+
 class OAuthService {
   /**
    * Generate OAuth authorization URL
@@ -104,7 +128,10 @@ class OAuthService {
     this.cleanupExpiredStates();
 
     // Build authorization URL
-    const authUrl = provider.oauthAuthUrl || oauthConfig.authUrl;
+    const authUrl = validateAdminIntegrationEndpointUrl(
+      provider.oauthAuthUrl || oauthConfig.authUrl,
+      'Git OAuth authorization URL',
+    ).toString();
     const scopes = provider.oauthScopes?.split(',') || oauthConfig.scopes;
     
     const params = new URLSearchParams({
@@ -167,7 +194,7 @@ class OAuthService {
     }
 
     // Decrypt client secret
-    const clientSecret = safeDecrypt(provider.oauthClientSecret);
+    const clientSecret = secretResolver.resolveStored(provider.oauthClientSecret)!;
 
     // Exchange code for tokens
     const tokenUrl = provider.oauthTokenUrl || oauthConfig.tokenUrl;
@@ -186,31 +213,16 @@ class OAuthService {
       body.set('grant_type', 'urn:ietf:params:oauth:grant-type:jwt-bearer');
     }
 
-    const response = await fetch(tokenUrl, {
+    const data = await fetchAdminIntegrationJson(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
       body: body.toString(),
-    });
+    }, { label: 'Git OAuth token exchange' });
 
-    if (!response.ok) {
-      const error = await response.text();
-      logger.error('OAuth token exchange failed', { providerId, error });
-      throw new Error('Failed to exchange authorization code');
-    }
-
-    const data = await response.json();
-
-    // Handle different response formats
-    const tokens: OAuthTokenResult = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresIn: data.expires_in,
-      tokenType: data.token_type || 'Bearer',
-      scope: data.scope,
-    };
+    const tokens = normalizeOAuthTokens(data);
 
     logger.info('OAuth token exchange successful', { userId, providerId });
 
@@ -238,7 +250,7 @@ class OAuthService {
       throw new Error('OAuth not configured for this provider');
     }
 
-    const clientSecret = safeDecrypt(provider.oauthClientSecret);
+    const clientSecret = secretResolver.resolveStored(provider.oauthClientSecret)!;
     const tokenUrl = provider.oauthTokenUrl || oauthConfig.tokenUrl;
 
     const body = new URLSearchParams({
@@ -248,28 +260,16 @@ class OAuthService {
       grant_type: 'refresh_token',
     });
 
-    const response = await fetch(tokenUrl, {
+    const data = await fetchAdminIntegrationJson(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
       body: body.toString(),
-    });
+    }, { label: 'Git OAuth token refresh' });
 
-    if (!response.ok) {
-      throw new Error('Failed to refresh token');
-    }
-
-    const data = await response.json();
-
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresIn: data.expires_in,
-      tokenType: data.token_type || 'Bearer',
-      scope: data.scope,
-    };
+    return normalizeOAuthTokens(data);
   }
 
   /**

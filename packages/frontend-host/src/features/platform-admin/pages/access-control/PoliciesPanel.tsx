@@ -18,6 +18,7 @@ import { Add } from '@carbon/icons-react';
 import type { AuthzPolicy, PolicyCondition } from '../../hooks/useAuthzApi';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards';
+import { configurationOwnershipDescription, configurationOwnershipLabel } from '../../identityAccessCopy';
 
 const authzPolicyHeaders = [
   { key: 'name', header: 'Policy' },
@@ -27,6 +28,7 @@ const authzPolicyHeaders = [
   { key: 'priority', header: 'Priority' },
   { key: 'conditions', header: 'Conditions' },
   { key: 'status', header: 'Status' },
+  { key: 'source', header: 'Management source' },
   { key: 'actions', header: '' },
 ];
 
@@ -68,6 +70,7 @@ export function PoliciesPanel({
         priority: policy.priority,
         conditions: formatConditions(policy.conditions),
         status: policy.isActive,
+        source: policy.ownershipMode || 'manual',
         actions: '',
       }))} headers={authzPolicyHeaders}>
         {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
@@ -84,12 +87,13 @@ export function PoliciesPanel({
                     {row.cells.map((cell) => {
                       if (cell.info.header === 'effect') return <TableCell key={cell.id}><Tag type={cell.value === 'deny' ? 'red' : 'green'}>{cell.value === 'deny' ? 'Deny' : 'Allow'}</Tag></TableCell>;
                       if (cell.info.header === 'status') return <TableCell key={cell.id}><Tag type={cell.value ? 'green' : 'gray'}>{cell.value ? 'Active' : 'Inactive'}</Tag></TableCell>;
+                      if (cell.info.header === 'source') return <TableCell key={cell.id}><Tag type={policy?.ownershipMode === 'config_warn' ? 'warm-gray' : policy?.ownershipMode === 'config_locked' ? 'purple' : 'gray'} title={configurationOwnershipDescription(policy?.ownershipMode, policy?.sourceRef)}>{configurationOwnershipLabel(policy?.ownershipMode)}</Tag>{policy?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</TableCell>;
                       if (cell.info.header === 'action') return <TableCell key={cell.id}><code>{cell.value}</code></TableCell>;
                       if (cell.info.header === 'actions') return <TableCell key={cell.id}>{policy && (
                         <GuardedOverflowMenu size="sm" flipped iconDescription={`Actions for ${policy.name}`}>
-                          <GuardedOverflowMenuItem itemText="Edit" disabled={pending || !canManage} unavailableReason={manageUnavailableReason} onClick={() => onEdit(policy)} />
-                          <GuardedOverflowMenuItem itemText={policy.isActive ? 'Disable' : 'Enable'} disabled={pending || !canManage} unavailableReason={manageUnavailableReason} onClick={() => onToggle(policy)} />
-                          <GuardedOverflowMenuItem itemText="Delete" isDelete hasDivider disabled={pending || !canManage} unavailableReason={manageUnavailableReason} onClick={() => setDeleteTarget(policy)} />
+                          <GuardedOverflowMenuItem itemText="Edit" disabled={pending || !canManage || policy.ownershipMode === 'config_locked'} unavailableReason={policy.ownershipMode === 'config_locked' ? configurationOwnershipDescription(policy.ownershipMode, policy.sourceRef) : manageUnavailableReason} onClick={() => onEdit(policy)} />
+                          <GuardedOverflowMenuItem itemText={policy.isActive ? 'Disable' : 'Enable'} disabled={pending || !canManage || policy.ownershipMode === 'config_locked'} unavailableReason={policy.ownershipMode === 'config_locked' ? configurationOwnershipDescription(policy.ownershipMode, policy.sourceRef) : manageUnavailableReason} onClick={() => onToggle(policy)} />
+                          <GuardedOverflowMenuItem itemText="Delete" isDelete hasDivider disabled={pending || !canManage || policy.ownershipMode === 'config_locked'} unavailableReason={policy.ownershipMode === 'config_locked' ? configurationOwnershipDescription(policy.ownershipMode, policy.sourceRef) : manageUnavailableReason} onClick={() => setDeleteTarget(policy)} />
                         </GuardedOverflowMenu>
                       )}</TableCell>;
                       return <TableCell key={cell.id}>{cell.value}</TableCell>;

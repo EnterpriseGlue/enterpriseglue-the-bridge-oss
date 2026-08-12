@@ -23,6 +23,10 @@ const persistedProvider = {
   oauthClientId: 'client-id',
   oauthClientSecret: 'encrypted-secret',
   oauthScopes: 'repo',
+  configKey: null,
+  sourceRef: null,
+  ownershipMode: 'manual',
+  driftStatus: null,
 };
 
 describe('Git provider administrator contracts', () => {

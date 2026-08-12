@@ -96,6 +96,9 @@ in `engine-tenant-mappings.json`. See
 | EG_ENFORCE_ENGINE_ENDPOINT_POLICY | No | true in production | Enforce HTTPS and `EG_ENGINE_ALLOWED_HOSTS`; production cannot disable the policy, while `true` exercises it outside production |
 | EG_ENGINE_ALLOW_PRIVATE_HOSTS | No | false | Additional explicit opt-in for a reviewed private/address-literal/single-label/loopback/Docker-local engine or sidecar; also requires an exact allowlist entry |
 | EG_ALLOW_INSECURE_ENGINE_HTTP | No | false | Separate temporary migration override for an allowlisted private HTTP endpoint; it does not bypass the private-host opt-in |
+| EG_ADMIN_INTEGRATION_ALLOWED_HOSTS | Required for custom production Git/PII endpoints | built-in public Git hosts only | Exact hosts or narrow organizational suffixes for Git OAuth/API and external PII calls; broad wildcards are rejected and private hosts require an exact entry |
+| EG_ENFORCE_ADMIN_INTEGRATION_ENDPOINT_POLICY | No | true in production | Enforce HTTPS, DNS/private-address validation and pinning, redirect rejection, timeouts, and bounded bodies; production cannot disable it |
+| EG_ADMIN_INTEGRATION_ALLOW_PRIVATE_HOSTS | No | false | Explicit opt-in for a reviewed private/single-label/address-literal Git or PII endpoint; also requires an exact allowlist entry |
 | EG_IDENTITY_PROVIDER_ALLOWED_HOSTS | Required for production direct SSO | unset | Comma-separated exact OIDC/SAML/LDAP hosts or narrow organizational patterns such as `*.login.example.com`; broad public/effective-suffix patterns are rejected and private hosts require an exact entry |
 | EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY | No | true in production | Enforce HTTPS/LDAPS, host allowlisting, redirect rejection, and bounded responses; production cannot disable it |
 | EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS | No | false | Additional explicit opt-in for a private/single-label/loopback identity endpoint; also requires an exact allowlist entry |

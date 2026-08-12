@@ -5,6 +5,8 @@ import { configBundleArchiveService } from '@enterpriseglue/shared/services/plat
 export type ConfigBundleFileEnvelope = {
   bundle: unknown;
   files: Record<string, unknown>;
+  /** Reviewed ownership/removal acknowledgements used only by startup apply. */
+  acknowledgements?: string[];
 };
 
 export type ConfigBundleFileReadResult = {
@@ -36,9 +38,16 @@ export async function readConfigBundleFile(
     const source = await file.readFile();
     if (source.length > maxBytes) throw new Error(`Configuration bundle exceeds EG_CONFIG_MAX_BYTES (${maxBytes})`);
     const sha256 = createHash('sha256').update(source).digest('hex');
-    const payload = path.toLowerCase().endsWith('.zip')
+    const payload: ConfigBundleFileEnvelope = path.toLowerCase().endsWith('.zip')
       ? configBundleArchiveService.readZip(source, maxBytes)
       : JSON.parse(source.toString('utf8')) as ConfigBundleFileEnvelope;
+
+    if (payload.acknowledgements !== undefined) {
+      if (!Array.isArray(payload.acknowledgements) || payload.acknowledgements.length > 100
+        || payload.acknowledgements.some((value) => typeof value !== 'string' || value.length < 1 || value.length > 500)) {
+        throw new Error('Configuration bootstrap acknowledgements are invalid');
+      }
+    }
 
     return { payload, sha256 };
   } finally {

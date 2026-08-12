@@ -2861,7 +2861,7 @@ describe('permissionService', () => {
   });
 
   it('updates and removes resolved assignments through a supplied transaction store', async () => {
-    const assignmentRepo = { update: vi.fn().mockResolvedValue(undefined), delete: vi.fn().mockResolvedValue(undefined) };
+    const assignmentRepo = { update: vi.fn().mockResolvedValue(undefined), delete: vi.fn().mockResolvedValue({ affected: 2 }) };
     const store = { getRepository: (entity: unknown) => {
       if (entity === RbacRoleAssignment) return assignmentRepo;
       throw new Error('Unexpected repository');
@@ -2871,13 +2871,24 @@ describe('permissionService', () => {
       expiresAt: 123, ownershipMode: 'config_warn', sourceHash: 'hash-1', lastAppliedAt: 456,
       driftStatus: 'in_sync', lastSeenAt: 789,
     });
-    await permissionService.deleteResolvedRoleAssignments(store as any, ['assignment-1', 'assignment-2']);
+    await permissionService.deleteResolvedRoleAssignments(store as any, ['assignment-1', 'assignment-2'], {
+      tenantId: 'tenant-a', source: 'config', sourceRef: 'config_bundle:acme.authz',
+    });
 
     expect(assignmentRepo.update).toHaveBeenCalledWith({ id: 'assignment-1' }, expect.objectContaining({
       expiresAt: 123, ownershipMode: 'config_warn', sourceHash: 'hash-1', lastAppliedAt: 456,
       driftStatus: 'in_sync', lastSeenAt: 789, updatedAt: expect.any(Number),
     }));
-    expect(assignmentRepo.delete).toHaveBeenCalledWith(['assignment-1', 'assignment-2']);
+    expect(assignmentRepo.delete).toHaveBeenCalledWith({
+      id: expect.anything(), tenantId: 'tenant-a', source: 'config', sourceRef: 'config_bundle:acme.authz',
+    });
+
+    assignmentRepo.delete.mockResolvedValueOnce({ affected: 1 });
+    await expect(permissionService.deleteResolvedRoleAssignments(
+      store as any,
+      ['assignment-1', 'assignment-2'],
+      { tenantId: 'tenant-a', source: 'config', sourceRef: 'config_bundle:acme.authz' },
+    )).rejects.toThrow('Scoped role assignments changed during authoritative reconciliation');
   });
 
   it('lists user assignments through canonical principals', async () => {

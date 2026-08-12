@@ -15,6 +15,19 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { PlatformSettingsSectionOwnership } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
+import type { PlatformSettingsSection } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
+import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
+import { AdminConfigObjectOwnership, type AdminConfigObjectType } from '@enterpriseglue/shared/infrastructure/persistence/entities/AdminConfigObjectOwnership.js';
+import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
+import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
+import { EmailTemplate } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailTemplate.js';
+import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
+import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
+import { ApiClient } from '@enterpriseglue/shared/infrastructure/persistence/entities/ApiClient.js';
+import { ServiceAccount } from '@enterpriseglue/shared/infrastructure/persistence/entities/ServiceAccount.js';
+import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
@@ -25,15 +38,20 @@ import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../au
 import { engineTenancyProvisioningService } from './EngineTenancyProvisioningService.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 import type { ConfigBundleContractMetadata } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import { hashCanonicalConfig } from './config-bundle-hash.js';
+import { adminConfigKeyIdentity, adminConfigObjectLabel, adminConfigScopeKey } from './AdminConfigObjectOwnershipService.js';
+import { isProductSeededEnvironmentTag } from './EnvironmentTagService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
+  objectType: 'environment_tag' | 'git_provider' | 'email_configuration' | 'email_template' | 'permission' | 'authorization_policy' | 'api_client' | 'service_account' | 'external_engine_system' | 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
   currentId?: string;
+  expectedUpdatedAt?: number;
+  expectedOwnershipGeneration?: number;
   permissionChanges?: {
     additions: string[];
     removals: string[];
@@ -336,7 +354,10 @@ class ConfigBundleDiffService {
     const explicitLoginPolicy = Boolean(input.bundle && typeof input.bundle === 'object' && Object.prototype.hasOwnProperty.call(input.bundle, 'login'));
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships, platformSettings] = await Promise.all([
+    const explicitPlatformSettings = Boolean(compilation.files['./platform-settings.json']);
+    const explicitEnvironmentTags = Boolean(compilation.files['./environment-tags.json']);
+    const desiredAssignments = values(compilation.files, './assignments.json', 'assignments');
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships, platformSettings, platformSettingsOwnership, environmentTags, users] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -353,10 +374,41 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RuntimeResource).find(),
       dataSource.getRepository(Project).find(),
       dataSource.getRepository(AuthzGroupMembership).find(),
-      explicitGovernanceSettings || explicitLoginPolicy
+      explicitGovernanceSettings || explicitLoginPolicy || explicitPlatformSettings
         ? dataSource.getRepository(PlatformSettings).findOneBy({ id: 'default' })
         : Promise.resolve(null),
+      explicitPlatformSettings
+        ? dataSource.getRepository(PlatformSettingsSectionOwnership).find({ where: { settingsId: 'default' } })
+        : Promise.resolve([]),
+      explicitEnvironmentTags || explicitPlatformSettings
+        ? dataSource.getRepository(EnvironmentTag).find()
+        : Promise.resolve([]),
+      desiredAssignments.some((assignment) => assignment.principal.type === 'user')
+        ? dataSource.getRepository(User).find()
+        : Promise.resolve([]),
     ]);
+    const hasAdminCatalogFiles = [
+      './git-providers.json', './email-configurations.json', './email-templates.json',
+      './permissions.json', './authorization-policies.json', './machine-principals.json',
+      './external-engine-systems.json',
+    ].some((path) => Boolean(compilation.files?.[path]))
+      || desiredAssignments.some((assignment) => assignment.principal.type === 'api_client' || assignment.principal.type === 'service_account');
+    const [adminOwnership, gitProviders, emailConfigurations, emailTemplates, customPermissions, authorizationPolicies, apiClients, serviceAccounts, externalEngineSystems] = hasAdminCatalogFiles
+      ? await Promise.all([
+          dataSource.getRepository(AdminConfigObjectOwnership).find(),
+          dataSource.getRepository(GitProvider).find(),
+          dataSource.getRepository(EmailSendConfig).find(),
+          dataSource.getRepository(EmailTemplate).find(),
+          dataSource.getRepository(RbacPermission).find({ where: { kind: 'custom' } }),
+          dataSource.getRepository(AuthzPolicy).find(),
+          dataSource.getRepository(ApiClient).find(),
+          dataSource.getRepository(ServiceAccount).find(),
+          dataSource.getRepository(ExternalEngineSystem).find(),
+        ])
+      : [[], [], [], [], [], [], [], [], []] as [
+          AdminConfigObjectOwnership[], GitProvider[], EmailSendConfig[], EmailTemplate[], RbacPermission[],
+          AuthzPolicy[], ApiClient[], ServiceAccount[], ExternalEngineSystem[],
+        ];
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
       rolePermissionsByRoleId.set(permission.roleId, [...(rolePermissionsByRoleId.get(permission.roleId) || []), permission.permissionId]);
@@ -437,6 +489,14 @@ class ConfigBundleDiffService {
     const changes: ConfigBundleDiffChange[] = [];
     const warnings = broadConfigurationWarnings(compilation.files);
     const desiredSettings = manifest.settings;
+    const pristineGovernanceSeed = Boolean(platformSettings)
+      && !platformSettings!.updatedById
+      && !platformSettings!.accessGovernanceSourceRef
+      && platformSettings!.engineAccessAuthority === 'manual'
+      && platformSettings!.projectAccessAuthority === 'manual'
+      && platformSettings!.engineOnboardingMode === 'manual_allowed'
+      && platformSettings!.projectEngineTargetMode === 'manual_allowed'
+      && platformSettings!.engineRuntimeAuthorizationMode === 'enterpriseglue_authoritative';
     if (explicitGovernanceSettings && !platformSettings) {
       changes.push({
         objectType: 'platform_settings',
@@ -467,8 +527,11 @@ class ConfigBundleDiffService {
         key: 'access-governance',
         operation: 'update',
         currentId: platformSettings!.id,
+        expectedUpdatedAt: Number(platformSettings!.updatedAt),
         reason: platformSettings!.accessGovernanceSourceRef
           ? 'Config-owned platform governance settings differ from the desired state'
+          : pristineGovernanceSeed
+            ? 'Product-seeded platform governance settings will be configured by this bundle'
           : 'Persisted platform governance settings will be adopted by this configuration bundle',
       });
     } else if (explicitGovernanceSettings) {
@@ -489,12 +552,345 @@ class ConfigBundleDiffService {
         key: 'login-policy',
         operation: !platformSettings ? 'create' : loginPolicyMatches ? 'noop' : 'update',
         ...(platformSettings ? { currentId: platformSettings.id } : {}),
+        ...(platformSettings ? { expectedUpdatedAt: Number(platformSettings.updatedAt) } : {}),
         reason: !platformSettings
           ? 'Platform login policy has not been persisted yet'
           : loginPolicyMatches
             ? 'Platform login policy already matches the desired state'
             : 'Platform login policy differs from the desired ordinary-user sign-in behavior',
       });
+    }
+
+    const desiredEnvironmentTags = values(compilation.files, './environment-tags.json', 'environmentTags');
+    const desiredEnvironmentTagKeys = new Set(desiredEnvironmentTags.map((tag) => tag.key));
+    const configScopeKey = adminConfigScopeKey(normalizedTenantId);
+    const environmentTagsByKey = new Map(environmentTags.filter((tag) => tag.configKey).map((tag) => [tag.configKey!, tag]));
+    const environmentTagsByName = new Map(environmentTags.map((tag) => [tag.name.toLowerCase(), tag]));
+    for (const desired of desiredEnvironmentTags) {
+      const current = environmentTagsByKey.get(desired.key) || environmentTagsByName.get(desired.name.toLowerCase());
+      if (current?.sourceRef && (current.sourceRef !== sourceRef || current.configScopeKey !== configScopeKey)) {
+        changes.push({
+          objectType: 'environment_tag', key: desired.key, operation: 'conflict', currentId: current.id,
+          reason: 'Environment tag is owned by another configuration bundle',
+        });
+        continue;
+      }
+      const matches = current
+        && current.name === desired.name
+        && current.color === desired.color
+        && current.manualDeployAllowed === desired.manualDeployAllowed
+        && current.sortOrder === desired.sortOrder
+        && current.isDefault === desired.isDefault
+        && current.configKey === desired.key
+        && current.sourceRef === sourceRef
+        && current.configScopeKey === configScopeKey
+        && current.ownershipMode === desired.ownershipMode
+        && current.driftStatus === 'in_sync';
+      changes.push({
+        objectType: 'environment_tag',
+        key: desired.key,
+        operation: !current ? 'create' : matches ? 'noop' : 'update',
+        ...(current ? { currentId: current.id } : {}),
+        ...(current ? {
+          expectedUpdatedAt: Number(current.updatedAt),
+          expectedOwnershipGeneration: Number(current.configGeneration || 0),
+        } : {}),
+        reason: !current
+          ? 'Environment tag does not exist'
+          : matches
+            ? 'Config-owned environment tag already matches the desired state'
+            : current.sourceRef
+              ? 'Config-owned environment tag differs from the desired state'
+              : isProductSeededEnvironmentTag(current)
+                ? 'Product-seeded environment tag will be configured by this bundle'
+              : 'Existing environment tag will be adopted by stable key and name',
+      });
+    }
+    if (manifest.mode === 'authoritative' && explicitEnvironmentTags) {
+      for (const current of environmentTags.filter((tag) =>
+        tag.sourceRef === sourceRef
+        && tag.configScopeKey === configScopeKey
+        && tag.configKey
+        && !desiredEnvironmentTagKeys.has(tag.configKey))) {
+        changes.push({
+          objectType: 'environment_tag', key: current.configKey!, operation: 'archive', currentId: current.id,
+          expectedUpdatedAt: Number(current.updatedAt),
+          expectedOwnershipGeneration: Number(current.configGeneration || 0),
+          reason: 'Config-owned environment tag is absent from the authoritative bundle',
+        });
+      }
+    }
+
+    const desiredPlatformFile = compilation.files['./platform-settings.json'] as {
+      platformSettings?: Record<string, any> & { ownershipMode: 'manual' | 'config_locked' | 'config_warn' };
+    } | undefined;
+    const desiredPlatformSettings = desiredPlatformFile?.platformSettings;
+    if (desiredPlatformSettings) {
+      const ownershipBySection = new Map(platformSettingsOwnership.map((entry) => [entry.section, entry]));
+      const sectionValues: Array<{ section: PlatformSettingsSection; desired: unknown; current: unknown }> = [];
+      if (desiredPlatformSettings.general) {
+        const desiredDefaultKey = desiredPlatformSettings.general.defaultEnvironmentTagKey;
+        const configuredDefault = desiredDefaultKey
+          ? environmentTagsByKey.get(desiredDefaultKey)
+            || environmentTagsByName.get(desiredEnvironmentTags.find((tag) => tag.key === desiredDefaultKey)?.name?.toLowerCase() || '')
+          : null;
+        sectionValues.push({
+          section: 'general',
+          desired: {
+            defaultEnvironmentTagId: desiredDefaultKey ? configuredDefault?.id || `config-key:${desiredDefaultKey}` : null,
+            emailPlatformName: desiredPlatformSettings.general.emailPlatformName,
+          },
+          current: {
+            defaultEnvironmentTagId: desiredDefaultKey && !configuredDefault
+              ? platformSettings?.defaultEnvironmentTagId ? `current-id:${platformSettings.defaultEnvironmentTagId}` : null
+              : platformSettings?.defaultEnvironmentTagId || null,
+            emailPlatformName: platformSettings?.emailPlatformName || 'EnterpriseGlue',
+          },
+        });
+      }
+      if (desiredPlatformSettings.gitSync) sectionValues.push({
+        section: 'git_sync',
+        desired: desiredPlatformSettings.gitSync,
+        current: {
+          pushEnabled: platformSettings?.syncPushEnabled ?? true,
+          pullEnabled: platformSettings?.syncPullEnabled ?? false,
+          bothEnabled: platformSettings?.syncBothEnabled ?? false,
+          projectTokenSharingEnabled: platformSettings?.gitProjectTokenSharingEnabled ?? false,
+        },
+      });
+      if (desiredPlatformSettings.deployment) sectionValues.push({
+        section: 'deployment',
+        desired: desiredPlatformSettings.deployment,
+        current: {
+          defaultDeployRoles: (() => { try { return JSON.parse(platformSettings?.defaultDeployRoles || '[]'); } catch { return []; } })(),
+          credentiallessCustomerSidecarsEnabled: platformSettings?.credentiallessCustomerSidecarsEnabled ?? false,
+        },
+      });
+      if (desiredPlatformSettings.invitations) sectionValues.push({
+        section: 'invitations',
+        desired: desiredPlatformSettings.invitations,
+        current: {
+          allowAllDomains: platformSettings?.inviteAllowAllDomains ?? true,
+          allowedDomains: (() => { try { return JSON.parse(platformSettings?.inviteAllowedDomains || '[]'); } catch { return []; } })(),
+        },
+      });
+      if (desiredPlatformSettings.pii) sectionValues.push({
+        section: 'pii',
+        desired: desiredPlatformSettings.pii,
+        current: {
+          regexEnabled: platformSettings?.piiRegexEnabled ?? false,
+          externalProviderEnabled: platformSettings?.piiExternalProviderEnabled ?? false,
+          externalProviderType: platformSettings?.piiExternalProviderType || null,
+          externalProviderEndpoint: platformSettings?.piiExternalProviderEndpoint || null,
+          externalProviderAuthHeader: platformSettings?.piiExternalProviderAuthHeader || null,
+          externalProviderAuthTokenRef: String(platformSettings?.piiExternalProviderAuthToken || '').startsWith('ref:')
+            ? String(platformSettings?.piiExternalProviderAuthToken).slice(4)
+            : null,
+          externalProviderProjectId: platformSettings?.piiExternalProviderProjectId || null,
+          externalProviderRegion: platformSettings?.piiExternalProviderRegion || null,
+          redactionStyle: platformSettings?.piiRedactionStyle || '<TYPE>',
+          scopes: (() => { try { return JSON.parse(platformSettings?.piiScopes || '[]'); } catch { return []; } })(),
+          maxPayloadSizeBytes: Number(platformSettings?.piiMaxPayloadSizeBytes ?? 262144),
+        },
+      });
+      if (desiredPlatformSettings.branding) sectionValues.push({
+        section: 'branding',
+        desired: desiredPlatformSettings.branding,
+        current: {
+          logoUrl: platformSettings?.logoUrl || null,
+          loginLogoUrl: platformSettings?.loginLogoUrl || null,
+          loginTitleVerticalOffset: platformSettings?.loginTitleVerticalOffset ?? 0,
+          loginTitleColor: platformSettings?.loginTitleColor || null,
+          logoTitle: platformSettings?.logoTitle || null,
+          logoScale: platformSettings?.logoScale ?? 100,
+          titleFontUrl: platformSettings?.titleFontUrl || null,
+          titleFontWeight: platformSettings?.titleFontWeight || '600',
+          titleFontSize: platformSettings?.titleFontSize ?? 14,
+          titleVerticalOffset: platformSettings?.titleVerticalOffset ?? 0,
+          menuAccentColor: platformSettings?.menuAccentColor || null,
+          faviconUrl: platformSettings?.faviconUrl || null,
+        },
+      });
+      for (const section of sectionValues) {
+        const ownership = ownershipBySection.get(section.section);
+        if (ownership?.sourceRef && (
+          ownership.sourceRef !== sourceRef
+          || (ownership.scopeKey || 'platform') !== adminConfigScopeKey(normalizedTenantId)
+        )) {
+          changes.push({
+            objectType: 'platform_settings', key: section.section, operation: 'conflict', currentId: platformSettings?.id,
+            reason: `Platform ${section.section} settings are owned by another configuration bundle`,
+          });
+          continue;
+        }
+        const valuesMatch = JSON.stringify(section.current) === JSON.stringify(section.desired);
+        const seededDefaults: Record<PlatformSettingsSection, unknown> = {
+          general: { defaultEnvironmentTagId: null, emailPlatformName: 'EnterpriseGlue' },
+          git_sync: { pushEnabled: true, pullEnabled: false, bothEnabled: false, projectTokenSharingEnabled: false },
+          deployment: { defaultDeployRoles: ['owner', 'delegate', 'operator'], credentiallessCustomerSidecarsEnabled: false },
+          invitations: { allowAllDomains: true, allowedDomains: [] },
+          pii: {
+            regexEnabled: false, externalProviderEnabled: false, externalProviderType: null,
+            externalProviderEndpoint: null, externalProviderAuthHeader: null, externalProviderAuthTokenRef: null,
+            externalProviderProjectId: null, externalProviderRegion: null, redactionStyle: '<TYPE>',
+            scopes: ['processDetails', 'history', 'logs', 'errors', 'audit'],
+            maxPayloadSizeBytes: 262144,
+          },
+          branding: {
+            logoUrl: null, loginLogoUrl: null, loginTitleVerticalOffset: 0, loginTitleColor: null,
+            logoTitle: null, logoScale: 100, titleFontUrl: null, titleFontWeight: '600', titleFontSize: 14,
+            titleVerticalOffset: 0, menuAccentColor: null, faviconUrl: null,
+          },
+          login: null,
+          governance: null,
+        };
+        const pristineSectionSeed = Boolean(platformSettings)
+          && !platformSettings!.updatedById
+          && !ownership
+          && JSON.stringify(section.current) === JSON.stringify(seededDefaults[section.section]);
+        const ownershipMatches = ownership?.sourceRef === sourceRef
+          && ownership.ownershipMode === desiredPlatformSettings.ownershipMode
+          && ownership.driftStatus === 'in_sync';
+        changes.push({
+          objectType: 'platform_settings',
+          key: section.section,
+          operation: !platformSettings ? 'create' : valuesMatch && ownershipMatches ? 'noop' : 'update',
+          ...(platformSettings ? { currentId: platformSettings.id } : {}),
+          ...(platformSettings ? { expectedUpdatedAt: Number(platformSettings.updatedAt) } : {}),
+          ...(ownership ? { expectedOwnershipGeneration: Number(ownership.generation || 0) } : {}),
+          reason: !platformSettings
+            ? `Platform ${section.section} settings have not been persisted yet`
+            : valuesMatch && ownershipMatches
+              ? `Config-owned platform ${section.section} settings already match the desired state`
+              : ownership?.sourceRef
+                ? `Config-owned platform ${section.section} settings differ from the desired state`
+                : pristineSectionSeed
+                  ? `Product-seeded platform ${section.section} settings will be configured by this bundle`
+                : `Persisted platform ${section.section} settings will be adopted by this configuration bundle`,
+        });
+      }
+    }
+
+    const machinePrincipals = values(compilation.files, './machine-principals.json', 'machinePrincipals');
+    const catalogFamilies: Array<{
+      path: string;
+      property: string;
+      objectType: AdminConfigObjectType;
+      desired: any[];
+      current: Array<{ id: string }>;
+      naturalMatch: (row: any, desired: any) => boolean;
+    }> = [
+      {
+        path: './git-providers.json', property: 'gitProviders', objectType: 'git_provider',
+        desired: values(compilation.files, './git-providers.json', 'gitProviders'), current: gitProviders,
+        naturalMatch: (row, desired) => (row.tenantId || null) === normalizedTenantId && row.name.toLowerCase() === desired.name.toLowerCase(),
+      },
+      {
+        path: './email-configurations.json', property: 'emailConfigurations', objectType: 'email_configuration',
+        desired: values(compilation.files, './email-configurations.json', 'emailConfigurations'), current: emailConfigurations,
+        naturalMatch: (row, desired) => row.name.toLowerCase() === desired.name.toLowerCase(),
+      },
+      {
+        path: './email-templates.json', property: 'emailTemplates', objectType: 'email_template',
+        desired: values(compilation.files, './email-templates.json', 'emailTemplates'), current: emailTemplates,
+        naturalMatch: (row, desired) => row.type === desired.type,
+      },
+      {
+        path: './permissions.json', property: 'permissions', objectType: 'permission',
+        desired: values(compilation.files, './permissions.json', 'permissions'), current: customPermissions,
+        naturalMatch: (row, desired) => row.key === desired.key,
+      },
+      {
+        path: './authorization-policies.json', property: 'authorizationPolicies', objectType: 'authorization_policy',
+        desired: values(compilation.files, './authorization-policies.json', 'authorizationPolicies'), current: authorizationPolicies,
+        naturalMatch: (row, desired) => (row.tenantId || null) === normalizedTenantId && row.name.toLowerCase() === desired.name.toLowerCase(),
+      },
+      {
+        path: './machine-principals.json', property: 'machinePrincipals', objectType: 'api_client',
+        desired: machinePrincipals.filter((principal) => principal.kind === 'api_client'), current: apiClients,
+        naturalMatch: (row, desired) => row.name.toLowerCase() === desired.name.toLowerCase(),
+      },
+      {
+        path: './machine-principals.json', property: 'machinePrincipals', objectType: 'service_account',
+        desired: machinePrincipals.filter((principal) => principal.kind === 'service_account'), current: serviceAccounts,
+        naturalMatch: (row, desired) => row.name.toLowerCase() === desired.name.toLowerCase(),
+      },
+      {
+        path: './external-engine-systems.json', property: 'externalEngineSystems', objectType: 'external_engine_system',
+        desired: values(compilation.files, './external-engine-systems.json', 'externalEngineSystems'), current: externalEngineSystems,
+        naturalMatch: (row, desired) => (row.tenantId || null) === normalizedTenantId && row.key === desired.key,
+      },
+    ];
+    const scopedAdminOwnership = adminOwnership.filter((ownership) =>
+      ownership.scopeKey === adminConfigScopeKey(normalizedTenantId));
+    const ownershipByKeyIdentity = new Map(scopedAdminOwnership.map((ownership) => [ownership.keyIdentity, ownership]));
+    for (const family of catalogFamilies) {
+      if (!compilation.files[family.path]) continue;
+      const desiredKeys = new Set(family.desired.map((entry) => entry.key));
+      for (const desired of family.desired) {
+        const keyIdentity = adminConfigKeyIdentity(family.objectType, normalizedTenantId, desired.key);
+        const ownership = ownershipByKeyIdentity.get(keyIdentity);
+        if (ownership?.sourceRef && ownership.sourceRef !== sourceRef) {
+          changes.push({
+            objectType: family.objectType,
+            key: desired.key,
+            operation: 'conflict',
+            currentId: ownership.objectId,
+            reason: `${adminConfigObjectLabel(family.objectType)} is owned by another configuration bundle`,
+          });
+          continue;
+        }
+        const current = ownership
+          ? family.current.find((candidate) => candidate.id === ownership.objectId)
+          : family.current.find((candidate) => family.naturalMatch(candidate, desired));
+        if (ownership && !current) {
+          changes.push({
+            objectType: family.objectType,
+            key: desired.key,
+            operation: 'conflict',
+            currentId: ownership.objectId,
+            reason: 'Configuration ownership exists but the persisted object is missing',
+          });
+          continue;
+        }
+        const desiredHash = hashCanonicalConfig({ kind: family.objectType, key: desired.key, value: desired });
+        const inSync = current && ownership?.sourceRef === sourceRef && ownership.active
+          && ownership.sourceHash === desiredHash && ownership.driftStatus === 'in_sync'
+          && ownership.ownershipMode === desired.ownershipMode;
+        changes.push({
+          objectType: family.objectType,
+          key: desired.key,
+          operation: !current ? 'create' : inSync ? 'noop' : 'update',
+          ...(current ? { currentId: current.id } : {}),
+          ...(current ? { expectedUpdatedAt: Number((current as { updatedAt?: unknown }).updatedAt) } : {}),
+          ...(ownership ? { expectedOwnershipGeneration: Number(ownership.generation || 0) } : {}),
+          reason: !current
+            ? `${adminConfigObjectLabel(family.objectType)} does not exist`
+            : inSync
+              ? `Config-owned ${adminConfigObjectLabel(family.objectType)} already matches the desired state`
+              : ownership
+                ? `Config-owned ${adminConfigObjectLabel(family.objectType)} differs from the desired state`
+                : `Existing ${adminConfigObjectLabel(family.objectType)} will be adopted by this configuration bundle`,
+        });
+      }
+      if (manifest.mode === 'authoritative') {
+        for (const ownership of scopedAdminOwnership.filter((candidate) =>
+          candidate.active
+          && candidate.objectType === family.objectType
+          && candidate.sourceRef === sourceRef
+          && candidate.scopeKey === (normalizedTenantId || 'platform')
+          && !desiredKeys.has(candidate.configKey))) {
+          changes.push({
+            objectType: family.objectType,
+            key: ownership.configKey,
+            operation: 'archive',
+            currentId: ownership.objectId,
+            expectedOwnershipGeneration: Number(ownership.generation || 0),
+            expectedUpdatedAt: Number((family.current.find((candidate) => candidate.id === ownership.objectId) as { updatedAt?: unknown } | undefined)?.updatedAt || 0),
+            reason: `Config-owned ${adminConfigObjectLabel(family.objectType)} is absent from the authoritative bundle`,
+          });
+        }
+      }
     }
     const desiredAssignmentGroupIds = new Map<string, string>();
     const desiredIdentityMappingGroupIds = new Map<string, string>();
@@ -1001,22 +1397,35 @@ class ConfigBundleDiffService {
       }
     }
 
-    const desiredAssignments = values(compilation.files, './assignments.json', 'assignments');
     const desiredAssignmentKeys = new Set<string>();
     for (const assignment of desiredAssignments) {
       const key = assignmentDisplayKey(assignment);
-      if (assignment.principal.type !== 'group') {
-        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Config apply currently supports group principals only' });
-        continue;
-      }
       if (!['platform', 'tenant', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) {
         changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: `Config apply does not yet support ${assignment.scope.type} assignment scopes` });
         continue;
       }
       const role = rolesByKey.get(assignment.roleKey);
-      const group = groupsByKey.get(assignment.principal.key);
       const stagedRole = !role && desiredRoleKeys.has(assignment.roleKey);
-      const stagedGroup = !group && desiredGroupKeys.has(assignment.principal.key);
+      let principalId: string | null = null;
+      let stagedPrincipal = false;
+      if (assignment.principal.type === 'group') {
+        const group = groupsByKey.get(assignment.principal.key);
+        principalId = group?.id || null;
+        stagedPrincipal = !group && desiredGroupKeys.has(assignment.principal.key);
+      } else if (assignment.principal.type === 'user') {
+        principalId = users.find((user) => user.id === assignment.principal.id && user.isActive)?.id || null;
+      } else {
+        const objectType = assignment.principal.type;
+        if (assignment.principal.key) {
+          const ownership = ownershipByKeyIdentity.get(adminConfigKeyIdentity(objectType, normalizedTenantId, assignment.principal.key));
+          const rows = objectType === 'api_client' ? apiClients : serviceAccounts;
+          principalId = ownership?.active && rows.some((row) => row.id === ownership.objectId) ? ownership.objectId : null;
+          stagedPrincipal = !principalId && machinePrincipals.some((principal) => principal.kind === objectType && principal.key === assignment.principal.key);
+        } else if (assignment.principal.id) {
+          const rows = objectType === 'api_client' ? apiClients : serviceAccounts;
+          principalId = rows.find((row) => row.id === assignment.principal.id && row.isActive)?.id || null;
+        }
+      }
       let scopeId: string | null = assignment.scope.type === 'platform' ? null
         : assignment.scope.type === 'tenant' ? normalizedTenantId
         : assignment.scope.type === 'engine' ? enginesByConfigKey.get(assignment.scope.engineKey)?.id || null
@@ -1032,29 +1441,29 @@ class ConfigBundleDiffService {
           ? runtimeResourcesByIdentity.get(`${engine.id}:${assignment.scope.resourceKind}:${assignment.scope.resourceKey}:${assignment.scope.runtimeTenantId || ''}`)?.id || null
           : null;
       }
-      if ((!role && !stagedRole) || (!group && !stagedGroup) || (assignment.scope.type !== 'platform' && !scopeId && !stagedScope)) {
-        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role, group, or scope' });
+      if ((!role && !stagedRole) || (!principalId && !stagedPrincipal) || (assignment.scope.type !== 'platform' && !scopeId && !stagedScope)) {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role, principal, or scope' });
         continue;
       }
-      if (stagedRole || stagedGroup || stagedScope) {
+      if (stagedRole || stagedPrincipal || stagedScope) {
         changes.push({ objectType: 'assignment', key, operation: 'create', reason: 'Scoped role assignment references an object that will be created by this configuration bundle' });
         continue;
       }
-      if (!role || !group) {
-        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role or group' });
+      if (!role || !principalId) {
+        changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Assignment references an unresolved role or principal' });
         continue;
       }
       const assignmentKey = canonicalRoleAssignmentKey({
         tenantId: normalizedTenantId,
-        principalType: 'group',
-        principalId: group.id,
+        principalType: assignment.principal.type,
+        principalId,
         roleId: role.id,
         scopeType: assignment.scope.type,
         scopeId,
         source: CONFIG_SOURCE,
         sourceRef,
       });
-      desiredAssignmentGroupIds.set(key, group.id);
+      if (assignment.principal.type === 'group') desiredAssignmentGroupIds.set(key, principalId);
       desiredAssignmentKeys.add(assignmentKey);
       const existing = assignmentsByKey.get(assignmentKey);
       if (!existing) {
@@ -1197,6 +1606,16 @@ class ConfigBundleDiffService {
           changes.push({ objectType: 'assignment', key: assignment.assignmentKey, operation: 'archive', currentId: assignment.id, reason: 'Config-owned scoped role assignment is absent from an authoritative bundle' });
         }
       }
+    }
+
+    for (const change of changes) {
+      if (!change.reason.toLowerCase().includes('will be adopted')) continue;
+      const acknowledgementId = `config.ownership_adoption:${change.objectType}:${change.key}`;
+      warnings.push({
+        id: acknowledgementId,
+        acknowledgementId,
+        message: `Configuration will adopt the existing ${change.objectType.replace(/_/g, ' ')} ${change.key}; future changes will follow its declared ownership mode.`,
+      });
     }
 
     for (const change of changes) {

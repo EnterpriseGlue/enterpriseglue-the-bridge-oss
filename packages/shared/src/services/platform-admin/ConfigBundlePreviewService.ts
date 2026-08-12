@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import {
   ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineBackstopMappingsFileSchema, ConfigEngineSetsFileSchema, ConfigEngineTenantMappingsFileSchema, ConfigGroupsFileSchema,
+  ConfigAuthorizationPoliciesFileSchema, ConfigEmailConfigurationsFileSchema, ConfigEmailTemplatesFileSchema,
+  ConfigEnvironmentTagsFileSchema, ConfigExternalEngineSystemsFileSchema, ConfigGitProvidersFileSchema,
+  ConfigMachinePrincipalsFileSchema, ConfigPermissionsFileSchema, ConfigPlatformSettingsFileSchema,
   ConfigIdentityMappingsFileSchema, ConfigIdentityProvidersFileSchema, ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema, ConfigRuntimeResourceSetsFileSchema, EnterpriseGlueConfigBundleSchema,
   ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1, ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
@@ -17,6 +20,15 @@ import type {
 } from './EngineTenancyProvisioningService.js';
 
 const FILE_SCHEMAS: Record<string, z.ZodType> = {
+  './platform-settings.json': ConfigPlatformSettingsFileSchema,
+  './environment-tags.json': ConfigEnvironmentTagsFileSchema,
+  './git-providers.json': ConfigGitProvidersFileSchema,
+  './email-configurations.json': ConfigEmailConfigurationsFileSchema,
+  './email-templates.json': ConfigEmailTemplatesFileSchema,
+  './permissions.json': ConfigPermissionsFileSchema,
+  './authorization-policies.json': ConfigAuthorizationPoliciesFileSchema,
+  './machine-principals.json': ConfigMachinePrincipalsFileSchema,
+  './external-engine-systems.json': ConfigExternalEngineSystemsFileSchema,
   './engines.json': ConfigEnginesFileSchema,
   './engine-backstop-mappings.json': ConfigEngineBackstopMappingsFileSchema,
   './engine-tenant-mappings.json': ConfigEngineTenantMappingsFileSchema,
@@ -176,6 +188,11 @@ function validateCrossFileReferences(
   const identityMappings = fileEntries(normalizedFiles, './identity-mappings.json', 'identityMappings');
   const assignments = fileEntries(normalizedFiles, './assignments.json', 'assignments');
   const targets = fileEntries(normalizedFiles, './project-engine-targets.json', 'projectEngineTargets');
+  const environmentTags = fileEntries(normalizedFiles, './environment-tags.json', 'environmentTags');
+  const configuredPermissions = fileEntries(normalizedFiles, './permissions.json', 'permissions');
+  const authorizationPolicies = fileEntries(normalizedFiles, './authorization-policies.json', 'authorizationPolicies');
+  const machinePrincipals = fileEntries(normalizedFiles, './machine-principals.json', 'machinePrincipals');
+  const platformSettingsFile = normalizedFiles['./platform-settings.json'] as { platformSettings?: { general?: { defaultEnvironmentTagKey?: string | null } } } | undefined;
 
   const roleKeys = new Set([...SystemRoleDefinitions.map((role) => role.key), ...roles.map((role) => role.key)]);
   const groupKeys = new Set(groups.map((group) => group.key));
@@ -183,7 +200,19 @@ function validateCrossFileReferences(
   const externallyReferencedEngineKeys = externalEngineKeys(policy);
   const engineSetKeys = new Set(engineSets.map((engineSet) => engineSet.key));
   const runtimeResourceSetKeys = new Set(runtimeResourceSets.map((set) => set.key));
-  const permissionsByKey = new Map(PermissionCatalog.map((permission) => [permission.key, permission]));
+  const environmentTagKeys = new Set(environmentTags.map((tag) => tag.key));
+  const apiClientKeys = new Set(machinePrincipals.filter((principal) => principal.kind === 'api_client').map((principal) => principal.key));
+  const serviceAccountKeys = new Set(machinePrincipals.filter((principal) => principal.kind === 'service_account').map((principal) => principal.key));
+  const permissionsByKey = new Map<string, { key: string; scope: string; tenantSafe?: boolean }>(
+    PermissionCatalog.map((permission) => [permission.key, permission]),
+  );
+  for (const permission of configuredPermissions) {
+    permissionsByKey.set(permission.key, {
+      key: permission.key,
+      scope: permission.scope,
+      tenantSafe: false,
+    });
+  }
 
   roles.forEach((role, index) => {
     const path = `./roles.json.roles.${index}`;
@@ -267,6 +296,12 @@ function validateCrossFileReferences(
     if (assignment.principal.type === 'group' && !groupKeys.has(assignment.principal.key)) {
       errors.push({ path: `${path}.principal.key`, message: `Unknown group key: ${assignment.principal.key}` });
     }
+    if (assignment.principal.type === 'api_client' && assignment.principal.key && !apiClientKeys.has(assignment.principal.key)) {
+      errors.push({ path: `${path}.principal.key`, message: `Unknown API client key: ${assignment.principal.key}` });
+    }
+    if (assignment.principal.type === 'service_account' && assignment.principal.key && !serviceAccountKeys.has(assignment.principal.key)) {
+      errors.push({ path: `${path}.principal.key`, message: `Unknown service account key: ${assignment.principal.key}` });
+    }
     if (!roleKeys.has(assignment.roleKey)) {
       errors.push({ path: `${path}.roleKey`, message: `Unknown role key: ${assignment.roleKey}` });
     }
@@ -289,6 +324,23 @@ function validateCrossFileReferences(
       errors.push({ path: `./project-engine-targets.json.projectEngineTargets.${index}.engineRef.engineKey`, message: `Unknown engine key: ${target.engineRef.engineKey}` });
     }
   });
+
+  authorizationPolicies.forEach((policy, index) => {
+    if (policy.action && !permissionsByKey.has(policy.action)) {
+      errors.push({
+        path: `./authorization-policies.json.authorizationPolicies.${index}.action`,
+        message: `Unknown permission: ${policy.action}`,
+      });
+    }
+  });
+
+  const defaultEnvironmentTagKey = platformSettingsFile?.platformSettings?.general?.defaultEnvironmentTagKey;
+  if (defaultEnvironmentTagKey && !environmentTagKeys.has(defaultEnvironmentTagKey)) {
+    errors.push({
+      path: './platform-settings.json.platformSettings.general.defaultEnvironmentTagKey',
+      message: `Unknown environment tag key: ${defaultEnvironmentTagKey}`,
+    });
+  }
 
   return errors;
 }

@@ -3,6 +3,11 @@
  * Supports GitHub, GitLab, Azure DevOps, Bitbucket
  */
 
+import {
+  fetchAdminIntegrationEndpoint,
+  readAdminIntegrationJsonResponse,
+} from '../../platform-admin/AdminIntegrationEndpointPolicy.js';
+
 export interface PullRequestParams {
   owner: string;
   repo: string;
@@ -93,7 +98,7 @@ export abstract class BaseGitProvider {
     accessToken: string,
     body?: any
   ): Promise<T> {
-    const response = await fetch(url, {
+    const response = await fetchAdminIntegrationEndpoint(url, {
       method,
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -101,13 +106,12 @@ export abstract class BaseGitProvider {
         'Accept': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, { label: 'Git provider API' });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`${method} ${url} failed: ${response.status} ${error}`);
+      throw new Error(`Git provider API returned HTTP ${response.status}`);
     }
 
-    return await response.json();
+    return readAdminIntegrationJsonResponse<T>(response, 'Git provider API');
   }
 }

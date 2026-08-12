@@ -72,4 +72,37 @@ describe('BrandingSettingsTab', () => {
     expect(loginBranding.compareDocumentPosition(brandFont) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
     expect(brandFont.compareDocumentPosition(favicon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
   });
+
+  it('renders configuration-owned branding read-only with its lineage', async () => {
+    (apiClient.get as any).mockResolvedValue({
+      logoUrl: null,
+      loginLogoUrl: null,
+      loginTitleVerticalOffset: 0,
+      loginTitleColor: null,
+      logoTitle: 'Configured brand',
+      logoScale: 100,
+      titleFontUrl: null,
+      titleFontWeight: '600',
+      titleFontSize: 14,
+      titleVerticalOffset: 0,
+      menuAccentColor: null,
+      faviconUrl: null,
+      ownership: {
+        section: 'branding',
+        sourceRef: 'config_bundle:headless.admin',
+        ownershipMode: 'config_locked',
+        sourceHash: 'hash',
+        lastAppliedAt: 1,
+        driftStatus: 'in_sync',
+        generation: 1,
+      },
+    });
+
+    renderBrandingSettings();
+
+    expect(await screen.findByText('Branding settings are read-only')).toBeInTheDocument();
+    expect(screen.getByText(/Update bundle headless\.admin and apply it again/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Reset to Default' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
+  });
 });

@@ -43,6 +43,10 @@ function configBundleTenantId(req: Request): string {
   return req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
 }
 
+function configBundleActorId(req: Request): string {
+  return req.apiClient?.id || req.user!.userId;
+}
+
 function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
   let result: Record<string, unknown> = {};
   try { result = row.resultJson ? JSON.parse(row.resultJson) as Record<string, unknown> : {}; } catch { /* preserve run-history availability */ }
@@ -84,7 +88,7 @@ export function registerConfigBundleRoutes(
     const payload = configBundleArchiveService.readZip(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
     await logAudit({
       tenantId: configBundleTenantId(req),
-      userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+      userId: configBundleActorId(req),
       action: 'authz.config_bundle.import_zip',
       resourceType: 'config_bundle',
       resourceId: String((payload.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
@@ -97,7 +101,7 @@ export function registerConfigBundleRoutes(
     const result = await configBundleRemoteSourceService.import(req.body.url);
     await logAudit({
       tenantId: configBundleTenantId(req),
-      userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+      userId: configBundleActorId(req),
       action: 'authz.config_bundle.import_url',
       resourceType: 'config_bundle',
       resourceId: String((result.payload.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
@@ -117,7 +121,7 @@ export function registerConfigBundleRoutes(
     const preflight = configBundleSecretPreflightService.check(req.body, settings);
     await logAudit({
       tenantId: configBundleTenantId(req),
-      userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+      userId: configBundleActorId(req),
       action: 'authz.config_bundle.secret_preflight',
       resourceType: 'config_bundle',
       resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
@@ -125,7 +129,11 @@ export function registerConfigBundleRoutes(
         canonicalHash: preflight.canonicalHash || null,
         valid: preflight.valid,
         available: preflight.available,
-        references: preflight.references.map(({ reference, available, reason }) => ({ reference, available, reason: reason || null })),
+        availabilityHash: preflight.availabilityHash || null,
+        referenceCount: preflight.references.length,
+        availableReferenceCount: preflight.references.filter(({ available }) => available).length,
+        unavailableReasonCodes: [...new Set(preflight.references.flatMap(({ available, reason }) =>
+          !available && reason ? [reason] : []))].sort(),
         actorType: req.apiClient ? 'api_client' : 'user',
       },
     });
@@ -144,7 +152,7 @@ export function registerConfigBundleRoutes(
   }));
 
   router.post('/api/authz/config-bundles/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), configBundleJsonPayloadLimit, validateBody(ConfigBundleApplyRequestSchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
-    const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
+    const actorId = configBundleActorId(req);
     const settings = await platformSettingsService.get();
     const result = await configBundleApplyService.apply({
       ...req.body,
@@ -192,7 +200,7 @@ export function registerConfigBundleRoutes(
     const preview = await governanceOwnershipService.preview(req.body);
     await logAudit({
       tenantId: configBundleTenantId(req),
-      userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+      userId: configBundleActorId(req),
       action: 'authz.governance_ownership.preview',
       resourceType: 'platform_settings',
       resourceId: 'default',
@@ -210,7 +218,7 @@ export function registerConfigBundleRoutes(
   }));
 
   router.post('/api/authz/config-bundles/governance-ownership/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), configBundleJsonPayloadLimit, validateBody(GovernanceOwnershipApplyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
-    const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
+    const actorId = configBundleActorId(req);
     const receipt = await governanceOwnershipService.apply(req.body, {
       tenantId: configBundleTenantId(req),
       actorId,

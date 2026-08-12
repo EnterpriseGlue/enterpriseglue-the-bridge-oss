@@ -7,12 +7,10 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
-import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-// TenantSettings removed - multi-tenancy is EE-only
-import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { platformBrandingService } from '@enterpriseglue/shared/services/platform-admin/PlatformBrandingService.js';
 import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import {
   PlatformBrandingSchema,
@@ -52,41 +50,7 @@ const updateTenantBrandingSchema = z.object({
  */
 router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (_req, res) => {
   try {
-    const dataSource = await getDataSource();
-    const platformSettingsRepo = dataSource.getRepository(PlatformSettings);
-    const row = await platformSettingsRepo.findOne({ where: { id: 'default' } });
-
-    if (!row) {
-      return res.json(PlatformBrandingSchema.parse({
-        logoUrl: null,
-        loginLogoUrl: null,
-        loginTitleVerticalOffset: 0,
-        loginTitleColor: null,
-        logoTitle: null,
-        logoScale: 100,
-        titleFontUrl: null,
-        titleFontWeight: '600',
-        titleFontSize: 14,
-        titleVerticalOffset: 0,
-        menuAccentColor: null,
-        faviconUrl: null,
-      }));
-    }
-
-    res.json(PlatformBrandingSchema.parse({
-      logoUrl: row.logoUrl || null,
-      loginLogoUrl: row.loginLogoUrl || null,
-      loginTitleVerticalOffset: row.loginTitleVerticalOffset ?? 0,
-      loginTitleColor: row.loginTitleColor || null,
-      logoTitle: row.logoTitle || null,
-      logoScale: row.logoScale ?? 100,
-      titleFontUrl: row.titleFontUrl || null,
-      titleFontWeight: row.titleFontWeight ?? '600',
-      titleFontSize: row.titleFontSize ?? 14,
-      titleVerticalOffset: row.titleVerticalOffset ?? 0,
-      menuAccentColor: row.menuAccentColor || null,
-      faviconUrl: row.faviconUrl || null,
-    }));
+    res.json(PlatformBrandingSchema.parse(await platformBrandingService.get()));
   } catch (error) {
     logger.error('Get platform branding error:', error);
     throw Errors.internal('Failed to get platform branding');
@@ -104,26 +68,7 @@ router.put(
   validateBody(UpdatePlatformBrandingRequestSchema),
   asyncHandler(async (req, res) => {
     try {
-      const dataSource = await getDataSource();
-      const platformSettingsRepo = dataSource.getRepository(PlatformSettings);
-      const now = Date.now();
-
-      await platformSettingsRepo.update({ id: 'default' }, {
-        logoUrl: req.body.logoUrl,
-        loginLogoUrl: req.body.loginLogoUrl,
-        loginTitleVerticalOffset: req.body.loginTitleVerticalOffset ?? 0,
-        loginTitleColor: req.body.loginTitleColor ?? null,
-        logoTitle: req.body.logoTitle,
-        logoScale: req.body.logoScale ?? 100,
-        titleFontUrl: req.body.titleFontUrl,
-        titleFontWeight: req.body.titleFontWeight ?? '600',
-        titleFontSize: req.body.titleFontSize ?? 14,
-        titleVerticalOffset: req.body.titleVerticalOffset ?? 0,
-        menuAccentColor: req.body.menuAccentColor,
-        faviconUrl: req.body.faviconUrl,
-        updatedAt: now,
-        updatedById: req.user!.userId,
-      });
+      await platformBrandingService.update(req.body, req.user!.userId);
 
       await logAudit({
         action: 'admin.branding.update',
@@ -138,6 +83,7 @@ router.put(
       res.json({ success: true });
     } catch (error) {
       logger.error('Update platform branding error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to update platform branding');
     }
   })
@@ -150,30 +96,12 @@ router.put(
  */
 router.delete('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req, res) => {
   try {
-    const dataSource = await getDataSource();
-    const platformSettingsRepo = dataSource.getRepository(PlatformSettings);
-    const now = Date.now();
-
-    await platformSettingsRepo.update({ id: 'default' }, {
-      logoUrl: null,
-      loginLogoUrl: null,
-      loginTitleVerticalOffset: 0,
-      loginTitleColor: null,
-      logoTitle: null,
-      logoScale: 100,
-      titleFontUrl: null,
-      titleFontWeight: '600',
-      titleFontSize: 14,
-      titleVerticalOffset: 0,
-      menuAccentColor: null,
-      faviconUrl: null,
-      updatedAt: now,
-      updatedById: req.user!.userId,
-    });
+    await platformBrandingService.reset(req.user!.userId);
 
     res.json({ success: true });
   } catch (error) {
     logger.error('Reset platform branding error:', error);
+    if (error instanceof AppError) throw error;
     throw Errors.internal('Failed to reset platform branding');
   }
 }));

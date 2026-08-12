@@ -11,11 +11,14 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 describe('ServiceAccountService', () => {
   let rows: any[];
+  let ownershipRows: any[];
   let repo: any;
+  let ownershipRepo: any;
   let service: ServiceAccountService;
 
   beforeEach(() => {
     rows = [];
+    ownershipRows = [];
     repo = {
       find: vi.fn().mockImplementation(({ where }: { where?: Record<string, unknown> } = {}) => {
         const filtered = where?.isActive === true ? rows.filter((row) => row.isActive) : rows;
@@ -32,7 +35,16 @@ describe('ServiceAccountService', () => {
         return Promise.resolve({});
       }),
     };
-    (getDataSource as any).mockResolvedValue({ getRepository: () => repo });
+    ownershipRepo = {
+      find: vi.fn().mockImplementation(() => Promise.resolve([...ownershipRows])),
+      findOneBy: vi.fn().mockImplementation((where) => Promise.resolve(ownershipRows.find((row) => row.objectType === where.objectType && row.objectId === where.objectId && (where.active === undefined || row.active === where.active)) || null)),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const manager = { getRepository: (entity: { name?: string }) => entity.name === 'AdminConfigObjectOwnership' ? ownershipRepo : repo };
+    (getDataSource as any).mockResolvedValue({
+      ...manager,
+      transaction: (callback: (store: typeof manager) => unknown) => callback(manager),
+    });
     service = new ServiceAccountService();
     vi.clearAllMocks();
   });
@@ -169,5 +181,27 @@ describe('ServiceAccountService', () => {
     const updateCount = repo.update.mock.calls.length;
     await service.revokeServiceAccount(created.account.id);
     expect(repo.update).toHaveBeenCalledTimes(updateCount);
+  });
+
+  it('exposes configuration provenance and rejects locked rotation and revocation', async () => {
+    const created = await service.createServiceAccount({ name: 'Configured service account' });
+    ownershipRows.push({
+      id: 'ownership-1', objectType: 'service_account', objectId: created.account.id,
+      configKey: 'service-account.configured', sourceRef: 'config_bundle:platform.production',
+      ownershipMode: 'config_locked', driftStatus: 'in_sync', active: true, generation: 1,
+    });
+
+    await expect(service.listServiceAccounts()).resolves.toEqual([
+      expect.objectContaining({
+        id: created.account.id,
+        configKey: 'service-account.configured',
+        sourceRef: 'config_bundle:platform.production',
+        ownershipMode: 'config_locked',
+        driftStatus: 'in_sync',
+      }),
+    ]);
+    await expect(service.rotateServiceAccountToken(created.account.id)).rejects.toThrow('managed by configuration');
+    await expect(service.revokeServiceAccount(created.account.id)).rejects.toThrow('managed by configuration');
+    expect(repo.update).not.toHaveBeenCalledWith({ id: created.account.id }, expect.objectContaining({ isActive: false }));
   });
 });

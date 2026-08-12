@@ -67,7 +67,10 @@ jobs:
             const body = String(freshPR.body || '').toLowerCase();
             const titleMatch = normalizedTitle.match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/i);
             const titleType = titleMatch ? titleMatch[1].toLowerCase() : '';
-            const isBreaking = /\)!:|!:/.test(normalizedTitle) || /breaking\s+change/.test(body);
+            const bodyDeclaresBreaking =
+              /(?:^|\n)\s*[-*]\s*\[[xX]\]\s*breaking change\b/i.test(body) ||
+              /(?:^|\n)\s*BREAKING[ -]CHANGE\s*:/i.test(body);
+            const isBreaking = /\)!:|!:/.test(normalizedTitle) || bodyDeclaresBreaking;
             const isSecurity = /security|vuln|cve/.test(title) || /security|vuln|cve/.test(body);
             const isDeprecation = /deprecat/.test(title) || /deprecat/.test(body);
             const isCompatibility = /compat|backward/.test(title) || /compat|backward/.test(body);

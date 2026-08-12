@@ -21,9 +21,14 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { PlatformSettingsSectionOwnership } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
+import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
+import { AdminConfigObjectOwnership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AdminConfigObjectOwnership.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
+import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
+import { PlatformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 
 const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine, createEngineSet, updateEngineSet, writeBackstopMapping } = vi.hoisted(() => ({
   materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
@@ -183,10 +188,56 @@ function setupDataSource() {
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const groupMembershipRepo = { find: vi.fn().mockResolvedValue([]), delete: vi.fn().mockResolvedValue(undefined) };
   const auditRepo = { insert: auditInsert };
+  let platformSettingsRow: any = null;
   const platformSettingsRepo = {
-    findOneBy: vi.fn().mockResolvedValue(null),
-    insert: vi.fn().mockResolvedValue(undefined),
-    update: vi.fn().mockResolvedValue(undefined),
+    findOneBy: vi.fn().mockImplementation(() => Promise.resolve(platformSettingsRow)),
+    findOne: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(
+      platformSettingsRow && Object.entries(where).every(([key, value]) => platformSettingsRow[key] === value)
+        ? platformSettingsRow
+        : null,
+    )),
+    insert: vi.fn().mockImplementation((row: any) => { platformSettingsRow = { ...row }; return Promise.resolve({}); }),
+    update: vi.fn().mockImplementation((_where: any, update: any) => {
+      if (platformSettingsRow) Object.assign(platformSettingsRow, update);
+      return Promise.resolve({ affected: platformSettingsRow ? 1 : 0 });
+    }),
+  };
+  const environmentTagRows: any[] = [];
+  const environmentTagRepo = {
+    find: vi.fn().mockImplementation(() => Promise.resolve(environmentTagRows.map((row) => ({ ...row })))),
+    findOneBy: vi.fn().mockImplementation((where: any) => Promise.resolve(environmentTagRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null)),
+    findOne: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(environmentTagRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null)),
+    insert: vi.fn().mockImplementation((row: any) => { environmentTagRows.push({ ...row }); return Promise.resolve({}); }),
+    update: vi.fn().mockImplementation((where: any, update: any) => {
+      let affected = 0;
+      environmentTagRows.forEach((row) => {
+        if (Object.entries(where).every(([key, value]) => row[key] === value)) { Object.assign(row, update); affected += 1; }
+      });
+      return Promise.resolve({ affected });
+    }),
+    delete: vi.fn().mockImplementation((where: any) => {
+      const index = environmentTagRows.findIndex((row) => Object.entries(where).every(([key, value]) => row[key] === value));
+      if (index < 0) return Promise.resolve({ affected: 0 });
+      environmentTagRows.splice(index, 1);
+      return Promise.resolve({ affected: 1 });
+    }),
+  };
+  const ownershipRows: any[] = [];
+  const ownershipRepo = {
+    find: vi.fn().mockImplementation(({ where }: any = {}) => Promise.resolve(ownershipRows.filter((row) =>
+      !where || Object.entries(where).every(([key, value]) => row[key] === value)
+    ).map((row) => ({ ...row })))),
+    insert: vi.fn().mockImplementation((row: any) => { ownershipRows.push({ ...row }); return Promise.resolve({}); }),
+    update: vi.fn().mockImplementation((where: any, update: any) => {
+      const row = ownershipRows.find((candidate) => Object.entries(where).every(([key, value]) => candidate[key] === value));
+      if (!row) return Promise.resolve({ affected: 0 });
+      Object.assign(row, update);
+      return Promise.resolve({ affected: 1 });
+    }),
   };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
@@ -210,6 +261,9 @@ function setupDataSource() {
     if (entity === AuditLog) return auditRepo;
     if (entity === ConfigBundleApplyRun) return configRunRepo;
     if (entity === PlatformSettings) return platformSettingsRepo;
+    if (entity === EnvironmentTag) return environmentTagRepo;
+    if (entity === PlatformSettingsSectionOwnership) return ownershipRepo;
+    if (entity === AdminConfigObjectOwnership) return { find: vi.fn().mockResolvedValue([]) };
     throw new Error('Unexpected repository');
   };
   const dataSource = {
@@ -217,11 +271,19 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, platformSettingsRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, platformSettingsRepo, environmentTagRows, ownershipRows, dataSource, get platformSettingsRow() { return platformSettingsRow; } };
 }
 
 describe('configBundleApplyService', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const name of [
+      'PAYMENTS_ENGINE_CLIENT_SECRET', 'CORPORATE_OIDC_CLIENT_SECRET', 'CENTRAL_PASSWORD',
+      'ENGINE_PASSWORD', 'PAYMENTS_ENGINE_TOKEN', 'PAYMENTS_ENGINE_PASSWORD', 'CENTRAL_ENGINE_PASSWORD',
+      'ENGINE_BASIC_PASSWORD', 'ENGINE_BEARER_TOKEN', 'ENGINE_OAUTH_SECRET', 'PAYMENTS_PASSWORD',
+      'PII_TOKEN', 'OPERATON_SIDECAR_PASSWORD', 'OPERATON_SIDECAR_OPERATORS_GROUP', 'secret/entra',
+    ]) process.env[name] = `test-${name}`;
+  });
 
   it('applies a hash-bound role and group bundle through one transaction with audit records', async () => {
     const {
@@ -807,7 +869,10 @@ describe('configBundleApplyService', () => {
     const projectId = '00000000-0000-4000-8000-000000000005';
     const configTarget = { id: 'target-config-stale', tenantId: 'tenant-a', projectId, engineId: 'engine-config', source: 'config', sourceRef: 'config_bundle:acme.authz', status: 'active' };
     const manualTarget = { id: 'target-manual-preserved', tenantId: 'tenant-a', projectId, engineId: 'engine-manual', source: 'manual', sourceRef: null, status: 'active' };
-    targetRepo.find.mockImplementation((options?: { where?: unknown }) => Promise.resolve(options?.where ? [configTarget] : [configTarget, manualTarget]));
+    const siblingTarget = { id: 'target-sibling-preserved', tenantId: 'tenant-b', projectId, engineId: 'engine-sibling', source: 'config', sourceRef: 'config_bundle:acme.authz', status: 'active' };
+    targetRepo.find.mockImplementation((options?: { where?: any }) => Promise.resolve(
+      options?.where?.tenantId === 'tenant-a' ? [configTarget] : [configTarget, manualTarget, siblingTarget],
+    ));
     const targetBundle = { ...bundle, imports: ['./project-engine-targets.json'] };
     const targetFiles = { './project-engine-targets.json': { projectEngineTargets: [] } };
     const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
@@ -826,7 +891,51 @@ describe('configBundleApplyService', () => {
     expect(targetRepo.update).toHaveBeenCalledTimes(1);
     expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-config-stale' }, expect.objectContaining({ status: 'archived', driftStatus: 'in_sync' }));
     expect(targetRepo.update).not.toHaveBeenCalledWith({ id: 'target-manual-preserved' }, expect.anything());
+    expect(targetRepo.update).not.toHaveBeenCalledWith({ id: 'target-sibling-preserved' }, expect.anything());
+    expect(targetRepo.find).toHaveBeenCalledWith({
+      where: { source: 'config', sourceRef: 'config_bundle:acme.authz', tenantId: 'tenant-a' },
+    });
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.archive', resourceId: 'target-config-stale' }));
+  });
+
+  it('authoritatively deletes only same-source assignments in the requested tenant', async () => {
+    const { assignmentRepo } = setupDataSource();
+    const tenantAssignment = {
+      id: 'assignment-a', tenantId: 'tenant-a', assignmentKey: 'assignment-key-a',
+      source: 'config', sourceRef: 'config_bundle:acme.authz', expiresAt: null,
+    };
+    const siblingAssignment = {
+      id: 'assignment-b', tenantId: 'tenant-b', assignmentKey: 'assignment-key-b',
+      source: 'config', sourceRef: 'config_bundle:acme.authz', expiresAt: null,
+    };
+    assignmentRepo.find.mockImplementation((options?: { where?: any }) => Promise.resolve(
+      options?.where?.tenantId === 'tenant-a'
+        ? [tenantAssignment]
+        : [tenantAssignment, siblingAssignment],
+    ));
+    assignmentRepo.delete.mockResolvedValue({ affected: 1 });
+    const assignmentBundle = { ...bundle, imports: ['./assignments.json'] };
+    const assignmentFiles = { './assignments.json': { assignments: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: assignmentBundle, files: assignmentFiles });
+
+    await configBundleApplyService.apply({
+      bundle: assignmentBundle,
+      files: assignmentFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: ['config.authoritative_archive:assignment:assignment-key-a'],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(assignmentRepo.find).toHaveBeenCalledWith({
+      where: { source: 'config', sourceRef: 'config_bundle:acme.authz', tenantId: 'tenant-a' },
+    });
+    expect(assignmentRepo.delete).toHaveBeenCalledOnce();
+    const criteria = assignmentRepo.delete.mock.calls[0][0];
+    expect(criteria.id.value).toEqual(['assignment-a']);
+    expect(criteria.tenantId).toBe('tenant-a');
+    expect(criteria.source).toBe('config');
+    expect(criteria.sourceRef).toBe('config_bundle:acme.authz');
   });
 
   it('restores a config-warning assignment by clearing its matching local override', async () => {
@@ -963,6 +1072,41 @@ describe('configBundleApplyService', () => {
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
+  it('requires explicit acknowledgement before adopting administrator-owned platform settings', async () => {
+    const { platformSettingsRepo, dataSource } = setupDataSource();
+    await platformSettingsRepo.insert({
+      id: 'default', updatedAt: 100, updatedById: 'admin-1',
+      engineAccessAuthority: 'manual', projectAccessAuthority: 'manual',
+      engineOnboardingMode: 'manual_allowed', projectEngineTargetMode: 'manual_allowed',
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+      accessGovernanceSourceRef: null, accessGovernanceOwnershipMode: 'manual',
+      accessGovernanceSourceHash: null, accessGovernanceLastAppliedAt: null, accessGovernanceDriftStatus: null,
+    });
+    const governedBundle = {
+      ...bundle,
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      governance: {
+        engineMembershipAuthority: 'manual', projectMembershipAuthority: 'manual',
+        engineRegistrationPolicy: 'manual_allowed', projectEngineTargetPolicy: 'manual_allowed',
+        runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+        governanceSettingsOwnership: 'config_locked',
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: governedBundle, files });
+    const acknowledgement = 'config.ownership_adoption:platform_settings:access-governance';
+
+    await expect(configBundleApplyService.apply({
+      bundle: governedBundle, files, expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a', actorId: 'admin-2',
+    })).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining(acknowledgement) });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+
+    await expect(configBundleApplyService.apply({
+      bundle: governedBundle, files, expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: [acknowledgement], tenantId: 'tenant-a', actorId: 'admin-2',
+    })).resolves.toMatchObject({ updated: expect.any(Number) });
+  });
+
   it('rejects a credentialless sidecar apply when platform policy is disabled', async () => {
     const engineBundle = { ...bundle, imports: ['./engines.json'] };
     const engineFiles = {
@@ -1003,6 +1147,7 @@ describe('configBundleApplyService', () => {
     const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
     const secretPreflight = configBundleSecretPreflightService.check({ bundle: engineBundle, files: engineFiles });
     vi.unstubAllEnvs();
+    delete process.env.PAYMENTS_ENGINE_TOKEN;
 
     await expect(configBundleApplyService.apply({
       bundle: engineBundle,
@@ -1094,7 +1239,7 @@ describe('configBundleApplyService', () => {
     const applyAudit = auditInsert.mock.calls.map((args) => args[0] as { details: string; action: string }).find((entry) => entry.action === 'authz.config_bundle.apply');
     expect(applyAudit).toBeDefined();
     expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
-    expect(applyAudit!.details).toContain('"secretReferenceSummary":{"count":1,"available":0,"unavailable":1}');
+    expect(applyAudit!.details).toContain('"secretReferenceSummary":{"count":1,"available":1,"unavailable":0}');
     expect(applyAudit!.details).not.toContain('PAYMENTS_ENGINE_PASSWORD');
     expect(applyAudit!.details).not.toContain('passwordRef');
   });
@@ -1599,6 +1744,94 @@ describe('configBundleApplyService', () => {
     expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'engines.prod', engineSetKeyIdentity: 'tenant-a:engines.prod', source: 'config',
     }));
+  });
+
+  it('persists, exports, and reapplies headless platform settings and environment tags after service re-instantiation', async () => {
+    const state = setupDataSource();
+    const headlessBundle = {
+      apiVersion: 'enterpriseglue.ai/v1beta1', kind: 'EnterpriseGlueConfigBundle',
+      metadata: { key: 'platform.headless', owner: 'platform' }, tenantKey: 'default', mode: 'authoritative',
+      imports: ['./environment-tags.json', './platform-settings.json'],
+    };
+    const headlessFiles = {
+      './environment-tags.json': { environmentTags: [{
+        key: 'environment.production', name: 'Production', color: '#da1e28',
+        manualDeployAllowed: false, sortOrder: 0, isDefault: true, ownershipMode: 'config_locked',
+      }] },
+      './platform-settings.json': { platformSettings: {
+        general: { defaultEnvironmentTagKey: 'environment.production', emailPlatformName: 'Acme Glue' },
+        gitSync: { pushEnabled: true, pullEnabled: true, bothEnabled: true, projectTokenSharingEnabled: false },
+        deployment: { defaultDeployRoles: ['owner', 'operator'], credentiallessCustomerSidecarsEnabled: false },
+        invitations: { allowAllDomains: false, allowedDomains: ['example.com'] },
+        pii: {
+          regexEnabled: true, externalProviderEnabled: true, externalProviderType: 'presidio',
+          externalProviderEndpoint: 'https://pii.example.com/analyze', externalProviderAuthHeader: 'Authorization',
+          externalProviderAuthTokenRef: 'env://PII_TOKEN', externalProviderProjectId: null,
+          externalProviderRegion: null, redactionStyle: '[REDACTED]', scopes: ['logs', 'audit'],
+          maxPayloadSizeBytes: 65536,
+        },
+        branding: { logoTitle: 'Acme Glue', menuAccentColor: '#0F62FE' },
+        ownershipMode: 'config_locked',
+      } },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: headlessBundle, files: headlessFiles });
+    expect(preview).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+
+    const applied = await configBundleApplyService.apply({
+      bundle: headlessBundle,
+      files: headlessFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: null,
+      actorId: 'system:config-bootstrap',
+    });
+    expect(applied).toMatchObject({ created: 7, updated: 0, archived: 0 });
+    expect(state.environmentTagRows).toEqual([expect.objectContaining({
+      configKey: 'environment.production', sourceRef: 'config_bundle:platform.headless', isDefault: true,
+    })]);
+    expect(state.ownershipRows.map((row) => row.section).sort()).toEqual([
+      'branding', 'deployment', 'general', 'git_sync', 'invitations', 'pii',
+    ]);
+    expect(state.platformSettingsRow).toMatchObject({
+      defaultEnvironmentTagId: state.environmentTagRows[0].id,
+      syncPullEnabled: true,
+      syncBothEnabled: true,
+      inviteAllowedDomains: JSON.stringify(['example.com']),
+      piiExternalProviderAuthToken: 'ref:env://PII_TOKEN',
+      emailPlatformName: 'Acme Glue',
+      logoTitle: 'Acme Glue',
+    });
+
+    // A new service instance reads the persisted rows, which is the same
+    // boundary exercised by startup after a process/container restart.
+    const restartedSettings = await new PlatformSettingsService().get();
+    expect(restartedSettings).toMatchObject({
+      defaultEnvironmentTagId: state.environmentTagRows[0].id,
+      syncPullEnabled: true,
+      syncBothEnabled: true,
+      inviteAllowedDomains: ['example.com'],
+      emailPlatformName: 'Acme Glue',
+    });
+    expect(restartedSettings.sectionOwnership).toHaveLength(6);
+
+    const exported = await configBundleExportService.exportBundle({ bundleKey: 'platform.headless' });
+    expect(exported.files).toMatchObject({
+      './environment-tags.json': { environmentTags: [expect.objectContaining({ key: 'environment.production' })] },
+      './platform-settings.json': { platformSettings: expect.objectContaining({
+        general: { defaultEnvironmentTagKey: 'environment.production', emailPlatformName: 'Acme Glue' },
+        pii: expect.objectContaining({ externalProviderAuthTokenRef: 'env://PII_TOKEN' }),
+      }) },
+    });
+    expect(JSON.stringify(exported)).not.toContain('literal-secret');
+
+    const exportedPreview = configBundlePreviewService.preview(exported);
+    const reapplied = await configBundleApplyService.apply({
+      ...exported,
+      expectedPreviewHash: exportedPreview.canonicalHash!,
+      tenantId: null,
+      actorId: 'system:config-bootstrap',
+    });
+    expect(reapplied).toMatchObject({ created: 0, updated: 0, archived: 0 });
+    expect(reapplied.changes.every((change) => change.operation === 'noop')).toBe(true);
   });
 
   it('resolves a backstop group reference only during apply and does not put its native value in audit output', async () => {

@@ -7,6 +7,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/db/entities/AuditLog.js';
 import { AuthzPolicy } from '@enterpriseglue/shared/db/entities/AuthzPolicy.js';
 import { AuthzAuditLog } from '@enterpriseglue/shared/db/entities/AuthzAuditLog.js';
+import { AdminConfigObjectOwnership } from '@enterpriseglue/shared/db/entities/AdminConfigObjectOwnership.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -236,15 +237,27 @@ describe('policyService', () => {
         resourceType: 'project',
         action: 'project:deploy',
       }),
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'policy-1',
+        tenantId: 'tenant-a',
+        name: 'Release freeze',
+        effect: 'deny',
+        resourceType: 'project',
+        action: 'project:deploy',
+      }),
     };
     const auditRepo = { insert: vi.fn() };
+    const ownershipRepo = { findOneBy: vi.fn().mockResolvedValue(null) };
+    const getRepository = (entity: unknown) => {
+      if (entity === AuthzPolicy) return policyRepo;
+      if (entity === AuditLog) return auditRepo;
+      if (entity === AdminConfigObjectOwnership) return ownershipRepo;
+      throw new Error('Unexpected repository');
+    };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: unknown) => {
-        if (entity === AuthzPolicy) return policyRepo;
-        if (entity === AuditLog) return auditRepo;
-        throw new Error('Unexpected repository');
-      },
+      getRepository,
+      transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
     });
 
     const created = await policyService.createPolicy({
@@ -404,15 +417,26 @@ describe('policyService', () => {
     const policyRepo = {
       ...queryRepo([policyRow({ id: 'policy-1', tenantId: 'tenant-a', description: '', resourceType: '', action: '', conditions: '{invalid' })]),
       insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
-      findOne: vi.fn().mockResolvedValue(null),
+      findOne: vi.fn().mockResolvedValue(policyRow({ id: 'policy-1', tenantId: 'tenant-b', description: null, resourceType: null, action: null, conditions: '{}' })),
       findOneBy: vi.fn()
+        .mockResolvedValueOnce(policyRow({ id: 'policy-1', tenantId: 'tenant-a', description: '', resourceType: '', action: '', conditions: '{invalid' }))
+        .mockResolvedValueOnce(policyRow({ id: 'policy-1', tenantId: 'tenant-b', description: null, resourceType: null, action: null, conditions: '{}' }))
         .mockResolvedValueOnce(policyRow({ id: 'policy-1', tenantId: 'tenant-a', description: '', resourceType: '', action: '', conditions: '{invalid' }))
         .mockResolvedValueOnce(null),
       find: vi.fn().mockResolvedValue([policyRow({ id: 'policy-1', tenantId: 'tenant-a', description: '', resourceType: '', action: '', conditions: '{invalid' })]),
     };
     const auditRepo = { insert: vi.fn(), createQueryBuilder: vi.fn().mockReturnValue(queryBuilder([])) };
+    const ownershipRepo = { findOneBy: vi.fn().mockResolvedValue(null), find: vi.fn().mockResolvedValue([{ objectId: 'other-policy' }]) };
+    const getRepository = (entity: unknown) => entity === AuthzPolicy
+      ? policyRepo
+      : entity === AuditLog || entity === AuthzAuditLog
+        ? auditRepo
+        : entity === AdminConfigObjectOwnership
+          ? ownershipRepo
+          : undefined;
     (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: unknown) => entity === AuthzPolicy ? policyRepo : entity === AuditLog || entity === AuthzAuditLog ? auditRepo : undefined,
+      getRepository,
+      transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
     });
 
     const created = await policyService.createPolicy({ name: 'Default policy', effect: 'allow', createdById: 'admin-1', tenantId: '  ' });
@@ -433,6 +457,9 @@ describe('policyService', () => {
     await expect(policyService.getAllPolicies()).resolves.toHaveLength(1);
     await expect(policyService.getPolicy('policy-1')).resolves.toMatchObject({ id: 'policy-1', conditions: {} });
     await expect(policyService.getPolicy('missing')).resolves.toBeNull();
+    await expect(policyService.updatePolicy('missing', {})).rejects.toMatchObject({ statusCode: 404 });
+    policyRepo.findOne.mockResolvedValueOnce(null);
+    await expect(policyService.deletePolicy('missing')).rejects.toMatchObject({ statusCode: 404 });
     await expect(policyService.getAuditLog({ tenantId: ' tenant-a ', userId: 'user-1', resourceType: 'project', resourceId: 'project-1', decision: 'deny', limit: 25, offset: 10 })).resolves.toEqual([]);
     await expect(policyService.getAuditLog({})).resolves.toEqual([]);
     const auditQb = auditRepo.createQueryBuilder.mock.results[0].value;

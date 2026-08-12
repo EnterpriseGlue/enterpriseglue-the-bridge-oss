@@ -14,40 +14,24 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt, decrypt } from '@enterpriseglue/shared/utils/crypto.js';
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+} from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
+import {
+  CreateEmailConfigurationRequestSchema,
+  EmailTestRequestSchema,
+  UpdateEmailConfigurationRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/email-administration.js';
 
 const router = Router();
 
-const createConfigSchema = z.object({
-  name: z.string().min(1).max(100),
-  provider: z.enum(['resend', 'sendgrid', 'mailgun', 'mailjet', 'smtp']),
-  apiKey: z.string().min(1),
-  fromName: z.string().min(1).max(100),
-  fromEmail: z.string().email(),
-  replyTo: z.string().email().optional(),
-  enabled: z.boolean().optional(),
-  isDefault: z.boolean().optional(),
-  // SMTP-specific fields
-  smtpHost: z.string().optional(),
-  smtpPort: z.number().int().min(1).max(65535).optional(),
-  smtpSecure: z.boolean().optional(),
-  smtpUser: z.string().optional(),
-});
-
-const updateConfigSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  provider: z.enum(['resend', 'sendgrid', 'mailgun', 'mailjet', 'smtp']).optional(),
-  apiKey: z.string().min(1).optional(),
-  fromName: z.string().min(1).max(100).optional(),
-  fromEmail: z.string().email().optional(),
-  replyTo: z.string().email().nullable().optional(),
-  enabled: z.boolean().optional(),
-  // SMTP-specific fields
-  smtpHost: z.string().nullable().optional(),
-  smtpPort: z.number().int().min(1).max(65535).nullable().optional(),
-  smtpSecure: z.boolean().nullable().optional(),
-  smtpUser: z.string().nullable().optional(),
-});
+const emailConfigSelect = [
+  'id', 'name', 'provider', 'fromName', 'fromEmail', 'replyTo', 'smtpHost', 'smtpPort',
+  'smtpSecure', 'smtpUser', 'enabled', 'isDefault', 'createdAt', 'updatedAt',
+] as const;
 
 /**
  * GET /api/admin/email-configs
@@ -57,12 +41,16 @@ router.get('/api/admin/email-configs', apiLimiter, requireAuth, requireAction('p
   try {
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
-    const configs = await configRepo.find({
-      select: ['id', 'name', 'provider', 'fromName', 'fromEmail', 'replyTo', 'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'enabled', 'isDefault', 'createdAt', 'updatedAt'],
-      order: { createdAt: 'DESC' },
-    });
+    const [configs, ownershipRows] = await Promise.all([
+      configRepo.find({
+        select: [...emailConfigSelect],
+        order: { createdAt: 'DESC' },
+      }),
+      adminConfigObjectOwnershipService.listForObjectType(dataSource, 'email_configuration'),
+    ]);
+    const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
 
-    res.json(configs);
+    res.json(configs.map((config) => ({ ...config, ...adminConfigOwnershipFields(ownershipById.get(config.id)) })));
   } catch (error) {
     logger.error('List email configs error:', error);
     throw Errors.internal('Failed to list email configurations');
@@ -81,15 +69,17 @@ router.get('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireActio
 
     const config = await configRepo.findOne({
       where: { id },
-      select: ['id', 'name', 'provider', 'fromName', 'fromEmail', 'replyTo', 'enabled', 'isDefault', 'createdAt', 'updatedAt'],
+      select: [...emailConfigSelect],
     });
 
     if (!config) {
       throw Errors.notFound('Email configuration');
     }
 
-    res.json(config);
+    const ownership = await adminConfigObjectOwnershipService.findForObject(dataSource, 'email_configuration', config.id);
+    res.json({ ...config, ...adminConfigOwnershipFields(ownership) });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Get email config error:', error);
     throw Errors.internal('Failed to get email configuration');
   }
@@ -101,37 +91,42 @@ router.get('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireActio
  */
 router.post('/api/admin/email-configs', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const body = createConfigSchema.parse(req.body);
+    const body = CreateEmailConfigurationRequestSchema.parse(req.body);
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
     const now = Date.now();
 
     const id = generateId();
     const apiKeyEncrypted = encrypt(body.apiKey);
 
-    // If this is set as default, unset other defaults
-    if (body.isDefault) {
-      await configRepo.update({ isDefault: true }, { isDefault: false, updatedAt: now });
-    }
-
-    await configRepo.insert({
-      id,
-      name: body.name,
-      provider: body.provider,
-      apiKeyEncrypted,
-      fromName: body.fromName,
-      fromEmail: body.fromEmail,
-      replyTo: body.replyTo || null,
-      smtpHost: body.smtpHost || null,
-      smtpPort: body.smtpPort || null,
-      smtpSecure: body.smtpSecure ?? true,
-      smtpUser: body.smtpUser || null,
-      enabled: body.enabled ?? true,
-      isDefault: body.isDefault ?? false,
-      createdAt: now,
-      updatedAt: now,
-      createdByUserId: req.user!.userId,
-      updatedByUserId: req.user!.userId,
+    const created = await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      if (body.isDefault) {
+        const defaults = await configRepo.find({ where: { isDefault: true }, select: ['id'] });
+        for (const current of defaults) {
+          await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', current.id);
+        }
+        await configRepo.update({ isDefault: true }, { isDefault: false, updatedAt: now });
+      }
+      await configRepo.insert({
+        id,
+        name: body.name,
+        provider: body.provider,
+        apiKeyEncrypted,
+        fromName: body.fromName,
+        fromEmail: body.fromEmail,
+        replyTo: body.replyTo || null,
+        smtpHost: body.smtpHost || null,
+        smtpPort: body.smtpPort || null,
+        smtpSecure: body.smtpSecure ?? true,
+        smtpUser: body.smtpUser || null,
+        enabled: body.enabled ?? true,
+        isDefault: body.isDefault ?? false,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: req.user!.userId,
+        updatedByUserId: req.user!.userId,
+      });
+      return configRepo.findOneOrFail({ where: { id }, select: [...emailConfigSelect] });
     });
 
     await logAudit({
@@ -144,18 +139,7 @@ router.post('/api/admin/email-configs', apiLimiter, requireAuth, requireAction('
       userAgent: req.headers['user-agent'],
     });
 
-    res.status(201).json({
-      id,
-      name: body.name,
-      provider: body.provider,
-      fromName: body.fromName,
-      fromEmail: body.fromEmail,
-      replyTo: body.replyTo,
-      enabled: body.enabled ?? true,
-      isDefault: body.isDefault ?? false,
-      createdAt: now,
-      updatedAt: now,
-    });
+    res.status(201).json({ ...created, ...adminConfigOwnershipFields(null) });
   } catch (error: any) {
     if (error instanceof AppError) throw error;
     if (error instanceof z.ZodError) {
@@ -173,16 +157,9 @@ router.post('/api/admin/email-configs', apiLimiter, requireAuth, requireAction('
 router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const body = updateConfigSchema.parse(req.body);
+    const body = UpdateEmailConfigurationRequestSchema.parse(req.body);
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
     const now = Date.now();
-
-    const existing = await configRepo.findOneBy({ id });
-
-    if (!existing) {
-      throw Errors.notFound('Email configuration');
-    }
 
     const updates: any = {
       updatedAt: now,
@@ -201,7 +178,13 @@ router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAct
     if (body.smtpSecure !== undefined) updates.smtpSecure = body.smtpSecure;
     if (body.smtpUser !== undefined) updates.smtpUser = body.smtpUser;
 
-    await configRepo.update({ id }, updates);
+    await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      const existing = await configRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Email configuration');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', id);
+      await configRepo.update({ id }, updates);
+    });
 
     await logAudit({
       action: AuditActions.USER_UPDATE,
@@ -232,22 +215,14 @@ router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAc
   try {
     const id = String(req.params.id);
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
-
-    const existing = await configRepo.findOne({
-      where: { id },
-      select: ['id', 'isDefault'],
+    await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      const existing = await configRepo.findOne({ where: { id }, select: ['id', 'isDefault'] });
+      if (!existing) throw Errors.notFound('Email configuration');
+      if (existing.isDefault) throw Errors.validation('Cannot delete the default email configuration');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', id);
+      await configRepo.delete({ id });
     });
-
-    if (!existing) {
-      throw Errors.notFound('Email configuration');
-    }
-
-    if (existing.isDefault) {
-      throw Errors.validation('Cannot delete the default email configuration');
-    }
-
-    await configRepo.delete({ id });
 
     await logAudit({
       action: AuditActions.USER_DELETE,
@@ -260,6 +235,7 @@ router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAc
 
     res.json({ success: true });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Delete email config error:', error);
     throw Errors.internal('Failed to delete email configuration');
   }
@@ -273,23 +249,22 @@ router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth,
   try {
     const id = String(req.params.id);
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
     const now = Date.now();
-
-    const existing = await configRepo.findOneBy({ id });
-
-    if (!existing) {
-      throw Errors.notFound('Email configuration');
-    }
-
-    // Unset all defaults
-    await configRepo.update({ isDefault: true }, { isDefault: false, updatedAt: now });
-
-    // Set this one as default
-    await configRepo.update({ id }, { isDefault: true, updatedAt: now, updatedByUserId: req.user!.userId });
+    await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      const existing = await configRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Email configuration');
+      const defaults = await configRepo.find({ where: { isDefault: true }, select: ['id'] });
+      for (const current of [...defaults, { id }].filter((entry, index, rows) => rows.findIndex((row) => row.id === entry.id) === index)) {
+        await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', current.id);
+      }
+      await configRepo.update({ isDefault: true }, { isDefault: false, updatedAt: now });
+      await configRepo.update({ id }, { isDefault: true, updatedAt: now, updatedByUserId: req.user!.userId });
+    });
 
     res.json({ success: true });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Set default email config error:', error);
     throw Errors.internal('Failed to set default email configuration');
   }
@@ -302,11 +277,7 @@ router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth,
 router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { toEmail } = req.body as { toEmail?: string };
-    
-    if (!toEmail) {
-      throw Errors.validation('toEmail is required');
-    }
+    const { toEmail } = EmailTestRequestSchema.parse(req.body);
 
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
@@ -316,7 +287,9 @@ router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requir
     if (!config) {
       throw Errors.notFound('Email configuration');
     }
-    const apiKey = decrypt(config.apiKeyEncrypted);
+    const apiKey = config.apiKeyEncrypted.startsWith('ref:')
+      ? secretResolver.resolveStored(config.apiKeyEncrypted)!
+      : decrypt(config.apiKeyEncrypted);
 
     // Import provider adapter
     const { sendTestEmail } = await import('@enterpriseglue/shared/services/email-providers.js');

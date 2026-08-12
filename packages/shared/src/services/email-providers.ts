@@ -7,6 +7,10 @@ import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 import escapeHtml from 'escape-html';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import {
+  fetchAdminIntegrationEndpoint,
+  readAdminIntegrationJsonResponse,
+} from '@enterpriseglue/shared/services/platform-admin/AdminIntegrationEndpointPolicy.js';
 
 export type EmailProvider = 'resend' | 'sendgrid' | 'mailgun' | 'mailjet' | 'smtp';
 
@@ -46,6 +50,19 @@ export interface TestEmailParams {
   smtpUser?: string;
 }
 
+const EMAIL_PROVIDER_RESPONSE_LIMIT_BYTES = 64 * 1024;
+
+function providerRequestOptions(label: string) {
+  return {
+    label,
+    maxResponseBytes: EMAIL_PROVIDER_RESPONSE_LIMIT_BYTES,
+  };
+}
+
+function providerHttpError(provider: string, status: number): SendEmailResult {
+  return { success: false, error: `${provider} request failed with HTTP ${status}` };
+}
+
 /**
  * Send an email using the specified provider
  */
@@ -67,9 +84,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       default:
         return { success: false, error: `Unsupported provider: ${provider}` };
     }
-  } catch (error) {
-    logger.error(`Email send error (${provider}):`, error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  } catch {
+    logger.error(`Email provider request failed (${provider})`);
+    return { success: false, error: 'Email provider request failed' };
   }
 }
 
@@ -158,8 +175,9 @@ async function sendWithResend(params: ProviderEmailParams): Promise<SendEmailRes
 async function sendWithSendGrid(params: ProviderEmailParams): Promise<SendEmailResult> {
   const { apiKey, fromName, fromEmail, replyTo, to, subject, html, text } = params;
 
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+  const response = await fetchAdminIntegrationEndpoint('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
+    // lgtm[js/file-access-to-http] Reviewed credential sink: the shared endpoint policy restricts this request to SendGrid's exact built-in HTTPS host, pins production DNS, rejects redirects, and bounds time and response size.
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -174,11 +192,10 @@ async function sendWithSendGrid(params: ProviderEmailParams): Promise<SendEmailR
         { type: 'text/html', value: html },
       ],
     }),
-  });
+  }, providerRequestOptions('SendGrid email provider'));
 
   if (!response.ok) {
-    const errorText = await response.text();
-    return { success: false, error: `SendGrid error: ${response.status} - ${errorText}` };
+    return providerHttpError('SendGrid', response.status);
   }
 
   const messageId = response.headers.get('x-message-id');
@@ -190,7 +207,10 @@ async function sendWithMailgun(params: ProviderEmailParams): Promise<SendEmailRe
 
   // Mailgun API key format: api:key-xxxxx or just the key
   // Domain is typically extracted from fromEmail
-  const domain = fromEmail.split('@')[1];
+  const domain = fromEmail.slice(fromEmail.lastIndexOf('@') + 1).trim().toLowerCase();
+  if (!domain || !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(domain)) {
+    return { success: false, error: 'Mailgun sender domain is invalid' };
+  }
   
   const formData = new URLSearchParams();
   formData.append('from', `${fromName} <${fromEmail}>`);
@@ -200,22 +220,26 @@ async function sendWithMailgun(params: ProviderEmailParams): Promise<SendEmailRe
   if (text) formData.append('text', text);
   if (replyTo) formData.append('h:Reply-To', replyTo);
 
-  const response = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${Buffer.from(`api:${apiKey}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
+  const response = await fetchAdminIntegrationEndpoint(
+    `https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`,
+    {
+      method: 'POST',
+      // lgtm[js/file-access-to-http] Reviewed credential sink: the shared endpoint policy restricts this request to Mailgun's exact built-in HTTPS host, pins production DNS, rejects redirects, and bounds time and response size.
+      headers: {
+        'Authorization': `Basic ${Buffer.from(`api:${apiKey}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
     },
-    body: formData.toString(),
-  });
+    providerRequestOptions('Mailgun email provider'),
+  );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    return { success: false, error: `Mailgun error: ${response.status} - ${errorText}` };
+    return providerHttpError('Mailgun', response.status);
   }
 
-  const result = await response.json();
-  return { success: true, messageId: result.id };
+  const result = await readAdminIntegrationJsonResponse<{ id?: unknown }>(response, 'Mailgun email provider');
+  return { success: true, messageId: typeof result.id === 'string' ? result.id : undefined };
 }
 
 async function sendWithMailjet(params: ProviderEmailParams): Promise<SendEmailResult> {
@@ -224,8 +248,9 @@ async function sendWithMailjet(params: ProviderEmailParams): Promise<SendEmailRe
   // Mailjet uses API key:secret format
   const [apiKeyPart, secretKey] = apiKey.includes(':') ? apiKey.split(':') : [apiKey, ''];
   
-  const response = await fetch('https://api.mailjet.com/v3.1/send', {
+  const response = await fetchAdminIntegrationEndpoint('https://api.mailjet.com/v3.1/send', {
     method: 'POST',
+    // lgtm[js/file-access-to-http] Reviewed credential sink: the shared endpoint policy restricts this request to Mailjet's exact built-in HTTPS host, pins production DNS, rejects redirects, and bounds time and response size.
     headers: {
       'Authorization': `Basic ${Buffer.from(`${apiKeyPart}:${secretKey}`).toString('base64')}`,
       'Content-Type': 'application/json',
@@ -242,14 +267,15 @@ async function sendWithMailjet(params: ProviderEmailParams): Promise<SendEmailRe
         },
       ],
     }),
-  });
+  }, providerRequestOptions('Mailjet email provider'));
 
   if (!response.ok) {
-    const errorText = await response.text();
-    return { success: false, error: `Mailjet error: ${response.status} - ${errorText}` };
+    return providerHttpError('Mailjet', response.status);
   }
 
-  const result = await response.json();
+  const result = await readAdminIntegrationJsonResponse<{
+    Messages?: Array<{ To?: Array<{ MessageID?: unknown }> }>;
+  }>(response, 'Mailjet email provider');
   const messageId = result.Messages?.[0]?.To?.[0]?.MessageID;
   return { success: true, messageId: messageId?.toString() };
 }

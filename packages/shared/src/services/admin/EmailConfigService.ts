@@ -3,6 +3,12 @@ import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persisten
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt, decrypt } from '@enterpriseglue/shared/utils/crypto.js';
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
+import { adminConfigObjectOwnershipService } from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
+
+function resolveEmailCredential(value: string): string {
+  return value.startsWith('ref:') ? secretResolver.resolveStored(value)! : decrypt(value);
+}
 
 export interface EmailConfigSummary {
   id: string;
@@ -129,11 +135,7 @@ class EmailConfigServiceImpl {
 
   async update(id: string, input: UpdateEmailConfigInput): Promise<void> {
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
     const now = Date.now();
-
-    const existing = await configRepo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('Email configuration');
 
     const updates: Record<string, unknown> = {
       updatedAt: now,
@@ -152,33 +154,38 @@ class EmailConfigServiceImpl {
     if (input.smtpSecure !== undefined) updates.smtpSecure = input.smtpSecure;
     if (input.smtpUser !== undefined) updates.smtpUser = input.smtpUser;
 
-    await configRepo.update({ id }, updates);
+    await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      const existing = await configRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Email configuration');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', id);
+      await configRepo.update({ id }, updates);
+    });
   }
 
   async delete(id: string): Promise<void> {
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
-
-    const existing = await configRepo.findOne({
-      where: { id },
-      select: ['id', 'isDefault'],
+    await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      const existing = await configRepo.findOne({ where: { id }, select: ['id', 'isDefault'] });
+      if (!existing) throw Errors.notFound('Email configuration');
+      if (existing.isDefault) throw Errors.validation('Cannot delete the default email configuration');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', id);
+      await configRepo.delete({ id });
     });
-    if (!existing) throw Errors.notFound('Email configuration');
-    if (existing.isDefault) throw Errors.validation('Cannot delete the default email configuration');
-
-    await configRepo.delete({ id });
   }
 
   async setDefault(id: string, userId: string): Promise<void> {
     const dataSource = await getDataSource();
-    const configRepo = dataSource.getRepository(EmailSendConfig);
     const now = Date.now();
-
-    const existing = await configRepo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('Email configuration');
-
-    await configRepo.update({ isDefault: true }, { isDefault: false, updatedAt: now });
-    await configRepo.update({ id }, { isDefault: true, updatedAt: now, updatedByUserId: userId });
+    await dataSource.transaction(async (manager) => {
+      const configRepo = manager.getRepository(EmailSendConfig);
+      const existing = await configRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Email configuration');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_configuration', id);
+      await configRepo.update({ isDefault: true }, { isDefault: false, updatedAt: now });
+      await configRepo.update({ id }, { isDefault: true, updatedAt: now, updatedByUserId: userId });
+    });
   }
 
   async getDecryptedConfig(id: string): Promise<{
@@ -197,7 +204,7 @@ class EmailConfigServiceImpl {
     const config = await configRepo.findOneBy({ id });
     if (!config) throw Errors.notFound('Email configuration');
 
-    const apiKey = decrypt(config.apiKeyEncrypted);
+    const apiKey = resolveEmailCredential(config.apiKeyEncrypted);
     return {
       provider: config.provider,
       fromName: config.fromName,

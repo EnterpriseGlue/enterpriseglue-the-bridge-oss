@@ -36,6 +36,7 @@ import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/pers
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
 import { normalizeTenantIdForPersistence, tenantIdsForAuthz } from '../../authz/tenant-scope.js';
 import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
@@ -49,6 +50,11 @@ import {
   TENANT_SAFE_PERMISSION_IDS,
   TENANT_SAFE_PROJECT_PERMISSION_IDS,
 } from '../../authz/tenant-role-policy.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+  type AdminConfigOwnershipFields,
+} from './AdminConfigObjectOwnershipService.js';
 
 export {
   isTenantSafePermission,
@@ -258,7 +264,7 @@ export type ConfigOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
 export type PermissionKind = 'system' | 'custom';
 export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap' | 'config';
 
-export interface PermissionDefinition {
+export interface PermissionDefinition extends Partial<AdminConfigOwnershipFields> {
   key: Permission;
   scope: ResourceType;
   category: string;
@@ -1688,12 +1694,19 @@ async function recordAuthzAudit(
 }
 
 class PermissionServiceClass {
-  async getPermissionCatalog(): Promise<PermissionDefinition[]> {
+  async getPermissionCatalog(store?: DataSource | EntityManager): Promise<PermissionDefinition[]> {
     try {
-      const dataSource = await getDataSource();
+      const dataSource = store || await getDataSource();
       const rows = await dataSource.getRepository(RbacPermission).find({
         order: { scope: 'ASC', category: 'ASC', key: 'ASC' },
       });
+      let ownershipById = new Map<string, Awaited<ReturnType<typeof adminConfigObjectOwnershipService.listForObjectType>>[number]>();
+      try {
+        const ownershipRows = await adminConfigObjectOwnershipService.listForObjectType(dataSource, 'permission');
+        ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
+      } catch {
+        // Older test doubles and pre-migration bootstrap paths have no generic ownership repository yet.
+      }
       const byKey = new Map<string, PermissionDefinition>(
         PermissionCatalog.map((permission) => [permission.key, permission])
       );
@@ -1712,6 +1725,7 @@ class PermissionServiceClass {
           createdById: row.createdById,
           createdAt: Number(row.createdAt),
           updatedAt: Number(row.updatedAt),
+          ...adminConfigOwnershipFields(ownershipById.get(row.id)),
         });
       }
 
@@ -2120,7 +2134,7 @@ class PermissionServiceClass {
     const dataSource = store || await getDataSource();
     const id = generateId();
     const now = Date.now();
-    const permissionIds = await this.validateRolePermissions(input.scope, input.permissionIds);
+    const permissionIds = await this.validateRolePermissions(input.scope, input.permissionIds, store);
     const name = input.name.trim();
     const source = normalizeRoleSource(input.source);
     const sourceRef = input.sourceRef?.trim() || null;
@@ -2329,7 +2343,7 @@ class PermissionServiceClass {
     if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
     await store.getRepository(RbacRole).update({ id }, values);
     if (input.permissionIds !== undefined) {
-      const permissions = await this.validateRolePermissions(input.scope!, input.permissionIds);
+      const permissions = await this.validateRolePermissions(input.scope!, input.permissionIds, store);
       await this.replaceRolePermissions(store, id, permissions, now);
     }
   }
@@ -2688,8 +2702,21 @@ class PermissionServiceClass {
     await dataSource.getRepository(RbacRoleAssignment).update({ id }, values);
   }
 
-  async deleteResolvedRoleAssignments(dataSource: DataSource | EntityManager, ids: string[]): Promise<void> {
-    if (ids.length > 0) await dataSource.getRepository(RbacRoleAssignment).delete(ids);
+  async deleteResolvedRoleAssignments(
+    dataSource: DataSource | EntityManager,
+    ids: string[],
+    expected: { tenantId?: string | null; source: RoleAssignmentSource; sourceRef: string | null },
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    const removed = await dataSource.getRepository(RbacRoleAssignment).delete({
+      id: In(ids),
+      tenantId: expected.tenantId || IsNull(),
+      source: expected.source,
+      sourceRef: expected.sourceRef || IsNull(),
+    });
+    if (removed.affected !== ids.length) {
+      throw Errors.conflict('Scoped role assignments changed during authoritative reconciliation');
+    }
   }
 
   private async getRuntimeAssignmentWarnings(
@@ -2803,8 +2830,8 @@ class PermissionServiceClass {
     });
   }
 
-  private async validateRolePermissions(scope: RoleScope, permissionIds: Permission[]): Promise<Permission[]> {
-    const catalogByKey = new Map((await this.getPermissionCatalog()).map((permission) => [permission.key, permission]));
+  private async validateRolePermissions(scope: RoleScope, permissionIds: Permission[], store?: DataSource | EntityManager): Promise<Permission[]> {
+    const catalogByKey = new Map((await this.getPermissionCatalog(store)).map((permission) => [permission.key, permission]));
     const uniquePermissionIds = Array.from(new Set(permissionIds));
 
     if (uniquePermissionIds.length === 0) {

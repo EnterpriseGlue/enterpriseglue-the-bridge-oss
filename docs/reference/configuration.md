@@ -93,6 +93,14 @@ to `disabled` for ordinary standalone deployments. A configured production
 bootstrap fails closed by default; use the optional Compose overlay or the
 OpenShift ConfigMap projection to mount the non-secret JSON payload.
 
+The payload may own the complete supported durable administration catalog,
+including Platform Settings sections, branding, Environment Tags, Git/email
+configuration, custom permissions and policies, machine principals, identity,
+and engine governance. See
+[Configure The Platform Without An Administrator](../how-to/configure-platform-headlessly.md)
+for the file inventory, secret-reference rules, startup ordering, export
+round-trip, and authoritative-removal procedure.
+
 - `EG_CONFIG_BUNDLE_PATH`: Absolute path to one JSON payload with `bundle` and `files` properties, or a folder-style ZIP archive containing `bundle.json` and its declared imported JSON files.
 - `EG_CONFIG_BOOTSTRAP_MODE`: `disabled`, `validate`, or `apply`; default `disabled`.
 - `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted payload; rejects unexpected content.
@@ -131,6 +139,28 @@ Host allowlisting validates the configured name and address literals; it is
 not DNS pinning. Allowlist only names below a reviewed administrative boundary,
 and enforce network egress rules that block private, loopback, and cloud-metadata
 destinations reached through an unexpected DNS answer.
+
+### Administrator integration endpoint policy
+
+Git provider OAuth/API calls and the optional external PII classifier use a
+separate fail-closed outbound boundary. Production requires HTTPS, rejects
+redirects and embedded credentials, resolves every configured host before the
+request, rejects private/reserved/metadata answers, pins the validated address
+for the connection, enforces a 10-second deadline, and caps request and response
+bodies at 1 MiB. Official GitHub/GitLab/Bitbucket Cloud hosts are built in;
+custom Git and PII hosts must be explicitly reviewed and allowed.
+
+- `EG_ADMIN_INTEGRATION_ALLOWED_HOSTS`: Comma-separated exact hosts or narrow
+  organizational patterns such as `*.git.example.com`. Broad suffixes such as
+  `*.com` are rejected. Use exact hosts for endpoints that receive OAuth client
+  secrets, access tokens, or PII payloads.
+- `EG_ENFORCE_ADMIN_INTEGRATION_ENDPOINT_POLICY`: Production cannot disable
+  enforcement. Set `true` to exercise the same policy outside production.
+- `EG_ADMIN_INTEGRATION_ALLOW_PRIVATE_HOSTS`: Defaults to `false`. A reviewed
+  private, single-label, `.local`, or address-literal integration requires this
+  opt-in and an exact allowlist entry; wildcards never authorize it. DNS answers
+  are validated and pinned for each request, but platform network egress rules
+  should still block cloud metadata and unapproved private destinations.
 
 ### Identity-provider endpoint and pre-authentication policy
 

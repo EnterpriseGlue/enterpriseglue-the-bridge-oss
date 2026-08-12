@@ -8,11 +8,14 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 describe('ApiClientService', () => {
   let rows: any[];
+  let ownershipRows: any[];
   let repo: any;
+  let ownershipRepo: any;
   let service: ApiClientService;
 
   beforeEach(() => {
     rows = [];
+    ownershipRows = [];
     repo = {
       find: vi.fn().mockImplementation(() => [...rows].sort((left, right) => right.createdAt - left.createdAt)),
       insert: vi.fn().mockImplementation((row) => {
@@ -26,7 +29,16 @@ describe('ApiClientService', () => {
         return Promise.resolve({});
       }),
     };
-    (getDataSource as any).mockResolvedValue({ getRepository: () => repo });
+    ownershipRepo = {
+      find: vi.fn().mockImplementation(() => Promise.resolve([...ownershipRows])),
+      findOneBy: vi.fn().mockImplementation((where) => Promise.resolve(ownershipRows.find((row) => row.objectType === where.objectType && row.objectId === where.objectId && (where.active === undefined || row.active === where.active)) || null)),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const manager = { getRepository: (entity: { name?: string }) => entity.name === 'AdminConfigObjectOwnership' ? ownershipRepo : repo };
+    (getDataSource as any).mockResolvedValue({
+      ...manager,
+      transaction: (callback: (store: typeof manager) => unknown) => callback(manager),
+    });
     service = new ApiClientService();
     vi.clearAllMocks();
   });
@@ -179,5 +191,27 @@ describe('ApiClientService', () => {
     const created = await service.createClient({ name: 'Engine registration' });
     await service.revokeClient(created.client.id);
     await expect(service.rotateClient(created.client.id)).rejects.toThrow('Cannot rotate a revoked API client');
+  });
+
+  it('exposes configuration provenance and rejects locked rotation and revocation', async () => {
+    const created = await service.createClient({ name: 'Configured client' });
+    ownershipRows.push({
+      id: 'ownership-1', objectType: 'api_client', objectId: created.client.id,
+      configKey: 'api-client.configured', sourceRef: 'config_bundle:platform.production',
+      ownershipMode: 'config_locked', driftStatus: 'in_sync', active: true, generation: 1,
+    });
+
+    await expect(service.listClients()).resolves.toEqual([
+      expect.objectContaining({
+        id: created.client.id,
+        configKey: 'api-client.configured',
+        sourceRef: 'config_bundle:platform.production',
+        ownershipMode: 'config_locked',
+        driftStatus: 'in_sync',
+      }),
+    ]);
+    await expect(service.rotateClient(created.client.id)).rejects.toThrow('managed by configuration');
+    await expect(service.revokeClient(created.client.id)).rejects.toThrow('managed by configuration');
+    expect(repo.update).not.toHaveBeenCalledWith({ id: created.client.id }, expect.objectContaining({ isActive: false }));
   });
 });

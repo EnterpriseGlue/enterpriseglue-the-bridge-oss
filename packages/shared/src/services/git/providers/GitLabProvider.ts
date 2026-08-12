@@ -1,4 +1,8 @@
 import { BaseGitProvider, PullRequestParams, PullRequest, CreateRepositoryParams, Repository } from './BaseProvider.js';
+import {
+  fetchAdminIntegrationEndpoint,
+  readAdminIntegrationJsonResponse,
+} from '../../platform-admin/AdminIntegrationEndpointPolicy.js';
 
 /**
  * GitLab API provider adapter
@@ -118,20 +122,19 @@ export class GitLabProvider extends BaseGitProvider {
     accessToken: string,
     body?: any
   ): Promise<T> {
-    const response = await fetch(url, {
+    const response = await fetchAdminIntegrationEndpoint(url, {
       method,
       headers: {
         'PRIVATE-TOKEN': accessToken, // GitLab uses PRIVATE-TOKEN header
         'Content-Type': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, { label: 'GitLab API' });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`${method} ${url} failed: ${response.status} ${error}`);
+      throw new Error(`GitLab API returned HTTP ${response.status}`);
     }
 
-    return await response.json();
+    return readAdminIntegrationJsonResponse<T>(response, 'GitLab API');
   }
 }

@@ -7,6 +7,15 @@ const MAX_ARCHIVE_ENTRIES = 64;
 const MANIFEST_PATH = 'bundle.json';
 const ALLOWED_ARCHIVE_PATHS = new Set([
   MANIFEST_PATH,
+  'platform-settings.json',
+  'environment-tags.json',
+  'git-providers.json',
+  'email-configurations.json',
+  'email-templates.json',
+  'permissions.json',
+  'authorization-policies.json',
+  'machine-principals.json',
+  'external-engine-systems.json',
   'engines.json',
   'engine-backstop-mappings.json',
   'engine-tenant-mappings.json',

@@ -12,6 +12,10 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+} from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
+import {
   externalEngineFieldOwnershipToJson,
   parseExternalEngineFieldOwnership,
 } from './external-engine-ownership.js';
@@ -46,7 +50,10 @@ function normalizeExternalSystemKey(name: string): string {
   });
 }
 
-function serializeExternalEngineSystem(system: ExternalEngineSystem) {
+function serializeExternalEngineSystem(
+  system: ExternalEngineSystem,
+  ownership?: Parameters<typeof adminConfigOwnershipFields>[0],
+) {
   return {
     id: system.id,
     tenantId: system.tenantId,
@@ -59,6 +66,7 @@ function serializeExternalEngineSystem(system: ExternalEngineSystem) {
     createdById: system.createdById,
     createdAt: system.createdAt,
     updatedAt: system.updatedAt,
+    ...adminConfigOwnershipFields(ownership),
   };
 }
 
@@ -68,11 +76,15 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
       const dataSource = await getDataSource();
       const tenantId = req.tenant?.tenantId || null;
       const tenantWhere = tenantId === null ? IsNull() : tenantId;
-      const systems = await dataSource.getRepository(ExternalEngineSystem).find({
-        where: [{ tenantId: tenantWhere }, { tenantId: IsNull() }],
-        order: { isActive: 'DESC', name: 'ASC' },
-      });
-      res.json(systems.map(serializeExternalEngineSystem));
+      const [systems, ownershipRows] = await Promise.all([
+        dataSource.getRepository(ExternalEngineSystem).find({
+          where: [{ tenantId: tenantWhere }, { tenantId: IsNull() }],
+          order: { isActive: 'DESC', name: 'ASC' },
+        }),
+        adminConfigObjectOwnershipService.listForObjectType(dataSource, 'external_engine_system'),
+      ]);
+      const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
+      res.json(systems.map((system) => serializeExternalEngineSystem(system, ownershipById.get(system.id))));
     } catch (error: any) {
       if (error.statusCode) throw error;
       logger.error('List external engine systems error:', error);
@@ -110,11 +122,9 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
 
   router.put('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateParams(resourceIdParamSchema), validateBody(externalEngineSystemUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
-      const repo = (await getDataSource()).getRepository(ExternalEngineSystem);
+      const dataSource = await getDataSource();
       const tenantId = req.tenant?.tenantId || null;
       const tenantWhere = tenantId === null ? IsNull() : tenantId;
-      const system = await repo.findOne({ where: [{ id: String(req.params.id), tenantId: tenantWhere }, { id: String(req.params.id), tenantId: IsNull() }] });
-      if (!system) throw Errors.notFound('External engine system');
       const updates = {
         name: req.body.name,
         description: req.body.description === undefined ? undefined : req.body.description ?? null,
@@ -123,15 +133,23 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
         isActive: req.body.isActive,
         updatedAt: Date.now(),
       };
-      await repo.update({ id: system.id }, updates);
+      const updated = await dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(ExternalEngineSystem);
+        const system = await repo.findOne({ where: [{ id: String(req.params.id), tenantId: tenantWhere }, { id: String(req.params.id), tenantId: IsNull() }] });
+        if (!system) throw Errors.notFound('External engine system');
+        await adminConfigObjectOwnershipService.claimManualMutation(manager, 'external_engine_system', system.id);
+        await repo.update({ id: system.id }, updates);
+        const persisted = await repo.findOneBy({ id: system.id });
+        if (!persisted) throw Errors.notFound('External engine system');
+        return persisted;
+      });
       await logAudit({
         tenantId: tenantId || undefined, userId: req.user!.userId, action: 'external_engine_system.update',
-        resourceType: 'external_engine_system', resourceId: system.id,
+        resourceType: 'external_engine_system', resourceId: updated.id,
         details: { changedFields: Object.entries(updates).filter(([, value]) => value !== undefined).map(([key]) => key) },
       });
-      const updated = await repo.findOneBy({ id: system.id });
-      if (!updated) throw Errors.notFound('External engine system');
-      res.json(serializeExternalEngineSystem(updated));
+      const ownership = await adminConfigObjectOwnershipService.findForObject(dataSource, 'external_engine_system', updated.id);
+      res.json(serializeExternalEngineSystem(updated, ownership));
     } catch (error: any) {
       if (error.statusCode) throw error;
       logger.error('Update external engine system error:', error);
@@ -141,12 +159,17 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
 
   router.delete('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
-      const repo = (await getDataSource()).getRepository(ExternalEngineSystem);
+      const dataSource = await getDataSource();
       const tenantId = req.tenant?.tenantId || null;
       const tenantWhere = tenantId === null ? IsNull() : tenantId;
-      const system = await repo.findOne({ where: [{ id: String(req.params.id), tenantId: tenantWhere }, { id: String(req.params.id), tenantId: IsNull() }] });
-      if (!system) throw Errors.notFound('External engine system');
-      await repo.update({ id: system.id }, { isActive: false, updatedAt: Date.now() });
+      const system = await dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(ExternalEngineSystem);
+        const persisted = await repo.findOne({ where: [{ id: String(req.params.id), tenantId: tenantWhere }, { id: String(req.params.id), tenantId: IsNull() }] });
+        if (!persisted) throw Errors.notFound('External engine system');
+        await adminConfigObjectOwnershipService.claimManualMutation(manager, 'external_engine_system', persisted.id);
+        await repo.update({ id: persisted.id }, { isActive: false, updatedAt: Date.now() });
+        return persisted;
+      });
       await logAudit({
         tenantId: tenantId || undefined, userId: req.user!.userId, action: 'external_engine_system.archive',
         resourceType: 'external_engine_system', resourceId: system.id, details: { key: system.key },

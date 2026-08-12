@@ -9,8 +9,10 @@ import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
-import { encrypt, decrypt, safeDecrypt } from '../encryption.js';
+import { encrypt, decrypt } from '../encryption.js';
 import { remoteGitService } from './RemoteGitService.js';
+import { secretResolver } from '../platform-admin/SecretResolver.js';
+import { fetchAdminIntegrationJson } from '../platform-admin/AdminIntegrationEndpointPolicy.js';
 
 export interface StoredCredential {
   id: string;
@@ -36,6 +38,18 @@ export interface SaveCredentialOptions {
   refreshToken?: string;
   expiresAt?: number;
   scopes?: string;
+}
+
+function refreshedOAuthTokens(data: Record<string, unknown>): { accessToken: string; refreshToken?: string; expiresIn?: number } | null {
+  if (typeof data.access_token !== 'string' || data.access_token.length === 0 || data.access_token.length > 16_384) return null;
+  const refreshToken = typeof data.refresh_token === 'string' && data.refresh_token.length <= 16_384
+    ? data.refresh_token
+    : undefined;
+  const rawExpiry = typeof data.expires_in === 'number' ? data.expires_in : Number(data.expires_in);
+  const expiresIn = Number.isFinite(rawExpiry) && rawExpiry > 0
+    ? Math.min(86_400, Math.trunc(rawExpiry))
+    : undefined;
+  return { accessToken: data.access_token, ...(refreshToken ? { refreshToken } : {}), ...(expiresIn ? { expiresIn } : {}) };
 }
 
 class CredentialService {
@@ -316,14 +330,14 @@ class CredentialService {
     try {
       // GitHub OAuth apps with refresh tokens use this endpoint
       const clientId = provider.oauthClientId;
-      const clientSecret = provider.oauthClientSecret ? decrypt(provider.oauthClientSecret) : null;
+      const clientSecret = provider.oauthClientSecret ? secretResolver.resolveStored(provider.oauthClientSecret) : null;
 
       if (!clientId || !clientSecret) {
         logger.error('GitHub OAuth credentials not configured');
         return null;
       }
 
-      const response = await fetch('https://github.com/login/oauth/access_token', {
+      const data = await fetchAdminIntegrationJson('https://github.com/login/oauth/access_token', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -335,25 +349,14 @@ class CredentialService {
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
         }),
-      });
-
-      if (!response.ok) {
-        logger.error('GitHub token refresh failed', { status: response.status });
-        return null;
-      }
-
-      const data = await response.json() as any;
+      }, { label: 'GitHub token refresh' });
       
       if (data.error) {
         logger.error('GitHub token refresh error', { error: data.error });
         return null;
       }
 
-      return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresIn: data.expires_in,
-      };
+      return refreshedOAuthTokens(data);
     } catch (error) {
       logger.error('GitHub token refresh exception', { error });
       return null;
@@ -369,7 +372,7 @@ class CredentialService {
   ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number } | null> {
     try {
       const clientId = provider.oauthClientId;
-      const clientSecret = provider.oauthClientSecret ? decrypt(provider.oauthClientSecret) : null;
+      const clientSecret = provider.oauthClientSecret ? secretResolver.resolveStored(provider.oauthClientSecret) : null;
       const baseUrl = provider.customBaseUrl || provider.baseUrl || 'https://gitlab.com';
 
       if (!clientId || !clientSecret) {
@@ -377,7 +380,7 @@ class CredentialService {
         return null;
       }
 
-      const response = await fetch(`${baseUrl}/oauth/token`, {
+      const data = await fetchAdminIntegrationJson(`${baseUrl}/oauth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -388,20 +391,9 @@ class CredentialService {
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
         }),
-      });
+      }, { label: 'GitLab token refresh' });
 
-      if (!response.ok) {
-        logger.error('GitLab token refresh failed', { status: response.status });
-        return null;
-      }
-
-      const data = await response.json() as any;
-
-      return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresIn: data.expires_in,
-      };
+      return refreshedOAuthTokens(data);
     } catch (error) {
       logger.error('GitLab token refresh exception', { error });
       return null;
@@ -417,7 +409,7 @@ class CredentialService {
   ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number } | null> {
     try {
       const clientId = provider.oauthClientId;
-      const clientSecret = provider.oauthClientSecret ? decrypt(provider.oauthClientSecret) : null;
+      const clientSecret = provider.oauthClientSecret ? secretResolver.resolveStored(provider.oauthClientSecret) : null;
 
       if (!clientId) {
         logger.error('Azure DevOps OAuth credentials not configured');
@@ -432,26 +424,15 @@ class CredentialService {
         redirect_uri: `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/git/oauth/callback`,
       });
 
-      const response = await fetch('https://app.vssps.visualstudio.com/oauth2/token', {
+      const data = await fetchAdminIntegrationJson('https://app.vssps.visualstudio.com/oauth2/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: params,
-      });
+      }, { label: 'Azure DevOps token refresh' });
 
-      if (!response.ok) {
-        logger.error('Azure DevOps token refresh failed', { status: response.status });
-        return null;
-      }
-
-      const data = await response.json() as any;
-
-      return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresIn: data.expires_in,
-      };
+      return refreshedOAuthTokens(data);
     } catch (error) {
       logger.error('Azure DevOps token refresh exception', { error });
       return null;
@@ -467,14 +448,14 @@ class CredentialService {
   ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number } | null> {
     try {
       const clientId = provider.oauthClientId;
-      const clientSecret = provider.oauthClientSecret ? decrypt(provider.oauthClientSecret) : null;
+      const clientSecret = provider.oauthClientSecret ? secretResolver.resolveStored(provider.oauthClientSecret) : null;
 
       if (!clientId || !clientSecret) {
         logger.error('Bitbucket OAuth credentials not configured');
         return null;
       }
 
-      const response = await fetch('https://bitbucket.org/site/oauth2/access_token', {
+      const data = await fetchAdminIntegrationJson('https://bitbucket.org/site/oauth2/access_token', {
         method: 'POST',
         headers: {
           'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
@@ -484,20 +465,9 @@ class CredentialService {
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
         }),
-      });
+      }, { label: 'Bitbucket token refresh' });
 
-      if (!response.ok) {
-        logger.error('Bitbucket token refresh failed', { status: response.status });
-        return null;
-      }
-
-      const data = await response.json() as any;
-
-      return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresIn: data.expires_in,
-      };
+      return refreshedOAuthTokens(data);
     } catch (error) {
       logger.error('Bitbucket token refresh exception', { error });
       return null;

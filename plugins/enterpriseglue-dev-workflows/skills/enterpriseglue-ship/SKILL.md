@@ -13,23 +13,37 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
 3. Review compatibility across public APIs, OpenAPI, configuration, database
    migrations, published packages, UI behavior, authentication, authorization,
    and rollback.
-4. In OSS repositories with `scripts/release-notes.mjs`, run:
+4. In OSS repositories with `scripts/release-notes.mjs`, require a changed
+   schema-v1 JSON fragment at `.release-notes/<kebab-case-id>.json` for every
+   release-impacting change. The fragment must follow `.release-notes/schema.json`
+   and include the actual audiences, compatibility, upgrade, configuration,
+   API, database/rollback, security, documentation, limitations, validation,
+   and published-package version impacts. Do not create legacy Markdown
+   fragments or directly edit generated release previews. Run:
 
    ```bash
+   pnpm run release-notes:validate
    pnpm run release-notes:preflight -- --base-ref origin/main
    ```
 
-   Read the preview. Do not ship placeholder, unsupported, contradictory, or
-   implementation-only notes.
-5. Confirm the changed fragment matches the conventional PR title,
+   Read `.artifacts/release-notes-preview.md` produced by the preflight. Do not
+   ship placeholder, unsupported, contradictory, implementation-only, or
+   unverified claims. Use `release-note:none` only where the repository permits
+   a low-risk exemption and the PR body contains the required explanation.
+5. Confirm every changed fragment matches the conventional PR title,
    `release:*` label, package version bumps, migration/rollback behavior, and
    actual test evidence. Breaking fragments require `!` and
    `release:breaking`.
 6. Run the repository's appropriate verification level, commit coherent
    changes, and push only the active branch. Create or update the PR without
    rewriting unrelated metadata.
-7. Keep a requested draft PR draft. Never enable auto-merge or merge unless the
-   user explicitly authorizes it.
+7. Determine whether the PR is first-party by comparing its head repository
+   owner with the base repository owner. For a first-party PR that is not
+   explicitly requested or marked as draft, enable auto-merge by default after
+   the required checks and release metadata are in place. Do not enable
+   auto-merge for fork/external PRs or explicitly draft PRs unless the user
+   explicitly requests it. Enabling auto-merge does not authorize bypassing
+   branch protection, dismissing reviews, or merging a draft.
 8. For a Release Please PR, require `docs/releases/vX.Y.Z.md`, require its body
    to match that document, and use a merge commit—not squash. Do not delete or
    recreate published tags.

@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response, Router } from 'express';
 import { z } from 'zod';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -56,6 +56,7 @@ export function registerPolicyRoutes(router: Router, { requirePlatformAction }: 
       });
       res.json({ success: true });
     } catch (error: any) {
+      if (error instanceof AppError) throw error;
       logger.error('Update policy error:', error);
       throw Errors.internal('Failed to update policy');
     }
@@ -67,6 +68,7 @@ export function registerPolicyRoutes(router: Router, { requirePlatformAction }: 
       await policyService.deletePolicy(policyId, req.user!.userId);
       res.status(204).send();
     } catch (error: any) {
+      if (error instanceof AppError) throw error;
       logger.error('Delete policy error:', error);
       throw Errors.internal('Failed to delete policy');
     }

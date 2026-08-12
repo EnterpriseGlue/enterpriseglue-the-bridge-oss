@@ -2032,6 +2032,18 @@ const {
   InvitationTokenParamsSchema,
   VerifyInvitationOtpRequestSchema,
   CompleteOnboardingRequestSchema,
+  EmailConfigurationAdminResponseSchema,
+  CreateEmailConfigurationRequestSchema,
+  UpdateEmailConfigurationRequestSchema,
+  EmailTemplateAdminResponseSchema,
+  EmailTemplatePreviewRequestSchema,
+  EmailTemplatePreviewResponseSchema,
+  UpdateEmailTemplateRequestSchema,
+  EmailPlatformNameResponseSchema,
+  UpdateEmailPlatformNameRequestSchema,
+  EmailTestRequestSchema,
+  EmailTestResponseSchema,
+  AdminMutationSuccessResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/index.js');
 
 // Environment Tags
@@ -3220,49 +3232,49 @@ registry.registerPath({
   method: 'get',
   path: '/api/admin/email-configs',
   ...authzExtension('platform.settings.read', 'GET', '/api/admin/email-configs'),
-  responses: { 200: { description: 'List email configs', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'List email configs', content: { 'application/json': { schema: z.array(EmailConfigurationAdminResponseSchema) } } } },
 });
 registry.registerPath({
   method: 'get',
   path: '/api/admin/email-configs/{id}',
   ...authzExtension('platform.settings.read', 'GET', '/api/admin/email-configs/{id}'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Get email config', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Get email config', content: { 'application/json': { schema: EmailConfigurationAdminResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/admin/email-configs',
   ...authzExtension('platform.settings.manage', 'POST', '/api/admin/email-configs'),
-  request: { body: { content: { 'application/json': { schema: z.unknown() } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: z.unknown() } } } },
+  request: { body: { content: { 'application/json': { schema: CreateEmailConfigurationRequestSchema } } } },
+  responses: { 201: { description: 'Created', content: { 'application/json': { schema: EmailConfigurationAdminResponseSchema } } } },
 });
 registry.registerPath({
   method: 'patch',
   path: '/api/admin/email-configs/{id}',
   ...authzExtension('platform.settings.manage', 'PATCH', '/api/admin/email-configs/{id}'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.unknown() } } } },
-  responses: { 200: { description: 'Updated', content: { 'application/json': { schema: z.unknown() } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdateEmailConfigurationRequestSchema } } } },
+  responses: { 200: { description: 'Updated', content: { 'application/json': { schema: AdminMutationSuccessResponseSchema } } } },
 });
 registry.registerPath({
   method: 'delete',
   path: '/api/admin/email-configs/{id}',
   ...authzExtension('platform.settings.manage', 'DELETE', '/api/admin/email-configs/{id}'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 204: { description: 'Deleted' } },
+  responses: { 200: { description: 'Deleted', content: { 'application/json': { schema: AdminMutationSuccessResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/admin/email-configs/{id}/set-default',
   ...authzExtension('platform.settings.manage', 'POST', '/api/admin/email-configs/{id}/set-default'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Set as default' } },
+  responses: { 200: { description: 'Set as default', content: { 'application/json': { schema: AdminMutationSuccessResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/admin/email-configs/{id}/test',
   ...authzExtension('platform.settings.manage', 'POST', '/api/admin/email-configs/{id}/test'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ to: z.string().email() }) } } } },
-  responses: { 200: { description: 'Test email sent' } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: EmailTestRequestSchema } } } },
+  responses: { 200: { description: 'Test email sent', content: { 'application/json': { schema: EmailTestResponseSchema } } } },
 });
 
 // Email platform name
@@ -3270,14 +3282,14 @@ registry.registerPath({
   method: 'get',
   path: '/api/admin/email-platform-name',
   ...authzExtension('platform.settings.read', 'GET', '/api/admin/email-platform-name'),
-  responses: { 200: { description: 'Platform email name', content: { 'application/json': { schema: z.object({ emailPlatformName: z.string() }) } } } },
+  responses: { 200: { description: 'Platform email name and ownership', content: { 'application/json': { schema: EmailPlatformNameResponseSchema } } } },
 });
 registry.registerPath({
   method: 'put',
   path: '/api/admin/email-platform-name',
   ...authzExtension('platform.settings.manage', 'PUT', '/api/admin/email-platform-name'),
-  request: { body: { content: { 'application/json': { schema: z.object({ name: z.string() }) } } } },
-  responses: { 200: { description: 'Platform name updated' } },
+  request: { body: { content: { 'application/json': { schema: UpdateEmailPlatformNameRequestSchema } } } },
+  responses: { 200: { description: 'Platform name updated', content: { 'application/json': { schema: AdminMutationSuccessResponseSchema } } } },
 });
 
 // Email templates
@@ -3285,35 +3297,38 @@ registry.registerPath({
   method: 'get',
   path: '/api/admin/email-templates',
   ...authzExtension('platform.settings.read', 'GET', '/api/admin/email-templates'),
-  responses: { 200: { description: 'List email templates', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'List email templates', content: { 'application/json': { schema: z.array(EmailTemplateAdminResponseSchema) } } } },
 });
 registry.registerPath({
   method: 'get',
   path: '/api/admin/email-templates/{id}',
   ...authzExtension('platform.settings.read', 'GET', '/api/admin/email-templates/{id}'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Get email template', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Get email template', content: { 'application/json': { schema: EmailTemplateAdminResponseSchema } } } },
 });
 registry.registerPath({
   method: 'patch',
   path: '/api/admin/email-templates/{id}',
   ...authzExtension('platform.settings.manage', 'PATCH', '/api/admin/email-templates/{id}'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.unknown() } } } },
-  responses: { 200: { description: 'Template updated', content: { 'application/json': { schema: z.unknown() } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdateEmailTemplateRequestSchema } } } },
+  responses: { 200: { description: 'Template updated', content: { 'application/json': { schema: AdminMutationSuccessResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/admin/email-templates/{id}/preview',
   ...authzExtension('platform.settings.read', 'POST', '/api/admin/email-templates/{id}/preview'),
-  request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Template preview HTML', content: { 'application/json': { schema: z.object({ html: z.string() }) } } } },
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: EmailTemplatePreviewRequestSchema } } },
+  },
+  responses: { 200: { description: 'Rendered template preview', content: { 'application/json': { schema: EmailTemplatePreviewResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
   path: '/api/admin/email-templates/{id}/reset',
   ...authzExtension('platform.settings.manage', 'POST', '/api/admin/email-templates/{id}/reset'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Template reset to default' } },
+  responses: { 200: { description: 'Template reset to default', content: { 'application/json': { schema: AdminMutationSuccessResponseSchema } } } },
 });
 
 // -----------------------------

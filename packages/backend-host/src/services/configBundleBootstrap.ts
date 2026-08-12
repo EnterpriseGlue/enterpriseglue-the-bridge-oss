@@ -99,11 +99,12 @@ export async function runConfigBundleBootstrap(options: {
     if (config.configExpectedSha256 && hash !== config.configExpectedSha256.toLowerCase()) throw new ConfigBootstrapFailure('hash_mismatch');
     phase = 'validate';
     const settings = await platformSettingsService.get();
-    const preview = configBundlePreviewService.preview(payload, settings);
+    const previewPayload = { bundle: payload.bundle, files: payload.files };
+    const preview = configBundlePreviewService.preview(previewPayload, settings);
     if (!preview.valid || !preview.canonicalHash) throw new ConfigBootstrapFailure('validation_failed');
     phase = 'preflight';
     const checkedSecretPreflight = config.configRequireSecretPreflight
-      ? configBundleSecretPreflightService.check(payload, settings)
+      ? configBundleSecretPreflightService.check(previewPayload, settings)
       : null;
     if (checkedSecretPreflight && (!checkedSecretPreflight.valid || !checkedSecretPreflight.available || checkedSecretPreflight.canonicalHash !== preview.canonicalHash || !checkedSecretPreflight.availabilityHash)) {
       secretPreflight = 'failed';
@@ -114,7 +115,8 @@ export async function runConfigBundleBootstrap(options: {
       if (!config.configExpectedTenantScope) throw new ConfigBootstrapFailure('tenant_scope_missing');
       phase = 'apply';
       const result = await configBundleApplyService.apply({
-        ...payload,
+        ...previewPayload,
+        acknowledgements: payload.acknowledgements || [],
         expectedPreviewHash: preview.canonicalHash,
         expectedSecretPreflightHash: checkedSecretPreflight?.availabilityHash,
         idempotencyKey: `bootstrap:${hash}`,

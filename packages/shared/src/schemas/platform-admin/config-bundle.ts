@@ -88,15 +88,28 @@ export const ConfigRoleReferenceSchema = z.object({ roleKey: ReferenceKeySchema 
 export const ConfigProjectReferenceSchema = z.object({
   id: z.string().uuid(),
 }).strict();
-const SecretReferenceSchema = z.string()
+export const SecretReferenceSchema = z.string()
   .min(1)
   .max(512)
   .regex(/^[A-Za-z][A-Za-z0-9_.:/-]*$/, 'Secret references must be opaque identifiers');
+const ConfigExternalSecretReferenceSchema = SecretReferenceSchema.refine(
+  (value) => /^(?:env|file|docker):\/\//.test(value),
+  'Headless configuration secrets must use an explicit env://, file://, or docker:// reference',
+);
 const PermissionIdSchema = z.string().min(3).max(255).regex(/^[a-z][a-z0-9-]*(?::[a-z0-9-]+)+$/);
 const LabelKeySchema = z.string().min(1).max(128).regex(/^[a-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$/, 'Label keys must be stable identifiers and cannot contain whitespace');
 const LabelSchema = z.record(LabelKeySchema, z.string().min(1).max(512));
 
 const AllowedImportPaths = [
+  './platform-settings.json',
+  './environment-tags.json',
+  './git-providers.json',
+  './email-configurations.json',
+  './email-templates.json',
+  './permissions.json',
+  './authorization-policies.json',
+  './machine-principals.json',
+  './external-engine-systems.json',
   './engines.json',
   './engine-backstop-mappings.json',
   './engine-tenant-mappings.json',
@@ -205,6 +218,9 @@ export const ConfigBundleSecretPreflightResponseSchema = z.object({
 
 export const ConfigBundleDiffOperationSchema = z.enum(['create', 'update', 'noop', 'archive', 'conflict']);
 export const ConfigBundleDiffObjectTypeSchema = z.enum([
+  'environment_tag',
+  'git_provider', 'email_configuration', 'email_template', 'permission',
+  'authorization_policy', 'api_client', 'service_account', 'external_engine_system',
   'role', 'group', 'engine', 'engine_tenant_mapping', 'engine_set', 'runtime_resource_set',
   'engine_backstop_mapping', 'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
   'platform_settings',
@@ -221,6 +237,8 @@ export const ConfigBundleDiffChangeSchema = z.object({
   operation: ConfigBundleDiffOperationSchema,
   reason: z.string(),
   currentId: z.string().optional(),
+  expectedUpdatedAt: z.number().optional(),
+  expectedOwnershipGeneration: z.number().int().nonnegative().optional(),
   permissionChanges: z.object({
     additions: z.array(z.string()),
     removals: z.array(z.string()),
@@ -522,6 +540,314 @@ export const ConfigBundleLoginPolicySchema = z.object({
   providerSelection: SsoProviderSelectionModeSchema
     .describe('Whether to redirect a single provider, always show a chooser, or use email-domain discovery.'),
 }).strict();
+
+const ConfigPlatformGeneralSettingsSchema = z.object({
+  defaultEnvironmentTagKey: ReferenceKeySchema.regex(/^environment[._-]/, 'Environment tag keys must begin with environment').nullable().optional(),
+  emailPlatformName: z.string().trim().min(1).max(160).default('EnterpriseGlue'),
+}).strict();
+
+const ConfigPlatformGitSyncSettingsSchema = z.object({
+  pushEnabled: z.boolean().default(true),
+  pullEnabled: z.boolean().default(false),
+  bothEnabled: z.boolean().default(false),
+  projectTokenSharingEnabled: z.boolean().default(false),
+}).strict().superRefine((settings, ctx) => {
+  if (settings.bothEnabled && (!settings.pushEnabled || !settings.pullEnabled)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['bothEnabled'],
+      message: 'bothEnabled requires pushEnabled and pullEnabled',
+    });
+  }
+});
+
+const ConfigPlatformDeploymentSettingsSchema = z.object({
+  defaultDeployRoles: z.array(z.string().trim().min(1).max(160)).min(1).max(50)
+    .default(['owner', 'delegate', 'operator']),
+  credentiallessCustomerSidecarsEnabled: z.boolean().default(false),
+}).strict();
+
+const ConfigPlatformInvitationSettingsSchema = z.object({
+  allowAllDomains: z.boolean().default(true),
+  allowedDomains: z.array(z.string().trim().toLowerCase().min(1).max(253)
+    .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/, 'Use a DNS domain without a scheme or path'))
+    .max(200)
+    .default([]),
+}).strict().superRefine((settings, ctx) => {
+  if (!settings.allowAllDomains && settings.allowedDomains.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['allowedDomains'],
+      message: 'At least one allowed domain is required when allowAllDomains is false',
+    });
+  }
+});
+
+const ConfigPlatformPiiSettingsSchema = z.object({
+  regexEnabled: z.boolean().default(false),
+  externalProviderEnabled: z.boolean().default(false),
+  externalProviderType: z.enum(['presidio', 'gcp_dlp', 'aws_comprehend', 'azure_pii']).nullable().default(null),
+  externalProviderEndpoint: z.string().url().max(2048).nullable().default(null),
+  externalProviderAuthHeader: z.string().trim().min(1).max(255).nullable().default(null),
+  externalProviderAuthTokenRef: ConfigExternalSecretReferenceSchema.nullable().default(null),
+  externalProviderProjectId: z.string().trim().min(1).max(255).nullable().default(null),
+  externalProviderRegion: z.string().trim().min(1).max(255).nullable().default(null),
+  redactionStyle: z.string().min(1).max(160).default('<TYPE>'),
+  scopes: z.array(z.enum(['processDetails', 'history', 'logs', 'errors', 'audit'])).min(1)
+    .default(['processDetails', 'history', 'logs', 'errors', 'audit']),
+  maxPayloadSizeBytes: z.number().int().min(1024).max(10 * 1024 * 1024).default(262144),
+}).strict().superRefine((settings, ctx) => {
+  if (settings.externalProviderEnabled) {
+    if (!settings.externalProviderType) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['externalProviderType'], message: 'An external provider type is required when external PII detection is enabled' });
+    }
+    if (!settings.externalProviderEndpoint) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['externalProviderEndpoint'], message: 'An external provider endpoint is required when external PII detection is enabled' });
+    }
+  }
+});
+
+const ConfigPlatformBrandingSettingsSchema = z.object({
+  logoUrl: z.string().url().max(2048).nullable().default(null),
+  loginLogoUrl: z.string().url().max(2048).nullable().default(null),
+  loginTitleVerticalOffset: z.number().int().min(-50).max(50).default(0),
+  loginTitleColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().default(null),
+  logoTitle: z.string().trim().max(160).nullable().default(null),
+  logoScale: z.number().int().min(50).max(200).default(100),
+  titleFontUrl: z.string().url().max(2048).nullable().default(null),
+  titleFontWeight: z.string().trim().min(1).max(32).default('600'),
+  titleFontSize: z.number().int().min(10).max(32).default(14),
+  titleVerticalOffset: z.number().int().min(-20).max(20).default(0),
+  menuAccentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().default(null),
+  faviconUrl: z.string().url().max(2048).nullable().default(null),
+}).strict();
+
+/** Durable singleton settings not already represented by governance/login manifest blocks. */
+export const ConfigPlatformSettingsSchema = z.object({
+  general: ConfigPlatformGeneralSettingsSchema.optional(),
+  gitSync: ConfigPlatformGitSyncSettingsSchema.optional(),
+  deployment: ConfigPlatformDeploymentSettingsSchema.optional(),
+  invitations: ConfigPlatformInvitationSettingsSchema.optional(),
+  pii: ConfigPlatformPiiSettingsSchema.optional(),
+  branding: ConfigPlatformBrandingSettingsSchema.optional(),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict().superRefine((settings, ctx) => {
+  if (!settings.general && !settings.gitSync && !settings.deployment && !settings.invitations && !settings.pii && !settings.branding) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: 'Declare at least one platform settings section' });
+  }
+});
+
+export const ConfigPlatformSettingsFileSchema = z.object({
+  platformSettings: ConfigPlatformSettingsSchema,
+}).strict();
+
+export const ConfigEnvironmentTagSchema = z.object({
+  key: ConfigKeySchema.regex(/^environment[._-]/, 'Environment tag keys must begin with environment'),
+  name: z.string().trim().min(1).max(50),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#6b7280'),
+  manualDeployAllowed: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).max(10000),
+  isDefault: z.boolean().default(false),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+export const ConfigEnvironmentTagsFileSchema = z.object({
+  environmentTags: z.array(ConfigEnvironmentTagSchema).max(1000),
+}).strict().superRefine((file, ctx) => {
+  uniqueKeys(file.environmentTags, ctx, 'environmentTags');
+  const defaultIndexes = file.environmentTags
+    .map((tag, index) => tag.isDefault ? index : -1)
+    .filter((index) => index >= 0);
+  if (defaultIndexes.length > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['environmentTags', defaultIndexes[1], 'isDefault'],
+      message: 'Only one environment tag may be the default',
+    });
+  }
+});
+
+export const ConfigGitProviderSchema = z.object({
+  key: ConfigKeySchema.regex(/^git-provider[._-]/, 'Git provider keys must begin with git-provider'),
+  name: z.string().trim().min(1).max(160),
+  type: z.enum(['github', 'gitlab', 'bitbucket', 'azure-devops']),
+  baseUrl: z.string().url().max(2048),
+  apiUrl: z.string().url().max(2048),
+  oauth: z.object({
+    clientId: z.string().trim().min(1).max(255),
+    clientSecretRef: ConfigExternalSecretReferenceSchema,
+    scopes: z.string().trim().min(1).max(2000).nullable().default(null),
+    authorizationUrl: z.string().url().max(2048).nullable().default(null),
+    tokenUrl: z.string().url().max(2048).nullable().default(null),
+  }).strict().nullable().default(null),
+  supportsPat: z.boolean().default(true),
+  active: z.boolean().default(true),
+  displayOrder: z.number().int().min(0).max(10000).default(0),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+export const ConfigGitProvidersFileSchema = z.object({
+  gitProviders: z.array(ConfigGitProviderSchema).max(100),
+}).strict().superRefine((file, ctx) => uniqueKeys(file.gitProviders, ctx, 'gitProviders'));
+
+export const ConfigEmailConfigurationSchema = z.object({
+  key: ConfigKeySchema.regex(/^email-config[._-]/, 'Email configuration keys must begin with email-config'),
+  name: z.string().trim().min(1).max(100),
+  provider: z.enum(['resend', 'sendgrid', 'mailgun', 'mailjet', 'smtp']),
+  credentialRef: ConfigExternalSecretReferenceSchema,
+  fromName: z.string().trim().min(1).max(100),
+  fromEmail: z.string().email().max(320),
+  replyTo: z.string().email().max(320).nullable().default(null),
+  smtp: z.object({
+    host: z.string().trim().min(1).max(255),
+    port: z.number().int().min(1).max(65535),
+    secure: z.boolean().default(true),
+    user: z.string().trim().min(1).max(255).nullable().default(null),
+  }).strict().nullable().default(null),
+  enabled: z.boolean().default(true),
+  isDefault: z.boolean().default(false),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict().superRefine((configuration, ctx) => {
+  if (configuration.provider === 'smtp' && !configuration.smtp) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['smtp'], message: 'SMTP configuration is required for the smtp provider' });
+  }
+  if (configuration.provider !== 'smtp' && configuration.smtp) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['smtp'], message: 'SMTP configuration is allowed only for the smtp provider' });
+  }
+});
+
+export const ConfigEmailConfigurationsFileSchema = z.object({
+  emailConfigurations: z.array(ConfigEmailConfigurationSchema).max(100),
+}).strict().superRefine((file, ctx) => {
+  uniqueKeys(file.emailConfigurations, ctx, 'emailConfigurations');
+  const defaults = file.emailConfigurations.filter((configuration) => configuration.isDefault);
+  if (defaults.length > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['emailConfigurations'], message: 'Only one email configuration may be the default' });
+});
+
+export const ConfigEmailTemplateSchema = z.object({
+  key: ConfigKeySchema.regex(/^email-template[._-]/, 'Email template keys must begin with email-template'),
+  type: z.string().trim().min(1).max(100).regex(/^[a-z][a-z0-9_]*$/),
+  name: z.string().trim().min(1).max(100),
+  subject: z.string().min(1).max(200),
+  htmlTemplate: z.string().min(1).max(1024 * 1024),
+  textTemplate: z.string().max(1024 * 1024).nullable().default(null),
+  variables: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9]*$/)).max(100).default([]),
+  active: z.boolean().default(true),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+export const ConfigEmailTemplatesFileSchema = z.object({
+  emailTemplates: z.array(ConfigEmailTemplateSchema).max(100),
+}).strict().superRefine((file, ctx) => {
+  uniqueKeys(file.emailTemplates, ctx, 'emailTemplates');
+  const types = new Set<string>();
+  file.emailTemplates.forEach((template, index) => {
+    if (types.has(template.type)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['emailTemplates', index, 'type'], message: `Duplicate email template type: ${template.type}` });
+    types.add(template.type);
+  });
+});
+
+export const ConfigPermissionSchema = z.object({
+  key: PermissionIdSchema,
+  scope: z.enum(['platform', 'tenant', 'project', 'engine', 'engine_runtime_resource']),
+  category: z.string().trim().min(1).max(128),
+  label: z.string().trim().min(1).max(128),
+  description: z.string().trim().max(2000).nullable().default(null),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict().superRefine((permission, ctx) => {
+  if (!permission.key.startsWith(`${permission.scope}:custom:`)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['key'], message: `Custom ${permission.scope} permission keys must begin with ${permission.scope}:custom:` });
+  }
+});
+
+export const ConfigPermissionsFileSchema = z.object({
+  permissions: z.array(ConfigPermissionSchema).max(1000),
+}).strict().superRefine((file, ctx) => uniqueKeys(file.permissions, ctx, 'permissions'));
+
+const ConfigPolicyConditionSchema = z.object({
+  timeWindow: z.object({
+    start: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    end: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    timezone: z.string().min(1).max(100).optional(),
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  }).strict().optional(),
+  userAttribute: z.object({
+    key: z.string().min(1).max(255),
+    operator: z.enum(['eq', 'neq', 'in', 'notIn', 'contains']),
+    value: z.union([z.string().max(2000), z.array(z.string().max(2000)).max(100)]),
+  }).strict().optional(),
+  resourceAttribute: z.object({
+    key: z.string().min(1).max(255),
+    operator: z.enum(['eq', 'neq', 'in', 'notIn']),
+    value: z.union([z.string().max(2000), z.array(z.string().max(2000)).max(100), z.boolean()]),
+  }).strict().optional(),
+  environment: z.object({
+    ipRange: z.array(z.string().min(1).max(100)).max(100).optional(),
+    requireMfa: z.boolean().optional(),
+  }).strict().optional(),
+}).strict();
+
+export const ConfigAuthorizationPolicySchema = z.object({
+  key: ConfigKeySchema.regex(/^policy[._-]/, 'Authorization policy keys must begin with policy'),
+  name: z.string().trim().min(1).max(255),
+  description: z.string().trim().max(2000).nullable().default(null),
+  effect: z.enum(['allow', 'deny']),
+  priority: z.number().int().min(0).max(1_000_000).default(0),
+  resourceType: z.string().trim().min(1).max(100).nullable().default(null),
+  action: PermissionIdSchema.nullable().default(null),
+  conditions: ConfigPolicyConditionSchema.default({}),
+  active: z.boolean().default(true),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+export const ConfigAuthorizationPoliciesFileSchema = z.object({
+  authorizationPolicies: z.array(ConfigAuthorizationPolicySchema).max(1000),
+}).strict().superRefine((file, ctx) => uniqueKeys(file.authorizationPolicies, ctx, 'authorizationPolicies'));
+
+const ConfigApiClientSchema = z.object({
+  kind: z.literal('api_client'),
+  key: ConfigKeySchema.regex(/^api-client[._-]/, 'API client keys must begin with api-client'),
+  name: z.string().trim().min(1).max(255),
+  tokenRef: ConfigExternalSecretReferenceSchema,
+  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute'])).min(1),
+  active: z.boolean().default(true),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+const ConfigServiceAccountSchema = z.object({
+  kind: z.literal('service_account'),
+  key: ConfigKeySchema.regex(/^service-account[._-]/, 'Service account keys must begin with service-account'),
+  name: z.string().trim().min(1).max(255),
+  description: z.string().trim().max(2000).nullable().default(null),
+  tokenRef: ConfigExternalSecretReferenceSchema,
+  scopes: z.array(z.literal('deployment:execute')).min(1),
+  active: z.boolean().default(true),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+export const ConfigMachinePrincipalSchema = z.discriminatedUnion('kind', [ConfigApiClientSchema, ConfigServiceAccountSchema]);
+export const ConfigMachinePrincipalsFileSchema = z.object({
+  machinePrincipals: z.array(ConfigMachinePrincipalSchema).max(1000),
+}).strict().superRefine((file, ctx) => uniqueKeys(file.machinePrincipals, ctx, 'machinePrincipals'));
+
+const ConfigEngineFieldOwnershipSchema = z.record(
+  z.string().min(1).max(128),
+  z.enum(['manual', 'external']),
+);
+
+export const ConfigExternalEngineSystemSchema = z.object({
+  key: ConfigKeySchema.regex(/^external-engine-system[._-]/, 'External engine system keys must begin with external-engine-system'),
+  name: z.string().trim().min(1).max(255),
+  description: z.string().trim().max(2000).nullable().default(null),
+  defaultManagementMode: z.enum(['external_managed', 'hybrid']).default('external_managed'),
+  defaultFieldOwnership: ConfigEngineFieldOwnershipSchema.default({}),
+  active: z.boolean().default(true),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+}).strict();
+
+export const ConfigExternalEngineSystemsFileSchema = z.object({
+  externalEngineSystems: z.array(ConfigExternalEngineSystemSchema).max(1000),
+}).strict().superRefine((file, ctx) => uniqueKeys(file.externalEngineSystems, ctx, 'externalEngineSystems'));
 
 const configBundleSettingsDefaults = {
   engineAccessAuthority: 'manual',
@@ -865,14 +1191,23 @@ export const ConfigAssignmentSchema = z.object({
   principal: z.discriminatedUnion('type', [
     z.object({ type: z.literal('group'), key: ReferenceKeySchema }).strict(),
     z.object({ type: z.literal('user'), id: z.string().uuid() }).strict(),
-    z.object({ type: z.literal('api_client'), id: z.string().uuid() }).strict(),
-    z.object({ type: z.literal('service_account'), id: z.string().uuid() }).strict(),
+    z.object({ type: z.literal('api_client'), key: ReferenceKeySchema.optional(), id: z.string().uuid().optional() }).strict(),
+    z.object({ type: z.literal('service_account'), key: ReferenceKeySchema.optional(), id: z.string().uuid().optional() }).strict(),
   ]),
   roleKey: ReferenceKeySchema,
   scope: ConfigAssignmentScopeSchema,
   expiresAt: z.number().int().positive().optional(),
   ownershipMode: ConfigOwnershipModeSchema.optional(),
-}).strict();
+}).strict().superRefine((assignment, ctx) => {
+  if (assignment.principal.type !== 'api_client' && assignment.principal.type !== 'service_account') return;
+  if (Boolean(assignment.principal.key) === Boolean(assignment.principal.id)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['principal'],
+      message: 'Machine-principal assignments require exactly one stable key or persisted id',
+    });
+  }
+});
 export const ConfigAssignmentsFileSchema = z.object({
   assignments: z.array(ConfigAssignmentSchema),
 }).strict().superRefine((file, ctx) => {
@@ -1028,6 +1363,8 @@ export type ConfigBundleDiffWarning = z.infer<typeof ConfigBundleDiffWarningSche
 export type ConfigBundleDiffResponse = z.infer<typeof ConfigBundleDiffResponseSchema>;
 export type ConfigBundleSettings = z.infer<typeof ConfigBundleSettingsSchema>;
 export type ConfigBundleLoginPolicy = z.infer<typeof ConfigBundleLoginPolicySchema>;
+export type ConfigPlatformSettings = z.infer<typeof ConfigPlatformSettingsSchema>;
+export type ConfigEnvironmentTag = z.infer<typeof ConfigEnvironmentTagSchema>;
 export type ConfigBundleBootstrapStatus = z.infer<typeof ConfigBundleBootstrapStatusSchema>;
 export type ConfigBundleIdentityReconciliationMode = z.infer<typeof ConfigBundleIdentityReconciliationModeSchema>;
 export type ConfigBundleIdentitySnapshot = z.infer<typeof ConfigBundleIdentitySnapshotSchema>;

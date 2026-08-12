@@ -233,6 +233,28 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     })).toMatchObject({
       assignments: [{ scope: { type: 'tenant' } }],
     });
+
+    expect(ConfigAssignmentsFileSchema.parse({
+      assignments: [{
+        key: 'assignment.config-client',
+        principal: { type: 'api_client', key: 'api-client.config-manager' },
+        roleKey: 'custom.platform.config-manager',
+        scope: { type: 'platform' },
+      }],
+    })).toMatchObject({ assignments: [{ principal: { type: 'api_client', key: 'api-client.config-manager' } }] });
+
+    expect(ConfigAssignmentsFileSchema.safeParse({
+      assignments: [{
+        principal: { type: 'service_account' },
+        roleKey: 'custom.platform.config-manager', scope: { type: 'platform' },
+      }],
+    }).success).toBe(false);
+    expect(ConfigAssignmentsFileSchema.safeParse({
+      assignments: [{
+        principal: { type: 'api_client', key: 'api-client.config-manager', id: '00000000-0000-4000-8000-000000000101' },
+        roleKey: 'custom.platform.config-manager', scope: { type: 'platform' },
+      }],
+    }).success).toBe(false);
   });
 
   it('rejects duplicate configuration object keys', () => {

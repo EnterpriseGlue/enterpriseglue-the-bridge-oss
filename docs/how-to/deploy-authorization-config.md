@@ -33,6 +33,7 @@ For implementation completion and verification status across authorization, iden
 
 Related guides:
 
+- [Configure The Platform Without An Administrator](./configure-platform-headlessly.md)
 - [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md)
 - [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
 - [Migrate Governance Settings Ownership](./migrate-governance-settings-ownership.md)
@@ -69,6 +70,14 @@ compatibility, an empty `settings: {}` block in a `v1alpha1` manifest does not
 claim the current settings row and does not reset existing portal choices. An
 engine-only or identity-only `v1beta1` bundle may omit `governance` entirely
 with the same non-claiming behavior.
+
+Administrative bundles may additionally import `platform-settings.json`,
+`environment-tags.json`, `git-providers.json`, `email-configurations.json`,
+`email-templates.json`, `permissions.json`, `authorization-policies.json`,
+`machine-principals.json`, and `external-engine-systems.json`. These families
+use the same preview/hash/apply/export lifecycle and section- or object-level
+ownership. See [Configure The Platform Without An Administrator](./configure-platform-headlessly.md)
+for the complete contract and persistence checks.
 
 The same manifest may independently declare ordinary-user login behavior by
 using this object as the top-level `login` value:

@@ -14,6 +14,17 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { PlatformSettingsSectionOwnership } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
+import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
+import { AdminConfigObjectOwnership, type AdminConfigObjectType } from '@enterpriseglue/shared/infrastructure/persistence/entities/AdminConfigObjectOwnership.js';
+import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
+import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
+import { EmailTemplate } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailTemplate.js';
+import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
+import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
+import { ApiClient } from '@enterpriseglue/shared/infrastructure/persistence/entities/ApiClient.js';
+import { ServiceAccount } from '@enterpriseglue/shared/infrastructure/persistence/entities/ServiceAccount.js';
+import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
 import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
 import { EngineTenantReferenceSchema } from '../../schemas/mission-control/engine.js';
 import {
@@ -22,6 +33,8 @@ import {
   type ConfigBundleContractMetadata,
 } from '../../schemas/platform-admin/config-bundle.js';
 import { normalizeIdentityProviderSyncForMandatoryLogin } from '../../schemas/platform-admin/identity.js';
+import { parseAdminConfigSecretReferences } from './AdminConfigObjectOwnershipService.js';
+import { adminConfigScopeKey } from './AdminConfigObjectOwnershipService.js';
 
 function json(value: string | null | undefined): Record<string, unknown> {
   try { const parsed = value ? JSON.parse(value) : {}; return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
@@ -97,7 +110,7 @@ class ConfigBundleExportService {
     const mappingSourcePrefix = `${sourceRef}:engine_tenant_mapping:`;
     const where = { sourceRef, ...(tenantId ? { tenantId } : { tenantId: IsNull() }) };
     const engineScopePrefix = `${tenantId || 'platform'}:`;
-    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources, platformSettings] = await Promise.all([
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources, platformSettings, platformSettingsOwnership, environmentTags, adminOwnership] = await Promise.all([
       dataSource.getRepository(RbacRole).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(AuthzGroup).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(Engine).find({
@@ -115,7 +128,12 @@ class ConfigBundleExportService {
         },
       }),
       dataSource.getRepository(EngineTenantMapping).find({
-        where: { source: 'config', sourceRef: Like(`${mappingSourcePrefix}%`), isActive: true },
+        where: {
+          source: 'config',
+          sourceRef: Like(`${mappingSourcePrefix}%`),
+          isActive: true,
+          enterpriseTenantId: tenantId || OSS_DEFAULT_TENANT_ID,
+        },
       }),
       dataSource.getRepository(EngineSet).find({ where: { ...where, source: 'config', isArchived: false } }),
       dataSource.getRepository(RuntimeResourceSet).find({ where: { ...where, source: 'config', isArchived: false } }),
@@ -125,6 +143,15 @@ class ConfigBundleExportService {
       dataSource.getRepository(IdentityEntitlementMapping).find({ where: { ...where, isActive: true } }),
       dataSource.getRepository(RuntimeResource).find({ where: tenantId ? { tenantId } : { tenantId: IsNull() } }),
       dataSource.getRepository(PlatformSettings).findOneBy({ id: 'default' }),
+      dataSource.getRepository(PlatformSettingsSectionOwnership).find({
+        where: { settingsId: 'default', sourceRef, scopeKey: adminConfigScopeKey(tenantId) },
+      }),
+      dataSource.getRepository(EnvironmentTag).find({
+        where: { sourceRef, configScopeKey: adminConfigScopeKey(tenantId) },
+      }),
+      dataSource.getRepository(AdminConfigObjectOwnership).find({
+        where: { sourceRef, scopeKey: adminConfigScopeKey(tenantId) },
+      }),
     ]);
     const permissions = roles.length
       ? await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: In(roles.map((role) => role.id)) } })
@@ -137,7 +164,205 @@ class ConfigBundleExportService {
     const permissionIdsByRole = new Map<string, string[]>();
     for (const permission of permissions) permissionIdsByRole.set(permission.roleId, [...(permissionIdsByRole.get(permission.roleId) || []), permission.permissionId]);
 
+    const ownershipByType = new Map<AdminConfigObjectType, AdminConfigObjectOwnership[]>();
+    for (const ownership of adminOwnership) {
+      ownershipByType.set(ownership.objectType, [...(ownershipByType.get(ownership.objectType) || []), ownership]);
+    }
+    const history = (type: AdminConfigObjectType): AdminConfigObjectOwnership[] => ownershipByType.get(type) || [];
+    const activeOwnership = (type: AdminConfigObjectType): AdminConfigObjectOwnership[] => history(type).filter((ownership) => ownership.active);
+    const ids = (type: AdminConfigObjectType): string[] => activeOwnership(type).map((ownership) => ownership.objectId);
+    const [gitProviders, emailConfigurations, emailTemplates, customPermissions, authorizationPolicies, apiClients, serviceAccounts, externalEngineSystems] = await Promise.all([
+      ids('git_provider').length ? dataSource.getRepository(GitProvider).find({ where: { id: In(ids('git_provider')) } }) : Promise.resolve([]),
+      ids('email_configuration').length ? dataSource.getRepository(EmailSendConfig).find({ where: { id: In(ids('email_configuration')) } }) : Promise.resolve([]),
+      ids('email_template').length ? dataSource.getRepository(EmailTemplate).find({ where: { id: In(ids('email_template')) } }) : Promise.resolve([]),
+      ids('permission').length ? dataSource.getRepository(RbacPermission).find({ where: { id: In(ids('permission')) } }) : Promise.resolve([]),
+      ids('authorization_policy').length ? dataSource.getRepository(AuthzPolicy).find({ where: { id: In(ids('authorization_policy')) } }) : Promise.resolve([]),
+      ids('api_client').length ? dataSource.getRepository(ApiClient).find({ where: { id: In(ids('api_client')) } }) : Promise.resolve([]),
+      ids('service_account').length ? dataSource.getRepository(ServiceAccount).find({ where: { id: In(ids('service_account')) } }) : Promise.resolve([]),
+      ids('external_engine_system').length ? dataSource.getRepository(ExternalEngineSystem).find({ where: { id: In(ids('external_engine_system')) } }) : Promise.resolve([]),
+    ]);
+
     const files: Record<string, unknown> = {};
+    const owned = (type: AdminConfigObjectType): AdminConfigObjectOwnership[] =>
+      [...activeOwnership(type)].sort((left, right) => left.configKey.localeCompare(right.configKey));
+    const rowById = <T extends { id: string }>(rows: T[], ownership: AdminConfigObjectOwnership, label: string): T => {
+      const row = rows.find((candidate) => candidate.id === ownership.objectId);
+      if (!row) throw new Error(`Cannot export ${label} ${ownership.configKey}: the persisted object is missing`);
+      return row;
+    };
+
+    if (history('git_provider').length) {
+      files['./git-providers.json'] = {
+        gitProviders: owned('git_provider').map((ownership) => {
+          const provider = rowById(gitProviders, ownership, 'Git provider');
+          const references = parseAdminConfigSecretReferences(ownership.secretReferencesJson);
+          if (provider.supportsOAuth && !references.oauthClientSecretRef) {
+            throw new Error(`Cannot export Git provider ${ownership.configKey}: its OAuth client secret reference is missing`);
+          }
+          return {
+            key: ownership.configKey,
+            name: provider.name,
+            type: provider.type,
+            baseUrl: provider.baseUrl,
+            apiUrl: provider.apiUrl,
+            oauth: provider.supportsOAuth ? {
+              clientId: provider.oauthClientId,
+              clientSecretRef: references.oauthClientSecretRef,
+              scopes: provider.oauthScopes,
+              authorizationUrl: provider.oauthAuthUrl,
+              tokenUrl: provider.oauthTokenUrl,
+            } : null,
+            supportsPat: provider.supportsPAT,
+            active: provider.isActive,
+            displayOrder: provider.displayOrder,
+            ownershipMode: ownership.ownershipMode,
+          };
+        }),
+      };
+    }
+    if (history('email_configuration').length) {
+      files['./email-configurations.json'] = {
+        emailConfigurations: owned('email_configuration').map((ownership) => {
+          const configuration = rowById(emailConfigurations, ownership, 'email configuration');
+          const credentialRef = parseAdminConfigSecretReferences(ownership.secretReferencesJson).credentialRef;
+          if (!credentialRef) throw new Error(`Cannot export email configuration ${ownership.configKey}: its credential reference is missing`);
+          return {
+            key: ownership.configKey,
+            name: configuration.name,
+            provider: configuration.provider,
+            credentialRef,
+            fromName: configuration.fromName,
+            fromEmail: configuration.fromEmail,
+            replyTo: configuration.replyTo,
+            smtp: configuration.provider === 'smtp' ? {
+              host: configuration.smtpHost,
+              port: configuration.smtpPort,
+              secure: configuration.smtpSecure,
+              user: configuration.smtpUser,
+            } : null,
+            enabled: configuration.enabled,
+            isDefault: configuration.isDefault,
+            ownershipMode: ownership.ownershipMode,
+          };
+        }),
+      };
+    }
+    if (history('email_template').length) {
+      files['./email-templates.json'] = {
+        emailTemplates: owned('email_template').map((ownership) => {
+          const template = rowById(emailTemplates, ownership, 'email template');
+          return {
+            key: ownership.configKey,
+            type: template.type,
+            name: template.name,
+            subject: template.subject,
+            htmlTemplate: template.htmlTemplate,
+            textTemplate: template.textTemplate,
+            variables: jsonArray(template.variables),
+            active: template.isActive,
+            ownershipMode: ownership.ownershipMode,
+          };
+        }),
+      };
+    }
+    if (history('permission').length) {
+      files['./permissions.json'] = {
+        permissions: owned('permission').map((ownership) => {
+          const permission = rowById(customPermissions, ownership, 'permission');
+          return {
+            key: permission.key,
+            scope: permission.scope,
+            category: permission.category,
+            label: permission.label,
+            description: permission.description,
+            ownershipMode: ownership.ownershipMode,
+          };
+        }),
+      };
+    }
+    if (history('authorization_policy').length) {
+      files['./authorization-policies.json'] = {
+        authorizationPolicies: owned('authorization_policy').map((ownership) => {
+          const policy = rowById(authorizationPolicies, ownership, 'authorization policy');
+          return {
+            key: ownership.configKey,
+            name: policy.name,
+            description: policy.description,
+            effect: policy.effect,
+            priority: policy.priority,
+            resourceType: policy.resourceType,
+            action: policy.action,
+            conditions: json(policy.conditions),
+            active: policy.isActive,
+            ownershipMode: ownership.ownershipMode,
+          };
+        }),
+      };
+    }
+    const machinePrincipals = [
+      ...owned('api_client').map((ownership) => {
+        const client = rowById(apiClients, ownership, 'API client');
+        const tokenRef = parseAdminConfigSecretReferences(ownership.secretReferencesJson).tokenRef;
+        if (!tokenRef) throw new Error(`Cannot export API client ${ownership.configKey}: its token reference is missing`);
+        return {
+          kind: 'api_client',
+          key: ownership.configKey,
+          name: client.name,
+          tokenRef,
+          scopes: jsonArray(client.scopesJson),
+          active: client.isActive,
+          ownershipMode: ownership.ownershipMode,
+        };
+      }),
+      ...owned('service_account').map((ownership) => {
+        const account = rowById(serviceAccounts, ownership, 'service account');
+        const tokenRef = parseAdminConfigSecretReferences(ownership.secretReferencesJson).tokenRef;
+        if (!tokenRef) throw new Error(`Cannot export service account ${ownership.configKey}: its token reference is missing`);
+        return {
+          kind: 'service_account',
+          key: ownership.configKey,
+          name: account.name,
+          description: account.description,
+          tokenRef,
+          scopes: jsonArray(account.scopesJson),
+          active: account.isActive,
+          ownershipMode: ownership.ownershipMode,
+        };
+      }),
+    ].sort((left, right) => left.key.localeCompare(right.key));
+    if (history('api_client').length || history('service_account').length) files['./machine-principals.json'] = { machinePrincipals };
+    if (history('external_engine_system').length) {
+      files['./external-engine-systems.json'] = {
+        externalEngineSystems: owned('external_engine_system').map((ownership) => {
+          const system = rowById(externalEngineSystems, ownership, 'external engine system');
+          return {
+            key: system.key,
+            name: system.name,
+            description: system.description,
+            defaultManagementMode: system.defaultManagementMode,
+            defaultFieldOwnership: json(system.defaultFieldOwnershipJson),
+            active: system.isActive,
+            ownershipMode: ownership.ownershipMode,
+          };
+        }),
+      };
+    }
+    if (environmentTags.length) {
+      files['./environment-tags.json'] = {
+        environmentTags: [...environmentTags]
+          .filter((tag): tag is EnvironmentTag & { configKey: string } => Boolean(tag.configKey))
+          .sort((left, right) => left.configKey.localeCompare(right.configKey))
+          .map((tag) => ({
+            key: tag.configKey,
+            name: tag.name,
+            color: tag.color,
+            manualDeployAllowed: tag.manualDeployAllowed,
+            sortOrder: tag.sortOrder,
+            isDefault: tag.isDefault,
+            ownershipMode: tag.ownershipMode || 'config_locked',
+          })),
+      };
+    }
     if (roles.length) files['./roles.json'] = { roles: sortedByKey(roles).map((role) => ({ key: role.key, name: role.name, description: role.description || undefined, scope: role.scope, permissions: [...(permissionIdsByRole.get(role.id) || [])].sort(), ownershipMode: role.ownershipMode || 'config_locked' })) };
     if (groups.length) files['./groups.json'] = { groups: sortedByKey(groups).map((group) => ({ key: group.key, name: group.name, description: group.description || undefined, ownershipMode: group.ownershipMode || 'config_locked' })) };
     if (engines.length) files['./engines.json'] = { engines: [...engines]
@@ -261,13 +486,30 @@ class ConfigBundleExportService {
     }) };
 
     const roleKeyById = new Map([...referenceRoles, ...roles].map((role) => [role.id, role.key]));
+    const apiClientKeyById = new Map(activeOwnership('api_client').map((ownership) => [ownership.objectId, ownership.configKey]));
+    const serviceAccountKeyById = new Map(activeOwnership('service_account').map((ownership) => [ownership.objectId, ownership.configKey]));
     const engineSetKeyById = new Map(engineSets.map((set) => [set.id, set.key]));
     const runtimeResourceSetKeyById = new Map(runtimeResourceSets.map((set) => [set.id, set.key]));
     const runtimeResourceById = new Map(runtimeResources.map((resource) => [resource.id, resource]));
     if (assignments.length) files['./assignments.json'] = { assignments: assignments.map((assignment) => {
       const roleKey = roleKeyById.get(assignment.roleId);
-      const groupKey = assignment.principalType === 'group' && assignment.principalId ? groupKeyById.get(assignment.principalId) : null;
-      if (!roleKey || !groupKey) throw new Error(`Cannot export scoped role assignment ${assignment.id}: its role or group is not config-owned by this bundle`);
+      if (!roleKey) throw new Error(`Cannot export scoped role assignment ${assignment.id}: its role is unresolved`);
+      let principal: Record<string, string>;
+      if (assignment.principalType === 'group') {
+        const groupKey = groupKeyById.get(assignment.principalId);
+        if (!groupKey) throw new Error(`Cannot export scoped role assignment ${assignment.id}: its group is not config-owned by this bundle`);
+        principal = { type: 'group', key: groupKey };
+      } else if (assignment.principalType === 'user') {
+        principal = { type: 'user', id: assignment.principalId };
+      } else if (assignment.principalType === 'api_client') {
+        const key = apiClientKeyById.get(assignment.principalId);
+        principal = key ? { type: 'api_client', key } : { type: 'api_client', id: assignment.principalId };
+      } else if (assignment.principalType === 'service_account') {
+        const key = serviceAccountKeyById.get(assignment.principalId);
+        principal = key ? { type: 'service_account', key } : { type: 'service_account', id: assignment.principalId };
+      } else {
+        throw new Error(`Cannot export scoped role assignment ${assignment.id}: unsupported principal type ${assignment.principalType}`);
+      }
       let scope: Record<string, unknown>;
       if (assignment.scopeType === 'platform') scope = { type: 'platform' };
       else if (assignment.scopeType === 'tenant' && assignment.scopeId === tenantId) scope = { type: 'tenant' };
@@ -280,7 +522,7 @@ class ConfigBundleExportService {
         if (!resource || !engineKey) throw new Error(`Cannot export scoped role assignment ${assignment.id}: its runtime resource is unresolved`);
         scope = { type: 'engine_runtime_resource', engineKey, resourceKind: resource.resourceKind, resourceKey: resource.resourceKey, runtimeTenantId: resource.runtimeTenantId || undefined };
       } else throw new Error(`Cannot export scoped role assignment ${assignment.id}: unsupported or unresolved ${assignment.scopeType} scope`);
-      return { principal: { type: 'group', key: groupKey }, roleKey, scope, expiresAt: assignment.expiresAt || undefined, ownershipMode: assignment.ownershipMode || 'config_locked' };
+      return { principal, roleKey, scope, expiresAt: assignment.expiresAt || undefined, ownershipMode: assignment.ownershipMode || 'config_locked' };
     }) };
 
     if (projectEngineTargets.length) files['./project-engine-targets.json'] = { projectEngineTargets: projectEngineTargets.filter((target) => target.status !== 'archived').map((target) => {
@@ -288,6 +530,73 @@ class ConfigBundleExportService {
       if (!engineKey) throw new Error(`Cannot export project-engine target ${target.id}: its engine is not config-owned by this bundle`);
       return { projectRef: { id: target.projectId }, engineRef: { engineKey }, status: target.status, allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport, ownershipMode: target.ownershipMode || 'config_locked' };
     }) };
+    if (platformSettings && platformSettingsOwnership.length > 0) {
+      const sectionNames = new Set(platformSettingsOwnership.map((ownership) => ownership.section));
+      const ownershipModes = [...new Set(platformSettingsOwnership.map((ownership) => ownership.ownershipMode))];
+      if (ownershipModes.length !== 1) {
+        throw new Error('Cannot export platform settings: sections owned by one bundle have different ownership modes');
+      }
+      const defaultEnvironmentTag = platformSettings.defaultEnvironmentTagId
+        ? environmentTags.find((tag) => tag.id === platformSettings.defaultEnvironmentTagId)
+        : null;
+      if (sectionNames.has('general') && platformSettings.defaultEnvironmentTagId && !defaultEnvironmentTag?.configKey) {
+        throw new Error('Cannot export platform settings: the default environment tag is not config-owned by this bundle');
+      }
+      const piiTokenRef = externalReference(platformSettings.piiExternalProviderAuthToken);
+      if (sectionNames.has('pii') && platformSettings.piiExternalProviderAuthToken && !piiTokenRef) {
+        throw new Error('Cannot export platform settings: the PII provider token must be an external secret reference');
+      }
+      files['./platform-settings.json'] = {
+        platformSettings: {
+          ...(sectionNames.has('general') ? { general: {
+            defaultEnvironmentTagKey: defaultEnvironmentTag?.configKey || null,
+            emailPlatformName: platformSettings.emailPlatformName || 'EnterpriseGlue',
+          } } : {}),
+          ...(sectionNames.has('git_sync') ? { gitSync: {
+            pushEnabled: platformSettings.syncPushEnabled,
+            pullEnabled: platformSettings.syncPullEnabled,
+            bothEnabled: platformSettings.syncBothEnabled,
+            projectTokenSharingEnabled: platformSettings.gitProjectTokenSharingEnabled,
+          } } : {}),
+          ...(sectionNames.has('deployment') ? { deployment: {
+            defaultDeployRoles: jsonArray(platformSettings.defaultDeployRoles),
+            credentiallessCustomerSidecarsEnabled: platformSettings.credentiallessCustomerSidecarsEnabled,
+          } } : {}),
+          ...(sectionNames.has('invitations') ? { invitations: {
+            allowAllDomains: platformSettings.inviteAllowAllDomains,
+            allowedDomains: jsonArray(platformSettings.inviteAllowedDomains),
+          } } : {}),
+          ...(sectionNames.has('pii') ? { pii: {
+            regexEnabled: platformSettings.piiRegexEnabled,
+            externalProviderEnabled: platformSettings.piiExternalProviderEnabled,
+            externalProviderType: platformSettings.piiExternalProviderType,
+            externalProviderEndpoint: platformSettings.piiExternalProviderEndpoint,
+            externalProviderAuthHeader: platformSettings.piiExternalProviderAuthHeader,
+            externalProviderAuthTokenRef: piiTokenRef,
+            externalProviderProjectId: platformSettings.piiExternalProviderProjectId,
+            externalProviderRegion: platformSettings.piiExternalProviderRegion,
+            redactionStyle: platformSettings.piiRedactionStyle,
+            scopes: jsonArray(platformSettings.piiScopes),
+            maxPayloadSizeBytes: Number(platformSettings.piiMaxPayloadSizeBytes),
+          } } : {}),
+          ...(sectionNames.has('branding') ? { branding: {
+            logoUrl: platformSettings.logoUrl,
+            loginLogoUrl: platformSettings.loginLogoUrl,
+            loginTitleVerticalOffset: platformSettings.loginTitleVerticalOffset,
+            loginTitleColor: platformSettings.loginTitleColor,
+            logoTitle: platformSettings.logoTitle,
+            logoScale: platformSettings.logoScale,
+            titleFontUrl: platformSettings.titleFontUrl,
+            titleFontWeight: platformSettings.titleFontWeight,
+            titleFontSize: platformSettings.titleFontSize,
+            titleVerticalOffset: platformSettings.titleVerticalOffset,
+            menuAccentColor: platformSettings.menuAccentColor,
+            faviconUrl: platformSettings.faviconUrl,
+          } } : {}),
+          ownershipMode: ownershipModes[0],
+        },
+      };
+    }
     const imports = Object.keys(files);
     const governance = platformSettings?.accessGovernanceSourceRef === sourceRef
       ? {

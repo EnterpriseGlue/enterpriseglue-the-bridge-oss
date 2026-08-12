@@ -98,6 +98,21 @@ test('the authorization structure gate requires exhaustive registry action cover
   assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
 });
 
+test('CI enforces headless admin parity and the real PostgreSQL persistence lifecycle', () => {
+  assert.match(scripts['test:headless-admin-config'], /headless-admin-contract-parity\.test\.mjs/);
+  assert.match(scripts['test:headless-admin-config'], /run-headless-admin-config-integration\.sh/);
+  assert.match(scripts['test:headless-admin:browser'], /@headless-admin/);
+  assert.equal(existsSync(new URL('../test/e2e/headless-admin-ownership.spec.ts', import.meta.url)), true);
+  assert.match(ciWorkflow, /Enforce headless administrator configuration parity[\s\S]*?headless-admin-contract-parity\.test\.mjs/);
+  assert.match(ciCoreWorkflow, /Enforce headless administrator configuration parity[\s\S]*?headless-admin-contract-parity\.test\.mjs/);
+  assert.match(ciWorkflow, /Enforce headless administrator configuration parity[\s\S]*?headless-admin-cli-lifecycle\.test\.mjs/);
+  assert.match(ciCoreWorkflow, /Enforce headless administrator configuration parity[\s\S]*?headless-admin-cli-lifecycle\.test\.mjs/);
+  assert.match(ciWorkflow, /Run Access Control and headless administration browser e2e[\s\S]*?@access-control-layout\|@headless-admin/);
+  assert.match(ciCoreWorkflow, /Run Access Control and headless administration browser e2e[\s\S]*?@access-control-layout\|@headless-admin/);
+  assert.match(ciWorkflow, /Run integration tests[\s\S]*?pnpm run test:integration/);
+  assert.match(ciCoreWorkflow, /Run integration tests[\s\S]*?pnpm run test:integration/);
+});
+
 test('the pull-request authorization gate keeps decision coverage and focused failure modes explicit', () => {
   assert.match(scripts['test:authz:pr'], /authorization-model-randomized\.test\.ts/);
   assert.match(scripts['test:authz:pr'], /custom-role-scope-matrix\.test\.ts/);

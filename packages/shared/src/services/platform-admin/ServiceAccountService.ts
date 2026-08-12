@@ -5,6 +5,11 @@ import { ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+  type AdminConfigOwnershipFields,
+} from './AdminConfigObjectOwnershipService.js';
 
 export const SERVICE_ACCOUNT_TOKEN_PREFIX = 'egsa';
 
@@ -14,7 +19,7 @@ export const ServiceAccountScopes = {
 
 export type ServiceAccountScope = typeof ServiceAccountScopes[keyof typeof ServiceAccountScopes];
 
-export interface ServiceAccountView {
+export interface ServiceAccountView extends AdminConfigOwnershipFields {
   id: string;
   name: string;
   tokenPrefix: string | null;
@@ -60,7 +65,7 @@ function normalizeScopes(scopes: string[] | undefined): string[] {
   return normalized.length > 0 ? normalized : [ServiceAccountScopes.DEPLOYMENT_EXECUTE];
 }
 
-function toView(account: ServiceAccount): ServiceAccountView {
+function toView(account: ServiceAccount, ownership?: Parameters<typeof adminConfigOwnershipFields>[0]): ServiceAccountView {
   return {
     id: account.id,
     name: account.name,
@@ -73,6 +78,7 @@ function toView(account: ServiceAccount): ServiceAccountView {
     revokedAt: account.revokedAt,
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
+    ...adminConfigOwnershipFields(ownership),
   };
 }
 
@@ -106,11 +112,15 @@ export class ServiceAccountService {
   async listServiceAccounts(input: { includeInactive?: boolean } = {}): Promise<ServiceAccountView[]> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(ServiceAccount);
-    const accounts = await repo.find({
-      where: input.includeInactive ? undefined : { isActive: true },
-      order: { createdAt: 'DESC' },
-    });
-    return accounts.map(toView);
+    const [accounts, ownershipRows] = await Promise.all([
+      repo.find({
+        where: input.includeInactive ? undefined : { isActive: true },
+        order: { createdAt: 'DESC' },
+      }),
+      adminConfigObjectOwnershipService.listForObjectType(dataSource, 'service_account'),
+    ]);
+    const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
+    return accounts.map((account) => toView(account, ownershipById.get(account.id)));
   }
 
   async createServiceAccount(input: {
@@ -150,39 +160,33 @@ export class ServiceAccountService {
 
   async rotateServiceAccountToken(id: string): Promise<ServiceAccountWithToken> {
     const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ServiceAccount);
-    const existing = await repo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('Service account');
-    if (!existing.isActive) throw Errors.validation('Cannot rotate a revoked service account');
-
     const secret = generateSecret();
     const now = Date.now();
     const secretHash = await hashPassword(secret);
-    const tokenPrefix = existing.tokenPrefix || `${SERVICE_ACCOUNT_TOKEN_PREFIX}_${id.slice(0, 8)}`;
-    const scopesJson = existing.scopesJson || JSON.stringify([ServiceAccountScopes.DEPLOYMENT_EXECUTE]);
-    await repo.update({ id }, {
-      tokenPrefix,
-      secretHash,
-      scopesJson,
-      updatedAt: now,
+    return dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ServiceAccount);
+      const existing = await repo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Service account');
+      if (!existing.isActive) throw Errors.validation('Cannot rotate a revoked service account');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'service_account', id);
+      const tokenPrefix = existing.tokenPrefix || `${SERVICE_ACCOUNT_TOKEN_PREFIX}_${id.slice(0, 8)}`;
+      const scopesJson = existing.scopesJson || JSON.stringify([ServiceAccountScopes.DEPLOYMENT_EXECUTE]);
+      await repo.update({ id }, { tokenPrefix, secretHash, scopesJson, updatedAt: now });
+      const updated = { ...existing, tokenPrefix, secretHash, scopesJson, updatedAt: now };
+      return { account: toView(updated as ServiceAccount), token: formatToken(id, secret) };
     });
-
-    const updated = { ...existing, tokenPrefix, secretHash, scopesJson, updatedAt: now };
-    return { account: toView(updated as ServiceAccount), token: formatToken(id, secret) };
   }
 
   async revokeServiceAccount(id: string): Promise<void> {
     const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ServiceAccount);
-    const existing = await repo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('Service account');
-    if (!existing.isActive) return;
-
-    const now = Date.now();
-    await repo.update({ id }, {
-      isActive: false,
-      revokedAt: now,
-      updatedAt: now,
+    await dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ServiceAccount);
+      const existing = await repo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Service account');
+      if (!existing.isActive) return;
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'service_account', id);
+      const now = Date.now();
+      await repo.update({ id }, { isActive: false, revokedAt: now, updatedAt: now });
     });
   }
 
