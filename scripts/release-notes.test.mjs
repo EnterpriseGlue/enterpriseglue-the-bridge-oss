@@ -253,6 +253,11 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   for (const workflow of [release, hotfix]) {
     assert.match(workflow, /node scripts\/release-notes\.mjs baseline/)
     assert.match(workflow, /bash scripts\/prepare-release-notes-pr\.sh/)
+    assert.match(
+      workflow,
+      /uses: actions\/checkout@[^\n]+\n\s+with:\n\s+fetch-depth: 0\n\s+token: \$\{\{ secrets\.RELEASE_PLEASE_TOKEN != '' && secrets\.RELEASE_PLEASE_TOKEN \|\| github\.token \}\}/,
+      'release workflows must persist the trusted release token for release-note branch pushes',
+    )
   }
   assert.match(
     prepare,
