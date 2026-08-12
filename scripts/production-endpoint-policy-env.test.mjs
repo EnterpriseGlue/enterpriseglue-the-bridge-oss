@@ -23,6 +23,12 @@ const requiredEnginePolicyKeys = [
   'EG_ALLOW_INSECURE_ENGINE_HTTP',
 ];
 
+const requiredAdminIntegrationPolicyKeys = [
+  'EG_ADMIN_INTEGRATION_ALLOWED_HOSTS',
+  'EG_ENFORCE_ADMIN_INTEGRATION_ENDPOINT_POLICY',
+  'EG_ADMIN_INTEGRATION_ALLOW_PRIVATE_HOSTS',
+];
+
 function source(path) {
   return readFileSync(new URL(path, import.meta.url), 'utf8');
 }
@@ -35,9 +41,11 @@ test('production Docker environment examples expose fail-closed engine and ident
   for (const path of ['../infra/docker/env/examples/production.env.example', '../infra/docker/env/examples/selfhost.env.example']) {
     const contents = source(path);
     assert.match(contents, /^NODE_ENV=production$/m);
-    [...requiredEnginePolicyKeys, ...requiredIdentityPolicyKeys].forEach((key) => assertEnvAssignment(contents, key));
+    [...requiredEnginePolicyKeys, ...requiredAdminIntegrationPolicyKeys, ...requiredIdentityPolicyKeys]
+      .forEach((key) => assertEnvAssignment(contents, key));
     assert.match(contents, /^EG_ENGINE_ALLOWED_HOSTS=$/m);
     assert.match(contents, /^EG_IDENTITY_PROVIDER_ALLOWED_HOSTS=$/m);
+    assert.match(contents, /^EG_ADMIN_INTEGRATION_ALLOWED_HOSTS=$/m);
     assert.doesNotMatch(contents, /HTTP .*automatically allowed/i);
   }
 });
@@ -46,7 +54,7 @@ test('OpenShift defaults and operator references retain every identity safety bu
   const configMap = source('../infra/kubernetes/openshift/kustomize/base/config/configmap.yaml');
   const openShiftExample = source('../infra/docker/env/examples/openshift.env.example');
   const configurationMatrix = source('../docs/reference/configuration-matrix.md');
-  for (const key of [...requiredEnginePolicyKeys, ...requiredIdentityPolicyKeys]) {
+  for (const key of [...requiredEnginePolicyKeys, ...requiredAdminIntegrationPolicyKeys, ...requiredIdentityPolicyKeys]) {
     assert.match(configMap, new RegExp(`^  ${key}:`, 'm'), `${key} must be rendered in the OpenShift ConfigMap`);
     assert.match(openShiftExample, new RegExp(`^#? ?${key}=`, 'm'), `${key} must be discoverable in the OpenShift environment example`);
     assert.match(configurationMatrix, new RegExp(`\\| ${key} \\|`), `${key} must be documented in the configuration matrix`);

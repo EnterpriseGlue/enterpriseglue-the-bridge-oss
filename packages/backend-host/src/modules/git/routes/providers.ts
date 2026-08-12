@@ -17,7 +17,11 @@ import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence
 import { GitCredential } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitCredential.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
 import { credentialService } from '@enterpriseglue/shared/services/git/CredentialService.js';
-import { encrypt as encryptSecret, isEncrypted as isEncryptedValue } from '@enterpriseglue/shared/services/encryption.js';
+import { gitProviderService } from '@enterpriseglue/shared/services/git/GitProviderService.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+} from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
 import {
   GitProviderAdminSummarySchema,
   GitProviderAdminUpdateResponseSchema,
@@ -101,7 +105,7 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requireAction('p
   const gitRepoRepo = dataSource.getRepository(GitRepository);
   const credentialRepo = dataSource.getRepository(GitCredential);
 
-  const [providers, repoCounts, credentialCounts] = await Promise.all([
+  const [providers, repoCounts, credentialCounts, ownershipRows] = await Promise.all([
     providerRepo.find({
       order: { displayOrder: 'ASC', name: 'ASC' },
     }),
@@ -115,7 +119,9 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requireAction('p
       .addSelect('COUNT(*)', 'gitConnectionsCount')
       .groupBy('c.providerId')
       .getRawMany(),
+    adminConfigObjectOwnershipService.listForObjectType(dataSource, 'git_provider'),
   ]);
+  const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
 
   const repoCountMap = new Map<string, number>();
   for (const row of repoCounts) {
@@ -137,6 +143,7 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requireAction('p
       gitConnectionsCount,
       hasProjectConnections: projectConnectionsCount > 0,
       hasGitConnections: gitConnectionsCount > 0,
+      ...adminConfigOwnershipFields(ownershipById.get(p.id)),
     };
   });
 
@@ -161,52 +168,19 @@ router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requireActio
     displayOrder,
   } = req.body;
 
+  const updated = await gitProviderService.update(id, {
+    isActive,
+    customBaseUrl,
+    customApiUrl,
+    oauthClientId,
+    oauthClientSecret,
+    oauthScopes,
+    displayOrder,
+  });
+
   const dataSource = await getDataSource();
-  const providerRepo = dataSource.getRepository(GitProvider);
-
-  // Check if provider exists
-  const existing = await providerRepo.findOneBy({ id });
-
-  if (!existing) {
-    throw Errors.providerNotFound();
-  }
-
-  // Validate custom URLs if provided
-  if (customBaseUrl && !customBaseUrl.startsWith('http')) {
-    throw Errors.validation('Custom base URL must start with http:// or https://');
-  }
-  if (customApiUrl && !customApiUrl.startsWith('http')) {
-    throw Errors.validation('Custom API URL must start with http:// or https://');
-  }
-
-  // Build update object with only provided fields
-  const updates: any = {
-    updatedAt: Date.now(),
-  };
-
-  if (isActive !== undefined) updates.isActive = isActive;
-  if (customBaseUrl !== undefined) updates.customBaseUrl = customBaseUrl || null;
-  if (customApiUrl !== undefined) updates.customApiUrl = customApiUrl || null;
-  if (oauthClientId !== undefined) updates.oauthClientId = oauthClientId || null;
-  if (oauthClientSecret !== undefined) {
-    if (!oauthClientSecret) {
-      updates.oauthClientSecret = null;
-    } else {
-      updates.oauthClientSecret = isEncryptedValue(oauthClientSecret)
-        ? oauthClientSecret
-        : encryptSecret(oauthClientSecret);
-    }
-  }
-  if (oauthScopes !== undefined) updates.oauthScopes = oauthScopes || null;
-  if (displayOrder !== undefined) updates.displayOrder = displayOrder;
-
-  // Update provider
-  await providerRepo.update({ id }, updates);
-
-  // Return updated provider
-  const updated = await providerRepo.findOneBy({ id });
-
-  res.json(GitProviderAdminUpdateResponseSchema.parse(updated));
+  const ownership = await adminConfigObjectOwnershipService.findForObject(dataSource, 'git_provider', id);
+  res.json(GitProviderAdminUpdateResponseSchema.parse({ ...updated, ...adminConfigOwnershipFields(ownership) }));
 }));
 
 /**

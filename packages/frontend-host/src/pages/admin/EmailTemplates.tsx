@@ -28,6 +28,7 @@ import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/
 import { apiClient } from '../../shared/api/client';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import { useToast } from '../../shared/notifications/ToastProvider';
+import { configurationOwnershipDescription, configurationOwnershipLabel } from '../../features/platform-admin/identityAccessCopy';
 
 interface EmailTemplate {
   id: string;
@@ -40,7 +41,20 @@ interface EmailTemplate {
   isActive: boolean;
   createdAt: number;
   updatedAt: number;
+  configKey: string | null;
+  sourceRef: string | null;
+  ownershipMode: 'manual' | 'config_locked' | 'config_warn';
+  driftStatus: 'in_sync' | 'drifted' | null;
 }
+
+interface SettingsSectionOwnership {
+  section: string;
+  sourceRef: string | null;
+  ownershipMode: 'manual' | 'config_locked' | 'config_warn';
+  driftStatus: 'in_sync' | 'drifted' | null;
+}
+
+const isConfigLocked = (template: EmailTemplate | null | undefined) => template?.ownershipMode === 'config_locked';
 
 const TYPE_LABELS: Record<string, string> = {
   invite: 'User Invitation',
@@ -86,14 +100,20 @@ export default function EmailTemplates({
 
   const platformNameQuery = useQuery({
     queryKey: ['email-platform-name'],
-    queryFn: () => apiClient.get<{ emailPlatformName: string }>('/api/admin/email-platform-name'),
+    queryFn: () => apiClient.get<{ emailPlatformName: string; ownership: SettingsSectionOwnership | null }>('/api/admin/email-platform-name'),
   });
+  const platformNameOwnership = platformNameQuery.data?.ownership;
+  const platformNameConfigLocked = platformNameOwnership?.ownershipMode === 'config_locked' && Boolean(platformNameOwnership.sourceRef);
+  const canManagePlatformName = canManageSettings && !platformNameConfigLocked;
+  const platformNameDisabledReason = platformNameConfigLocked
+    ? configurationOwnershipDescription(platformNameOwnership.ownershipMode, platformNameOwnership.sourceRef)
+    : disabledReason;
 
   const updatePlatformNameMutation = useMutation({
     mutationFn: (value: string) =>
-      canManageSettings
+      canManagePlatformName
         ? apiClient.put('/api/admin/email-platform-name', { emailPlatformName: value })
-        : Promise.reject(new Error(disabledReason)),
+        : Promise.reject(new Error(platformNameDisabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-platform-name'] });
       queryClient.invalidateQueries({ queryKey: ['email-templates'] });
@@ -160,6 +180,7 @@ export default function EmailTemplates({
   });
 
   const openEditModal = (template: EmailTemplate) => {
+    if (isConfigLocked(template)) return;
     setFormData({
       name: template.name,
       subject: template.subject,
@@ -204,19 +225,30 @@ export default function EmailTemplates({
             style={{ flexBasis: '100%' }}
           />
         )}
+        {platformNameConfigLocked && (
+          <InlineNotification
+            kind="info"
+            title="Email platform name is managed by configuration"
+            subtitle={platformNameDisabledReason}
+            hideCloseButton
+            lowContrast
+            style={{ flexBasis: '100%' }}
+          />
+        )}
         <TextInput
           id="email-platform-name"
           labelText="Email Platform Name"
           value={emailPlatformName}
+          maxLength={160}
           onChange={(e) => setEmailPlatformName(e.target.value)}
-          disabled={!canManageSettings}
+          disabled={!canManagePlatformName}
           style={{ minWidth: 320 }}
         />
         <Button
           kind="primary"
           size="md"
           onClick={() => {
-            if (!canManageSettings) return;
+            if (!canManagePlatformName) return;
             const v = emailPlatformName.trim();
             if (!v) {
               notify({ kind: 'error', title: 'Email platform name cannot be empty' });
@@ -224,8 +256,8 @@ export default function EmailTemplates({
             }
             updatePlatformNameMutation.mutate(v);
           }}
-          disabled={!canManageSettings || platformNameQuery.isLoading || updatePlatformNameMutation.isPending}
-          title={!canManageSettings ? disabledReason : undefined}
+          disabled={!canManagePlatformName || platformNameQuery.isLoading || updatePlatformNameMutation.isPending}
+          title={!canManagePlatformName ? platformNameDisabledReason : undefined}
         >
           {updatePlatformNameMutation.isPending ? 'Saving...' : 'Save'}
         </Button>
@@ -269,6 +301,8 @@ export default function EmailTemplates({
                                 <Tag type={template.isActive ? 'green' : 'gray'} size="sm">
                                   {template.isActive ? 'Active' : 'Inactive'}
                                 </Tag>
+                                {template.ownershipMode !== 'manual' && <Tag type={template.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'} size="sm" title={configurationOwnershipDescription(template.ownershipMode, template.sourceRef)}>{configurationOwnershipLabel(template.ownershipMode)}</Tag>}
+                                {template.driftStatus === 'drifted' && <Tag type="red" size="sm">Drifted</Tag>}
                               </TableCell>
                             );
                           }
@@ -291,8 +325,8 @@ export default function EmailTemplates({
                                     hasIconOnly
                                     renderIcon={Edit}
                                     iconDescription="Edit"
-                                    disabled={!canManageSettings}
-                                    title={!canManageSettings ? disabledReason : undefined}
+                                    disabled={!canManageSettings || isConfigLocked(template)}
+                                    title={isConfigLocked(template) ? configurationOwnershipDescription(template.ownershipMode, template.sourceRef) : !canManageSettings ? disabledReason : undefined}
                                     onClick={() => openEditModal(template)}
                                   />
                                   <Button
@@ -301,8 +335,8 @@ export default function EmailTemplates({
                                     hasIconOnly
                                     renderIcon={Reset}
                                     iconDescription="Reset to Default"
-                                    disabled={!canManageSettings}
-                                    title={!canManageSettings ? disabledReason : undefined}
+                                    disabled={!canManageSettings || isConfigLocked(template)}
+                                    title={isConfigLocked(template) ? configurationOwnershipDescription(template.ownershipMode, template.sourceRef) : !canManageSettings ? disabledReason : undefined}
                                     onClick={() => {
                                       if (!canManageSettings) return;
                                       if (confirm('Reset this template to its default content?')) {
@@ -338,12 +372,15 @@ export default function EmailTemplates({
             updateMutation.mutate({ id: editingTemplate.id, data: formData });
           }
         }}
-        primaryButtonDisabled={!canManageSettings || updateMutation.isPending}
+        primaryButtonDisabled={!canManageSettings || updateMutation.isPending || isConfigLocked(editingTemplate)}
         size="lg"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
           {!canManageSettings && (
             <InlineNotification kind="warning" title="Email templates are read-only" subtitle={disabledReason} hideCloseButton lowContrast />
+          )}
+          {isConfigLocked(editingTemplate) && (
+            <InlineNotification kind="info" title="Managed by configuration" subtitle={configurationOwnershipDescription(editingTemplate?.ownershipMode, editingTemplate?.sourceRef)} hideCloseButton lowContrast />
           )}
           <TextInput
             id="template-name"

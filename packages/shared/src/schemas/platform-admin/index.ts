@@ -12,3 +12,4 @@ export * from './invitation.js';
 export * from './git-provider.js';
 export * from './camunda-native-grants.js';
 export * from './engine-backstop.js';
+export * from './email-administration.js';

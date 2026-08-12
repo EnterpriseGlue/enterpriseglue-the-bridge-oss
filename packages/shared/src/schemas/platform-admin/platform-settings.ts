@@ -12,6 +12,19 @@ export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 
 export const AccessGovernanceOwnershipModeSchema = z.enum(['manual', 'config_locked', 'config_warn'])
   .describe('Declares whether the five governance settings are portal-owned, configuration-locked, or editable with drift tracking.');
 export const AccessGovernanceDriftStatusSchema = z.enum(['in_sync', 'drifted']);
+export const PlatformSettingsSectionSchema = z.enum([
+  'governance', 'login', 'general', 'git_sync', 'deployment', 'invitations', 'pii', 'branding',
+]);
+export const PlatformSettingsSectionOwnershipSchema = z.object({
+  section: PlatformSettingsSectionSchema,
+  scopeKey: z.string(),
+  sourceRef: z.string().nullable(),
+  ownershipMode: AccessGovernanceOwnershipModeSchema,
+  sourceHash: z.string().nullable(),
+  lastAppliedAt: z.number().nullable(),
+  driftStatus: AccessGovernanceDriftStatusSchema.nullable(),
+  generation: z.number().int().nonnegative(),
+}).strict();
 export const LocalPasswordLoginModeSchema = z.enum(['auto', 'enabled', 'disabled'])
   .describe('Controls ordinary local password login. auto preserves safe SSO enforcement by disabling ordinary local login whenever a direct identity provider is enabled.');
 export const SsoProviderSelectionModeSchema = z.enum(['auto_redirect_single', 'chooser', 'progressive'])
@@ -43,10 +56,11 @@ export const PlatformBrandingSchema = z.object({
   titleVerticalOffset: z.number(),
   menuAccentColor: z.string().nullable(),
   faviconUrl: z.string().nullable(),
+  ownership: PlatformSettingsSectionOwnershipSchema.nullable().optional(),
 });
 
 /** Non-secret branding available before a normal user session exists. */
-export const PublicPlatformBrandingSchema = PlatformBrandingSchema;
+export const PublicPlatformBrandingSchema = PlatformBrandingSchema.omit({ ownership: true });
 
 export const UpdatePlatformBrandingRequestSchema = z.object({
   logoUrl: z.string().nullable().optional(),
@@ -104,6 +118,7 @@ export const PlatformSettingsSchema = z.object({
   defaultEnvironmentTagId: z.string().nullable(),
   syncPushEnabled: z.boolean(),
   syncPullEnabled: z.boolean(),
+  syncBothEnabled: z.boolean(),
   gitProjectTokenSharingEnabled: z.boolean(),
   defaultDeployRoles: z.array(z.string()),
   engineOnboardingMode: EngineOnboardingModeSchema,
@@ -141,6 +156,8 @@ export const PlatformSettingsSchema = z.object({
   piiRedactionStyle: z.string(),
   piiScopes: z.array(PiiScopeSchema),
   piiMaxPayloadSizeBytes: z.number(),
+  emailPlatformName: z.string(),
+  sectionOwnership: z.array(PlatformSettingsSectionOwnershipSchema),
 });
 
 /** Safe settings required by authenticated, non-admin UI surfaces. */
@@ -171,6 +188,7 @@ export const UpdatePlatformSettingsRequest = z.object({
   defaultEnvironmentTagId: z.string().nullable().optional(),
   syncPushEnabled: z.boolean().optional(),
   syncPullEnabled: z.boolean().optional(),
+  syncBothEnabled: z.boolean().optional(),
   gitProjectTokenSharingEnabled: z.boolean().optional(),
   defaultDeployRoles: z.array(z.string()).optional(),
   engineOnboardingMode: EngineOnboardingModeSchema.optional(),
@@ -194,7 +212,7 @@ export const UpdatePlatformSettingsRequest = z.object({
   piiRegexEnabled: z.boolean().optional(),
   piiExternalProviderEnabled: z.boolean().optional(),
   piiExternalProviderType: PiiProviderTypeSchema.optional().nullable(),
-  piiExternalProviderEndpoint: z.string().optional().nullable(),
+  piiExternalProviderEndpoint: z.string().url().max(2048).optional().nullable(),
   piiExternalProviderAuthHeader: z.string().optional().nullable(),
   piiExternalProviderAuthToken: z.string().optional().nullable(),
   piiExternalProviderProjectId: z.string().optional().nullable(),
@@ -202,6 +220,7 @@ export const UpdatePlatformSettingsRequest = z.object({
   piiRedactionStyle: z.string().optional(),
   piiScopes: z.array(PiiScopeSchema).optional(),
   piiMaxPayloadSizeBytes: z.number().optional(),
+  emailPlatformName: z.string().trim().min(1).max(160).optional(),
 }).strict();
 
 // Types
@@ -220,3 +239,4 @@ export type AccessGovernanceOwnershipMode = z.infer<typeof AccessGovernanceOwner
 export type AccessGovernanceDriftStatus = z.infer<typeof AccessGovernanceDriftStatusSchema>;
 export type PlatformGovernanceBehavior = z.infer<typeof PlatformGovernanceBehaviorSchema>;
 export type EngineRuntimeAuthorizationMode = z.infer<typeof EngineRuntimeAuthorizationModeSchema>;
+export type PlatformSettingsSectionOwnership = z.infer<typeof PlatformSettingsSectionOwnershipSchema>;

@@ -5,15 +5,24 @@ import type { z } from 'zod';
 import {
   ConfigAssignmentSchema,
   ConfigAssignmentsFileSchema,
+  ConfigAuthorizationPoliciesFileSchema,
+  ConfigEmailConfigurationsFileSchema,
+  ConfigEmailTemplatesFileSchema,
   ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
+  ConfigEnvironmentTagsFileSchema,
+  ConfigExternalEngineSystemsFileSchema,
+  ConfigGitProvidersFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
   ConfigBundleLoginPolicySchema,
   ConfigIdentityProviderSchema,
   ConfigIdentityProvidersFileSchema,
+  ConfigMachinePrincipalsFileSchema,
+  ConfigPermissionsFileSchema,
+  ConfigPlatformSettingsFileSchema,
   ConfigRolesFileSchema,
   ConfigRoleSchema,
   EnterpriseGlueConfigBundleSchema,
@@ -42,15 +51,24 @@ import {
 const SCHEMAS: Record<string, z.ZodType> = {
   ConfigAssignmentSchema,
   ConfigAssignmentsFileSchema,
+  ConfigAuthorizationPoliciesFileSchema,
+  ConfigEmailConfigurationsFileSchema,
+  ConfigEmailTemplatesFileSchema,
   ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
+  ConfigEnvironmentTagsFileSchema,
+  ConfigExternalEngineSystemsFileSchema,
+  ConfigGitProvidersFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
   ConfigBundleLoginPolicySchema,
   ConfigIdentityProviderSchema,
   ConfigIdentityProvidersFileSchema,
+  ConfigMachinePrincipalsFileSchema,
+  ConfigPermissionsFileSchema,
+  ConfigPlatformSettingsFileSchema,
   ConfigRolesFileSchema,
   ConfigRoleSchema,
   CreateEngineRequestSchema,
@@ -137,5 +155,36 @@ describe('published machine-readable JSON examples', () => {
       }),
     ]);
     expect(JSON.stringify(envelope)).not.toContain('"password":');
+  });
+
+  it('keeps the complete headless platform-administration envelope executable', async () => {
+    const examplePath = resolve(repoRoot, 'docs/reference/headless-platform-administration.example.json');
+    const envelope = JSON.parse(readFileSync(examplePath, 'utf8')) as {
+      bundle: unknown;
+      files: Record<string, unknown>;
+    };
+    const bundle = EnterpriseGlueConfigBundleSchema.parse(envelope.bundle);
+    const expectedFiles = {
+      './environment-tags.json': ConfigEnvironmentTagsFileSchema,
+      './platform-settings.json': ConfigPlatformSettingsFileSchema,
+      './git-providers.json': ConfigGitProvidersFileSchema,
+      './email-configurations.json': ConfigEmailConfigurationsFileSchema,
+      './email-templates.json': ConfigEmailTemplatesFileSchema,
+      './permissions.json': ConfigPermissionsFileSchema,
+      './roles.json': ConfigRolesFileSchema,
+      './assignments.json': ConfigAssignmentsFileSchema,
+      './authorization-policies.json': ConfigAuthorizationPoliciesFileSchema,
+      './machine-principals.json': ConfigMachinePrincipalsFileSchema,
+      './external-engine-systems.json': ConfigExternalEngineSystemsFileSchema,
+    } as const;
+
+    expect(bundle.imports).toEqual(Object.keys(expectedFiles));
+    for (const [path, schema] of Object.entries(expectedFiles)) schema.parse(envelope.files[path]);
+
+    const { configBundlePreviewService } = await import(
+      '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js'
+    );
+    expect(configBundlePreviewService.compile(envelope).preview.valid).toBe(true);
+    expect(JSON.stringify(envelope)).not.toMatch(/"(?:password|clientSecret|credential|token)"\s*:/);
   });
 });

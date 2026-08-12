@@ -25,11 +25,17 @@ import {
   type ProjectEngineTargetPolicyMode,
   type SsoProviderSelectionMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
-import { decrypt, encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
+import { decrypt } from '../encryption.js';
 import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { EngineBackstopSyncDetailSchema } from '../../schemas/platform-admin/engine-backstop.js';
 import { engineBackstopConnectionCommitment, engineBackstopSyncService } from './EngineBackstopSyncService.js';
+import { secretResolver } from './SecretResolver.js';
+import {
+  platformSettingsSectionOwnershipService,
+} from './PlatformSettingsSectionOwnershipService.js';
+import { validateAdminIntegrationEndpointUrl } from './AdminIntegrationEndpointPolicy.js';
+import type { PlatformSettingsSection } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
 
 const DEFAULT_PII_SCOPES = ['processDetails', 'history', 'logs', 'errors', 'audit'];
 export const DEFAULT_ENGINE_ONBOARDING_MODE: EngineOnboardingMode = 'manual_allowed';
@@ -90,6 +96,7 @@ export interface PlatformSettingsData {
   defaultEnvironmentTagId: string | null;
   syncPushEnabled: boolean;
   syncPullEnabled: boolean;
+  syncBothEnabled: boolean;
   gitProjectTokenSharingEnabled: boolean;
   defaultDeployRoles: string[];
   engineOnboardingMode: EngineOnboardingMode;
@@ -127,6 +134,29 @@ export interface PlatformSettingsData {
   piiRedactionStyle: string;
   piiScopes: string[];
   piiMaxPayloadSizeBytes: number;
+  emailPlatformName: string;
+  sectionOwnership: import('./PlatformSettingsSectionOwnershipService.js').PlatformSettingsSectionOwnershipState[];
+}
+
+function settingsSectionsForUpdate(data: Record<string, unknown>): PlatformSettingsSection[] {
+  const sections: PlatformSettingsSection[] = [];
+  const contains = (...keys: string[]): boolean => keys.some((key) => data[key] !== undefined);
+  if (contains('defaultEnvironmentTagId', 'emailPlatformName')) sections.push('general');
+  if (contains('syncPushEnabled', 'syncPullEnabled', 'syncBothEnabled', 'gitProjectTokenSharingEnabled')) sections.push('git_sync');
+  if (contains('defaultDeployRoles', 'credentiallessCustomerSidecarsEnabled')) sections.push('deployment');
+  if (contains('inviteAllowAllDomains', 'inviteAllowedDomains')) sections.push('invitations');
+  if (contains(
+    'piiRegexEnabled', 'piiExternalProviderEnabled', 'piiExternalProviderType',
+    'piiExternalProviderEndpoint', 'piiExternalProviderAuthHeader', 'piiExternalProviderAuthToken',
+    'piiExternalProviderProjectId', 'piiExternalProviderRegion', 'piiRedactionStyle',
+    'piiScopes', 'piiMaxPayloadSizeBytes',
+  )) sections.push('pii');
+  if (contains(
+    'engineOnboardingMode', 'projectEngineTargetMode', 'engineAccessAuthority',
+    'projectAccessAuthority', 'engineRuntimeAuthorizationMode',
+  )) sections.push('governance');
+  if (contains('localPasswordLoginMode', 'ssoProviderSelectionMode')) sections.push('login');
+  return sections;
 }
 
 export class PlatformSettingsService {
@@ -179,6 +209,7 @@ export class PlatformSettingsService {
     const dataSource = await getDataSource();
     const settingsRepo = dataSource.getRepository(PlatformSettings);
     const settings = await settingsRepo.findOneBy({ id: this.DEFAULT_ID });
+    const sectionOwnership = await platformSettingsSectionOwnershipService.list(dataSource);
 
     if (!settings) {
       // Return defaults
@@ -186,6 +217,7 @@ export class PlatformSettingsService {
         defaultEnvironmentTagId: null,
         syncPushEnabled: true,
         syncPullEnabled: false,
+        syncBothEnabled: false,
         gitProjectTokenSharingEnabled: false,
         defaultDeployRoles: ['owner', 'delegate', 'operator'],
         engineOnboardingMode: DEFAULT_ENGINE_ONBOARDING_MODE,
@@ -229,6 +261,8 @@ export class PlatformSettingsService {
         piiRedactionStyle: '<TYPE>',
         piiScopes: [...DEFAULT_PII_SCOPES],
         piiMaxPayloadSizeBytes: 262144,
+        emailPlatformName: 'EnterpriseGlue',
+        sectionOwnership,
       };
     }
 
@@ -250,6 +284,7 @@ export class PlatformSettingsService {
       defaultEnvironmentTagId: settings.defaultEnvironmentTagId,
       syncPushEnabled: settings.syncPushEnabled,
       syncPullEnabled: settings.syncPullEnabled,
+      syncBothEnabled: settings.syncBothEnabled ?? false,
       gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles: JSON.parse(settings.defaultDeployRoles),
       engineOnboardingMode,
@@ -309,6 +344,8 @@ export class PlatformSettingsService {
         }
       })(),
       piiMaxPayloadSizeBytes: Number(settings.piiMaxPayloadSizeBytes ?? 262144),
+      emailPlatformName: settings.emailPlatformName || 'EnterpriseGlue',
+      sectionOwnership,
     };
   }
 
@@ -325,7 +362,7 @@ export class PlatformSettingsService {
     const token = settings.piiExternalProviderAuthToken ?? null;
     return {
       ...base,
-      piiExternalProviderAuthToken: token ? safeDecrypt(String(token)) : null,
+      piiExternalProviderAuthToken: token ? secretResolver.resolveStored(String(token)) : null,
     };
   }
 
@@ -337,6 +374,7 @@ export class PlatformSettingsService {
       defaultEnvironmentTagId: string | null;
       syncPushEnabled: boolean;
       syncPullEnabled: boolean;
+      syncBothEnabled: boolean;
       gitProjectTokenSharingEnabled: boolean;
       defaultDeployRoles: string[];
       engineOnboardingMode: EngineOnboardingMode;
@@ -368,6 +406,7 @@ export class PlatformSettingsService {
       piiRedactionStyle: string;
       piiScopes: string[];
       piiMaxPayloadSizeBytes: number;
+      emailPlatformName: string;
     }>,
     updatedById: string,
     options?: {
@@ -378,12 +417,50 @@ export class PlatformSettingsService {
       lastAppliedAt?: number | null;
       driftStatus?: AccessGovernanceDriftStatus | null;
       bypassOwnership?: boolean;
+      sectionOwnership?: {
+        sections: PlatformSettingsSection[];
+        scopeKey: string;
+        sourceRef: string;
+        ownershipMode: 'manual' | 'config_locked' | 'config_warn';
+        sourceHash: string;
+        appliedAt: number;
+        expectedGeneration?: number;
+      };
     },
   ): Promise<void> {
-    const dataSource = options?.store || await getDataSource();
+    if (!options?.store) {
+      const rootDataSource = await getDataSource();
+      if (typeof rootDataSource.transaction === 'function') {
+        await rootDataSource.transaction(async (manager) => this.update(data, updatedById, { ...options, store: manager }));
+      } else {
+        // Narrow compatibility for repository-only test adapters. Every real
+        // TypeORM DataSource supplies transaction(), so production mutations
+        // remain ownership-claimed and settings-written atomically.
+        await this.update(data, updatedById, { ...options, store: rootDataSource });
+      }
+      return;
+    }
+    const dataSource = options.store;
     const settingsRepo = dataSource.getRepository(PlatformSettings);
     const now = Date.now();
     const existing = await settingsRepo.findOneBy({ id: this.DEFAULT_ID });
+    const effectivePiiEndpoint = data.piiExternalProviderEndpoint !== undefined
+      ? data.piiExternalProviderEndpoint
+      : existing?.piiExternalProviderEndpoint || null;
+    const effectivePiiEnabled = data.piiExternalProviderEnabled !== undefined
+      ? data.piiExternalProviderEnabled
+      : existing?.piiExternalProviderEnabled || false;
+    if (effectivePiiEndpoint) {
+      validateAdminIntegrationEndpointUrl(effectivePiiEndpoint, 'PII provider endpoint');
+    } else if (effectivePiiEnabled) {
+      throw Errors.validation('PII provider endpoint is required when the external provider is enabled');
+    }
+    const sections = settingsSectionsForUpdate(data);
+    if (options.sectionOwnership) {
+      await platformSettingsSectionOwnershipService.claimConfiguration(dataSource, options.sectionOwnership);
+    } else if (!options.bypassOwnership) {
+      await platformSettingsSectionOwnershipService.claimManualMutation(dataSource, sections);
+    }
     const governanceKeys = [
       'engineOnboardingMode',
       'projectEngineTargetMode',
@@ -425,6 +502,9 @@ export class PlatformSettingsService {
     }
     if (data.syncPullEnabled !== undefined) {
       updateData.syncPullEnabled = data.syncPullEnabled;
+    }
+    if (data.syncBothEnabled !== undefined) {
+      updateData.syncBothEnabled = data.syncBothEnabled;
     }
     if (data.gitProjectTokenSharingEnabled !== undefined) {
       updateData.gitProjectTokenSharingEnabled = data.gitProjectTokenSharingEnabled;
@@ -502,13 +582,7 @@ export class PlatformSettingsService {
       updateData.piiExternalProviderAuthHeader = data.piiExternalProviderAuthHeader;
     }
     if (data.piiExternalProviderAuthToken !== undefined) {
-      if (!data.piiExternalProviderAuthToken) {
-        updateData.piiExternalProviderAuthToken = null;
-      } else {
-        updateData.piiExternalProviderAuthToken = isEncrypted(data.piiExternalProviderAuthToken)
-          ? data.piiExternalProviderAuthToken
-          : encrypt(data.piiExternalProviderAuthToken);
-      }
+      updateData.piiExternalProviderAuthToken = secretResolver.normalizeForStorage(data.piiExternalProviderAuthToken);
     }
     if (data.piiExternalProviderProjectId !== undefined) {
       updateData.piiExternalProviderProjectId = data.piiExternalProviderProjectId;
@@ -525,6 +599,9 @@ export class PlatformSettingsService {
     if (data.piiMaxPayloadSizeBytes !== undefined) {
       updateData.piiMaxPayloadSizeBytes = data.piiMaxPayloadSizeBytes;
     }
+    if (data.emailPlatformName !== undefined) {
+      updateData.emailPlatformName = data.emailPlatformName;
+    }
 
     if (!existing) {
       // Insert new record
@@ -533,6 +610,7 @@ export class PlatformSettingsService {
         defaultEnvironmentTagId: data.defaultEnvironmentTagId ?? null,
         syncPushEnabled: data.syncPushEnabled ?? true,
         syncPullEnabled: data.syncPullEnabled ?? false,
+        syncBothEnabled: data.syncBothEnabled ?? false,
         gitProjectTokenSharingEnabled: data.gitProjectTokenSharingEnabled ?? false,
         defaultDeployRoles: JSON.stringify(data.defaultDeployRoles ?? ['owner', 'delegate', 'operator']),
         engineOnboardingMode: data.engineOnboardingMode ?? DEFAULT_ENGINE_ONBOARDING_MODE,
@@ -565,16 +643,13 @@ export class PlatformSettingsService {
         piiExternalProviderType: data.piiExternalProviderType ?? null,
         piiExternalProviderEndpoint: data.piiExternalProviderEndpoint ?? null,
         piiExternalProviderAuthHeader: data.piiExternalProviderAuthHeader ?? null,
-        piiExternalProviderAuthToken: data.piiExternalProviderAuthToken
-          ? (isEncrypted(data.piiExternalProviderAuthToken)
-            ? data.piiExternalProviderAuthToken
-            : encrypt(data.piiExternalProviderAuthToken))
-          : null,
+        piiExternalProviderAuthToken: secretResolver.normalizeForStorage(data.piiExternalProviderAuthToken),
         piiExternalProviderProjectId: data.piiExternalProviderProjectId ?? null,
         piiExternalProviderRegion: data.piiExternalProviderRegion ?? null,
         piiRedactionStyle: data.piiRedactionStyle ?? '<TYPE>',
         piiScopes: JSON.stringify(data.piiScopes ?? DEFAULT_PII_SCOPES),
         piiMaxPayloadSizeBytes: data.piiMaxPayloadSizeBytes ?? 262144,
+        emailPlatformName: data.emailPlatformName ?? 'EnterpriseGlue',
         updatedAt: now,
         updatedById,
       });

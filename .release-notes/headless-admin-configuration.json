@@ -1,0 +1,91 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "headless-admin-configuration",
+  "type": "feature",
+  "scope": "platform-administration",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Extends declarative configuration and bootstrap so operators can manage the complete supported platform-administration contract without an interactive administrator or Admin UI.",
+  "userImpact": [
+    "Platform administration can be supplied, previewed, applied, reconciled, and exported through the supported headless configuration workflow.",
+    "Configuration-owned settings remain visible in the portal for diagnostics while interactive mutations are disabled or clearly identified as drift-prone."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Run database migration 1700000000110 before enabling the expanded headless administrative catalog.",
+      "Existing interactive administration remains supported unless a deployment explicitly enables configuration ownership for the corresponding settings.",
+      "Validate and preview the complete administrative bundle before enabling authoritative startup reconciliation in production."
+    ]
+  },
+  "configuration": [
+    "Adds declarative coverage for the supported Platform Settings and administrative resource families that are not yet represented in EnterpriseGlueConfigBundle.",
+    "Supports fail-closed startup bootstrap and reconciliation from a bounded local file while keeping credentials in approved secret references rather than bundle values."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Extends the public configuration-bundle schemas, preview, diff, apply, export, and reconciliation receipts for complete supported administrative configuration coverage."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000110 add portable Platform Settings section ownership, generic administrative-object ownership, and Environment Tag provenance"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "The migration is additive and preserves existing settings and Environment Tags as manually owned.",
+      "TypeORM revert removes the new provenance tables and Environment Tag provenance columns; export and restore the owning bundle first because ownership history is not preserved by the downgrade."
+    ]
+  },
+  "security": [
+    "Headless bootstrap is fail closed, validates exact bundle content and ownership, and never accepts literal credentials in configuration.",
+    "Administrative changes retain audit, idempotency, tenant, authorization, endpoint-policy, and secret-resolution boundaries equivalent to the interactive APIs."
+  ],
+  "documentation": [
+    "Architecture and parity plan: `docs/architecture/17-headless-platform-administration-plan.md`",
+    "Complete headless administration: `docs/how-to/configure-platform-headlessly.md`",
+    "Configuration bundle API and ownership: `docs/reference/access-governance-and-headless-api.md`",
+    "Deployment configuration: `docs/reference/configuration.md`"
+  ],
+  "knownLimitations": [
+    "Runtime operational actions and user-specific workflows that are not durable platform configuration remain outside the declarative bundle contract."
+  ],
+  "rollback": [
+    "Restore the previous bundle and reapply it through the hash-bound configuration workflow before disabling authoritative bootstrap.",
+    "Export the active bundle before database downgrade, disable bootstrap, revert migration 1700000000110, and redeploy the matching prior application images; do not edit configuration ownership directly in the database."
+  ],
+  "validation": [
+    "Configuration schema, preview, diff, apply, export, idempotency, ownership, and rollback contract suites",
+    "Fail-closed startup bootstrap, secret-reference, audit, tenant-boundary, and administrative API parity coverage",
+    "Real PostgreSQL startup/restart/reapply coverage for persistence, secret resolution, machine-principal authentication and RBAC, export/no-op round-trip, mutation locks, and authoritative removal",
+    "Real HTTP and CLI all-family lifecycle coverage plus a maintained browser workflow for locked, warning, and drifted ownership across administrator surfaces",
+    "Backend and frontend typechecks, lint, authorization structure coverage, portable migration-up/down tests, and focused Admin API and portal tests"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.3.8",
+      "newVersion": "0.4.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.2.12",
+      "newVersion": "0.3.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.4.9",
+      "newVersion": "0.5.0",
+      "impact": "minor"
+    }
+  ]
+}

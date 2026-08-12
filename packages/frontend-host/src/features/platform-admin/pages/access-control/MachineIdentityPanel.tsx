@@ -45,6 +45,7 @@ import type {
   RoleAssignment,
   ServiceAccount,
 } from '../../hooks/useAuthzApi';
+import { configurationOwnershipDescription, configurationOwnershipLabel } from '../../identityAccessCopy';
 
 const apiClientHeaders = [
   { key: 'name', header: 'Client' },
@@ -53,6 +54,7 @@ const apiClientHeaders = [
   { key: 'created', header: 'Created' },
   { key: 'lastUsed', header: 'Last used' },
   { key: 'status', header: 'Status' },
+  { key: 'source', header: 'Management source' },
   { key: 'audit', header: 'Audit' },
   { key: 'actions', header: '' },
 ];
@@ -65,6 +67,7 @@ const serviceAccountHeaders = [
   { key: 'created', header: 'Created' },
   { key: 'lastUsed', header: 'Last used' },
   { key: 'status', header: 'Status' },
+  { key: 'source', header: 'Management source' },
   { key: 'audit', header: 'Audit' },
   { key: 'actions', header: '' },
 ];
@@ -91,6 +94,7 @@ const externalEngineSystemHeaders = [
   { key: 'mode', header: 'Default mode' },
   { key: 'ownership', header: 'Default ownership' },
   { key: 'status', header: 'Status' },
+  { key: 'source', header: 'Management source' },
   { key: 'actions', header: '' },
 ];
 
@@ -309,6 +313,8 @@ export function ApiClientsPanel({
   const [editingExternalSystemId, setEditingExternalSystemId] = React.useState<string | null>(null);
   const [externalSystemForm, setExternalSystemForm] = React.useState(DEFAULT_EXTERNAL_SYSTEM_FORM);
   const selectedEngine = externalEngines.find((engine) => engine.id === selectedEngineId) || null;
+  const editingExternalSystem = externalSystems.find((system) => system.id === editingExternalSystemId) || null;
+  const externalSystemConfigLocked = editingExternalSystem?.ownershipMode === 'config_locked';
   const activeApiClients = clients.filter((client) => client.isActive);
   const activeServiceAccounts = serviceAccounts.filter((account) => account.isActive);
   const revokedMachineIdentities = clients.filter((client) => !client.isActive).length +
@@ -344,6 +350,7 @@ export function ApiClientsPanel({
   };
 
   const editExternalSystem = (system: ExternalEngineSystem) => {
+    if (system.ownershipMode === 'config_locked') return;
     setEditingExternalSystemId(system.id);
     setExternalSystemForm({
       key: system.key,
@@ -475,6 +482,7 @@ export function ApiClientsPanel({
               created: new Date(client.createdAt).toLocaleString(),
               lastUsed: client.lastUsedAt ? new Date(client.lastUsedAt).toLocaleString() : 'Never',
               status: client.isActive,
+              source: client.ownershipMode,
               audit: machineAuditLoading ? 'Loading...' : formatAuditReferences(findMachineIdentityAuditEntries('api_client', client.id, machineAuditEntries)),
               actions: '',
             }))}
@@ -498,6 +506,9 @@ export function ApiClientsPanel({
                           if (cell.info.header === 'status') {
                             return <TableCell key={cell.id}><Tag type={cell.value ? 'green' : 'gray'}>{cell.value ? 'Active' : 'Revoked'}</Tag></TableCell>;
                           }
+                          if (cell.info.header === 'source') {
+                            return <TableCell key={cell.id}><Tag type={client?.ownershipMode === 'config_warn' ? 'warm-gray' : client?.ownershipMode === 'config_locked' ? 'purple' : 'gray'} title={configurationOwnershipDescription(client?.ownershipMode, client?.sourceRef)}>{configurationOwnershipLabel(client?.ownershipMode)}</Tag>{client?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</TableCell>;
+                          }
                           if (cell.info.header === 'audit') {
                             return (
                               <TableCell key={cell.id}>
@@ -515,8 +526,8 @@ export function ApiClientsPanel({
                               <TableCell key={cell.id}>
                                 {client?.isActive && (
                                   <>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManageApiClients} title={apiClientsManageUnavailableReason} onClick={() => onRotate(client.id)}>Rotate</Button>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManageApiClients} title={apiClientsManageUnavailableReason} renderIcon={TrashCan} onClick={() => onRevoke(client.id)}>Revoke</Button>
+                                    <Button kind="ghost" size="sm" disabled={pending || !canManageApiClients || client.ownershipMode === 'config_locked'} title={client.ownershipMode === 'config_locked' ? configurationOwnershipDescription(client.ownershipMode, client.sourceRef) : apiClientsManageUnavailableReason} onClick={() => onRotate(client.id)}>Rotate</Button>
+                                    <Button kind="ghost" size="sm" disabled={pending || !canManageApiClients || client.ownershipMode === 'config_locked'} title={client.ownershipMode === 'config_locked' ? configurationOwnershipDescription(client.ownershipMode, client.sourceRef) : apiClientsManageUnavailableReason} renderIcon={TrashCan} onClick={() => onRevoke(client.id)}>Revoke</Button>
                                   </>
                                 )}
                               </TableCell>
@@ -580,6 +591,7 @@ export function ApiClientsPanel({
               created: new Date(account.createdAt).toLocaleString(),
               lastUsed: account.lastUsedAt ? new Date(account.lastUsedAt).toLocaleString() : 'Never',
               status: account.isActive,
+              source: account.ownershipMode,
               audit: machineAuditLoading ? 'Loading...' : formatAuditReferences(findMachineIdentityAuditEntries('service_account', account.id, machineAuditEntries)),
               actions: '',
             }))}
@@ -603,6 +615,9 @@ export function ApiClientsPanel({
                           if (cell.info.header === 'status') {
                             return <TableCell key={cell.id}><Tag type={cell.value ? 'green' : 'gray'}>{cell.value ? 'Active' : 'Revoked'}</Tag></TableCell>;
                           }
+                          if (cell.info.header === 'source') {
+                            return <TableCell key={cell.id}><Tag type={account?.ownershipMode === 'config_warn' ? 'warm-gray' : account?.ownershipMode === 'config_locked' ? 'purple' : 'gray'} title={configurationOwnershipDescription(account?.ownershipMode, account?.sourceRef)}>{configurationOwnershipLabel(account?.ownershipMode)}</Tag>{account?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</TableCell>;
+                          }
                           if (cell.info.header === 'audit') {
                             return (
                               <TableCell key={cell.id}>
@@ -620,8 +635,8 @@ export function ApiClientsPanel({
                               <TableCell key={cell.id}>
                                 {account?.isActive && (
                                   <>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManageServiceAccounts} title={serviceAccountsManageUnavailableReason} onClick={() => onRotateServiceAccount(account.id)}>Rotate</Button>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManageServiceAccounts} title={serviceAccountsManageUnavailableReason} renderIcon={TrashCan} onClick={() => onRevokeServiceAccount(account.id)}>Revoke</Button>
+                                    <Button kind="ghost" size="sm" disabled={pending || !canManageServiceAccounts || account.ownershipMode === 'config_locked'} title={account.ownershipMode === 'config_locked' ? configurationOwnershipDescription(account.ownershipMode, account.sourceRef) : serviceAccountsManageUnavailableReason} onClick={() => onRotateServiceAccount(account.id)}>Rotate</Button>
+                                    <Button kind="ghost" size="sm" disabled={pending || !canManageServiceAccounts || account.ownershipMode === 'config_locked'} title={account.ownershipMode === 'config_locked' ? configurationOwnershipDescription(account.ownershipMode, account.sourceRef) : serviceAccountsManageUnavailableReason} renderIcon={TrashCan} onClick={() => onRevokeServiceAccount(account.id)}>Revoke</Button>
                                   </>
                                 )}
                               </TableCell>
@@ -644,28 +659,28 @@ export function ApiClientsPanel({
           id="external-system-key"
           labelText="System key"
           value={externalSystemForm.key}
-          disabled={Boolean(editingExternalSystemId) || pending || !canManageExternalSystems}
+          disabled={Boolean(editingExternalSystemId) || pending || !canManageExternalSystems || externalSystemConfigLocked}
           onChange={(event) => setExternalSystemForm((current) => ({ ...current, key: event.target.value }))}
         />
         <TextInput
           id="external-system-name"
           labelText="System name"
           value={externalSystemForm.name}
-          disabled={pending || !canManageExternalSystems}
+          disabled={pending || !canManageExternalSystems || externalSystemConfigLocked}
           onChange={(event) => setExternalSystemForm((current) => ({ ...current, name: event.target.value }))}
         />
         <TextInput
           id="external-system-description"
           labelText="System description"
           value={externalSystemForm.description}
-          disabled={pending || !canManageExternalSystems}
+          disabled={pending || !canManageExternalSystems || externalSystemConfigLocked}
           onChange={(event) => setExternalSystemForm((current) => ({ ...current, description: event.target.value }))}
         />
         <Dropdown
           id="external-system-mode"
           titleText="Default mode"
           label="Default mode"
-          disabled={pending || !canManageExternalSystems}
+          disabled={pending || !canManageExternalSystems || externalSystemConfigLocked}
           items={EXTERNAL_SYSTEM_MODE_OPTIONS}
           itemToString={(item) => item?.label || ''}
           selectedItem={EXTERNAL_SYSTEM_MODE_OPTIONS.find((item) => item.id === externalSystemForm.defaultManagementMode) || EXTERNAL_SYSTEM_MODE_OPTIONS[0]}
@@ -684,7 +699,7 @@ export function ApiClientsPanel({
             labelText={`${field.label} manually editable`}
             labelA="External"
             labelB="Manual"
-            disabled={pending || !canManageExternalSystems}
+            disabled={pending || !canManageExternalSystems || externalSystemConfigLocked}
             toggled={externalSystemForm.defaultFieldOwnership[field.id] === 'manual'}
             onToggle={(checked) => {
               setExternalSystemForm((current) => ({
@@ -699,7 +714,7 @@ export function ApiClientsPanel({
         ))}
       </div>
       <div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
-        <Button disabled={!externalSystemForm.name.trim() || pending || !canManageExternalSystems} title={externalSystemsManageUnavailableReason} onClick={submitExternalSystem}>
+        <Button disabled={!externalSystemForm.name.trim() || pending || !canManageExternalSystems || externalSystemConfigLocked} title={externalSystemConfigLocked ? configurationOwnershipDescription(editingExternalSystem?.ownershipMode, editingExternalSystem?.sourceRef) : externalSystemsManageUnavailableReason} onClick={submitExternalSystem}>
           {editingExternalSystemId ? 'Update System' : 'Create System'}
         </Button>
         {editingExternalSystemId && (
@@ -720,6 +735,7 @@ export function ApiClientsPanel({
               mode: system.defaultManagementMode === 'hybrid' ? 'Hybrid' : 'External managed',
               ownership: formatFieldOwnership(system.defaultFieldOwnership),
               status: system.isActive ? 'Active' : 'Disabled',
+              source: system.ownershipMode,
               actions: '',
             }))}
             headers={externalEngineSystemHeaders}
@@ -742,14 +758,17 @@ export function ApiClientsPanel({
                           if (cell.info.header === 'status') {
                             return <TableCell key={cell.id}><Tag type={cell.value === 'Active' ? 'green' : 'gray'}>{cell.value}</Tag></TableCell>;
                           }
+                          if (cell.info.header === 'source') {
+                            return <TableCell key={cell.id}><Tag type={system?.ownershipMode === 'config_warn' ? 'warm-gray' : system?.ownershipMode === 'config_locked' ? 'purple' : 'gray'} title={configurationOwnershipDescription(system?.ownershipMode, system?.sourceRef)}>{configurationOwnershipLabel(system?.ownershipMode)}</Tag>{system?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</TableCell>;
+                          }
                           if (cell.info.header === 'actions') {
                             return (
                               <TableCell key={cell.id}>
                                 {system && (
                                   <>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManageExternalSystems} title={externalSystemsManageUnavailableReason} aria-label={`Edit ${system.name}`} onClick={() => editExternalSystem(system)}>Edit</Button>
+                                    <Button kind="ghost" size="sm" disabled={pending || !canManageExternalSystems || system.ownershipMode === 'config_locked'} title={system.ownershipMode === 'config_locked' ? configurationOwnershipDescription(system.ownershipMode, system.sourceRef) : externalSystemsManageUnavailableReason} aria-label={`Edit ${system.name}`} onClick={() => editExternalSystem(system)}>Edit</Button>
                                     {system.isActive && (
-                                      <Button kind="ghost" size="sm" disabled={pending || !canManageExternalSystems} title={externalSystemsManageUnavailableReason} aria-label={`Archive ${system.name}`} renderIcon={TrashCan} onClick={() => onArchiveExternalSystem(system.id)}>Archive</Button>
+                                      <Button kind="ghost" size="sm" disabled={pending || !canManageExternalSystems || system.ownershipMode === 'config_locked'} title={system.ownershipMode === 'config_locked' ? configurationOwnershipDescription(system.ownershipMode, system.sourceRef) : externalSystemsManageUnavailableReason} aria-label={`Archive ${system.name}`} renderIcon={TrashCan} onClick={() => onArchiveExternalSystem(system.id)}>Archive</Button>
                                     )}
                                   </>
                                 )}

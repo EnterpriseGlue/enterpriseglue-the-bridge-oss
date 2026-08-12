@@ -18,6 +18,14 @@ vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   safeDecrypt: vi.fn((value: string) => value.startsWith('enc:') ? value.slice(4) : value),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsSectionOwnershipService.js', () => ({
+  platformSettingsSectionOwnershipService: {
+    list: vi.fn().mockResolvedValue([]),
+    claimManualMutation: vi.fn().mockResolvedValue(undefined),
+    claimConfiguration: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe('PlatformSettingsService', () => {
   const currentBackstopCommitments = vi.fn(async () => ({
     sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), connectionCommitment: 'c'.repeat(64),
@@ -538,7 +546,7 @@ describe('PlatformSettingsService', () => {
         piiExternalProviderType: 'presidio',
         piiExternalProviderEndpoint: 'https://presidio.local',
         piiExternalProviderAuthHeader: 'Authorization',
-        piiExternalProviderAuthToken: 'enc:secret-token',
+        piiExternalProviderAuthToken: `enc:${Buffer.from('secret-token').toString('base64')}`,
         piiExternalProviderProjectId: null,
         piiExternalProviderRegion: null,
         piiRedactionStyle: '<TYPE>',
@@ -573,7 +581,7 @@ describe('PlatformSettingsService', () => {
         piiExternalProviderType: 'presidio',
         piiExternalProviderEndpoint: 'https://presidio.local',
         piiExternalProviderAuthHeader: 'Authorization',
-        piiExternalProviderAuthToken: 'enc:secret-token',
+        piiExternalProviderAuthToken: `enc:${Buffer.from('secret-token').toString('base64')}`,
         piiExternalProviderProjectId: null,
         piiExternalProviderRegion: null,
         piiRedactionStyle: '<TYPE>',
@@ -590,7 +598,6 @@ describe('PlatformSettingsService', () => {
     });
 
     const settings = await service.getWithSecrets();
-    expect(safeDecrypt).toHaveBeenCalledWith('enc:secret-token');
     expect(settings.piiExternalProviderAuthToken).toBe('secret-token');
   });
 

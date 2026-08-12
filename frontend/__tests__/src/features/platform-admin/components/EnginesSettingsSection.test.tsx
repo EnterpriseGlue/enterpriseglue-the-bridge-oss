@@ -9,7 +9,9 @@ const baseSettings: PlatformSettings = {
   defaultEnvironmentTagId: null,
   syncPushEnabled: true,
   syncPullEnabled: false,
+  syncBothEnabled: false,
   gitProjectTokenSharingEnabled: false,
+  emailPlatformName: 'EnterpriseGlue',
   defaultDeployRoles: ['owner', 'delegate', 'operator'],
   engineOnboardingMode: 'external_only',
   projectEngineTargetMode: 'hybrid',
@@ -52,6 +54,7 @@ const baseSettings: PlatformSettings = {
   piiRedactionStyle: '<TYPE>',
   piiScopes: ['processDetails', 'history', 'logs', 'errors', 'audit'],
   piiMaxPayloadSizeBytes: 262144,
+  sectionOwnership: [],
 };
 
 describe('EnginesSettingsSection', () => {
@@ -166,5 +169,32 @@ describe('EnginesSettingsSection', () => {
     expect(screen.getByRole('button', { name: 'Assign Owner' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Assign Delegate' })).toBeDisabled();
     expect(screen.getByText('Payments')).toBeInTheDocument();
+  });
+
+  it('shows environment provenance and locks only configuration-owned tag mutations', () => {
+    renderSection({
+      envTags: [
+        {
+          id: 'env-configured', name: 'Configured', color: '#0f62fe', manualDeployAllowed: false,
+          sortOrder: 0, isDefault: true, configKey: 'environment.production', sourceRef: 'config_bundle:headless.admin',
+          ownershipMode: 'config_locked', sourceHash: 'hash', lastAppliedAt: 1, driftStatus: 'in_sync',
+          configGeneration: 1, createdAt: 1, updatedAt: 1,
+        },
+        {
+          id: 'env-manual', name: 'Manual', color: '#24a148', manualDeployAllowed: true,
+          sortOrder: 1, isDefault: false, configKey: null, sourceRef: null, ownershipMode: 'manual',
+          sourceHash: null, lastAppliedAt: null, driftStatus: null, configGeneration: 0, createdAt: 1, updatedAt: 1,
+        },
+      ],
+    });
+
+    expect(screen.getByText('Managed by configuration')).toBeInTheDocument();
+    expect(screen.getByText('Environment ordering is managed by configuration')).toBeInTheDocument();
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' });
+    const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
+    expect(editButtons[0]).toBeDisabled();
+    expect(deleteButtons[0]).toBeDisabled();
+    expect(editButtons[1]).toBeEnabled();
+    expect(deleteButtons[1]).toBeEnabled();
   });
 });

@@ -136,6 +136,39 @@ describe('configBundleBootstrap', () => {
     );
   });
 
+  it('passes hash-bound startup acknowledgements to apply without including them in preview', async () => {
+    config.configExpectedTenantScope = 'platform';
+    const payload = {
+      bundle: { apiVersion: 'enterpriseglue.ai/v1beta1', kind: 'EnterpriseGlueConfigBundle' },
+      files: {},
+      acknowledgements: ['config.ownership_adoption:platform_settings:general'],
+    };
+    readFile.mockResolvedValue(JSON.stringify(payload));
+    apply.mockResolvedValue({ canonicalHash: 'preview-hash' });
+
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+
+    expect(preview).toHaveBeenCalledWith(
+      { bundle: payload.bundle, files: payload.files },
+      expect.any(Object),
+    );
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ acknowledgements: payload.acknowledgements }),
+      expect.any(Object),
+    );
+  });
+
+  it('rejects unbounded startup acknowledgements before preview or apply', async () => {
+    config.configExpectedTenantScope = 'platform';
+    readFile.mockResolvedValue(JSON.stringify({
+      bundle: {}, files: {}, acknowledgements: ['x'.repeat(501)],
+    }));
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle could not be read');
+    expect(preview).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  });
+
   it('rejects a mounted bundle when its image-bound hash does not match', async () => {
     config.configExpectedSha256 = 'a'.repeat(64);
     readFile.mockResolvedValue(Buffer.from('{"bundle":{},"files":{}}'));

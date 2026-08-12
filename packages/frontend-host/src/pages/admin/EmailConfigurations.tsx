@@ -29,6 +29,7 @@ import { useModal } from '../../shared/hooks/useModal';
 import { apiClient } from '../../shared/api/client';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import { useToast } from '../../shared/notifications/ToastProvider';
+import { configurationOwnershipDescription, configurationOwnershipLabel } from '../../features/platform-admin/identityAccessCopy';
 
 interface EmailConfig {
   id: string;
@@ -45,7 +46,13 @@ interface EmailConfig {
   isDefault: boolean;
   createdAt: number;
   updatedAt: number;
+  configKey: string | null;
+  sourceRef: string | null;
+  ownershipMode: 'manual' | 'config_locked' | 'config_warn';
+  driftStatus: 'in_sync' | 'drifted' | null;
 }
+
+const isConfigLocked = (config: EmailConfig | null | undefined) => config?.ownershipMode === 'config_locked';
 
 const PROVIDER_LABELS: Record<string, string> = {
   resend: 'Resend',
@@ -215,6 +222,7 @@ export default function EmailConfigurations({
   };
 
   const openEditModal = (config: EmailConfig) => {
+    if (isConfigLocked(config)) return;
     setFormData({
       name: config.name,
       provider: config.provider,
@@ -315,6 +323,8 @@ export default function EmailConfigurations({
                                   ) : (
                                     <Tag type="gray" size="sm">Disabled</Tag>
                                   )}
+                                  {cfg.ownershipMode !== 'manual' && <Tag type={cfg.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'} size="sm" title={configurationOwnershipDescription(cfg.ownershipMode, cfg.sourceRef)}>{configurationOwnershipLabel(cfg.ownershipMode)}</Tag>}
+                                  {cfg.driftStatus === 'drifted' && <Tag type="red" size="sm">Drifted</Tag>}
                                 </div>
                               </TableCell>
                             );
@@ -324,12 +334,13 @@ export default function EmailConfigurations({
                             return (
                               <TableCell key={cell.id}>
                                 <GuardedOverflowMenu size="sm" flipped>
-                                  <GuardedOverflowMenuItem itemText="Edit" unavailableReason={!canManageSettings ? disabledReason : null} onClick={() => openEditModal(cfg)} />
+                                  <GuardedOverflowMenuItem itemText="Edit" disabled={isConfigLocked(cfg)} unavailableReason={isConfigLocked(cfg) ? configurationOwnershipDescription(cfg.ownershipMode, cfg.sourceRef) : !canManageSettings ? disabledReason : null} onClick={() => openEditModal(cfg)} />
                                   <GuardedOverflowMenuItem itemText="Test Send" unavailableReason={!canManageSettings ? disabledReason : null} onClick={() => openTestModal(cfg)} />
                                   {!cfg.isDefault && (
                                     <GuardedOverflowMenuItem
                                       itemText="Set as Default"
-                                      unavailableReason={!canManageSettings ? disabledReason : null}
+                                      disabled={isConfigLocked(cfg)}
+                                      unavailableReason={isConfigLocked(cfg) ? configurationOwnershipDescription(cfg.ownershipMode, cfg.sourceRef) : !canManageSettings ? disabledReason : null}
                                       onClick={() => setDefaultMutation.mutate(cfg.id)}
                                     />
                                   )}
@@ -337,7 +348,8 @@ export default function EmailConfigurations({
                                     <GuardedOverflowMenuItem
                                       itemText="Delete"
                                       isDelete
-                                      unavailableReason={!canManageSettings ? disabledReason : null}
+                                      disabled={isConfigLocked(cfg)}
+                                      unavailableReason={isConfigLocked(cfg) ? configurationOwnershipDescription(cfg.ownershipMode, cfg.sourceRef) : !canManageSettings ? disabledReason : null}
                                       onClick={() => deleteModal.openModal(cfg)}
                                     />
                                   )}

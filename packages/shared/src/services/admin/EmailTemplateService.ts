@@ -1,5 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EmailTemplate } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailTemplate.js';
+import { adminConfigObjectOwnershipService } from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 
@@ -81,11 +82,7 @@ class EmailTemplateServiceImpl {
 
   async update(id: string, input: UpdateEmailTemplateInput): Promise<void> {
     const dataSource = await getDataSource();
-    const templateRepo = dataSource.getRepository(EmailTemplate);
     const now = Date.now();
-
-    const existing = await templateRepo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('Email template');
 
     const updates: Record<string, unknown> = {
       updatedAt: now,
@@ -98,27 +95,26 @@ class EmailTemplateServiceImpl {
     if (input.textTemplate !== undefined) updates.textTemplate = input.textTemplate;
     if (input.isActive !== undefined) updates.isActive = input.isActive;
 
-    await templateRepo.update({ id }, updates);
+    await dataSource.transaction(async (manager) => {
+      const templateRepo = manager.getRepository(EmailTemplate);
+      const existing = await templateRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Email template');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_template', id);
+      await templateRepo.update({ id }, updates);
+    });
   }
 
   async reset(id: string, userId: string): Promise<void> {
     const dataSource = await getDataSource();
-    const templateRepo = dataSource.getRepository(EmailTemplate);
     const now = Date.now();
-
-    const existing = await templateRepo.findOne({
-      where: { id },
-      select: ['type'],
-    });
-    if (!existing) throw Errors.notFound('Email template');
-
-    const defaultTemplate = DEFAULT_TEMPLATES[existing.type];
-    if (!defaultTemplate) throw Errors.validation('No default template available for this type');
-
-    await templateRepo.update({ id }, {
-      ...defaultTemplate,
-      updatedAt: now,
-      updatedByUserId: userId,
+    await dataSource.transaction(async (manager) => {
+      const templateRepo = manager.getRepository(EmailTemplate);
+      const existing = await templateRepo.findOne({ where: { id }, select: ['type'] });
+      if (!existing) throw Errors.notFound('Email template');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_template', id);
+      const defaultTemplate = DEFAULT_TEMPLATES[existing.type];
+      if (!defaultTemplate) throw Errors.validation('No default template available for this type');
+      await templateRepo.update({ id }, { ...defaultTemplate, updatedAt: now, updatedByUserId: userId });
     });
   }
 

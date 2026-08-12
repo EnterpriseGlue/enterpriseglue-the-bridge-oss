@@ -7,30 +7,22 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
 import { environmentTagService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import {
+  CreateEnvironmentTagRequest,
+  ReorderEnvironmentTagsRequest,
+  UpdateEnvironmentTagRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
 
 const router = Router();
 
-const createEnvTagSchema = z.object({
-  name: z.string().min(1).max(50),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  manualDeployAllowed: z.boolean().optional(),
-});
-
-const updateEnvTagSchema = z.object({
-  name: z.string().min(1).max(50).optional(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  manualDeployAllowed: z.boolean().optional(),
-  isDefault: z.boolean().optional(),
-});
-
-const reorderSchema = z.object({
-  orderedIds: z.array(z.string()),
-});
+const createEnvTagSchema = CreateEnvironmentTagRequest;
+const updateEnvTagSchema = UpdateEnvironmentTagRequest;
+const reorderSchema = ReorderEnvironmentTagsRequest;
 
 /**
  * GET /api/platform-admin/admin/environments
@@ -71,6 +63,7 @@ router.post(
       res.status(201).json(tag);
     } catch (error) {
       logger.error('Create environment tag error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to create environment tag');
     }
   })
@@ -103,6 +96,7 @@ router.put(
       res.json({ success: true });
     } catch (error) {
       logger.error('Update environment tag error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to update environment tag');
     }
   })
@@ -133,6 +127,7 @@ router.delete(
       res.status(204).send();
     } catch (error: any) {
       logger.error('Delete environment tag error:', error);
+      if (error instanceof AppError) throw error;
       if (error.message?.includes('in use')) {
         throw Errors.validation('Cannot delete environment tag that is in use');
       } else {
@@ -156,6 +151,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Reorder environment tags error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to reorder environment tags');
     }
   })

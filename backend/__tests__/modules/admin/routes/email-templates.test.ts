@@ -32,6 +32,12 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   AuditActions: { USER_UPDATE: 'user.update' },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsSectionOwnershipService.js', () => ({
+  platformSettingsSectionOwnershipService: {
+    list: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 describe('GET /api/admin/email-platform-name', () => {
   let app: express.Application;
 
@@ -61,6 +67,7 @@ describe('GET /api/admin/email-platform-name', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.emailPlatformName).toBe('Test Platform');
+    expect(response.body.ownership).toBeNull();
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       PlatformPermissions.SETTINGS_MANAGE,
       expect.objectContaining({

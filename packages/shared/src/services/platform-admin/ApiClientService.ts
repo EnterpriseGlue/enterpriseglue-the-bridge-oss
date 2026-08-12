@@ -4,6 +4,11 @@ import { ApiClient } from '@enterpriseglue/shared/infrastructure/persistence/ent
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+  type AdminConfigOwnershipFields,
+} from './AdminConfigObjectOwnershipService.js';
 
 export const API_CLIENT_TOKEN_PREFIX = 'egac';
 
@@ -15,7 +20,7 @@ export const ApiClientScopes = {
 
 export type ApiClientScope = typeof ApiClientScopes[keyof typeof ApiClientScopes];
 
-export interface ApiClientView {
+export interface ApiClientView extends AdminConfigOwnershipFields {
   id: string;
   name: string;
   tokenPrefix: string;
@@ -58,7 +63,7 @@ function normalizeScopes(scopes: string[] | undefined): string[] {
   return normalized.length > 0 ? normalized : [ApiClientScopes.ENGINE_REGISTER];
 }
 
-function toView(client: ApiClient): ApiClientView {
+function toView(client: ApiClient, ownership?: Parameters<typeof adminConfigOwnershipFields>[0]): ApiClientView {
   return {
     id: client.id,
     name: client.name,
@@ -70,6 +75,7 @@ function toView(client: ApiClient): ApiClientView {
     revokedAt: client.revokedAt,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
+    ...adminConfigOwnershipFields(ownership),
   };
 }
 
@@ -103,8 +109,12 @@ export class ApiClientService {
   async listClients(): Promise<ApiClientView[]> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(ApiClient);
-    const clients = await repo.find({ order: { createdAt: 'DESC' } });
-    return clients.map(toView);
+    const [clients, ownershipRows] = await Promise.all([
+      repo.find({ order: { createdAt: 'DESC' } }),
+      adminConfigObjectOwnershipService.listForObjectType(dataSource, 'api_client'),
+    ]);
+    const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
+    return clients.map((client) => toView(client, ownershipById.get(client.id)));
   }
 
   async createClient(input: { name: string; scopes?: string[]; createdById?: string | null }): Promise<ApiClientWithToken> {
@@ -138,33 +148,30 @@ export class ApiClientService {
 
   async rotateClient(id: string): Promise<ApiClientWithToken> {
     const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ApiClient);
-    const existing = await repo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('API client');
-    if (!existing.isActive) throw Errors.validation('Cannot rotate a revoked API client');
-
     const secret = generateSecret();
     const now = Date.now();
     const secretHash = await hashPassword(secret);
-    await repo.update({ id }, {
-      secretHash,
-      updatedAt: now,
+    return dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ApiClient);
+      const existing = await repo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('API client');
+      if (!existing.isActive) throw Errors.validation('Cannot rotate a revoked API client');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'api_client', id);
+      await repo.update({ id }, { secretHash, updatedAt: now });
+      const updated = { ...existing, secretHash, updatedAt: now };
+      return { client: toView(updated as ApiClient), token: formatToken(id, secret) };
     });
-
-    const updated = { ...existing, secretHash, updatedAt: now };
-    return { client: toView(updated as ApiClient), token: formatToken(id, secret) };
   }
 
   async revokeClient(id: string): Promise<void> {
     const dataSource = await getDataSource();
-    const repo = dataSource.getRepository(ApiClient);
-    const existing = await repo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('API client');
-    const now = Date.now();
-    await repo.update({ id }, {
-      isActive: false,
-      revokedAt: now,
-      updatedAt: now,
+    await dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ApiClient);
+      const existing = await repo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('API client');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'api_client', id);
+      const now = Date.now();
+      await repo.update({ id }, { isActive: false, revokedAt: now, updatedAt: now });
     });
   }
 

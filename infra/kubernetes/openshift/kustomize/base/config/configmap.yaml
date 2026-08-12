@@ -47,6 +47,11 @@ data:
   EG_ENGINE_ALLOW_PRIVATE_HOSTS: "false"
   EG_ALLOW_INSECURE_ENGINE_HTTP: "false"
 
+  # Official public Git hosts are built in; custom Git/PII hosts are explicit.
+  EG_ADMIN_INTEGRATION_ALLOWED_HOSTS: ""
+  EG_ENFORCE_ADMIN_INTEGRATION_ENDPOINT_POLICY: "true"
+  EG_ADMIN_INTEGRATION_ALLOW_PRIVATE_HOSTS: "false"
+
   # Direct SSO is fail-closed until operators replace this empty host list.
   EG_IDENTITY_PROVIDER_ALLOWED_HOSTS: ""
   EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY: "true"

@@ -314,6 +314,48 @@ Settings and verify `accessGovernanceSourceRef`,
 `accessGovernanceOwnershipMode`, `accessGovernanceDriftStatus`, and
 `governanceBehavior`.
 
+### Complete Platform Administration Files
+
+The same lifecycle also supports these optional imports. Merely omitting a file
+does not claim its administrative family; an imported empty file in
+`authoritative` mode archives only objects previously owned by the same bundle
+and scope.
+
+| Import | Durable contract |
+| --- | --- |
+| `platform-settings.json` | Independent `general`, `gitSync`, `deployment`, `invitations`, `pii`, and `branding` sections |
+| `environment-tags.json` | Ordered Environment Tags and the single default tag |
+| `git-providers.json` | Git provider definitions and referenced OAuth client secrets |
+| `email-configurations.json` | Email provider/SMTP configuration with referenced credentials |
+| `email-templates.json` | Bounded, typed email templates and declared variables |
+| `permissions.json` | Custom permission definitions in the `<scope>:custom:*` namespace |
+| `authorization-policies.json` | Ordered allow/deny policies and bounded conditions |
+| `machine-principals.json` | API clients and service accounts with externally supplied token references |
+| `external-engine-systems.json` | External provisioning-system identities and default ownership policy |
+
+Custom roles in `roles.json` may reference permissions declared in
+`permissions.json`; compile rejects an unknown permission before persistence.
+Machine tokens are resolved only at preflight/apply and stored with the normal
+one-way verifier. Their values never appear in export or ownership metadata.
+Because that verifier is materialized at apply time, token rotation must update
+`tokenRef` to a new versioned reference before reapplying; replacing only the
+secret value behind an unchanged reference does not rotate a machine token.
+
+Diff requires `config.ownership_adoption:<type>:<key>` acknowledgement before
+an existing manual administrative object is adopted. Apply also claims the
+previewed object timestamp and ownership generation in the same transaction,
+so a portal or competing bundle change after preview fails without a partial
+write.
+
+The Admin read APIs for these families expose `sourceRef`, `ownershipMode`,
+and `driftStatus`. The portal renders configuration-owned
+records as managed and disables mutation for `config_locked`. Test-send,
+connection-test, diagnostics, and similar operational actions do not transfer
+configuration ownership.
+
+For a complete file example, startup contract, persistence proof, and removal
+procedure, see [Configure The Platform Without An Administrator](../how-to/configure-platform-headlessly.md).
+
 ## Governance Settings Ownership API
 
 Do not edit `accessGovernance*` database columns to change which bundle owns

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import authzRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/authz.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
@@ -135,8 +137,10 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   permissionService: sharedPermissionServiceMock,
+  rolePermissionDependencyError: vi.fn(() => null),
   PermissionCatalog: [
     { key: 'engine:deploy', scope: 'engine' },
+    { key: 'platform:config-bundles:preview', scope: 'platform' },
   ],
   SystemRoleDefinitions: [
     { key: 'system.engine.operator' },
@@ -1940,12 +1944,12 @@ describe('platform-admin authz routes', () => {
       defaultFieldOwnershipJson: expect.stringContaining('connection'),
     }));
 
+    const updateGetRepository = (entity: any) => entity.name === 'AdminConfigObjectOwnership'
+      ? { findOneBy: vi.fn().mockResolvedValue(null) }
+      : { findOne: updateFindOne, findOneBy, update };
     (getDataSource as any).mockResolvedValueOnce({
-      getRepository: () => ({
-        findOne: updateFindOne,
-        findOneBy,
-        update,
-      }),
+      getRepository: updateGetRepository,
+      transaction: (callback: (manager: any) => unknown) => callback({ getRepository: updateGetRepository }),
     });
     const updateResponse = await request(app)
       .put('/api/authz/external-engine-systems/system-2')
@@ -1956,11 +1960,12 @@ describe('platform-admin authz routes', () => {
       defaultManagementMode: 'hybrid',
     }));
 
+    const archiveGetRepository = (entity: any) => entity.name === 'AdminConfigObjectOwnership'
+      ? { findOneBy: vi.fn().mockResolvedValue(null) }
+      : { findOne: updateFindOne, update };
     (getDataSource as any).mockResolvedValueOnce({
-      getRepository: () => ({
-        findOne: updateFindOne,
-        update,
-      }),
+      getRepository: archiveGetRepository,
+      transaction: (callback: (manager: any) => unknown) => callback({ getRepository: archiveGetRepository }),
     });
     const archiveResponse = await request(app).delete('/api/authz/external-engine-systems/system-2');
     expect(archiveResponse.status).toBe(204);
@@ -2899,7 +2904,7 @@ describe('platform-admin authz routes', () => {
       'platform.config-bundles.apply',
     );
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
-      actorId: 'user-1',
+      actorId: 'client-1',
       ciProvenance: {
         repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss',
         revision: 'a'.repeat(40),
@@ -2915,6 +2920,108 @@ describe('platform-admin authz routes', () => {
         ciProvenance: expect.objectContaining({ repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', revision: 'a'.repeat(40) }),
       }),
     }));
+  });
+
+  it('runs the complete headless platform bundle through HTTP preview, preflight, diff, apply, wait, and export', async () => {
+    const examplePath = resolve(
+      import.meta.dirname,
+      '../../../../../docs/reference/headless-platform-administration.example.json',
+    );
+    const payload = JSON.parse(readFileSync(examplePath, 'utf8'));
+    const emptyRepo = {
+      find: vi.fn().mockResolvedValue([]),
+      findOne: vi.fn().mockResolvedValue(null),
+      findOneBy: vi.fn().mockResolvedValue(null),
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: vi.fn((entity: { name?: string }) => entity.name === 'ConfigBundleApplyRun'
+        ? {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'config-run-all-family', tenantId: 'tenant-default', bundleKey: 'platform.headless-example',
+            bundleApiVersion: 'enterpriseglue.ai/v1beta1', canonicalHash: 'all-family-preview-hash',
+            idempotencyKey: 'all-family-http-lifecycle', actorId: 'client-1', status: 'succeeded',
+            resultJson: '{}', errorMessage: null, completedAt: 2, createdAt: 1,
+          }),
+        }
+        : emptyRepo),
+    });
+    configBundleSecretPreflightMock.check.mockReturnValueOnce({
+      valid: true,
+      canonicalHash: 'all-family-preview-hash',
+      availabilityHash: 'all-family-availability-hash',
+      available: true,
+      errors: [],
+      references: [
+        { reference: 'env://HEADLESS_GIT_OAUTH_SECRET', locations: ['./git-providers.json'], available: true },
+        { reference: 'env://HEADLESS_EMAIL_CREDENTIAL', locations: ['./email-configurations.json'], available: true },
+      ],
+    });
+    configBundleApplyMock.apply.mockResolvedValueOnce({
+      canonicalHash: 'all-family-preview-hash', created: 11, updated: 0, archived: 0,
+      changes: [], applyRunId: 'config-run-all-family',
+      contract: { inputApiVersion: 'enterpriseglue.ai/v1beta1', normalizedApiVersion: 'enterpriseglue.ai/v1beta1', warnings: [] },
+      reconciliation: {
+        status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0,
+        identitySnapshot: { mode: 'apply', status: 'completed', providerCount: 0, scanned: 0, created: 0, removed: 0, failed: 0 },
+      },
+    });
+    app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(500).json({ message: error.message });
+    });
+
+    const authorization = { Authorization: 'Bearer egac_client-1_secret' };
+    const preview = await request(app).post('/api/authz/config-bundles/preview').set(authorization).send(payload);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+    expect(preview.body.counts).toMatchObject({
+      './environment-tags.json': 1,
+      './git-providers.json': 1,
+      './email-configurations.json': 1,
+      './email-templates.json': 1,
+      './authorization-policies.json': 1,
+      './machine-principals.json': 2,
+      './external-engine-systems.json': 1,
+    });
+
+    const preflight = await request(app).post('/api/authz/config-bundles/validate-secret-refs').set(authorization).send(payload);
+    expect(preflight.status).toBe(200);
+    expect(preflight.body).toMatchObject({ available: true, availabilityHash: 'all-family-availability-hash' });
+    const preflightAudit = auditLogMock.mock.calls.find(([entry]) => entry.action === 'authz.config_bundle.secret_preflight')?.[0];
+    expect(preflightAudit.details).toMatchObject({ referenceCount: 2, availableReferenceCount: 2 });
+    expect(JSON.stringify(preflightAudit.details)).not.toContain('HEADLESS_GIT_OAUTH_SECRET');
+
+    const diff = await request(app).post('/api/authz/config-bundles/diff').set(authorization).send(payload);
+    expect(diff.status).toBe(200);
+    expect(diff.body.valid).toBe(true);
+    expect(diff.body.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'git_provider', operation: 'create' }),
+      expect.objectContaining({ objectType: 'email_template', operation: 'create' }),
+      expect.objectContaining({ objectType: 'external_engine_system', operation: 'create' }),
+    ]));
+
+    const apply = await request(app).post('/api/authz/config-bundles/apply').set(authorization).send({
+      ...payload,
+      expectedPreviewHash: 'all-family-preview-hash',
+      expectedTenantScope: 'platform',
+      idempotencyKey: 'all-family-http-lifecycle',
+    });
+    expect(apply.status).toBe(200);
+    expect(apply.body).toMatchObject({ applyRunId: 'config-run-all-family', created: 11 });
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'client-1', expectedTenantScope: 'platform' }),
+      expect.any(Object),
+    );
+
+    const wait = await request(app)
+      .get('/api/authz/config-bundles/runs/config-run-all-family/identity-replay-tasks')
+      .set(authorization);
+    expect(wait.status).toBe(200);
+
+    const exported = await request(app)
+      .get('/api/authz/config-bundles/export?bundleKey=platform.headless-example')
+      .set(authorization);
+    expect(exported.status).toBe(200);
+    expect(exported.body.bundle).toMatchObject({ apiVersion: 'enterpriseglue.ai/v1beta1' });
   });
 
   it('allows configuration-scoped API clients to preview bundles from CI', async () => {

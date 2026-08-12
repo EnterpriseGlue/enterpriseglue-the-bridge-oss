@@ -308,6 +308,10 @@ jobs:
         if: matrix.database == 'postgres'
         run: pnpm run test:unit
 
+      - name: Enforce headless administrator configuration parity
+        if: matrix.database == 'postgres'
+        run: node --test scripts/headless-admin-contract-parity.test.mjs scripts/headless-admin-cli-lifecycle.test.mjs
+
       - name: Run integration tests
         if: matrix.database == 'postgres'
         run: pnpm run test:integration
@@ -421,7 +425,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Run Access Control layout browser e2e
+      - name: Run Access Control and headless administration browser e2e
         if: matrix.database == 'postgres' && inputs.run_e2e
         run: |
           PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
@@ -446,7 +450,7 @@ jobs:
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
-            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @access-control-layout"
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep '@access-control-layout|@headless-admin'"
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && inputs.run_e2e

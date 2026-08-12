@@ -77,6 +77,49 @@ describe('configBundlePreviewService', () => {
     expect(configBundlePreviewService.preview({ bundle, files: { './roles.json': { roles: [] } } })).toMatchObject({ valid: false });
   });
 
+  it('validates durable platform settings and environment tags as one strict headless contract', () => {
+    const input = {
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1beta1', kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: 'platform.headless', owner: 'platform' }, tenantKey: 'default', mode: 'authoritative',
+        imports: ['./environment-tags.json', './platform-settings.json'],
+      },
+      files: {
+        './environment-tags.json': { environmentTags: [{
+          key: 'environment.production', name: 'Production', color: '#da1e28',
+          manualDeployAllowed: false, sortOrder: 0, isDefault: true,
+        }] },
+        './platform-settings.json': { platformSettings: {
+          general: { defaultEnvironmentTagKey: 'environment.production', emailPlatformName: 'Acme Glue' },
+          gitSync: { pushEnabled: true, pullEnabled: true, bothEnabled: true, projectTokenSharingEnabled: false },
+          deployment: { defaultDeployRoles: ['owner', 'operator'], credentiallessCustomerSidecarsEnabled: false },
+          invitations: { allowAllDomains: false, allowedDomains: ['example.com'] },
+          pii: {
+            externalProviderEnabled: true, externalProviderType: 'presidio',
+            externalProviderEndpoint: 'https://pii.example.com/analyze', externalProviderAuthTokenRef: 'env://PII_TOKEN',
+          },
+          branding: { logoTitle: 'Acme Glue', menuAccentColor: '#0F62FE' },
+          ownershipMode: 'config_locked',
+        } },
+      },
+    };
+
+    expect(configBundlePreviewService.preview(input)).toMatchObject({
+      valid: true,
+      counts: { './environment-tags.json': 1, './platform-settings.json': 0 },
+      canonicalHash: expect.any(String),
+    });
+    const unknownDefault = structuredClone(input);
+    unknownDefault.files['./platform-settings.json'].platformSettings.general.defaultEnvironmentTagKey = 'environment.missing';
+    expect(configBundlePreviewService.preview(unknownDefault)).toMatchObject({
+      valid: false,
+      errors: [expect.objectContaining({ message: 'Unknown environment tag key: environment.missing' })],
+    });
+    const plaintext = structuredClone(input);
+    plaintext.files['./platform-settings.json'].platformSettings.pii.externalProviderAuthTokenRef = 'literal-secret';
+    expect(configBundlePreviewService.preview(plaintext)).toMatchObject({ valid: false });
+  });
+
   it('rejects OAuth scopes as config-managed human identity mappings', () => {
     const result = configBundlePreviewService.preview({
       bundle: { ...bundle, imports: ['./identity-mappings.json'] },

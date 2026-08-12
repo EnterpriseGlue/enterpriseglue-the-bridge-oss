@@ -5,6 +5,8 @@ import { GitCredential } from '@enterpriseglue/shared/db/entities/GitCredential.
 import { encrypt as encryptSecret, isEncrypted as isEncryptedValue } from '@enterpriseglue/shared/services/encryption.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
+import { adminConfigObjectOwnershipService } from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
+import { validateAdminIntegrationEndpointUrl } from '@enterpriseglue/shared/services/platform-admin/AdminIntegrationEndpointPolicy.js';
 
 export interface ProviderSummary {
   id: string;
@@ -124,17 +126,8 @@ class GitProviderServiceImpl {
     displayOrder?: number;
   }) {
     const dataSource = await getDataSource();
-    const providerRepo = dataSource.getRepository(GitProvider);
-
-    const existing = await providerRepo.findOneBy({ id });
-    if (!existing) throw Errors.providerNotFound();
-
-    if (input.customBaseUrl && !input.customBaseUrl.startsWith('http')) {
-      throw Errors.validation('Custom base URL must start with http:// or https://');
-    }
-    if (input.customApiUrl && !input.customApiUrl.startsWith('http')) {
-      throw Errors.validation('Custom API URL must start with http:// or https://');
-    }
+    if (input.customBaseUrl) validateAdminIntegrationEndpointUrl(input.customBaseUrl, 'Custom Git base URL');
+    if (input.customApiUrl) validateAdminIntegrationEndpointUrl(input.customApiUrl, 'Custom Git API URL');
 
     const updates: any = { updatedAt: Date.now() };
 
@@ -154,8 +147,14 @@ class GitProviderServiceImpl {
     if (input.oauthScopes !== undefined) updates.oauthScopes = input.oauthScopes || null;
     if (input.displayOrder !== undefined) updates.displayOrder = input.displayOrder;
 
-    await providerRepo.update({ id }, updates);
-    return providerRepo.findOneBy({ id });
+    return dataSource.transaction(async (manager) => {
+      const providerRepo = manager.getRepository(GitProvider);
+      const existing = await providerRepo.findOneBy({ id });
+      if (!existing) throw Errors.providerNotFound();
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'git_provider', id);
+      await providerRepo.update({ id }, updates);
+      return providerRepo.findOneBy({ id });
+    });
   }
 }
 

@@ -16,23 +16,23 @@ import { EmailTemplate } from '@enterpriseglue/shared/infrastructure/persistence
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+} from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
+import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
+import { platformSettingsSectionOwnershipService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsSectionOwnershipService.js';
+import {
+  EmailTemplatePreviewRequestSchema,
+  EmailTemplatePreviewResponseSchema,
+  UpdateEmailPlatformNameRequestSchema,
+  UpdateEmailTemplateRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/email-administration.js';
 
 const router = Router();
 
 const idParamSchema = z.object({
   id: z.string().min(1),
-});
-
-const updateTemplateSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  subject: z.string().min(1).max(200).optional(),
-  htmlTemplate: z.string().min(1).optional(),
-  textTemplate: z.string().nullable().optional(),
-  isActive: z.boolean().optional(),
-});
-
-const updateEmailPlatformNameSchema = z.object({
-  emailPlatformName: z.string().min(1).max(120),
 });
 
 router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (_req: Request, res: Response) => {
@@ -43,21 +43,15 @@ router.get('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAct
     select: ['emailPlatformName'],
   });
 
-  res.json({ emailPlatformName: settings?.emailPlatformName || 'EnterpriseGlue' });
+  const ownership = (await platformSettingsSectionOwnershipService.list(dataSource))
+    .find((row) => row.section === 'general') || null;
+  res.json({ emailPlatformName: settings?.emailPlatformName || 'EnterpriseGlue', ownership });
 }));
 
-router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateBody(updateEmailPlatformNameSchema), asyncHandler(async (req: Request, res: Response) => {
+router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateBody(UpdateEmailPlatformNameRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = req.body;
-    const dataSource = await getDataSource();
-    const settingsRepo = dataSource.getRepository(PlatformSettings);
-    const now = Date.now();
-
-    await settingsRepo.update({ id: 'default' }, {
-      emailPlatformName: body.emailPlatformName,
-      updatedAt: now,
-      updatedById: req.user!.userId,
-    });
+    await platformSettingsService.update({ emailPlatformName: body.emailPlatformName }, req.user!.userId);
 
     await logAudit({
       action: AuditActions.USER_UPDATE,
@@ -87,15 +81,20 @@ router.put('/api/admin/email-platform-name', apiLimiter, requireAuth, requireAct
 router.get('/api/admin/email-templates', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource();
   const templateRepo = dataSource.getRepository(EmailTemplate);
-  const templates = await templateRepo.find({
-    select: ['id', 'type', 'name', 'subject', 'htmlTemplate', 'textTemplate', 'variables', 'isActive', 'createdAt', 'updatedAt'],
-    order: { type: 'ASC' },
-  });
+  const [templates, ownershipRows] = await Promise.all([
+    templateRepo.find({
+      select: ['id', 'type', 'name', 'subject', 'htmlTemplate', 'textTemplate', 'variables', 'isActive', 'createdAt', 'updatedAt'],
+      order: { type: 'ASC' },
+    }),
+    adminConfigObjectOwnershipService.listForObjectType(dataSource, 'email_template'),
+  ]);
+  const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
 
   // Parse variables JSON
   const parsed = templates.map((t) => ({
     ...t,
     variables: JSON.parse(t.variables || '[]'),
+    ...adminConfigOwnershipFields(ownershipById.get(t.id)),
   }));
 
   res.json(parsed);
@@ -119,6 +118,7 @@ router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireAct
   res.json({
     ...template,
     variables: JSON.parse(template.variables || '[]'),
+    ...adminConfigOwnershipFields(await adminConfigObjectOwnershipService.findForObject(dataSource, 'email_template', template.id)),
   });
 }));
 
@@ -126,7 +126,7 @@ router.get('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireAct
  * PATCH /api/admin/email-templates/:id
  * Update an email template (platform admin only)
  */
-router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateParams(idParamSchema), validateBody(updateTemplateSchema), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireAction('platform.settings.manage'), validateParams(idParamSchema), validateBody(UpdateEmailTemplateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const body = req.body;
@@ -151,7 +151,10 @@ router.patch('/api/admin/email-templates/:id', apiLimiter, requireAuth, requireA
     if (body.textTemplate !== undefined) updates.textTemplate = body.textTemplate;
     if (body.isActive !== undefined) updates.isActive = body.isActive;
 
-    await templateRepo.update({ id }, updates);
+    await dataSource.transaction(async (manager) => {
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_template', id);
+      await manager.getRepository(EmailTemplate).update({ id }, updates);
+    });
 
     await logAudit({
       action: AuditActions.USER_UPDATE,
@@ -443,10 +446,13 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
     throw Errors.validation('No default template available for this type');
   }
 
-  await templateRepo.update({ id }, {
-    ...defaultTemplate,
-    updatedAt: now,
-    updatedByUserId: req.user!.userId,
+  await dataSource.transaction(async (manager) => {
+    await adminConfigObjectOwnershipService.claimManualMutation(manager, 'email_template', id);
+    await manager.getRepository(EmailTemplate).update({ id }, {
+      ...defaultTemplate,
+      updatedAt: now,
+      updatedByUserId: req.user!.userId,
+    });
   });
 
   res.json({ success: true });
@@ -456,7 +462,7 @@ router.post('/api/admin/email-templates/:id/reset', apiLimiter, requireAuth, req
  * POST /api/admin/email-templates/:id/preview
  * Preview an email template with sample data (platform admin only)
  */
-router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requireAction('platform.settings.read'), validateParams(idParamSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, requireAction('platform.settings.read'), validateParams(idParamSchema), validateBody(EmailTemplatePreviewRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const { variables } = req.body as { variables?: Record<string, string> };
   const dataSource = await getDataSource();
@@ -500,11 +506,11 @@ router.post('/api/admin/email-templates/:id/preview', apiLimiter, requireAuth, r
     subject = subject.replace(regex, value);
   }
 
-  res.json({
+  res.json(EmailTemplatePreviewResponseSchema.parse({
     subject,
     html,
     text,
-  });
+  }));
 }));
 
 export default router;

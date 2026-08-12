@@ -14,6 +14,7 @@ import {
 import { UpgradeLegacySamlSignatures1700000000065 } from '@enterpriseglue/shared/db/migrations/1700000000065-upgrade-legacy-saml-signatures.js';
 import { AddExternalEngineRegistrationIdentities1700000000108 } from '@enterpriseglue/shared/db/migrations/1700000000108-add-external-engine-registration-identities.js';
 import { RequireProjectTenantOwnership1700000000109 } from '@enterpriseglue/shared/db/migrations/1700000000109-require-project-tenant-ownership.js';
+import { AddHeadlessPlatformSettingsOwnership1700000000110 } from '@enterpriseglue/shared/db/migrations/1700000000110-add-headless-platform-settings-ownership.js';
 
 function runner(database: string) {
   return {
@@ -327,4 +328,113 @@ describe('portable data migrations', () => {
       .rejects.toThrow('tenant does not match project');
     expect(query.mock.calls.some(([sql]) => String(sql).startsWith('UPDATE'))).toBe(false);
   });
+
+  it.each(['postgres', 'mysql', 'mssql', 'oracle', 'spanner'])(
+    'adds durable headless settings and environment ownership portably on %s',
+    async (database) => {
+      const escape = (name: string) => database === 'mysql' ? `\`${name}\`` : database === 'mssql' ? `[${name}]` : `"${name}"`;
+      const ownershipTableName = 'main.platform_settings_section_ownership';
+      const objectOwnershipTableName = 'main.admin_config_object_ownership';
+      const tagTableName = 'main.environment_tags';
+      const createdTables = new Map<string, any>();
+      const tagTable = {
+        columns: [new TableColumn({ name: 'id', type: 'text', isNullable: false })],
+        indices: [] as any[],
+        uniques: [] as any[],
+      };
+      const query = vi.fn(async (_sql: string) => undefined);
+      const migrationRunner = {
+        connection: {
+          options: { type: database },
+          getMetadata: vi.fn((name: string) => ({ tablePath: name === 'EnvironmentTag'
+            ? tagTableName
+            : name === 'AdminConfigObjectOwnership'
+              ? objectOwnershipTableName
+              : ownershipTableName })),
+          driver: {
+            escape,
+            createFullType: (column: TableColumn) => column.length ? `${column.type}(${column.length})` : column.type,
+          },
+        },
+        hasTable: vi.fn(async (name: string) => name === tagTableName || createdTables.has(name)),
+        createTable: vi.fn(async (table: any) => { createdTables.set(table.name, table); }),
+        dropTable: vi.fn(async (name: string) => { createdTables.delete(name); }),
+        getTable: vi.fn(async (name: string) => createdTables.get(name) || (name === tagTableName ? tagTable : undefined)),
+        hasColumn: vi.fn(async (name: string, column: string) => name === tagTableName && tagTable.columns.some((candidate) => candidate.name === column)),
+        addColumn: vi.fn(async (name: string, column: TableColumn) => {
+          if (name === tagTableName) tagTable.columns.push(column.clone());
+        }),
+        dropColumn: vi.fn(async (name: string, columnName: string) => {
+          if (name === tagTableName) {
+            const index = tagTable.columns.findIndex((candidate) => candidate.name === columnName);
+            if (index >= 0) tagTable.columns.splice(index, 1);
+          }
+        }),
+        changeColumn: vi.fn(async (name: string, oldColumn: TableColumn, nextColumn: TableColumn) => {
+          if (name !== tagTableName) return;
+          const index = tagTable.columns.findIndex((candidate) => candidate.name === oldColumn.name);
+          tagTable.columns[index] = nextColumn.clone();
+        }),
+        updateDDL: vi.fn(async (sql: string) => {
+          const columnName = sql.includes('ownership_mode') ? 'ownership_mode' : 'config_generation';
+          tagTable.columns.find((column) => column.name === columnName)!.isNullable = false;
+        }),
+        createIndex: vi.fn(async (name: string, index: any) => {
+          if (name === tagTableName) tagTable.indices.push(index);
+        }),
+        dropIndex: vi.fn(async (name: string, index: any) => {
+          if (name === tagTableName) {
+            const position = tagTable.indices.findIndex((candidate) => candidate.name === index.name);
+            if (position >= 0) tagTable.indices.splice(position, 1);
+          }
+        }),
+        query,
+      } as any;
+
+      const migration = new AddHeadlessPlatformSettingsOwnership1700000000110();
+      await migration.up(migrationRunner);
+      await migration.up(migrationRunner);
+
+      const ownershipTable = createdTables.get(ownershipTableName);
+      const objectOwnershipTable = createdTables.get(objectOwnershipTableName);
+      expect(migrationRunner.createTable).toHaveBeenCalledTimes(2);
+      expect(ownershipTable.columns.map((column: TableColumn) => column.name)).toEqual([
+        'id', 'settings_id', 'section', 'scope_key', 'source_ref', 'ownership_mode', 'source_hash',
+        'last_applied_at', 'drift_status', 'generation', 'updated_at',
+      ]);
+      expect(ownershipTable.uniques.map((unique: any) => unique.name)).toEqual([
+        'uq_platform_settings_section_ownership_scope',
+      ]);
+      expect(ownershipTable.indices.map((index: any) => index.name)).toEqual([
+        'idx_platform_settings_section_ownership_source',
+      ]);
+      expect(objectOwnershipTable.columns.map((column: TableColumn) => column.name)).toEqual([
+        'id', 'object_type', 'object_id', 'scope_key', 'config_key', 'key_identity',
+        'source_ref', 'ownership_mode', 'source_hash', 'secret_references_json',
+        'last_applied_at', 'drift_status', 'active', 'generation', 'updated_at',
+      ]);
+      expect(objectOwnershipTable.uniques.map((unique: any) => unique.name)).toEqual([
+        'uq_admin_config_object_ownership_object',
+        'uq_admin_config_object_ownership_key_identity',
+      ]);
+      expect(tagTable.columns.find((column) => column.name === 'ownership_mode')).toMatchObject({ isNullable: false });
+      expect(tagTable.columns.find((column) => column.name === 'config_generation')).toMatchObject({ isNullable: false });
+      expect(tagTable.columns.find((column) => column.name === 'config_scope_key')).toMatchObject({ isNullable: true });
+      expect(tagTable.indices.map((index) => index.name)).toEqual([
+        'uq_environment_tags_config_key',
+        'idx_environment_tags_source',
+      ]);
+      expect(tagTable.indices[0]).toMatchObject({ isUnique: true, columnNames: ['config_key'] });
+      expect(query.mock.calls.filter(([sql]) => String(sql).startsWith('UPDATE')).length).toBe(4);
+      if (database === 'spanner') expect(migrationRunner.updateDDL).toHaveBeenCalledTimes(2);
+
+      await migration.down(migrationRunner);
+      expect(createdTables.has(ownershipTableName)).toBe(false);
+      expect(createdTables.has(objectOwnershipTableName)).toBe(false);
+      expect(tagTable.indices).toEqual([]);
+      expect(tagTable.columns.map((column) => column.name)).toEqual(['id']);
+      expect(migrationRunner.dropTable).toHaveBeenCalledTimes(2);
+      expect(migrationRunner.dropColumn).toHaveBeenCalledTimes(8);
+    },
+  );
 });

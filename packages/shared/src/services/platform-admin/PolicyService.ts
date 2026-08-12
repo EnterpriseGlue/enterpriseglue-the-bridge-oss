@@ -15,10 +15,16 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
 import { AuthzAuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzAuditLog.js';
-import { IsNull } from 'typeorm';
+import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { permissionService, Permission, PermissionContext } from './permissions.js';
+import {
+  adminConfigObjectOwnershipService,
+  adminConfigOwnershipFields,
+  type AdminConfigOwnershipFields,
+} from './AdminConfigObjectOwnershipService.js';
 
 // ============================================================================
 // Types
@@ -56,7 +62,7 @@ export interface PolicyCondition {
   };
 }
 
-export interface PolicyDefinition {
+export interface PolicyDefinition extends Partial<AdminConfigOwnershipFields> {
   id: string;
   tenantId: string | null;
   name: string;
@@ -119,7 +125,7 @@ class PolicyServiceClass {
   }
 
   private async logPolicyMutation(
-    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    dataSource: DataSource | EntityManager,
     entry: {
       tenantId?: string | null;
       userId?: string | null;
@@ -569,7 +575,6 @@ class PolicyServiceClass {
 
   async updatePolicy(id: string, updates: UpdatePolicyInput): Promise<void> {
     const dataSource = await getDataSource();
-    const policyRepo = dataSource.getRepository(AuthzPolicy);
     const now = Date.now();
 
     const updateData: any = { updatedAt: now };
@@ -583,44 +588,54 @@ class PolicyServiceClass {
     if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
     if (updates.tenantId !== undefined) updateData.tenantId = this.normalizeTenantId(updates.tenantId);
 
-    await policyRepo.update({ id }, updateData);
-    await this.logPolicyMutation(dataSource, {
-      tenantId: updates.tenantId,
-      userId: updates.updatedById || null,
-      action: 'authz.policy.update',
-      resourceId: id,
-      details: {
-        policyId: id,
-        tenantId: updates.tenantId !== undefined ? this.normalizeTenantId(updates.tenantId) : undefined,
-        updatedFields: Object.keys(updateData).filter((field) => field !== 'updatedAt'),
-        name: updates.name,
-        effect: updates.effect,
-        priority: updates.priority,
-        resourceType: updates.resourceType,
-        action: updates.action,
-        isActive: updates.isActive,
-      },
+    await dataSource.transaction(async (manager) => {
+      const policyRepo = manager.getRepository(AuthzPolicy);
+      const existing = await policyRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('Authorization policy');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'authorization_policy', id);
+      await policyRepo.update({ id }, updateData);
+      await this.logPolicyMutation(manager, {
+        tenantId: updates.tenantId ?? existing.tenantId,
+        userId: updates.updatedById || null,
+        action: 'authz.policy.update',
+        resourceId: id,
+        details: {
+          policyId: id,
+          tenantId: updates.tenantId !== undefined ? this.normalizeTenantId(updates.tenantId) : existing.tenantId,
+          updatedFields: Object.keys(updateData).filter((field) => field !== 'updatedAt'),
+          name: updates.name,
+          effect: updates.effect,
+          priority: updates.priority,
+          resourceType: updates.resourceType,
+          action: updates.action,
+          isActive: updates.isActive,
+        },
+      });
     });
   }
 
   async deletePolicy(id: string, deletedById?: string | null): Promise<void> {
     const dataSource = await getDataSource();
-    const policyRepo = dataSource.getRepository(AuthzPolicy);
-    const policy = await policyRepo.findOne({ where: { id } });
-    await policyRepo.delete({ id });
-    await this.logPolicyMutation(dataSource, {
-      tenantId: policy?.tenantId,
-      userId: deletedById || null,
-      action: 'authz.policy.delete',
-      resourceId: id,
-      details: {
-        policyId: id,
-        tenantId: policy?.tenantId,
-        name: policy?.name,
-        effect: policy?.effect,
-        resourceType: policy?.resourceType,
-        action: policy?.action,
-      },
+    await dataSource.transaction(async (manager) => {
+      const policyRepo = manager.getRepository(AuthzPolicy);
+      const policy = await policyRepo.findOne({ where: { id } });
+      if (!policy) throw Errors.notFound('Authorization policy');
+      await adminConfigObjectOwnershipService.claimManualMutation(manager, 'authorization_policy', id);
+      await policyRepo.delete({ id });
+      await this.logPolicyMutation(manager, {
+        tenantId: policy.tenantId,
+        userId: deletedById || null,
+        action: 'authz.policy.delete',
+        resourceId: id,
+        details: {
+          policyId: id,
+          tenantId: policy.tenantId,
+          name: policy.name,
+          effect: policy.effect,
+          resourceType: policy.resourceType,
+          action: policy.action,
+        },
+      });
     });
   }
 
@@ -628,10 +643,14 @@ class PolicyServiceClass {
     const dataSource = await getDataSource();
     const policyRepo = dataSource.getRepository(AuthzPolicy);
     const normalizedTenantId = this.normalizeTenantId(tenantId);
-    const policies = await policyRepo.find({
-      where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : undefined,
-      order: { priority: 'DESC' },
-    });
+    const [policies, ownershipRows] = await Promise.all([
+      policyRepo.find({
+        where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : undefined,
+        order: { priority: 'DESC' },
+      }),
+      adminConfigObjectOwnershipService.listForObjectType(dataSource, 'authorization_policy'),
+    ]);
+    const ownershipById = new Map(ownershipRows.map((row) => [row.objectId, row]));
 
     return policies.map((p) => ({
       id: p.id,
@@ -644,6 +663,7 @@ class PolicyServiceClass {
       action: p.action || undefined,
       conditions: this.parseConditions(p.conditions),
       isActive: p.isActive,
+      ...adminConfigOwnershipFields(ownershipById.get(p.id)),
     }));
   }
 
@@ -654,6 +674,7 @@ class PolicyServiceClass {
 
     if (!p) return null;
 
+    const ownership = await adminConfigObjectOwnershipService.findForObject(dataSource, 'authorization_policy', p.id);
     return {
       id: p.id,
       tenantId: p.tenantId,
@@ -665,6 +686,7 @@ class PolicyServiceClass {
       action: p.action || undefined,
       conditions: this.parseConditions(p.conditions),
       isActive: p.isActive,
+      ...adminConfigOwnershipFields(ownership),
     };
   }
 
