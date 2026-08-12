@@ -37,8 +37,13 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
 6. Run the repository's appropriate verification level, commit coherent
    changes, and push only the active branch. Create or update the PR without
    rewriting unrelated metadata.
-7. Keep a requested draft PR draft. Never enable auto-merge or merge unless the
-   user explicitly authorizes it.
+7. Determine whether the PR is first-party by comparing its head repository
+   owner with the base repository owner. For a first-party PR that is not
+   explicitly requested or marked as draft, enable auto-merge by default after
+   the required checks and release metadata are in place. Do not enable
+   auto-merge for fork/external PRs or explicitly draft PRs unless the user
+   explicitly requests it. Enabling auto-merge does not authorize bypassing
+   branch protection, dismissing reviews, or merging a draft.
 8. For a Release Please PR, require `docs/releases/vX.Y.Z.md`, require its body
    to match that document, and use a merge commit—not squash. Do not delete or
    recreate published tags.
