@@ -21,6 +21,7 @@ import type { RoleSummary } from '../../hooks/useAuthzApi';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
 import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './roleScopePresentation';
+import { AdminTableEmptyState, AdminTablePagination, useAdminTablePagination } from '../../../../shared/components/AdminDataTable';
 
 const rolesHeaders = [
   { key: 'name', header: 'Role' },
@@ -65,14 +66,15 @@ export function RolesTable({
     () => filterRoles(roles, searchQuery, scopeFilter),
     [filterRoles, roles, searchQuery, scopeFilter],
   );
+  const pagination = useAdminTablePagination(filteredRoles, { resetKey: `${searchQuery}:${scopeFilter}` });
   const selectedScopeFilter = ROLE_SCOPE_FILTERS.find((item) => item.id === scopeFilter) || ROLE_SCOPE_FILTERS[0];
 
   if (loading) return <DataTableSkeleton headers={rolesHeaders} rowCount={6} />;
 
   return (
-    <TableContainer>
+    <TableContainer className="eg-admin-data-table">
       <DataTable
-        rows={filteredRoles.map((role) => ({
+        rows={pagination.pageItems.map((role) => ({
           id: role.id,
           name: role.name,
           scope: role.scope,
@@ -106,7 +108,9 @@ export function RolesTable({
                 </Button>
               </TableToolbarContent>
             </TableToolbar>
-            <Table {...getTableProps()} size="md">
+            {filteredRoles.length === 0 ? (
+              <AdminTableEmptyState title="No roles found" description="No roles match the current search and scope filter." />
+            ) : <Table {...getTableProps()} size="md">
               <TableHead>
                 <TableRow>
                   {headers.map((header) => <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />)}
@@ -116,7 +120,7 @@ export function RolesTable({
                 {rows.length === 0 ? (
                   <TableRow><TableCell colSpan={headers.length}>No roles match the current filters.</TableCell></TableRow>
                 ) : rows.map((row) => {
-                  const role = filteredRoles.find((item) => item.id === row.id);
+                  const role = pagination.pageItems.find((item) => item.id === row.id);
                   return (
                     <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                       {row.cells.map((cell) => {
@@ -139,10 +143,11 @@ export function RolesTable({
                   );
                 })}
               </TableBody>
-            </Table>
+            </Table>}
           </>
         )}
       </DataTable>
+      <AdminTablePagination totalItems={filteredRoles.length} page={pagination.page} pageSize={pagination.pageSize} onChange={pagination.setPagination} />
       <Modal
         open={Boolean(archiveTarget)}
         danger

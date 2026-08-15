@@ -7,6 +7,7 @@ import { Add } from '@carbon/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { useSafeDestructiveModalFocus } from '../../../shared/hooks/useSafeDestructiveModalFocus';
 import { useUnsavedChangesGuard } from '../../../shared/hooks/useUnsavedChangesGuard';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { authzQueryKeys, useIdentityProviders } from '../hooks/useAuthzApi';
@@ -50,6 +51,7 @@ type MembershipReplayResult = IdentityProviderMembershipReplayResult;
 type MembershipPreviewResult = IdentityProviderMembershipPreviewResult;
 type ConnectionTestResult = IdentityProviderConnectionTestResult;
 type ProviderActionError = { title: string; message: string };
+type ProviderSaveSummary = { title: string; description: string };
 
 interface IdentityProvidersSettingsTabProps {
   loginPolicy?: {
@@ -271,6 +273,7 @@ export default function IdentityProvidersSettingsTab({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [error, setError] = useState<ProviderActionError | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedSummary, setSavedSummary] = useState<ProviderSaveSummary | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<IdentityProvider | null>(null);
   const [replayTarget, setReplayTarget] = useState<{ provider: IdentityProvider; cursor?: string } | null>(null);
   const [replayResult, setReplayResult] = useState<{ providerKey: string; result: MembershipReplayResult } | null>(null);
@@ -281,6 +284,7 @@ export default function IdentityProvidersSettingsTab({
   const [connectionResult, setConnectionResult] = useState<{ providerKey: string; result: ConnectionTestResult } | null>(null);
   const [externalIdentityConflict, setExternalIdentityConflict] = useState<{ provider: IdentityProvider; subjectId: string; userId: string } | null>(null);
   const [externalIdentityUnlinkResult, setExternalIdentityUnlinkResult] = useState<{ providerKey: string; result: IdentityProviderExternalIdentityUnlinkResult } | null>(null);
+  const savedSummaryRef = React.useRef<HTMLDivElement | null>(null);
   const providerViewOnly = isConfigLockedIdentityProvider(editing);
   const clearActionFeedback = () => {
     setPreviewResult(null);
@@ -304,7 +308,17 @@ export default function IdentityProvidersSettingsTab({
       const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), displayName: payload.displayName.trim(), organization: payload.organization.trim() || null, displayOrder: Number(payload.displayOrder), isPreferred: payload.isPreferred, loginDomains: Array.from(new Set(payload.loginDomains.split(/[\n,]/).map((domain) => domain.trim().toLowerCase()).filter(Boolean))), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers, requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.syncConnectorCapability, scheduled, ...(scheduled ? { intervalSeconds: Number(payload.syncIntervalSeconds) } : {}) }, ownershipMode: isConfigWarnIdentityProvider(editing) ? 'config_warn' : 'manual' };
       return editing ? apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : apiClient.post('/api/identity/providers', body);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityProviders }); setOpen(false); setEditing(null); setError(null); setSaveError(null); },
+    onSuccess: (_result, payload) => {
+      setSavedSummary({
+        title: editing ? 'Identity provider saved' : 'Identity provider created',
+        description: `${payload.displayName.trim()} is ${payload.isEnabled ? 'enabled for its configured sign-in use' : 'saved in a disabled state'}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityProviders });
+      setOpen(false);
+      setEditing(null);
+      setError(null);
+      setSaveError(null);
+    },
     onError: (value: unknown) => setSaveError(parseApiError(value, 'Unable to save identity provider').message),
   });
   const archive = useMutation({ mutationFn: (key: string) => apiClient.delete(`/api/identity/providers/${encodeURIComponent(key)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityProviders }); setArchiveTarget(null); } });
@@ -334,15 +348,16 @@ export default function IdentityProvidersSettingsTab({
   }, []);
   const startCreate = () => {
     const nextForm = emptyForm();
-    setEditing(null); setProviderStep(1); setForm(nextForm); setInitialForm(nextForm); resetFormInteraction(); setError(null); setSaveError(null); setOpen(true);
+    setEditing(null); setProviderStep(1); setForm(nextForm); setInitialForm(nextForm); resetFormInteraction(); setError(null); setSaveError(null); setSavedSummary(null); setOpen(true);
   };
   const startEdit = (provider: IdentityProvider) => {
     const nextForm = formForProvider(provider);
-    setEditing(provider); setProviderStep(1); setForm(nextForm); setInitialForm(nextForm); resetFormInteraction(); setError(null); setSaveError(null); setOpen(true);
+    setEditing(provider); setProviderStep(1); setForm(nextForm); setInitialForm(nextForm); resetFormInteraction(); setError(null); setSaveError(null); setSavedSummary(null); setOpen(true);
   };
   const providerWorkflowDirty = open && !providerViewOnly
     && JSON.stringify(form) !== JSON.stringify(initialForm);
   const unsavedChanges = useUnsavedChangesGuard(providerWorkflowDirty, closeProviderWorkflow);
+  useSafeDestructiveModalFocus(unsavedChanges.confirmationOpen, 'Leave without saving?', 'Keep editing');
   React.useEffect(() => {
     if (!open) return;
     const animationFrame = window.requestAnimationFrame(() => {
@@ -367,6 +382,11 @@ export default function IdentityProvidersSettingsTab({
     });
     return () => window.cancelAnimationFrame(animationFrame);
   }, [open, providerStep]);
+  React.useEffect(() => {
+    if (!savedSummary) return;
+    const animationFrame = window.requestAnimationFrame(() => savedSummaryRef.current?.focus());
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [savedSummary]);
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((current) => ({ ...current, [key]: value }));
   const formErrors = validateProviderForm(form);
   const formIsValid = Object.keys(formErrors).length === 0;
@@ -442,6 +462,67 @@ export default function IdentityProvidersSettingsTab({
     ['Membership refresh', form.syncConnectorCapability === 'ldap_directory' ? 'LDAP directory query' : 'Sign-in claims'],
     ['Initial status', form.isEnabled ? 'Enabled' : 'Disabled'],
   ];
+  const configuredValue = (value: string, fallback = 'Not configured') => value.trim() || fallback;
+  const providerConnectionItems = form.protocol === 'oidc'
+    ? [
+      ['Issuer URL', configuredValue(form.issuerUrl)],
+      ['Client ID', configuredValue(form.clientId)],
+      ['Client secret reference', configuredValue(form.clientSecretRef, 'None')],
+      ['Callback URL', configuredValue(form.callbackUrl)],
+      ['Scopes', configuredValue(form.scopes)],
+      ['Group claim', configuredValue(form.groupClaim, 'None')],
+      ['Audience confirmation', configuredValue(form.expectedAudience, 'None')],
+      ['Post-logout redirect URL', configuredValue(form.postLogoutRedirectUrl, 'None')],
+    ]
+    : form.protocol === 'saml'
+      ? [
+        ['Service provider entity ID', configuredValue(form.entityId)],
+        ['Identity provider entity ID', configuredValue(form.idpEntityId)],
+        ['Assertion consumer service URL', configuredValue(form.callbackUrl)],
+        ['Identity provider SSO URL', configuredValue(form.ssoUrl)],
+        ['Signing certificate reference', configuredValue(form.signingCertificateRef)],
+        ['Subject attribute', configuredValue(form.nameIdAttribute)],
+        ['Email attribute', configuredValue(form.emailAttribute)],
+        ['Group attribute', configuredValue(form.groupAttribute)],
+      ]
+      : [
+        ['LDAPS URL', configuredValue(form.ldapUrl)],
+        ['Service bind DN', configuredValue(form.ldapBindDn)],
+        ['Bind password reference', configuredValue(form.ldapBindPasswordRef)],
+        ['User base DN', configuredValue(form.ldapUserBaseDn)],
+        ['User search filter', configuredValue(form.ldapUserSearchFilter)],
+        ['Group base DN', configuredValue(form.ldapGroupBaseDn)],
+        ['Membership lookup', form.ldapMembershipMode === 'group_search' ? 'Search groups by member DN' : 'Read memberOf from user'],
+        ['TLS trust reference', configuredValue(form.ldapTlsTrustRef, 'System trust store')],
+      ];
+  const providerConfigurationSections = [
+    {
+      title: 'Identity and sign-in',
+      items: [
+        ['Sign-in name', configuredValue(form.displayName)],
+        ['Organization', configuredValue(form.organization, 'None')],
+        ['Provider key', configuredValue(form.key)],
+        ['Protocol', form.protocol === 'oidc' ? 'OpenID Connect' : form.protocol === 'saml' ? 'SAML 2.0' : 'LDAP'],
+        ['Sign-in use', form.authenticationMode === 'direct' ? 'Direct user sign-in' : 'Verified host integration'],
+        ['Discovery domains', configuredValue(form.loginDomains, 'None')],
+        ['Preferred provider', form.isPreferred ? 'Yes' : 'No'],
+        ['Status', form.isEnabled ? 'Enabled' : 'Disabled'],
+      ],
+    },
+    { title: 'Connection', items: providerConnectionItems },
+    {
+      title: 'Membership and ownership',
+      items: [
+        ['Directory tenant ID', configuredValue(form.directoryTenantId, 'None')],
+        ['Verified email account linking', form.allowVerifiedEmailLinking ? 'Enabled' : 'Disabled'],
+        ['Authorization attribute allowlist', configuredValue(form.authorizationAttributeKeys, 'None')],
+        ['Membership source', form.syncConnectorCapability === 'ldap_directory' ? 'LDAP directory query' : 'Sign-in claims'],
+        ['Manual membership refresh', form.syncOnManual ? 'Enabled' : 'Disabled'],
+        ['Scheduled reconciliation', form.syncScheduled ? `Every ${form.syncIntervalSeconds} seconds` : 'Disabled'],
+        ['Configuration source', configurationSourceName(editing?.sourceRef)],
+      ],
+    },
+  ];
   return <>
     {!open && <>
     {loginPolicy && <Tile style={{ marginBottom: 'var(--spacing-5)' }}>
@@ -476,6 +557,7 @@ export default function IdentityProvidersSettingsTab({
         </div>
         {rows.length > 0 && <GuardedAction actionId="platform.sso.providers.manage" resource={resource}><Button kind="primary" size="sm" renderIcon={Add} onClick={startCreate}>Create provider</Button></GuardedAction>}
       </div>
+      {savedSummary && <div ref={savedSummaryRef} aria-live="polite" tabIndex={-1} className="eg-settings-result-focus"><InlineNotification kind="success" title={savedSummary.title} subtitle={savedSummary.description} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} /></div>}
       {error && <InlineNotification kind="error" title={error.title} subtitle={`${sentence(error.message)} Review the relevant settings, then try again.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {previewResult && <InlineNotification
         kind={previewResult.result.failed > 0 || previewResult.result.warnings.includes('no_active_snapshots') ? 'warning' : 'info'}
@@ -580,8 +662,18 @@ export default function IdentityProvidersSettingsTab({
         </div>
         <Button kind="ghost" size="sm" onClick={unsavedChanges.requestExit}>Back to identity providers</Button>
       </div>
-      <div className="eg-settings-workflow__body" role="region" aria-label="Identity provider form fields" tabIndex={0}>
-        {providerViewOnly && <Callout kind="info" lowContrast title="Managed by configuration" subtitle={`This provider cannot be changed here. Update ${configurationSourceName(editing?.sourceRef)} and apply it again.`} />}
+      <div className="eg-settings-workflow__body" role="region" aria-label={providerViewOnly ? 'Identity provider configuration details' : 'Identity provider form fields'} tabIndex={0}>
+        {providerViewOnly ? <>
+          <Callout kind="info" lowContrast title="Managed by configuration" subtitle={`This provider cannot be changed here. Update ${configurationSourceName(editing?.sourceRef)} and apply it again.`} />
+          <div className="eg-settings-readonly-sections">
+            {providerConfigurationSections.map((section) => <section key={section.title} className="eg-settings-readonly-section" aria-labelledby={`identity-provider-readonly-${section.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+              <h3 id={`identity-provider-readonly-${section.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{section.title}</h3>
+              <dl className="eg-settings-readonly-list">
+                {section.items.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+              </dl>
+            </section>)}
+          </div>
+        </> : <>
         {saveError && <InlineNotification kind="error" title="Provider not saved" subtitle={saveError} hideCloseButton />}
         {submitAttempted && !currentStepValid && <InlineNotification kind="error" title="Complete the highlighted fields" subtitle="Correct the indicated provider settings before continuing." hideCloseButton />}
         <ProgressIndicator currentIndex={providerStep - 1} spaceEqually>
@@ -662,19 +754,24 @@ export default function IdentityProvidersSettingsTab({
             <dl className="eg-settings-review-list" aria-label="Identity provider review">{providerReviewItems.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value}</dd></React.Fragment>)}</dl>
           </section>}
         </fieldset>
+        </>}
       </div>
       <div className="eg-settings-workflow__actions">
-        <Button kind="ghost" onClick={closeProviderWorkflow}>{providerViewOnly ? 'Close' : 'Cancel'}</Button>
-        {providerStep > 1 && <Button kind="secondary" onClick={() => setProviderStep((step) => Math.max(1, step - 1))}>Back</Button>}
-        {providerStep < 4 && <Button kind="primary" disabled={!providerViewOnly && !manage.allowed} onClick={continueProvider}>Continue</Button>}
-        {providerStep === 4 && !providerViewOnly && <Button kind="primary" disabled={!manage.allowed || save.isPending || !formIsValid} onClick={submitProvider}>{save.isPending ? 'Saving provider…' : editing ? 'Save provider' : 'Create provider'}</Button>}
+        {providerViewOnly ? <Button kind="primary" onClick={closeProviderWorkflow}>Close</Button> : <>
+          <Button kind="ghost" onClick={unsavedChanges.requestExit}>Cancel</Button>
+          {providerStep > 1 && <Button kind="secondary" onClick={() => setProviderStep((step) => Math.max(1, step - 1))}>Back</Button>}
+          {providerStep < 4 && <Button kind="primary" disabled={!manage.allowed || !currentStepValid} onClick={continueProvider}>Continue</Button>}
+          {providerStep === 4 && <Button kind="primary" disabled={!manage.allowed || save.isPending || !formIsValid} onClick={submitProvider}>{save.isPending ? 'Saving provider…' : editing ? 'Save provider' : 'Create provider'}</Button>}
+        </>}
       </div>
     </section>}
     <Modal
       open={unsavedChanges.confirmationOpen}
+      danger
       modalHeading="Leave without saving?"
       primaryButtonText="Leave"
       secondaryButtonText="Keep editing"
+      selectorPrimaryFocus=".cds--btn--secondary"
       onRequestClose={unsavedChanges.keepEditing}
       onRequestSubmit={unsavedChanges.leaveWithoutSaving}
     >

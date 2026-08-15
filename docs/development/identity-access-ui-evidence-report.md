@@ -420,3 +420,115 @@ across Chromium, Firefox, and WebKit. Screenshot integrity passed for all 36
 desktop, 14 narrow, and two 200%-reflow images with no dimension or duplicate
 content findings. The directly affected review captures are `108`, `122`–
 `124b`, and `147`.
+
+## P2 and P3 Carbon UX closeout (2026-08-15)
+
+All remaining P2 and P3 findings from the Carbon review are closed. This
+focused addendum does not replace the consolidated 52-screen evidence above;
+it records the later P2/P3 implementation and its changed-state review set in
+`test/results/manual-ui-screenshots-carbon-p2-p3-final-20260815-v3`.
+
+| Finding | Resolution | Direct evidence |
+|---|---|---|
+| Provider steps allowed premature progression | Continue/Create is derived from current-step validity and remains disabled until required inputs are complete; inline validation remains available. | `113`–`116`, `130` |
+| Provider creation lacked completion feedback | The saved result now shows a success notification, moves focus to it, and exposes the message to assistive technology. | `116a` |
+| Unsaved-exit action hierarchy was unsafe | Discard uses Carbon's danger action; Keep editing is the safe initial focus target. Provider, mapping, and provisioning creation use the same guarded behavior. | `125`, `125a` |
+| Configuration-owned records looked editable | Provider and mapping detail views now use static key/value content instead of low-contrast disabled form controls. | `126`, `127` |
+| Provisioning creation used a disconnected wide form | Directory creation now uses the shared single-column creation workflow, one documented scroll region, persistent actions, sufficient bottom clearance, and the common unsaved-change guard. | `145a`, `150a` |
+| Operational detail lists were difficult to scan | Effective access, sessions, audit, credentials, and diagnostics use one responsive structured-list primitive with table/row/header/cell semantics and stacked narrow rendering. | `142`–`144`, `146`, `148`, `149b`, `150b` |
+| Narrow User directory obscured later columns | The inner table is the horizontal scroll container, the User identity column stays pinned, a scroll hint is announced and shown, and scrollbar styling remains available. | `149`, `149c` |
+
+The focused identity component suite passes 62/62. The complete Chromium
+Carbon implementation gallery passes 8/8, and the focused
+identity-administration accessibility suite passes 12/12. The
+frontend-host typecheck and both frontend production builds pass. Screenshot
+integrity passes for all 47 P2/P3 captures: 29 desktop `1440 × 900`, 16 narrow
+`390 × 844`, and two 200%-reflow `720 × 450` images, with no dimension or
+duplicate-content findings. The screenshots were captured against the exact
+rebuilt frontend package with the deterministic identity mock stack; they are
+UI and accessibility evidence, not a claim of live customer-IdP certification.
+
+## Access Model real-API E2E evidence (2026-08-15)
+
+The Roles, Permissions, Assignments, and Groups pages now share a repeatable
+real-backend Playwright journey in
+`test/e2e/smoke/access-model-pages-local.spec.ts`. The journey signs in as a
+disposable seeded administrator, creates a custom permission, creates a custom
+platform role that includes it, assigns that role to the seeded user, creates a
+manual group, and adds the user as a member. Each mutation must return the
+expected HTTP status, survive a browser reload, and match an authenticated API
+read before evidence is captured. The same test then removes the assignment
+and membership, archives the group and role, verifies the final archived role
+state, and relies on targeted global teardown for repeatable database cleanup.
+The journey is included in the seeded local authorization smoke runner.
+
+The final source-built container evidence is in
+`test/results/manual-ui-access-model-e2e-20260815`:
+
+- `230`–`233` prove persisted custom permission, role, assignment, and manual
+  group membership at `1440 × 900`;
+- `234`–`237` prove responsive access to all four Access Model pages at
+  `390 × 844`; and
+- `238` proves the role's non-assignable archived result at `1440 × 900`.
+
+The real-API journey passes 1/1. The real local Access Control and effective
+access smokes pass 2/2. The mocked cross-page navigation journey passes 1/1,
+the tablet long-label layout check passes 1/1, and the focused Chromium
+accessibility lane passes 5/5, including error announcement, rendered WCAG AA
+text contrast, 200% reflow, reduced motion, and toolbar alignment. The
+authorization structure gate reports all 218 registered actions directly
+covered and the guarded machine-principal, policy, API-client, and shared
+authorization middleware sources at literal 100% coverage. Screenshot audit
+passes for all five desktop and four narrow images with correct dimensions,
+unique content, and no integrity findings.
+
+## Resource Administration real-API E2E evidence (2026-08-16)
+
+The three Access Control Resource sections now share a real-backend Chromium
+journey in `test/e2e/smoke/resource-administration-local.spec.ts`. The journey
+uses the source-built production frontend and backend containers, PostgreSQL,
+and the deterministic Camunda REST mock. It does not intercept the Resource
+Administration APIs in the browser.
+
+The journey proves the following persisted lifecycle:
+
+- create an Engine Set from an explicit engine selector, preview its match,
+  require HTTP `201`, reload it from the API, edit it, refresh matching engines,
+  and archive it through a Carbon danger confirmation;
+- load the seeded runtime process inventory and refresh it through the backend
+  to the Docker Camunda mock, require HTTP `200`, and render bigint observation
+  timestamps as readable dates rather than `Invalid Date`;
+- create a Project Target from real project and engine catalogs, enable manual,
+  CI, and import paths, require HTTP `201`, reload and verify the stored
+  contract, add API deployment by edit, evaluate both an allowed owner and a
+  denied persona, and archive the target through a danger confirmation; and
+- revisit all three sections at `390 × 844`, reject document-level horizontal
+  overflow, keep mobile actions reachable, expose explicit horizontal-table
+  guidance, and retain the first table column as scroll context.
+
+The companion
+`test/e2e/smoke/resource-scope-assignments-local.spec.ts` creates Engine Set,
+single Runtime Resource, and Runtime Resource Set assignments through the
+redesigned Assignments page. Separate authenticated browser sessions then
+prove the permitted engine/resource is returned and its sibling is denied.
+Both journeys are included in `scripts/run-authz-local-seeded-smoke.sh`, with a
+fresh disposable fixture and direct cleanup for every spec.
+
+The final screenshot set is
+`test/results/manual-ui-resource-administration-e2e-20260816`:
+
+- `240`–`242`: Engine Set preview, persisted detail, and refreshed matches;
+- `243`–`244`: runtime inventory before and after live reconciliation;
+- `245`–`248`: Project Target creation, persistence, allowed evaluation, and
+  denied evaluation;
+- `249`–`251`: the three Resource sections at `390 × 844`; and
+- `252`–`253`: guarded Engine Set and Project Target archive confirmations.
+
+The source-built Docker journey passes 1/1 and the live scope-enforcement
+journey passes 1/1. Focused frontend coverage passes 29/29, focused backend
+resource and route coverage passes 123/123, and frontend-host typecheck passes.
+All 14 retained files are unique and dimension-valid: 11 desktop captures are
+`1440 × 900`, and three narrow captures are `390 × 844`.
+The Compose E2E overlay permits only the named `camunda-mock` HTTP/private
+endpoint so the backend container can exercise reconciliation. Production
+endpoint-policy defaults remain unchanged.

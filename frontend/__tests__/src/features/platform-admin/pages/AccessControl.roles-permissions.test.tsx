@@ -186,20 +186,20 @@ describe('AccessControl roles and permissions', () => {
 
     render(<AccessControl />);
 
-    expect(screen.getByRole('tab', { name: /^Roles$/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^Permissions$/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^Assignments$/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^Groups$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /Effective Access/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /SSO Engine Assignments/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /^Engine sets$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /^Project Targets$/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^Policies$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /^Audit$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /External Registration/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Roles$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Permissions$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Assignments$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Groups$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Effective Access/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /SSO Engine Assignments/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Engine sets$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Project Targets$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Policies$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Audit$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /External Registration/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Create Role/i })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Assignments$/i }));
     expect(screen.getByRole('button', { name: /Assign role/i })).toBeDisabled();
     expect(screen.getAllByLabelText('Remove assignment').every((button) => button.hasAttribute('disabled'))).toBe(true);
   });
@@ -217,7 +217,7 @@ describe('AccessControl roles and permissions', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Engine sets$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Engine sets$/i }));
 
     expect(screen.getAllByText('Production Engines').length).toBeGreaterThan(0);
     expectButtonAbsentOrDisabled(screen, /Create engine set/i);
@@ -241,7 +241,7 @@ describe('AccessControl roles and permissions', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Project Targets$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Project Targets$/i }));
 
     expect(screen.getByText('Payments')).toBeInTheDocument();
     expectButtonAbsentOrDisabled(screen, /Create Target/i);
@@ -265,7 +265,7 @@ describe('AccessControl roles and permissions', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Policies$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Policies$/i }));
 
     expect(screen.getByText('Block production deploys outside hours')).toBeInTheDocument();
     expectButtonAbsentOrDisabled(screen, /Add policy/i);
@@ -278,7 +278,7 @@ describe('AccessControl roles and permissions', () => {
   it('creates custom permissions from the permission catalog tab', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Permissions$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Permissions$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Add permission/i }));
 
     fireEvent.change(document.getElementById('custom-permission-key')!, { target: { value: 'project:custom:approve-release' } });
@@ -286,7 +286,7 @@ describe('AccessControl roles and permissions', () => {
     fireEvent.change(document.getElementById('custom-permission-label')!, { target: { value: 'Approve release' } });
     fireEvent.change(document.getElementById('custom-permission-description')!, { target: { value: 'Allows release approval.' } });
 
-    const permissionModal = screen.getByText('Create custom permission').closest('.cds--modal-container')!;
+    const permissionModal = screen.getByText('Create custom permission').closest('.eg-access-control-workflow')!;
     const createButton = Array.from(permissionModal.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Create') as HTMLButtonElement | undefined;
     expect(createButton).toBeDefined();
     expect(createButton).not.toBeDisabled();
@@ -306,7 +306,7 @@ describe('AccessControl roles and permissions', () => {
   it('renders manual role assignments and removal affordance', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Assignments$/i }));
 
     expect(screen.getAllByText('Custom Operator').length).toBeGreaterThan(0);
     const assignmentRow = screen
@@ -320,7 +320,7 @@ describe('AccessControl roles and permissions', () => {
   it('shows SSO-managed assignments without a manual removal affordance', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Assignments$/i }));
 
     const assignmentRow = screen.getByText('User: 00000000-0000-4000-8000-000000000012').closest('tr');
     expect(assignmentRow).toBeTruthy();
@@ -376,7 +376,7 @@ describe('AccessControl roles and permissions', () => {
   it('identifies locally overridable config assignments without hiding their removal affordance', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Assignments$/i }));
 
     const assignmentRow = screen.getByText('User: 00000000-0000-4000-8000-000000000099').closest('tr');
     expect(assignmentRow).toBeTruthy();
@@ -387,7 +387,7 @@ describe('AccessControl roles and permissions', () => {
   it('renders external engine registration audit drilldown', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
+    fireEvent.click(screen.getByRole('link', { name: /External Registration/i }));
     fireEvent.click(screen.getAllByRole('button', { name: /View audit/i })[0]);
 
     expect(screen.getByText('External Engine audit')).toBeInTheDocument();

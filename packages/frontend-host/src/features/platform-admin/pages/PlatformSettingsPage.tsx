@@ -596,7 +596,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     </React.Suspense>
   );
 
-  const renderAccessControl = () => renderAdminSurface(<AccessControl />);
+  const renderAccessControl = () => renderAdminSurface(<AccessControl embedded />);
 
 
   const renderAuthzPolicies = () => renderAdminSurface(<AuthzPolicies />);

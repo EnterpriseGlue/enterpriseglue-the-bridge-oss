@@ -21,6 +21,13 @@ async function activateSettingsSection(page: Page, sectionName: keyof typeof set
   await expect(link).toHaveAttribute('aria-current', 'page');
 }
 
+async function discardProviderWorkflow(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Leave without saving?' });
+  await expect(dialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+  await dialog.locator('button.cds--btn--danger', { hasText: 'Leave' }).click();
+}
+
 async function openIdentitySettings(page: Page, sectionName: keyof typeof settingsSection): Promise<MockBrowserIdentityStack> {
   const stack = new MockBrowserIdentityStack();
   await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
@@ -95,7 +102,10 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(page.getByRole('menuitem', { name: 'Disable provider' })).toHaveCount(0);
     await page.getByRole('menuitem', { name: 'View configuration' }).click();
     await expect(page.getByRole('heading', { name: 'View identity provider configuration' })).toBeVisible();
-    await expect(page.getByLabel('Sign-in name')).toBeDisabled();
+    const providerDetails = page.getByRole('region', { name: 'Identity provider configuration details' });
+    await expect(providerDetails.getByText('Sign-in name', { exact: true })).toBeVisible();
+    await expect(providerDetails.getByRole('textbox')).toHaveCount(0);
+    await expect(providerDetails.getByRole('button', { name: 'Continue' })).toHaveCount(0);
     await captureManualScreenshot(page, '42a-provider-config-view-only.jpg');
     await page.getByRole('button', { name: 'Close' }).click();
 
@@ -114,7 +124,9 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(page.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
     await page.getByRole('menuitem', { name: 'View configuration' }).click();
     await expect(page.getByRole('heading', { name: 'View identity mapping configuration' })).toBeVisible();
-    await expect(page.getByLabel('External identity data type')).toBeDisabled();
+    const mappingDetails = page.getByRole('region', { name: 'Identity mapping configuration details' });
+    await expect(mappingDetails.getByText('External identity data type', { exact: true })).toBeVisible();
+    await expect(mappingDetails.getByRole('combobox')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Preview with sample claims' })).toBeEnabled();
     await captureManualScreenshot(page, '43a-mapping-config-view-only.jpg');
   });
@@ -236,11 +248,14 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     const providerWorkflow = page.getByRole('region', { name: 'Create identity provider' });
     await expect(providerWorkflow.getByText('Complete the highlighted fields')).toHaveCount(0);
     await expect(providerWorkflow.getByRole('heading', { name: 'Identity', exact: true })).toBeFocused();
+    const identityContinue = providerWorkflow.getByRole('button', { name: 'Continue', exact: true });
+    await expect(identityContinue).toBeDisabled();
     await captureManualScreenshot(page, '19-identity-provider-editor-oidc.jpg');
 
-    await providerWorkflow.getByRole('button', { name: 'Continue', exact: true }).click();
-    await expect(providerWorkflow.getByText('Complete the highlighted fields')).toBeVisible();
-    await expect(providerWorkflow.getByLabel('Sign-in name')).toBeFocused();
+    await providerWorkflow.getByLabel('Sign-in name').focus();
+    await providerWorkflow.getByLabel('Sign-in name').blur();
+    await expect(providerWorkflow.getByText('Enter the provider name users will recognize on the sign-in screen.')).toBeVisible();
+    await expect(identityContinue).toBeDisabled();
     await captureManualScreenshot(page, '45-provider-validation-identity.jpg');
 
     await providerWorkflow.getByLabel('Sign-in name').fill('OIDC evidence');
@@ -252,9 +267,10 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(issuer).toBeVisible();
     await expect(scopes).toBeVisible();
     await captureManualScreenshot(page, '19a-identity-provider-connection-oidc.jpg');
-    await providerWorkflow.getByRole('button', { name: 'Continue', exact: true }).click();
-    await expect(providerWorkflow.getByText('Complete the highlighted fields')).toBeVisible();
-    await expect(issuer).toBeFocused();
+    await expect(providerWorkflow.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
+    await issuer.focus();
+    await issuer.blur();
+    await expect(providerWorkflow.getByText(/Enter an HTTPS issuer URL/)).toBeVisible();
     await scopes.scrollIntoViewIfNeeded();
     await captureManualScreenshot(page, '45-provider-validation-oidc.jpg');
 
@@ -268,7 +284,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     });
     expect(layout).toMatchObject({ visibleAboveFooter: true });
 
-    await providerWorkflow.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await discardProviderWorkflow(page);
     await page.getByRole('button', { name: 'Create provider', exact: true }).click();
     await page.getByLabel('Protocol', { exact: true }).selectOption('saml');
     await page.getByLabel('Sign-in name').fill('SAML evidence');
@@ -278,13 +294,14 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(entityId).toBeVisible();
     await entityId.scrollIntoViewIfNeeded();
     await captureManualScreenshot(page, '20-identity-provider-editor-saml.jpg');
-    await providerWorkflow.getByRole('button', { name: 'Continue', exact: true }).click();
-    await expect(providerWorkflow.getByText('Complete the highlighted fields')).toBeVisible();
-    await expect(entityId).toBeFocused();
+    await expect(providerWorkflow.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
+    await entityId.focus();
+    await entityId.blur();
+    await expect(providerWorkflow.getByText('Service provider entity ID is required.')).toBeVisible();
     await entityId.scrollIntoViewIfNeeded();
     await captureManualScreenshot(page, '46-provider-validation-saml.jpg');
 
-    await providerWorkflow.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await discardProviderWorkflow(page);
     await page.getByRole('button', { name: 'Create provider', exact: true }).click();
     await page.getByLabel('Protocol', { exact: true }).selectOption('ldap');
     await page.getByLabel('Sign-in name').fill('LDAP evidence');
@@ -294,9 +311,10 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(ldapUrl).toBeVisible();
     await ldapUrl.scrollIntoViewIfNeeded();
     await captureManualScreenshot(page, '21-identity-provider-editor-ldap.jpg');
-    await providerWorkflow.getByRole('button', { name: 'Continue', exact: true }).click();
-    await expect(providerWorkflow.getByText('Complete the highlighted fields')).toBeVisible();
-    await expect(ldapUrl).toBeFocused();
+    await expect(providerWorkflow.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
+    await ldapUrl.focus();
+    await ldapUrl.blur();
+    await expect(providerWorkflow.getByText('Use an ldaps:// directory endpoint.')).toBeVisible();
     await ldapUrl.scrollIntoViewIfNeeded();
     await captureManualScreenshot(page, '47-provider-validation-ldap.jpg');
   });

@@ -117,7 +117,7 @@ describe('AccessControl groups', () => {
   it('edits and archives manual authorization groups', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Groups$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Groups$/i }));
 
     const operationsRow = screen.getByText('operations').closest('tr')!;
     fireEvent.click(within(operationsRow).getByRole('button', { name: 'Actions for Operations' }));
@@ -147,7 +147,7 @@ describe('AccessControl groups', () => {
   it('manages manual group memberships', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Groups$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Groups$/i }));
 
     expect(screen.getAllByText('00000000-0000-4000-8000-000000000010').length).toBeGreaterThan(0);
 
@@ -174,7 +174,7 @@ describe('AccessControl groups', () => {
   it('keeps source-owned groups and memberships read-only', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Groups$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Groups$/i }));
 
     const ssoGroupRow = screen.getByText('sso-ops').closest('tr')!;
     fireEvent.click(within(ssoGroupRow).getByRole('button', { name: /Actions for SSO Operators/i }));
@@ -203,7 +203,7 @@ describe('AccessControl groups', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Groups$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Groups$/i }));
 
     expect(screen.getAllByText('Operations').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Create Group/i })).toBeDisabled();

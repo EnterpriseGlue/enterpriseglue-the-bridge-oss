@@ -642,6 +642,40 @@ explicitly reviewed as tenant-safe or prohibited.
 
 ## Local HTTP and Browser Evidence
 
+### Resource Administration journeys
+
+The seeded local authorization runner includes two complementary Resource
+Administration journeys:
+
+- `resource-administration-local.spec.ts` exercises Engine Sets, Runtime
+  Resources, and Project Targets through the real browser and API, including
+  reload persistence, Camunda-mock reconciliation, allow/deny deployment
+  evaluation, archive confirmations, and 390 px layout checks.
+- `resource-scope-assignments-local.spec.ts` creates Engine Set, Runtime
+  Resource, and Runtime Resource Set assignments through the Assignments UI,
+  then signs in as each scoped persona and verifies the allowed inventory and
+  denied sibling boundary against the backend.
+
+Both specs use the synthetic fixture written by Playwright global setup and
+removed by global teardown. Cleanup includes E2E-owned Engine Set
+materializations, Engine Sets, Project Targets, role assignments, projects,
+and principals, so repeated local runs do not accumulate authorization state.
+The deterministic Camunda service is addressed inside Compose as
+`http://camunda-mock:9080/engine-rest`. Only the E2E Compose overlay enables
+that named HTTP/private endpoint; do not copy those allowances into production
+configuration.
+
+Run the full seeded browser suite with:
+
+```bash
+pnpm run test:authz:local-smoke
+```
+
+For retained Resource Administration screenshots, set
+`MANUAL_UI_SCREENSHOT_DIR` when running the resource-administration spec. The
+canonical evidence naming is documented in
+`identity-access-ui-evidence-report.md`.
+
 When a running local stack is required, use isolated local tenants and engines.
 The authorization PR workflow starts PostgreSQL, the backend, frontend, and a
 Camunda-compatible mock before running Chromium. Scheduled jobs repeat the

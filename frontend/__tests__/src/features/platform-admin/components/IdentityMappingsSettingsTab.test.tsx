@@ -104,11 +104,13 @@ describe('IdentityMappingsSettingsTab', () => {
     fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity mappings' }));
     const confirmation = await screen.findByRole('dialog', { name: 'Leave without saving?' });
     expect(within(confirmation).getByText(/changes have not been saved/)).toBeInTheDocument();
+    await waitFor(() => expect(within(confirmation).getByRole('button', { name: 'Keep editing' })).toHaveFocus());
+    expect(within(confirmation).getByText('Leave', { exact: true }).closest('button')).toHaveClass('cds--btn--danger');
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }));
     expect(screen.getByRole('region', { name: 'Create identity mapping' })).toBeInTheDocument();
 
     fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity mappings' }));
-    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByRole('button', { name: 'Leave' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByText('Leave', { exact: true }).closest('button')!);
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Create identity mapping' })).not.toBeInTheDocument());
   });
 
@@ -230,7 +232,10 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(await screen.findByText('View identity mapping configuration')).toBeInTheDocument();
     expect(screen.getByText(/cannot be changed here/)).toBeInTheDocument();
     expect(screen.getByText(/Update configuration source identity-mappings\/operations and apply it again/)).toBeInTheDocument();
-    expect(screen.getByLabelText('External identity data type')).toBeDisabled();
+    const details = screen.getByRole('region', { name: 'Identity mapping configuration details' });
+    expect(within(details).getByText('External identity data type')).toBeInTheDocument();
+    expect(within(details).getByText('Equals this value')).toBeInTheDocument();
+    expect(within(details).queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Preview with sample claims' })).toBeEnabled();
     fireEvent.click(within(screen.getByRole('region', { name: 'View identity mapping configuration' })).getByRole('button', { name: 'Close' }));
   });

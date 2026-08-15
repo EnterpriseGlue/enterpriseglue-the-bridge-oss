@@ -52,12 +52,20 @@ async function selectOption(page: Page, name: string, option: string): Promise<v
 
 async function assignThroughUi(
   page: Page,
-  input: { userId: string; scope: 'Engine set' | 'Runtime resource' | 'Runtime resource set'; role: string; target: string },
+  input: { userEmail: string; scope: 'Engine set' | 'Runtime resource' | 'Runtime resource set'; role: string; target: string },
 ): Promise<void> {
   await page.goto('/admin/access-control');
-  await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
-  await page.getByRole('textbox', { name: 'User ID', exact: true }).fill(input.userId);
-  await selectOption(page, 'Scope', input.scope);
+  // Access Control sections are navigation links after the Carbon information
+  // architecture redesign; they are not tabs within one document anymore.
+  await page.getByRole('link', { name: 'Assignments', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Assignments', exact: true })).toBeVisible();
+  const userPicker = page.getByRole('textbox', { name: 'User', exact: true });
+  await userPicker.fill(input.userEmail);
+  const userSuggestion = page.getByRole('button').filter({ hasText: input.userEmail }).first();
+  await expect(userSuggestion).toBeVisible();
+  await userSuggestion.click();
+  await expect(userPicker).toHaveValue(input.userEmail);
+  await selectOption(page, 'Access target', input.scope);
 
   if (input.scope === 'Engine set') {
     await selectOption(page, 'Engine set', input.target);
@@ -101,19 +109,19 @@ test.describe('Smoke: Access Control resource-scope assignments', () => {
       await login(administratorPage, administrator.email!, administrator.password!);
 
       await assignThroughUi(administratorPage, {
-        userId: fixture.scopeAssignmentEngineSetUserId!,
+        userEmail: fixture.scopeAssignmentEngineSetEmail!,
         scope: 'Engine set',
         role: 'Engine Operator',
         target: `${fixture.scopeAssignmentEngineSetName} (${fixture.scopeAssignmentEngineSetKey})`,
       });
       await assignThroughUi(administratorPage, {
-        userId: fixture.scopeAssignmentRuntimeResourceUserId!,
+        userEmail: fixture.scopeAssignmentRuntimeResourceEmail!,
         scope: 'Runtime resource',
         role: fixture.scopeAssignmentRuntimeRoleName!,
         target: 'invoice-process (process)',
       });
       await assignThroughUi(administratorPage, {
-        userId: fixture.scopeAssignmentRuntimeResourceSetUserId!,
+        userEmail: fixture.scopeAssignmentRuntimeResourceSetEmail!,
         scope: 'Runtime resource set',
         role: fixture.scopeAssignmentRuntimeRoleName!,
         target: `${fixture.scopeAssignmentRuntimeResourceSetName} (process_definition)`,
@@ -146,7 +154,7 @@ test.describe('Smoke: Access Control resource-scope assignments', () => {
         expect([403, 404], persona.label).toContain(denied.status);
       }
     } finally {
-      await Promise.all(sessions.reverse().map((context) => context.close()));
+      await Promise.allSettled(sessions.reverse().map((context) => context.close()));
     }
   });
 });

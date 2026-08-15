@@ -30,7 +30,10 @@ import type {
 import { identityProvisioningApi } from '../../../api/platform-admin/identityProvisioning';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import ConfirmModal from '../../../shared/components/ConfirmModal';
+import ResponsiveStructuredList from '../../../shared/components/ResponsiveStructuredList';
 import { useModal } from '../../../shared/hooks/useModal';
+import { useSafeDestructiveModalFocus } from '../../../shared/hooks/useSafeDestructiveModalFocus';
+import { useUnsavedChangesGuard } from '../../../shared/hooks/useUnsavedChangesGuard';
 import { useToast } from '../../../shared/notifications/ToastProvider';
 
 interface IdentityProvisioningSettingsTabProps {
@@ -84,6 +87,14 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
   const [issuedCredential, setIssuedCredential] = React.useState<IdentityProvisioningCredentialIssued | null>(null);
   const [credentialStored, setCredentialStored] = React.useState(false);
   const [testResult, setTestResult] = React.useState<IdentityProvisioningDirectoryTestResponse | null>(null);
+  const closeCreateDirectory = React.useCallback(() => {
+    setShowCreate(false);
+    setDirectoryForm(emptyDirectoryForm);
+  }, []);
+  const createDirectoryDirty = showCreate
+    && JSON.stringify(directoryForm) !== JSON.stringify(emptyDirectoryForm);
+  const unsavedDirectoryChanges = useUnsavedChangesGuard(createDirectoryDirty, closeCreateDirectory);
+  useSafeDestructiveModalFocus(unsavedDirectoryChanges.confirmationOpen, 'Leave without saving?', 'Keep editing');
 
   const selected = directories.find((directory) => directory.key === selectedKey) || null;
   const configManaged = Boolean(selected && selected.ownershipMode !== 'manual');
@@ -135,6 +146,11 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
 
   React.useEffect(() => { void loadDirectories(); }, []);
   React.useEffect(() => { void loadDirectoryDetails(); }, [loadDirectoryDetails]);
+  React.useEffect(() => {
+    if (!showCreate) return;
+    const animationFrame = window.requestAnimationFrame(() => document.getElementById('provisioning-directory-create-title')?.focus());
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [showCreate]);
 
   const createDirectory = async () => {
     if (!canManage) return;
@@ -256,7 +272,7 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
 
   return (
     <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--spacing-4)', flexWrap: 'wrap' }}>
+      {!showCreate && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--spacing-4)', flexWrap: 'wrap' }}>
         <div>
           <p className="cds--label">IDENTITY PROVISIONING</p>
           <h2 style={{ fontWeight: 400, marginBottom: 'var(--spacing-2)' }}>Provisioning directories</h2>
@@ -264,42 +280,50 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
             Configure an authoritative SCIM 2.0 lifecycle source independently from the identity provider used for sign-in.
           </p>
         </div>
-        {canManage && !showCreate && (
+        {canManage && (
           <Button renderIcon={Add} onClick={() => setShowCreate(true)}>Create directory</Button>
         )}
-      </div>
+      </div>}
 
       {!canManage && unavailableReason && <InlineNotification kind="info" title="Read-only provisioning configuration" subtitle={unavailableReason} hideCloseButton />}
       {error && <InlineNotification kind="error" title="Provisioning unavailable" subtitle={error} hideCloseButton />}
 
       {showCreate && (
-        <Tile>
-          <h3 style={{ marginBottom: 'var(--spacing-4)' }}>Create authoritative SCIM directory</h3>
-          <InlineNotification
-            kind="info"
-            title="Authentication remains separate"
-            subtitle="This connection creates, updates, suspends, and reconciles users and groups. Configure OIDC or SAML separately under Identity providers."
-            hideCloseButton
-            lowContrast
-          />
-          <div className="eg-provisioning-form-grid">
-            <TextInput id="provisioning-name" labelText="Directory name" value={directoryForm.displayName} onChange={(event) => setDirectoryForm({ ...directoryForm, displayName: event.target.value })} />
-            <TextInput id="provisioning-key" labelText="Directory key" helperText="Lowercase stable key used in the SCIM endpoint." value={directoryForm.key} onChange={(event) => setDirectoryForm({ ...directoryForm, key: event.target.value })} />
-            <TextInput id="provisioning-idp" labelText="Related identity provider key (optional)" helperText="For administrative context only; it does not combine sign-in and provisioning." value={directoryForm.identityProviderKey} onChange={(event) => setDirectoryForm({ ...directoryForm, identityProviderKey: event.target.value })} />
-            <Select id="provisioning-enabled" labelText="Initial state" value={directoryForm.isEnabled ? 'active' : 'disabled'} onChange={(event) => setDirectoryForm({ ...directoryForm, isEnabled: event.target.value === 'active' })}>
-              <SelectItem value="disabled" text="Disabled — configure and test first" />
-              <SelectItem value="active" text="Active" />
-            </Select>
-            <TextArea id="provisioning-description" labelText="Description (optional)" rows={3} value={directoryForm.description} onChange={(event) => setDirectoryForm({ ...directoryForm, description: event.target.value })} />
+        <section className="eg-settings-workflow eg-provisioning-create-workflow" role="region" aria-labelledby="provisioning-directory-create-title" data-unsaved-changes={createDirectoryDirty ? 'true' : 'false'}>
+          <div className="eg-settings-workflow__header">
+            <div>
+              <h2 id="provisioning-directory-create-title" tabIndex={-1}>Create authoritative SCIM directory</h2>
+              <p>Configure one authoritative lifecycle source, then issue its reveal-once client credential.</p>
+            </div>
+            {directories.length > 0 && <Button kind="ghost" size="sm" onClick={unsavedDirectoryChanges.requestExit}>Back to provisioning directories</Button>}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}>
-            {directories.length > 0 && <Button kind="secondary" onClick={() => { setShowCreate(false); setDirectoryForm(emptyDirectoryForm); }}>Cancel</Button>}
+          <div className="eg-settings-workflow__body" role="region" aria-label="Provisioning directory form fields" tabIndex={0}>
+            <div className="eg-settings-form-column">
+              <InlineNotification
+                kind="info"
+                title="Authentication remains separate"
+                subtitle="This connection creates, updates, suspends, and reconciles users and groups. Configure OIDC or SAML separately under Identity providers."
+                hideCloseButton
+                lowContrast
+              />
+              <TextInput id="provisioning-name" labelText="Directory name" value={directoryForm.displayName} onChange={(event) => setDirectoryForm({ ...directoryForm, displayName: event.target.value })} />
+              <TextInput id="provisioning-key" labelText="Directory key" helperText="Lowercase stable key used in the SCIM endpoint." value={directoryForm.key} onChange={(event) => setDirectoryForm({ ...directoryForm, key: event.target.value })} />
+              <TextInput id="provisioning-idp" labelText="Related identity provider key (optional)" helperText="For administrative context only; it does not combine sign-in and provisioning." value={directoryForm.identityProviderKey} onChange={(event) => setDirectoryForm({ ...directoryForm, identityProviderKey: event.target.value })} />
+              <Select id="provisioning-enabled" labelText="Initial state" value={directoryForm.isEnabled ? 'active' : 'disabled'} onChange={(event) => setDirectoryForm({ ...directoryForm, isEnabled: event.target.value === 'active' })}>
+                <SelectItem value="disabled" text="Disabled — configure and test first" />
+                <SelectItem value="active" text="Active" />
+              </Select>
+              <TextArea id="provisioning-description" labelText="Description (optional)" rows={3} value={directoryForm.description} onChange={(event) => setDirectoryForm({ ...directoryForm, description: event.target.value })} />
+            </div>
+          </div>
+          <div className="eg-settings-workflow__actions">
+            {directories.length > 0 && <Button kind="ghost" onClick={unsavedDirectoryChanges.requestExit}>Cancel</Button>}
             <Button disabled={!canManage || busy || !directoryForm.key.trim() || !directoryForm.displayName.trim()} onClick={createDirectory}>Create directory</Button>
           </div>
-        </Tile>
+        </section>
       )}
 
-      {loading ? <DataTableSkeleton showHeader={false} showToolbar={false} columnCount={4} rowCount={3} /> : directories.length > 0 && (
+      {!showCreate && (loading ? <DataTableSkeleton showHeader={false} showToolbar={false} columnCount={4} rowCount={3} /> : directories.length > 0 && (
         <>
           <Select id="provisioning-directory-selector" labelText="Provisioning directory" value={selectedKey} onChange={(event) => { setSelectedKey(event.target.value); setTestResult(null); }}>
             {directories.map((directory) => <SelectItem key={directory.key} value={directory.key} text={`${directory.displayName} — ${directory.status}`} />)}
@@ -371,47 +395,59 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
                       <Button size="sm" renderIcon={Add} disabled={mutationDisabled || busy} title={mutationReason || undefined} onClick={() => setCredentialModalOpen(true)}>Create credential</Button>
                     </div>
                     {detailLoading ? <DataTableSkeleton showHeader={false} showToolbar={false} columnCount={4} rowCount={3} /> : (
-                      <div className="eg-user-detail-list">
-                        {credentials.map((credential) => (
-                          <Tile key={credential.id}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', flexWrap: 'wrap' }}>
-                              <div>
-                                <Tag type={credentialTag(credential.status)}>{credential.status}</Tag>
-                                <h3>{credential.name}</h3>
-                                <p>Fingerprint {credential.fingerprint}</p>
-                                <p className="eg-secondary-text">Last used {time(credential.lastUsedAt)} · Expires {time(credential.expiresAt)}</p>
-                              </div>
-                              <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
-                                <Button kind="ghost" size="sm" renderIcon={Renew} disabled={mutationDisabled || credential.status === 'revoked' || busy} onClick={() => rotateCredential(credential)}>Rotate</Button>
-                                <Button kind="danger--ghost" size="sm" renderIcon={TrashCan} disabled={mutationDisabled || credential.status === 'revoked' || busy} onClick={() => revokeModal.openModal(credential)}>Revoke</Button>
-                              </div>
-                            </div>
-                          </Tile>
-                        ))}
-                        {credentials.length === 0 && <InlineNotification kind="warning" title="No provisioning credential" subtitle="Create a bearer credential before enabling the directory client." hideCloseButton />}
-                      </div>
+                      credentials.length > 0 ? <ResponsiveStructuredList
+                        label="Provisioning credentials"
+                        columns={[{ key: 'status', header: 'Status' }, { key: 'credential', header: 'Credential' }, { key: 'fingerprint', header: 'Fingerprint' }, { key: 'lastUsed', header: 'Last used' }, { key: 'expires', header: 'Expires' }, { key: 'actions', header: 'Actions' }]}
+                        rows={credentials.map((credential) => ({
+                          id: credential.id,
+                          cells: {
+                            status: <Tag type={credentialTag(credential.status)}>{credential.status}</Tag>,
+                            credential: <h3>{credential.name}</h3>,
+                            fingerprint: <span className="eg-structured-list-breakable">{credential.fingerprint}</span>,
+                            lastUsed: time(credential.lastUsedAt),
+                            expires: time(credential.expiresAt),
+                            actions: <div className="eg-structured-list-actions"><Button kind="ghost" size="sm" renderIcon={Renew} disabled={mutationDisabled || credential.status === 'revoked' || busy} onClick={() => rotateCredential(credential)}>Rotate</Button><Button kind="danger--ghost" size="sm" renderIcon={TrashCan} disabled={mutationDisabled || credential.status === 'revoked' || busy} onClick={() => revokeModal.openModal(credential)}>Revoke</Button></div>,
+                          },
+                        }))}
+                      /> : <InlineNotification kind="warning" title="No provisioning credential" subtitle="Create a bearer credential before enabling the directory client." hideCloseButton />
                     )}
                   </TabPanel>
                   <TabPanel>
                     <p style={{ marginBottom: 'var(--spacing-4)', color: 'var(--cds-text-secondary)' }}>Sanitized recent SCIM requests and lifecycle outcomes. Raw request bodies and credentials are never retained here.</p>
-                    <div className="eg-user-detail-list">
-                      {events.map((event) => (
-                        <Tile key={event.id}>
-                          <Tag type={event.status === 'success' || event.status === 'accepted' ? 'green' : event.status === 'failed' ? 'red' : 'blue'}>{event.status}</Tag>
-                          <h3>{event.eventType}</h3>
-                          <p>{event.message || event.code || 'No additional diagnostic message.'}</p>
-                          <p className="eg-secondary-text">{time(event.occurredAt)} · Request {event.requestId} · {event.resourceType || 'Directory'} {event.resourceId || ''}</p>
-                        </Tile>
-                      ))}
-                      {events.length === 0 && <p>No provisioning diagnostics have been recorded.</p>}
-                    </div>
+                    {events.length > 0 ? <ResponsiveStructuredList
+                      label="Provisioning diagnostics"
+                      columns={[{ key: 'status', header: 'Status' }, { key: 'event', header: 'Event' }, { key: 'message', header: 'Message' }, { key: 'resource', header: 'Resource' }, { key: 'context', header: 'Time and request' }]}
+                      rows={events.map((event) => ({
+                        id: event.id,
+                        cells: {
+                          status: <Tag type={event.status === 'success' || event.status === 'accepted' ? 'green' : event.status === 'failed' ? 'red' : 'blue'}>{event.status}</Tag>,
+                          event: <h3>{event.eventType}</h3>,
+                          message: event.message || event.code || 'No additional diagnostic message.',
+                          resource: `${event.resourceType || 'Directory'} ${event.resourceId || ''}`.trim(),
+                          context: <><span>{time(event.occurredAt)}</span><span className="eg-secondary-text">Request {event.requestId}</span></>,
+                        },
+                      }))}
+                    /> : <InlineNotification kind="info" title="No provisioning diagnostics" subtitle="No sanitized SCIM request or lifecycle outcomes have been recorded." hideCloseButton lowContrast />}
                   </TabPanel>
                 </TabPanels>
               </Tabs>
             </>
           )}
         </>
-      )}
+      ))}
+
+      <Modal
+        open={unsavedDirectoryChanges.confirmationOpen}
+        danger
+        modalHeading="Leave without saving?"
+        primaryButtonText="Leave"
+        secondaryButtonText="Keep editing"
+        selectorPrimaryFocus=".cds--btn--secondary"
+        onRequestClose={unsavedDirectoryChanges.keepEditing}
+        onRequestSubmit={unsavedDirectoryChanges.leaveWithoutSaving}
+      >
+        <p>Your provisioning directory changes have not been saved. Leaving this page will discard them.</p>
+      </Modal>
 
       <Modal
         open={credentialModalOpen}

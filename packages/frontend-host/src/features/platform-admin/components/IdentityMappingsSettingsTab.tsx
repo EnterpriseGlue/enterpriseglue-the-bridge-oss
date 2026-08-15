@@ -29,6 +29,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { useSafeDestructiveModalFocus } from '../../../shared/hooks/useSafeDestructiveModalFocus';
 import { useUnsavedChangesGuard } from '../../../shared/hooks/useUnsavedChangesGuard';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
@@ -348,6 +349,7 @@ export default function IdentityMappingsSettingsTab() {
   const mappingWorkflowDirty = open && !mappingViewOnly
     && currentWorkflowSnapshot !== initialWorkflowSnapshotRef.current;
   const unsavedChanges = useUnsavedChangesGuard(mappingWorkflowDirty, closeMappingWorkflow);
+  useSafeDestructiveModalFocus(unsavedChanges.confirmationOpen, 'Leave without saving?', 'Keep editing');
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity mappings unavailable" reason={read.reason || 'Missing identity mapping read permission.'} />;
   if (mappingsQuery.isLoading) return <SkeletonText paragraph lineCount={5} />;
@@ -361,6 +363,16 @@ export default function IdentityMappingsSettingsTab() {
     ['How group membership is updated', form.syncMode === 'authoritative' ? 'Add and remove members to match the provider' : 'Add matching members only'],
     ['EnterpriseGlue group', createGroupInFlow ? `${newGroupName || 'New group'} (${newGroupKey || 'key pending'})` : selectedGroup ? `${selectedGroup.name} (${selectedGroup.key})` : form.targetGroupKey || 'Not selected'],
     ['Scoped engine access', provisionAccessInFlow ? `${provisionedRole?.name || provisionRoleId || 'Role pending'} · ${accessTargetTypeName[provisionScopeType]} · ${provisionResourceId ? accessTargetName(provisionScopeType, provisionResourceId) : 'Target pending'}` : 'Not included'],
+  ];
+  const mappingConfigurationItems = [
+    ['Identity provider', form.providerKey ? `${identityProviderName(providers.find((provider) => provider.key === form.providerKey))} (${form.providerKey})` : 'Not configured'],
+    ['External identity data type', form.entitlementType],
+    ['Match rule', form.matchOperator === 'exact' ? 'Equals this value' : form.matchOperator === 'contains' ? 'Contains this text' : 'Any value of this type'],
+    ['External value', form.matchOperator === 'exists' ? 'Any value' : form.externalId || 'Not configured'],
+    ['EnterpriseGlue group', selectedGroup ? `${selectedGroup.name} (${selectedGroup.key})` : form.targetGroupKey || 'Not configured'],
+    ['Membership behavior', form.syncMode === 'authoritative' ? 'Keep in sync — add and remove members' : 'Add only — never remove automatically'],
+    ['Status', form.isActive ? 'Enabled' : 'Disabled'],
+    ['Configuration source', configurationSourceName(editing?.sourceRef)],
   ];
   return <>
     {!open &&
@@ -378,17 +390,31 @@ export default function IdentityMappingsSettingsTab() {
         </div>
         <Button kind="ghost" size="sm" onClick={unsavedChanges.requestExit}>Back to identity mappings</Button>
       </div>
-      <div className="eg-settings-workflow__body" role="region" aria-label="Identity mapping form fields" tabIndex={0}>
+      <div className="eg-settings-workflow__body" role="region" aria-label={mappingViewOnly ? 'Identity mapping configuration details' : 'Identity mapping form fields'} tabIndex={0}>
       <div className="eg-identity-mapping-flow">
       {error && <InlineNotification kind="error" title="Mapping not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {mappingViewOnly && <InlineNotification kind="info" lowContrast hideCloseButton title="Managed by configuration" subtitle={`This mapping cannot be changed here. Update ${configurationSourceName(editing?.sourceRef)} and apply it again. Preview tools remain available.`} style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {mappingViewOnly ? <>
+        <section className="eg-settings-readonly-section" aria-labelledby="identity-mapping-readonly-heading">
+          <h3 id="identity-mapping-readonly-heading">Mapping configuration</h3>
+          <dl className="eg-settings-readonly-list">
+            {mappingConfigurationItems.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+          </dl>
+        </section>
+        <section className="eg-settings-readonly-tools" aria-labelledby="identity-mapping-preview-heading">
+          <div><h3 id="identity-mapping-preview-heading">Preview tools</h3><p>Evaluate the saved configuration without changing identities, memberships, or access.</p></div>
+          <div className="eg-settings-readonly-tools__actions"><Button kind="tertiary" size="sm" renderIcon={Checkmark} disabled={!form.providerKey || test.isPending} onClick={() => test.mutate(form)}>Preview with sample claims</Button><Button kind="tertiary" size="sm" disabled={!form.providerKey || previewSnapshots.isPending} onClick={() => previewSnapshots.mutate(form)}>Check saved identities</Button></div>
+          {testResult && <div ref={testResultRef}><InlineNotification kind={testResult.startsWith('The sample matches') ? 'success' : 'info'} title="Sample sign-in claim preview" subtitle={testResult} hideCloseButton style={{ marginTop: 'var(--spacing-4)' }} /></div>}
+          {snapshotResult && <div ref={snapshotResultRef}><InlineNotification kind="info" title="Saved identity preview" subtitle={snapshotResult} hideCloseButton style={{ marginTop: 'var(--spacing-3)' }} /></div>}
+        </section>
+      </> : <>
       {!editing && <ProgressIndicator currentIndex={creationStep - 1} spaceEqually>
         <ProgressStep label="Identity" complete={creationStep > 1} />
         <ProgressStep label="Access" complete={creationStep > 2} />
         <ProgressStep label="Review" />
       </ProgressIndicator>}
       {!editing && <p className="eg-visually-hidden" aria-live="polite">Step {creationStep} of 3: {['Identity', 'Access', 'Review'][creationStep - 1]}</p>}
-      <fieldset disabled={mappingViewOnly} className="eg-settings-workflow__fieldset" hidden={!editing && creationStep === 3}>
+      <fieldset className="eg-settings-workflow__fieldset" hidden={!editing && creationStep === 3}>
       <div className="eg-settings-form-column" hidden={!editing && creationStep !== 1}><div className="eg-settings-step-introduction"><h3 id="identity-mapping-identity-step-heading" tabIndex={-1}>Identity</h3><p>Choose the provider data that grants membership.</p></div><ComboBox id="identity-mapping-provider" titleText="Identity provider" items={providers} itemToString={(item) => item ? `${identityProviderName(item)} (${item.key})` : ''} selectedItem={providers.find((provider) => provider.key === form.providerKey) || null} onChange={({ selectedItem }) => set('providerKey', selectedItem?.key || '')} /></div>
       <div className="eg-settings-form-column" hidden={!editing && creationStep !== 2}>
         {!editing && <div className="eg-settings-step-introduction"><h3 id="identity-mapping-access-step-heading" tabIndex={-1}>Access</h3><p>Choose the EnterpriseGlue group and optional scoped engine access.</p></div>}
@@ -429,10 +455,11 @@ export default function IdentityMappingsSettingsTab() {
       {testResult && <div ref={testResultRef}><InlineNotification kind={testResult.startsWith('The sample matches') ? 'success' : 'info'} title="Sample sign-in claim preview" subtitle={testResult} hideCloseButton style={{ marginTop: 'var(--spacing-4)' }} /></div>}
       {snapshotResult && <div ref={snapshotResultRef}><InlineNotification kind="info" title="Saved identity preview" subtitle={snapshotResult} hideCloseButton style={{ marginTop: 'var(--spacing-3)' }} /></div>}</div>
       {!editing && creationStep === 3 && <div className="eg-settings-form-column"><div className="eg-settings-step-introduction"><h3 id="identity-mapping-review-step-heading" tabIndex={-1}>Review</h3><p>Confirm the identity and access changes before creating the mapping.</p></div><InlineNotification kind="info" lowContrast title="Review before creating" subtitle={atomicCreationCopy(createGroupInFlow, provisionAccessInFlow)} hideCloseButton /><dl className="eg-settings-review-list" aria-label="Identity mapping review">{mappingReviewItems.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value}</dd></React.Fragment>)}</dl></div>}
+      </>}
       </div>
       </div>
       <div className="eg-settings-workflow__actions">
-        <Button kind="ghost" onClick={closeMappingWorkflow}>{mappingViewOnly ? 'Close' : 'Cancel'}</Button>
+        <Button kind="ghost" onClick={mappingViewOnly ? closeMappingWorkflow : unsavedChanges.requestExit}>{mappingViewOnly ? 'Close' : 'Cancel'}</Button>
         {!editing && creationStep > 1 && <Button kind="secondary" onClick={() => setCreationStep((step) => step - 1)}>Back</Button>}
         {!mappingViewOnly && <Button
           kind="primary"
@@ -449,9 +476,11 @@ export default function IdentityMappingsSettingsTab() {
     </section>}
     <Modal
       open={unsavedChanges.confirmationOpen}
+      danger
       modalHeading="Leave without saving?"
       primaryButtonText="Leave"
       secondaryButtonText="Keep editing"
+      selectorPrimaryFocus=".cds--btn--secondary"
       onRequestClose={unsavedChanges.keepEditing}
       onRequestSubmit={unsavedChanges.leaveWithoutSaving}
     >

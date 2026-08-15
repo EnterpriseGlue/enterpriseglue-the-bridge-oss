@@ -375,6 +375,7 @@ async function startProviderWorkflow(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Create provider', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Create identity provider' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Identity', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeDisabled();
 }
 
 async function completeProviderIdentity(page: Page): Promise<void> {
@@ -382,6 +383,7 @@ async function completeProviderIdentity(page: Page): Promise<void> {
   await page.getByLabel('Organization (optional)').fill('Example Corporation');
   await page.getByLabel('Provider key').fill('identity.entra-gallery');
   await page.getByLabel('Discovery email domains (optional)').fill('example.com');
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Connection', exact: true })).toBeFocused();
 }
@@ -390,6 +392,7 @@ async function completeProviderConnection(page: Page): Promise<void> {
   await page.getByLabel('Issuer URL').fill('https://login.microsoftonline.com/example/v2.0');
   await page.getByLabel('Client ID').fill('enterpriseglue-gallery-client');
   await page.getByLabel('Callback URL').fill('https://enterpriseglue.example.com/api/auth/identity/callback');
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Membership', exact: true })).toBeFocused();
 }
@@ -523,6 +526,9 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await captureManualScreenshot(page, '116-identity-provider-step-4-review.jpg');
 
     await page.getByRole('button', { name: 'Create provider', exact: true }).click();
+    const providerSaved = page.getByText('Identity provider created', { exact: true });
+    await expect(providerSaved).toBeVisible();
+    await expect(page.locator('.eg-settings-result-focus')).toBeFocused();
     await expect(page.getByText('identity.entra-gallery', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '116a-identity-provider-saved-result.jpg');
 
@@ -562,23 +568,31 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByLabel('Sign-in name').fill('Unsaved provider');
     await expect(page.getByRole('region', { name: 'Create identity provider' })).toHaveAttribute('data-unsaved-changes', 'true');
     await page.getByRole('link', { name: 'Identity mappings', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Leave without saving?' })).toBeVisible();
+    const providerUnsavedDialog = page.getByRole('dialog', { name: 'Leave without saving?' });
+    await expect(providerUnsavedDialog).toBeVisible();
+    await expect(providerUnsavedDialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+    await expect(providerUnsavedDialog.locator('button.cds--btn--danger', { hasText: 'Leave' })).toBeVisible();
     await captureManualScreenshot(page, '125-identity-provider-unsaved-exit.jpg');
-    await page.getByRole('dialog', { name: 'Leave without saving?' }).getByRole('button', { name: 'Keep editing' }).click();
+    await providerUnsavedDialog.getByRole('button', { name: 'Keep editing' }).click();
     await expect(page).toHaveURL(/\/admin\/settings\/identity-providers$/);
     await expect(page.getByLabel('Sign-in name')).toHaveValue('Unsaved provider');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Leave without saving?' }).locator('button.cds--btn--danger', { hasText: 'Leave' }).click();
 
     await page.goto('/admin/settings/identity-mappings');
     await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
     await page.getByLabel('External group, role, or attribute value').fill('unsaved-group');
     await expect(page.getByRole('region', { name: 'Create identity mapping' })).toHaveAttribute('data-unsaved-changes', 'true');
     await page.getByRole('link', { name: 'Identity providers', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Leave without saving?' })).toBeVisible();
+    const mappingUnsavedDialog = page.getByRole('dialog', { name: 'Leave without saving?' });
+    await expect(mappingUnsavedDialog).toBeVisible();
+    await expect(mappingUnsavedDialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+    await expect(mappingUnsavedDialog.locator('button.cds--btn--danger', { hasText: 'Leave' })).toBeVisible();
     await captureManualScreenshot(page, '125a-identity-mapping-unsaved-exit.jpg');
-    await page.getByRole('dialog', { name: 'Leave without saving?' }).getByRole('button', { name: 'Keep editing' }).click();
+    await mappingUnsavedDialog.getByRole('button', { name: 'Keep editing' }).click();
     await expect(page).toHaveURL(/\/admin\/settings\/identity-mappings$/);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Leave without saving?' }).locator('button.cds--btn--danger', { hasText: 'Leave' }).click();
 
     stack.provider.ownershipMode = 'config_locked';
     stack.provider.sourceRef = 'config_bundle:gallery.identity';
@@ -587,6 +601,10 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByRole('menuitem', { name: 'View configuration' }).click();
     await expect(page.getByRole('heading', { name: 'View identity provider configuration' })).toBeVisible();
     await expect(page.getByText('Managed by configuration', { exact: true })).toBeVisible();
+    const providerDetails = page.getByRole('region', { name: 'Identity provider configuration details' });
+    await expect(providerDetails.getByText('Sign-in name', { exact: true })).toBeVisible();
+    await expect(providerDetails.getByRole('textbox')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0);
     await captureManualScreenshot(page, '126-identity-provider-config-owned-view.jpg');
 
     stack.mapping.sourceRef = 'config_bundle:gallery.identity';
@@ -596,6 +614,9 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByRole('menuitem', { name: 'View configuration' }).click();
     await expect(page.getByRole('heading', { name: 'View identity mapping configuration' })).toBeVisible();
     await expect(page.getByText('Managed by configuration', { exact: true })).toBeVisible();
+    const mappingDetails = page.getByRole('region', { name: 'Identity mapping configuration details' });
+    await expect(mappingDetails.getByText('External identity data type', { exact: true })).toBeVisible();
+    await expect(mappingDetails.getByRole('combobox')).toHaveCount(0);
     await captureManualScreenshot(page, '127-identity-mapping-config-owned-view.jpg');
   });
 
@@ -630,15 +651,18 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByRole('tab', { name: 'Effective access' }).click();
     await expect(page.getByRole('heading', { name: 'Finance operators', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Process viewer', exact: true })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Effective access lineage' })).toBeVisible();
     await captureManualScreenshot(page, '142-user-detail-effective-access.jpg');
 
     await page.getByRole('tab', { name: 'Sessions' }).click();
     await expect(page.getByText('OpenID Connect session')).toBeVisible();
     await expect(page.getByText(/Chrome on managed macOS/)).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Current and recent user sessions' })).toBeVisible();
     await captureManualScreenshot(page, '143-user-detail-sessions.jpg');
 
     await page.getByRole('tab', { name: 'Audit' }).click();
     await expect(page.getByText('identity.provisioning.user.update')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'User audit events' })).toBeVisible();
     await captureManualScreenshot(page, '144-user-detail-audit.jpg');
 
     await page.goto('/admin/settings/identity-provisioning');
@@ -650,12 +674,30 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByRole('button', { name: 'Create directory' }).click();
     await expect(page.getByRole('heading', { name: 'Create authoritative SCIM directory' })).toBeVisible();
     await expect(page.getByText('Authentication remains separate')).toBeVisible();
+    const directoryWorkflow = page.getByRole('region', { name: 'Create authoritative SCIM directory' });
+    const directoryForm = page.getByRole('region', { name: 'Provisioning directory form fields' });
+    await expect(directoryForm).toBeVisible();
+    const directoryLayout = await directoryWorkflow.evaluate((workflow) => {
+      const form = workflow.querySelector<HTMLElement>('.eg-settings-form-column');
+      const actions = workflow.querySelector<HTMLElement>('.eg-settings-workflow__actions');
+      const formRect = form?.getBoundingClientRect();
+      const actionsRect = actions?.getBoundingClientRect();
+      return {
+        formWidth: formRect?.width || 0,
+        actionVisible: Boolean(actionsRect && actionsRect.bottom <= window.innerHeight + 1),
+        gridColumns: form ? getComputedStyle(form).gridTemplateColumns : '',
+      };
+    });
+    expect(directoryLayout.formWidth).toBeLessThanOrEqual(640);
+    expect(directoryLayout.actionVisible).toBe(true);
+    expect(directoryLayout.gridColumns.split(' ').length).toBe(1);
     await captureManualScreenshot(page, '145a-provisioning-directory-create.jpg');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
     await page.getByRole('tab', { name: 'Credentials' }).click();
     await expect(page.getByText('Entra production')).toBeVisible();
     await expect(page.getByText(/sha256:75e4a84f1a62/)).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Provisioning credentials' })).toBeVisible();
     await captureManualScreenshot(page, '146-provisioning-directory-credentials.jpg');
 
     await page.getByRole('button', { name: 'Create credential' }).click();
@@ -680,6 +722,7 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByRole('tab', { name: 'Diagnostics' }).click();
     await expect(page.getByText('User.patch')).toBeVisible();
     await expect(page.getByText('Group.membership.replace')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Provisioning diagnostics' })).toBeVisible();
     await captureManualScreenshot(page, '148-provisioning-directory-diagnostics.jpg');
   });
 
@@ -760,8 +803,45 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.goto('/admin/users');
     await expect(page.getByRole('heading', { name: 'User management' })).toBeVisible();
     await expect(page.getByLabel('User directory filters')).toBeVisible();
+    await expect(page.getByText(/Scroll horizontally to review all user attributes/)).toBeVisible();
+    const narrowTableMetrics = await page.locator('.eg-user-directory-table-wrap .cds--data-table-content').evaluate((container) => {
+      const firstCell = container.querySelector<HTMLElement>('tbody tr td:first-child');
+      const before = firstCell?.getBoundingClientRect();
+      container.scrollLeft = Math.min(240, container.scrollWidth - container.clientWidth);
+      const after = firstCell?.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const tableRect = container.querySelector('table')?.getBoundingClientRect();
+      return {
+        overflowX: getComputedStyle(container).overflowX,
+        scrollbarWidth: getComputedStyle(container).scrollbarWidth,
+        clientWidth: container.clientWidth,
+        scrollWidth: container.scrollWidth,
+        tableWidth: tableRect?.width || 0,
+        containerLeft: containerRect.left,
+        firstCellBeforeLeft: before?.left || 0,
+        firstCellAfterLeft: after?.left || 0,
+        scrollLeft: container.scrollLeft,
+        stickyPosition: firstCell ? getComputedStyle(firstCell).position : '',
+        firstCellStayedVisible: Boolean(before && after && Math.abs(after.left - containerRect.left) <= 1),
+      };
+    });
+    expect(['auto', 'scroll']).toContain(narrowTableMetrics.overflowX);
+    expect(narrowTableMetrics.scrollbarWidth).not.toBe('none');
+    expect(narrowTableMetrics.scrollWidth, JSON.stringify(narrowTableMetrics)).toBeGreaterThan(narrowTableMetrics.clientWidth);
+    expect(narrowTableMetrics.scrollLeft, JSON.stringify(narrowTableMetrics)).toBeGreaterThan(0);
+    expect(narrowTableMetrics.stickyPosition).toBe('sticky');
+    expect(narrowTableMetrics.firstCellStayedVisible, JSON.stringify(narrowTableMetrics)).toBe(true);
+    await page.locator('.eg-user-directory-table-wrap .cds--data-table-content').evaluate((container) => { container.scrollLeft = 0; });
     await stabilizeCurrentViewport(page);
     await captureManualScreenshot(page, '149-user-directory-narrow.jpg', { stabilize: false });
+
+    const narrowDirectoryScroller = page.locator('.eg-user-directory-table-wrap .cds--data-table-content');
+    await narrowDirectoryScroller.evaluate((container) => {
+      container.scrollIntoView({ block: 'end' });
+      container.scrollLeft = 240;
+    });
+    await page.evaluate(() => window.scrollBy(0, 16));
+    await captureManualScreenshot(page, '149c-user-directory-scrolled-narrow.jpg', { stabilize: false });
 
     await page.goto('/admin/users/browser-directory-user');
     await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
@@ -778,10 +858,24 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     expect(userActionBoxes[0].height).toBeGreaterThanOrEqual(64);
     await captureManualScreenshot(page, '149a-user-detail-narrow.jpg', { stabilize: false });
 
+    await page.getByRole('tab', { name: 'Audit' }).click();
+    await expect(page.getByRole('table', { name: 'User audit events' })).toBeVisible();
+    await captureManualScreenshot(page, '149b-user-detail-audit-narrow.jpg', { stabilize: false });
+
     await page.goto('/admin/settings/identity-provisioning');
     await expect(page.getByRole('heading', { name: 'Provisioning directories' })).toBeVisible();
     await stabilizeCurrentViewport(page);
     await captureManualScreenshot(page, '150-provisioning-directory-narrow.jpg', { stabilize: false });
+
+    await page.getByRole('button', { name: 'Create directory' }).click();
+    await expect(page.getByRole('region', { name: 'Create authoritative SCIM directory' })).toBeVisible();
+    await expectMobileWorkflowSurface(page);
+    await captureManualScreenshot(page, '150a-provisioning-directory-create-narrow.jpg', { stabilize: false });
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+    await page.getByRole('tab', { name: 'Diagnostics' }).click();
+    await expect(page.getByRole('table', { name: 'Provisioning diagnostics' })).toBeVisible();
+    await captureManualScreenshot(page, '150b-provisioning-diagnostics-narrow.jpg', { stabilize: false });
   });
 
   test('captures workflow validation and 200 percent reflow proxy @carbon-pattern-zoom', async ({ page }) => {
@@ -790,11 +884,13 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
 
     await page.goto('/admin/settings/identity-providers');
     await startProviderWorkflow(page);
-    await page.getByRole('button', { name: 'Continue', exact: true }).click();
-    await expect(page.getByText('Complete the highlighted fields', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('Sign-in name')).toBeFocused();
+    const providerContinue = page.getByRole('button', { name: 'Continue', exact: true });
+    await expect(providerContinue).toBeDisabled();
+    await page.getByLabel('Sign-in name').focus();
+    await page.getByLabel('Sign-in name').blur();
+    await expect(page.getByText('Enter the provider name users will recognize on the sign-in screen.')).toBeVisible();
     await stabilizeCurrentViewport(page);
-    await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+    await expect(providerContinue).toBeDisabled();
     await captureManualScreenshot(page, '130-identity-provider-validation-200-percent-reflow.jpg', { stabilize: false });
 
     await page.goto('/admin/settings/identity-mappings');

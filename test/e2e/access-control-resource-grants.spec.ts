@@ -103,7 +103,7 @@ async function openAssignments(page: Page): Promise<Array<Record<string, unknown
 
   await page.goto('/admin/access-control');
   await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
+  await page.getByRole('link', { name: 'Assignments', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Assign role', exact: true })).toBeVisible();
   return created;
 }
@@ -211,7 +211,7 @@ test.describe('Access Control resource-type policies', () => {
 
     await page.goto('/admin/access-control');
     await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
-    await page.getByRole('tab', { name: 'Policies', exact: true }).click();
+    await page.getByRole('link', { name: 'Policies', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Add policy', exact: true })).toBeVisible();
 
     const scenarios = [
@@ -285,9 +285,9 @@ test.describe('Access Control resource-type policies', () => {
     await page.route('**/api/authz/policies', (route) => json(route, []));
 
     await page.goto('/admin/access-control');
-    await expect(page.getByRole('tab', { name: 'Project Targets', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('tab', { name: 'Policies', exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'Policies', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Project Targets', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Policies', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Policies', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Add policy', exact: true })).toBeVisible();
     await expect(page.getByText('No authorization policies are configured.', { exact: true })).toBeVisible();
   });

@@ -110,19 +110,22 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.queryByText('demo-oidc')).not.toBeInTheDocument();
   });
 
-  it('defers provider validation until a field is touched or the form is submitted', async () => {
+  it('keeps provider progression disabled until required fields are valid and validates touched fields inline', async () => {
     renderTab();
     await screen.findByText('demo-oidc');
     fireEvent.click(screen.getByRole('button', { name: /Create provider/i }));
     const modal = await screen.findByRole('region', { name: 'Create identity provider' });
 
+    const continueButton = within(modal).getByRole('button', { name: 'Continue' });
+    expect(continueButton).toBeDisabled();
     expect(within(modal).queryByText('Enter the provider name users will recognize on the sign-in screen.')).not.toBeInTheDocument();
     fireEvent.blur(within(modal).getByLabelText('Sign-in name'));
     expect(within(modal).getByText('Enter the provider name users will recognize on the sign-in screen.')).toBeInTheDocument();
-
-    fireEvent.click(within(modal).getByRole('button', { name: 'Continue' }));
-    expect(within(modal).getByText('Complete the highlighted fields')).toBeInTheDocument();
+    fireEvent.blur(within(modal).getByLabelText('Provider key'));
     expect(within(modal).getByText('Use a stable lowercase key with letters, numbers, dots, dashes, or underscores.')).toBeInTheDocument();
+    fireEvent.change(within(modal).getByLabelText('Sign-in name'), { target: { value: 'Validated provider' } });
+    fireEvent.change(within(modal).getByLabelText('Provider key'), { target: { value: 'validated-provider' } });
+    expect(continueButton).toBeEnabled();
   });
 
   it('limits the sign-in name to a readable 40-character login label', async () => {
@@ -148,11 +151,13 @@ describe('IdentityProvidersSettingsTab', () => {
     fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity providers' }));
     const confirmation = await screen.findByRole('dialog', { name: 'Leave without saving?' });
     expect(within(confirmation).getByText(/changes have not been saved/)).toBeInTheDocument();
+    await waitFor(() => expect(within(confirmation).getByRole('button', { name: 'Keep editing' })).toHaveFocus());
+    expect(within(confirmation).getByText('Leave', { exact: true }).closest('button')).toHaveClass('cds--btn--danger');
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }));
     expect(screen.getByRole('region', { name: 'Create identity provider' })).toBeInTheDocument();
 
     fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity providers' }));
-    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByRole('button', { name: 'Leave' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByText('Leave', { exact: true }).closest('button')!);
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Create identity provider' })).not.toBeInTheDocument());
   });
 
@@ -327,6 +332,9 @@ describe('IdentityProvidersSettingsTab', () => {
       configuration: expect.objectContaining({ groupClaim: 'groups', expectedAudience: 'enterpriseglue-web', scopes: ['openid', 'profile', 'email'] }),
       sync: expect.objectContaining({ triggers: ['login'], connectorCapability: 'claim_only', requiredForLogin: true, incompleteEntitlements: 'fail_closed' }),
     })));
+    expect(await screen.findByText('Identity provider created')).toBeInTheDocument();
+    expect(screen.getByText('Advanced OIDC is saved in a disabled state.')).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('.eg-settings-result-focus')).toHaveFocus());
   });
 
   it('exposes LDAP identity and TLS trust fields that are available to headless configuration', async () => {
@@ -421,7 +429,12 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByText(/cannot be changed here/)).toBeInTheDocument();
     expect(screen.getByText(/Update bundle acme\.authz and apply it again/)).toBeInTheDocument();
     expect(screen.queryByText(/Update config_bundle:/)).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Sign-in name')).toBeDisabled();
+    const details = screen.getByRole('region', { name: 'Identity provider configuration details' });
+    expect(within(details).getByText('Sign-in name')).toBeInTheDocument();
+    expect(within(details).getByText('Configured OIDC')).toBeInTheDocument();
+    expect(within(details).getByText('Configuration source')).toBeInTheDocument();
+    expect(within(details).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
     fireEvent.click(within(screen.getByRole('region', { name: 'View identity provider configuration' })).getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Provider actions' }));
     expect(screen.queryByRole('menuitem', { name: 'Disable provider' })).not.toBeInTheDocument();

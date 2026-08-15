@@ -22,6 +22,8 @@ interface PageLayoutProps {
   padding?: string
   /** Optional additional styles */
   style?: React.CSSProperties
+  /** Optional class name for surface-specific responsive layout */
+  className?: string
 }
 
 /**
@@ -96,10 +98,11 @@ export function PageHeader({
 export function PageLayout({ 
   children, 
   padding = 'var(--spacing-6)',
-  style 
+  style,
+  className,
 }: PageLayoutProps) {
   return (
-    <div style={{ 
+    <div className={className} style={{
       padding,
       ...style
     }}>

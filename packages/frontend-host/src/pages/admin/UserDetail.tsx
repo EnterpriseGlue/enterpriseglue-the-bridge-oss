@@ -23,6 +23,7 @@ import type {
 import { userDirectoryApi } from '../../api/platform-admin/userDirectory';
 import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
 import ConfirmModal from '../../shared/components/ConfirmModal';
+import ResponsiveStructuredList from '../../shared/components/ResponsiveStructuredList';
 import { evaluateActionSnapshot } from '../../shared/auth/guards';
 import { useAuth } from '../../shared/hooks/useAuth';
 import { useModal } from '../../shared/hooks/useModal';
@@ -271,44 +272,50 @@ export default function UserDetail() {
                   <p><strong>Compatibility platform role:</strong> {access?.platformRole || user.platformRole}</p>
                   <p className="eg-secondary-text">Evaluated {formatTimestamp(access?.evaluatedAt)}</p>
                 </Tile>
-                <div className="eg-user-detail-list">
-                  {(access?.lineage || []).map((entry, index) => (
-                    <Tile key={`${entry.assignmentId}-${index}`}>
-                      <Tag type={entry.active ? 'green' : 'warm-gray'}>{entry.active ? 'active' : 'inactive'}</Tag>
-                      <h3>{entry.assignmentName}</h3>
-                      <p>{entry.assignmentType.replace('_', ' ')} from {entry.sourceType.replace('_', ' ')}</p>
-                      {entry.sourceName && <p className="eg-secondary-text">Source: {entry.sourceName}</p>}
-                    </Tile>
-                  ))}
-                  {(access?.lineage || []).length === 0 && <p>No effective access lineage was found.</p>}
-                </div>
+                {(access?.lineage || []).length > 0 ? <ResponsiveStructuredList
+                  label="Effective access lineage"
+                  columns={[{ key: 'status', header: 'Status' }, { key: 'assignment', header: 'Assignment' }, { key: 'access', header: 'Access' }, { key: 'source', header: 'Source' }]}
+                  rows={(access?.lineage || []).map((entry, index) => ({
+                    id: `${entry.assignmentId}-${index}`,
+                    cells: {
+                      status: <Tag type={entry.active ? 'green' : 'warm-gray'}>{entry.active ? 'active' : 'inactive'}</Tag>,
+                      assignment: <h3>{entry.assignmentName}</h3>,
+                      access: entry.assignmentType.replace('_', ' '),
+                      source: <><span>{entry.sourceName || entry.sourceType.replace('_', ' ')}</span>{entry.sourceName && <span className="eg-secondary-text">{entry.sourceType.replace('_', ' ')}</span>}</>,
+                    },
+                  }))}
+                /> : <InlineNotification kind="info" title="No effective access lineage" subtitle="No group, directory mapping, or direct assignment currently grants access to this user." hideCloseButton lowContrast />}
               </TabPanel>
               <TabPanel>
-                <div className="eg-user-detail-list">
-                  {(sessions?.sessions || []).map((session) => (
-                    <Tile key={session.id}>
-                      <Tag type={session.revokedAt ? 'warm-gray' : 'green'}>{session.revokedAt ? 'revoked' : 'active'}</Tag>
-                      <h3>{sourceLabel(session.authenticationSource)} session</h3>
-                      <p><strong>Last used:</strong> {formatTimestamp(session.lastUsedAt)}</p>
-                      <p><strong>Expires:</strong> {formatTimestamp(session.expiresAt)}</p>
-                      <p className="eg-secondary-text">{session.ipAddress || 'IP unavailable'} · {session.userAgent || 'Device unavailable'}</p>
-                    </Tile>
-                  ))}
-                  {(sessions?.sessions || []).length === 0 && <p>No current or recent sessions were found.</p>}
-                </div>
+                {(sessions?.sessions || []).length > 0 ? <ResponsiveStructuredList
+                  label="Current and recent user sessions"
+                  columns={[{ key: 'status', header: 'Status' }, { key: 'authentication', header: 'Authentication' }, { key: 'lastUsed', header: 'Last used' }, { key: 'expires', header: 'Expires' }, { key: 'client', header: 'Client' }]}
+                  rows={(sessions?.sessions || []).map((session) => ({
+                    id: session.id,
+                    cells: {
+                      status: <Tag type={session.revokedAt ? 'warm-gray' : 'green'}>{session.revokedAt ? 'revoked' : 'active'}</Tag>,
+                      authentication: <h3>{sourceLabel(session.authenticationSource)} session</h3>,
+                      lastUsed: formatTimestamp(session.lastUsedAt),
+                      expires: formatTimestamp(session.expiresAt),
+                      client: <><span>{session.ipAddress || 'IP unavailable'}</span><span className="eg-secondary-text">{session.userAgent || 'Device unavailable'}</span></>,
+                    },
+                  }))}
+                /> : <InlineNotification kind="info" title="No user sessions" subtitle="No current or recent sessions were found for this user." hideCloseButton lowContrast />}
               </TabPanel>
               <TabPanel>
-                <div className="eg-user-detail-list">
-                  {(audit?.events || []).map((event) => (
-                    <Tile key={event.id}>
-                      <Tag type={statusTagType(event.outcome)}>{event.outcome}</Tag>
-                      <h3>{event.action}</h3>
-                      <p>{event.reason || 'No administrator reason recorded.'}</p>
-                      <p className="eg-secondary-text">{formatTimestamp(event.occurredAt)} · Actor {event.actorId || 'system'} · Source {event.sourceType || 'application'}</p>
-                    </Tile>
-                  ))}
-                  {(audit?.events || []).length === 0 && <p>No bounded audit events were found for this user.</p>}
-                </div>
+                {(audit?.events || []).length > 0 ? <ResponsiveStructuredList
+                  label="User audit events"
+                  columns={[{ key: 'outcome', header: 'Outcome' }, { key: 'action', header: 'Action' }, { key: 'reason', header: 'Reason' }, { key: 'context', header: 'Time and source' }]}
+                  rows={(audit?.events || []).map((event) => ({
+                    id: event.id,
+                    cells: {
+                      outcome: <Tag type={statusTagType(event.outcome)}>{event.outcome}</Tag>,
+                      action: <h3>{event.action}</h3>,
+                      reason: event.reason || 'No administrator reason recorded.',
+                      context: <><span>{formatTimestamp(event.occurredAt)}</span><span className="eg-secondary-text">Actor {event.actorId || 'system'} · Source {event.sourceType || 'application'}</span></>,
+                    },
+                  }))}
+                /> : <InlineNotification kind="info" title="No user audit events" subtitle="No bounded audit events were found for this user." hideCloseButton lowContrast />}
               </TabPanel>
             </TabPanels>
           </Tabs>

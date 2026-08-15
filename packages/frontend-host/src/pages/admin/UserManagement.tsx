@@ -36,6 +36,11 @@ import { parseApiError } from '../../shared/api/apiErrorUtils';
 import type { User, CreateUserRequest, UpdateUserRequest } from '../../shared/types/auth';
 import { useToast } from '../../shared/notifications/ToastProvider';
 import { useTenantNavigate } from '../../shared/hooks/useTenantNavigate';
+import {
+  AdminTableEmptyState,
+  AdminTablePagination,
+  useAdminTablePagination,
+} from '../../shared/components/AdminDataTable';
 import { userDirectoryApi } from '../../api/platform-admin/userDirectory';
 import {
   getBootstrapAccessDescription,
@@ -598,7 +603,11 @@ export default function UserManagement() {
     return hay.includes(q);
   });
 
-  const rows = visibleUsers.map((user) => ({
+  const userPagination = useAdminTablePagination(visibleUsers, {
+    resetKey: `${searchQuery}:${statusFilter}:${authenticationFilter}:${provisioningFilter}`,
+  });
+
+  const rows = userPagination.pageItems.map((user) => ({
     id: user.id,
     user: user.email,
     status: getUserDisplayStatus(user).label,
@@ -692,11 +701,19 @@ export default function UserManagement() {
             columnCount={headers.length}
           />
               </TableContainer>
+            ) : visibleUsers.length === 0 ? (
+              <AdminTableEmptyState
+                title="No users found"
+                description="No users match the current search and filters. Clear or adjust the filters to review the directory."
+              />
             ) : (
+              <>
               <DataTable rows={rows} headers={headers}>
           {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
             <TableContainer className="eg-user-directory-table-container">
+              <p className="eg-user-directory-scroll-hint">Scroll horizontally to review all user attributes. The User column remains visible for context.</p>
               <div className="eg-user-directory-table-wrap">
+              <div className="eg-user-directory-table-scroll-content">
               <Table {...getTableProps()} size="lg" className="eg-user-directory-table">
                 <TableHead>
                   <TableRow>
@@ -722,7 +739,7 @@ export default function UserManagement() {
                     </TableRow>
                   )}
                   {rows.map((row) => {
-                    const user = users.find(u => u.id === row.id);
+                    const user = userPagination.pageItems.find(u => u.id === row.id);
                     if (!user) return null;
 
                     const rowActions = getUserRowActions(user, {
@@ -863,9 +880,17 @@ export default function UserManagement() {
                 </TableBody>
               </Table>
               </div>
+              </div>
             </TableContainer>
           )}
               </DataTable>
+              <AdminTablePagination
+                totalItems={visibleUsers.length}
+                page={userPagination.page}
+                pageSize={userPagination.pageSize}
+                onChange={userPagination.setPagination}
+              />
+              </>
             )}
           </section>
         </PlatformCol>

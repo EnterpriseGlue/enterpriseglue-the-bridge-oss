@@ -18,6 +18,7 @@ import {
 import { Add } from '@carbon/icons-react';
 import type { PermissionCatalogEntry } from '../../hooks/useAuthzApi';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
+import { AdminTableEmptyState, AdminTablePagination, useAdminTablePagination } from '../../../../shared/components/AdminDataTable';
 
 const permissionsHeaders = [
   { key: 'label', header: 'Permission' },
@@ -96,13 +97,14 @@ export function PermissionsTable({
         .some((value) => String(value || '').toLowerCase().includes(query))
     ));
   }, [filterPermissions, permissions, quickFilter, search]);
+  const pagination = useAdminTablePagination(filteredPermissions, { resetKey: `${search}:${quickFilter}` });
   const selectedQuickFilter = PERMISSION_QUICK_FILTERS.find((item) => item.id === quickFilter) || PERMISSION_QUICK_FILTERS[0];
 
   if (loading) return <DataTableSkeleton headers={permissionsHeaders} rowCount={8} />;
 
   return (
-    <TableContainer className="eg-permissions-table">
-      <DataTable rows={filteredPermissions.map((permission) => ({
+    <TableContainer className="eg-permissions-table eg-admin-data-table">
+      <DataTable rows={pagination.pageItems.map((permission) => ({
         id: permission.key,
         label: permission.label,
         scope: permission.scope,
@@ -136,11 +138,13 @@ export function PermissionsTable({
                 <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'You can view permissions, but you do not have permission to create them.'}>Add permission</Button>
               </TableToolbarContent>
             </TableToolbar>
-            <Table {...getTableProps()} size="md">
+            {filteredPermissions.length === 0 ? (
+              <AdminTableEmptyState title="No permissions found" description="No permissions match the current search and capability filter." />
+            ) : <Table {...getTableProps()} size="md">
               <TableHead><TableRow>{headers.map((header) => <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />)}</TableRow></TableHead>
               <TableBody>
                 {rows.length === 0 ? <TableRow><TableCell colSpan={headers.length}>No permissions match the current filter.</TableCell></TableRow> : rows.map((row) => {
-                  const permission = filteredPermissions.find((item) => item.key === row.id);
+                  const permission = pagination.pageItems.find((item) => item.key === row.id);
                   const risk = permission ? getPermissionRisk(permission) : null;
                   const implications = permission ? getPermissionImplications(permission) : [];
                   return <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
@@ -175,10 +179,11 @@ export function PermissionsTable({
                   </DataTableDataRow>;
                 })}
               </TableBody>
-            </Table>
+            </Table>}
           </>
         )}
       </DataTable>
+      <AdminTablePagination totalItems={filteredPermissions.length} page={pagination.page} pageSize={pagination.pageSize} onChange={pagination.setPagination} />
     </TableContainer>
   );
 }

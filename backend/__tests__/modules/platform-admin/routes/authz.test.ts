@@ -144,6 +144,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   ],
   SystemRoleDefinitions: [
     { key: 'system.engine.operator' },
+    { key: 'system.api.identity_provisioning_admin' },
   ],
 }));
 
@@ -2979,7 +2980,7 @@ describe('platform-admin authz routes', () => {
       './email-configurations.json': 1,
       './email-templates.json': 1,
       './authorization-policies.json': 1,
-      './machine-principals.json': 2,
+      './machine-principals.json': 3,
       './external-engine-systems.json': 1,
     });
 

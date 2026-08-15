@@ -142,8 +142,8 @@ describe('Dashboard', () => {
       expect(screen.getByText('File Structure')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('BPMN')).toBeInTheDocument();
-    expect(screen.getByText('DMN')).toBeInTheDocument();
+    expect(screen.getAllByText('BPMN')).toHaveLength(2);
+    expect(screen.getAllByText('DMN')).toHaveLength(2);
     expect(screen.getByText('Total: 3 files')).toBeInTheDocument();
   });
 

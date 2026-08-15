@@ -100,7 +100,7 @@ export function ProjectEngineTargetsPanel({
           lowContrast
         />
       )}
-      <TableContainer>
+      <TableContainer className="eg-admin-data-table">
         <DataTable
           rows={filteredTargets.map((target) => ({
             id: target.id,

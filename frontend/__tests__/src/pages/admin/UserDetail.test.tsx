@@ -91,15 +91,18 @@ describe('UserDetail', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Effective access' }));
     expect(await screen.findByText('Process viewer')).toBeInTheDocument();
     expect(screen.getByText(/directory mapping/)).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Effective access lineage' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }));
     expect(await screen.findByText('OpenID Connect session')).toBeInTheDocument();
     expect(screen.getByText(/192\.0\.2\.1/)).toBeInTheDocument();
     expect(screen.queryByText(/tokenHash/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Current and recent user sessions' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Audit' }));
     expect(await screen.findByText('identity.provisioning.user.update')).toBeInTheDocument();
     expect(screen.getByText('Directory profile update')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'User audit events' })).toBeInTheDocument();
   });
 
   it('requires an audit reason for emergency deactivation and reloads the source-aware record', async () => {

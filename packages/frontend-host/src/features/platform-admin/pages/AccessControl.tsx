@@ -13,6 +13,10 @@ import {
   InlineNotification,
   Modal,
   NumberInput,
+  SideNav,
+  SideNavItems,
+  SideNavMenu,
+  SideNavMenuItem,
   Tab,
   TabList,
   TabPanel,
@@ -217,6 +221,33 @@ const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   external_registration: 'External Registration',
 };
 
+const ACCESS_CONTROL_SECTION_DESCRIPTIONS: Record<AccessControlTabId, string> = {
+  roles: 'Define reusable collections of permissions for people and machine identities.',
+  permissions: 'Review the actions that roles and policies can grant.',
+  assignments: 'Assign roles to users, groups, clients, and service accounts.',
+  by_principal: 'Inspect all access held by one person or machine identity.',
+  by_resource: 'Inspect who can access a selected platform resource.',
+  groups: 'Manage reusable principal groups and their membership.',
+  effective_access: 'Evaluate the combined result of roles, groups, and policies.',
+  engine_sets: 'Group engines with explicit IDs or governed label selectors.',
+  runtime_resources: 'Review runtime resources discovered from connected engines.',
+  project_targets: 'Govern which engines projects can deploy to and how.',
+  policies: 'Add conditional allow and deny rules beyond role assignments.',
+  audit: 'Trace authorization decisions and administrative changes.',
+  external_registration: 'Manage credentials and registrations for external engine integrations.',
+};
+
+const ACCESS_CONTROL_SECTION_GROUPS: Array<{
+  id: string;
+  label: string;
+  sections: AccessControlTabId[];
+}> = [
+  { id: 'access-model', label: 'Access model', sections: ['roles', 'permissions', 'assignments', 'groups'] },
+  { id: 'explore-access', label: 'Explore access', sections: ['by_principal', 'by_resource', 'effective_access'] },
+  { id: 'resources', label: 'Resources', sections: ['engine_sets', 'runtime_resources', 'project_targets'] },
+  { id: 'governance', label: 'Governance', sections: ['policies', 'audit', 'external_registration'] },
+];
+
 
 type EngineSetSelectorMode = EngineSetSelector['mode'];
 
@@ -327,6 +358,91 @@ function VisibleTabPanels({ children }: { children: React.ReactNode }) {
   // panel. React conditional children can leave false placeholders behind,
   // which would otherwise shift later panels for a partially authorized user.
   return <TabPanels>{React.Children.toArray(children)}</TabPanels>;
+}
+
+function AccessControlWorkflow({
+  open,
+  title,
+  description,
+  primaryButtonText,
+  primaryButtonDisabled,
+  onCancel,
+  onSubmit,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  primaryButtonText: string;
+  primaryButtonDisabled?: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+  children: React.ReactNode;
+}) {
+  const titleRef = React.useRef<HTMLHeadingElement>(null);
+  const workflowRef = React.useRef<HTMLElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    titleRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleWorkflowKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(workflowRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) || []).filter((element) => !element.hasAttribute('hidden'));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <section
+      ref={workflowRef}
+      className="eg-access-control-workflow"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="access-control-workflow-title"
+      aria-describedby="access-control-workflow-description"
+      onKeyDown={handleWorkflowKeyDown}
+    >
+      <header className="eg-access-control-workflow__header">
+        <div>
+          <p className="eg-access-control-workflow__eyebrow">Access Control</p>
+          <h1 id="access-control-workflow-title" ref={titleRef} tabIndex={-1}>{title}</h1>
+          <p id="access-control-workflow-description">{description}</p>
+        </div>
+        <Button kind="ghost" type="button" onClick={onCancel}>Cancel</Button>
+      </header>
+      <div className="eg-access-control-workflow__body">{children}</div>
+      <footer className="eg-access-control-workflow__actions">
+        <Button kind="secondary" type="button" onClick={onCancel}>Cancel</Button>
+        <Button kind="primary" type="button" disabled={primaryButtonDisabled} onClick={onSubmit}>
+          {primaryButtonText}
+        </Button>
+      </footer>
+    </section>
+  );
 }
 
 interface AuthzGroupFormState {
@@ -657,7 +773,7 @@ export function filterRoles(roles: RoleSummary[], searchQuery: string, scopeFilt
 }
 
 
-export default function AccessControl() {
+export default function AccessControl({ embedded = false }: { embedded?: boolean }) {
   const platformSettingsQ = usePlatformSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const rolesQ = useRbacRoles();
@@ -1606,15 +1722,30 @@ export default function AccessControl() {
     setSelectedTabId('audit');
   }, []);
 
+  const visibleSectionGroups = ACCESS_CONTROL_SECTION_GROUPS
+    .map((group) => ({
+      ...group,
+      sections: group.sections.filter((tabId) => visibleTabIds.includes(tabId)),
+    }))
+    .filter((group) => group.sections.length > 0);
+  const selectedSectionGroup = visibleSectionGroups.find((group) => group.sections.includes(selectedTabId));
+  const selectAccessControlSection = (nextTabId: AccessControlTabId) => {
+    if (!visibleTabIds.includes(nextTabId)) return;
+    setSelectedTabId(nextTabId);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set('tab', nextTabId.replace(/_/g, '-'));
+    setSearchParams(nextSearchParams, { replace: true });
+  };
+
   if (!hasVisibleTabs) {
     return (
-      <PageLayout style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
-        <PageHeader
+      <PageLayout padding={embedded ? '0' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
+        {!embedded && <PageHeader
           icon={Security}
           title="Access Control"
           subtitle="Manage roles, permissions, group membership, and access to projects, engines, and runtime resources."
           gradient={PAGE_GRADIENTS.red}
-        />
+        />}
         <UnauthorizedEmptyState
           title="Access Control unavailable"
           reason="No Access Control read permissions are available for the current user."
@@ -1624,30 +1755,77 @@ export default function AccessControl() {
   }
 
   return (
-    <PageLayout style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
-      <PageHeader
+    <PageLayout className={`eg-access-control-page${embedded ? ' eg-access-control-page--embedded' : ''}`} padding={embedded ? '0' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
+      {!embedded && <PageHeader
         icon={Security}
         title="Access Control"
         subtitle="Manage roles, permissions, group membership, and access to projects, engines, and runtime resources."
         gradient={PAGE_GRADIENTS.red}
-      />
+      />}
 
       {error && (
         <InlineNotification kind="error" title={error} onCloseButtonClick={() => setError(null)} lowContrast />
       )}
+
+      <div className="eg-access-control-mobile-selector">
+        <Dropdown
+          id="access-control-section-selector"
+          titleText="Access Control section"
+          label="Choose an Access Control section"
+          items={visibleTabIds}
+          itemToString={(tabId) => tabId ? ACCESS_CONTROL_TAB_LABELS[tabId] : ''}
+          selectedItem={selectedTabId}
+          onChange={({ selectedItem }) => selectedItem && selectAccessControlSection(selectedItem)}
+        />
+      </div>
+
+      <div className="eg-access-control-workspace">
+        <aside className="eg-access-control-local-navigation" aria-label="Access Control sections">
+          <SideNav expanded isFixedNav={false} isPersistent aria-label="Access Control sections">
+            <SideNavItems>
+              {visibleSectionGroups.map((group) => (
+                <SideNavMenu
+                  key={group.id}
+                  title={group.label}
+                  defaultExpanded
+                  isActive={group.sections.includes(selectedTabId)}
+                >
+                  {group.sections.map((tabId) => (
+                    <SideNavMenuItem
+                      key={tabId}
+                      href={`?tab=${tabId.replace(/_/g, '-')}`}
+                      isActive={tabId === selectedTabId}
+                      aria-current={tabId === selectedTabId ? 'page' : undefined}
+                      onClick={(event: React.MouseEvent<HTMLElement>) => {
+                        event.preventDefault();
+                        selectAccessControlSection(tabId);
+                      }}
+                    >
+                      {ACCESS_CONTROL_TAB_LABELS[tabId]}
+                    </SideNavMenuItem>
+                  ))}
+                </SideNavMenu>
+              ))}
+            </SideNavItems>
+          </SideNav>
+        </aside>
+
+        <section className="eg-access-control-content" aria-labelledby="access-control-section-title">
+          <header className="eg-access-control-section-header">
+            <p>{selectedSectionGroup?.label || 'Access Control'}</p>
+            <h2 id="access-control-section-title">{ACCESS_CONTROL_TAB_LABELS[selectedTabId]}</h2>
+            <p>{ACCESS_CONTROL_SECTION_DESCRIPTIONS[selectedTabId]}</p>
+          </header>
 
       <Tabs
         selectedIndex={selectedTabIndex}
         onChange={({ selectedIndex }: { selectedIndex: number }) => {
           const nextTabId = visibleTabIds[selectedIndex];
           if (!nextTabId) return;
-          setSelectedTabId(nextTabId);
-          const nextSearchParams = new URLSearchParams(searchParams);
-          nextSearchParams.set('tab', nextTabId.replace(/_/g, '-'));
-          setSearchParams(nextSearchParams, { replace: true });
+          selectAccessControlSection(nextTabId);
         }}
       >
-        <TabList aria-label="Access control tabs" className="eg-scrollable-tab-list" scrollIntoView>
+        <TabList aria-label="Access control panel mapping" className="eg-access-control-hidden-tab-list" aria-hidden="true">
           {visibleTabIds.map((tabId) => <Tab key={tabId}>{ACCESS_CONTROL_TAB_LABELS[tabId]}</Tab>)}
         </TabList>
         <VisibleTabPanels>
@@ -1964,14 +2142,16 @@ export default function AccessControl() {
           )}
         </VisibleTabPanels>
       </Tabs>
+        </section>
+      </div>
 
-      <Modal
+      <AccessControlWorkflow
         open={permissionModalOpen}
-        onRequestClose={() => setPermissionModalOpen(false)}
-        onRequestSubmit={submitPermission}
-        modalHeading="Create custom permission"
+        onCancel={() => setPermissionModalOpen(false)}
+        onSubmit={submitPermission}
+        title="Create custom permission"
+        description="Define a scoped action that can be assigned through roles and policies."
         primaryButtonText="Create"
-        secondaryButtonText="Cancel"
         primaryButtonDisabled={
           !canManageRoles ||
           !permissionForm.key ||
@@ -2026,7 +2206,7 @@ export default function AccessControl() {
             onChange={(event) => setPermissionForm((current) => ({ ...current, description: event.target.value }))}
           />
         </div>
-      </Modal>
+      </AccessControlWorkflow>
 
       <Modal
         open={groupModalOpen}
@@ -2070,19 +2250,19 @@ export default function AccessControl() {
         </div>
       </Modal>
 
-      <Modal
+      <AccessControlWorkflow
         open={roleModalOpen}
-        onRequestClose={() => {
+        onCancel={() => {
           setRoleModalOpen(false);
           setEditingRole(null);
           setDuplicatingRole(null);
           setRoleRiskAcknowledged(false);
           setRolePermissionSearch('');
         }}
-        onRequestSubmit={submitRole}
-        modalHeading={editingRole ? 'Edit custom role' : duplicatingRole ? 'Duplicate system role' : 'Create custom role'}
+        onSubmit={submitRole}
+        title={editingRole ? 'Edit custom role' : duplicatingRole ? 'Duplicate system role' : 'Create custom role'}
+        description="Name the role, choose its scope, and review every permission before saving."
         primaryButtonText={editingRole ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
         primaryButtonDisabled={
           !canManageRoles ||
           !roleForm.name ||
@@ -2175,20 +2355,20 @@ export default function AccessControl() {
             </div>
           )}
         </div>
-      </Modal>
+      </AccessControlWorkflow>
 
-      <Modal
+      <AccessControlWorkflow
         open={engineSetModalOpen}
-        onRequestClose={() => {
+        onCancel={() => {
           setEngineSetModalOpen(false);
           setEditingEngineSet(null);
           setEngineSetRiskAcknowledged(false);
           previewEngineSetM.reset();
         }}
-        onRequestSubmit={submitEngineSet}
-        modalHeading={editingEngineSet ? 'Edit engine set' : 'Create engine set'}
+        onSubmit={submitEngineSet}
+        title={editingEngineSet ? 'Edit engine set' : 'Create engine set'}
+        description="Configure a governed engine selector and preview its current reach before saving."
         primaryButtonText={editingEngineSet ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
         primaryButtonDisabled={
           !engineSetsManageDecision.allowed ||
           !engineSetForm.name.trim() ||
@@ -2335,18 +2515,18 @@ export default function AccessControl() {
             />
           )}
         </div>
-      </Modal>
+      </AccessControlWorkflow>
 
-      <Modal
+      <AccessControlWorkflow
         open={projectTargetModalOpen}
-        onRequestClose={() => {
+        onCancel={() => {
           setProjectTargetModalOpen(false);
           setEditingProjectTarget(null);
         }}
-        onRequestSubmit={submitProjectTarget}
-        modalHeading={editingProjectTarget ? 'Edit Project Target' : 'Create Project Target'}
+        onSubmit={submitProjectTarget}
+        title={editingProjectTarget ? 'Edit project target' : 'Create project target'}
+        description="Choose a project and engine, then define the deployment paths this target permits."
         primaryButtonText={editingProjectTarget ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
         primaryButtonDisabled={
           !projectTargetsManageDecision.allowed ||
           !projectTargetFormValid ||
@@ -2407,20 +2587,20 @@ export default function AccessControl() {
             </AccordionItem>
           </Accordion>
         </div>
-      </Modal>
+      </AccessControlWorkflow>
 
-      <Modal
+      <AccessControlWorkflow
         open={policyModalOpen}
-        onRequestClose={() => {
+        onCancel={() => {
           setPolicyModalOpen(false);
           setEditingPolicy(null);
           setPolicyMatchAllActions(false);
           setPolicyRiskAcknowledged(false);
         }}
-        onRequestSubmit={submitPolicy}
-        modalHeading={editingPolicy ? 'Edit policy' : 'Add policy'}
+        onSubmit={submitPolicy}
+        title={editingPolicy ? 'Edit policy' : 'Add policy'}
+        description="Define the effect, governed resource, permission, and optional conditions in one reviewable flow."
         primaryButtonText={editingPolicy ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
         primaryButtonDisabled={
           !policiesManageDecision.allowed ||
           !policyForm.name.trim() ||
@@ -2432,7 +2612,6 @@ export default function AccessControl() {
           createPolicyM.isPending ||
           updatePolicyM.isPending
         }
-        size="lg"
       >
         <div
           key={`${policyModalOpen ? 'open' : 'closed'}:${editingPolicy?.id || 'new'}`}
@@ -2543,7 +2722,7 @@ export default function AccessControl() {
             </AccordionItem>
           </Accordion>
         </div>
-      </Modal>
+      </AccessControlWorkflow>
     </PageLayout>
   );
 }

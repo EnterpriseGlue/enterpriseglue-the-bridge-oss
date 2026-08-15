@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import IdentityProvisioningSettingsTab from '@src/features/platform-admin/components/IdentityProvisioningSettingsTab';
 
@@ -33,6 +34,13 @@ const credential = {
   status: 'active' as const, createdAt: 1002, expiresAt: null, overlapEndsAt: null, lastUsedAt: null, revokedAt: null,
 };
 
+function renderTab() {
+  const router = createMemoryRouter([{ path: '*', element: <IdentityProvisioningSettingsTab canManage /> }], {
+    initialEntries: ['/admin/settings/identity-provisioning'],
+  });
+  return render(<RouterProvider router={router} />);
+}
+
 describe('IdentityProvisioningSettingsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -43,7 +51,7 @@ describe('IdentityProvisioningSettingsTab', () => {
   });
 
   it('separates authoritative provisioning from sign-in and exposes safe operational metadata', async () => {
-    render(<IdentityProvisioningSettingsTab canManage />);
+    renderTab();
 
     expect(await screen.findByText('Microsoft Entra workforce')).toBeInTheDocument();
     expect(screen.getByText(/independently from the identity provider used for sign-in/i)).toBeInTheDocument();
@@ -55,10 +63,28 @@ describe('IdentityProvisioningSettingsTab', () => {
     expect(await screen.findByText('Entra production')).toBeInTheDocument();
     expect(screen.getByText(/sha256:1234567890abcdef/)).toBeInTheDocument();
     expect(screen.queryByText(/bearerToken/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Provisioning credentials' })).toBeInTheDocument();
+  });
+
+  it('renders sanitized diagnostics as a labelled structured list', async () => {
+    api.events.mockResolvedValue({
+      items: [{
+        id: 'event-1', directoryId: directory.id, eventType: 'scim.user.updated', status: 'success',
+        resourceType: 'User', resourceId: 'user-2', requestId: 'request-safe-1', code: null,
+        message: 'User lifecycle update applied', occurredAt: 1003,
+      }],
+    });
+    renderTab();
+    await screen.findByText('Microsoft Entra workforce');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Diagnostics' }));
+    expect(await screen.findByText('scim.user.updated')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Provisioning diagnostics' })).toBeInTheDocument();
+    expect(screen.queryByText(/eg_scim_[a-z0-9_-]+/i)).not.toBeInTheDocument();
   });
 
   it('runs a readiness check without rendering credential material', async () => {
-    render(<IdentityProvisioningSettingsTab canManage />);
+    renderTab();
     await screen.findByText('Microsoft Entra workforce');
 
     fireEvent.click(screen.getByRole('button', { name: 'Test readiness' }));
@@ -75,7 +101,7 @@ describe('IdentityProvisioningSettingsTab', () => {
       clientId: 'credential-1',
       tokenEndpointPath: '/scim/v2/entra-workforce/oauth/token',
     });
-    render(<IdentityProvisioningSettingsTab canManage />);
+    renderTab();
     await screen.findByText('Microsoft Entra workforce');
     fireEvent.click(screen.getByRole('tab', { name: 'Credentials' }));
     const createButtons = await screen.findAllByRole('button', { name: 'Create credential' });
@@ -100,5 +126,25 @@ describe('IdentityProvisioningSettingsTab', () => {
     fireEvent.click(done);
     await waitFor(() => expect(screen.queryByText(/eg_scim_reveal_once_12345678901234567890/)).not.toBeInTheDocument());
     expect(screen.getAllByText('Entra production')).toHaveLength(1);
+  });
+
+  it('uses the shared single-column create workflow and protects unsaved directory changes', async () => {
+    renderTab();
+    await screen.findByText('Microsoft Entra workforce');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create directory' }));
+    const workflow = await screen.findByRole('region', { name: 'Create authoritative SCIM directory' });
+    expect(within(workflow).getByRole('region', { name: 'Provisioning directory form fields' })).toBeInTheDocument();
+    expect(within(workflow).getByLabelText('Directory name')).toBeInTheDocument();
+    expect(within(workflow).getByRole('button', { name: 'Create directory' })).toBeDisabled();
+
+    fireEvent.change(within(workflow).getByLabelText('Directory name'), { target: { value: 'Workforce directory' } });
+    fireEvent.change(within(workflow).getByLabelText('Directory key'), { target: { value: 'workforce' } });
+    expect(within(workflow).getByRole('button', { name: 'Create directory' })).toBeEnabled();
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Cancel' }));
+
+    const confirmation = await screen.findByRole('dialog', { name: 'Leave without saving?' });
+    await waitFor(() => expect(within(confirmation).getByRole('button', { name: 'Keep editing' })).toHaveFocus());
+    expect(within(confirmation).getByText('Leave', { exact: true }).closest('button')).toHaveClass('cds--btn--danger');
   });
 });

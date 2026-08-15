@@ -28,7 +28,7 @@ async function openPermissions(page: Page, failPermissions = false): Promise<voi
   await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible({
     timeout: accessControlReadyTimeoutMs,
   });
-  await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
+  await page.getByRole('link', { name: 'Permissions', exact: true }).click();
 }
 
 function permissionLabelCell(page: Page): Locator {
@@ -39,13 +39,24 @@ function permissionLabelCell(page: Page): Locator {
 
 async function contrastRatio(locator: Locator): Promise<number> {
   return locator.evaluate((element) => {
-    const parseRgb = (value: string): [number, number, number] => {
-      const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
-      if (!channels || channels.length !== 3) throw new Error(`Unsupported color: ${value}`);
-      return channels as [number, number, number];
+    type Rgba = [number, number, number, number];
+    const parseRgb = (value: string): Rgba => {
+      const channels = value.match(/[\d.]+/g)?.map(Number);
+      if (!channels || channels.length < 3) throw new Error(`Unsupported color: ${value}`);
+      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
     };
-    const luminance = (value: string): number => {
-      const [red, green, blue] = parseRgb(value).map((channel) => {
+    const composite = (foreground: Rgba, background: Rgba): Rgba => {
+      const alpha = foreground[3] + (background[3] * (1 - foreground[3]));
+      if (alpha === 0) return [0, 0, 0, 0];
+      return [
+        ((foreground[0] * foreground[3]) + (background[0] * background[3] * (1 - foreground[3]))) / alpha,
+        ((foreground[1] * foreground[3]) + (background[1] * background[3] * (1 - foreground[3]))) / alpha,
+        ((foreground[2] * foreground[3]) + (background[2] * background[3] * (1 - foreground[3]))) / alpha,
+        alpha,
+      ];
+    };
+    const luminance = (value: Rgba): number => {
+      const [red, green, blue] = value.slice(0, 3).map((channel) => {
         const normalized = channel / 255;
         return normalized <= 0.04045
           ? normalized / 12.92
@@ -54,15 +65,20 @@ async function contrastRatio(locator: Locator): Promise<number> {
       return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
     };
 
-    const foreground = window.getComputedStyle(element).color;
+    const foreground = parseRgb(window.getComputedStyle(element).color);
     let backgroundElement: Element | null = element;
-    let background = 'rgba(0, 0, 0, 0)';
+    const backgroundLayers: Rgba[] = [];
     while (backgroundElement) {
-      background = window.getComputedStyle(backgroundElement).backgroundColor;
-      if (!background.endsWith(', 0)') && background !== 'transparent') break;
+      const layer = parseRgb(window.getComputedStyle(backgroundElement).backgroundColor);
+      if (layer[3] > 0) backgroundLayers.push(layer);
+      if (layer[3] === 1) break;
       backgroundElement = backgroundElement.parentElement;
     }
-    const foregroundLuminance = luminance(foreground);
+    const background = backgroundLayers
+      .reverse()
+      .reduce((rendered, layer) => composite(layer, rendered), [255, 255, 255, 1] as Rgba);
+    const renderedForeground = composite(foreground, background);
+    const foregroundLuminance = luminance(renderedForeground);
     const backgroundLuminance = luminance(background);
     return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
       / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
@@ -82,14 +98,14 @@ test.describe('Access Control accessibility release checks', () => {
     await openPermissions(page);
 
     const samples = [
-      page.getByRole('heading', { name: 'Access Control' }),
-      page.getByRole('tab', { name: 'Permissions', exact: true }),
-      permissionLabelCell(page),
-      page.getByRole('button', { name: 'Add permission' }),
+      { name: 'page heading', locator: page.getByRole('heading', { name: 'Access Control' }) },
+      { name: 'active section link', locator: page.getByRole('link', { name: 'Permissions', exact: true }) },
+      { name: 'permission label', locator: permissionLabelCell(page) },
+      { name: 'primary action', locator: page.getByRole('button', { name: 'Add permission' }) },
     ];
     for (const sample of samples) {
-      await expect(sample).toBeVisible();
-      await expect(contrastRatio(sample)).resolves.toBeGreaterThanOrEqual(4.5);
+      await expect(sample.locator).toBeVisible();
+      expect(await contrastRatio(sample.locator), sample.name).toBeGreaterThanOrEqual(4.5);
     }
   });
 
