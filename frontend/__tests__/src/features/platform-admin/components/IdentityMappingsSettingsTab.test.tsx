@@ -2,6 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import IdentityMappingsSettingsTab from '@src/features/platform-admin/components/IdentityMappingsSettingsTab';
@@ -21,7 +22,11 @@ vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 
 function renderTab() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}><IdentityMappingsSettingsTab /></QueryClientProvider>);
+  const router = createMemoryRouter([{
+    path: '*',
+    element: <QueryClientProvider client={queryClient}><IdentityMappingsSettingsTab /></QueryClientProvider>,
+  }], { initialEntries: ['/admin/settings/identity-mappings'] });
+  return render(<RouterProvider router={router} />);
 }
 
 function menuItem(label: string): HTMLElement | null {
@@ -54,7 +59,7 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(screen.getByText('Keep in sync')).toBeInTheDocument();
     expect(screen.getByText('Add and remove members')).toBeInTheDocument();
     expect(screen.getByText('Manual')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Add mapping/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Create mapping/i })).toBeEnabled();
   });
 
   it('persists a disabled manual mapping through the edit form', async () => {
@@ -80,13 +85,31 @@ describe('IdentityMappingsSettingsTab', () => {
     renderTab();
     await screen.findByText('group.engine-operators');
 
-    fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create mapping/i }));
 
-    expect((await screen.findAllByText('External identity data')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Provider and match rule')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Identity' })).toBeInTheDocument();
+    expect(screen.getByText('Choose the provider data that grants membership.')).toBeInTheDocument();
     expect(document.getElementById('identity-mapping-group')).not.toBeVisible();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
     expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
+  });
+
+  it('warns before a changed mapping workflow is abandoned through its back action', async () => {
+    renderTab();
+    await screen.findByText('group.engine-operators');
+    fireEvent.click(screen.getByRole('button', { name: /Create mapping/i }));
+    const workflow = await screen.findByRole('region', { name: 'Create identity mapping' });
+    fireEvent.change(within(workflow).getByLabelText('External group, role, or attribute value'), { target: { value: 'unsaved-group' } });
+
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity mappings' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Leave without saving?' });
+    expect(within(confirmation).getByText(/changes have not been saved/)).toBeInTheDocument();
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }));
+    expect(screen.getByRole('region', { name: 'Create identity mapping' })).toBeInTheDocument();
+
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity mappings' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByRole('button', { name: 'Leave' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Create identity mapping' })).not.toBeInTheDocument());
   });
 
   it.each([
@@ -115,13 +138,18 @@ describe('IdentityMappingsSettingsTab', () => {
     renderTab();
     await screen.findByText('group.engine-operators');
 
-    fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create mapping/i }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Identity' })).toHaveFocus());
     fireEvent.click(screen.getByRole('combobox', { name: 'Identity provider' }));
     fireEvent.click(await screen.findByRole('option', { name: 'Demo OIDC (demo-oidc)' }));
     fireEvent.change(screen.getByLabelText('External group, role, or attribute value'), { target: { value: 'operations' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('combobox', { name: 'Identity provider' })).toHaveValue('Demo OIDC (demo-oidc)');
+    expect(screen.getByLabelText('External group, role, or attribute value')).toHaveValue('operations');
+    const continueButton = screen.getByRole('button', { name: 'Continue' });
+    expect(continueButton).toBeEnabled();
+    fireEvent.click(continueButton);
 
-    expect(await screen.findByText('Group and access')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: 'Create a new group' }));
     fireEvent.change(await screen.findByLabelText('New EnterpriseGlue group name'), { target: { value: `Operators ${resourceType}` } });
     fireEvent.change(screen.getByLabelText('New group key'), { target: { value: `group.operators.${resourceType}` } });
@@ -155,8 +183,8 @@ describe('IdentityMappingsSettingsTab', () => {
     }
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByText('Review')).toBeInTheDocument();
-    expect(screen.getByText('Ready to create')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect(screen.getByText('Review before creating')).toBeInTheDocument();
     expect(screen.getByText('EnterpriseGlue will create the new group, identity mapping, and engine role assignment together. If any step fails, nothing will be saved.')).toBeInTheDocument();
     expect(within(screen.getByLabelText('Identity mapping review')).getByText(targetName, { exact: false })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create mapping' }));
@@ -177,7 +205,7 @@ describe('IdentityMappingsSettingsTab', () => {
   it('warns before a broad entitlement match is saved', async () => {
     renderTab();
     await screen.findByText('group.engine-operators');
-    fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create mapping/i }));
 
     fireEvent.change(screen.getByLabelText('Match rule'), { target: { value: 'contains' } });
 
@@ -204,7 +232,7 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(screen.getByText(/Update configuration source identity-mappings\/operations and apply it again/)).toBeInTheDocument();
     expect(screen.getByLabelText('External identity data type')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Preview with sample claims' })).toBeEnabled();
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'View identity mapping configuration' })).getByRole('button', { name: 'Close' }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'View identity mapping configuration' })).getByRole('button', { name: 'Close' }));
   });
 
   it('shows config warnings and permits local mapping edits without allowing deletion', async () => {

@@ -1,35 +1,24 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
-import { createUserLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
+import { createUserLimiter, identityAdminLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
+import { userDirectoryService } from '@enterpriseglue/shared/services/platform-admin/UserDirectoryService.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
+import {
+  PlatformUserCreateRequestSchema,
+  PlatformUserUpdateRequestSchema,
+  UserAuditQuerySchema,
+  UserDeactivateRequestSchema,
+  UserDirectoryQuerySchema,
+  UserReactivateRequestSchema,
+  UserRevokeSessionsRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 
 const router = Router();
-
-const createUserSchema = z.object({
-  email: z.string().email(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  // `role` is the canonical user-management input. Keep the older
-  // `platformRole` alias readable at this boundary without allowing it to
-  // override an explicit canonical choice.
-  role: z.enum(['admin', 'user']).optional(),
-  platformRole: z.enum(['admin', 'user']).optional(),
-  sendEmail: z.boolean().default(true),
-});
-
-const updateUserSchema = z.object({
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  role: z.enum(['admin', 'user']).optional(),
-  platformRole: z.enum(['admin', 'user']).optional(),
-  isActive: z.boolean().optional(),
-});
 
 /**
  * GET /api/users
@@ -47,7 +36,7 @@ router.get('/api/users', requireAuth, requireAction('platform.users.read'), asyn
  * Rate limited: 20 user creations per hour
  * ✨ Uses validation middleware
  */
-router.post('/api/users', requireAuth, requireAction('platform.users.create'), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
+router.post('/api/users', requireAuth, requireAction('platform.users.create'), createUserLimiter, validateBody(PlatformUserCreateRequestSchema), asyncHandler(async (req, res) => {
   const { email, firstName, lastName, role, platformRole, sendEmail } = req.body;
   const requestedPlatformRole = role ?? platformRole ?? 'user';
 
@@ -89,6 +78,44 @@ router.post('/api/users', requireAuth, requireAction('platform.users.create'), c
   });
 }));
 
+/** Source-aware enterprise user directory. Kept separate from the legacy array response. */
+router.get('/api/users/directory', requireAuth, identityAdminLimiter, requireAction('platform.users.read'), validateQuery(UserDirectoryQuerySchema), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.list({
+    ...req.query as any,
+    tenantId: req.tenant?.tenantId || null,
+  }));
+}));
+
+router.get('/api/users/:id/identity-context', requireAuth, identityAdminLimiter, requireAction('platform.users.read'), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.identityContext(String(req.params.id), req.tenant?.tenantId || null));
+}));
+
+router.get('/api/users/:id/effective-access', requireAuth, identityAdminLimiter, requireAction('platform.users.read'), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.effectiveAccess(String(req.params.id), req.tenant?.tenantId || null));
+}));
+
+router.get('/api/users/:id/sessions', requireAuth, identityAdminLimiter, requireAction('platform.users.read'), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.sessions(String(req.params.id)));
+}));
+
+router.get('/api/users/:id/audit', requireAuth, identityAdminLimiter, requireAction('platform.users.read'), validateQuery(UserAuditQuerySchema), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.audit(String(req.params.id), Number(req.query.limit)));
+}));
+
+router.post('/api/users/:id/deactivate', requireAuth, identityAdminLimiter, requireAction('platform.users.deactivate'), validateBody(UserDeactivateRequestSchema), asyncHandler(async (req, res) => {
+  const userId = String(req.params.id);
+  if (userId === req.user!.userId) throw Errors.validation('Cannot deactivate your own account');
+  res.json(await userDirectoryService.deactivate({ userId, actorId: req.user!.userId, tenantId: req.tenant?.tenantId || null, reason: req.body.reason }));
+}));
+
+router.post('/api/users/:id/reactivate', requireAuth, identityAdminLimiter, requireAction('platform.users.update'), validateBody(UserReactivateRequestSchema), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.reactivate({ userId: String(req.params.id), actorId: req.user!.userId, tenantId: req.tenant?.tenantId || null, reason: req.body.reason }));
+}));
+
+router.post('/api/users/:id/revoke-sessions', requireAuth, identityAdminLimiter, requireAction('platform.users.update'), validateBody(UserRevokeSessionsRequestSchema), asyncHandler(async (req, res) => {
+  res.json(await userDirectoryService.revokeSessions({ userId: String(req.params.id), actorId: req.user!.userId, tenantId: req.tenant?.tenantId || null, reason: req.body.reason }));
+}));
+
 /**
  * GET /api/users/:id
  * Get user by ID
@@ -106,7 +133,7 @@ router.get('/api/users/:id', requireAuth, requireAction('platform.users.read'), 
  * ✨ Migrated to TypeORM
  * ✨ Uses validation middleware
  */
-router.put('/api/users/:id', requireAuth, requireAction('platform.users.update'), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
+router.put('/api/users/:id', requireAuth, requireAction('platform.users.update'), validateBody(PlatformUserUpdateRequestSchema), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
   const { role, ...input } = req.body;
   const requestedPlatformRole = role ?? input.platformRole;

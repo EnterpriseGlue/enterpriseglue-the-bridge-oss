@@ -1,28 +1,22 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { ActionableNotification, TextInput, PasswordInput, Button, ClickableTile, InlineLoading, Loading, InlineNotification } from '@carbon/react';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
+import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification } from '@carbon/react';
 import { Login as LoginIcon } from '@carbon/icons-react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
-import logoPng from '../assets/logo.png';
+import PublicAuthShell from '../shared/components/PublicAuthShell';
 import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
-import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import type {
   PublicLoginMethodsResponse,
   PublicLoginProvider,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { LoginResponse } from '../shared/types/auth';
-import {
-  MAX_LOGIN_LABEL_LENGTH,
-  providerLoginLabel,
-} from '../features/platform-admin/identityAccessCopy';
 
 const DEFAULT_TENANT_SLUG = 'default';
 
-const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 const SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY = 'eg.sso.autoRedirect.blockUntil';
 const SSO_REDIRECT_TRANSITION_MS = 600;
 
@@ -30,9 +24,22 @@ interface LoginLocationState {
   from?: { pathname?: unknown };
 }
 
+type LoginField = 'email' | 'password' | 'discoveryEmail' | 'ldapUsername' | 'ldapPassword';
+type LoginErrorFocusTarget = 'notification' | 'email' | 'ldap-username';
+
 function sentence(value: string): string {
   const trimmed = value.trim();
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function requiredFieldError(value: string, label: string): string | null {
+  return value.trim() ? null : `${label} is required`;
+}
+
+function emailFieldError(value: string, label: string): string | null {
+  const requiredError = requiredFieldError(value, label);
+  if (requiredError) return requiredError;
+  return /^[^\s@]+@[^\s@]+$/.test(value.trim()) ? null : 'Enter a valid email address';
 }
 
 function providerLoginPath(provider: PublicLoginProvider, slug: string | null): string {
@@ -53,97 +60,6 @@ function providerPasswordLoginPath(provider: PublicLoginProvider, slug: string |
     : `/api/auth/providers/${encodeURIComponent(provider.id)}/login`;
 }
 
-function normalizeBranding(raw: unknown): PublicPlatformBranding {
-  const r: Record<string, unknown> = raw && typeof raw === 'object'
-    ? raw as Record<string, unknown>
-    : {};
-  return {
-    logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
-    loginLogoUrl: typeof r.loginLogoUrl === 'string' ? r.loginLogoUrl : null,
-    loginTitleVerticalOffset: typeof r.loginTitleVerticalOffset === 'number' ? r.loginTitleVerticalOffset : 0,
-    loginTitleColor: typeof r.loginTitleColor === 'string' ? r.loginTitleColor : null,
-    logoTitle: typeof r.logoTitle === 'string' ? r.logoTitle : null,
-    logoScale: typeof r.logoScale === 'number' ? r.logoScale : 100,
-    titleFontUrl: typeof r.titleFontUrl === 'string' ? r.titleFontUrl : null,
-    titleFontWeight: typeof r.titleFontWeight === 'string' ? r.titleFontWeight : '600',
-    titleFontSize: typeof r.titleFontSize === 'number' ? r.titleFontSize : 14,
-    titleVerticalOffset: typeof r.titleVerticalOffset === 'number' ? r.titleVerticalOffset : 0,
-    menuAccentColor: typeof r.menuAccentColor === 'string' ? r.menuAccentColor : null,
-    faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
-  };
-}
-
-function readCachedBranding(): PublicPlatformBranding | null {
-  try {
-    const raw = window.localStorage.getItem(BRANDING_CACHE_KEY);
-    if (!raw) return null;
-    return normalizeBranding(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedBranding(branding: PublicPlatformBranding): void {
-  try {
-    window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(branding));
-  } catch {
-  }
-}
-
-function parseSafeLogoDataUrl(raw: unknown): { mime: string; bytes: ArrayBuffer } | null {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('//')) return null;
-  if (!trimmed.startsWith('data:')) return null;
-
-  const match = trimmed.match(/^data:(image\/(?:png|jpe?g|webp|gif|svg\+xml))(?:;charset=[a-z0-9-]+)?;base64,([a-z0-9+/=\s]+)$/i);
-  if (!match) return null;
-
-  const mime = match[1].toLowerCase();
-  const base64 = match[2].replace(/\s+/g, '');
-
-  let decoded: string;
-  try {
-    decoded = atob(base64);
-  } catch {
-    return null;
-  }
-
-  const maxBytes = 600 * 1024;
-  if (decoded.length > maxBytes) return null;
-
-  if (mime === 'image/svg+xml') {
-    const snippet = decoded.slice(0, 8000).toLowerCase();
-    if (
-      snippet.includes('<script') ||
-      snippet.includes('javascript:') ||
-      snippet.includes('<foreignobject') ||
-      snippet.includes('<iframe') ||
-      snippet.includes('<object') ||
-      snippet.includes('<embed') ||
-      /\son\w+\s*=/.test(snippet)
-    ) {
-      return null;
-    }
-  }
-
-  const buffer = new ArrayBuffer(decoded.length);
-  const view = new Uint8Array(buffer);
-  for (let i = 0; i < decoded.length; i++) {
-    view[i] = decoded.charCodeAt(i);
-  }
-
-  return { mime, bytes: buffer };
-}
-
-function makeLogoObjectUrl(raw: unknown): string | null {
-  const parsed = parseSafeLogoDataUrl(raw);
-  if (!parsed) return null;
-  const blob = new Blob([parsed.bytes], { type: parsed.mime });
-  return URL.createObjectURL(blob);
-}
-
 /**
  * Login page
  * Handles user authentication
@@ -159,7 +75,6 @@ export default function Login() {
   const isAdministratorRecovery = /(?:^|\/)admin-recovery\/?$/.test(location.pathname);
   const forgotPasswordPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/forgot-password` : '/forgot-password';
 
-  const initialBranding = readCachedBranding();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -170,20 +85,39 @@ export default function Login() {
   const [ssoLoading, setSsoLoading] = useState(true);
   const [loginMethodsUnavailable, setLoginMethodsUnavailable] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginErrorFocusTarget, setLoginErrorFocusTarget] = useState<LoginErrorFocusTarget>('notification');
+  const [touchedFields, setTouchedFields] = useState<Partial<Record<LoginField, boolean>>>({});
   const [redirectingProvider, setRedirectingProvider] = useState<PublicLoginProvider | null>(null);
-  const [branding, setBranding] = useState<PublicPlatformBranding | null>(initialBranding);
-  const [brandingFetchDone, setBrandingFetchDone] = useState(false);
-  const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => {
-    const raw = initialBranding?.loginLogoUrl || initialBranding?.logoUrl;
-    return makeLogoObjectUrl(raw);
-  });
-  const logoObjectUrlRef = useRef<string | null>(logoObjectUrl);
   const hasTriggeredAutoSsoRedirect = useRef(false);
   const redirectTimerRef = useRef<number | null>(null);
   const transitionHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const chooserHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
   const hasAppliedFirstFocusableState = useRef(false);
+
+  const touchFields = useCallback((...fields: LoginField[]) => {
+    setTouchedFields((current) => {
+      const next = { ...current };
+      fields.forEach((field) => { next[field] = true; });
+      return next;
+    });
+  }, []);
+
+  const updateEmail = (value: string) => {
+    setEmail(value);
+    setLoginError(null);
+  };
+
+  const updatePassword = (value: string) => {
+    setPassword(value);
+    setLoginError(null);
+  };
+
+  const emailError = touchedFields.email ? emailFieldError(email, 'Email') : null;
+  const passwordError = touchedFields.password ? requiredFieldError(password, 'Password') : null;
+  const discoveryEmailError = touchedFields.discoveryEmail ? emailFieldError(email, 'Work email') : null;
+  const ldapUsernameError = touchedFields.ldapUsername ? requiredFieldError(email, 'Username') : null;
+  const ldapPasswordError = touchedFields.ldapPassword ? requiredFieldError(password, 'Password') : null;
   
   // The public contract contains only policy-resolved, sanitized login methods.
   const loadLoginMethods = useCallback(() => {
@@ -213,101 +147,6 @@ export default function Login() {
   }, [loadLoginMethods]);
 
   useEffect(() => {
-    const raw = branding?.loginLogoUrl || branding?.logoUrl;
-    const nextUrl = makeLogoObjectUrl(raw);
-
-    if (logoObjectUrlRef.current) {
-      URL.revokeObjectURL(logoObjectUrlRef.current);
-      logoObjectUrlRef.current = null;
-    }
-
-    logoObjectUrlRef.current = nextUrl;
-    setLogoObjectUrl(nextUrl);
-
-    return () => {
-      if (logoObjectUrlRef.current) {
-        URL.revokeObjectURL(logoObjectUrlRef.current);
-        logoObjectUrlRef.current = null;
-      }
-    };
-  }, [branding?.loginLogoUrl, branding?.logoUrl]);
-
-  // Apply favicon override from branding
-  useEffect(() => {
-    const faviconUrl = branding?.faviconUrl;
-    const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')) as HTMLLinkElement[];
-    if (links.length === 0) return;
-
-    // Store default href on first run
-    for (const link of links) {
-      if (!link.dataset.defaultHref) {
-        link.dataset.defaultHref = link.href;
-      }
-    }
-
-    if (faviconUrl) {
-      for (const link of links) {
-        link.href = faviconUrl;
-      }
-    } else {
-      for (const link of links) {
-        if (link.dataset.defaultHref) link.href = link.dataset.defaultHref;
-      }
-    }
-  }, [branding?.faviconUrl]);
-
-  useEffect(() => {
-    const styleId = 'public-branding-font';
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
-
-    if (!branding?.titleFontUrl) {
-      if (styleEl) styleEl.remove();
-      return;
-    }
-
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      document.head.appendChild(styleEl);
-    }
-
-    styleEl.textContent = `
-      @font-face {
-        font-family: 'PublicBrandingFont';
-        src: url('${branding.titleFontUrl}') format('woff2'), url('${branding.titleFontUrl}') format('woff'), url('${branding.titleFontUrl}') format('truetype');
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-      }
-    `;
-  }, [branding?.titleFontUrl]);
-
-  // Fetch platform branding for the login page (public endpoint)
-  useEffect(() => {
-    let cancelled = false;
-
-    apiClient.get<unknown>('/api/auth/branding', undefined, { credentials: 'include' })
-      .then((data: unknown) => {
-        if (cancelled) return;
-        if (!data || typeof data !== 'object') return;
-        const normalized = normalizeBranding(data);
-        writeCachedBranding(normalized);
-        setBranding(normalized);
-      })
-      .catch(() => {
-        // ignore
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setBrandingFetchDone(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (isAuthLoading || !isAuthenticated) return;
 
     const params = new URLSearchParams(location.search);
@@ -331,6 +170,7 @@ export default function Login() {
         // ignore
       }
 
+      setLoginErrorFocusTarget('notification');
       setLoginError(errorMessage || error);
       // Clean up URL
       navigate(toSafeInternalPath(location.pathname, '/login'), { replace: true });
@@ -424,6 +264,9 @@ export default function Login() {
       navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
     } catch (err) {
       const parsed = parseApiError(err, 'Login failed');
+      setPassword('');
+      setTouchedFields((current) => ({ ...current, password: false }));
+      setLoginErrorFocusTarget('email');
       setLoginError(parsed.message);
     } finally {
       setIsLoading(false);
@@ -432,12 +275,23 @@ export default function Login() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    touchFields('email', 'password');
+    const invalidEmail = emailFieldError(email, 'Email');
+    const invalidPassword = requiredFieldError(password, 'Password');
+    if (invalidEmail || invalidPassword) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(invalidEmail ? 'email' : 'password')?.focus({ preventScroll: true });
+      });
+      return;
+    }
     submitLogin();
   };
 
   const handleSsoLogin = (provider: PublicLoginProvider) => {
     setLoginError(null);
     if (provider.loginMethod === 'password') {
+      setPassword('');
+      setTouchedFields((current) => ({ ...current, ldapUsername: false, ldapPassword: false }));
       setDirectLdapProvider(provider);
       return;
     }
@@ -466,48 +320,51 @@ export default function Login() {
     setLoginStep('methods');
   };
 
+  const handleDiscoverySubmit = (event: FormEvent) => {
+    event.preventDefault();
+    touchFields('discoveryEmail');
+    if (emailFieldError(email, 'Work email')) {
+      window.requestAnimationFrame(() => {
+        document.getElementById('login-discovery-email')?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    continueLoginDiscovery();
+  };
+
   const submitDirectLdapLogin = async () => {
-    if (!directLdapProvider || isLoading || !email || !password) return;
+    if (!directLdapProvider || isLoading) return;
     setLoginError(null);
     setIsLoading(true);
     try {
       await apiClient.post(providerPasswordLoginPath(directLdapProvider, tenantSlug), { username: email, password });
       redirectTo(tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`);
     } catch (err) {
-      const parsed = parseApiError(err, 'Directory sign-in failed');
+      const parsed = parseApiError(err, 'Directory login failed');
+      setPassword('');
+      setTouchedFields((current) => ({ ...current, ldapPassword: false }));
+      setLoginErrorFocusTarget('ldap-username');
       setLoginError(parsed.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const hideDefaultBranding = !branding && !brandingFetchDone;
-  const safeBrandLogoSrc = logoObjectUrl;
-  const loginLogoHeightPx = Math.round(28 * ((branding?.logoScale ?? 100) / 100));
-  const brandTitle = typeof branding?.logoTitle === 'string' && branding.logoTitle.trim() ? branding.logoTitle.trim() : 'EnterpriseGlue';
-  const customBrandFontFamily = branding?.titleFontUrl ? 'PublicBrandingFont' : undefined;
-  const brandTitleWeight = typeof branding?.titleFontWeight === 'string' && branding.titleFontWeight.trim()
-    ? branding.titleFontWeight.trim()
-    : 'var(--font-weight-semibold)';
-  const loginTitleFontSizePx = Math.round(Math.max(branding?.titleFontSize ?? 14, 10) * 2);
+  const handleDirectLdapSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    touchFields('ldapUsername', 'ldapPassword');
+    const invalidUsername = requiredFieldError(email, 'Username');
+    const invalidPassword = requiredFieldError(password, 'Password');
+    if (invalidUsername || invalidPassword) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(invalidUsername ? 'ldap-username' : 'ldap-password')?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    submitDirectLdapLogin();
+  };
 
-  const loginTitleOffsetPx = (() => {
-    const raw = branding?.loginTitleVerticalOffset;
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
-    return Math.max(-50, Math.min(50, raw));
-  })();
-
-  const loginTitleColor = (() => {
-    const raw = branding?.loginTitleColor;
-    if (typeof raw !== 'string') return undefined;
-    const trimmed = raw.trim();
-    if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return undefined;
-    return trimmed;
-  })();
-
-  useEffect(() => {
-    document.title = brandTitle;
-  }, [brandTitle]);
+  const headerHomePath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
 
   const availableProviders = loginMethods?.providers || [];
   const visibleProviders = discoveredProviderIds
@@ -520,14 +377,22 @@ export default function Login() {
     && visibleProviders.length > 0 && loginStep === 'methods';
   const showProgressiveDiscovery = !isAdministratorRecovery && !directLdapProvider && !ssoLoading
     && loginMethods?.providerSelection === 'progressive' && loginStep === 'discover';
+  const primaryProviderId = !showLocalForm
+    ? visibleProviders.find((provider) => provider.preferred)?.id
+      || (visibleProviders.length === 1 ? visibleProviders[0].id : null)
+    : null;
 
   useEffect(() => {
     if (ssoLoading) return;
     const isFirstFocusableState = !hasAppliedFirstFocusableState.current;
     hasAppliedFirstFocusableState.current = true;
     window.requestAnimationFrame(() => {
-      if (loginError && errorRef.current) {
-        errorRef.current.focus({ preventScroll: true });
+      if (loginError) {
+        if (loginErrorFocusTarget === 'notification' && errorRef.current) {
+          errorRef.current.focus({ preventScroll: true });
+        } else {
+          document.getElementById(loginErrorFocusTarget)?.focus({ preventScroll: true });
+        }
         return;
       }
       if (redirectingProvider && transitionHeadingRef.current) {
@@ -550,6 +415,7 @@ export default function Login() {
   }, [
     directLdapProvider,
     loginError,
+    loginErrorFocusTarget,
     loginStep,
     redirectingProvider,
     showLocalForm,
@@ -559,55 +425,17 @@ export default function Login() {
   ]);
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      backgroundColor: 'var(--color-bg-secondary)',
-      padding: 'var(--spacing-6)'
-    }}>
-      <div style={{
-        background: 'var(--color-bg-primary)',
-        padding: 'var(--spacing-8)',
-        borderRadius: 'var(--border-radius-md)',
-        boxShadow: 'var(--shadow-md)',
-        width: '100%',
-        maxWidth: '440px'
-      }}>
-        {/* Logo + Name (matching header style, scaled up) */}
-        <div style={{ 
-          marginBottom: 'var(--spacing-6)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          gap: 'var(--spacing-3)',
-          width: '100%'
-        }}>
-          <img 
-            src={safeBrandLogoSrc || logoPng} 
-            alt="Logo" 
-            style={{ height: `${loginLogoHeightPx}px`, width: 'auto', visibility: hideDefaultBranding ? 'hidden' : 'visible' }}
-          />
-          <span style={{ 
-            fontSize: `${loginTitleFontSizePx}px`,
-            fontWeight: brandTitleWeight,
-            fontFamily: customBrandFontFamily || 'var(--font-primary)',
-            color: loginTitleColor || 'var(--color-text-primary)',
-            display: 'inline-block',
-            transform: loginTitleOffsetPx ? `translateY(${loginTitleOffsetPx}px)` : undefined,
-            visibility: hideDefaultBranding ? 'hidden' : 'visible',
-          }}>
-            {brandTitle}
-          </span>
-        </div>
+    <PublicAuthShell
+      title={isAdministratorRecovery ? 'Log in for administrator recovery' : 'Log in'}
+      homePath={headerHomePath}
+    >
 
         {isAdministratorRecovery && <InlineNotification
           kind="warning"
           lowContrast
           hideCloseButton
           title="Administrator recovery"
-          subtitle="Only the designated platform administrator can use this emergency sign-in with a local password. Use it only if your organization’s sign-in provider is unavailable."
+          subtitle="Only the designated platform administrator can use this emergency login with a local password. Use it only if your organization’s login provider is unavailable."
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
 
@@ -615,8 +443,8 @@ export default function Login() {
           kind="error"
           lowContrast
           hideCloseButton
-          title="No sign-in method is available"
-          subtitle="Ask a platform administrator to enable work-account sign-in or local password sign-in."
+          title="No login method is available"
+          subtitle="Ask a platform administrator to enable work-account login or local password login."
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
 
@@ -627,8 +455,8 @@ export default function Login() {
           inline
           actionButtonLabel="Retry"
           onActionButtonClick={loadLoginMethods}
-          title="Sign-in methods could not be loaded"
-          subtitle="Try again or contact a platform administrator. Sign-in remains unavailable until EnterpriseGlue can verify your organization’s sign-in settings."
+          title="Login methods could not be loaded"
+          subtitle="Try again or contact a platform administrator. Login remains unavailable until EnterpriseGlue can verify your organization’s login settings."
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
 
@@ -637,8 +465,8 @@ export default function Login() {
             kind="error"
             lowContrast
             hideCloseButton
-            title={isAdministratorRecovery ? 'Recovery sign-in failed' : 'Sign-in failed'}
-            subtitle={`${sentence(loginError)} Check the entered details or choose another sign-in method.`}
+            title={isAdministratorRecovery ? 'Recovery login failed' : 'Log in failed'}
+            subtitle={`${sentence(loginError)} Check the entered details or choose another login method.`}
             style={{ marginBottom: 'var(--spacing-5)' }}
           />
         </div>}
@@ -647,47 +475,78 @@ export default function Login() {
         {redirectingProvider ? (
           <div role="status" aria-live="polite" className="eg-login-redirect-status">
             <h2 ref={transitionHeadingRef} tabIndex={-1} style={{ fontSize: 'var(--text-18)', margin: '0 0 var(--spacing-3)' }}>
-              Opening {providerLoginLabel(redirectingProvider)}
+              Opening {redirectingProvider.displayName}
             </h2>
-            {redirectingProvider.organization && <p style={{ margin: '0 0 var(--spacing-4)', color: 'var(--cds-text-secondary)', overflowWrap: 'anywhere' }}>{redirectingProvider.organization}</p>}
-            <InlineLoading description="Connecting to your organization’s sign-in…" />
-            <Button type="button" kind="ghost" onClick={cancelProviderRedirect} style={{ width: '100%', marginTop: 'var(--spacing-4)' }}>
-              Choose another sign-in method
+            {redirectingProvider.organization && <p className="eg-login-supporting-copy">{redirectingProvider.organization}</p>}
+            <InlineLoading description="Connecting to your organization’s login…" />
+            <Button type="button" kind="ghost" size="md" onClick={cancelProviderRedirect} className="eg-login-secondary-action">
+              Choose another login method
             </Button>
           </div>
         ) : directLdapProvider ? (
-          <form onSubmit={(event) => { event.preventDefault(); submitDirectLdapLogin(); }}>
-            <h2 ref={chooserHeadingRef} tabIndex={-1} style={{ fontSize: 'var(--text-18)', margin: '0 0 var(--spacing-5)', overflowWrap: 'anywhere' }}>Sign in with {providerLoginLabel(directLdapProvider)}</h2>
+          <form onSubmit={handleDirectLdapSubmit} noValidate>
+            <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading">Log in with {directLdapProvider.displayName}</h2>
             <div style={{ marginBottom: 'var(--spacing-5)' }}>
-              <TextInput id="ldap-username" labelText="Username" placeholder="Enter your directory username" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLoading} />
+              <TextInput
+                id="ldap-username"
+                labelText="Username"
+                placeholder="Enter your directory username"
+                autoComplete="username"
+                value={email}
+                onChange={(event) => updateEmail(event.target.value)}
+                onBlur={() => touchFields('ldapUsername')}
+                invalid={Boolean(ldapUsernameError)}
+                invalidText={ldapUsernameError || undefined}
+                required
+                disabled={isLoading}
+              />
             </div>
             <div style={{ marginBottom: 'var(--spacing-6)' }}>
-              <PasswordInput id="ldap-password" labelText="Password" placeholder="Enter your directory password" autoComplete="current-password" showPasswordLabel="Show password" hidePasswordLabel="Hide password" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={isLoading} />
+              <PasswordInput
+                id="ldap-password"
+                labelText="Password"
+                placeholder="Enter your directory password"
+                autoComplete="current-password"
+                showPasswordLabel="Show password"
+                hidePasswordLabel="Hide password"
+                value={password}
+                onChange={(event) => updatePassword(event.target.value)}
+                onBlur={() => touchFields('ldapPassword')}
+                invalid={Boolean(ldapPasswordError)}
+                invalidText={ldapPasswordError || undefined}
+                required
+                disabled={isLoading}
+              />
             </div>
-            <Button type="submit" kind="primary" disabled={isLoading || !email || !password} style={{ width: '100%' }}>{isLoading ? 'Signing in...' : 'Sign in'}</Button>
-            <Button type="button" kind="ghost" disabled={isLoading} onClick={() => { setDirectLdapProvider(null); setPassword(''); setLoginStep('methods'); }} style={{ width: '100%', marginTop: 'var(--spacing-3)' }}>Choose another sign-in method</Button>
+            <Button type="submit" kind="primary" size="md" disabled={isLoading} className="eg-login-primary-action">{isLoading ? 'Logging in…' : 'Log in'}</Button>
+            <Button type="button" kind="ghost" size="md" disabled={isLoading} onClick={() => { setDirectLdapProvider(null); setPassword(''); setLoginError(null); setLoginStep('methods'); }} className="eg-login-secondary-action">Choose another login method</Button>
           </form>
         ) : showProgressiveDiscovery ? (
-          <form onSubmit={(event) => { event.preventDefault(); if (email) continueLoginDiscovery(); }}>
-            <h2 ref={chooserHeadingRef} tabIndex={-1} style={{ fontSize: 'var(--text-18)', margin: '0 0 var(--spacing-3)' }}>Sign in to your organization</h2>
-            <p style={{ margin: '0 0 var(--spacing-5)', color: 'var(--cds-text-secondary)' }}>Enter your work email and we’ll direct you to the right sign-in method.</p>
+          <form onSubmit={handleDiscoverySubmit} noValidate>
+            <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading eg-login-section-heading--with-copy">Use your work email</h2>
+            <p className="eg-login-intro-copy">Enter your work email and we’ll direct you to the right login method.</p>
             <div style={{ marginBottom: 'var(--spacing-6)' }}>
-              <TextInput id="login-discovery-email" labelText="Work email" placeholder="name@example.com" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={isLoading} />
+              <TextInput
+                id="login-discovery-email"
+                labelText="Work email"
+                placeholder="name@example.com"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => updateEmail(event.target.value)}
+                onBlur={() => touchFields('discoveryEmail')}
+                invalid={Boolean(discoveryEmailError)}
+                invalidText={discoveryEmailError || undefined}
+                required
+                disabled={isLoading}
+              />
             </div>
-            <Button type="submit" kind="primary" disabled={isLoading || !email} style={{ width: '100%' }}>Continue</Button>
-            <Button type="button" kind="ghost" onClick={() => { setDiscoveredProviderIds(null); setLoginStep('methods'); }} style={{ width: '100%', marginTop: 'var(--spacing-3)' }}>Choose a sign-in method instead</Button>
+            <Button type="submit" kind="primary" size="md" disabled={isLoading} className="eg-login-primary-action">Continue</Button>
+            <Button type="button" kind="ghost" size="md" onClick={() => { setDiscoveredProviderIds(null); setLoginError(null); setLoginStep('methods'); }} className="eg-login-secondary-action">Choose a login method instead</Button>
           </form>
         ) : showLocalForm ? (
-          <form
-            onSubmit={handleSubmit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isLoading && email && password) {
-                e.preventDefault();
-                submitLogin();
-              }
-            }}
-          >
-            <h2 ref={chooserHeadingRef} tabIndex={-1} style={{ fontSize: 'var(--text-18)', margin: '0 0 var(--spacing-5)' }}>{isAdministratorRecovery ? 'Recover platform access' : 'Sign in with email and password'}</h2>
+          <form onSubmit={handleSubmit} noValidate>
+            <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading">{isAdministratorRecovery ? 'Recovery credentials' : 'Email and password'}</h2>
             <div style={{ marginBottom: 'var(--spacing-5)' }}>
               <TextInput
                 id="email"
@@ -696,7 +555,10 @@ export default function Login() {
                 type="email"
                 autoComplete="username"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => updateEmail(event.target.value)}
+                onBlur={() => touchFields('email')}
+                invalid={Boolean(emailError)}
+                invalidText={emailError || undefined}
                 required
                 disabled={isLoading}
               />
@@ -711,7 +573,10 @@ export default function Login() {
                 showPasswordLabel="Show password"
                 hidePasswordLabel="Hide password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => updatePassword(event.target.value)}
+                onBlur={() => touchFields('password')}
+                invalid={Boolean(passwordError)}
+                invalidText={passwordError || undefined}
                 required
                 disabled={isLoading}
               />
@@ -720,25 +585,16 @@ export default function Login() {
             <Button
               type="submit"
               kind="primary"
-              disabled={isLoading || ssoLoading || !email || !password}
-              style={{ 
-                width: '100%',
-                backgroundColor: 'var(--eg-color-dark-gray)',
-                borderColor: 'var(--eg-color-dark-gray)',
-                fontWeight: 'var(--font-weight-semibold)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                paddingInline: '1rem'
-              }}
+              size="md"
+              disabled={isLoading || ssoLoading}
+              className="eg-login-primary-action"
             >
-              {isLoading ? 'Signing in...' : isAdministratorRecovery ? 'Sign in for recovery' : 'Sign in'}
+              {isLoading ? 'Logging in…' : isAdministratorRecovery ? 'Log in for recovery' : 'Log in'}
             </Button>
-            {!isAdministratorRecovery && <div style={{ textAlign: 'right', marginTop: 'var(--spacing-3)' }}>
-              <Link to={forgotPasswordPath} style={{ color: 'var(--cds-link-01)', fontSize: 'var(--text-14)' }}>
-                Forgot your password?
-              </Link>
+            {!isAdministratorRecovery && <div className="eg-login-forgot-password">
+              <CarbonLink as={RouterLink} to={forgotPasswordPath} size="sm">
+                Forgot password?
+              </CarbonLink>
             </div>}
           </form>
         ) : null}
@@ -746,7 +602,7 @@ export default function Login() {
         {/* SSO Providers */}
         {ssoLoading ? (
           <div role="status" aria-live="polite" style={{ display: 'flex', justifyContent: 'center', padding: 'var(--spacing-4)' }}>
-            <Loading small withOverlay={false} description="Loading sign-in options..." />
+            <Loading small withOverlay={false} description="Loading login options…" />
           </div>
         ) : showProviderChooser && !redirectingProvider && (
           <>
@@ -764,43 +620,41 @@ export default function Login() {
             </div>}
 
             {!showLocalForm && <div style={{ marginBottom: 'var(--spacing-5)' }}>
-              <h2 ref={chooserHeadingRef} tabIndex={-1} style={{ fontSize: 'var(--text-18)', margin: 0 }}>Choose how to sign in</h2>
+              <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading eg-login-section-heading--with-copy">Choose how to log in</h2>
               <p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Use your work account.</p>
             </div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+            <div className="eg-login-provider-list">
               {visibleProviders.map((provider) => {
-                const primary = visibleProviders.length === 1 && !showLocalForm;
+                const primary = provider.id === primaryProviderId;
                 const accessibleLabel = `Continue with ${provider.displayName}${provider.organization ? ` ${provider.organization}` : ''}`;
                 return (
-                  <ClickableTile
+                  <Button
                     key={provider.id}
-                    role="button"
+                    type="button"
+                    kind={primary ? 'primary' : 'tertiary'}
+                    size="lg"
                     aria-label={accessibleLabel}
-                    aria-disabled={isLoading}
-                    className={`eg-login-provider-tile${primary ? ' eg-login-provider-tile--primary' : ''}`}
+                    className="eg-login-provider-button"
                     renderIcon={LoginIcon}
                     onClick={() => handleSsoLogin(provider)}
                     disabled={isLoading}
                   >
-                    <span className="eg-login-provider-tile__content">
-                      <span
-                        className="eg-login-provider-tile__action"
-                        title={provider.displayName.length > MAX_LOGIN_LABEL_LENGTH ? provider.displayName : undefined}
-                      >
-                        Continue with {providerLoginLabel(provider)}
+                    <span className="eg-login-provider-button__content">
+                      <span className="eg-login-provider-button__action">
+                        Continue with {provider.displayName}
                       </span>
                       {provider.organization && (
-                        <span className="eg-login-provider-tile__supporting" title={provider.organization}>
+                        <span className="eg-login-provider-button__supporting">
                           {provider.organization}
                         </span>
                       )}
                     </span>
-                  </ClickableTile>
+                  </Button>
                 );
               })}
             </div>
-            {loginMethods?.providerSelection === 'progressive' && <Button type="button" kind="ghost" onClick={() => { setDiscoveredProviderIds(null); setLoginStep('discover'); }} style={{ width: '100%', marginTop: 'var(--spacing-3)' }}>Use a different email</Button>}
-            {loginMethods?.localPassword.enabled && !showLocalForm && <Button type="button" kind="ghost" onClick={() => setLoginStep('local')} style={{ width: '100%', marginTop: 'var(--spacing-3)' }}>Sign in with a local password</Button>}
+            {loginMethods?.providerSelection === 'progressive' && <Button type="button" kind="ghost" size="md" onClick={() => { setDiscoveredProviderIds(null); setLoginError(null); setLoginStep('discover'); }} className="eg-login-secondary-action">Use a different email</Button>}
+            {loginMethods?.localPassword.enabled && !showLocalForm && <Button type="button" kind="ghost" size="md" onClick={() => { setLoginError(null); setLoginStep('local'); }} className="eg-login-secondary-action">Use a local password</Button>}
           </>
         )}
 
@@ -813,15 +667,13 @@ export default function Login() {
             textAlign: 'center'
           }}>
             <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-3)' }}>
-              Don't have an account?{' '}
-              <Link to="/signup" style={{ color: 'var(--cds-link-01)' }}>
-                Sign up
-              </Link>
+              Need an account?{' '}
+              <CarbonLink as={RouterLink} to="/signup" inline>
+                Create account
+              </CarbonLink>
             </p>
           </div>
         )}
-      </div>
-
-    </div>
+    </PublicAuthShell>
   );
 }

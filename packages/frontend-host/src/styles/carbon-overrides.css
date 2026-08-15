@@ -23,6 +23,16 @@
   filter: invert(1) brightness(2);
 }
 
+/* The Carbon child SideNav is the compact replacement for header menus. At
+   the large breakpoint the existing horizontal navigation remains the single
+   navigation surface, so the responsive copy must not reserve or cover page
+   space. */
+@media (min-width: 66rem) {
+  .eg-responsive-global-navigation.cds--side-nav {
+    display: none;
+  }
+}
+
 /* -----------------------------------------
    3. PLATFORM SETTINGS PAGE - LAYOUT
    (Token colors now handled by Theme g10 wrapper)
@@ -75,70 +85,495 @@
   flex: 0 0 auto;
 }
 
-/* Keep the sign-in action and its optional organization as separate,
-   scannable content inside Carbon's interactive tile. */
-.eg-login-provider-tile.cds--tile--clickable {
-  position: relative;
-  display: block;
-  inline-size: 100%;
-  min-block-size: 4.75rem;
-  padding: var(--spacing-4) 3.5rem var(--spacing-4) var(--spacing-4);
-  border: 1px solid var(--cds-border-interactive);
-  background: var(--cds-layer);
-  text-align: start;
+.eg-settings-workspace {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  align-items: start;
+  min-block-size: 32rem;
+  border-block-start: 1px solid var(--cds-border-subtle);
 }
 
-.eg-login-provider-tile__content {
-  display: block;
+.eg-settings-local-navigation {
+  position: sticky;
+  inset-block-start: 0;
+  block-size: calc(100vh - 12rem);
+  min-block-size: 32rem;
+  border-inline-end: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
+  overflow-y: auto;
+}
+
+.eg-settings-local-navigation .cds--side-nav {
+  position: static;
+  inline-size: 100%;
+  max-inline-size: none;
+  block-size: auto;
+  min-block-size: 100%;
+  padding-block-start: var(--spacing-3);
+  transform: none;
+}
+
+.eg-settings-local-navigation .cds--side-nav__overlay {
+  display: none;
+}
+
+.eg-settings-content {
+  min-inline-size: 0;
+  padding: var(--spacing-6);
+  overflow-x: hidden;
+}
+
+.eg-settings-mobile-selector {
+  display: none;
+  padding-inline: var(--spacing-5);
+}
+
+.eg-project-governance-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-4);
   min-inline-size: 0;
 }
 
-.eg-login-provider-tile__action,
-.eg-login-provider-tile__supporting {
-  display: -webkit-box;
+.eg-project-governance-controls__project {
+  flex: 1 1 20rem;
+  min-inline-size: 0;
+  max-inline-size: 25rem;
+}
+
+.eg-project-governance-controls__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--spacing-2);
+}
+
+.eg-settings-workflow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inline-size: min(100%, 72rem);
+  max-block-size: calc(100vh - 13rem);
+  max-block-size: calc(100dvh - 13rem);
+  min-block-size: min(36rem, calc(100vh - 13rem));
+  min-block-size: min(36rem, calc(100dvh - 13rem));
+  margin-inline: auto;
+  border: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
   overflow: hidden;
+}
+
+.eg-settings-workflow__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-6);
+  padding: var(--spacing-6);
+  border-block-end: 1px solid var(--cds-border-subtle);
+  min-inline-size: 0;
+}
+
+.eg-settings-workflow__header > div {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.eg-settings-workflow__header h2 {
+  margin: 0;
+  color: var(--cds-text-primary);
+  font-size: var(--text-24);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.25;
   overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
-.eg-login-provider-tile__action {
-  color: inherit;
-  font-weight: var(--font-weight-semibold);
+.eg-settings-workflow__header p:not(.eg-settings-workflow__eyebrow) {
+  max-inline-size: 48rem;
+  margin: var(--spacing-2) 0 0;
+  color: var(--cds-text-secondary);
+  overflow-wrap: anywhere;
 }
 
-.eg-login-provider-tile__supporting {
+.eg-settings-workflow__body {
+  min-block-size: 0;
+  min-inline-size: 0;
+  padding: var(--spacing-6);
+  padding-block-end: calc(var(--spacing-6) + var(--spacing-5));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cds-border-strong-01) var(--cds-layer-01);
+}
+
+.eg-settings-workflow__body::-webkit-scrollbar {
+  inline-size: 0.75rem;
+}
+
+.eg-settings-workflow__body::-webkit-scrollbar-track {
+  background: var(--cds-layer-01);
+}
+
+.eg-settings-workflow__body::-webkit-scrollbar-thumb {
+  border: 3px solid var(--cds-layer-01);
+  border-radius: 999px;
+  background: var(--cds-border-strong-01);
+}
+
+.eg-settings-workflow__body:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+/* Grid and form-column display rules must not reveal fields from inactive
+ * workflow steps. */
+.eg-settings-workflow [hidden] {
+  display: none !important;
+}
+
+.eg-settings-workflow__body > .cds--inline-notification,
+.eg-settings-workflow__body > .cds--callout {
+  max-inline-size: none;
+  margin-block-end: var(--spacing-5);
+}
+
+.eg-settings-workflow .cds--actionable-notification,
+.eg-settings-workflow .cds--inline-notification,
+.eg-settings-workflow .cds--callout {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.eg-settings-workflow__body > .cds--progress {
+  margin-block-end: var(--spacing-6);
+}
+
+.eg-settings-workflow__fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.eg-settings-workflow__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1px;
+  padding: var(--spacing-5) var(--spacing-6);
+  border-block-start: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-02);
+  z-index: 2;
+  min-inline-size: 0;
+}
+
+@media (max-width: 66rem) {
+  .eg-settings-workspace {
+    display: block;
+    border-block-start: 0;
+  }
+
+  .eg-settings-local-navigation {
+    display: none;
+  }
+
+  .eg-settings-mobile-selector {
+    display: block;
+  }
+
+  .eg-settings-content {
+    padding: var(--spacing-5);
+  }
+
+  .eg-settings-workflow__header {
+    flex-direction: column;
+  }
+
+  .eg-settings-workflow {
+    max-block-size: calc(100vh - 11rem);
+    max-block-size: calc(100dvh - 11rem);
+    min-block-size: min(34rem, calc(100vh - 11rem));
+    min-block-size: min(34rem, calc(100dvh - 11rem));
+  }
+}
+
+@media (max-width: 42rem) {
+  .eg-settings-mobile-selector,
+  .eg-settings-content {
+    padding-inline: var(--spacing-4);
+  }
+
+  .eg-settings-workflow__header,
+  .eg-settings-workflow__body,
+  .eg-settings-workflow__actions {
+    padding-inline: var(--spacing-4);
+  }
+
+  .eg-settings-workflow__actions .cds--btn {
+    inline-size: 100%;
+    min-inline-size: 0 !important;
+    max-inline-size: none;
+    padding-inline: var(--spacing-3);
+    justify-content: center;
+  }
+
+  .eg-settings-workflow__actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .eg-settings-workflow {
+    max-block-size: calc(100vh - 19rem);
+    max-block-size: calc(100dvh - 19rem);
+    min-block-size: min(30rem, calc(100vh - 19rem));
+    min-block-size: min(30rem, calc(100dvh - 19rem));
+  }
+
+  .eg-settings-workflow__body > .cds--progress,
+  .eg-identity-mapping-flow > .cds--progress {
+    display: none;
+  }
+
+  .eg-settings-workflow__body > .eg-visually-hidden,
+  .eg-identity-mapping-flow > .eg-visually-hidden {
+    position: static;
+    display: block;
+    inline-size: auto;
+    block-size: auto;
+    margin: 0 0 var(--spacing-5);
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    color: var(--cds-text-secondary);
+    font-size: var(--text-14);
+  }
+
+  .eg-project-governance-controls,
+  .eg-project-governance-controls__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .eg-project-governance-controls__project {
+    flex-basis: auto;
+    max-inline-size: none;
+  }
+
+  .eg-project-governance-controls__actions .cds--btn {
+    inline-size: 100%;
+    max-inline-size: none;
+  }
+}
+
+/* At 200% zoom and other short viewports, use the page's single scroll
+ * container. A nested fixed-height workflow can place inputs beneath its
+ * action bar when the available block size is very small. */
+@media (max-height: 40rem) {
+  .eg-settings-workflow {
+    grid-template-rows: auto auto auto;
+    max-block-size: none;
+    min-block-size: 0;
+    overflow: visible;
+  }
+
+  .eg-settings-workflow__body {
+    overflow: visible;
+  }
+}
+
+/* The login composition follows Carbon's single-column login pattern while
+   preserving EnterpriseGlue branding. Interactive controls remain native
+   Carbon components so focus, hover, disabled, and high-contrast states are
+   supplied by the design system. */
+.eg-login-shell {
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  background: var(--cds-background);
+}
+
+.eg-login-header-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.eg-login-shell a.cds--header__name {
+  flex: 0 0 auto;
+  min-inline-size: max-content;
+  overflow: visible;
+}
+
+.eg-login-header-logo {
+  inline-size: auto;
+  object-fit: contain;
+}
+
+.eg-login-header-title {
+  display: inline-block;
+  color: #f4f4f4;
+  line-height: 1.25rem;
+}
+
+.eg-header-brand-title {
+  color: #f4f4f4;
+}
+
+.eg-login-page {
+  display: flex;
+  justify-content: center;
+  min-block-size: calc(100vh - 3rem);
+  min-block-size: calc(100dvh - 3rem);
+  margin-block-start: 3rem;
+  padding: var(--spacing-6);
+  overflow-y: auto;
+  background: var(--cds-background);
+}
+
+.eg-login-panel {
+  inline-size: 100%;
+  max-inline-size: 27.5rem;
+  margin-block: auto;
+  padding: var(--spacing-8);
+  border: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer);
+  box-shadow: none;
+}
+
+.eg-login-panel--wide {
+  max-inline-size: 40rem;
+}
+
+.eg-login-title {
+  margin: 0 0 var(--spacing-6);
+  color: var(--cds-text-primary);
+  font-size: var(--text-28);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.25;
+}
+
+.eg-public-auth-description {
+  margin: calc(-1 * var(--spacing-4)) 0 var(--spacing-6);
+  color: var(--cds-text-secondary);
+  line-height: 1.5;
+}
+
+.eg-public-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  margin-block-start: var(--spacing-6);
+}
+
+.eg-public-auth-actions .cds--btn {
+  flex: 1 1 12rem;
+  max-inline-size: none;
+}
+
+.eg-login-section-heading {
+  margin: 0 0 var(--spacing-5);
+  color: var(--cds-text-primary);
+  font-size: var(--text-18);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.eg-login-section-heading--with-copy {
+  margin-block-end: 0;
+}
+
+.eg-login-intro-copy,
+.eg-login-supporting-copy {
+  color: var(--cds-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.eg-login-intro-copy {
+  margin: var(--spacing-2) 0 var(--spacing-5);
+}
+
+.eg-login-supporting-copy {
+  margin: 0 0 var(--spacing-4);
+}
+
+.eg-login-primary-action.cds--btn,
+.eg-login-secondary-action.cds--btn {
+  inline-size: 100%;
+  max-inline-size: none;
+  text-align: start;
+}
+
+.eg-login-secondary-action.cds--btn {
+  margin-block-start: var(--spacing-3);
+}
+
+.eg-login-forgot-password {
+  margin-block-start: var(--spacing-3);
+  text-align: start;
+}
+
+.eg-login-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.eg-login-provider-button.cds--btn {
+  inline-size: 100%;
+  max-inline-size: none;
+  min-block-size: 4.75rem;
+  block-size: auto;
+  align-items: center;
+  white-space: normal;
+  text-align: start;
+}
+
+.eg-login-provider-button__content {
+  display: block;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  padding-inline-end: var(--spacing-5);
+}
+
+.eg-login-provider-button__action,
+.eg-login-provider-button__supporting {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.eg-login-provider-button__supporting {
   margin-block-start: var(--spacing-2);
   color: var(--cds-text-secondary);
   font-size: var(--text-12);
 }
 
-.eg-login-provider-tile.cds--tile--clickable .cds--tile--icon {
-  inset-block-start: 50%;
-  inset-block-end: auto;
-  transform: translateY(-50%);
-}
-
-.eg-login-provider-tile--primary.cds--tile--clickable,
-.eg-login-provider-tile--primary.cds--tile--clickable:visited {
-  border-color: var(--cds-button-primary);
-  background: var(--cds-button-primary);
-  color: var(--cds-text-on-color);
-}
-
-.eg-login-provider-tile--primary.cds--tile--clickable:hover,
-.eg-login-provider-tile--primary.cds--tile--clickable:active {
-  background: var(--cds-button-primary-hover);
-  color: var(--cds-text-on-color);
-}
-
-.eg-login-provider-tile--primary .eg-login-provider-tile__supporting {
+.eg-login-provider-button.cds--btn--primary .eg-login-provider-button__supporting {
   color: var(--cds-text-on-color);
   opacity: 0.85;
 }
 
-.eg-login-provider-tile--primary.cds--tile--clickable .cds--tile--icon {
-  fill: var(--cds-icon-on-color);
+.eg-login-provider-button.cds--btn--tertiary:hover .eg-login-provider-button__supporting,
+.eg-login-provider-button.cds--btn--tertiary:active .eg-login-provider-button__supporting {
+  color: var(--cds-text-on-color);
+}
+
+@media (max-width: 42rem) {
+  .eg-login-page {
+    padding: 0;
+  }
+
+  .eg-login-panel {
+    min-block-size: calc(100vh - 3rem);
+    min-block-size: calc(100dvh - 3rem);
+    max-inline-size: none;
+    margin-block: 0;
+    padding: var(--spacing-6);
+    border: 0;
+    box-shadow: none;
+  }
 }
 
 /* Toolbar controls use the search field's outline for separation. Remove the
@@ -163,49 +598,76 @@
   border-block-end: 0;
 }
 
-/* Protocol settings remain readable at laptop widths. Long forms scroll in the
-   modal body while the Carbon header and action footer stay fixed. */
-.eg-identity-provider-form {
+/* Productive settings forms use one primary reading column. Related policy
+   controls may share a row when they describe the same sign-in decision. */
+.eg-login-policy-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-5);
+  gap: var(--spacing-6);
   align-items: start;
 }
 
-.eg-identity-provider-form .cds--form-item {
-  margin: 0;
+.eg-settings-field-description {
+  margin: var(--spacing-2) 0 0;
+  color: var(--cds-text-secondary);
+  font-size: var(--text-12);
+  line-height: 1.4;
 }
 
-.eg-identity-provider-section {
-  grid-column: 1 / -1;
+.eg-settings-form-column {
   display: grid;
-  grid-template-columns: subgrid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-5);
+  inline-size: min(100%, 40rem);
   min-inline-size: 0;
-  padding-block-start: var(--spacing-5);
-  border-block-start: 1px solid var(--cds-border-subtle);
 }
 
-.eg-identity-provider-section:first-child {
-  padding-block-start: 0;
-  border-block-start: 0;
-}
-
-.eg-identity-provider-section > h3 {
-  grid-column: 1 / -1;
+.eg-settings-form-column .cds--form-item {
   margin: 0;
+}
+
+.eg-settings-step-introduction h3 {
+  margin: 0 0 var(--spacing-2);
   font-size: 1rem;
   line-height: 1.4;
 }
 
-.eg-identity-provider-section > .cds--inline-notification {
-  grid-column: 1 / -1;
-  max-inline-size: none;
+.eg-settings-step-introduction p {
+  margin: 0;
+  color: var(--cds-text-secondary);
+  line-height: 1.5;
 }
 
-.eg-identity-provider-section > .cds--callout {
-  grid-column: 1 / -1;
-  max-inline-size: none;
+.eg-settings-review-list {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) minmax(0, 2fr);
+  column-gap: var(--spacing-5);
+  row-gap: var(--spacing-3);
+  margin: 0;
+  padding: var(--spacing-5);
+  border: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-02);
+}
+
+.eg-settings-review-list dt {
+  color: var(--cds-text-secondary);
+}
+
+.eg-settings-review-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.eg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .eg-login-experience-preview {
@@ -286,22 +748,6 @@
   inline-size: 100%;
 }
 
-.cds--modal-container:has(.eg-identity-provider-form) {
-  block-size: min(92vh, 54rem) !important;
-  max-block-size: 92vh;
-}
-
-/* The provider form is intentionally dense. Without a zero minimum grid size,
-   its Carbon modal-content row expands to the form's intrinsic height instead
-   of becoming the intended scroll region. Lower OIDC/SAML/LDAP controls then
-   sit behind the fixed footer on laptop-height viewports. */
-.cds--modal-container:has(.eg-identity-provider-form) .cds--modal-content {
-  min-block-size: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-block-end: var(--spacing-7);
-}
-
 @media (max-width: 42rem) {
   .eg-settings-section-header {
     align-items: flex-start;
@@ -311,12 +757,17 @@
     flex-basis: 100%;
   }
 
-  .eg-identity-provider-form {
+  .eg-login-policy-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .eg-identity-provider-section {
+  .eg-settings-review-list {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--spacing-2);
+  }
+
+  .eg-settings-review-list dd + dt {
+    margin-block-start: var(--spacing-3);
   }
 
   .eg-login-experience-preview__heading {
@@ -329,18 +780,19 @@
   }
 }
 
-.cds--modal-container:has(.eg-identity-mapping-flow) {
-  block-size: min(90vh, 52rem);
-}
-
-.cds--modal-container:has(.eg-identity-mapping-flow) .cds--modal-content {
-  min-block-size: 0;
-  overscroll-behavior: contain;
-}
-
 .eg-identity-mapping-flow {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-6);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.eg-identity-mapping-flow > fieldset,
+.eg-identity-mapping-flow > fieldset > div,
+.eg-identity-mapping-flow > div {
+  inline-size: min(100%, 40rem);
+  min-inline-size: 0;
 }
 
 .eg-identity-mapping-flow > .cds--progress {
@@ -364,6 +816,14 @@
   display: grid;
   gap: var(--spacing-5);
   margin-block: var(--spacing-5) var(--spacing-2);
+}
+
+#main-content:focus {
+  outline: none;
+}
+
+#main-content h1[tabindex="-1"]:focus {
+  outline: none;
 }
 
 .eg-permission-implications {
@@ -544,3 +1004,255 @@
  [data-eg-project-members-roles] .cds--checkbox-label {
    color: var(--cds-text-primary, #161616) !important;
  }
+
+/* Source-aware enterprise user directory and details. */
+.eg-user-directory-grid {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.eg-user-directory-shell {
+  min-inline-size: 0;
+}
+
+.eg-user-directory-page-header {
+  margin-block-end: var(--spacing-5);
+}
+
+.eg-user-directory-notification {
+  inline-size: 100%;
+  max-inline-size: none;
+  margin-block-end: var(--spacing-5);
+}
+
+.eg-user-directory-toolbar {
+  display: grid;
+  grid-template-columns: minmax(20rem, 7fr) repeat(3, minmax(10rem, 3fr)) auto;
+  align-items: end;
+  column-gap: var(--spacing-4);
+  row-gap: var(--spacing-4);
+  padding: var(--spacing-4);
+  margin-block-end: var(--spacing-4);
+  background: var(--cds-layer-01);
+}
+
+.eg-user-directory-table-container {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.eg-user-directory-table-wrap {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+.eg-user-directory-table {
+  min-inline-size: 79rem;
+  table-layout: fixed;
+}
+
+.eg-user-directory-table th {
+  vertical-align: middle;
+}
+
+.eg-user-directory-table tbody td {
+  vertical-align: top;
+  padding-block: var(--spacing-3);
+}
+
+.eg-user-directory-table th:nth-child(1) { inline-size: 14rem; }
+.eg-user-directory-table th:nth-child(2) { inline-size: 6rem; }
+.eg-user-directory-table th:nth-child(3) { inline-size: 10rem; }
+.eg-user-directory-table th:nth-child(4) { inline-size: 9rem; }
+.eg-user-directory-table th:nth-child(5) { inline-size: 9rem; }
+.eg-user-directory-table th:nth-child(6) { inline-size: 10rem; }
+.eg-user-directory-table th:nth-child(7) { inline-size: 10rem; }
+.eg-user-directory-table th:nth-child(8) { inline-size: 8rem; }
+.eg-user-directory-table th:nth-child(9) { inline-size: 3rem; }
+
+.eg-user-directory-cell,
+.eg-user-directory-user-cell {
+  min-inline-size: 0;
+}
+
+.eg-user-directory-user-cell strong,
+.eg-user-directory-user-cell span {
+  display: block;
+}
+
+.eg-user-directory-user-cell strong + span {
+  margin-block-start: var(--spacing-1);
+}
+
+.eg-user-directory-tag-stack,
+.eg-user-directory-source-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  min-inline-size: 0;
+}
+
+.eg-user-directory-tag-stack .cds--tag,
+.eg-user-directory-source-stack .cds--tag {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+}
+
+.eg-user-directory-user-cell span,
+.eg-secondary-text {
+  color: var(--cds-text-secondary);
+  font-size: var(--cds-label-01-font-size, 0.75rem);
+}
+
+.eg-user-detail-tabs {
+  margin-top: var(--spacing-5);
+}
+
+.eg-user-detail-page-header {
+  margin-block-end: var(--spacing-4);
+}
+
+.eg-user-detail-tabs .cds--tab-content {
+  padding-inline: 0;
+}
+
+.eg-user-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-5);
+  margin: 0;
+}
+
+.eg-user-detail-definition dt {
+  color: var(--cds-text-secondary);
+  font-size: var(--cds-label-01-font-size, 0.75rem);
+  margin-bottom: var(--spacing-2);
+}
+
+.eg-user-detail-definition dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.eg-user-detail-section-heading {
+  margin: 0 0 var(--spacing-4);
+  font-size: var(--cds-heading-03-font-size, 1.25rem);
+  font-weight: 400;
+}
+
+.eg-user-detail-field-ownership {
+  margin-block-start: var(--spacing-6);
+  padding: var(--spacing-5);
+  background: var(--cds-layer-01);
+}
+
+.eg-user-detail-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-3);
+  background: transparent;
+}
+
+.eg-user-detail-card-grid > .cds--tile {
+  min-width: 0;
+  padding: var(--spacing-5);
+  border: 1px solid var(--cds-border-subtle-01);
+}
+
+.eg-user-detail-list {
+  display: grid;
+  gap: 1px;
+  background: var(--cds-border-subtle-01);
+}
+
+.eg-user-detail-list h3,
+.eg-user-detail-card-grid h3 {
+  margin: var(--spacing-3) 0;
+  font-size: var(--cds-heading-compact-01-font-size, 0.875rem);
+}
+
+.eg-provisioning-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-4);
+  margin-top: var(--spacing-5);
+}
+
+.eg-provisioning-form-grid > :last-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1055px) {
+  .eg-user-directory-toolbar {
+    grid-template-columns: minmax(14rem, 1fr) repeat(2, minmax(9rem, 1fr));
+  }
+
+  .eg-user-directory-toolbar > :nth-child(4),
+  .eg-user-directory-toolbar > :nth-child(5) {
+    grid-column: auto;
+  }
+
+  .eg-user-detail-grid,
+  .eg-user-detail-card-grid,
+  .eg-provisioning-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 671px) {
+  .eg-page-header {
+    max-width: 100%;
+  }
+
+  .eg-page-header__identity {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .eg-page-header__identity > :last-child {
+    min-width: 0;
+  }
+
+  .eg-page-header__actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(4rem, auto);
+    align-items: stretch !important;
+    width: 100%;
+  }
+
+  .eg-page-header__actions > .cds--btn {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-block-size: 4rem;
+    max-block-size: none;
+    block-size: 100%;
+    align-self: stretch;
+  }
+
+  .eg-provisioning-directory-title > h3 {
+    flex-basis: 100%;
+  }
+
+  .eg-user-directory-toolbar,
+  .eg-user-detail-grid,
+  .eg-user-detail-card-grid,
+  .eg-provisioning-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .eg-user-directory-toolbar > * {
+    grid-column: 1 !important;
+  }
+
+  .eg-provisioning-form-grid > * {
+    grid-column: 1 !important;
+  }
+
+  .eg-user-detail-tabs .cds--tabs__nav {
+    overflow-x: auto;
+  }
+}

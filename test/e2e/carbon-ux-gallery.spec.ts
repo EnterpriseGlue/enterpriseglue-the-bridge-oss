@@ -349,7 +349,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     }));
 
     await page.goto('/admin/users');
-    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'User management' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Access source' })).toBeVisible();
     await expect(page.getByText('SSO-managed', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '02-user-management-platform-role.jpg');
@@ -578,8 +578,7 @@ test.describe('Carbon UX screenshot gallery', () => {
       ],
     }));
 
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Engines', exact: true }).click();
+    await page.goto('/admin/settings/engines');
     await expect(page.getByText('Changes save automatically.', { exact: true })).toBeVisible();
     await expect(page.getByRole('radio', { name: /Hybrid ownership/ })).toBeChecked();
     await captureManualScreenshot(page, '29-engine-onboarding-and-authorization-modes.jpg');
@@ -608,7 +607,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '75-engine-governance-modes-narrow.jpg', { stabilize: false });
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    await page.getByRole('tab', { name: 'Role Library', exact: true }).click();
+    await page.goto('/admin/settings/role-library');
     await page.getByRole('button', { name: /Workflow Operator/ }).click();
     await expect(page.locator('#role-library-edit-name')).toHaveValue('Workflow Operator');
     await expect(page.getByText('3 selected', { exact: true }).first()).toBeVisible();

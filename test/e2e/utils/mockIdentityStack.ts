@@ -18,7 +18,7 @@ export class MockBrowserIdentityStack {
     id: 'browser-oidc-provider',
     key: 'identity.oidc.browser-mock',
     displayName: 'Browser identity provider',
-    organization: 'EnterpriseGlue test',
+    organization: 'EnterpriseGlue test' as string | null,
     displayOrder: 0,
     isPreferred: true,
     loginDomainsJson: JSON.stringify(['example.test']),
@@ -48,14 +48,14 @@ export class MockBrowserIdentityStack {
     providerKey: this.provider.key,
     targetGroupId: 'browser-group',
     targetGroupKey: 'group.browser-operators',
-    entitlementType: 'group' as const,
-    externalId: 'operators',
-    matchOperator: 'exact' as const,
-    syncMode: 'authoritative' as const,
+    entitlementType: 'group' as 'group' | 'role' | 'attribute' | 'authenticated',
+    externalId: 'operators' as string | null,
+    matchOperator: 'exact' as 'exact' | 'contains' | 'prefix' | 'regex' | 'exists',
+    syncMode: 'authoritative' as 'authoritative' | 'additive',
     isActive: true,
     configKey: null,
-    sourceRef: null,
-    ownershipMode: 'manual' as const,
+    sourceRef: null as string | null,
+    ownershipMode: 'manual' as 'manual' | 'config_warn' | 'config_locked',
   };
 
   async install(page: Page, appOrigin: string): Promise<void> {
@@ -126,6 +126,8 @@ export class MockBrowserIdentityStack {
             'platform:config-bundles:apply', 'platform:config-bundles:export',
             'platform:sso-providers:view', 'platform:sso-providers:manage',
             'platform:sso-assignments:view', 'platform:sso-assignments:manage',
+            'platform:users:view', 'platform:users:create', 'platform:users:update',
+            'platform:users:deactivate', 'platform:users:unlock',
           ],
           projects: [], engines: [], generatedAt: Date.now(),
           authorizationVersion: 'browser-authz-v1',
@@ -133,6 +135,96 @@ export class MockBrowserIdentityStack {
       }
       if (path === '/api/dashboard/context') return json(route, { isPlatformAdmin: true, canViewActiveUsers: false, canViewEngines: false, canViewProcessData: false, canViewDeployments: false, canViewMetrics: false });
       if (path === '/api/dashboard/stats') return json(route, { totalProjects: 0, totalFiles: 0, fileTypes: { bpmn: 0, dmn: 0, form: 0 } });
+      if (path === '/api/t/default/invitations/capabilities' || path === '/api/invitations/capabilities') {
+        return json(route, { ssoRequired: true, emailConfigured: true });
+      }
+      const directoryUsers = [
+        {
+          id: 'browser-directory-user', email: 'ada.lovelace@example.test', firstName: 'Ada', lastName: 'Lovelace', displayName: 'Ada Lovelace',
+          status: 'active', platformRole: 'user', authenticationSources: ['oidc'], provisioningSource: 'scim',
+          provisioningDirectoryKey: 'entra-workforce', lastSignInAt: Date.UTC(2026, 7, 14, 8, 30),
+          lastProvisionedAt: Date.UTC(2026, 7, 14, 8, 15), provisioningHealth: 'healthy',
+        },
+        {
+          id: 'browser-jit-user', email: 'grace.hopper@example.test', firstName: 'Grace', lastName: 'Hopper', displayName: 'Grace Hopper',
+          status: 'active', platformRole: 'admin', authenticationSources: ['saml'], provisioningSource: 'jit',
+          provisioningDirectoryKey: null, lastSignInAt: Date.UTC(2026, 7, 13, 16, 45), lastProvisionedAt: null, provisioningHealth: 'not_applicable',
+        },
+        {
+          id: 'browser-admin-user', email: 'browser.admin@example.test', firstName: 'Browser', lastName: 'Admin', displayName: 'Browser Admin',
+          status: 'active', platformRole: 'admin', authenticationSources: ['local', 'recovery'], provisioningSource: 'none',
+          provisioningDirectoryKey: null, lastSignInAt: Date.UTC(2026, 7, 14, 9, 0), lastProvisionedAt: null, provisioningHealth: 'not_applicable',
+        },
+        {
+          id: 'browser-suspended-user', email: 'former.employee@example.test', firstName: 'Former', lastName: 'Employee', displayName: 'Former Employee',
+          status: 'deactivated', platformRole: 'user', authenticationSources: ['none'], provisioningSource: 'scim',
+          provisioningDirectoryKey: 'entra-workforce', lastSignInAt: null, lastProvisionedAt: Date.UTC(2026, 7, 12, 12, 0), provisioningHealth: 'warning',
+        },
+      ];
+      if (path === '/api/users/directory') return json(route, { items: directoryUsers, total: directoryUsers.length, limit: 200, offset: 0 });
+      if (path === '/api/users/browser-directory-user/identity-context') return json(route, {
+        user: directoryUsers[0],
+        linkedIdentities: [
+          { id: 'linked-idp-1', sourceType: 'identity_provider', sourceKey: 'identity.oidc.browser-mock', sourceName: 'Microsoft Entra ID', externalSubject: 'entra:ada-lovelace', status: 'active', linkedAt: Date.UTC(2026, 6, 1), lastSeenAt: Date.UTC(2026, 7, 14, 8, 30) },
+          { id: 'linked-scim-1', sourceType: 'provisioning_directory', sourceKey: 'entra-workforce', sourceName: 'Microsoft Entra workforce', externalSubject: '00u-ada-lovelace', status: 'active', linkedAt: Date.UTC(2026, 6, 1), lastSeenAt: Date.UTC(2026, 7, 14, 8, 15) },
+        ],
+        fieldOwnership: [
+          { field: 'email', owner: 'directory', sourceKey: 'entra-workforce' },
+          { field: 'firstName', owner: 'directory', sourceKey: 'entra-workforce' },
+          { field: 'lastName', owner: 'directory', sourceKey: 'entra-workforce' },
+          { field: 'displayName', owner: 'directory', sourceKey: 'entra-workforce' },
+          { field: 'active', owner: 'directory', sourceKey: 'entra-workforce' },
+        ],
+        recoveryAdministrator: false,
+      });
+      if (path === '/api/users/browser-directory-user/effective-access') return json(route, {
+        userId: 'browser-directory-user', platformRole: 'user', evaluatedAt: Date.UTC(2026, 7, 14, 9, 5),
+        lineage: [
+          { sourceType: 'directory_mapping', sourceId: 'map-finance', sourceName: 'Entra Finance operators', assignmentType: 'group', assignmentId: 'group-finance', assignmentName: 'Finance operators', active: true },
+          { sourceType: 'directory_mapping', sourceId: 'map-process-viewer', sourceName: 'Entra workforce role mapping', assignmentType: 'role', assignmentId: 'role-process-viewer', assignmentName: 'Process viewer', active: true },
+          { sourceType: 'configuration', sourceId: 'config:baseline', sourceName: 'Platform baseline', assignmentType: 'platform_role', assignmentId: 'user', assignmentName: 'Standard user', active: true },
+        ],
+      });
+      if (path === '/api/users/browser-directory-user/sessions') return json(route, {
+        userId: 'browser-directory-user', sessions: [
+          { id: 'session-browser-1', createdAt: Date.UTC(2026, 7, 14, 8, 30), lastUsedAt: Date.UTC(2026, 7, 14, 9, 2), expiresAt: Date.UTC(2026, 7, 21, 8, 30), revokedAt: null, authenticationSource: 'oidc', ipAddress: '192.0.2.44', userAgent: 'Chrome on managed macOS' },
+        ],
+      });
+      if (path === '/api/users/browser-directory-user/audit') return json(route, {
+        userId: 'browser-directory-user', events: [
+          { id: 'audit-browser-1', action: 'identity.provisioning.user.update', outcome: 'success', actorId: null, sourceType: 'scim', reason: 'Directory profile reconciliation', occurredAt: Date.UTC(2026, 7, 14, 8, 15) },
+          { id: 'audit-browser-2', action: 'auth.login.success', outcome: 'success', actorId: 'browser-directory-user', sourceType: 'oidc', reason: 'Enterprise SSO', occurredAt: Date.UTC(2026, 7, 14, 8, 30) },
+        ],
+      });
+      if (/^\/api\/users\/browser-directory-user\/(?:deactivate|reactivate|revoke-sessions)$/.test(path) && request.method() === 'POST') {
+        const action = path.split('/').pop();
+        return json(route, { userId: 'browser-directory-user', status: action === 'deactivate' ? 'deactivated' : 'active', authSessionVersion: 2, changedAt: Date.now() });
+      }
+      const provisioningDirectory = {
+        id: 'browser-directory-1', tenantId: null, key: 'entra-workforce', directoryKeyIdentity: 'global:entra-workforce',
+        displayName: 'Microsoft Entra workforce', description: 'Authoritative employee and group lifecycle', type: 'scim_v2',
+        identityProviderKey: 'identity.oidc.browser-mock', authoritative: true, status: 'active', ownershipMode: 'manual',
+        sourceRef: null, sourceHash: null, credentialSecretRef: null, lastAppliedAt: null, driftStatus: null,
+        createdAt: Date.UTC(2026, 6, 1), updatedAt: Date.UTC(2026, 7, 14, 8, 15), archivedAt: null,
+      };
+      const provisioningCredentials = [{
+        id: 'browser-scim-credential', directoryId: provisioningDirectory.id, name: 'Entra production', fingerprint: 'sha256:75e4a84f1a62',
+        status: 'active', createdAt: Date.UTC(2026, 6, 1), expiresAt: Date.UTC(2027, 0, 1), overlapEndsAt: null,
+        lastUsedAt: Date.UTC(2026, 7, 14, 8, 15), revokedAt: null,
+      }];
+      if (path === '/api/identity/provisioning-directories' && request.method() === 'GET') return json(route, { items: [provisioningDirectory], total: 1, limit: 200, offset: 0 });
+      if (path === '/api/identity/provisioning-directories/entra-workforce/credentials' && request.method() === 'GET') return json(route, { items: provisioningCredentials });
+      if (path === '/api/identity/provisioning-directories/entra-workforce/credentials' && request.method() === 'POST') return json(route, {
+        credential: { ...provisioningCredentials[0], id: 'browser-new-credential', name: 'Directory provisioning', fingerprint: 'sha256:1d423f9940bb', lastUsedAt: null },
+        clientId: 'browser-new-credential',
+        token: 'eg_scim_7bd083f6d75a4b6dbaf3_reveal_once',
+        tokenEndpointPath: '/scim/v2/entra-workforce/oauth/token',
+      }, 201);
+      if (path === '/api/identity/provisioning-directories/entra-workforce/events') return json(route, { items: [
+        { id: 'diag-1', directoryId: provisioningDirectory.id, requestId: 'req-20260814-001', eventType: 'User.patch', resourceType: 'User', resourceId: '00u-ada-lovelace', userId: 'browser-directory-user', status: 'success', code: null, message: 'User attributes reconciled', occurredAt: Date.UTC(2026, 7, 14, 8, 15) },
+        { id: 'diag-2', directoryId: provisioningDirectory.id, requestId: 'req-20260814-002', eventType: 'Group.membership.replace', resourceType: 'Group', resourceId: 'finance-operators', userId: null, status: 'success', code: null, message: 'Group membership synchronized', occurredAt: Date.UTC(2026, 7, 14, 8, 16) },
+      ] });
+      if (path === '/api/identity/provisioning-directories/entra-workforce/test' && request.method() === 'POST') return json(route, { status: 'ready', directoryStatus: 'active', activeCredentialCount: 1, endpointPath: '/scim/v2/entra-workforce' });
       if (path === '/engines-api/engines' || path === '/api/users') return json(route, []);
       if (path === '/api/admin/settings') return json(route, {
         inviteAllowAllDomains: true,
@@ -142,7 +234,18 @@ export class MockBrowserIdentityStack {
       });
       if (path === '/api/admin/environments' || path === '/api/admin/projects' || path === '/api/admin/engines') return json(route, []);
       if (path === '/api/sso/providers' || path === '/api/identity/providers/environment-migration-drafts') return json(route, []);
-      if (path === '/api/identity/providers') return json(route, [this.provider]);
+      if (path === '/api/identity/providers' && request.method() === 'GET') return json(route, [this.provider]);
+      if (path === '/api/identity/providers' && request.method() === 'POST') {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        if (typeof body.key === 'string') this.provider.key = body.key;
+        if (typeof body.displayName === 'string') this.provider.displayName = body.displayName;
+        if (typeof body.organization === 'string' || body.organization === null) this.provider.organization = body.organization as string | null;
+        if (typeof body.isEnabled === 'boolean') this.provider.isEnabled = body.isEnabled;
+        if (body.authenticationMode === 'direct' || body.authenticationMode === 'claims_only') this.provider.authenticationMode = body.authenticationMode;
+        if (body.configuration && typeof body.configuration === 'object') this.provider.configurationJson = JSON.stringify(body.configuration);
+        if (body.sync && typeof body.sync === 'object') this.provider.syncJson = JSON.stringify(body.sync);
+        return json(route, this.provider, 201);
+      }
       if (path === `/api/identity/providers/${this.provider.key}` && request.method() === 'PUT') {
         const body = request.postDataJSON() as Partial<typeof this.provider>;
         if (typeof body.isEnabled === 'boolean') this.provider.isEnabled = body.isEnabled;
@@ -176,7 +279,17 @@ export class MockBrowserIdentityStack {
         this.events.push('membership_replayed');
         return json(route, { runId: 'browser-replay-run', scanned: 1, created: 1, removed: 0, failed: 0, truncated: false, nextCursor: null });
       }
-      if (path === '/api/identity/mappings') return json(route, [this.mapping]);
+      if (path === '/api/identity/mappings' && request.method() === 'GET') return json(route, [this.mapping]);
+      if (path === '/api/identity/mappings' && request.method() === 'POST') {
+        const body = request.postDataJSON() as Partial<typeof this.mapping>;
+        if (typeof body.providerKey === 'string') this.mapping.providerKey = body.providerKey;
+        if (typeof body.targetGroupKey === 'string') this.mapping.targetGroupKey = body.targetGroupKey;
+        if (body.entitlementType) this.mapping.entitlementType = body.entitlementType;
+        if (typeof body.externalId === 'string' || body.externalId === null) this.mapping.externalId = body.externalId;
+        if (body.matchOperator) this.mapping.matchOperator = body.matchOperator;
+        if (body.syncMode) this.mapping.syncMode = body.syncMode;
+        return json(route, this.mapping, 201);
+      }
       if (path === `/api/identity/mappings/${this.mapping.id}` && request.method() === 'PUT') {
         const body = request.postDataJSON() as Partial<typeof this.mapping>;
         if (typeof body.isActive === 'boolean') this.mapping.isActive = body.isActive;

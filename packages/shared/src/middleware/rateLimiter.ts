@@ -251,6 +251,33 @@ export const identityAdminLimiter = rateLimit({
   keyGenerator: (req) => getClientIdentifier(req),
 });
 
+/** Machine provisioning is isolated from browser and broad API budgets. */
+export const scimProvisioningLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: (() => {
+    const configured = Number(process.env.EG_SCIM_RATE_LIMIT_MAX);
+    return Number.isInteger(configured) && configured > 0
+      ? configured
+      // 30,000 requests per 15 minutes sustains 33 requests/second for a
+      // credential, above Microsoft Entra's 25 requests/second per-tenant
+      // gallery-readiness baseline while retaining a bounded abuse budget.
+      : process.env.NODE_ENV === 'production' ? 30_000 : 1_000_000;
+  })(),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.provisioning?.credential?.id
+    ? `scim-credential:${req.provisioning.credential.id}`
+    : getClientIdentifier(req),
+  handler: (_req, res) => {
+    res.status(429).type('application/scim+json').json({
+      schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
+      status: '429',
+      scimType: 'tooMany',
+      detail: 'Too many provisioning requests; retry after the advertised rate-limit window',
+    });
+  },
+});
+
 /** Network and reconciliation operations are expensive and intentionally use the smallest budget. */
 export const reconciliationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

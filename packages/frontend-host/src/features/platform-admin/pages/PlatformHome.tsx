@@ -15,7 +15,7 @@ export default function PlatformHome() {
 
   const cards = [
     {
-      title: 'Platform Settings',
+      title: 'Platform settings',
       description: 'Configure platform-wide settings, environments, and default behaviors.',
       icon: Settings,
       path: '/admin/settings',

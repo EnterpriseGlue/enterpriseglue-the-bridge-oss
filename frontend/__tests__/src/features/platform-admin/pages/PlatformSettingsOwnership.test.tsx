@@ -2,6 +2,7 @@ import React from 'react';
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import PlatformSettingsPage from '@src/features/platform-admin/pages/PlatformSettingsPage';
 
 const mutate = vi.fn();
@@ -67,10 +68,17 @@ describe('PlatformSettingsPage configuration ownership', () => {
   });
 
   it('passes section-level configuration locks through to the rendered settings surface', () => {
-    render(<PlatformSettingsPage section="git" />);
+    render(
+      <MemoryRouter initialEntries={['/admin/settings/git']}>
+        <PlatformSettingsPage section="git" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('git-configured-readonly')).toBeInTheDocument();
     expect(screen.getByText(/headless\.admin/)).toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Platform settings sections' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Git' })).toHaveAttribute('aria-current', 'page');
     const button = screen.getByRole('button', { name: 'Change Git sync' });
     expect(button).toBeDisabled();
     fireEvent.click(button);

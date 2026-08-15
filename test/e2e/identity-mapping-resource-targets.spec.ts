@@ -42,7 +42,7 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
 
 async function startScopedMapping(page: Page, suffix: string, captureInitialState = false): Promise<void> {
   const slug = suffix.replaceAll('_', '-');
-  await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
+  await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
   if (captureInitialState) await captureManualScreenshot(page, '23-identity-mapping-wizard-step-1.jpg');
   await page.getByRole('combobox', { name: 'Identity provider' }).click();
   await page.getByRole('option', { name: `Browser identity provider (${providerKey})`, exact: true }).click();
@@ -148,8 +148,7 @@ async function openScopedMappingPage(page: Page): Promise<Record<string, unknown
   });
   await page.route('**/api/identity/mappings', (route) => json(route, persistedMappings));
 
-  await page.goto('/admin/settings');
-  await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
+  await page.goto('/admin/settings/identity-mappings');
   return provisionRequests;
 }
 
@@ -200,7 +199,7 @@ test.describe('Identity mapping scoped access', () => {
 
   test('selects an existing group before deciding whether to grant engine access @identity-mapping-scopes', async ({ page }) => {
     await openScopedMappingPage(page);
-    await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
+    await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
     await page.getByRole('combobox', { name: 'Identity provider' }).click();
     await page.getByRole('option', { name: `Browser identity provider (${providerKey})`, exact: true }).click();
     await page.getByRole('textbox', { name: 'External group, role, or attribute value' }).fill('operators-existing-group');

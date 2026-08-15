@@ -12,6 +12,7 @@ import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persis
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityProvisioningDirectory } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvisioningDirectory.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { PlatformSettingsSectionOwnership } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
@@ -110,7 +111,7 @@ class ConfigBundleExportService {
     const mappingSourcePrefix = `${sourceRef}:engine_tenant_mapping:`;
     const where = { sourceRef, ...(tenantId ? { tenantId } : { tenantId: IsNull() }) };
     const engineScopePrefix = `${tenantId || 'platform'}:`;
-    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources, platformSettings, platformSettingsOwnership, environmentTags, adminOwnership] = await Promise.all([
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityProvisioningDirectories, identityMappings, runtimeResources, platformSettings, platformSettingsOwnership, environmentTags, adminOwnership] = await Promise.all([
       dataSource.getRepository(RbacRole).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(AuthzGroup).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(Engine).find({
@@ -140,6 +141,9 @@ class ConfigBundleExportService {
       dataSource.getRepository(RbacRoleAssignment).find({ where: { ...where, source: 'config' } }),
       dataSource.getRepository(ProjectEngineTarget).find({ where: { ...where, source: 'config' } }),
       dataSource.getRepository(IdentityProvider).find({ where }),
+      typeof dataSource.hasMetadata === 'function' && dataSource.hasMetadata(IdentityProvisioningDirectory)
+        ? dataSource.getRepository(IdentityProvisioningDirectory).find({ where })
+        : Promise.resolve([]),
       dataSource.getRepository(IdentityEntitlementMapping).find({ where: { ...where, isActive: true } }),
       dataSource.getRepository(RuntimeResource).find({ where: tenantId ? { tenantId } : { tenantId: IsNull() } }),
       dataSource.getRepository(PlatformSettings).findOneBy({ id: 'default' }),
@@ -476,6 +480,27 @@ class ConfigBundleExportService {
         ownershipMode: provider.ownershipMode,
       };
     }) };
+
+    const activeProvisioningDirectories = identityProvisioningDirectories.filter((directory) => directory.status !== 'archived');
+    if (activeProvisioningDirectories.length) {
+      files['./identity-provisioning-directories.json'] = {
+        identityProvisioningDirectories: sortedByKey(activeProvisioningDirectories).map((directory) => {
+          if (directory.status === 'active' && !directory.credentialSecretRef) {
+            throw new Error(`Cannot export provisioning directory ${directory.key}: its credential secret reference is missing`);
+          }
+          return {
+            key: directory.key,
+            displayName: directory.displayName,
+            ...(directory.description ? { description: directory.description } : {}),
+            ...(directory.identityProviderKey ? { identityProviderKey: directory.identityProviderKey } : {}),
+            enabled: directory.status === 'active',
+            authoritative: true,
+            ...(directory.credentialSecretRef ? { credentialSecretRef: directory.credentialSecretRef } : {}),
+            ownershipMode: directory.ownershipMode === 'manual' ? 'config_locked' : directory.ownershipMode,
+          };
+        }),
+      };
+    }
 
     if (identityMappings.length) files['./identity-mappings.json'] = { identityMappings: sortedByKey(identityMappings.filter((mapping) => Boolean(mapping.configKey)).map((mapping) => ({ ...mapping, key: mapping.configKey! }))).map((mapping) => {
       const providerKey = providerKeyById.get(mapping.providerId);

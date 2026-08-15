@@ -844,7 +844,7 @@ export default function EngineMembersModal({
         return
       }
       if (memberDeliveryMethod === 'email' && !emailConfigured) {
-        setMemberError('Email delivery is not configured. Configure a provider in Admin UI → Platform Settings → Email.')
+        setMemberError('Email delivery is not configured. Configure a provider in Admin UI → Platform settings → Email.')
         return
       }
     }
@@ -1319,7 +1319,7 @@ export default function EngineMembersModal({
               <InlineNotification
                 kind="info"
                 title="Email delivery unavailable"
-                subtitle="Email is not configured in Admin UI → Platform Settings → Email, so invitations must be delivered manually."
+                subtitle="Email is not configured in Admin UI → Platform settings → Email, so invitations must be delivered manually."
                 lowContrast
                 hideCloseButton
               />

@@ -530,6 +530,13 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/identity/providers/{key}/reconciliation-preview', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/replay-memberships', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/test-connection', 'platform.self'],
+          ['POST', '/api/identity/provisioning-directories', 'platform.self'],
+          ['PUT', '/api/identity/provisioning-directories/{key}', 'platform.self'],
+          ['DELETE', '/api/identity/provisioning-directories/{key}', 'platform.self'],
+          ['POST', '/api/identity/provisioning-directories/{key}/test', 'platform.self'],
+          ['POST', '/api/identity/provisioning-directories/{key}/credentials', 'platform.self'],
+          ['POST', '/api/identity/provisioning-directories/{key}/credentials/{credentialId}/rotate', 'platform.self'],
+          ['DELETE', '/api/identity/provisioning-directories/{key}/credentials/{credentialId}', 'platform.self'],
         ],
       },
     ];
@@ -958,8 +965,8 @@ describe('authorization route inventory validation', () => {
   it('registers high-risk user management actions as audited platform actions', () => {
     const expectedActions = [
       ['platform.users.create', 'platform:users:create', 'create', 'high', 'admin.users.create', [['POST', '/api/users']]],
-      ['platform.users.update', 'platform:users:update', 'update', 'high', 'admin.users.edit', [['PUT', '/api/users/{id}']]],
-      ['platform.users.deactivate', 'platform:users:deactivate', 'delete', 'high', 'admin.users.deactivate', [['DELETE', '/api/users/{id}']]],
+      ['platform.users.update', 'platform:users:update', 'update', 'high', 'admin.users.edit', [['PUT', '/api/users/{id}'], ['POST', '/api/users/{id}/reactivate'], ['POST', '/api/users/{id}/revoke-sessions']]],
+      ['platform.users.deactivate', 'platform:users:deactivate', 'delete', 'high', 'admin.users.deactivate', [['DELETE', '/api/users/{id}'], ['POST', '/api/users/{id}/deactivate']]],
       ['platform.users.permanent-delete', 'platform:users:permanent-delete', 'delete', 'critical', 'admin.users.permanent-delete', [['DELETE', '/api/users/{id}/permanent']]],
       ['platform.users.unlock', 'platform:users:unlock', 'execute', 'high', 'admin.users.unlock', [['POST', '/api/users/{id}/unlock']]],
       ['platform.users.manage', 'platform:users:update', 'manage', 'high', 'admin.users.actions', []],

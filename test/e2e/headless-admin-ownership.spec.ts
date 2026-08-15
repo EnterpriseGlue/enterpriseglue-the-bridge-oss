@@ -129,12 +129,11 @@ test('renders and enforces headless ownership across all administrator surfaces 
   await expect(warnGit.getByText('Configuration-linked', { exact: true })).toBeVisible();
   await expect(warnGit.getByText('Drifted', { exact: true })).toBeVisible();
 
-  await page.goto('/admin/settings');
-  await page.getByRole('tab', { name: 'Email', exact: true }).click();
+  await page.goto('/admin/settings/email');
   const emailRow = page.getByText('Release email').locator('..');
   await expect(emailRow.getByText('Managed by configuration', { exact: true })).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Email Templates', exact: true }).click();
+  await page.goto('/admin/settings/email-templates');
   await expect(page.getByText('Email platform name is managed by configuration', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Email Platform Name')).toBeDisabled();
   const templateRow = page.getByText('Welcome template').locator('..');

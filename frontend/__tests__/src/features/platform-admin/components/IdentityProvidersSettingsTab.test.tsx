@@ -2,6 +2,7 @@ import React from 'react';
 import type { ComponentProps } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import IdentityProvidersSettingsTab, { isConfigLockedIdentityProvider, isConfigWarnIdentityProvider } from '@src/features/platform-admin/components/IdentityProvidersSettingsTab';
@@ -21,7 +22,11 @@ vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 
 function renderTab(props: ComponentProps<typeof IdentityProvidersSettingsTab> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}><IdentityProvidersSettingsTab {...props} /></QueryClientProvider>);
+  const router = createMemoryRouter([{
+    path: '*',
+    element: <QueryClientProvider client={queryClient}><IdentityProvidersSettingsTab {...props} /><Link to="/admin/settings/identity-mappings">Other settings</Link></QueryClientProvider>,
+  }], { initialEntries: ['/admin/settings/identity-providers'] });
+  return render(<RouterProvider router={router} />);
 }
 
 function providerMenuItem(label: string): HTMLElement {
@@ -34,6 +39,16 @@ function providerMenuItem(label: string): HTMLElement {
 async function openProviderActions() {
   fireEvent.click(screen.getByRole('button', { name: 'Provider actions' }));
   await waitFor(() => expect(providerMenuItem('Test connection')).toBeInTheDocument());
+}
+
+async function startProviderCreation(protocol: 'oidc' | 'saml' | 'ldap' = 'oidc', displayName = 'Test provider', key = 'test-provider') {
+  fireEvent.click(screen.getByRole('button', { name: /Create provider/i }));
+  const workflow = await screen.findByRole('region', { name: 'Create identity provider' });
+  fireEvent.change(within(workflow).getByLabelText('Sign-in name'), { target: { value: displayName } });
+  fireEvent.change(within(workflow).getByLabelText('Provider key'), { target: { value: key } });
+  if (protocol !== 'oidc') fireEvent.change(within(workflow).getByLabelText('Protocol'), { target: { value: protocol } });
+  fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+  return workflow;
 }
 
 describe('IdentityProvidersSettingsTab', () => {
@@ -53,7 +68,7 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByRole('button', { name: 'Access refresh' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign-in status' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Management source' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Add provider/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Create provider/i })).toBeEnabled();
   });
 
   it('does not request provider data without the read action', () => {
@@ -72,7 +87,7 @@ describe('IdentityProvidersSettingsTab', () => {
 
     expect(await screen.findByText('Sign-in policy')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Local password sign-in'), { target: { value: 'disabled' } });
-    fireEvent.change(screen.getByLabelText('How users choose an SSO provider'), { target: { value: 'progressive' } });
+    fireEvent.change(screen.getByLabelText('SSO provider selection'), { target: { value: 'progressive' } });
 
     expect(onLoginPolicyChange).toHaveBeenNthCalledWith(1, { localPasswordLoginMode: 'disabled' });
     expect(onLoginPolicyChange).toHaveBeenNthCalledWith(2, { ssoProviderSelectionMode: 'progressive' });
@@ -98,29 +113,58 @@ describe('IdentityProvidersSettingsTab', () => {
   it('defers provider validation until a field is touched or the form is submitted', async () => {
     renderTab();
     await screen.findByText('demo-oidc');
-    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
-    const modal = await screen.findByRole('dialog', { name: 'Add identity provider' });
+    fireEvent.click(screen.getByRole('button', { name: /Create provider/i }));
+    const modal = await screen.findByRole('region', { name: 'Create identity provider' });
 
     expect(within(modal).queryByText('Enter the provider name users will recognize on the sign-in screen.')).not.toBeInTheDocument();
     fireEvent.blur(within(modal).getByLabelText('Sign-in name'));
     expect(within(modal).getByText('Enter the provider name users will recognize on the sign-in screen.')).toBeInTheDocument();
 
-    fireEvent.click(within(modal).getByRole('button', { name: 'Create provider' }));
+    fireEvent.click(within(modal).getByRole('button', { name: 'Continue' }));
     expect(within(modal).getByText('Complete the highlighted fields')).toBeInTheDocument();
-    expect(within(modal).getByText('Client ID is required.')).toBeInTheDocument();
+    expect(within(modal).getByText('Use a stable lowercase key with letters, numbers, dots, dashes, or underscores.')).toBeInTheDocument();
   });
 
   it('limits the sign-in name to a readable 40-character login label', async () => {
     renderTab();
     await screen.findByText('demo-oidc');
-    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
-    const modal = await screen.findByRole('dialog', { name: 'Add identity provider' });
+    fireEvent.click(screen.getByRole('button', { name: /Create provider/i }));
+    const modal = await screen.findByRole('region', { name: 'Create identity provider' });
 
-    expect(within(modal).getByText(/Use 40 characters or fewer so the sign-in button stays easy to scan/)).toBeInTheDocument();
+    expect(within(modal).getByText(/Use 40 characters or fewer/)).toBeInTheDocument();
     fireEvent.change(within(modal).getByLabelText('Sign-in name'), { target: { value: 'A provider name that is deliberately longer than forty characters' } });
     fireEvent.blur(within(modal).getByLabelText('Sign-in name'));
 
     expect(within(modal).getByText('Use 40 characters or fewer. This text appears on the sign-in button.')).toBeInTheDocument();
+  });
+
+  it('warns before a changed provider workflow is abandoned through its back action', async () => {
+    renderTab();
+    await screen.findByText('demo-oidc');
+    fireEvent.click(screen.getByRole('button', { name: /Create provider/i }));
+    const workflow = await screen.findByRole('region', { name: 'Create identity provider' });
+    fireEvent.change(within(workflow).getByLabelText('Sign-in name'), { target: { value: 'Unsaved provider' } });
+
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity providers' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Leave without saving?' });
+    expect(within(confirmation).getByText(/changes have not been saved/)).toBeInTheDocument();
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }));
+    expect(screen.getByRole('region', { name: 'Create identity provider' })).toBeInTheDocument();
+
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Back to identity providers' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Leave without saving?' })).getByRole('button', { name: 'Leave' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Create identity provider' })).not.toBeInTheDocument());
+  });
+
+  it('blocks an in-app navigation link while provider changes are unsaved', async () => {
+    renderTab();
+    await screen.findByText('demo-oidc');
+    fireEvent.click(screen.getByRole('button', { name: /Create provider/i }));
+    fireEvent.change(screen.getByLabelText('Sign-in name'), { target: { value: 'Unsaved provider' } });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Other settings' }));
+    expect(await screen.findByRole('dialog', { name: 'Leave without saving?' })).toBeInTheDocument();
+    expect(window.location.pathname).not.toBe('/admin/settings/identity-mappings');
   });
 
   it('tests connections, previews reconciliation, and renders synchronization history', async () => {
@@ -237,17 +281,21 @@ describe('IdentityProvidersSettingsTab', () => {
   it('collects the complete provider-neutral SAML runtime configuration', async () => {
     renderTab();
     await waitFor(() => expect(screen.getByText('demo-oidc')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
-    fireEvent.change(screen.getByLabelText('Protocol'), { target: { value: 'saml' } });
+    const workflow = await startProviderCreation('saml');
 
-    expect(screen.getByRole('heading', { name: 'Provider identity and sign-in' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'SAML connection and claims' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Membership refresh and lifecycle' })).toBeInTheDocument();
+    expect(await within(workflow).findByRole('heading', { name: 'Connection' })).toBeInTheDocument();
     expect(screen.getByLabelText('Identity provider SSO URL')).toBeInTheDocument();
     expect(screen.getByLabelText('Identity provider signing certificate reference')).toBeInTheDocument();
     expect(screen.getByLabelText('Subject attribute')).toHaveValue('nameID');
     expect(screen.getByLabelText('Email attribute')).toHaveValue('email');
     expect(screen.getByLabelText('Group attribute')).toHaveValue('groups');
+    fireEvent.change(screen.getByLabelText('EnterpriseGlue service provider entity ID'), { target: { value: 'urn:enterpriseglue:test' } });
+    fireEvent.change(screen.getByLabelText('Expected identity provider entity ID'), { target: { value: 'urn:idp:test' } });
+    fireEvent.change(screen.getByLabelText('Assertion consumer service URL'), { target: { value: 'https://app.example.test/saml/callback' } });
+    fireEvent.change(screen.getByLabelText('Identity provider SSO URL'), { target: { value: 'https://idp.example.test/sso' } });
+    fireEvent.change(screen.getByLabelText('Identity provider signing certificate reference'), { target: { value: 'secret:saml-cert' } });
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+    expect(await within(workflow).findByRole('heading', { name: 'Membership' })).toBeInTheDocument();
     expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
   });
 
@@ -259,10 +307,7 @@ describe('IdentityProvidersSettingsTab', () => {
     }));
     renderTab();
     await screen.findByText('demo-oidc');
-    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
-    const modal = await screen.findByRole('dialog', { name: 'Add identity provider' });
-    fireEvent.change(within(modal).getByLabelText('Sign-in name'), { target: { value: 'Advanced OIDC' } });
-    fireEvent.change(within(modal).getByLabelText('Provider key'), { target: { value: 'advanced-oidc' } });
+    const modal = await startProviderCreation('oidc', 'Advanced OIDC', 'advanced-oidc');
     fireEvent.change(within(modal).getByLabelText('Issuer URL'), { target: { value: 'https://login.example.test' } });
     fireEvent.change(within(modal).getByLabelText('Client ID'), { target: { value: 'enterpriseglue-web' } });
     fireEvent.change(within(modal).getByLabelText('Callback URL'), { target: { value: 'https://app.example.test/api/auth/identity/callback' } });
@@ -270,9 +315,11 @@ describe('IdentityProvidersSettingsTab', () => {
     fireEvent.change(within(modal).getByLabelText('Audience confirmation (optional)'), { target: { value: 'enterpriseglue-web' } });
     expect(within(modal).queryByRole('option', { name: 'SCIM directory API' })).not.toBeInTheDocument();
     expect(within(modal).queryByRole('option', { name: 'Directory graph API' })).not.toBeInTheDocument();
-    expect(within(modal).getByText('Memberships are refreshed at every sign-in')).toBeInTheDocument();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Continue' }));
+    expect(within(modal).getByText('Memberships refresh at every sign-in')).toBeInTheDocument();
     expect(within(modal).queryByLabelText('Synchronize on sign-in')).not.toBeInTheDocument();
     expect(within(modal).queryByLabelText('Synchronization required for sign-in')).not.toBeInTheDocument();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Continue' }));
     fireEvent.click(within(modal).getByRole('button', { name: 'Create provider' }));
 
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
@@ -285,13 +332,19 @@ describe('IdentityProvidersSettingsTab', () => {
   it('exposes LDAP identity and TLS trust fields that are available to headless configuration', async () => {
     renderTab();
     await screen.findByText('demo-oidc');
-    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
-    fireEvent.change(screen.getByLabelText('Protocol'), { target: { value: 'ldap' } });
+    const workflow = await startProviderCreation('ldap');
 
     expect(screen.getByLabelText('Subject identifier attribute')).toHaveValue('entryUUID');
     expect(screen.getByLabelText('Email attribute')).toHaveValue('mail');
     expect(screen.getByLabelText('TLS trust reference (optional)')).toBeInTheDocument();
-    expect(screen.getByLabelText('How memberships are refreshed')).toHaveValue('ldap_directory');
+    fireEvent.change(screen.getByLabelText('LDAPS URL'), { target: { value: 'ldaps://directory.example.test' } });
+    fireEvent.change(screen.getByLabelText('Service bind DN'), { target: { value: 'cn=service,dc=example,dc=test' } });
+    fireEvent.change(screen.getByLabelText('Service bind password reference'), { target: { value: 'secret:ldap-bind' } });
+    fireEvent.change(screen.getByLabelText('User base DN'), { target: { value: 'ou=people,dc=example,dc=test' } });
+    fireEvent.change(screen.getByLabelText('Group base DN'), { target: { value: 'ou=groups,dc=example,dc=test' } });
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+    expect(await within(workflow).findByRole('heading', { name: 'Membership' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Membership source')).toHaveValue('ldap_directory');
   });
 
   it('does not expose legacy-provider migration or cutover controls', async () => {
@@ -369,7 +422,7 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByText(/Update bundle acme\.authz and apply it again/)).toBeInTheDocument();
     expect(screen.queryByText(/Update config_bundle:/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Sign-in name')).toBeDisabled();
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'View identity provider configuration' })).getByRole('button', { name: 'Close' }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'View identity provider configuration' })).getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Provider actions' }));
     expect(screen.queryByRole('menuitem', { name: 'Disable provider' })).not.toBeInTheDocument();
   });

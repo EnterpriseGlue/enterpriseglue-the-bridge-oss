@@ -49,7 +49,7 @@ async function loginAdministrator(page: Page): Promise<void> {
   await page.goto('/admin-recovery');
   await page.getByLabel(/email/i).fill(process.env.LOCAL_OIDC_ADMIN_EMAIL!);
   await page.getByLabel('Password', { exact: true }).fill(process.env.LOCAL_OIDC_ADMIN_PASSWORD!);
-  await page.getByRole('button', { name: 'Sign in for recovery', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in for recovery', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 

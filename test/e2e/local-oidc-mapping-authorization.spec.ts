@@ -86,7 +86,7 @@ async function loginLocalAdministrator(page: Page): Promise<void> {
   await page.goto('/admin-recovery');
   await page.getByLabel(/email/i).fill(email!);
   await page.getByLabel('Password', { exact: true }).fill(password!);
-  await page.getByRole('button', { name: 'Sign in for recovery', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in for recovery', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
@@ -108,39 +108,42 @@ async function createEngine(page: Page, csrf: string, name: string): Promise<Eng
 
 async function fillProviderField(page: Page, selector: string, value: string): Promise<void> {
   const field = page.locator(selector);
-  // Carbon's modal body is independently scrollable on laptop-height
-  // viewports. Make that keyboard-equivalent scroll explicit before filling
-  // a lower optional field, so the test proves it remains reachable above the
-  // fixed modal footer instead of relying on a larger CI viewport.
+  // Keep lower optional fields keyboard-reachable in the in-page workflow at
+  // laptop-height viewports instead of relying on a larger CI viewport.
   await field.scrollIntoViewIfNeeded();
   await field.fill(value);
 }
 
 async function createProviderThroughUi(page: Page, providerKey: string): Promise<void> {
-  await page.goto('/admin/settings');
-  await page.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
-  await page.getByRole('button', { name: 'Add provider', exact: true }).click();
+  await page.goto('/admin/settings/identity-providers');
+  await page.getByRole('button', { name: 'Create provider', exact: true }).click();
   await page.getByLabel('Provider key').fill(providerKey);
   await page.getByLabel('Sign-in name').fill(providerDisplayName);
   await page.getByLabel('Sign-in use').selectOption('direct');
-  const emailLinkingToggle = page.getByLabel('Allow verified email account linking');
-  if (await emailLinkingToggle.getAttribute('aria-checked') !== 'true') await emailLinkingToggle.press('Space');
-  await expect(emailLinkingToggle).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Connection', exact: true })).toBeFocused();
   await fillProviderField(page, '#identity-provider-issuer', issuerUrl);
   await fillProviderField(page, '#identity-provider-client-id', clientId);
   if (clientSecretRef) await fillProviderField(page, '#identity-provider-secret-ref', clientSecretRef);
-  if (directoryTenantId) await fillProviderField(page, '#identity-provider-directory-tenant', directoryTenantId);
   await fillProviderField(page, '#identity-provider-callback', `${baseUrl.replace(/\/$/, '')}/api/auth/identity/callback`);
   await fillProviderField(page, '#identity-provider-scopes', oidcScopes);
   await fillProviderField(page, '#identity-provider-group-claim', 'groups');
   await fillProviderField(page, '#identity-provider-expected-audience', clientId);
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Membership', exact: true })).toBeFocused();
+  const emailLinkingToggle = page.getByLabel('Allow verified email account linking');
+  if (await emailLinkingToggle.getAttribute('aria-checked') !== 'true') await emailLinkingToggle.press('Space');
+  await expect(emailLinkingToggle).toHaveAttribute('aria-checked', 'true');
+  if (directoryTenantId) await fillProviderField(page, '#identity-provider-directory-tenant', directoryTenantId);
   // Carbon renders this toggle as a button with role=switch, not a native
-  // checkbox. Keyboard activation avoids modal scrolling/overlay geometry and
+  // checkbox. Keyboard activation avoids scroll/overlay geometry and
   // exercises the accessible switch interaction a keyboard user receives.
   const enabledToggle = page.getByLabel('Enable provider');
   await enabledToggle.scrollIntoViewIfNeeded();
   if (await enabledToggle.getAttribute('aria-checked') !== 'true') await enabledToggle.press('Space');
   await expect(enabledToggle).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeFocused();
   await page.getByRole('button', { name: 'Create provider', exact: true }).click();
   await expect(page.getByText(providerKey, { exact: true })).toBeVisible();
 
@@ -151,8 +154,8 @@ async function createProviderThroughUi(page: Page, providerKey: string): Promise
 }
 
 async function createMappingThroughUi(page: Page, providerKey: string, groupKey: string, groupName: string, engine: Engine): Promise<void> {
-  await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
-  await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
+  await page.goto('/admin/settings/identity-mappings');
+  await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
   await page.getByRole('combobox', { name: 'Identity provider' }).click();
   await page.getByRole('option', { name: `${providerDisplayName} (${providerKey})`, exact: true }).click();
   if (externalEntitlementType !== 'group') {
@@ -177,7 +180,7 @@ async function createMappingThroughUi(page: Page, providerKey: string, groupKey:
   await page.locator('#identity-mapping-provision-engine').click();
   await page.getByRole('option', { name: engine.name, exact: true }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.getByText('Ready to create', { exact: true })).toBeVisible();
+  await expect(page.getByText('Review before creating', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
   await expect(page.getByRole('table').filter({ hasText: providerKey }).getByText(groupKey, { exact: true })).toBeVisible();
 }
@@ -286,7 +289,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
         resourceId: allowedEngine.id,
       });
       if (viewAssignment) createdAssignmentIds.push(viewAssignment.id);
-      await expect(admin.getByRole('dialog', { name: 'Add identity mapping' })).toBeHidden();
+      await expect(admin.getByRole('region', { name: 'Create identity mapping' })).toBeHidden();
       await captureLiveScreenshot(admin, '61a-identity-mapping-live-oidc-configuration.png');
 
       const operator = await signInWithProvider(operatorContext, providerKey);
@@ -386,8 +389,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
         expect(session.status, JSON.stringify(session.body)).toBe(200);
         expect(session.body?.id).toBeTruthy();
 
-        await admin.goto('/admin/settings');
-        await admin.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+        await admin.goto('/admin/settings/identity-providers');
         const providerRow = admin.getByRole('row').filter({ hasText: providerKey });
         await providerRow.getByRole('button', { name: 'Provider actions' }).click();
         await admin.getByRole('menuitem', { name: 'Resolve identity conflict' }).click();
@@ -434,8 +436,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       }
 
       if (runsLocalIdentityRecovery) {
-        await admin.goto('/admin/settings');
-        await admin.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+        await admin.goto('/admin/settings/identity-providers');
         const providerRow = admin.getByRole('row').filter({ hasText: providerKey });
         await providerRow.getByRole('button', { name: 'Provider actions' }).click();
         await admin.getByRole('menuitem', { name: 'Disable provider' }).click();

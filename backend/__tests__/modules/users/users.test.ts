@@ -27,6 +27,17 @@ const permissionGate = vi.hoisted(() => ({
   },
 }));
 
+const userDirectoryServiceMock = vi.hoisted(() => ({
+  list: vi.fn(),
+  identityContext: vi.fn(),
+  effectiveAccess: vi.fn(),
+  sessions: vi.fn(),
+  audit: vi.fn(),
+  deactivate: vi.fn(),
+  reactivate: vi.fn(),
+  revokeSessions: vi.fn(),
+}));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
@@ -40,10 +51,7 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   createUserLimiter: (_req: any, _res: any, next: any) => next(),
-}));
-
-vi.mock('@enterpriseglue/shared/middleware/validate.js', () => ({
-  validateBody: () => (_req: any, _res: any, next: any) => next(),
+  identityAdminLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/UserService.js', () => ({
@@ -56,6 +64,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/UserService.js', () => (
     deleteUserPermanently: vi.fn(),
     unlockUser: vi.fn(),
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/UserDirectoryService.js', () => ({
+  userDirectoryService: userDirectoryServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/invitations.js', () => ({
@@ -266,6 +278,92 @@ describe('users routes', () => {
       userId: 'user-1',
       resourceType: 'platform',
     }));
+  });
+
+  it('lists the source-aware directory with validated filters and pagination', async () => {
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:view');
+    userDirectoryServiceMock.list.mockResolvedValue({ items: [], total: 0, limit: 25, offset: 50 });
+
+    const response = await request(app).get('/api/users/directory?status=active&authenticationSource=oidc&provisioningSource=scim&limit=25&offset=50');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ items: [], total: 0, limit: 25, offset: 50 });
+    expect(userDirectoryServiceMock.list).toHaveBeenCalledWith({
+      status: 'active',
+      authenticationSource: 'oidc',
+      provisioningSource: 'scim',
+      limit: 25,
+      offset: 50,
+      tenantId: null,
+    });
+  });
+
+  it('returns source-aware identity, access, session, and audit details', async () => {
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:view');
+    userDirectoryServiceMock.identityContext.mockResolvedValue({ user: { id: 'user-2' }, linkedIdentities: [] });
+    userDirectoryServiceMock.effectiveAccess.mockResolvedValue({ userId: 'user-2', lineage: [] });
+    userDirectoryServiceMock.sessions.mockResolvedValue({ userId: 'user-2', sessions: [] });
+    userDirectoryServiceMock.audit.mockResolvedValue({ userId: 'user-2', events: [] });
+
+    const identity = await request(app).get('/api/users/user-2/identity-context');
+    const access = await request(app).get('/api/users/user-2/effective-access');
+    const sessions = await request(app).get('/api/users/user-2/sessions');
+    const audit = await request(app).get('/api/users/user-2/audit?limit=20');
+
+    expect(identity.status).toBe(200);
+    expect(access.status).toBe(200);
+    expect(sessions.status).toBe(200);
+    expect(audit.status).toBe(200);
+    expect(userDirectoryServiceMock.identityContext).toHaveBeenCalledWith('user-2', null);
+    expect(userDirectoryServiceMock.effectiveAccess).toHaveBeenCalledWith('user-2', null);
+    expect(userDirectoryServiceMock.sessions).toHaveBeenCalledWith('user-2');
+    expect(userDirectoryServiceMock.audit).toHaveBeenCalledWith('user-2', 20);
+    expect(sessions.body).not.toHaveProperty('tokenHash');
+  });
+
+  it('validates lifecycle reasons and protects the signed-in user from deactivation', async () => {
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:deactivate');
+
+    const malformed = await request(app).post('/api/users/user-2/deactivate').send({ reason: 'x' });
+    const self = await request(app).post('/api/users/user-1/deactivate').send({ reason: 'Emergency response' });
+
+    expect(malformed.status).toBe(400);
+    expect(self.status).toBe(400);
+    expect(userDirectoryServiceMock.deactivate).not.toHaveBeenCalled();
+  });
+
+  it('executes reasoned source-aware lifecycle actions with granular permissions', async () => {
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:deactivate');
+    userDirectoryServiceMock.deactivate.mockResolvedValue({ userId: 'user-2', status: 'deactivated', authSessionVersion: 2, changedAt: 1000 });
+
+    const deactivated = await request(app)
+      .post('/api/users/user-2/deactivate')
+      .send({ reason: 'Confirmed employee departure' });
+
+    expect(deactivated.status).toBe(200);
+    expect(userDirectoryServiceMock.deactivate).toHaveBeenCalledWith({
+      userId: 'user-2',
+      actorId: 'user-1',
+      tenantId: null,
+      reason: 'Confirmed employee departure',
+    });
+
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:update');
+    userDirectoryServiceMock.reactivate.mockResolvedValue({ userId: 'user-2', status: 'active', authSessionVersion: 2, changedAt: 1001 });
+    userDirectoryServiceMock.revokeSessions.mockResolvedValue({ userId: 'user-2', status: 'active', authSessionVersion: 3, changedAt: 1002 });
+
+    const reactivated = await request(app).post('/api/users/user-2/reactivate').send({ reason: 'Return from leave' });
+    const revoked = await request(app).post('/api/users/user-2/revoke-sessions').send({ reason: 'Device reported lost' });
+
+    expect(reactivated.status).toBe(200);
+    expect(revoked.status).toBe(200);
+    expect(userDirectoryServiceMock.reactivate).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-2', reason: 'Return from leave' }));
+    expect(userDirectoryServiceMock.revokeSessions).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-2', reason: 'Device reported lost' }));
   });
 
   it('rejects user creation when only users:view is granted', async () => {

@@ -60,13 +60,14 @@ describe('Login error state', () => {
 
     await user.type(await screen.findByLabelText(/email/i), 'user@example.com');
     await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }));
+    await user.click(screen.getByRole('button', { name: /^log in$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Sign-in failed')).toBeInTheDocument();
+      expect(screen.getByText('Log in failed')).toBeInTheDocument();
     });
-    await waitFor(() => expect(screen.getByText('Sign-in failed').closest('[tabindex="-1"]')).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText(/email/i)).toHaveFocus());
     expect(screen.getByText(/Invalid credentials/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^password$/i)).toHaveValue('');
   });
 
   it('fails closed with an actionable message when the login-method policy cannot be loaded', async () => {
@@ -97,10 +98,10 @@ describe('Login error state', () => {
     );
 
     const user = userEvent.setup();
-    expect(await screen.findByText('Sign-in methods could not be loaded')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^sign in$/i })).not.toBeInTheDocument();
+    expect(await screen.findByText('Login methods could not be loaded')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^log in$/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^log in$/i })).toBeInTheDocument();
     expect(loginMethodAttempts).toBe(2);
   });
 });

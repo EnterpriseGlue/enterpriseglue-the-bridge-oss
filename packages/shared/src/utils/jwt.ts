@@ -22,9 +22,19 @@ export interface JwtPayload {
   authSessionVersion?: number;
   /** Marks a break-glass session that must retain live platform-administrator membership. */
   recovery?: 'platform_administrator';
+  /** Verified authentication method and assurance carried across refreshes. */
+  authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap';
+  /** True only when a trusted authenticator/IdP supplied configured MFA evidence. */
+  mfaVerified?: boolean;
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
   tenantSlug?: string;
+}
+
+export interface SessionAssuranceOptions {
+  administratorRecovery?: boolean;
+  authenticationMethod?: JwtPayload['authenticationMethod'];
+  mfaVerified?: boolean;
 }
 
 /** A validated browser-session principal, including a compatibility user id for request consumers. */
@@ -59,12 +69,14 @@ export function normalizeUserJwtPayload(payload: JwtPayload): UserJwtPayload {
 /**
  * Generate an access token (short-lived)
  */
-export function generateAccessToken(user: User | any, options: { administratorRecovery?: boolean } = {}): string {
+export function generateAccessToken(user: User | any, options: SessionAssuranceOptions = {}): string {
   const payload: JwtPayload = {
     principalType: 'user',
     principalId: user.id,
     authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
+    ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
+    ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
     type: 'access',
   };
 
@@ -76,12 +88,14 @@ export function generateAccessToken(user: User | any, options: { administratorRe
 /**
  * Generate a refresh token (long-lived)
  */
-export function generateRefreshToken(user: User | any, options: { administratorRecovery?: boolean } = {}): string {
+export function generateRefreshToken(user: User | any, options: SessionAssuranceOptions = {}): string {
   const payload: JwtPayload = {
     principalType: 'user',
     principalId: user.id,
     authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
+    ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
+    ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
     type: 'refresh',
   };
 

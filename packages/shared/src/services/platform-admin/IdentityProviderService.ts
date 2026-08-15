@@ -16,7 +16,7 @@ import { isOssDefaultTenantId, OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/sha
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type EntityManager, type FindOptionsWhere } from 'typeorm';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
-import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
+import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl, validateIdentityProviderSamlLogoutCallbackUrl } from './IdentityProviderEndpointPolicy.js';
 
 /** Compatibility exports; shared schemas remain the canonical vocabulary. */
 export type IdentityProviderProtocol = SchemaIdentityProviderProtocol;
@@ -126,6 +126,16 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
       validateIdentityProviderEndpointUrl(String(configuration.ssoUrl), 'SAML ssoUrl', ['https:']);
       if (typeof configuration.metadataUrl === 'string' && configuration.metadataUrl.trim()) {
         validateIdentityProviderEndpointUrl(configuration.metadataUrl, 'SAML metadataUrl', ['https:']);
+      }
+      if (typeof configuration.sloUrl === 'string' && configuration.sloUrl.trim()) {
+        validateIdentityProviderEndpointUrl(configuration.sloUrl, 'SAML sloUrl', ['https:']);
+        if (typeof configuration.logoutCallbackUrl !== 'string' || !configuration.logoutCallbackUrl.trim()) {
+          throw new Error('SAML logoutCallbackUrl is required when sloUrl is configured');
+        }
+        validateIdentityProviderSamlLogoutCallbackUrl(configuration.logoutCallbackUrl);
+        if (typeof configuration.requestSigningPrivateKeyRef !== 'string' || !configuration.requestSigningPrivateKeyRef.trim()) {
+          throw new Error('SAML requestSigningPrivateKeyRef is required when sloUrl is configured');
+        }
       }
     } catch (error) { throw Errors.validation(error instanceof Error ? error.message : 'SAML endpoint configuration is invalid'); }
     if (configuration.signatureAlgorithm !== undefined && configuration.signatureAlgorithm !== 'sha256' && configuration.signatureAlgorithm !== 'sha512') {

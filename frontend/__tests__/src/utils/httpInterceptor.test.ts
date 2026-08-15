@@ -116,6 +116,32 @@ describe('httpInterceptor', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps OSS signup public when session initialization returns 401', async () => {
+      window.location.pathname = '/signup';
+      const response = new Response(null, { status: 401 });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+      const result = await interceptedFetch('/api/auth/me');
+
+      expect(result.status).toBe(401);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(window.location.href).toBe('http://localhost/dashboard');
+    });
+
+    it('does not treat a protected route with a public-looking prefix as public', async () => {
+      window.location.pathname = '/login-history';
+      const first401 = new Response(null, { status: 401 });
+      const refreshFail = new Response(null, { status: 401 });
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(first401)
+        .mockResolvedValueOnce(refreshFail);
+
+      await interceptedFetch('/api/data');
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(window.location.href).toBe('/t/default/login');
+    });
+
     it('does not intercept on tenant public routes', async () => {
       window.location.pathname = '/t/acme/login';
       const response = new Response(null, { status: 401 });

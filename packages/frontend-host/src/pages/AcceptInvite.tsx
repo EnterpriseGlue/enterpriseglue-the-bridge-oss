@@ -10,7 +10,6 @@ import {
 import { Checkmark } from '@carbon/icons-react';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
-import { useToast } from '../shared/notifications/ToastProvider';
 import { useAuth } from '../shared/hooks/useAuth';
 import type { LoginResponse } from '../shared/types/auth';
 import type {
@@ -19,96 +18,24 @@ import type {
   InvitationOnboardingResponse,
   VerifyInvitationOtpRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
-import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
-import logoPng from '../assets/logo.png';
+import PublicAuthShell from '../shared/components/PublicAuthShell';
 
-const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
+const PASSWORD_REQUIREMENTS = 'Use at least 8 characters with an uppercase letter, lowercase letter, number, and symbol (!@#$%^&*_+=).';
 
-function normalizeBranding(raw: unknown): PublicPlatformBranding {
-  const r: Record<string, unknown> = raw && typeof raw === 'object'
-    ? raw as Record<string, unknown>
-    : {};
-  return {
-    logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
-    loginLogoUrl: typeof r.loginLogoUrl === 'string' ? r.loginLogoUrl : null,
-    loginTitleVerticalOffset: typeof r.loginTitleVerticalOffset === 'number' ? r.loginTitleVerticalOffset : 0,
-    loginTitleColor: typeof r.loginTitleColor === 'string' ? r.loginTitleColor : null,
-    logoTitle: typeof r.logoTitle === 'string' ? r.logoTitle : null,
-    logoScale: typeof r.logoScale === 'number' ? r.logoScale : 100,
-    titleFontUrl: typeof r.titleFontUrl === 'string' ? r.titleFontUrl : null,
-    titleFontWeight: typeof r.titleFontWeight === 'string' ? r.titleFontWeight : '600',
-    titleFontSize: typeof r.titleFontSize === 'number' ? r.titleFontSize : 14,
-    titleVerticalOffset: typeof r.titleVerticalOffset === 'number' ? r.titleVerticalOffset : 0,
-    menuAccentColor: typeof r.menuAccentColor === 'string' ? r.menuAccentColor : null,
-    faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
-  };
-}
-
-function readCachedBranding(): PublicPlatformBranding | null {
-  try {
-    const raw = window.localStorage.getItem(BRANDING_CACHE_KEY);
-    if (!raw) return null;
-    return normalizeBranding(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
-function parseSafeLogoDataUrl(raw: unknown): { mime: string; bytes: ArrayBuffer } | null {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed || trimmed.startsWith('//') || !trimmed.startsWith('data:')) return null;
-  const match = trimmed.match(/^data:(image\/(?:png|jpe?g|webp|gif|svg\+xml))(?:;charset=[a-z0-9-]+)?;base64,([a-z0-9+/=\s]+)$/i);
-  if (!match) return null;
-
-  const mime = match[1].toLowerCase();
-  const base64 = match[2].replace(/\s+/g, '');
-
-  let decoded = '';
-  try {
-    decoded = atob(base64);
-  } catch {
-    return null;
-  }
-
-  if (decoded.length > 600 * 1024) return null;
-
-  if (mime === 'image/svg+xml') {
-    const snippet = decoded.slice(0, 8000).toLowerCase();
-    if (
-      snippet.includes('<script') ||
-      snippet.includes('javascript:') ||
-      snippet.includes('<foreignobject') ||
-      snippet.includes('<iframe') ||
-      snippet.includes('<object') ||
-      snippet.includes('<embed') ||
-      /\son\w+\s*=/.test(snippet)
-    ) {
-      return null;
-    }
-  }
-
-  const buffer = new ArrayBuffer(decoded.length);
-  const view = new Uint8Array(buffer);
-  for (let i = 0; i < decoded.length; i++) {
-    view[i] = decoded.charCodeAt(i);
-  }
-  return { mime, bytes: buffer };
-}
-
-function makeLogoObjectUrl(raw: unknown): string | null {
-  const parsed = parseSafeLogoDataUrl(raw);
-  if (!parsed) return null;
-  return URL.createObjectURL(new Blob([parsed.bytes], { type: parsed.mime }));
+function validateInvitationPassword(password: string): string | null {
+  if (password.length < 8) return 'Use at least 8 characters.';
+  if (!/[a-z]/.test(password)) return 'Add at least one lowercase letter.';
+  if (!/[A-Z]/.test(password)) return 'Add at least one uppercase letter.';
+  if (!/[0-9]/.test(password)) return 'Add at least one number.';
+  if (!/[!@#$%^&*_+=]/.test(password)) return 'Add at least one symbol (!@#$%^&*_+=).';
+  return null;
 }
 
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { notify } = useToast();
   const { setAuthenticatedUser } = useAuth();
   const onboardingStageKey = token ? `invite-onboarding-stage:${token}` : null;
-  const initialBranding = readCachedBranding();
 
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState(false);
@@ -122,12 +49,10 @@ export default function AcceptInvite() {
   const [oneTimePassword, setOneTimePassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [branding, setBranding] = useState<PublicPlatformBranding | null>(initialBranding);
-  const [brandingFetchDone, setBrandingFetchDone] = useState(false);
-  const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => {
-    const raw = initialBranding?.loginLogoUrl || initialBranding?.logoUrl;
-    return makeLogoObjectUrl(raw);
-  });
+  const [feedback, setFeedback] = useState<{ title: string; subtitle?: string } | null>(null);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [confirmPasswordTouched, setConfirmPasswordTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -146,70 +71,6 @@ export default function AcceptInvite() {
     }
   }, [onboardingStageKey]);
 
-  useEffect(() => {
-    const raw = branding?.loginLogoUrl || branding?.logoUrl;
-    const next = makeLogoObjectUrl(raw);
-    setLogoObjectUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-      }
-      return next;
-    });
-
-    return () => {
-      if (next) {
-        URL.revokeObjectURL(next);
-      }
-    };
-  }, [branding?.loginLogoUrl, branding?.logoUrl]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    apiClient.get<unknown>('/api/auth/branding', undefined, { credentials: 'include' })
-      .then((data) => {
-        if (cancelled || !data || typeof data !== 'object') return;
-        const normalized = normalizeBranding(data);
-        try {
-          window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(normalized));
-        } catch {
-        }
-        setBranding(normalized);
-      })
-      .catch(() => {
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setBrandingFetchDone(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const faviconUrl = branding?.faviconUrl;
-    const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')) as HTMLLinkElement[];
-    if (links.length === 0) return;
-
-    for (const link of links) {
-      if (!link.dataset.defaultHref) {
-        link.dataset.defaultHref = link.href;
-      }
-    }
-
-    if (faviconUrl) {
-      for (const link of links) {
-        link.href = faviconUrl;
-      }
-    } else {
-      for (const link of links) {
-        if (link.dataset.defaultHref) link.href = link.dataset.defaultHref;
-      }
-    }
-  }, [branding?.faviconUrl]);
 
   const loadInviteInfo = async () => {
     try {
@@ -225,7 +86,7 @@ export default function AcceptInvite() {
       }
     } catch (err) {
       const parsed = parseApiError(err, 'Failed to load invitation');
-      notify({ kind: 'error', title: 'Failed to load invitation', subtitle: parsed.message });
+      setFeedback({ title: 'Failed to load invitation', subtitle: parsed.message });
     } finally {
       setLoading(false);
     }
@@ -237,13 +98,14 @@ export default function AcceptInvite() {
     try {
       setRedeeming(true);
       await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/redeem`, {});
+      setFeedback(null);
       setStage('set-password');
       if (onboardingStageKey) {
         window.sessionStorage.setItem(onboardingStageKey, 'set-password');
       }
     } catch (err) {
       const parsed = parseApiError(err, 'Failed to redeem invitation');
-      notify({ kind: 'error', title: 'Failed to redeem invitation', subtitle: parsed.message });
+      setFeedback({ title: 'Failed to redeem invitation', subtitle: parsed.message });
     } finally {
       setRedeeming(false);
     }
@@ -257,28 +119,27 @@ export default function AcceptInvite() {
 
       const request: VerifyInvitationOtpRequest = { oneTimePassword };
       await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/verify-otp`, request);
+      setFeedback(null);
       setStage('set-password');
       if (onboardingStageKey) {
         window.sessionStorage.setItem(onboardingStageKey, 'set-password');
       }
     } catch (err) {
       const parsed = parseApiError(err, 'Failed to verify one-time password');
-      notify({ kind: 'error', title: 'Failed to verify one-time password', subtitle: parsed.message });
+      setFeedback({ title: 'Failed to verify one-time password', subtitle: parsed.message });
     } finally {
       setVerifying(false);
     }
   };
 
   const handleComplete = async () => {
+    setSubmitAttempted(true);
     if (!firstName.trim() || !lastName.trim()) {
-      notify({ kind: 'error', title: 'Name is required', subtitle: 'Enter your first name and last name to finish account setup.' });
+      setFeedback({ title: 'Name is required', subtitle: 'Enter your first name and last name to finish account setup.' });
       return;
     }
 
-    if (password !== confirmPassword) {
-      notify({ kind: 'error', title: 'Passwords do not match' });
-      return;
-    }
+    if (validateInvitationPassword(password) || password !== confirmPassword) return;
 
     try {
       setCompleting(true);
@@ -288,6 +149,7 @@ export default function AcceptInvite() {
         newPassword: password,
       };
       const response = await apiClient.post<LoginResponse>('/api/auth/complete-onboarding', request);
+      setFeedback(null);
       setAuthenticatedUser(response.user);
       setCompleted(true);
       if (onboardingStageKey) {
@@ -298,7 +160,7 @@ export default function AcceptInvite() {
       }, 1200);
     } catch (err) {
       const parsed = parseApiError(err, 'Failed to complete onboarding');
-      notify({ kind: 'error', title: 'Failed to complete onboarding', subtitle: parsed.message });
+      setFeedback({ title: 'Failed to complete onboarding', subtitle: parsed.message });
     } finally {
       setCompleting(false);
     }
@@ -309,21 +171,15 @@ export default function AcceptInvite() {
     : inviteInfo?.resourceType === 'platform_user'
       ? 'platform'
       : inviteInfo?.resourceType;
-  const hideDefaultBranding = !branding && !brandingFetchDone;
-  const safeBrandLogoSrc = logoObjectUrl;
-  const loginLogoHeightPx = Math.round(28 * ((branding?.logoScale ?? 100) / 100));
-  const brandTitle = typeof branding?.logoTitle === 'string' && branding.logoTitle.trim() ? branding.logoTitle.trim() : 'EnterpriseGlue';
-  const customBrandFontFamily = branding?.titleFontUrl ? 'PublicBrandingFont' : undefined;
-  const brandTitleWeight = typeof branding?.titleFontWeight === 'string' && branding.titleFontWeight.trim()
-    ? branding.titleFontWeight.trim()
-    : 'var(--font-weight-semibold)';
-  const loginTitleFontSizePx = Math.round(Math.max(branding?.titleFontSize ?? 14, 10) * 2);
-  const loginTitleOffsetPx = typeof branding?.loginTitleVerticalOffset === 'number'
-    ? Math.max(-50, Math.min(50, branding.loginTitleVerticalOffset))
-    : 0;
-  const loginTitleColor = typeof branding?.loginTitleColor === 'string' && /^#[0-9A-Fa-f]{6}$/.test(branding.loginTitleColor.trim())
-    ? branding.loginTitleColor.trim()
-    : undefined;
+  const passwordError = passwordTouched || submitAttempted ? validateInvitationPassword(password) : null;
+  const confirmPasswordError = confirmPasswordTouched || submitAttempted
+    ? !confirmPassword
+      ? 'Confirm your new password.'
+      : password !== confirmPassword
+        ? 'Passwords do not match.'
+        : null
+    : null;
+  const loginPath = inviteInfo?.tenantSlug ? `/t/${encodeURIComponent(inviteInfo.tenantSlug)}/login` : '/login';
   const inviteStatusNotice = inviteInfo?.status === 'expired'
     ? {
         kind: 'warning' as const,
@@ -346,113 +202,42 @@ export default function AcceptInvite() {
           }
       : null;
 
-  useEffect(() => {
-    const styleId = 'public-branding-font-accept-invite';
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
-
-    if (!branding?.titleFontUrl) {
-      if (styleEl) styleEl.remove();
-      return;
-    }
-
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      document.head.appendChild(styleEl);
-    }
-
-    styleEl.textContent = `
-      @font-face {
-        font-family: 'PublicBrandingFont';
-        src: url('${branding.titleFontUrl}') format('woff2'), url('${branding.titleFontUrl}') format('woff'), url('${branding.titleFontUrl}') format('truetype');
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-      }
-    `;
-
-    return () => {
-      const next = document.getElementById(styleId);
-      if (next) next.remove();
-    };
-  }, [branding?.titleFontUrl]);
-
-  useEffect(() => {
-    document.title = brandTitle;
-  }, [brandTitle]);
-
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--color-bg-secondary)',
-        }}
-      >
+      <PublicAuthShell title="Set up your account" description="Loading your invitation details." panelSize="wide">
         <InlineLoading description="Loading invitation..." />
-      </div>
+      </PublicAuthShell>
     );
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--color-bg-secondary)',
-        padding: 'var(--spacing-6)',
-      }}
+    <PublicAuthShell
+      title={completed ? 'Account ready' : 'Set up your account'}
+      description={!completed && inviteInfo ? <>You have been invited to join <strong>{inviteInfo.resourceName || inviteInfo.tenantSlug}</strong> {resourceLabel ? `(${resourceLabel})` : ''}.</> : undefined}
+      homePath={inviteInfo?.tenantSlug ? `/t/${encodeURIComponent(inviteInfo.tenantSlug)}/` : '/'}
+      panelSize="wide"
     >
-      <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--spacing-5)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-2)', width: '100%' }}>
-          <img
-            src={safeBrandLogoSrc || logoPng}
-            alt="Logo"
-            style={{ height: `${loginLogoHeightPx}px`, width: 'auto', visibility: hideDefaultBranding ? 'hidden' : 'visible' }}
-          />
-          <span
-            style={{
-              fontSize: `${loginTitleFontSizePx}px`,
-              fontWeight: brandTitleWeight,
-              fontFamily: customBrandFontFamily || 'var(--font-primary)',
-              color: loginTitleColor || 'var(--color-text-primary)',
-              display: 'inline-block',
-              transform: loginTitleOffsetPx ? `translateY(${loginTitleOffsetPx}px)` : undefined,
-              visibility: hideDefaultBranding ? 'hidden' : 'visible',
-            }}
-          >
-            {brandTitle}
-          </span>
-        </div>
-
-        <div style={{ background: 'var(--color-bg-primary)', padding: 'var(--spacing-6)', borderRadius: 'var(--border-radius-md)', boxShadow: 'var(--shadow-md)', width: '100%' }}>
+      {(publicBranding) => <>
+          {feedback ? (
+            <InlineNotification
+              lowContrast
+              kind="error"
+              title={feedback.title}
+              subtitle={feedback.subtitle}
+              hideCloseButton
+              style={{ marginBottom: 'var(--spacing-5)' }}
+            />
+          ) : null}
           {completed ? (
-            <div style={{ textAlign: 'center' }}>
+            <div>
               <Checkmark size={48} style={{ color: 'var(--cds-support-success)', marginBottom: 'var(--spacing-4)' }} />
-              <h1 style={{ fontSize: '1.375rem', lineHeight: 1.25, fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>
-                Account ready
-              </h1>
               <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-4)' }}>
-                {`Redirecting you into ${brandTitle}...`}
+                {`Redirecting you into ${publicBranding.brandTitle}...`}
               </p>
               <InlineLoading description="Redirecting..." />
             </div>
           ) : inviteInfo ? (
             <div style={{ display: 'grid', gap: 'var(--spacing-5)', width: '100%' }}>
-              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-                <h1 style={{ fontSize: '1.375rem', lineHeight: 1.25, fontWeight: 'var(--font-weight-semibold)', margin: 0 }}>
-                  Set up your account
-                </h1>
-                <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-14)', lineHeight: 1.5, margin: 0 }}>
-                  You have been invited to join <strong>{inviteInfo.resourceName || inviteInfo.tenantSlug}</strong> {resourceLabel ? `(${resourceLabel})` : ''} on {brandTitle}.
-                </p>
-              </div>
-
               {inviteStatusNotice ? (
                 <InlineNotification
                   lowContrast
@@ -474,7 +259,7 @@ export default function AcceptInvite() {
                     renderIcon={Checkmark}
                     onClick={handleRedeemEmailInvite}
                     disabled={redeeming}
-                    style={{ width: '100%', backgroundColor: 'var(--eg-color-dark-gray)', borderColor: 'var(--eg-color-dark-gray)', fontWeight: 'var(--font-weight-semibold)' }}
+                    className="eg-login-primary-action"
                   >
                     {redeeming ? 'Continuing...' : 'Continue to account setup'}
                   </Button>
@@ -483,7 +268,7 @@ export default function AcceptInvite() {
                 <div style={{ display: 'grid', gap: 'var(--spacing-4)', width: '100%' }}>
                   <TextInput
                     id="invite-one-time-password"
-                    labelText="One-Time Password"
+                    labelText="One-time password"
                     placeholder="Enter the one-time password"
                     value={oneTimePassword}
                     onChange={(e) => setOneTimePassword(e.target.value)}
@@ -493,16 +278,16 @@ export default function AcceptInvite() {
                     renderIcon={Checkmark}
                     onClick={handleVerifyOtp}
                     disabled={verifying || !oneTimePassword.trim()}
-                    style={{ width: '100%', backgroundColor: 'var(--eg-color-dark-gray)', borderColor: 'var(--eg-color-dark-gray)', fontWeight: 'var(--font-weight-semibold)' }}
+                    className="eg-login-primary-action"
                   >
-                    {verifying ? 'Verifying...' : 'Verify One-Time Password'}
+                    {verifying ? 'Verifying...' : 'Verify one-time password'}
                   </Button>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: 'var(--spacing-4)', width: '100%' }}>
                   <TextInput
                     id="invite-first-name"
-                    labelText="First Name"
+                    labelText="First name"
                     placeholder="Enter your first name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
@@ -511,7 +296,7 @@ export default function AcceptInvite() {
                   />
                   <TextInput
                     id="invite-last-name"
-                    labelText="Last Name"
+                    labelText="Last name"
                     placeholder="Enter your last name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
@@ -520,27 +305,35 @@ export default function AcceptInvite() {
                   />
                   <PasswordInput
                     id="invite-password"
-                    labelText="New Password"
+                    labelText="New password"
                     placeholder="Choose a strong password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => setPasswordTouched(true)}
+                    helperText={PASSWORD_REQUIREMENTS}
+                    invalid={Boolean(passwordError)}
+                    invalidText={passwordError || undefined}
                     disabled={completing}
                   />
                   <PasswordInput
                     id="invite-confirm-password"
-                    labelText="Confirm Password"
+                    labelText="Confirm password"
                     placeholder="Re-enter your password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    onBlur={() => setConfirmPasswordTouched(true)}
+                    helperText="Enter the same password again."
+                    invalid={Boolean(confirmPasswordError)}
+                    invalidText={confirmPasswordError || undefined}
                     disabled={completing}
                   />
                   <Button
                     renderIcon={Checkmark}
                     onClick={handleComplete}
                     disabled={completing || !firstName.trim() || !lastName.trim() || !password || !confirmPassword}
-                    style={{ width: '100%', backgroundColor: 'var(--eg-color-dark-gray)', borderColor: 'var(--eg-color-dark-gray)', fontWeight: 'var(--font-weight-semibold)' }}
+                    className="eg-login-primary-action"
                   >
-                    {completing ? 'Finishing setup...' : 'Finish Account Setup'}
+                    {completing ? 'Finishing setup...' : 'Finish account setup'}
                   </Button>
                 </div>
               )}
@@ -555,13 +348,12 @@ export default function AcceptInvite() {
             />
           )}
 
-          <p style={{ textAlign: 'center', marginTop: 'var(--spacing-4)', color: 'var(--color-text-secondary)' }}>
-            <Link to="/" style={{ color: 'var(--cds-link-01)' }}>
-              Go to home page
+          {(inviteInfo?.status === 'expired' || !inviteInfo) && <p style={{ marginTop: 'var(--spacing-5)' }}>
+            <Link to={loginPath} style={{ color: 'var(--cds-link-01)' }}>
+              Go to login
             </Link>
-          </p>
-        </div>
-      </div>
-    </div>
+          </p>}
+      </>}
+    </PublicAuthShell>
   );
 }

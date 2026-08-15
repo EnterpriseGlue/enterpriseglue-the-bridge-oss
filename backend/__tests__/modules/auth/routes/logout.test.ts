@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { doubleCsrf } from 'csrf-csrf';
 import logoutRouter from '../../../../../packages/backend-host/src/modules/auth/routes/logout.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+
+const genericOidcService = vi.hoisted(() => ({ createLogoutRequest: vi.fn() }));
+const genericSamlService = vi.hoisted(() => ({ createLogoutRequest: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/GenericSamlService.js', () => ({ genericSamlService }));
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
+  AuditActions: { LOGOUT: 'auth.logout' }, auditFromRequest: vi.fn((_req, entry) => entry), logAudit: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -77,6 +87,8 @@ describe('POST /api/auth/logout', () => {
     registerCsrfMiddleware(app);
     app.use(logoutRouter);
     vi.clearAllMocks();
+    genericOidcService.createLogoutRequest.mockResolvedValue('https://issuer.example.test/logout');
+    genericSamlService.createLogoutRequest.mockResolvedValue(null);
   });
 
   async function issueCsrfToken(agent: ReturnType<typeof request.agent>) {
@@ -90,7 +102,7 @@ describe('POST /api/auth/logout', () => {
   }
 
   it('rejects logout without CSRF token for cookie-authenticated requests', async () => {
-    const refreshTokenRepo = { update: vi.fn() };
+    const refreshTokenRepo = { update: vi.fn(), find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -110,7 +122,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('revokes all refresh tokens when no token provided', async () => {
-    const refreshTokenRepo = { update: vi.fn() };
+    const refreshTokenRepo = { update: vi.fn(), find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -129,6 +141,7 @@ describe('POST /api/auth/logout', () => {
       .send({});
 
     expect(response.status).toBe(200);
+    expect(response.body).toEqual({ message: 'Logged out successfully', federatedLogoutUrl: null });
     expect(refreshTokenRepo.update).toHaveBeenCalledWith(
       { userId: 'user-1' },
       expect.objectContaining({ revokedAt: expect.any(Number) })
@@ -136,7 +149,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('revokes active tokens when refresh token provided', async () => {
-    const refreshTokenRepo = { update: vi.fn() };
+    const refreshTokenRepo = { update: vi.fn(), find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -155,6 +168,57 @@ describe('POST /api/auth/logout', () => {
       .send({ refreshToken: 'refresh-1' });
 
     expect(response.status).toBe(200);
+    expect(refreshTokenRepo.update).toHaveBeenCalled();
+  });
+
+  it('revokes local sessions first and returns the verified OIDC provider logout target', async () => {
+    const presentedToken = 'current-refresh-token';
+    const providerSession = {
+      id: 'session-1', userId: 'user-1', identityProviderId: 'provider-1',
+      providerSubjectId: 'subject-1', providerSessionId: 'sid-1', providerNameIdFormat: null,
+      tokenHash: await bcrypt.hash(presentedToken, 4), createdAt: Date.now(), revokedAt: null,
+    };
+    const refreshTokenRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }), find: vi.fn().mockResolvedValue([providerSession]) };
+    const identityProviderRepo = { findOne: vi.fn().mockResolvedValue({
+      id: 'provider-1', isEnabled: true, authenticationMode: 'direct', protocol: 'oidc',
+      configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test' }),
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RefreshToken) return refreshTokenRepo;
+        if (entity === IdentityProvider) return identityProviderRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', 'Bearer test')
+      .send({ refreshToken: presentedToken });
+
+    expect(response.status).toBe(200);
+    expect(refreshTokenRepo.update.mock.invocationCallOrder[0]).toBeLessThan(genericOidcService.createLogoutRequest.mock.invocationCallOrder[0]);
+    expect(response.body.federatedLogoutUrl).toBe('https://issuer.example.test/logout');
+  });
+
+  it('keeps local logout successful when the identity provider logout endpoint fails', async () => {
+    const presentedToken = 'current-refresh-token';
+    const refreshTokenRepo = {
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      find: vi.fn().mockResolvedValue([{
+        identityProviderId: 'provider-1', providerSubjectId: 'subject-1', tokenHash: await bcrypt.hash(presentedToken, 4), createdAt: Date.now(),
+      }]),
+    };
+    const identityProviderRepo = { findOne: vi.fn().mockResolvedValue({
+      id: 'provider-1', isEnabled: true, authenticationMode: 'direct', protocol: 'oidc', configurationJson: '{}',
+    }) };
+    genericOidcService.createLogoutRequest.mockRejectedValue(new Error('provider unavailable'));
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === RefreshToken ? refreshTokenRepo : identityProviderRepo });
+
+    const response = await request(app).post('/api/auth/logout').set('Authorization', 'Bearer test').send({ refreshToken: presentedToken });
+
+    expect(response.status).toBe(200);
+    expect(response.body.federatedLogoutUrl).toBeNull();
     expect(refreshTokenRepo.update).toHaveBeenCalled();
   });
 });

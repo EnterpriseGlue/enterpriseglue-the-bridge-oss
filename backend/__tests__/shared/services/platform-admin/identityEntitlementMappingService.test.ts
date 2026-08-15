@@ -7,6 +7,7 @@ import {
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, PlatformSettings, RbacRoleAssignment, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
+import { PLATFORM_ADMINISTRATORS_GROUP_ID } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
@@ -248,6 +249,46 @@ describe('identity entitlement mapping', () => {
       }));
     }
     expect(mappingRepo.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects privileged mapping targets and removes grants derived from legacy privileged rows', async () => {
+    const mappingRepo = {
+      insert: vi.fn(),
+      find: vi.fn().mockResolvedValue([{
+        id: 'legacy-platform-admin', providerId: 'entra', entitlementType: 'group', externalId: 'group-prod',
+        matchOperator: 'exact', targetGroupId: PLATFORM_ADMINISTRATORS_GROUP_ID,
+        syncMode: 'authoritative', isActive: true, updatedAt: 1,
+      }]),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const membershipRepo = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'legacy-admin-membership', userId: 'user-1', groupId: PLATFORM_ADMINISTRATORS_GROUP_ID,
+        source: 'identity_provider', sourceRef: identityProviderMembershipSourceRef('entra', 'legacy-platform-admin'),
+      }),
+      insert: vi.fn(),
+      delete: vi.fn().mockResolvedValue(undefined),
+    };
+    const providerRepo = { findOne: vi.fn().mockResolvedValue({ id: 'entra', key: 'identity.oidc.main' }) };
+    const groupRepo = { findOne: vi.fn().mockResolvedValue({ id: PLATFORM_ADMINISTRATORS_GROUP_ID, key: 'platform-administrators' }) };
+    (getDataSource as unknown as Mock).mockResolvedValue(transactionalStore(
+      (entity: unknown) => entity === IdentityProvider ? providerRepo
+        : entity === AuthzGroup ? groupRepo
+          : entity === IdentityEntitlementMapping ? mappingRepo
+            : entity === AuthzGroupMembership ? membershipRepo
+              : {},
+    ));
+
+    await expect(identityEntitlementMappingService.create({
+      providerKey: 'identity.oidc.main', targetGroupKey: 'platform-administrators',
+      entitlementType: 'group', externalId: 'group-prod', matchOperator: 'exact',
+    }, 'tenant-a')).rejects.toThrow('Platform administrator access cannot be assigned by an identity mapping');
+    expect(mappingRepo.insert).not.toHaveBeenCalled();
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', identity))
+      .resolves.toEqual({ created: 0, removed: 1 });
+    expect(membershipRepo.insert).not.toHaveBeenCalled();
+    expect(membershipRepo.delete).toHaveBeenCalledWith({ id: 'legacy-admin-membership' });
   });
 
   it('requires an explicit platform setting before creating a broad entitlement mapping', async () => {

@@ -207,8 +207,9 @@ function isPublicRoute(): boolean {
     '/forgot-password',
     '/password-reset',
     '/resend-verification',
+    '/signup',
   ];
-  if (publicRoutes.some((route) => pathname.startsWith(route))) return true;
+  if (publicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) return true;
   return /^\/t\/[^/]+\/(login|admin-recovery|invite|verify-email|reset-password|forgot-password|password-reset|resend-verification)(?:\/|$)/.test(pathname);
 }
 

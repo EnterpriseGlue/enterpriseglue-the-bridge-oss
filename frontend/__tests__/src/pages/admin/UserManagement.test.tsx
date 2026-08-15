@@ -173,6 +173,37 @@ describe('UserManagement', () => {
     expect(actions.canDeactivate).toBe(true)
   })
 
+  it('keeps directory-owned profile actions at the source while preserving emergency deactivation', () => {
+    const actions = getUserRowActions(makeUser({
+      id: 'scim-1',
+      authProvider: 'oidc',
+      provisioningSource: 'scim',
+      provisioningDirectoryKey: 'entra-workforce',
+      authenticationSources: ['oidc'],
+      directoryStatus: 'active',
+      isActive: true,
+    }), {
+      currentUserId: 'admin-1',
+      localLoginDisabled: true,
+    })
+
+    expect(actions.isDirectoryManaged).toBe(true)
+    expect(actions.canEdit).toBe(false)
+    expect(actions.canPermanentDelete).toBe(false)
+    expect(actions.canDeactivate).toBe(true)
+  })
+
+  it('does not mislabel a provisioned pre-login identity as authenticated', () => {
+    const user = makeUser({
+      authenticationSources: ['none'],
+      provisioningSource: 'scim',
+      directoryStatus: 'active',
+    })
+
+    expect(user.authenticationSources).toEqual(['none'])
+    expect(user.provisioningSource).toBe('scim')
+  })
+
   it('formats user role assignment lineage without exposing raw claim payloads', () => {
     expect(formatUserRoleAssignmentSourceLineage(makeAssignment({
       source: 'sso',

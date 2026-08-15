@@ -40,7 +40,7 @@ import {
   type Permission,
   type PermissionContext,
 } from '../services/platform-admin/permissions.js';
-import { policyService } from '../services/platform-admin/PolicyService.js';
+import { policyService, type EvaluationContext } from '../services/platform-admin/PolicyService.js';
 import { Errors } from './errorHandler.js';
 import { updateBpmnEngineRequestContext } from '../services/bpmn-engine-request-context.js';
 
@@ -843,6 +843,9 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
           userId: req.user.userId,
           tenantId: effectiveProjectTenantId(req.tenant?.tenantId),
           resourceType: 'project',
+          ipAddress: req.ip,
+          userAgent: req.headers?.['user-agent'],
+          mfaVerified: req.user.mfaVerified === true,
         });
         if (policy.decision === 'deny') {
           throw Errors.forbidden(`Access denied for action ${action.actionId}: ${policy.reason}`);
@@ -860,6 +863,9 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
           userId: req.user.userId,
           tenantId: req.tenant?.tenantId || null,
           resourceType: 'engine',
+          ipAddress: req.ip,
+          userAgent: req.headers?.['user-agent'],
+          mfaVerified: req.user.mfaVerified === true,
         });
         if (policy.decision === 'deny') {
           throw Errors.forbidden(`Access denied for action ${action.actionId}: ${policy.reason}`);
@@ -889,7 +895,12 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
         acceptedPermissions.map((permission) => permissionService.hasPermission(permission, context))
       )).some(Boolean);
       let policyPermission = action.permissionId;
-      let policyContext = context;
+      let policyContext: EvaluationContext = {
+        ...context,
+        ipAddress: req.ip,
+        userAgent: req.headers?.['user-agent'],
+        mfaVerified: req.user.mfaVerified === true,
+      };
       const unownedMigrationId = (req as Request & { unownedEngineMigrationId?: string })
         .unownedEngineMigrationId;
       if (
@@ -908,7 +919,12 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
         );
         if (allowed) {
           policyPermission = options.unownedEngineMigrationPermission;
-          policyContext = platformContext;
+          policyContext = {
+            ...platformContext,
+            ipAddress: req.ip,
+            userAgent: req.headers?.['user-agent'],
+            mfaVerified: req.user.mfaVerified === true,
+          };
         }
       }
       if (!allowed) {

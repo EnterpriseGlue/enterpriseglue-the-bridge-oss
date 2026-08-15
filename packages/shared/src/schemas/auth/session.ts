@@ -53,8 +53,15 @@ export const RefreshAccessTokenResponseSchema = z.object({
   expiresIn: z.number().positive(),
 }).strict();
 
+export const LogoutResponseSchema = z.object({
+  message: z.string(),
+  /** Present only when the verified provider supports standards-based RP logout. */
+  federatedLogoutUrl: z.string().url().nullable(),
+}).strict();
+
 export type AuthenticatedSessionContext = z.infer<typeof AuthenticatedSessionContextSchema>;
 export type AuthenticatedSessionUser = z.infer<typeof AuthenticatedSessionUserSchema>;
 export type AuthenticatedSessionLoginResponse = z.infer<typeof AuthenticatedSessionLoginResponseSchema>;
 export type AuthenticatedSessionOnboardingResponse = z.infer<typeof AuthenticatedSessionOnboardingResponseSchema>;
 export type RefreshAccessTokenResponse = z.infer<typeof RefreshAccessTokenResponseSchema>;
+export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;

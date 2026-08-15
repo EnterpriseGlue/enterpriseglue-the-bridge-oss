@@ -1,4 +1,5 @@
 import React, { useContext, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Settings } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
 import {
@@ -8,11 +9,11 @@ import {
   TextInput,
   TextArea,
   ComboBox,
-  Tabs,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
+  Dropdown,
+  SideNav,
+  SideNavItems,
+  SideNavMenu,
+  SideNavMenuItem,
 } from '@carbon/react';
 import {
   usePlatformSettings,
@@ -43,6 +44,7 @@ import type {
   UserListItem,
 } from '../../../api/platform-admin';
 import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
+import IdentityProvisioningSettingsTab from '../components/IdentityProvisioningSettingsTab';
 import IdentityMappingsSettingsTab from '../components/IdentityMappingsSettingsTab';
 import ConfigurationBundleSettingsTab from '../components/ConfigurationBundleSettingsTab';
 import RoleLibrarySettingsTab from '../components/RoleLibrarySettingsTab';
@@ -93,24 +95,35 @@ type PlatformSettingsSectionVisibility =
   | 'authz-policies'
   | 'audit';
 
+const PLATFORM_SETTINGS_GROUPS = [
+  { id: 'platform', label: 'Platform' },
+  { id: 'identity-access', label: 'Identity and access' },
+  { id: 'operations', label: 'Operations' },
+  { id: 'communications', label: 'Communications' },
+  { id: 'audit', label: 'Audit' },
+] as const;
+
+type PlatformSettingsGroup = typeof PLATFORM_SETTINGS_GROUPS[number]['id'];
+
 const PLATFORM_SETTINGS_SECTION_REGISTRY = [
-  { id: 'git', label: 'Git', visibility: 'settings-or-git-manage' },
-  { id: 'projects', label: 'Projects', visibility: 'settings-or-governance-read' },
-  { id: 'invite-domains', label: 'Invite Domains', visibility: 'settings' },
-  { id: 'pii-redaction', label: 'PII Redaction', visibility: 'settings' },
-  { id: 'engines', label: 'Engines', visibility: 'settings-or-governance-read' },
-  { id: 'identity-providers', label: 'Identity Providers', visibility: 'identity-providers' },
-  { id: 'identity-mappings', label: 'Identity Mappings', visibility: 'identity-mappings' },
-  { id: 'configuration', label: 'Configuration', visibility: 'configuration' },
-  { id: 'role-library', label: 'Role Library', visibility: 'access-control' },
-  { id: 'access-control', label: 'Access Control', visibility: 'access-control' },
-  { id: 'authz-policies', label: 'Authorization Policies', visibility: 'authz-policies' },
-  { id: 'authz-audit', label: 'Authorization Audit', visibility: 'audit' },
-  { id: 'audit-logs', label: 'System Audit Logs', visibility: 'audit' },
-  { id: 'email', label: 'Email', visibility: 'settings' },
-  { id: 'email-templates', label: 'Email Templates', visibility: 'settings' },
-  { id: 'branding', label: 'Branding', visibility: 'settings' },
-] as const satisfies ReadonlyArray<{ id: string; label: string; visibility: PlatformSettingsSectionVisibility }>;
+  { id: 'projects', label: 'Projects', group: 'platform', visibility: 'settings-or-governance-read' },
+  { id: 'engines', label: 'Engines', group: 'platform', visibility: 'settings-or-governance-read' },
+  { id: 'invite-domains', label: 'Invite domains', group: 'platform', visibility: 'settings' },
+  { id: 'pii-redaction', label: 'PII redaction', group: 'platform', visibility: 'settings' },
+  { id: 'branding', label: 'Branding', group: 'platform', visibility: 'settings' },
+  { id: 'identity-providers', label: 'Identity providers', group: 'identity-access', visibility: 'identity-providers' },
+  { id: 'identity-provisioning', label: 'Provisioning', group: 'identity-access', visibility: 'identity-providers' },
+  { id: 'identity-mappings', label: 'Identity mappings', group: 'identity-access', visibility: 'identity-mappings' },
+  { id: 'role-library', label: 'Role library', group: 'identity-access', visibility: 'access-control' },
+  { id: 'access-control', label: 'Access control', group: 'identity-access', visibility: 'access-control' },
+  { id: 'authz-policies', label: 'Authorization policies', group: 'identity-access', visibility: 'authz-policies' },
+  { id: 'git', label: 'Git', group: 'operations', visibility: 'settings-or-git-manage' },
+  { id: 'configuration', label: 'Configuration', group: 'operations', visibility: 'configuration' },
+  { id: 'email', label: 'Email', group: 'communications', visibility: 'settings' },
+  { id: 'email-templates', label: 'Email templates', group: 'communications', visibility: 'settings' },
+  { id: 'authz-audit', label: 'Authorization audit', group: 'audit', visibility: 'audit' },
+  { id: 'audit-logs', label: 'System audit logs', group: 'audit', visibility: 'audit' },
+] as const satisfies ReadonlyArray<{ id: string; label: string; group: PlatformSettingsGroup; visibility: PlatformSettingsSectionVisibility }>;
 
 type PlatformSettingsSection = typeof PLATFORM_SETTINGS_SECTION_REGISTRY[number]['id'];
 const PLATFORM_SETTINGS_SECTION_BY_ID = new Map(PLATFORM_SETTINGS_SECTION_REGISTRY.map((section) => [section.id, section]));
@@ -120,6 +133,9 @@ interface PlatformSettingsPageProps {
 }
 
 export default function PlatformSettingsPage({ section }: PlatformSettingsPageProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = useParams<{ settingsSection?: string }>();
   const authContext = useContext(AuthContext);
   const platformResource = { type: 'platform' as const, id: null };
   const hasPermissionSnapshot = Boolean(authContext?.permissions);
@@ -145,6 +161,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   ]);
   const canViewIdentityProviders = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
     PlatformPermission.SSO_PROVIDERS_VIEW,
+    PlatformPermission.SSO_PROVIDERS_MANAGE,
+  ]);
+  const canManageIdentityProviders = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
     PlatformPermission.SSO_PROVIDERS_MANAGE,
   ]);
   const canViewConfiguration = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
@@ -432,7 +451,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const sectionLabel = section ? PLATFORM_SETTINGS_SECTION_BY_ID.get(section)?.label || null : null;
-  const headerTitle = sectionLabel || 'Platform Settings';
+  const headerTitle = sectionLabel || 'Platform settings';
   const headerSubtitle = section
     ? 'Configure platform defaults for this area'
     : 'Configure global platform behavior and defaults';
@@ -562,6 +581,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     }}
   />;
   const renderIdentityMappings = () => <IdentityMappingsSettingsTab />;
+  const renderIdentityProvisioning = () => (
+    <IdentityProvisioningSettingsTab
+      canManage={canManageIdentityProviders}
+      unavailableReason={canManageIdentityProviders ? null : 'The current role can inspect provisioning directories but cannot create, rotate, enable, or archive them.'}
+    />
+  );
   const renderConfiguration = () => <ConfigurationBundleSettingsTab />;
   const renderRoleLibrary = () => <RoleLibrarySettingsTab />;
 
@@ -610,6 +635,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     'pii-redaction': renderPiiRedaction,
     engines: renderEngines,
     'identity-providers': renderIdentityProviders,
+    'identity-provisioning': renderIdentityProvisioning,
     'identity-mappings': renderIdentityMappings,
     configuration: renderConfiguration,
     'role-library': renderRoleLibrary,
@@ -625,27 +651,22 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     .filter((tab) => sectionVisibility[tab.visibility])
     .map((tab) => ({ ...tab, render: sectionRenderers[tab.id] }));
 
-  const scrollPlatformSettingsTabIntoView = (selectedTab: HTMLElement) => {
-    if (typeof window === 'undefined') return;
-    const centerSelectedTab = () => {
-      const tabList = selectedTab.closest<HTMLElement>(
-        '[role="tablist"][aria-label="Platform settings tabs"]',
-      );
-      if (!tabList || !selectedTab) return;
-      const centeredScrollLeft = selectedTab.offsetLeft
-        - ((tabList.clientWidth - selectedTab.offsetWidth) / 2);
-      tabList.scrollTo({
-        left: Math.max(0, centeredScrollLeft),
-        behavior: 'auto',
-      });
-    };
-    window.requestAnimationFrame(centerSelectedTab);
-    window.setTimeout(centerSelectedTab, 250);
+  const routeSection = params.settingsSection && PLATFORM_SETTINGS_SECTION_BY_ID.has(params.settingsSection as PlatformSettingsSection)
+    ? params.settingsSection as PlatformSettingsSection
+    : undefined;
+  const selectedSectionTab = platformSettingsTabs.find((tab) => tab.id === (section || routeSection))
+    || platformSettingsTabs[0];
+  const settingsBasePath = location.pathname.match(/^(.*\/admin\/settings)(?:\/.*)?$/)?.[1] || '/admin/settings';
+  const selectSettingsSection = (nextSection: PlatformSettingsSection) => {
+    if (nextSection === selectedSectionTab?.id) return;
+    navigate(`${settingsBasePath}/${nextSection}`);
   };
-
-  const selectedSectionTab = section
-    ? platformSettingsTabs.find((tab) => tab.id === section)
-    : null;
+  const visibleSettingsGroups = PLATFORM_SETTINGS_GROUPS
+    .map((group) => ({
+      ...group,
+      sections: platformSettingsTabs.filter((tab) => tab.group === group.id),
+    }))
+    .filter((group) => group.sections.length > 0);
 
   const normalizedInviteDomains = Array.isArray((settings as any)?.inviteAllowedDomains)
     ? ((settings as any).inviteAllowedDomains as string[]).map((d) => String(d || '').trim().toLowerCase()).filter(Boolean)
@@ -684,9 +705,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       >
         <PageHeader
           icon={Settings}
-          title="Platform Settings"
+          title="Platform settings"
           subtitle="Configure global platform behavior and defaults"
           gradient={PAGE_GRADIENTS.red}
+          variant="productive"
         />
         <div style={{ padding: 'var(--spacing-5)' }}>
           <div style={{ display: 'flex', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-6)' }}>
@@ -735,12 +757,13 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
           title={headerTitle}
           subtitle={headerSubtitle}
           gradient={PAGE_GRADIENTS.red}
+          variant="productive"
         />
         <div style={{ padding: 'var(--spacing-5)' }}>
           <InlineNotification
             kind="error"
             title="Platform settings unavailable"
-            subtitle="No Platform Settings or platform administration permissions are available for the current user."
+            subtitle="No platform settings or platform administration permissions are available for the current user."
             hideCloseButton
           />
         </div>
@@ -764,6 +787,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
           title={headerTitle}
           subtitle={headerSubtitle}
           gradient={PAGE_GRADIENTS.red}
+          variant="productive"
         />
         <div style={{ padding: 'var(--spacing-5)' }}>
           <InlineNotification
@@ -792,6 +816,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         title={headerTitle}
         subtitle={headerSubtitle}
         gradient={PAGE_GRADIENTS.red}
+        variant="productive"
       />
 
       {settingsUpdateError && (
@@ -805,45 +830,59 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         </div>
       )}
 
-      {section ? (
-        <div style={{ paddingInline: 0, paddingBlock: 'var(--cds-layout-density-padding-inline-local)' }}>
+      <div className="eg-settings-mobile-selector">
+        <Dropdown
+          id="platform-settings-section-selector"
+          titleText="Settings section"
+          label="Choose a settings section"
+          items={platformSettingsTabs}
+          itemToString={(item) => item?.label || ''}
+          selectedItem={selectedSectionTab}
+          onChange={({ selectedItem }) => selectedItem && selectSettingsSection(selectedItem.id)}
+        />
+      </div>
+
+      <div className="eg-settings-workspace">
+        <aside className="eg-settings-local-navigation" aria-label="Platform settings sections">
+          <SideNav expanded isFixedNav={false} isPersistent aria-label="Platform settings sections">
+            <SideNavItems>
+              {visibleSettingsGroups.map((group) => (
+                <SideNavMenu
+                  key={group.id}
+                  title={group.label}
+                  defaultExpanded={group.sections.some((item) => item.id === selectedSectionTab?.id)}
+                  isActive={group.sections.some((item) => item.id === selectedSectionTab?.id)}
+                >
+                  {group.sections.map((item) => (
+                    <SideNavMenuItem
+                      key={item.id}
+                      href={`${settingsBasePath}/${item.id}`}
+                      isActive={item.id === selectedSectionTab?.id}
+                      aria-current={item.id === selectedSectionTab?.id ? 'page' : undefined}
+                      onClick={(event: React.MouseEvent<HTMLElement>) => {
+                        event.preventDefault();
+                        selectSettingsSection(item.id);
+                      }}
+                    >
+                      {item.label}
+                    </SideNavMenuItem>
+                  ))}
+                </SideNavMenu>
+              ))}
+            </SideNavItems>
+          </SideNav>
+        </aside>
+        <section className="eg-settings-content" aria-label={selectedSectionTab?.label || 'Platform settings'}>
           {selectedSectionTab ? selectedSectionTab.render() : (
             <InlineNotification
               kind="error"
-              title="Settings tab unavailable"
-              subtitle="The current user does not have permission to open this Platform Settings tab."
+              title="Settings section unavailable"
+              subtitle="The current user does not have permission to open this platform settings section."
               hideCloseButton
             />
           )}
-        </div>
-      ) : (
-        <Tabs>
-          <TabList aria-label="Platform settings tabs" className="eg-scrollable-tab-list" scrollIntoView>
-            {platformSettingsTabs.map((tab) => (
-              <Tab
-                key={tab.id}
-                onClick={(event) => scrollPlatformSettingsTabIntoView(event.currentTarget as HTMLElement)}
-                onFocus={(event) => scrollPlatformSettingsTabIntoView(event.currentTarget as HTMLElement)}
-              >
-                {tab.label}
-              </Tab>
-            ))}
-          </TabList>
-          <TabPanels>
-            {platformSettingsTabs.map((tab) => (
-              <TabPanel
-                key={tab.id}
-                style={{
-                  paddingInline: 0,
-                  paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-                }}
-              >
-                {tab.render()}
-              </TabPanel>
-            ))}
-          </TabPanels>
-        </Tabs>
-      )}
+        </section>
+      </div>
 
       {/* Create Environment Modal */}
       <Modal

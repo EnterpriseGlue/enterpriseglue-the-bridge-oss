@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { MOCK_SAML_REQUEST_ID, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
+import { createSamlSigningMaterial } from '../../../../test/identity-mocks/samlSigningMaterial.js';
 
 const configuration = {
   entityId: 'enterpriseglue-ai',
@@ -16,6 +17,8 @@ const configuration = {
 describe('GenericSamlService', () => {
   afterEach(async () => {
     delete process.env.EG_SAML_PROTOCOL_CERT;
+    delete process.env.EG_SAML_SP_PRIVATE_KEY;
+    delete process.env.EG_SAML_SP_CERT;
   });
 
   it('normalizes configured SAML attributes for provider-neutral provisioning and mappings', () => {
@@ -116,6 +119,53 @@ describe('GenericSamlService', () => {
     const second = new MockSamlIdentityProvider();
 
     expect(first.certificate()).not.toEqual(second.certificate());
+  });
+
+  it('validates an XML-signed IdP LogoutRequest before exposing its session identifiers', async () => {
+    const provider = new MockSamlIdentityProvider();
+    const serviceProvider = createSamlSigningMaterial();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    process.env.EG_SAML_SP_PRIVATE_KEY = serviceProvider.privateKey;
+    process.env.EG_SAML_SP_CERT = serviceProvider.certificate;
+    const logoutConfiguration = {
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+      sloUrl: 'https://idp.example.test/slo',
+      logoutCallbackUrl: 'http://localhost:5173/api/auth/identity/identity.saml.main/saml/logout',
+      requestSigningPrivateKeyRef: 'EG_SAML_SP_PRIVATE_KEY',
+      requestSigningCertificateRef: 'EG_SAML_SP_CERT',
+    };
+
+    await expect(genericSamlService.validatePostLogoutRequest(logoutConfiguration, provider.signedLogoutRequest({
+      nameID: 'subject-1', sessionIndex: 'provider-session-1',
+    }))).resolves.toMatchObject({ nameID: 'subject-1', sessionIndex: 'provider-session-1', issuer: provider.issuer });
+  });
+
+  it('signs RP-initiated SAML LogoutRequest redirects and rejects unavailable signing keys', async () => {
+    const provider = new MockSamlIdentityProvider();
+    const serviceProvider = createSamlSigningMaterial();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    process.env.EG_SAML_SP_PRIVATE_KEY = serviceProvider.privateKey;
+    const logoutConfiguration = {
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+      sloUrl: 'https://idp.example.test/slo',
+      logoutCallbackUrl: 'http://localhost:5173/api/auth/identity/identity.saml.main/saml/logout',
+      requestSigningPrivateKeyRef: 'EG_SAML_SP_PRIVATE_KEY',
+    };
+    const result = await genericSamlService.createLogoutRequest(logoutConfiguration, 'relay-state', {
+      nameID: 'subject-1', nameIDFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified', sessionIndex: 'provider-session-1',
+    }, MOCK_SAML_REQUEST_ID);
+    const target = new URL(result!.url);
+    expect(result!.requestId).toBe(MOCK_SAML_REQUEST_ID);
+    expect(target.origin).toBe('https://idp.example.test');
+    expect(target.searchParams.get('Signature')).toBeTruthy();
+    expect(target.searchParams.get('SigAlg')).toContain('sha256');
+
+    delete process.env.EG_SAML_SP_PRIVATE_KEY;
+    await expect(genericSamlService.createLogoutRequest(logoutConfiguration, 'relay-state', {
+      nameID: 'subject-1', nameIDFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified',
+    })).rejects.toThrow(/secret reference is unavailable|private key reference is unavailable/i);
   });
 
 });

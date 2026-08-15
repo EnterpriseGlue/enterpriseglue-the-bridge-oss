@@ -1,0 +1,116 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "carbon-login-pattern-compliance",
+  "type": "feature",
+  "scope": "enterprise-identity-lifecycle",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds a Carbon-aligned authentication and identity-administration experience with provider-neutral SCIM 2.0 provisioning, source-aware user lifecycle controls, headless configuration, and complete API contracts.",
+  "userImpact": [
+    "Desktop navigation keeps Voyager and Admin while narrow viewports expose the same allowed destinations in Carbon side navigation; OSS does not show an empty Enterprise menu.",
+    "Public login, recovery, verification, signup guidance, and invitation onboarding share the application header and a consistent Carbon authentication composition.",
+    "Platform settings now provides responsive grouped navigation plus focused provider, mapping, and provisioning creation workflows.",
+    "Administrators can configure one active authoritative SCIM 2.0 directory per tenant, issue reveal-once credentials, inspect sanitized diagnostics, and manage credential rotation and revocation.",
+    "User management identifies authentication, provisioning, lifecycle, health, effective-access, session, and audit sources while keeping directory-owned fields read-only.",
+    "SCIM deactivation immediately revokes sessions and directory-owned access while preserving the user, authored resources, audit history, and unrelated assignments."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Back up the database and deploy the migration before enabling SCIM traffic.",
+      "Keep provisioning directories disabled until every application instance runs the new backend and migration.",
+      "Retain and test at least one local recovery administrator before enabling authoritative provisioning.",
+      "Follow `docs/how-to/upgrade-identity-provisioning.md` for staged rollout and rollback."
+    ]
+  },
+  "configuration": [
+    "Configuration bundles may import `identity-provisioning-directories.json` using canonical secret references; resolved tokens and hashes are rejected from portable output.",
+    "`EG_SCIM_RATE_LIMIT_MAX` optionally changes the per-credential request budget for each 15-minute window; production defaults to 30000.",
+    "Existing bundles remain valid because provisioning directories are optional and disabled by default."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds `/scim/v2/{directoryKey}` OAuth client-credentials, discovery, bounded Bulk, deterministic sorting, and User/Group create, retrieve, filter, replace, atomic patch, membership, and soft-deprovision endpoints using `application/scim+json`.",
+      "Adds OIDC back-channel and RP-initiated logout plus signed, correlated SAML single logout with targeted provider-session revocation.",
+      "Adds authenticated provisioning-directory, credential, readiness-test, and diagnostics endpoints under `/api/identity/provisioning-directories`.",
+      "Adds source-aware user directory, identity-context, effective-access, session, audit, deactivate, reactivate, and revoke-session endpoints.",
+      "Generated OpenAPI uses canonical shared request, response, authorization, media-type, and error schemas; compatible existing user APIs remain available."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000111-add-identity-provisioning-foundation",
+      "1700000000112-add-federated-session-lineage"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "Adds provisioning directory, hashed credential, SCIM user link, SCIM group link, SCIM group membership, and sanitized diagnostic tables with tenant-scoped identities and lifecycle indexes.",
+      "Adds nullable provider-subject, provider-session, and SAML NameID-format lineage to refresh sessions so verified OIDC/SAML logout can revoke only the affected sessions.",
+      "The down migration removes the new provisioning tables and therefore requires SCIM traffic to be stopped and credentials revoked before rollback."
+    ]
+  },
+  "security": [
+    "SCIM credentials are directory-bound, hashed, compared in constant time, revealed once, independently rate-limited, rotatable with bounded overlap, expirable, revocable, and redacted from responses and diagnostics.",
+    "Email alone never links an account; an existing account is reused only through an active external identity for the directory's associated sign-in provider.",
+    "SCIM and identity mappings cannot grant Platform Administrator access, and local recovery administrators cannot be linked, modified, or deactivated by SCIM.",
+    "ETags, serializable transactions, bounded payloads/results/groups/Bulk operations, atomic PATCH, sanitized errors, source-scoped access removal, audit reasons, and immediate session invalidation protect lifecycle operations.",
+    "Conditional access evaluates trusted IPv4/IPv6/CIDR context and verified OIDC/SAML MFA assurance fail closed; federated logout validates signed protocol evidence before targeted revocation."
+  ],
+  "documentation": [
+    "Architecture and trust model: `docs/architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md` and `docs/concepts/authentication-and-authoritative-provisioning.md`",
+    "Administrator setup and operation: `docs/how-to/configure-scim-provisioning.md` and `docs/how-to/operate-identity-lifecycle.md`",
+    "API and extension reference: `docs/reference/scim-and-user-lifecycle-api.md` and `docs/development/extending-scim-provisioning.md`",
+    "Upgrade and rollback: `docs/how-to/upgrade-identity-provisioning.md`",
+    "Carbon and browser evidence: `docs/development/identity-access-ui-evidence-report.md`"
+  ],
+  "knownLimitations": [
+    "The first OSS release allows one active authoritative provisioning directory per tenant and keeps provisioning disabled by default.",
+    "Microsoft Entra gallery certification and validation against a real customer IdP tenant are external qualification activities and are not claimed by the repository's local protocol-emulator evidence.",
+    "SCIM password input is accepted only for connector interoperability and is deliberately discarded; authentication credentials remain owned by the configured identity provider.",
+    "SCIM remains provider-push, so there is no server-initiated synchronization run API; unsafe account collisions deliberately have no email-based force-link API."
+  ],
+  "rollback": [
+    "Disable every provisioning directory, revoke all provisioning credentials, and stop external SCIM traffic.",
+    "Redeploy the previous application packages and execute the reversible migration only after accepting that the new provisioning-link and diagnostic tables will be removed.",
+    "Restore the pre-upgrade database backup if provisioning records must be retained."
+  ],
+  "validation": [
+    "571 local identity contract, route, mapping-matrix, protocol, provisioning, documentation, relational HTTP E2E, and Carbon UI tests passed.",
+    "The containerized protocol rehearsal passed SCIM HTTP/database (1), OIDC (3), Entra-compatible OIDC (3), signed SAML (1), and direct LDAP (2) journeys.",
+    "Fifty-one accessibility scenarios passed in Chromium, Firefox, and WebKit, and the authorization layout browser gate passed.",
+    "The focused identity-administration accessibility suite passed all 36 Chromium, Firefox, and WebKit cases, including keyboard access to the true end of internally scrolling provider and mapping forms.",
+    "The complete backend, frontend, and frontend-host TypeScript check plus the production frontend-host build passed.",
+    "Authorization inventory reports all 444 authenticated backend routes classified, with zero remaining.",
+    "Fifty-two final Carbon authentication, navigation, settings, identity-workflow, user-lifecycle, provisioning, narrow, and 200%-reflow screenshots passed deterministic dimension, uniqueness, overflow, accessibility, and visual inspection checks, including explicit provider and mapping form-bottom evidence.",
+    "The exact worktree passed a local source-image deployment, while the fail-closed image-only Compose path independently pulled and smoke-tested the published multi-architecture Docker Hub images without falling back to a build.",
+    "Configuration-bundle, documentation, release-note, authorization, browser, database-adapter, and protocol-rehearsal gates are recorded in the implementation plan and UI evidence report."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.4.0",
+      "newVersion": "0.5.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.3.0",
+      "newVersion": "0.4.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.5.0",
+      "newVersion": "0.6.0",
+      "impact": "minor"
+    }
+  ]
+}

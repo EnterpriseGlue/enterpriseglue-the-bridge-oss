@@ -79,7 +79,7 @@ describe('AuthProvider', () => {
 
   it('logs out and clears storage', async () => {
     const { authService } = await import('@src/services/auth');
-    (authService.logout as any).mockResolvedValue(undefined);
+    (authService.logout as any).mockResolvedValue({ message: 'Logged out successfully', federatedLogoutUrl: null });
     (authService.getMe as any).mockResolvedValue({ id: 'user-1', email: 'test@example.com' });
 
     localStorage.setItem(USER_KEY, JSON.stringify({ id: 'user-1' }));

@@ -79,7 +79,7 @@ Use this when you want deployment from registry images without local source buil
 Published images:
 - `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend:latest`
 - `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend:latest`
-- Docker Hub mirrors: `docker.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}:latest`
+- Docker Hub mirrors: `docker.io/haryenterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}:latest`
 
 **Option A — Standalone (no git clone):** use `docker-compose.selfhost.yml` as described above.
 
@@ -92,6 +92,7 @@ Published images:
    cp infra/docker/env/examples/images.oracle.env.example .local/docker/env/images.oracle.env
    ```
 2. `BACKEND_IMAGE` and `FRONTEND_IMAGE` default to the published GHCR images. Set `IMAGE_TAG` to `latest` or a specific version.
+   The published-image overlay always pulls the selected references and stops on registry errors; it never substitutes a local source build.
 3. Keep `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is baked into the frontend image at build time; use `API_UPSTREAM` only when the runtime Nginx proxy must target a different backend host.
 4. Start from images:
    ```bash

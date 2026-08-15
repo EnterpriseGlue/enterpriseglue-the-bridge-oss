@@ -7,8 +7,8 @@ import identityOidcRoute from '../../../../../packages/backend-host/src/modules/
 import { buildSignedOidcState, parseSignedOidcState } from '../../../../../packages/backend-host/src/modules/auth/routes/sso-state.js';
 
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), getDirectLoginProviderByKey: vi.fn(), getDirectLoginProviderById: vi.fn(), listEnabledDirectLoginProviders: vi.fn(), listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn() }));
-const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
-const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn() }));
+const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), authenticationAssurance: vi.fn(), verifyBackChannelLogoutToken: vi.fn() }));
+const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn(), authenticationAssurance: vi.fn(), validatePostLogoutRequest: vi.fn(), createLogoutResponse: vi.fn(), validatePostLogoutResponse: vi.fn(), validateRedirectLogoutResponse: vi.fn() }));
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
@@ -16,6 +16,8 @@ const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 const auditService = vi.hoisted(() => ({ auditFromRequest: vi.fn((_req: unknown, input: unknown) => input), logAudit: vi.fn() }));
 const loginMethodService = vi.hoisted(() => ({ get: vi.fn() }));
 const recordLoginExperienceMetric = vi.hoisted(() => vi.fn());
+const identityProviderRepository = vi.hoisted(() => ({ findOne: vi.fn(), find: vi.fn() }));
+const refreshTokenRepository = vi.hoisted(() => ({ update: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({ loginMethodService }));
@@ -30,6 +32,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMem
 }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success', LOGIN_FAILED: 'auth.login.failed' }, ...auditService }));
 vi.mock('@enterpriseglue/shared/auth/login-experience-metrics.js', () => ({ recordLoginExperienceMetric }));
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn(async () => ({
+  getRepository: (entity: { name?: string }) => entity?.name === 'IdentityProvider' ? identityProviderRepository : refreshTokenRepository,
+})) }));
 
 const provider = {
   id: 'provider-1', tenantId: null, key: 'identity.oidc.main', protocol: 'oidc', isEnabled: true,
@@ -56,6 +61,8 @@ describe('provider-neutral OIDC routes', () => {
     });
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
+    genericOidcService.authenticationAssurance.mockReturnValue({ mfaVerified: false });
+    genericOidcService.verifyBackChannelLogoutToken.mockResolvedValue({ sub: 'subject-1', sid: 'session-1', events: {} });
     identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
     identityProviderProvisioningService.reconcileLdapLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
     identityProviderProvisioningService.reconcileSamlLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
@@ -63,8 +70,16 @@ describe('provider-neutral OIDC routes', () => {
     genericSamlService.createAuthorizationRequest.mockResolvedValue({ url: 'https://idp.example.test/sso?SAMLRequest=request', entryPoint: 'https://idp.example.test/sso' });
     genericSamlService.validatePostResponse.mockResolvedValue({ nameID: 'person@example.test', groups: ['ops'] });
     genericSamlService.extractUserClaims.mockReturnValue({ subjectId: 'subject-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', directoryTenantId: null, claims: { sub: 'subject-1', email: 'person@example.test', groups: ['ops'] } });
+    genericSamlService.authenticationAssurance.mockReturnValue({ mfaVerified: false, authnContext: [] });
+    genericSamlService.validatePostLogoutRequest.mockResolvedValue({ nameID: 'subject-1', sessionIndex: 'session-1', issuer: 'https://issuer.example.test', ID: '_logout-request' });
+    genericSamlService.createLogoutResponse.mockResolvedValue('https://issuer.example.test/slo?SAMLResponse=response');
+    genericSamlService.validatePostLogoutResponse.mockResolvedValue(undefined);
+    genericSamlService.validateRedirectLogoutResponse.mockResolvedValue(undefined);
     samlAssertionReplayService.consume.mockResolvedValue(undefined);
     authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900 });
+    identityProviderRepository.findOne.mockResolvedValue(provider);
+    identityProviderRepository.find.mockResolvedValue([]);
+    refreshTokenRepository.update.mockResolvedValue({ affected: 1 });
     app = express();
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
@@ -259,6 +274,7 @@ describe('provider-neutral OIDC routes', () => {
   it('starts and completes direct SAML login through the exact provider id', async () => {
     const samlProvider = {
       ...provider,
+      key: 'identity.saml.main',
       protocol: 'saml',
       configurationJson: JSON.stringify({ entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test', callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'EG_SAML_CERT' }),
     };
@@ -372,5 +388,55 @@ describe('provider-neutral OIDC routes', () => {
     const samlCookieHeader = Array.isArray(samlCookies) ? samlCookies.join(';') : samlCookies || '';
     expect(samlCookieHeader).not.toContain('accessToken=');
     expect(samlCookieHeader).not.toContain('refreshToken=');
+  });
+
+  it('revokes only the provider subject and session from a verified OIDC back-channel logout token', async () => {
+    const response = await request(app)
+      .post('/api/auth/providers/provider-1/oidc/backchannel-logout')
+      .type('form')
+      .send({ logout_token: 'signed-logout-token' });
+
+    expect(response.status).toBe(200);
+    expect(genericOidcService.verifyBackChannelLogoutToken).toHaveBeenCalledWith(expect.any(Object), 'signed-logout-token');
+    expect(refreshTokenRepository.update).toHaveBeenCalledWith(expect.objectContaining({
+      identityProviderId: 'provider-1', providerSubjectId: 'subject-1', providerSessionId: 'session-1',
+    }), expect.objectContaining({ revokedAt: expect.any(Number) }));
+  });
+
+  it('rejects a non-form OIDC back-channel request before token verification', async () => {
+    const response = await request(app)
+      .post('/api/auth/providers/provider-1/oidc/backchannel-logout')
+      .send({ logout_token: 'signed-logout-token' });
+
+    expect(response.status).toBe(400);
+    expect(genericOidcService.verifyBackChannelLogoutToken).not.toHaveBeenCalled();
+    expect(refreshTokenRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('validates a signed IdP-initiated SAML LogoutRequest before targeted revocation and response', async () => {
+    const samlProvider = {
+      ...provider,
+      key: 'identity.saml.main',
+      protocol: 'saml',
+      configurationJson: JSON.stringify({
+        sloUrl: 'https://issuer.example.test/slo',
+        logoutCallbackUrl: 'http://localhost:5173/api/auth/identity/identity.saml.main/saml/logout',
+      }),
+    };
+    identityProviderRepository.find.mockResolvedValue([samlProvider]);
+
+    const response = await request(app)
+      .post('/api/auth/identity/identity.saml.main/saml/logout')
+      .type('form')
+      .send({ SAMLRequest: 'signed-logout-request', RelayState: 'idp-state' })
+      .redirects(0);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe('https://issuer.example.test/slo?SAMLResponse=response');
+    expect(genericSamlService.validatePostLogoutRequest).toHaveBeenCalledBefore(refreshTokenRepository.update);
+    expect(refreshTokenRepository.update).toHaveBeenCalledWith(expect.objectContaining({
+      identityProviderId: 'provider-1', providerSubjectId: 'subject-1', providerSessionId: 'session-1',
+    }), expect.any(Object));
+    expect(genericSamlService.createLogoutResponse).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ ID: '_logout-request' }), 'idp-state');
   });
 });

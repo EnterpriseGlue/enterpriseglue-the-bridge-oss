@@ -42,7 +42,7 @@ test.describe('Smoke: local Access Control authorization', () => {
 
     await page.goto('/login?local=1');
     await enterLocalCredentials(page, email, password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
     await page.goto('/t/default/admin/access-control');
@@ -95,7 +95,7 @@ test.describe('Smoke: local Access Control authorization', () => {
 
     await page.goto('/login?local=1');
     await enterLocalCredentials(page, email, password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
     await page.goto('/t/default/admin/access-control');
     await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();

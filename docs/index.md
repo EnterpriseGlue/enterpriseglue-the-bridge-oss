@@ -32,6 +32,9 @@ Audience: Developers and architects.
 - [Migrate Governance Settings Ownership](how-to/migrate-governance-settings-ownership.md)
 - [Customer Sidecar Backstop Adapter API](reference/customer-sidecar-backstop-adapter-api.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
+- [Configure SCIM Provisioning](how-to/configure-scim-provisioning.md)
+- [Operate User Lifecycle and Provisioning](how-to/operate-identity-lifecycle.md)
+- [Upgrade Identity Provisioning](how-to/upgrade-identity-provisioning.md)
 - [Configure Authorization, Identity, and Engines](how-to/configure-authorization-and-engines.md)
 - [Enable Mirrored Camunda 7 or Operaton Authorization Backstop](how-to/enable-mirrored-engine-backstop.md)
 - [Customer Sidecar Readiness Runbook](how-to/customer-sidecar-readiness-runbook.md)
@@ -49,6 +52,8 @@ Audience: Developers and architects.
 - [Centralized and Decentralized Engine Tenancy Implementation Plan](architecture/12-engine-tenancy-and-external-provisioning-plan.md)
 - [Camunda 7 Native Grant Migration Plan](architecture/13-camunda-7-native-grant-migration-plan.md)
 - [ADR 0001: Limit Default Tenant Fallback to Provisioning](architecture/decisions/0001-default-tenant-provisioning-fallback.md)
+- [ADR 0003: Separate Authentication from Authoritative Provisioning](architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md)
+- [Authentication and Authoritative Provisioning](concepts/authentication-and-authoritative-provisioning.md)
 - [ADR 0002: Fail Closed for Shared-Engine Tenant Resolution](architecture/decisions/0002-shared-engine-fail-closed-resolution.md)
 
 ## Development and Verification
@@ -56,11 +61,13 @@ Audience: Developers and architects.
 - [Enterprise Backend Plugin Database API](reference/enterprise-backend-plugin-database-api.md)
 - [Customer Sidecar Backstop Test Report](development/customer-sidecar-backstop-test-report.md)
 - [Identity Protocol, Entra Compatibility, and LDAP Test Harness](how-to/ldap-protocol-test-harness.md)
+- [Extending SCIM Provisioning](development/extending-scim-provisioning.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
 - [Engine Tenancy Data Model](reference/engine-tenancy-data-model.md)
 - [Engine Tenancy and Provisioning API](reference/engine-tenancy-and-provisioning-api.md)
+- [SCIM and User-Lifecycle API](reference/scim-and-user-lifecycle-api.md)
 - [Engine Tenancy Compatibility and Deprecation](reference/engine-tenancy-compatibility-and-deprecation.md)
 - [Provision Engines Externally](how-to/provision-engines-externally.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](development/testing-engine-tenancy-and-access-control.md)

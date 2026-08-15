@@ -68,18 +68,17 @@ test.describe('Identity configuration browser lifecycle', () => {
     });
     await page.route('**/api/authz/config-bundles/runs?limit=10', (route) => fulfillJson(route, []));
 
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Configuration' }).click();
+    await page.goto('/admin/settings/configuration');
     await page.getByLabel('Configuration bundle JSON').fill(JSON.stringify(bundle, null, 2));
     await page.getByRole('button', { name: 'Preview changes' }).click();
     await expect(page.getByText('Preview valid')).toBeVisible();
     await page.getByRole('button', { name: 'Apply exact preview' }).click();
     await expect(page.getByText('Configuration applied')).toBeVisible();
     await expect(page.getByText(/No engine or identity changes were needed|Checked \d+ engine sets?/)).toBeVisible();
-    const platformSettingsHeading = page.getByRole('heading', { name: 'Platform Settings' });
+    const platformSettingsHeading = page.getByRole('heading', { name: 'Platform settings' });
     await platformSettingsHeading.scrollIntoViewIfNeeded();
     await expect(platformSettingsHeading).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Configuration' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('link', { name: 'Configuration' })).toHaveAttribute('aria-current', 'page');
     await captureManualScreenshot(page, '48-identity-configuration-applied.jpg');
     expect(appliedBodies).toHaveLength(1);
     expect(appliedBodies[0]).toMatchObject({ expectedPreviewHash: canonicalHash, identityReconciliationMode: 'apply' });
@@ -92,9 +91,8 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
     expect(identityStack.events).toEqual(expect.arrayContaining(['provider_listed', 'authorization_started', 'token_issued', 'session_created']));
 
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Providers' }).click();
-    const providersPanel = page.getByLabel('Identity Providers', { exact: true });
+    await page.goto('/admin/settings/identity-providers');
+    const providersPanel = page.getByLabel('Identity providers', { exact: true });
     await expect(providersPanel.getByText('identity.oidc.browser-mock', { exact: true })).toBeVisible();
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Test connection' }).click();
@@ -135,8 +133,8 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect(providersPanel.getByText('Saved membership data applied: Browser identity provider')).toHaveCount(0);
     await expect(providersPanel.getByText(/browser-stack-secret/)).toHaveCount(0);
 
-    await page.getByRole('tab', { name: 'Identity Mappings' }).click();
-    const mappingsPanel = page.getByLabel('Identity Mappings', { exact: true });
+    await page.goto('/admin/settings/identity-mappings');
+    const mappingsPanel = page.getByLabel('Identity mappings', { exact: true });
     await expect(mappingsPanel.getByText('group.browser-operators', { exact: true })).toBeVisible();
     await mappingsPanel.getByRole('button', { name: 'Mapping actions' }).click();
     await page.getByRole('menuitem', { name: 'Edit' }).click();
@@ -150,10 +148,15 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect.poll(async () => (await mappingPreviewNotification.boundingBox())?.height || 0)
       .toBeGreaterThan(40);
     await expect.poll(() => mappingPreviewNotification.evaluate((element) => {
-      const modalContent = element.closest('.cds--modal-content');
-      if (!modalContent) return false;
-      return element.getBoundingClientRect().bottom
-        <= modalContent.getBoundingClientRect().bottom - 64;
+      const workflow = element.closest('[role="region"]');
+      const actions = workflow?.querySelector('.eg-settings-workflow__actions');
+      if (!actions) return false;
+      const notificationBottom = element.getBoundingClientRect().bottom;
+      const actionsTop = actions.getBoundingClientRect().top;
+      // The action bar owns a one-pixel top border. Depending on device-scale
+      // rounding, that shared boundary can differ by a fractional pixel even
+      // though the notification remains fully outside the action bar.
+      return notificationBottom <= actionsTop + 1;
     }))
       .toBe(true);
     await expect(page.getByRole('heading', { name: 'Edit identity mapping' })).toBeVisible();
@@ -180,10 +183,9 @@ test.describe('Identity configuration browser lifecycle', () => {
     await deleteMappingDialog.getByRole('button', { name: 'Cancel' }).click();
 
     identityStack.makeProviderManual();
-    await page.getByRole('tab', { name: 'Identity Providers' }).click();
+    await page.goto('/admin/settings/identity-providers');
     await page.reload();
-    await page.getByRole('tab', { name: 'Identity Providers' }).click();
-    const manualProvidersPanel = page.getByLabel('Identity Providers', { exact: true });
+    const manualProvidersPanel = page.getByLabel('Identity providers', { exact: true });
     await manualProvidersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Disable provider' }).click();
     const disableProviderDialog = page.getByRole('dialog', { name: 'Disable Browser identity provider?' });

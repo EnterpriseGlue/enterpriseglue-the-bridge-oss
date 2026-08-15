@@ -5,6 +5,7 @@ import {
   ConfigEnvironmentTagsFileSchema, ConfigExternalEngineSystemsFileSchema, ConfigGitProvidersFileSchema,
   ConfigMachinePrincipalsFileSchema, ConfigPermissionsFileSchema, ConfigPlatformSettingsFileSchema,
   ConfigIdentityMappingsFileSchema, ConfigIdentityProvidersFileSchema, ConfigProjectEngineTargetsFileSchema,
+  ConfigIdentityProvisioningDirectoriesFileSchema,
   ConfigRolesFileSchema, ConfigRuntimeResourceSetsFileSchema, EnterpriseGlueConfigBundleSchema,
   ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1, ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
   configBundleContractMetadataForApiVersion,
@@ -38,6 +39,7 @@ const FILE_SCHEMAS: Record<string, z.ZodType> = {
   './groups.json': ConfigGroupsFileSchema,
   './assignments.json': ConfigAssignmentsFileSchema,
   './identity-providers.json': ConfigIdentityProvidersFileSchema,
+  './identity-provisioning-directories.json': ConfigIdentityProvisioningDirectoriesFileSchema,
   './identity-mappings.json': ConfigIdentityMappingsFileSchema,
   './project-engine-targets.json': ConfigProjectEngineTargetsFileSchema,
 };
@@ -185,6 +187,7 @@ function validateCrossFileReferences(
   const engineSets = fileEntries(normalizedFiles, './engine-sets.json', 'engineSets');
   const runtimeResourceSets = fileEntries(normalizedFiles, './runtime-resource-sets.json', 'runtimeResourceSets');
   const identityProviders = fileEntries(normalizedFiles, './identity-providers.json', 'identityProviders');
+  const identityProvisioningDirectories = fileEntries(normalizedFiles, './identity-provisioning-directories.json', 'identityProvisioningDirectories');
   const identityMappings = fileEntries(normalizedFiles, './identity-mappings.json', 'identityMappings');
   const assignments = fileEntries(normalizedFiles, './assignments.json', 'assignments');
   const targets = fileEntries(normalizedFiles, './project-engine-targets.json', 'projectEngineTargets');
@@ -288,6 +291,17 @@ function validateCrossFileReferences(
     // bundle. The persisted diff/apply resolver validates that reference.
     if (!groupKeys.has(mapping.targetGroupKey)) {
       errors.push({ path: `./identity-mappings.json.identityMappings.${index}.targetGroupKey`, message: `Unknown group key: ${mapping.targetGroupKey}` });
+    }
+  });
+
+  identityProvisioningDirectories.forEach((directory, index) => {
+    // Persisted diff/apply may resolve an associated sign-in provider managed
+    // outside this bundle, just like identity mappings do.
+    if (directory.enabled && directory.credentialSecretRef == null) {
+      errors.push({
+        path: `./identity-provisioning-directories.json.identityProvisioningDirectories.${index}.credentialSecretRef`,
+        message: 'An enabled provisioning directory requires a credential secret reference',
+      });
     }
   });
 

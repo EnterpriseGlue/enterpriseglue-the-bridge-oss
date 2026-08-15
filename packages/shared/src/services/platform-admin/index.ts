@@ -38,6 +38,8 @@ export * from './SsoNormalizedIdentityService.js';
 export * from './ExternalIdentityService.js';
 export * from './IdentityProviderAdapter.js';
 export * from './IdentityProviderService.js';
+export * from './IdentityProvisioningDirectoryService.js';
+export * from './ScimService.js';
 export * from './GenericOidcService.js';
 export * from './IdentityProviderFailure.js';
 export * from './SamlAssertionReplayService.js';
@@ -77,5 +79,6 @@ export * from './DeploymentDiscoveryService.js';
 export * from './SecretResolver.js';
 export * from './PolicyService.js';
 export * from './UserService.js';
+export * from './UserDirectoryService.js';
 
 export const LEIA_SERVICE_VERSION = '1.0.0';

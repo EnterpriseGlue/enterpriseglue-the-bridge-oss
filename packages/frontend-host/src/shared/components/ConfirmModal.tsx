@@ -17,6 +17,7 @@ interface ConfirmModalProps {
   showWarning?: boolean
   warningMessage?: string
   requireReason?: boolean
+  reasonMinLength?: number
   reasonLabel?: string
   reasonPlaceholder?: string
   reasonDescription?: string
@@ -54,6 +55,7 @@ export default function ConfirmModal({
   showWarning = false,
   warningMessage = 'This action cannot be undone',
   requireReason = false,
+  reasonMinLength = 1,
   reasonLabel = 'Audit reason',
   reasonPlaceholder = 'Describe why this action is needed.',
   reasonDescription,
@@ -66,7 +68,8 @@ export default function ConfirmModal({
 
   const reasonValue = reason.trim()
   const reasonMissing = requireReason && reasonValue.length === 0
-  const primaryDisabled = busy || confirmDisabled || reasonMissing
+  const reasonTooShort = requireReason && reasonValue.length > 0 && reasonValue.length < reasonMinLength
+  const primaryDisabled = busy || confirmDisabled || reasonMissing || reasonTooShort
 
   return (
     <Modal
@@ -105,6 +108,7 @@ export default function ConfirmModal({
             placeholder={reasonPlaceholder}
             value={reason}
             rows={3}
+            minLength={reasonMinLength}
             disabled={busy}
             onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setReason(event.target.value)}
           />
@@ -128,6 +132,16 @@ export default function ConfirmModal({
           hideCloseButton
           subtitle="An audit reason is required before this action can be submitted."
           title="Reason required"
+        />
+      )}
+
+      {reasonTooShort && (
+        <InlineNotification
+          kind="warning"
+          lowContrast
+          hideCloseButton
+          subtitle={`Enter at least ${reasonMinLength} characters so the reason is useful in the audit trail.`}
+          title="Reason too short"
         />
       )}
     </Modal>

@@ -46,7 +46,7 @@ async function login(page: Page): Promise<void> {
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await page.waitForURL(/\/t\/default(?:\/|$)/);
 }
 

@@ -8,8 +8,7 @@ test.describe('Identity administration recovery', () => {
     stack.makeProviderManual();
     await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
 
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+    await page.goto('/admin/settings/identity-providers');
     const providerRow = page.getByRole('row').filter({ hasText: stack.provider.key });
     await expect(providerRow).toContainText('Enabled');
 
@@ -22,7 +21,7 @@ test.describe('Identity administration recovery', () => {
     expect(stack.events).toContain('external_identity_unlinked');
     await captureManualScreenshot(page, '55-identity-conflict-unlinked.jpg');
 
-    await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
+    await page.goto('/admin/settings/identity-mappings');
     const mappingRow = page.getByRole('row').filter({ hasText: stack.mapping.targetGroupKey });
     await expect(mappingRow).toContainText('Enabled');
     await mappingRow.getByRole('button', { name: 'Mapping actions' }).click();
@@ -36,7 +35,7 @@ test.describe('Identity administration recovery', () => {
     expect(stack.mapping.isActive).toBe(false);
     await captureManualScreenshot(page, '56-mapping-disabled-recovery.jpg');
 
-    await page.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+    await page.goto('/admin/settings/identity-providers');
     await providerRow.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Disable provider' }).click();
     const disableDialog = page.getByRole('dialog', { name: 'Disable Browser identity provider?' });

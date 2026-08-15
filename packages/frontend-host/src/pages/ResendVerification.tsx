@@ -1,14 +1,13 @@
 import { FormEvent, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, TextInput } from '@carbon/react';
+import { Button, InlineNotification, TextInput } from '@carbon/react';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
-import { useToast } from '../shared/notifications/ToastProvider';
+import PublicAuthShell from '../shared/components/PublicAuthShell';
 
 export default function ResendVerification() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { notify } = useToast();
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
@@ -28,6 +27,7 @@ export default function ResendVerification() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [status, setStatus] = useState<'idle' | 'sent' | 'verified'>('idle');
   const [showResendForm, setShowResendForm] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: 'error' | 'info' | 'success'; title: string; subtitle: string } | null>(null);
 
   const canResend = Boolean(email);
 
@@ -35,7 +35,7 @@ export default function ResendVerification() {
     e.preventDefault();
     const trimmedToken = token.trim();
     if (!trimmedToken) {
-      notify({
+      setFeedback({
         kind: 'error',
         title: 'Verification token required',
         subtitle: 'Paste the verification token from your email to continue.',
@@ -49,7 +49,7 @@ export default function ResendVerification() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email) {
-      notify({
+      setFeedback({
         kind: 'error',
         title: 'Email required',
         subtitle: 'Enter the email address for the verification link.',
@@ -62,14 +62,14 @@ export default function ResendVerification() {
       const response = await apiClient.post<{ alreadyVerified?: boolean }>('/api/auth/resend-verification', { email });
       if (response?.alreadyVerified) {
         setStatus('verified');
-        notify({
+        setFeedback({
           kind: 'info',
           title: 'Email already verified',
           subtitle: 'You can log in to your account.',
         });
       } else {
         setStatus('sent');
-        notify({
+        setFeedback({
           kind: 'success',
           title: 'Verification email sent',
           subtitle: 'If your email exists, a verification link has been sent.',
@@ -77,42 +77,29 @@ export default function ResendVerification() {
       }
     } catch (err) {
       const parsed = parseApiError(err, 'Failed to send verification email');
-      notify({ kind: 'error', title: 'Unable to resend verification email', subtitle: parsed.message });
+      setFeedback({ kind: 'error', title: 'Unable to resend verification email', subtitle: parsed.message });
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      backgroundColor: 'var(--color-bg-secondary)',
-      padding: 'var(--spacing-6)',
-    }}>
-      <div style={{
-        background: 'var(--color-bg-primary)',
-        padding: 'var(--spacing-8)',
-        borderRadius: 'var(--border-radius-md)',
-        boxShadow: 'var(--shadow-md)',
-        width: '100%',
-        maxWidth: '480px',
-      }}>
-        <div style={{ marginBottom: 'var(--spacing-6)' }}>
-          <h1 style={{
-            fontSize: 'var(--text-28)',
-            fontWeight: 'var(--font-weight-semibold)',
-            marginBottom: 'var(--spacing-2)',
-            color: 'var(--color-text-primary)',
-          }}>
-            Verify your email
-          </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-14)' }}>
-            Paste the verification token from the email to complete verification.
-          </p>
-        </div>
+    <PublicAuthShell
+      title="Verify your email"
+      description="Paste the verification token from the email to complete verification."
+      homePath={tenantSlug ? `${tenantPrefix}/` : '/'}
+    >
+
+        {feedback ? (
+          <InlineNotification
+            kind={feedback.kind}
+            lowContrast
+            hideCloseButton
+            title={feedback.title}
+            subtitle={feedback.subtitle}
+            style={{ marginBottom: 'var(--spacing-5)' }}
+          />
+        ) : null}
 
         <form onSubmit={handleVerifyToken}>
           <div style={{ marginBottom: 'var(--spacing-5)' }}>
@@ -149,7 +136,7 @@ export default function ResendVerification() {
               onClick={() => setShowResendForm(true)}
               style={{ width: '100%' }}
             >
-              Need a new link? Resend verification email
+              Resend verification email
             </Button>
           ) : (
             <>
@@ -203,17 +190,7 @@ export default function ResendVerification() {
           )}
         </div>
 
-        <div style={{
-          marginTop: 'var(--spacing-6)',
-          paddingTop: 'var(--spacing-4)',
-          borderTop: '1px solid var(--color-border-primary)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 'var(--spacing-3)',
-          flexWrap: 'wrap',
-          fontSize: 'var(--text-14)',
-        }}>
+        <div className="eg-public-auth-actions">
           <span style={{ color: 'var(--color-text-secondary)' }}>
             {status === 'verified' ? 'Email already verified.' : 'Already verified your email?'}
           </span>
@@ -221,7 +198,6 @@ export default function ResendVerification() {
             Go to login
           </Button>
         </div>
-      </div>
-    </div>
+    </PublicAuthShell>
   );
 }

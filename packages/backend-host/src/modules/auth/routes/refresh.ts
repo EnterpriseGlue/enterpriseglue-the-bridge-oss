@@ -82,7 +82,11 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
 
   // Generate new access token
-  const accessToken = generateAccessToken(user, { administratorRecovery: payload.recovery === 'platform_administrator' });
+  const accessToken = generateAccessToken(user, {
+    administratorRecovery: payload.recovery === 'platform_administrator',
+    authenticationMethod: payload.authenticationMethod,
+    mfaVerified: payload.mfaVerified === true,
+  });
 
   // Set new access token as httpOnly cookie
   res.cookie('accessToken', accessToken, {

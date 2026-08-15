@@ -61,7 +61,7 @@ async function login(page: Page): Promise<void> {
   await page.getByLabel('Password', { exact: true }).fill(password);
   const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
     && new URL(response.url()).pathname.endsWith('/api/auth/login'));
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   const response = await responsePromise;
   const body = await response.json().catch(() => null);
   expect(response.ok(), `local E2E administrator login failed (${response.status()}): ${JSON.stringify(body)}`).toBe(true);

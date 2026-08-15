@@ -92,4 +92,28 @@ describe('ConfirmModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(onConfirm).toHaveBeenCalledWith('Maintenance window');
   });
+
+  it('enforces the configured audit-reason minimum length', () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmModal
+        open={true}
+        title="Confirm"
+        description="Are you sure?"
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+        requireReason
+        reasonMinLength={3}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Audit reason'), { target: { value: 'x' } });
+    expect(screen.getByText('Enter at least 3 characters so the reason is useful in the audit trail.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Audit reason'), { target: { value: 'Valid reason' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(onConfirm).toHaveBeenCalledWith('Valid reason');
+  });
 });

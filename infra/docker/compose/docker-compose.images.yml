@@ -1,8 +1,12 @@
 services:
   backend:
     image: ${BACKEND_IMAGE}:${IMAGE_TAG}
-    build: null
+    # Published-image mode must never fall back to a source build when a
+    # registry reference is missing, private, or mistyped.
+    pull_policy: always
+    build: !reset null
 
   frontend:
     image: ${FRONTEND_IMAGE}:${IMAGE_TAG}
-    build: null
+    pull_policy: always
+    build: !reset null

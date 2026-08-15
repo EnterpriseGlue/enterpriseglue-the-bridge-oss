@@ -154,7 +154,7 @@ describe('Login SSO auto-redirect behavior', () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /^log in$/i })).toBeEnabled();
     });
   });
 
@@ -167,17 +167,17 @@ describe('Login SSO auto-redirect behavior', () => {
 
     renderLogin();
 
-    const providerTile = await screen.findByRole('button', { name: /Continue with Microsoft Entra ID Example Corporation/i });
-    expect(providerTile).toHaveClass('eg-login-provider-tile', 'eg-login-provider-tile--primary');
-    expect(screen.getByText('Continue with Microsoft Entra ID')).toHaveClass('eg-login-provider-tile__action');
-    expect(screen.getByText('Example Corporation')).toHaveClass('eg-login-provider-tile__supporting');
-    expect(providerTile.querySelector('.cds--tile--icon')).toBeInTheDocument();
+    const providerButton = await screen.findByRole('button', { name: /Continue with Microsoft Entra ID Example Corporation/i });
+    expect(providerButton).toHaveClass('eg-login-provider-button', 'cds--btn', 'cds--btn--primary');
+    expect(screen.getByText('Continue with Microsoft Entra ID')).toHaveClass('eg-login-provider-button__action');
+    expect(screen.getByText('Example Corporation')).toHaveClass('eg-login-provider-button__supporting');
+    expect(providerButton.querySelector('svg')).toBeInTheDocument();
     expect(screen.queryByLabelText(/^Password$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/provider-p1/i)).not.toBeInTheDocument();
   });
 
-  it('shortens the visual provider name while preserving its complete accessible name', async () => {
-    const longName = 'Sign-in service for international employees, contractors, partners, and delegated administrators';
+  it('wraps the complete provider name instead of truncating identity information', async () => {
+    const longName = 'Login service for international employees, contractors, partners, and delegated administrators';
     setupApiResponses({
       providers: [provider('legacy-long-name', { displayName: longName })],
       localPassword: false,
@@ -187,12 +187,11 @@ describe('Login SSO auto-redirect behavior', () => {
     renderLogin();
 
     expect(await screen.findByRole('button', { name: `Continue with ${longName}` })).toBeInTheDocument();
-    expect(screen.getByText('Continue with Sign-in service for international emplo…')).toBeInTheDocument();
-    expect(screen.getByTitle(longName)).toBeInTheDocument();
-    expect(screen.queryByText(longName, { exact: true })).not.toBeInTheDocument();
+    expect(screen.getByText(`Continue with ${longName}`)).toHaveClass('eg-login-provider-button__action');
+    expect(screen.queryByTitle(longName)).not.toBeInTheDocument();
   });
 
-  it('gives administrators a plain-language next action when no sign-in method is configured', async () => {
+  it('gives administrators a plain-language next action when no login method is configured', async () => {
     setupApiResponses({
       providers: [],
       localPassword: false,
@@ -201,8 +200,8 @@ describe('Login SSO auto-redirect behavior', () => {
 
     renderLogin();
 
-    expect(await screen.findByText('No sign-in method is available')).toBeInTheDocument();
-    expect(screen.getByText('Ask a platform administrator to enable work-account sign-in or local password sign-in.')).toBeInTheDocument();
+    expect(await screen.findByText('No login method is available')).toBeInTheDocument();
+    expect(screen.getByText('Ask a platform administrator to enable work-account login or local password login.')).toBeInTheDocument();
   });
 
   it('routes progressive discovery to the matching provider without exposing account existence', async () => {
@@ -236,9 +235,9 @@ describe('Login SSO auto-redirect behavior', () => {
     renderLogin();
 
     expect(await screen.findByRole('heading', { name: 'Opening Corporate identity' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Choose another sign-in method' }));
+    await user.click(screen.getByRole('button', { name: 'Choose another login method' }));
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose how to sign in' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose how to log in' })).toHaveFocus());
     expect(screen.getByRole('button', { name: /Continue with Corporate identity/ })).toBeInTheDocument();
     await new Promise((resolve) => window.setTimeout(resolve, 650));
     expect(redirectTo).not.toHaveBeenCalled();
@@ -249,7 +248,25 @@ describe('Login SSO auto-redirect behavior', () => {
     renderLogin('/admin-recovery');
 
     expect(await screen.findByText('Administrator recovery')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in for recovery' })).toBeDisabled();
+    expect(screen.getByRole('heading', { level: 1, name: 'Log in for administrator recovery' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Log in for recovery' })).toBeEnabled();
     expect(apiClient.get).not.toHaveBeenCalledWith('/api/auth/login-methods');
+  });
+
+  it('validates progressive discovery inline and returns focus to work email', async () => {
+    const user = userEvent.setup();
+    setupApiResponses({
+      providers: [provider('entra', { displayName: 'Microsoft Entra ID', loginDomains: ['example.com'] })],
+      providerSelection: 'progressive',
+    });
+
+    renderLogin();
+    const emailInput = await screen.findByLabelText('Work email');
+    await user.type(emailInput, 'invalid');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByText('Enter a valid email address')).toBeInTheDocument();
+    await waitFor(() => expect(emailInput).toHaveFocus());
+    expect(redirectTo).not.toHaveBeenCalled();
   });
 });

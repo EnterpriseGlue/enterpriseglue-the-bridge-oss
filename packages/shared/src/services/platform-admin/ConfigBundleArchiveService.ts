@@ -25,6 +25,7 @@ const ALLOWED_ARCHIVE_PATHS = new Set([
   'groups.json',
   'assignments.json',
   'identity-providers.json',
+  'identity-provisioning-directories.json',
   'identity-mappings.json',
   'project-engine-targets.json',
 ]);

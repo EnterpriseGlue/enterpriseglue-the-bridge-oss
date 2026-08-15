@@ -7,6 +7,7 @@
 import { apiClient } from '../shared/api/client';
 import { parseApiError, getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
 import { CurrentUserPermissionsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import type { LogoutResponse } from '@enterpriseglue/shared/schemas/auth/session.js';
 import type {
   LoginRequest,
   LoginResponse,
@@ -66,8 +67,8 @@ class AuthService {
   /**
    * Logout and revoke refresh token
    */
-  async logout(refreshToken?: string): Promise<void> {
-    await apiClient.post(`${API_BASE_URL}/auth/logout`, { refreshToken });
+  async logout(refreshToken?: string): Promise<LogoutResponse> {
+    return apiClient.post<LogoutResponse>(`${API_BASE_URL}/auth/logout`, { refreshToken });
   }
 
   /**

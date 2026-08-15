@@ -16,6 +16,7 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ExternalEntitlement, NormalizedExternalIdentity } from './IdentityProviderAdapter.js';
+import { PLATFORM_ADMINISTRATORS_GROUP_ID } from './PlatformAdministratorMembershipService.js';
 
 export type IdentityEntitlementMatchOperator = SchemaIdentityEntitlementMatchOperator;
 
@@ -117,6 +118,12 @@ function normalized(value: string, field: string): string {
   return result;
 }
 
+function assertNonPrivilegedMappingTarget(targetGroupId: string): void {
+  if (targetGroupId === PLATFORM_ADMINISTRATORS_GROUP_ID) {
+    throw Errors.validation('Platform administrator access cannot be assigned by an identity mapping; use the dedicated audited administrator-membership workflow');
+  }
+}
+
 function ownershipMode(mapping: Pick<IdentityEntitlementMapping, 'ownershipMode' | 'sourceRef'>): 'manual' | 'config_locked' | 'config_warn' {
   if (mapping.ownershipMode === 'config_locked' || mapping.ownershipMode === 'config_warn' || mapping.ownershipMode === 'manual') {
     return mapping.ownershipMode;
@@ -201,6 +208,7 @@ class IdentityEntitlementMappingService {
     ]);
     if (!provider) throw Errors.notFound('Identity provider not found');
     if (!group) throw Errors.notFound('Authorization group not found');
+    assertNonPrivilegedMappingTarget(group.id);
     const repo = dataSource.getRepository(IdentityEntitlementMapping);
     const now = Date.now();
     const id = generateId();
@@ -230,6 +238,7 @@ class IdentityEntitlementMappingService {
   /** Applies an already-validated configuration mapping and clears only its prior derived memberships. */
   async reconcileConfiguredMapping(id: string, input: ConfiguredIdentityEntitlementMappingUpdate, tenantId?: string | null, store?: MappingStore): Promise<void> {
     const dataSource = store || await getDataSource();
+    assertNonPrivilegedMappingTarget(input.targetGroupId);
     await dataSource.getRepository(IdentityEntitlementMapping).update({ id }, {
       providerId: input.providerId,
       configKey: input.configKey,
@@ -294,6 +303,7 @@ class IdentityEntitlementMappingService {
     ]);
     if (!provider) throw Errors.notFound('Identity provider not found');
     if (!group) throw Errors.notFound('Authorization group not found');
+    assertNonPrivilegedMappingTarget(group.id);
     const isActive = input.isActive ?? existing.isActive;
     if (isActive && (current.matchOperator === 'exact' || !existing.isActive) && merged.matchOperator !== 'exact') {
       await requireBroadEntitlementMappingsEnabled(dataSource, merged.matchOperator);
@@ -386,6 +396,16 @@ class IdentityEntitlementMappingService {
       const sourceRef = identityProviderMembershipSourceRef(mapping.providerId, mapping.id);
       const existing = await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef } })
         || await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } });
+      // Fail closed for legacy rows created before privileged-target
+      // validation existed. Identity claims and SCIM groups may never grant
+      // Platform Administrator membership.
+      if (mapping.targetGroupId === PLATFORM_ADMINISTRATORS_GROUP_ID) {
+        if (existing) {
+          await membershipRepo.delete({ id: existing.id });
+          removed += 1;
+        }
+        continue;
+      }
       if (!isHumanIdentityEntitlementType(mapping.entitlementType)) {
         if (existing) {
           await membershipRepo.delete({ id: existing.id });

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Button, SkeletonIcon, SkeletonText } from '@carbon/react';
+import { Button, InlineLoading, InlineNotification } from '@carbon/react';
 import { apiClient } from '../shared/api/client';
-import { CheckmarkFilled, WarningFilled } from '@carbon/icons-react';
+import PublicAuthShell from '../shared/components/PublicAuthShell';
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
@@ -21,6 +21,7 @@ export default function VerifyEmail() {
 
   useEffect(() => {
     const token = searchParams.get('token');
+    let redirectTimer: ReturnType<typeof setInterval> | undefined;
 
     if (!token) {
       setStatus('error');
@@ -42,10 +43,10 @@ export default function VerifyEmail() {
         if (!data.code && !data.error) {
           setStatus('success');
           // Start countdown to redirect
-          const timer = setInterval(() => {
+          redirectTimer = setInterval(() => {
             setCountdown((prev) => {
               if (prev <= 1) {
-                clearInterval(timer);
+                if (redirectTimer) clearInterval(redirectTimer);
                 navigate(loginPath);
                 return 0;
               }
@@ -53,7 +54,6 @@ export default function VerifyEmail() {
             });
           }, 1000);
           
-          return () => clearInterval(timer);
         }
         if (data.code === 'TOKEN_EXPIRED') {
           setStatus('expired');
@@ -67,151 +67,40 @@ export default function VerifyEmail() {
         setStatus('error');
         setError('Failed to verify email. Please try again.');
       });
+    return () => {
+      if (redirectTimer) clearInterval(redirectTimer);
+    };
   }, [searchParams, navigate, loginPath]);
 
-  if (status === 'verifying') {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: 'var(--spacing-6)',
-        textAlign: 'center',
-      }}>
-        <div style={{ marginBottom: 'var(--spacing-6)' }}>
-          <SkeletonIcon />
-        </div>
-        <div style={{ width: 'min(520px, 100%)' }}>
-          <SkeletonText heading width="60%" />
-          <div style={{ marginTop: 'var(--spacing-3)' }}>
-            <SkeletonText paragraph lineCount={2} />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const title = status === 'verifying'
+    ? 'Verifying your email'
+    : status === 'success'
+      ? 'Email verified'
+      : status === 'expired'
+        ? 'Verification link expired'
+        : 'Verification failed';
 
-  if (status === 'success') {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: 'var(--spacing-6)',
-        textAlign: 'center',
-      }}>
-        <div style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '50%',
-          padding: 'var(--spacing-6)',
-          marginBottom: 'var(--spacing-6)',
-        }}>
-          <CheckmarkFilled size={64} style={{ color: 'white' }} />
-        </div>
-        
-        <h1 style={{ fontSize: 'var(--text-32)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-4)' }}>
-          Email Verified Successfully!
-        </h1>
-        
-        <p style={{ fontSize: 'var(--text-18)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-6)', maxWidth: '500px' }}>
-          Your email address has been verified. You can now log in to your account.
-        </p>
-        
-        <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-tertiary)', marginBottom: 'var(--spacing-5)' }}>
-          Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}...
-        </p>
-        
-        <Button onClick={() => navigate(loginPath)}>
-          Go to Login Now
-        </Button>
-      </div>
-    );
-  }
-
-  if (status === 'expired') {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: 'var(--spacing-6)',
-        textAlign: 'center',
-      }}>
-        <div style={{
-          background: 'var(--color-warning)',
-          borderRadius: '50%',
-          padding: 'var(--spacing-6)',
-          marginBottom: 'var(--spacing-6)',
-        }}>
-          <WarningFilled size={64} style={{ color: 'white' }} />
-        </div>
-        
-        <h1 style={{ fontSize: 'var(--text-32)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-4)' }}>
-          Verification Link Expired
-        </h1>
-        
-        <p style={{ fontSize: 'var(--text-18)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-6)', maxWidth: '500px' }}>
-          This verification link has expired. Verification links are valid for 24 hours.
-        </p>
-        
-        <div style={{ display: 'flex', gap: 'var(--spacing-4)' }}>
-          <Button kind="secondary" onClick={() => navigate(loginPath)}>
-            Go to Login
-          </Button>
-          <Button onClick={() => navigate(resendPath)}>
-            Request New Link
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      padding: 'var(--spacing-6)',
-      textAlign: 'center',
-    }}>
-      <div style={{
-        background: 'var(--color-error)',
-        borderRadius: '50%',
-        padding: 'var(--spacing-6)',
-        marginBottom: 'var(--spacing-6)',
-      }}>
-        <WarningFilled size={64} style={{ color: 'white' }} />
-      </div>
-      
-      <h1 style={{ fontSize: 'var(--text-32)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-4)' }}>
-        Verification Failed
-      </h1>
-      
-      <p style={{ fontSize: 'var(--text-18)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-6)', maxWidth: '500px' }}>
-        {error}
-      </p>
-      
-      <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-tertiary)', marginBottom: 'var(--spacing-6)' }}>
-        The verification link may be invalid or has already been used.
-      </p>
-      
-      <div style={{ display: 'flex', gap: 'var(--spacing-4)' }}>
-        <Button kind="secondary" onClick={() => navigate(loginPath)}>
-          Go to Login
-        </Button>
-        <Button onClick={() => navigate(resendPath)}>
-          Request New Link
-        </Button>
-      </div>
-    </div>
+    <PublicAuthShell title={title} homePath={tenantSlug ? `${tenantPrefix}/` : '/'}>
+      {status === 'verifying' ? (
+        <InlineLoading description="Verifying your email…" />
+      ) : status === 'success' ? <>
+        <InlineNotification kind="success" lowContrast hideCloseButton title="Email address verified" subtitle="You can now log in to your account." />
+        <p style={{ color: 'var(--cds-text-secondary)' }}>Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}…</p>
+        <div className="eg-public-auth-actions"><Button onClick={() => navigate(loginPath)}>Go to login now</Button></div>
+      </> : status === 'expired' ? <>
+        <InlineNotification kind="warning" lowContrast hideCloseButton title="This link has expired" subtitle="Verification links are valid for 24 hours. Request a new link to continue." />
+        <div className="eg-public-auth-actions">
+          <Button onClick={() => navigate(resendPath)}>Request new link</Button>
+          <Button kind="secondary" onClick={() => navigate(loginPath)}>Go to login</Button>
+        </div>
+      </> : <>
+        <InlineNotification kind="error" lowContrast hideCloseButton title="Email was not verified" subtitle={error || 'The verification link may be invalid or may already have been used.'} />
+        <div className="eg-public-auth-actions">
+          <Button onClick={() => navigate(resendPath)}>Request new link</Button>
+          <Button kind="secondary" onClick={() => navigate(loginPath)}>Go to login</Button>
+        </div>
+      </>}
+    </PublicAuthShell>
   );
 }

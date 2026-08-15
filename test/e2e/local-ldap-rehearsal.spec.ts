@@ -21,7 +21,7 @@ async function loginLocalAdministrator(page: Page): Promise<void> {
   await page.goto('/admin-recovery');
   await page.getByLabel(/email/i).fill(adminEmail);
   await page.getByLabel('Password', { exact: true }).fill(adminPassword);
-  await page.getByRole('button', { name: 'Sign in for recovery', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in for recovery', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
@@ -67,7 +67,7 @@ test.describe('Local LDAP rehearsal', () => {
       const url = new URL(response.url());
       return response.request().method() === 'POST' && /^\/api\/auth\/providers\/[^/]+\/login$/.test(url.pathname);
     });
-    await page.getByRole('button', { name: /^Sign in$/ }).click();
+    await page.getByRole('button', { name: /^Log in$/ }).click();
     expect((await loginResponse).status()).toBe(200);
 
     await expect(page).toHaveURL(new RegExp(`${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/t/default/(?:$|[?#])`));

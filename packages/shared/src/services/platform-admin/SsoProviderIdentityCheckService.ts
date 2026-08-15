@@ -64,10 +64,12 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 /**
- * Provider-neutral 0.11 behavior intentionally has no Microsoft Graph or SCIM
- * authority path. OIDC/Entra access is reconciled from a fresh, verified token
- * during sign-in; LDAP has its separate bounded authoritative directory run.
- * These diagnostic methods therefore never make an implicit outbound request.
+ * This sign-in-provider diagnostic deliberately has no implicit Microsoft
+ * Graph or SCIM enumeration path. OIDC/Entra access is reconciled from a fresh,
+ * verified token during sign-in, SCIM lifecycle changes arrive through the
+ * separate provider-push service API, and LDAP has its bounded authoritative
+ * directory run. These methods therefore never make an implicit outbound
+ * request or establish a second lifecycle authority.
  */
 class SsoProviderIdentityCheckServiceClass {
   async checkIdentity(identity: SsoNormalizedIdentity): Promise<SsoProviderIdentityCheckResult> {

@@ -39,6 +39,10 @@ import { AddLoginExperienceMetadata1700000000106 as DbLoginExperienceMigration }
 import { AddLoginExperienceMetadata1700000000106 as PersistenceLoginExperienceMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000106-add-login-experience-metadata.js';
 import { ConsolidateLoginProviderPreference1700000000107 as DbLoginProviderPreferenceMigration } from '@enterpriseglue/shared/db/migrations/1700000000107-consolidate-login-provider-preference.js';
 import { ConsolidateLoginProviderPreference1700000000107 as PersistenceLoginProviderPreferenceMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000107-consolidate-login-provider-preference.js';
+import { AddIdentityProvisioningFoundation1700000000111 as DbIdentityProvisioningFoundationMigration } from '@enterpriseglue/shared/db/migrations/1700000000111-add-identity-provisioning-foundation.js';
+import { AddIdentityProvisioningFoundation1700000000111 as PersistenceIdentityProvisioningFoundationMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000111-add-identity-provisioning-foundation.js';
+import { AddFederatedSessionLineage1700000000112 as DbFederatedSessionLineageMigration } from '@enterpriseglue/shared/db/migrations/1700000000112-add-federated-session-lineage.js';
+import { AddFederatedSessionLineage1700000000112 as PersistenceFederatedSessionLineageMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000112-add-federated-session-lineage.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
@@ -62,5 +66,7 @@ describe('persistence migration bridges', () => {
     expect(PersistencePlatformGovernanceOwnershipMigration).toBe(DbPlatformGovernanceOwnershipMigration);
     expect(PersistenceLoginExperienceMigration).toBe(DbLoginExperienceMigration);
     expect(PersistenceLoginProviderPreferenceMigration).toBe(DbLoginProviderPreferenceMigration);
+    expect(PersistenceIdentityProvisioningFoundationMigration).toBe(DbIdentityProvisioningFoundationMigration);
+    expect(PersistenceFederatedSessionLineageMigration).toBe(DbFederatedSessionLineageMigration);
   });
 });

@@ -47,6 +47,16 @@ describe('authService', () => {
     expect(result.id).toBe('user-1');
   });
 
+  it('returns a standards-based provider logout target after local revocation', async () => {
+    (apiClient.post as any).mockResolvedValue({
+      message: 'Logged out successfully', federatedLogoutUrl: 'https://issuer.example.test/logout',
+    });
+    await expect(authService.logout()).resolves.toEqual(expect.objectContaining({
+      federatedLogoutUrl: 'https://issuer.example.test/logout',
+    }));
+    expect(apiClient.post).toHaveBeenCalledWith('/api/auth/logout', { refreshToken: undefined });
+  });
+
   it('gets current user effective permissions', async () => {
     (apiClient.get as any).mockResolvedValue({
       userId: 'user-1',

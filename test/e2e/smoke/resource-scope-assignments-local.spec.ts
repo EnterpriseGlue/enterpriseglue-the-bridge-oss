@@ -30,7 +30,7 @@ async function login(page: Page, email: string, password: string): Promise<void>
   // same browser validation and submits the exact fixture credentials.
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   // The personas deliberately receive only engine-scoped access, so their
   // default landing page is not an authorization prerequisite. Prove the
   // actual browser session instead of assuming every role can render the
