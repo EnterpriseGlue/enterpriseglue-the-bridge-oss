@@ -348,7 +348,16 @@ export default function IdentityProvidersSettingsTab({
     const animationFrame = window.requestAnimationFrame(() => {
       const target = document.getElementById('identity-provider-step-heading')
         || document.getElementById('identity-provider-workflow-title');
-      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const workflow = target?.closest<HTMLElement>('.eg-settings-workflow');
+      const workflowBody = target?.closest<HTMLElement>('.eg-settings-workflow__body');
+      if (workflow) {
+        workflow.scrollTop = 0;
+        workflow.scrollLeft = 0;
+      }
+      if (workflowBody) {
+        workflowBody.scrollTop = 0;
+        workflowBody.scrollLeft = 0;
+      }
       target?.focus({ preventScroll: true });
       let ancestor = target?.parentElement;
       while (ancestor) {

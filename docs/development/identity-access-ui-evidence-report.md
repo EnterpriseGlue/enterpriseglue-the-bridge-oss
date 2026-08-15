@@ -382,3 +382,41 @@ and Microsoft Entra gallery certification remain external qualification work;
 the local evidence is deliberately labelled as emulator or protocol-rehearsal
 evidence. The accepted OSS limitation remains one active authoritative
 provisioning directory per tenant.
+
+## P1 Carbon UX closeout (2026-08-15)
+
+The remaining P1 findings from the final Carbon review are closed in the
+canonical 52-screen evidence set:
+
+- Public invitation onboarding now constrains its wide authentication panel
+  with border-box sizing and `min(40rem, 100%)` behavior. Long invitation,
+  notification, and account text can wrap without increasing the document
+  width. The narrow evidence test measures the panel and heading against the
+  `390 × 844` viewport and rejects any page-level horizontal overflow.
+- At Carbon's small breakpoint, provider and identity-mapping creation now
+  become a full-height mobile creation surface beneath the 48 px application
+  header. The redundant Platform settings header, section selector, border,
+  and duplicate back action are covered or removed from that surface. The
+  workflow uses one vertical scroll container; its body no longer creates a
+  second short scroll area. Step focus resets both desktop and mobile scroll
+  origins without causing the workflow title to leave the viewport.
+- The mobile action footer remains sticky and ends exactly at the viewport.
+  Two-action steps use equal columns. Three-action steps place the primary
+  Continue/Create action on a full-width first row and equal Cancel/Back
+  actions beneath it, preventing labels from wrapping or producing unequal
+  targets. Rendered tests also scroll the longest provider steps to their true
+  final controls and require at least 32 px of clearance above the footer.
+- Reveal-once provisioning credentials cannot be dismissed accidentally.
+  Close, Escape, and outside-click dismissal remain guarded until the operator
+  confirms that the client secret was stored in the approved secret manager.
+  The explicit `I've stored the credential` action is disabled before that
+  acknowledgement, then becomes the only completion path.
+
+The exact changed frontend package was rebuilt and served at
+`http://127.0.0.1:4173` for deterministic mocked-browser evidence. The Carbon
+implementation gallery passed 8/8, the focused identity component suites
+passed 39/39, and the identity-administration accessibility suite passed 36/36
+across Chromium, Firefox, and WebKit. Screenshot integrity passed for all 36
+desktop, 14 narrow, and two 200%-reflow images with no dimension or duplicate
+content findings. The directly affected review captures are `108`, `122`–
+`124b`, and `147`.

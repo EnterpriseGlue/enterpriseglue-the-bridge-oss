@@ -117,6 +117,31 @@ async function expectPublicAuthBrand(page: Page): Promise<void> {
   await page.locator('.eg-login-header-logo').evaluate((element: HTMLImageElement) => element.decode());
 }
 
+async function expectPublicAuthWithinViewport(page: Page): Promise<void> {
+  const metrics = await page.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>('.eg-login-panel');
+    const title = document.querySelector<HTMLElement>('.eg-login-title');
+    const panelRect = panel?.getBoundingClientRect();
+    const titleRect = title?.getBoundingClientRect();
+    const viewportWidth = document.documentElement.clientWidth;
+    return {
+      viewportWidth,
+      documentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      panelLeft: panelRect?.left ?? -1,
+      panelRight: panelRect?.right ?? Number.POSITIVE_INFINITY,
+      titleLeft: titleRect?.left ?? -1,
+      titleRight: titleRect?.right ?? Number.POSITIVE_INFINITY,
+      panelBoxSizing: panel ? getComputedStyle(panel).boxSizing : '',
+    };
+  });
+  expect(metrics.documentWidth).toBeLessThanOrEqual(metrics.viewportWidth);
+  expect(metrics.panelLeft).toBeGreaterThanOrEqual(0);
+  expect(metrics.panelRight).toBeLessThanOrEqual(metrics.viewportWidth);
+  expect(metrics.titleLeft).toBeGreaterThanOrEqual(0);
+  expect(metrics.titleRight).toBeLessThanOrEqual(metrics.viewportWidth);
+  expect(metrics.panelBoxSizing).toBe('border-box');
+}
+
 async function expectAuthenticatedShell(page: Page): Promise<void> {
   await expect(page.locator('.eg-header-brand-title')).toHaveText('EnterpriseGlue');
   await expect(page.locator('.eg-header-brand-title')).toBeVisible();
@@ -143,6 +168,59 @@ async function expectWorkflowWithinViewport(page: Page): Promise<void> {
       .slice(0, 10);
   });
   expect(offenders).toEqual([]);
+}
+
+async function expectMobileWorkflowSurface(page: Page): Promise<void> {
+  const workflow = page.locator('.eg-settings-workflow');
+  const metrics = await workflow.evaluate((element) => {
+    const surface = element.getBoundingClientRect();
+    const body = element.querySelector<HTMLElement>('.eg-settings-workflow__body');
+    const actions = element.querySelector<HTMLElement>('.eg-settings-workflow__actions');
+    const actionsRect = actions?.getBoundingClientRect();
+    const backToList = element.querySelector<HTMLElement>('.eg-settings-workflow__header > .cds--btn');
+    const actionButtons = Array.from(element.querySelectorAll<HTMLElement>('.eg-settings-workflow__actions .cds--btn'));
+    return {
+      position: getComputedStyle(element).position,
+      top: surface.top,
+      left: surface.left,
+      right: surface.right,
+      bottom: surface.bottom,
+      bodyOverflowY: body ? getComputedStyle(body).overflowY : '',
+      bodyHasNestedScroll: body ? body.scrollHeight > body.clientHeight + 1 : true,
+      actionsPosition: actions ? getComputedStyle(actions).position : '',
+      actionsBottom: actionsRect?.bottom ?? -1,
+      actionsHeight: actionsRect?.height ?? -1,
+      backToListDisplay: backToList ? getComputedStyle(backToList).display : '',
+      buttonWidths: actionButtons.map((button) => button.getBoundingClientRect().width),
+      buttonTextWraps: actionButtons.map((button) => button.scrollHeight > button.clientHeight + 1),
+    };
+  });
+  expect(metrics.position).toBe('fixed');
+  expect(metrics.top).toBeCloseTo(48, 0);
+  expect(metrics.left).toBeCloseTo(0, 0);
+  expect(metrics.right).toBeCloseTo(390, 0);
+  expect(metrics.bottom).toBeCloseTo(844, 0);
+  expect(metrics.bodyOverflowY).toBe('visible');
+  expect(metrics.bodyHasNestedScroll).toBe(false);
+  expect(metrics.actionsPosition).toBe('sticky');
+  expect(metrics.actionsBottom).toBeCloseTo(844, 0);
+  expect(metrics.actionsHeight).toBeGreaterThanOrEqual(metrics.buttonWidths.length === 3 ? 96 : 48);
+  expect(metrics.backToListDisplay).toBe('none');
+  expect(metrics.buttonWidths.every((width) => width >= 178)).toBe(true);
+  expect(metrics.buttonTextWraps).not.toContain(true);
+}
+
+async function expectMobileWorkflowEndReachable(page: Page, control: Locator): Promise<void> {
+  const workflow = page.locator('.eg-settings-workflow');
+  await workflow.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect(control).toBeVisible();
+  const clearance = await control.evaluate((element) => {
+    const controlRect = element.getBoundingClientRect();
+    const actionsRect = document.querySelector<HTMLElement>('.eg-settings-workflow__actions')?.getBoundingClientRect();
+    return actionsRect ? actionsRect.top - controlRect.bottom : Number.NEGATIVE_INFINITY;
+  });
+  expect(clearance).toBeGreaterThanOrEqual(31);
+  await workflow.evaluate((element) => { element.scrollTop = 0; });
 }
 
 async function expectWorkflowScrollReachability(page: Page, accessibleName: string, endControl?: Locator): Promise<void> {
@@ -393,6 +471,7 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await page.getByLabel('Confirm password', { exact: true }).blur();
     await expect(page.getByText('Passwords do not match.', { exact: true })).toBeVisible();
     await expectPublicAuthBrand(page);
+    await expectPublicAuthWithinViewport(page);
     await stabilizeCurrentViewport(page);
     await captureManualScreenshot(page, '108-public-invitation-validation-narrow.jpg', { stabilize: false });
   });
@@ -586,8 +665,17 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await expect(page.getByText('Reveal once')).toBeVisible();
     await expect(credentialDialog.getByText('browser-new-credential')).toBeVisible();
     await expect(credentialDialog.getByText(/\/scim\/v2\/entra-workforce\/oauth\/token/)).toBeVisible();
-    await captureManualScreenshot(page, '147-provisioning-credential-reveal-once.jpg');
+    const storedCredentialButton = credentialDialog.getByRole('button', { name: "I've stored the credential" });
+    await expect(storedCredentialButton).toBeDisabled();
     await credentialDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(credentialDialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(credentialDialog).toBeVisible();
+    await captureManualScreenshot(page, '147-provisioning-credential-reveal-once.jpg');
+    await credentialDialog.getByText('I have stored the client secret in the approved secret manager', { exact: true }).click();
+    await expect(storedCredentialButton).toBeEnabled();
+    await storedCredentialButton.click();
+    await expect(credentialDialog).toBeHidden();
 
     await page.getByRole('tab', { name: 'Diagnostics' }).click();
     await expect(page.getByText('User.patch')).toBeVisible();
@@ -618,35 +706,43 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await stabilizeCurrentViewport(page);
     await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
     await captureManualScreenshot(page, '122-identity-provider-identity-narrow.jpg', { stabilize: false });
 
     await completeProviderIdentity(page);
     await stabilizeCurrentViewport(page);
     await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
+    await expectMobileWorkflowEndReachable(page, page.getByLabel('Post-logout redirect URL (optional)'));
     await captureManualScreenshot(page, '123-identity-provider-connection-narrow.jpg', { stabilize: false });
 
     await completeProviderConnection(page);
     await stabilizeCurrentViewport(page);
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
+    await expectMobileWorkflowEndReachable(page, page.getByLabel('Enable provider after creation'));
     await captureManualScreenshot(page, '123a-identity-provider-membership-narrow.jpg', { stabilize: false });
 
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeFocused();
     await stabilizeCurrentViewport(page);
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
     await captureManualScreenshot(page, '123b-identity-provider-review-narrow.jpg', { stabilize: false });
 
     await page.goto('/admin/settings/identity-mappings');
     await startMappingWorkflow(page);
     await stabilizeCurrentViewport(page);
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
     await captureManualScreenshot(page, '124a-identity-mapping-identity-narrow.jpg', { stabilize: false });
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Access', exact: true })).toBeFocused();
     await stabilizeCurrentViewport(page);
     await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
     await page.getByRole('radio', { name: 'Use an existing group' }).scrollIntoViewIfNeeded();
     await stabilizeCurrentViewport(page);
     await expectWorkflowWithinViewport(page);
@@ -658,6 +754,7 @@ test.describe('Implemented Carbon pattern screenshot gallery', () => {
     await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeFocused();
     await stabilizeCurrentViewport(page);
     await expectWorkflowWithinViewport(page);
+    await expectMobileWorkflowSurface(page);
     await captureManualScreenshot(page, '124b-identity-mapping-review-narrow.jpg', { stabilize: false });
 
     await page.goto('/admin/users');

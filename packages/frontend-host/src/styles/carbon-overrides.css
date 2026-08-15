@@ -304,31 +304,94 @@
     padding-inline: var(--spacing-4);
   }
 
+  /* Creation becomes the mobile page surface. Keeping the desktop page
+   * header, section picker, bordered workflow, and a second scroll container
+   * left too little room for the form at 390 px. The application header stays
+   * visible while this surface covers the redundant Settings chrome. */
+  .eg-settings-workflow {
+    position: fixed;
+    inset: 3rem 0 0;
+    z-index: var(--z-overlay);
+    display: block;
+    box-sizing: border-box;
+    inline-size: 100%;
+    block-size: calc(100vh - 3rem);
+    block-size: calc(100dvh - 3rem);
+    max-block-size: none;
+    min-block-size: 0;
+    margin: 0;
+    border: 0;
+    background: var(--cds-background);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
   .eg-settings-workflow__header,
-  .eg-settings-workflow__body,
-  .eg-settings-workflow__actions {
+  .eg-settings-workflow__body {
     padding-inline: var(--spacing-4);
+  }
+
+  .eg-settings-workflow__header {
+    gap: var(--spacing-3);
+    padding-block: var(--spacing-5);
+  }
+
+  .eg-settings-workflow__header h2 {
+    font-size: var(--text-24);
+  }
+
+  .eg-settings-workflow__header > .cds--btn {
+    display: none;
+  }
+
+  .eg-settings-workflow__body {
+    padding-block: var(--spacing-5) var(--spacing-8);
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+
+  .eg-settings-workflow__actions {
+    position: sticky;
+    inset-block-end: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    padding: 1px 0 0;
+    border-block-start: 1px solid var(--cds-border-subtle);
+    box-shadow: 0 -0.25rem 0.75rem rgb(0 0 0 / 10%);
   }
 
   .eg-settings-workflow__actions .cds--btn {
     inline-size: 100%;
     min-inline-size: 0 !important;
     max-inline-size: none;
+    min-block-size: 3rem;
     padding-inline: var(--spacing-3);
     justify-content: center;
+    white-space: normal;
   }
 
-  .eg-settings-workflow__actions {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
+  .eg-settings-workflow__actions .cds--btn:only-child {
+    grid-column: 1 / -1;
   }
 
-  .eg-settings-workflow {
-    max-block-size: calc(100vh - 19rem);
-    max-block-size: calc(100dvh - 19rem);
-    min-block-size: min(30rem, calc(100vh - 19rem));
-    min-block-size: min(30rem, calc(100dvh - 19rem));
+  /* With three actions, give the consequential Next/Create action the full
+   * first row and keep Cancel/Back as equal secondary actions below it. */
+  .eg-settings-workflow__actions .cds--btn:first-child:nth-last-child(3) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .eg-settings-workflow__actions .cds--btn:nth-child(2):nth-last-child(2) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .eg-settings-workflow__actions .cds--btn:nth-child(3):last-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
   }
 
   .eg-settings-workflow__body > .cds--progress,
@@ -383,6 +446,15 @@
   }
 }
 
+@media (max-width: 42rem) and (max-height: 40rem) {
+  .eg-settings-workflow {
+    block-size: calc(100vh - 3rem);
+    block-size: calc(100dvh - 3rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}
+
 /* The login composition follows Carbon's single-column login pattern while
    preserving EnterpriseGlue branding. Interactive controls remain native
    Carbon components so focus, hover, disabled, and high-contrast states are
@@ -432,7 +504,9 @@
 }
 
 .eg-login-panel {
+  box-sizing: border-box;
   inline-size: 100%;
+  min-inline-size: 0;
   max-inline-size: 27.5rem;
   margin-block: auto;
   padding: var(--spacing-8);
@@ -442,7 +516,22 @@
 }
 
 .eg-login-panel--wide {
+  inline-size: min(40rem, 100%);
   max-inline-size: 40rem;
+}
+
+.eg-login-panel > *,
+.eg-login-panel form,
+.eg-login-panel .cds--inline-notification,
+.eg-login-panel .cds--inline-notification__details {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.eg-login-panel p,
+.eg-login-panel strong,
+.eg-login-panel .cds--inline-notification__subtitle {
+  overflow-wrap: anywhere;
 }
 
 .eg-login-title {
@@ -566,6 +655,7 @@
   }
 
   .eg-login-panel {
+    inline-size: 100%;
     min-block-size: calc(100vh - 3rem);
     min-block-size: calc(100dvh - 3rem);
     max-inline-size: none;

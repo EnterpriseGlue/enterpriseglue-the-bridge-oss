@@ -362,7 +362,16 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(revealDialog.getByText('browser-new-credential')).toBeVisible();
     await expect(revealDialog.getByText(/eg_scim_.*reveal_once/)).toBeVisible();
     await expect(revealDialog.getByText(`${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173'}/scim/v2/entra-workforce/oauth/token`)).toBeVisible();
+    const storedCredentialButton = revealDialog.getByRole('button', { name: "I've stored the credential" });
+    await expect(storedCredentialButton).toBeDisabled();
     await revealDialog.getByRole('button', { name: 'Close' }).click();
+    await expect(revealDialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(revealDialog).toBeVisible();
+    await revealDialog.getByText('I have stored the client secret in the approved secret manager', { exact: true }).click();
+    await expect(storedCredentialButton).toBeEnabled();
+    await storedCredentialButton.click();
+    await expect(revealDialog).toBeHidden();
     await expect(page.getByText('browser-new-credential')).toHaveCount(0);
     await expect(page.getByText(/eg_scim_.*reveal_once/)).toHaveCount(0);
 

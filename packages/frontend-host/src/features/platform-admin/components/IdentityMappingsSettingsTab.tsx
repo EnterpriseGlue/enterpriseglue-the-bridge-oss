@@ -180,7 +180,16 @@ export default function IdentityMappingsSettingsTab() {
           : 'identity-mapping-review-step-heading';
       const target = document.getElementById(stepHeadingId)
         || document.getElementById('identity-mapping-workflow-title');
-      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const workflow = target?.closest<HTMLElement>('.eg-settings-workflow');
+      const workflowBody = target?.closest<HTMLElement>('.eg-settings-workflow__body');
+      if (workflow) {
+        workflow.scrollTop = 0;
+        workflow.scrollLeft = 0;
+      }
+      if (workflowBody) {
+        workflowBody.scrollTop = 0;
+        workflowBody.scrollLeft = 0;
+      }
       target?.focus({ preventScroll: true });
       let ancestor = target?.parentElement;
       while (ancestor) {
@@ -379,7 +388,7 @@ export default function IdentityMappingsSettingsTab() {
         <ProgressStep label="Review" />
       </ProgressIndicator>}
       {!editing && <p className="eg-visually-hidden" aria-live="polite">Step {creationStep} of 3: {['Identity', 'Access', 'Review'][creationStep - 1]}</p>}
-      <fieldset disabled={mappingViewOnly} className="eg-settings-workflow__fieldset">
+      <fieldset disabled={mappingViewOnly} className="eg-settings-workflow__fieldset" hidden={!editing && creationStep === 3}>
       <div className="eg-settings-form-column" hidden={!editing && creationStep !== 1}><div className="eg-settings-step-introduction"><h3 id="identity-mapping-identity-step-heading" tabIndex={-1}>Identity</h3><p>Choose the provider data that grants membership.</p></div><ComboBox id="identity-mapping-provider" titleText="Identity provider" items={providers} itemToString={(item) => item ? `${identityProviderName(item)} (${item.key})` : ''} selectedItem={providers.find((provider) => provider.key === form.providerKey) || null} onChange={({ selectedItem }) => set('providerKey', selectedItem?.key || '')} /></div>
       <div className="eg-settings-form-column" hidden={!editing && creationStep !== 2}>
         {!editing && <div className="eg-settings-step-introduction"><h3 id="identity-mapping-access-step-heading" tabIndex={-1}>Access</h3><p>Choose the EnterpriseGlue group and optional scoped engine access.</p></div>}
