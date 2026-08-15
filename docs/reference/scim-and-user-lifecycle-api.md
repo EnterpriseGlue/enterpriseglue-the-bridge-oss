@@ -86,8 +86,11 @@ Errors use `urn:ietf:params:scim:api:messages:2.0:Error`. Common statuses are:
 
 ## Provisioning administration API
 
-These routes use the authenticated EnterpriseGlue session and
-`platform.sso.providers.read` or `platform.sso.providers.manage`:
+These routes accept either an authenticated EnterpriseGlue session or a
+dedicated API client. A machine call requires the
+`identity:provisioning:manage` scope, the
+`system.api.identity_provisioning_admin` role, and the same
+`platform.sso.providers.read` or `platform.sso.providers.manage` action check:
 
 - `GET|POST /api/identity/provisioning-directories`
 - `GET|PUT|DELETE /api/identity/provisioning-directories/{key}`
@@ -98,8 +101,15 @@ These routes use the authenticated EnterpriseGlue session and
 - `GET /api/identity/provisioning-directories/{key}/events`
 
 Credential create and rotate return the client ID, client secret/static bearer,
-and token endpoint exactly once. All later reads expose only name, status,
-timestamps, and fingerprint.
+and token endpoint exactly once. Machine calls must send an 8–128 character
+`Idempotency-Key`. A completed key returns `409` rather than replaying clear
+text. Successful reveal-once responses set `Cache-Control: no-store`,
+`Pragma: no-cache`, and `Referrer-Policy: no-referrer`. All later reads expose
+only name, status, timestamps, and fingerprint. Audit entries identify the
+human or API-client principal but contain neither the token nor its hash.
+
+The supported command-line handoff is documented in
+[Headless identity-provisioning control plane](../development/headless-identity-provisioning.md).
 
 There is no administrative “run” API because this release is a push SCIM
 service provider; the directory client owns synchronization scheduling and

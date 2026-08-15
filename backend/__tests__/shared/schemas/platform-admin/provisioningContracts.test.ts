@@ -4,6 +4,7 @@ import {
   IdentityProvisioningDirectoryConfigSchema,
   IdentityProvisioningDirectoryCreateSchema,
   IdentityProvisioningDirectoryRecordSchema,
+  IdentityProvisioningIdempotencyKeySchema,
   UserDeactivateRequestSchema,
   UserDirectoryListResponseSchema,
   UserIdentityContextSchema,
@@ -50,6 +51,12 @@ describe('authoritative identity provisioning contracts', () => {
       status: 'active', createdAt: 1, expiresAt: null, overlapEndsAt: null, lastUsedAt: null, revokedAt: null,
       tokenHash: 'must-not-leak',
     })).toThrow();
+  });
+
+  it('accepts bounded automation idempotency keys', () => {
+    expect(IdentityProvisioningIdempotencyKeySchema.parse('deployment:2026-08-15:001')).toBe('deployment:2026-08-15:001');
+    expect(() => IdentityProvisioningIdempotencyKeySchema.parse('short')).toThrow();
+    expect(() => IdentityProvisioningIdempotencyKeySchema.parse('contains spaces')).toThrow();
   });
 
   it('exposes bounded source-aware user directory records', () => {

@@ -532,7 +532,7 @@ export const ApiClientSchema = z.object({
 
 export const ApiClientCreateSchema = z.object({
   name: z.string().min(1).max(255),
-  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute'])).min(1).optional(),
+  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute', 'identity:provisioning:manage'])).min(1).optional(),
 });
 
 export const ApiClientWithTokenSchema = z.object({

@@ -41,6 +41,7 @@
       "Adds `/scim/v2/{directoryKey}` OAuth client-credentials, discovery, bounded Bulk, deterministic sorting, and User/Group create, retrieve, filter, replace, atomic patch, membership, and soft-deprovision endpoints using `application/scim+json`.",
       "Adds OIDC back-channel and RP-initiated logout plus signed, correlated SAML single logout with targeted provider-session revocation.",
       "Adds authenticated provisioning-directory, credential, readiness-test, and diagnostics endpoints under `/api/identity/provisioning-directories`.",
+      "Provisioning administration also accepts a least-privilege API client with `identity:provisioning:manage`, matching RBAC, and durable at-most-once keys for reveal-once credential operations.",
       "Adds source-aware user directory, identity-context, effective-access, session, audit, deactivate, reactivate, and revoke-session endpoints.",
       "Generated OpenAPI uses canonical shared request, response, authorization, media-type, and error schemas; compatible existing user APIs remain available."
     ]
@@ -48,12 +49,14 @@
   "database": {
     "migrations": [
       "1700000000111-add-identity-provisioning-foundation",
-      "1700000000112-add-federated-session-lineage"
+      "1700000000112-add-federated-session-lineage",
+      "1700000000113-add-provisioning-credential-idempotency"
     ],
     "rollbackSupported": true,
     "notes": [
       "Adds provisioning directory, hashed credential, SCIM user link, SCIM group link, SCIM group membership, and sanitized diagnostic tables with tenant-scoped identities and lifecycle indexes.",
       "Adds nullable provider-subject, provider-session, and SAML NameID-format lineage to refresh sessions so verified OIDC/SAML logout can revoke only the affected sessions.",
+      "Adds a portable non-null operation identity plus redacted idempotency metadata for concurrent-safe, at-most-once credential issuance and rotation.",
       "The down migration removes the new provisioning tables and therefore requires SCIM traffic to be stopped and credentials revoked before rollback."
     ]
   },
@@ -62,12 +65,14 @@
     "Email alone never links an account; an existing account is reused only through an active external identity for the directory's associated sign-in provider.",
     "SCIM and identity mappings cannot grant Platform Administrator access, and local recovery administrators cannot be linked, modified, or deactivated by SCIM.",
     "ETags, serializable transactions, bounded payloads/results/groups/Bulk operations, atomic PATCH, sanitized errors, source-scoped access removal, audit reasons, and immediate session invalidation protect lifecycle operations.",
-    "Conditional access evaluates trusted IPv4/IPv6/CIDR context and verified OIDC/SAML MFA assurance fail closed; federated logout validates signed protocol evidence before targeted revocation."
+    "Conditional access evaluates trusted IPv4/IPv6/CIDR context and verified OIDC/SAML MFA assurance fail closed; federated logout validates signed protocol evidence before targeted revocation.",
+    "Reveal-once administration responses are non-cacheable; the supported CLI writes secrets only to new mode-0600 files and never logs them."
   ],
   "documentation": [
     "Architecture and trust model: `docs/architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md` and `docs/concepts/authentication-and-authoritative-provisioning.md`",
     "Administrator setup and operation: `docs/how-to/configure-scim-provisioning.md` and `docs/how-to/operate-identity-lifecycle.md`",
     "API and extension reference: `docs/reference/scim-and-user-lifecycle-api.md` and `docs/development/extending-scim-provisioning.md`",
+    "Headless provisioning and secret handoff: `docs/development/headless-identity-provisioning.md`",
     "Upgrade and rollback: `docs/how-to/upgrade-identity-provisioning.md`",
     "Carbon and browser evidence: `docs/development/identity-access-ui-evidence-report.md`"
   ],

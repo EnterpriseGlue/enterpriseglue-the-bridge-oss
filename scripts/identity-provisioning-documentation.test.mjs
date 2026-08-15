@@ -8,6 +8,7 @@ const setup = read('docs/how-to/configure-scim-provisioning.md');
 const operations = read('docs/how-to/operate-identity-lifecycle.md');
 const api = read('docs/reference/scim-and-user-lifecycle-api.md');
 const developer = read('docs/development/extending-scim-provisioning.md');
+const headless = read('docs/development/headless-identity-provisioning.md');
 const upgrade = read('docs/how-to/upgrade-identity-provisioning.md');
 const index = read('docs/index.md');
 const example = JSON.parse(read('docs/examples/identity-provisioning-directories.json'));
@@ -49,6 +50,7 @@ test('documents setup, lifecycle, credential, audit, troubleshooting, and rollba
   assert.match(operations, /Troubleshooting/);
   assert.match(upgrade, /1700000000111-add-identity-provisioning-foundation/);
   assert.match(upgrade, /1700000000112-add-federated-session-lineage/);
+  assert.match(developer, /1700000000113-add-provisioning-credential-idempotency/);
   assert.match(upgrade, /Rollback/);
 });
 
@@ -62,6 +64,16 @@ test('keeps the headless example secret-reference-only and discoverable', () => 
   assert.match(setup, /docs\/examples|identity-provisioning-directories\.json|identityProvisioningDirectories/);
   assert.match(index, /SCIM and User-Lifecycle API/);
   assert.match(index, /Extending SCIM Provisioning/);
+  assert.match(index, /Headless Identity Provisioning/);
+});
+
+test('documents the least-privilege headless credential lifecycle', () => {
+  for (const requirement of [
+    'identity:provisioning:manage', 'system.api.identity_provisioning_admin',
+    'Idempotency-Key', 'Cache-Control: no-store', '0600', 'at most once',
+  ]) assert.match(headless, new RegExp(requirement, 'i'));
+  assert.match(api, /API client/);
+  assert.match(api, /principal/i);
 });
 
 test('developer guide requires contract, persistence, security, and end-to-end parity', () => {

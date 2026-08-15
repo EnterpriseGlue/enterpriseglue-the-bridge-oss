@@ -98,6 +98,20 @@ reference, never a resolved token or hash. A `config_locked` directory is
 read-only in the portal; a `config_warn` directory can be changed locally but
 the next configuration apply may overwrite drift.
 
+For a completely unattended lifecycle, bootstrap a dedicated API client with
+the `identity:provisioning:manage` scope and
+`system.api.identity_provisioning_admin` role. Use the secret-safe CLI to
+generate an initial credential offline or create/rotate it through the API:
+
+```bash
+pnpm admin:provisioning-credential generate ./entra-workforce.scim.secret
+```
+
+API create and rotate require an `Idempotency-Key`. Their reveal-once response
+is non-cacheable and a repeated key returns `409` instead of replaying the
+secret. See [Headless identity-provisioning control plane](../development/headless-identity-provisioning.md)
+for bootstrap, rotation order, failure recovery, and developer invariants.
+
 ## Rollout checks
 
 - Confirm an unsafe existing-email collision returns `409` and creates no link.

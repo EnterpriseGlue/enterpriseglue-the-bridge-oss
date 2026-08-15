@@ -462,6 +462,14 @@ replace route enforcement: mutation endpoints evaluate ownership again.
 
 ## External Registry API
 
+Identity-provisioning automation uses the same two-gate machine model. A
+dedicated API client needs scope `identity:provisioning:manage` and platform
+role `system.api.identity_provisioning_admin`; neither one grants access on its
+own. Credential create and rotate require `Idempotency-Key` and return a
+non-cacheable secret exactly once. The complete secret-manager handoff and
+rotation order are in
+[Headless Identity Provisioning](../development/headless-identity-provisioning.md).
+
 `POST /engines-api/external/engines` is for a CMDB, operator, or external
 registry that owns engine inventory. It requires explicit `tenancy` and a
 stable `externalId`. This endpoint:

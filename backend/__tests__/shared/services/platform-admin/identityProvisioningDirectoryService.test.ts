@@ -167,6 +167,45 @@ describe('IdentityProvisioningDirectoryService', () => {
     await expect(context.service.verifyCredential('workday', immediate.token)).resolves.not.toBeNull();
   });
 
+  it('uses durable at-most-once keys without storing or replaying reveal-once secrets', async () => {
+    const context = fixture();
+    await context.directories.insert({ id: 'directory-1', key: 'workday', status: 'active' } as IdentityProvisioningDirectory);
+
+    const issued = await context.service.issueCredential({
+      directoryId: 'directory-1',
+      name: 'Automation',
+      idempotencyKey: 'deployment:2026-08-15:001',
+    });
+    expect(context.credentials.rows[0]).toMatchObject({
+      issuanceIdempotencyKey: 'deployment:2026-08-15:001',
+      issuanceRequestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(context.credentials.rows[0]).not.toHaveProperty('token');
+
+    await expect(context.service.issueCredential({
+      directoryId: 'directory-1',
+      name: 'Automation',
+      idempotencyKey: 'deployment:2026-08-15:001',
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(context.credentials.rows).toHaveLength(1);
+
+    await context.service.rotateCredential({
+      directoryId: 'directory-1',
+      credentialId: issued.credential.id,
+      overlapSeconds: 300,
+      idempotencyKey: 'deployment:2026-08-15:002',
+    });
+    const beforeRetry = { ...context.credentials.rows.find((row) => row.id === issued.credential.id) };
+    await expect(context.service.rotateCredential({
+      directoryId: 'directory-1',
+      credentialId: issued.credential.id,
+      overlapSeconds: 300,
+      idempotencyKey: 'deployment:2026-08-15:002',
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(context.credentials.rows.find((row) => row.id === issued.credential.id)).toEqual(beforeRetry);
+    expect(context.credentials.rows).toHaveLength(2);
+  });
+
   it('archives a directory and revokes every credential in the same transaction', async () => {
     const context = fixture();
     await context.directories.insert({

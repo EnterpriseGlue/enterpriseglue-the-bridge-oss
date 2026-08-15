@@ -148,9 +148,9 @@ describe('provider-neutral identity shared contracts', () => {
 
   it('shares machine-principal write contracts with the route and OpenAPI', () => {
     expect(ApiClientCreateSchema.parse({
-      name: 'Engine registration',
-      scopes: ['engine:register'],
-    })).toMatchObject({ scopes: ['engine:register'] });
+      name: 'Identity provisioning',
+      scopes: ['identity:provisioning:manage'],
+    })).toMatchObject({ scopes: ['identity:provisioning:manage'] });
     expect(ServiceAccountCreateSchema.parse({
       name: 'Release service',
       description: 'Release automation',

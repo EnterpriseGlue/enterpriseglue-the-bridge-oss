@@ -8,6 +8,7 @@ describe('identity provisioning OpenAPI contracts', () => {
     const list = paths?.['/api/identity/provisioning-directories']?.get;
     const create = paths?.['/api/identity/provisioning-directories']?.post;
     const rotate = paths?.['/api/identity/provisioning-directories/{key}/credentials/{credentialId}/rotate']?.post;
+    const credentialCreate = paths?.['/api/identity/provisioning-directories/{key}/credentials']?.post;
     const record = list?.responses?.['200']?.content?.['application/json']?.schema?.properties?.items?.items;
 
     expect(list?.['x-enterpriseglue-authz']).toMatchObject({ actionId: 'platform.sso.providers.read' });
@@ -21,6 +22,11 @@ describe('identity provisioning OpenAPI contracts', () => {
     expect(record?.properties).not.toHaveProperty('token');
     expect(record?.properties).not.toHaveProperty('tokenHash');
     expect(create?.requestBody?.content?.['application/json']?.schema?.properties).not.toHaveProperty('credentialSecretRef');
+    expect(credentialCreate?.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ in: 'header', name: 'idempotency-key' }),
+    ]));
+    expect(credentialCreate?.responses?.['201']?.headers?.['Cache-Control']).toBeDefined();
+    expect(credentialCreate?.responses?.['409']).toBeDefined();
   });
 
   it('publishes SCIM discovery and resource endpoints under independent bearer security', () => {

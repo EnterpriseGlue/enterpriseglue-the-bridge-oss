@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Button,
+  Checkbox,
   CodeSnippet,
   DataTableSkeleton,
   InlineNotification,
@@ -81,6 +82,7 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
   const [credentialModalOpen, setCredentialModalOpen] = React.useState(false);
   const [credentialName, setCredentialName] = React.useState('Directory provisioning');
   const [issuedCredential, setIssuedCredential] = React.useState<IdentityProvisioningCredentialIssued | null>(null);
+  const [credentialStored, setCredentialStored] = React.useState(false);
   const [testResult, setTestResult] = React.useState<IdentityProvisioningDirectoryTestResponse | null>(null);
 
   const selected = directories.find((directory) => directory.key === selectedKey) || null;
@@ -193,6 +195,7 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
       const issued = await identityProvisioningApi.issueCredential(selected.key, credentialName.trim());
       setCredentialModalOpen(false);
       setCredentialName('Directory provisioning');
+      setCredentialStored(false);
       setIssuedCredential(issued);
       await loadDirectoryDetails();
     } catch (credentialError) {
@@ -210,6 +213,7 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
         name: `${credential.name} replacement`,
         overlapSeconds: 3600,
       });
+      setCredentialStored(false);
       setIssuedCredential(issued);
       await loadDirectoryDetails();
     } catch (rotateError) {
@@ -425,8 +429,13 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
       <Modal
         open={Boolean(issuedCredential)}
         modalHeading="Copy the client credential now"
-        passiveModal
-        onRequestClose={() => setIssuedCredential(null)}
+        primaryButtonText="I've stored the credential"
+        primaryButtonDisabled={!credentialStored}
+        preventCloseOnClickOutside
+        onRequestClose={() => {
+          if (credentialStored) setIssuedCredential(null);
+        }}
+        onRequestSubmit={() => setIssuedCredential(null)}
         size="sm"
       >
         <InlineNotification kind="warning" title="Reveal once" subtitle="The client secret cannot be retrieved again. Copy these values into your directory provider before closing this dialog." hideCloseButton lowContrast />
@@ -440,6 +449,12 @@ export default function IdentityProvisioningSettingsTab({ canManage, unavailable
             <p className="cds--label" style={{ marginTop: 'var(--spacing-4)' }}>TOKEN ENDPOINT</p>
             <CodeSnippet type="single" feedback="Token endpoint copied">{`${window.location.origin}${issuedCredential.tokenEndpointPath}`}</CodeSnippet>
             <p className="eg-secondary-text" style={{ marginTop: 'var(--spacing-3)' }}>Stored fingerprint: {issuedCredential.credential.fingerprint}</p>
+            <Checkbox
+              id="provisioning-credential-stored"
+              labelText="I have stored the client secret in the approved secret manager"
+              checked={credentialStored}
+              onChange={(_event, data) => setCredentialStored(Boolean(data.checked))}
+            />
           </>
         )}
       </Modal>

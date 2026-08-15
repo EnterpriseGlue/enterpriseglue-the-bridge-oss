@@ -31,6 +31,19 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
   requireAction: () => (_req: any, _res: any, next: any) => next(),
 }));
 
+vi.mock('@enterpriseglue/shared/middleware/apiClientAuth.js', () => ({
+  requireApiClientAction: (_scope: string, _action: string) => (req: any, _res: any, next: any) => {
+    req.apiClient = { id: 'provisioning-client-1', scopes: ['identity:provisioning:manage'] };
+    req.tenant = { tenantId: 'tenant-1', tenantSlug: 'acme' };
+    next();
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/ApiClientService.js', () => ({
+  API_CLIENT_TOKEN_PREFIX: 'egac',
+  ApiClientScopes: { IDENTITY_PROVISIONING_MANAGE: 'identity:provisioning:manage' },
+}));
+
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   identityAdminLimiter: (_req: any, _res: any, next: any) => next(),
 }));
@@ -132,7 +145,7 @@ describe('identity provisioning admin routes', () => {
       key: 'entra-workforce',
       isEnabled: false,
       authoritative: true,
-    }), 'tenant-1', 'admin-1');
+    }), 'tenant-1', 'admin-1', 'user');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'identity.provisioning.directory.create',
       userId: 'admin-1',
@@ -166,10 +179,38 @@ describe('identity provisioning admin routes', () => {
 
     expect(issued.status).toBe(201);
     expect(issued.body.token).toBe('eg_scim_reveal_once_12345678901234567890');
+    expect(issued.headers['cache-control']).toBe('no-store');
+    expect(issued.headers.pragma).toBe('no-cache');
+    expect(service.issueCredential).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: null }));
     expect(listed.status).toBe(200);
     expect(listed.body).toEqual({ items: [credential] });
     expect(JSON.stringify(listed.body)).not.toContain('eg_scim_reveal_once');
     expect(JSON.stringify(listed.body)).not.toContain('tokenHash');
+  });
+
+  it('authorizes a machine principal and requires durable operation idempotency', async () => {
+    service.issueCredential.mockResolvedValue({ credential, token: 'eg_scim_reveal_once_12345678901234567890' });
+
+    const missingKey = await request(app)
+      .post('/api/identity/provisioning-directories/entra-workforce/credentials')
+      .set('Authorization', 'Bearer egac_provisioning_secret')
+      .send({ name: 'Automation' });
+    const issued = await request(app)
+      .post('/api/identity/provisioning-directories/entra-workforce/credentials')
+      .set('Authorization', 'Bearer egac_provisioning_secret')
+      .set('Idempotency-Key', 'deployment:2026-08-15:001')
+      .send({ name: 'Automation' });
+
+    expect(missingKey.status).toBe(400);
+    expect(issued.status).toBe(201);
+    expect(service.issueCredential).toHaveBeenLastCalledWith(expect.objectContaining({
+      actorUserId: null,
+      idempotencyKey: 'deployment:2026-08-15:001',
+    }));
+    expect(logAudit).toHaveBeenLastCalledWith(expect.objectContaining({
+      userId: 'provisioning-client-1',
+      details: expect.objectContaining({ principalType: 'api_client' }),
+    }));
   });
 
   it('rotates with bounded overlap, revokes immediately, and returns sanitized diagnostics', async () => {
@@ -206,7 +247,7 @@ describe('identity provisioning admin routes', () => {
     expect(service.archive).toHaveBeenCalledWith('entra-workforce', 'tenant-1');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'identity.provisioning.directory.archive',
-      details: { key: 'entra-workforce', credentialsRevoked: true },
+      details: { principalType: 'user', key: 'entra-workforce', credentialsRevoked: true },
     }));
   });
 });

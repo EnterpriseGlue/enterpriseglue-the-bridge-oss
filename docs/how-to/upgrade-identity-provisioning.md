@@ -32,6 +32,13 @@ verified token/assertion evidence. Existing sessions remain locally revocable
 and expire normally; provider-targeted logout applies to sessions that carry
 the new lineage.
 
+Migration `1700000000113-add-provisioning-credential-idempotency` adds nullable
+`issuance_idempotency_key` and `issuance_request_hash` columns plus a required
+canonical `issuance_idempotency_identity` and unique index. Existing
+credentials are backfilled with unkeyed identities and remain valid. New
+headless create and rotate operations use these fields for durable at-most-once
+behavior; the columns contain no clear-text credential or token hash.
+
 The migration is idempotent and reversible and uses portable non-null identity
 columns for tenant/key, active-authority, user-name, external-ID, and membership
 uniqueness. Run the normal EnterpriseGlue migration command, then verify the
@@ -54,7 +61,8 @@ application readiness endpoint and generated OpenAPI.
 4. Keep the six new tables during an application-only rollback so identity and
    audit history remain available for a forward retry.
 5. Run migration `down` only after a reviewed retention decision and a
-   verified backup. Reverting `0112` removes logout lineage, and reverting
+   verified backup. Reverting `0113` removes durable retry protection,
+   reverting `0112` removes logout lineage, and reverting
    `0111` removes all six provisioning tables and is therefore destructive.
 
 Rollback does not restore sessions already invalidated by deprovisioning. Users

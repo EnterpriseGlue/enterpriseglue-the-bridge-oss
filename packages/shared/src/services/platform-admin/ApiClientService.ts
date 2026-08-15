@@ -16,6 +16,7 @@ export const ApiClientScopes = {
   CONFIG_BUNDLE_MANAGE: 'config:bundle:manage',
   ENGINE_REGISTER: 'engine:register',
   DEPLOYMENT_EXECUTE: 'deployment:execute',
+  IDENTITY_PROVISIONING_MANAGE: 'identity:provisioning:manage',
 } as const;
 
 export type ApiClientScope = typeof ApiClientScopes[keyof typeof ApiClientScopes];

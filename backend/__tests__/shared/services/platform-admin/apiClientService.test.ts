@@ -125,6 +125,20 @@ describe('ApiClientService', () => {
       });
   });
 
+  it('supports least-privilege identity provisioning tokens', async () => {
+    const created = await service.createClient({
+      name: 'Identity provisioning automation',
+      scopes: [ApiClientScopes.IDENTITY_PROVISIONING_MANAGE],
+    });
+
+    await expect(service.authenticateToken(created.token, ApiClientScopes.IDENTITY_PROVISIONING_MANAGE))
+      .resolves
+      .toMatchObject({
+        id: created.client.id,
+        scopes: [ApiClientScopes.IDENTITY_PROVISIONING_MANAGE],
+      });
+  });
+
   it('rejects tokens without the required scope', async () => {
     const created = await service.createClient({ name: 'Engine registration', scopes: [ApiClientScopes.ENGINE_REGISTER] });
     rows[0].scopesJson = JSON.stringify([]);

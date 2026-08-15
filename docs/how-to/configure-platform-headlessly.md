@@ -14,6 +14,11 @@ deployment targets. It deliberately does not configure users, sessions,
 in-flight invitations, audit history, diagnostics, or one-off operational
 actions.
 
+Operational identity-provisioning credential creation and rotation are
+available headlessly through a separate, least-privilege API client. They are
+not configuration-bundle apply actions because their clear-text result is
+revealed once. See [Headless identity-provisioning control plane](../development/headless-identity-provisioning.md).
+
 The portal remains available for inspection. A `config_locked` object is
 read-only there and in ordinary mutation APIs; its response includes the
 owning source and drift status. A `config_warn` object may be changed by an

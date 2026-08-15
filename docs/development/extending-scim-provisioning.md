@@ -13,11 +13,20 @@ Keep protocol, persistence, API, configuration, and UI changes aligned.
 - Persistence entities and migration:
   `packages/shared/src/infrastructure/persistence/entities/` and
   `1700000000111-add-identity-provisioning-foundation.ts`; federated-session
-  logout lineage is added by `1700000000112-add-federated-session-lineage.ts`
+  logout lineage is added by `1700000000112-add-federated-session-lineage.ts`,
+  and reveal-once at-most-once state by
+  `1700000000113-add-provisioning-credential-idempotency.ts`
 
 Do not introduce route-local request or response schemas when a public
 contract changes. Do not expose a token hash, resolved secret, raw protocol
 body, unrestricted claim, or stack trace.
+
+Headless administration preserves a two-part authorization boundary: the API
+client needs `identity:provisioning:manage` and an RBAC role containing the
+matching SSO-provider action. Credential create/rotate additionally needs a
+durable `Idempotency-Key`; retry state stores only a request digest and must not
+make a reveal-once secret replayable. See
+[Headless identity-provisioning control plane](./headless-identity-provisioning.md).
 
 ## Extension rules
 

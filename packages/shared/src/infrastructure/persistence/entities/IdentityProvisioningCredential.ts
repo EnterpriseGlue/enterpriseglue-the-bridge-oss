@@ -5,6 +5,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('uq_identity_provisioning_credentials_hash', ['tokenHash'], { unique: true })
 @Index('idx_identity_provisioning_credentials_directory_status', ['directoryId', 'status'])
 @Index('idx_identity_provisioning_credentials_expiry', ['expiresAt'])
+@Index('uq_identity_provisioning_credentials_idempotency', ['issuanceIdempotencyIdentity'], { unique: true })
 export class IdentityProvisioningCredential extends AppBaseEntity {
   @Column({ name: 'directory_id', type: 'text' }) directoryId!: string;
   @Column({ type: 'text' }) name!: string;
@@ -17,4 +18,7 @@ export class IdentityProvisioningCredential extends AppBaseEntity {
   @Column({ name: 'last_used_at', type: 'bigint', nullable: true }) lastUsedAt!: number | null;
   @Column({ name: 'revoked_at', type: 'bigint', nullable: true }) revokedAt!: number | null;
   @Column({ name: 'created_by_user_id', type: 'text', nullable: true }) createdByUserId!: string | null;
+  @Column({ name: 'issuance_idempotency_key', type: 'text', nullable: true }) issuanceIdempotencyKey!: string | null;
+  @Column({ name: 'issuance_request_hash', type: 'text', nullable: true }) issuanceRequestHash!: string | null;
+  @Column({ name: 'issuance_idempotency_identity', type: 'text' }) issuanceIdempotencyIdentity!: string;
 }

@@ -117,6 +117,7 @@ const EXTERNAL_ENGINE_AUDIT_FILTERS: Array<{ id: ExternalEngineAuditAction; labe
 const API_CLIENT_SCOPE_OPTIONS = [
   { id: 'config:bundle:manage', label: 'Configuration bundles' },
   { id: 'engine:register', label: 'Engine registration' },
+  { id: 'identity:provisioning:manage', label: 'Identity provisioning' },
   { id: 'deployment:execute', label: 'Deployment execution' },
 ];
 

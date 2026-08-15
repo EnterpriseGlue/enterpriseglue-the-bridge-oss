@@ -88,6 +88,13 @@ export const IdentityProvisioningCredentialRotateSchema = z.object({
   overlapSeconds: z.number().int().min(0).max(86_400).default(3600),
 }).strict();
 
+/** Durable operation key for reveal-once credential issuance. */
+export const IdentityProvisioningIdempotencyKeySchema = z.string()
+  .trim()
+  .min(8)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/, 'Use letters, numbers, dot, underscore, colon, or hyphen');
+
 export const IdentityProvisioningCredentialStatusSchema = z.enum(['active', 'overlap', 'expired', 'revoked']);
 
 /** Public credential metadata deliberately excludes token values and token hashes. */

@@ -62,6 +62,7 @@ Audience: Developers and architects.
 - [Customer Sidecar Backstop Test Report](development/customer-sidecar-backstop-test-report.md)
 - [Identity Protocol, Entra Compatibility, and LDAP Test Harness](how-to/ldap-protocol-test-harness.md)
 - [Extending SCIM Provisioning](development/extending-scim-provisioning.md)
+- [Headless Identity Provisioning](development/headless-identity-provisioning.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)

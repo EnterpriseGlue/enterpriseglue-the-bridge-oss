@@ -44,6 +44,25 @@ function hashCredentialSecret(secret: string): string {
   return createHash('sha256').update(secret).digest('hex');
 }
 
+function credentialIssuanceRequestHash(value: Record<string, unknown>): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function credentialIssuanceIdentity(directoryId: string, credentialId: string, idempotencyKey?: string | null): string {
+  return provisioningIdentity(
+    idempotencyKey ? 'identity-provisioning-credential-idempotency-v1' : 'identity-provisioning-credential-unkeyed-v1',
+    directoryId,
+    idempotencyKey || credentialId,
+  );
+}
+
+function completedCredentialOperationError(existing: IdentityProvisioningCredential, requestHash: string) {
+  const sameRequest = existing.issuanceRequestHash === requestHash;
+  return Errors.conflict(sameRequest
+    ? `Credential operation already completed as ${existing.id}; its reveal-once secret cannot be returned again`
+    : 'Idempotency-Key was already used for a different credential operation');
+}
+
 function constantTimeHexEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, 'hex');
   const rightBuffer = Buffer.from(right, 'hex');
@@ -131,7 +150,8 @@ export class IdentityProvisioningDirectoryService {
   async create(
     input: IdentityProvisioningDirectoryCreate,
     tenantId: string | null,
-    actorUserId: string | null,
+    actorId: string | null,
+    actorType: 'user' | 'api_client' = 'user',
   ): Promise<IdentityProvisioningDirectoryRecord> {
     const dataSource = await this.dataSourceProvider();
     const id = generateId();
@@ -158,7 +178,7 @@ export class IdentityProvisioningDirectoryService {
           authoritative: true,
           status,
           ownershipMode: 'manual',
-          sourceRef: actorUserId ? `user:${actorUserId}` : null,
+          sourceRef: actorId ? `${actorType}:${actorId}` : null,
           sourceHash: null,
           credentialSecretRef: null,
           lastAppliedAt: null,
@@ -321,6 +341,9 @@ export class IdentityProvisioningDirectoryService {
           lastUsedAt: null,
           revokedAt: null,
           createdByUserId: null,
+          issuanceIdempotencyKey: null,
+          issuanceRequestHash: null,
+          issuanceIdempotencyIdentity: credentialIssuanceIdentity(directory.id, credentialId),
         }));
       }
       await credentialRepo.update(
@@ -379,6 +402,7 @@ export class IdentityProvisioningDirectoryService {
     name: string;
     expiresAt?: number | null;
     actorUserId?: string | null;
+    idempotencyKey?: string | null;
   }): Promise<{ credential: IdentityProvisioningCredentialMetadata; token: string }> {
     const dataSource = await this.dataSourceProvider();
     const directory = await dataSource.getRepository(IdentityProvisioningDirectory).findOneBy({ id: input.directoryId });
@@ -386,7 +410,17 @@ export class IdentityProvisioningDirectoryService {
     if (input.expiresAt != null && input.expiresAt <= Date.now()) {
       throw Errors.validation('Provisioning credential expiry must be in the future');
     }
+    const requestHash = credentialIssuanceRequestHash({
+      operation: 'issue', name: input.name, expiresAt: input.expiresAt ?? null,
+    });
     const id = generateId();
+    const idempotencyIdentity = credentialIssuanceIdentity(directory.id, id, input.idempotencyKey);
+    if (input.idempotencyKey) {
+      const existing = await dataSource.getRepository(IdentityProvisioningCredential).findOneBy({
+        issuanceIdempotencyIdentity: idempotencyIdentity,
+      });
+      if (existing) throw completedCredentialOperationError(existing, requestHash);
+    }
     const secret = randomBytes(32).toString('base64url');
     const token = `egscim_${id}.${secret}`;
     const now = Date.now();
@@ -403,8 +437,21 @@ export class IdentityProvisioningDirectoryService {
       lastUsedAt: null,
       revokedAt: null,
       createdByUserId: input.actorUserId ?? null,
+      issuanceIdempotencyKey: input.idempotencyKey ?? null,
+      issuanceRequestHash: input.idempotencyKey ? requestHash : null,
+      issuanceIdempotencyIdentity: idempotencyIdentity,
     });
-    await dataSource.getRepository(IdentityProvisioningCredential).insert(record);
+    try {
+      await dataSource.getRepository(IdentityProvisioningCredential).insert(record);
+    } catch (error) {
+      if (input.idempotencyKey) {
+        const existing = await dataSource.getRepository(IdentityProvisioningCredential).findOneBy({
+          issuanceIdempotencyIdentity: idempotencyIdentity,
+        });
+        if (existing) throw completedCredentialOperationError(existing, requestHash);
+      }
+      throw error;
+    }
     return { credential: toCredentialMetadata(record), token };
   }
 
@@ -415,6 +462,7 @@ export class IdentityProvisioningDirectoryService {
     expiresAt?: number | null;
     overlapSeconds: number;
     actorUserId?: string | null;
+    idempotencyKey?: string | null;
   }): Promise<{ credential: IdentityProvisioningCredentialMetadata; token: string }> {
     const dataSource = await this.dataSourceProvider();
     return dataSource.transaction(async (manager) => {
@@ -436,6 +484,20 @@ export class IdentityProvisioningDirectoryService {
         throw Errors.validation('Provisioning credential expiry must be in the future');
       }
 
+      const requestHash = credentialIssuanceRequestHash({
+        operation: 'rotate', credentialId: input.credentialId,
+        name: input.name ?? null, expiresAt: input.expiresAt ?? null,
+        overlapSeconds: input.overlapSeconds,
+      });
+      const replacementId = generateId();
+      const idempotencyIdentity = credentialIssuanceIdentity(directory.id, replacementId, input.idempotencyKey);
+      if (input.idempotencyKey) {
+        const existing = await credentialRepo.findOneBy({
+          issuanceIdempotencyIdentity: idempotencyIdentity,
+        });
+        if (existing) throw completedCredentialOperationError(existing, requestHash);
+      }
+
       const now = Date.now();
       if (input.overlapSeconds === 0) {
         current.status = 'revoked';
@@ -447,7 +509,7 @@ export class IdentityProvisioningDirectoryService {
       }
       await credentialRepo.save(current);
 
-      const id = generateId();
+      const id = replacementId;
       const secret = randomBytes(32).toString('base64url');
       const token = `egscim_${id}.${secret}`;
       const replacement = credentialRepo.create({
@@ -463,8 +525,21 @@ export class IdentityProvisioningDirectoryService {
         lastUsedAt: null,
         revokedAt: null,
         createdByUserId: input.actorUserId ?? null,
+        issuanceIdempotencyKey: input.idempotencyKey ?? null,
+        issuanceRequestHash: input.idempotencyKey ? requestHash : null,
+        issuanceIdempotencyIdentity: idempotencyIdentity,
       });
-      await credentialRepo.insert(replacement);
+      try {
+        await credentialRepo.insert(replacement);
+      } catch (error) {
+        if (input.idempotencyKey) {
+          const existing = await credentialRepo.findOneBy({
+            issuanceIdempotencyIdentity: idempotencyIdentity,
+          });
+          if (existing) throw completedCredentialOperationError(existing, requestHash);
+        }
+        throw error;
+      }
       return { credential: toCredentialMetadata(replacement), token };
     });
   }

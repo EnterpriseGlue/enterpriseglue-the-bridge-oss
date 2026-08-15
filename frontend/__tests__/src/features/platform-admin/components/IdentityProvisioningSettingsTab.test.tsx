@@ -92,6 +92,12 @@ describe('IdentityProvisioningSettingsTab', () => {
     expect(within(revealDialog).getByText(/eg_scim_reveal_once_12345678901234567890/)).toBeInTheDocument();
     expect(within(revealDialog).getByText(/\/scim\/v2\/entra-workforce\/oauth\/token/)).toBeInTheDocument();
     fireEvent.click(within(revealDialog).getByRole('button', { name: 'Close' }));
+    expect(within(revealDialog).getByText(/eg_scim_reveal_once_12345678901234567890/)).toBeInTheDocument();
+    const done = within(revealDialog).getByRole('button', { name: "I've stored the credential" });
+    expect(done).toBeDisabled();
+    fireEvent.click(within(revealDialog).getByRole('checkbox', { name: /approved secret manager/i }));
+    expect(done).toBeEnabled();
+    fireEvent.click(done);
     await waitFor(() => expect(screen.queryByText(/eg_scim_reveal_once_12345678901234567890/)).not.toBeInTheDocument());
     expect(screen.getAllByText('Entra production')).toHaveLength(1);
   });

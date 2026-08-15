@@ -87,5 +87,9 @@ test('the CLI applies, waits for, and exports the complete headless platform bun
   assert.equal(applied.body.expectedPreviewHash, canonicalHash);
   assert.equal(applied.body.expectedTenantScope, 'platform');
   assert.equal(applied.body.idempotencyKey, 'all-family-cli-lifecycle');
-  assert.equal(applied.body.files['./machine-principals.json'].machinePrincipals.length, 2);
+  assert.equal(applied.body.files['./machine-principals.json'].machinePrincipals.length, 3);
+  assert.deepEqual(
+    applied.body.files['./machine-principals.json'].machinePrincipals.find((principal) => principal.key === 'api-client.identity-provisioning')?.scopes,
+    ['identity:provisioning:manage'],
+  );
 });
