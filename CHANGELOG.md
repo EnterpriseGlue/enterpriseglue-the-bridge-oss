@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.13.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.12.0...v0.13.0) (2026-08-16)
+
+
+### Features
+
+* align identity and access administration with Carbon ([#370](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/370)) ([756e3cd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/756e3cd4357c58b6d7848eab8688ae9eeb84b7a8))
+
 ## [0.12.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.11.1...v0.12.0) (2026-08-12)
 
 
