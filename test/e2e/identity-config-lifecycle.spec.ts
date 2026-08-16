@@ -148,7 +148,7 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect.poll(async () => (await mappingPreviewNotification.boundingBox())?.height || 0)
       .toBeGreaterThan(40);
     await expect.poll(() => mappingPreviewNotification.evaluate((element) => {
-      const workflow = element.closest('[role="region"]');
+      const workflow = element.closest('.eg-settings-workflow');
       const actions = workflow?.querySelector('.eg-settings-workflow__actions');
       if (!actions) return false;
       const notificationBottom = element.getBoundingClientRect().bottom;
