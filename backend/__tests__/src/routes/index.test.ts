@@ -1,8 +1,9 @@
 import express from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createNotificationsRouter, noopMiddleware } = vi.hoisted(() => ({
+const { createNotificationsRouter, identityProvisioningRoute, noopMiddleware } = vi.hoisted(() => ({
   createNotificationsRouter: vi.fn(),
+  identityProvisioningRoute: vi.fn((_req: any, _res: any, next: any) => next()),
   noopMiddleware: (_req: any, _res: any, next: any) => next(),
 }));
 
@@ -58,6 +59,7 @@ vi.mock('@modules/platform-admin/index.js', () => ({
   ssoProvidersRoute: noopMiddleware,
   identityProvidersRoute: noopMiddleware,
   identityMappingsRoute: noopMiddleware,
+  identityProvisioningRoute,
 }));
 
 vi.mock('@modules/auth/index.js', () => ({
@@ -128,5 +130,6 @@ describe('backend routes index', () => {
     registerRoutes(app, { notificationTenantResolver: tenantResolver });
 
     expect(createNotificationsRouter).toHaveBeenCalledWith({ tenantResolver });
+    expect(app.router.stack.some((layer: { handle?: unknown }) => layer.handle === identityProvisioningRoute)).toBe(true);
   });
 });
