@@ -43,6 +43,20 @@ export function identityApiFailureHandlers(message = 'Identity provider unavaila
 }
 
 export const handlers = [
+  http.get('/engines-api/engines', () => HttpResponse.json([
+    {
+      id: 'engine-1',
+      name: 'Test Engine',
+      baseUrl: 'https://engine.example.test',
+    },
+  ])),
+  http.get('/t/default/engines-api/engines', () => HttpResponse.json([
+    {
+      id: 'engine-1',
+      name: 'Test Engine',
+      baseUrl: 'https://engine.example.test',
+    },
+  ])),
   http.get('/api/auth/login-methods', () => HttpResponse.json({
     localPassword: { enabled: true },
     providerSelection: 'chooser',

@@ -58,7 +58,7 @@ function renderWithProviders() {
 describe('BatchesList error state', () => {
   it('shows error notification when API fails', async () => {
     server.use(
-      http.get('/mission-control-api/batches', () => HttpResponse.json({ error: 'fail' }, { status: 500 }))
+      http.get(/\/mission-control-api\/batches(?:\?.*)?$/, () => HttpResponse.json({ error: 'fail' }, { status: 500 }))
     );
 
     renderWithProviders();

@@ -80,7 +80,7 @@ describe('BatchesList', () => {
     });
   });
 
-  it('does not fetch batch rows when the selected engine read action is denied', () => {
+  it('does not fetch batch rows when the selected engine read action is denied', async () => {
     authPermissions = {
       userId: 'user-1',
       platform: [],
@@ -91,7 +91,9 @@ describe('BatchesList', () => {
 
     renderWithProviders();
 
-    expect(screen.getByText('Batches unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Missing permission engine:instance:view')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Batches unavailable')).toBeInTheDocument();
+      expect(screen.getByText('Missing permission engine:instance:view')).toBeInTheDocument();
+    });
   });
 });

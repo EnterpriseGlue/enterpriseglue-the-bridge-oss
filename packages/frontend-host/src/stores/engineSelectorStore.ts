@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 
 interface EngineSelectorState {
   selectedEngineId: string | undefined // undefined means no engine selected yet
-  setSelectedEngineId: (id: string) => void
+  setSelectedEngineId: (id: string | undefined) => void
 }
 
 export const useEngineSelectorStore = create<EngineSelectorState>()(

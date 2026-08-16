@@ -23,6 +23,12 @@ async function enableInstanceCounts(page: Page) {
   });
 }
 
+async function clearPersistedEngineSelection(page: Page) {
+  await page.evaluate(() => {
+    window.localStorage.removeItem('engine-selector');
+  });
+}
+
 async function waitForJsonResponse(page: Page, pathFragment: string) {
   const response = await page.waitForResponse((candidate) => {
     return candidate.request().method() === 'GET' && candidate.url().includes(pathFragment);
@@ -65,6 +71,10 @@ test.describe('Smoke: Mission Control process instance detail', () => {
     const instanceId = fixture?.primaryInstanceId || fallbackInstanceId;
     await login(page);
     await enableInstanceCounts(page);
+    await clearPersistedEngineSelection(page);
+    const enginesPromise = requireMock
+      ? waitForJsonResponse(page, '/engines-api/engines')
+      : Promise.resolve(null);
     const historicPromise = requireMock
       ? waitForJsonResponse(page, `/mission-control-api/history/process-instances/${instanceId}`)
       : Promise.resolve(null);
@@ -79,8 +89,16 @@ test.describe('Smoke: Mission Control process instance detail', () => {
       : Promise.resolve(null);
 
     await page.goto(`/mission-control/processes/instances/${instanceId}`);
-    const [historic, variables, activityHistory, xml] = await Promise.all([historicPromise, variablesPromise, activityHistoryPromise, xmlPromise]);
+    const [engines, historic, variables, activityHistory, xml] = await Promise.all([
+      enginesPromise,
+      historicPromise,
+      variablesPromise,
+      activityHistoryPromise,
+      xmlPromise,
+    ]);
     if (requireMock) {
+      expect(Array.isArray(engines)).toBe(true);
+      expect(engines.length).toBeGreaterThan(0);
       expect(historic?.processDefinitionKey).toBe(fixture?.primaryProcessDefinitionKey);
       expect(variables && typeof variables === 'object').toBe(true);
       if (fixture?.primaryVariableName) {

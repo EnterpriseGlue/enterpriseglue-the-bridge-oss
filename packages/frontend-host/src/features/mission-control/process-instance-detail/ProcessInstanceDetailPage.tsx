@@ -12,7 +12,7 @@ import { SplitPane, Pane } from 'react-split-pane'
 import { useAlert } from '../../../shared/hooks/useAlert'
 import { PageLoader } from '../../../shared/components/PageLoader'
 import { useInstanceData } from './components/hooks/useInstanceData'
-import { useSelectedEngine } from '../../../components/EngineSelector'
+import { useEngineSelection } from '../../../components/EngineSelector'
 import { useDiagramOverlays } from './components/hooks/useDiagramOverlays'
 import { useVariableEditor } from './components/hooks/useVariableEditor'
 import { useInstanceRetry } from './components/hooks/useInstanceRetry'
@@ -73,7 +73,8 @@ export default function ProcessInstanceDetailPage() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
-  const selectedEngineId = useSelectedEngine()
+  const engineSelection = useEngineSelection()
+  const selectedEngineId = engineSelection.selectedEngineId
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
@@ -955,7 +956,30 @@ export default function ProcessInstanceDetailPage() {
   })
 
   // Check if initial data is loading
-  const isInitialLoading = histQ.isLoading || xmlQ.isLoading
+  const isInitialLoading = engineSelection.isResolving || histQ.isLoading || xmlQ.isLoading
+
+  if (engineSelection.isError) {
+    const selectionError = isEngineAccessError(engineSelection.error)
+    return (
+      <EngineAccessError
+        status={selectionError?.status ?? 503}
+        message={selectionError?.message || 'EnterpriseGlue could not load the engines available to your account. Try again or contact your administrator.'}
+        actionPath={toTenantPath('/engines')}
+        actionLabel="Go to Engines"
+      />
+    )
+  }
+
+  if (engineSelection.isEmpty) {
+    return (
+      <EngineAccessError
+        status={503}
+        message="No accessible active engine is available for this Mission Control link. Ask an administrator to configure an engine or grant access."
+        actionPath={toTenantPath('/engines')}
+        actionLabel="Go to Engines"
+      />
+    )
+  }
 
   // Check for engine access errors (403/503)
   const engineAccessError = isEngineAccessError(histQ.error)
