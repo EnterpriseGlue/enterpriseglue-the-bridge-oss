@@ -14,6 +14,15 @@ test('published-image compose mode pulls both images and fails closed on registr
   assert.match(overlay, /frontend:[\s\S]*image: \$\{FRONTEND_IMAGE\}:\$\{IMAGE_TAG\}[\s\S]*pull_policy: always/);
 });
 
+test('CI image smoke jobs use their downloaded image artifacts without registry pulls', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const localImageStarts = workflow.match(/docker compose[^\n]+docker-compose\.images\.yml[^\n]+up -d --pull never/g) || [];
+
+  assert.equal(localImageStarts.length, 2);
+  assert.match(workflow, /smoke-postgres-image-deploy:[\s\S]*\.env\.images\.ci[\s\S]*up -d --pull never/);
+  assert.match(workflow, /smoke-postgres-image-deploy-exposed:[\s\S]*\.env\.images\.exposed\.ci[\s\S]*up -d --pull never/);
+});
+
 test('Docker Hub examples use the configured release namespace', () => {
   const publicFiles = [
     'README.md',

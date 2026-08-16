@@ -658,7 +658,7 @@ jobs:
       - name: Start image deployment stack
         run: |
           COMPOSE_DIR="infra/docker/compose"
-          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d
+          docker compose --project-directory . --env-file .env.images.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" up -d --pull never
 
       - name: Wait for frontend and backend health
         shell: bash
@@ -744,7 +744,7 @@ jobs:
       - name: Start image deployment stack (backend exposed)
         run: |
           COMPOSE_DIR="infra/docker/compose"
-          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d
+          docker compose --project-directory . --env-file .env.images.exposed.ci -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" up -d --pull never
 
       - name: Wait for frontend and backend direct health
         shell: bash
