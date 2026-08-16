@@ -108,7 +108,8 @@
     "Fourteen focused SCIM route and service tests passed after hardening Bearer parsing and deterministic identity generation, including malformed and oversized authorization-header cases.",
     "Fourteen additional governance screenshots passed desktop and mobile dimension, uniqueness, and visual inspection checks; the dashboard mobile E2E also asserts equal filter, notification, and KPI widths plus single-column stacking at 390 pixels.",
     "The exact worktree passed a local source-image deployment, while the fail-closed image-only Compose path independently pulled and smoke-tested the published multi-architecture Docker Hub images without falling back to a build.",
-    "Configuration-bundle, documentation, release-note, authorization, browser, database-adapter, and protocol-rehearsal gates are recorded in the implementation plan and UI evidence report."
+    "Configuration-bundle, documentation, release-note, authorization, browser, database-adapter, and protocol-rehearsal gates are recorded in the implementation plan and UI evidence report.",
+    "All 23 Chromium smoke journeys passed against the local PostgreSQL deployment after aligning application login helpers with the Carbon public-authentication form contract."
   ],
   "packages": [
     {
