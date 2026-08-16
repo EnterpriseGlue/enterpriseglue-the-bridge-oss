@@ -157,6 +157,32 @@ function DashboardUnauthorized({ reason }: { reason: string }) {
   )
 }
 
+function DashboardError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <PageLayout padding="0" className="eg-dashboard-page">
+      <PageHeader
+        icon={Activity}
+        title="Dashboard"
+        subtitle="Real-time overview of your platform activity"
+        gradient={PAGE_GRADIENTS.blue}
+        variant="productive"
+      />
+      <div className="eg-dashboard-content">
+        <div style={{ display: 'grid', gap: 'var(--spacing-3)', justifyItems: 'start' }}>
+          <InlineNotification
+            kind="error"
+            title="Dashboard context could not be loaded"
+            subtitle="No dashboard data is shown because its authorization context is unavailable. Try again after checking the platform connection."
+            lowContrast
+            hideCloseButton
+          />
+          <Button kind="primary" size="sm" onClick={onRetry}>Retry</Button>
+        </div>
+      </div>
+    </PageLayout>
+  )
+}
+
 export default function Dashboard() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -217,14 +243,14 @@ export default function Dashboard() {
   // Fetch engines
   const enginesQuery = useQuery({
     queryKey: ['engines'],
-    queryFn: () => getAccessibleEngines().catch(() => []),
+    queryFn: () => getAccessibleEngines(),
     enabled: canReadDashboard,
   })
 
   // Fetch users
   const usersQuery = useQuery({
     queryKey: ['users'],
-    queryFn: () => apiClient.get<any[]>('/api/users').catch(() => []),
+    queryFn: () => apiClient.get<any[]>('/api/users'),
     enabled: canReadDashboard && canViewActiveUsers,
   })
 
@@ -239,7 +265,7 @@ export default function Dashboard() {
       suspended: true,
       engineId: selectedEngineId || undefined,
       startedAfter: timePeriod ? startedAfter : undefined,
-    }).catch(() => []),
+    }),
     enabled: canReadDashboard && !!selectedEngineId && canViewProcessData,
   })
 
@@ -249,7 +275,7 @@ export default function Dashboard() {
   const instances = instancesQuery.data || []
 
   const totalProjects = statsQuery.data?.totalProjects || 0
-  const showGettingStarted = !statsQuery.isLoading && !enginesQuery.isLoading && (totalProjects === 0 || connectedEngines === 0)
+  const showGettingStarted = !statsQuery.isLoading && !enginesQuery.isLoading && !statsQuery.isError && !enginesQuery.isError && (totalProjects === 0 || connectedEngines === 0)
 
   const instanceStates = React.useMemo(() => ({
     active: instances.filter(i => i.state === 'ACTIVE' && !i.hasIncident).length,
@@ -298,6 +324,10 @@ export default function Dashboard() {
     return <DashboardLoading />
   }
 
+  if (contextQuery.isError) {
+    return <DashboardError onRetry={() => { void contextQuery.refetch() }} />
+  }
+
   const fileTypes = statsQuery.data?.fileTypes || { bpmn: 0, dmn: 0, form: 0 }
   const totalFiles = statsQuery.data?.totalFiles || 0
   const hasFilesToReport = totalFiles > 0
@@ -324,6 +354,18 @@ export default function Dashboard() {
         variant="productive"
       />
       <div className="eg-dashboard-content">
+        {statsQuery.isError && (
+          <InlineNotification kind="error" title="Project statistics are unavailable" subtitle="Project and file totals could not be loaded. Other available dashboard data is still shown." lowContrast hideCloseButton />
+        )}
+        {enginesQuery.isError && (
+          <InlineNotification kind="error" title="Engine summary is unavailable" subtitle="Connected engine totals could not be loaded. Other available dashboard data is still shown." lowContrast hideCloseButton />
+        )}
+        {usersQuery.isError && (
+          <InlineNotification kind="warning" title="Active user total is unavailable" subtitle="The user directory could not be loaded for this dashboard view." lowContrast hideCloseButton />
+        )}
+        {instancesQuery.isError && (
+          <InlineNotification kind="warning" title="Process metrics are unavailable" subtitle="Process instances could not be loaded for the selected engine and time period." lowContrast hideCloseButton />
+        )}
         <div className="eg-dashboard-controls" aria-label="Dashboard filters">
           <EngineSelector size="sm" label="Engine" />
           <Dropdown

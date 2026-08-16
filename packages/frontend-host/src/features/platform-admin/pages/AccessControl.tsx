@@ -922,6 +922,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const externalEngineLifecycleUnavailableReason = unavailableReason(externalEngineLifecycleDecision, 'Missing permission platform:engine-registration:manage');
   const authzAuditQ = useAuthzAuditLog({
     userId: authzAuditFilter.userId.trim() || undefined,
+    action: authzAuditFilter.action.trim() || undefined,
     resourceType: authzAuditFilter.resourceType.trim() || undefined,
     resourceId: authzAuditFilter.resourceId.trim() || undefined,
     decision: authzAuditFilter.decision === 'all' ? undefined : authzAuditFilter.decision,
@@ -1504,6 +1505,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const createApiClient = async (name: string, scopes: string[]) => {
     try {
       const result = await createApiClientM.mutateAsync({ name, scopes });
+      setServiceAccountToken(null);
       setApiClientToken(result.token);
       setError(null);
     } catch (e) {
@@ -1514,6 +1516,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const createServiceAccount = async (name: string, description: string, scopes: string[]) => {
     try {
       const result = await createServiceAccountM.mutateAsync({ name, description: description || null, scopes });
+      setApiClientToken(null);
       setServiceAccountToken(result.token);
       setError(null);
     } catch (e) {
@@ -1524,6 +1527,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const rotateApiClient = async (id: string) => {
     try {
       const result = await rotateApiClientM.mutateAsync(id);
+      setServiceAccountToken(null);
       setApiClientToken(result.token);
       setError(null);
     } catch (e) {
@@ -1534,6 +1538,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const rotateServiceAccount = async (id: string) => {
     try {
       const result = await rotateServiceAccountM.mutateAsync(id);
+      setApiClientToken(null);
       setServiceAccountToken(result.token);
       setError(null);
     } catch (e) {
@@ -2093,6 +2098,8 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
                 pending={createApiClientM.isPending || createServiceAccountM.isPending || createExternalSystemM.isPending || updateExternalSystemM.isPending || archiveExternalSystemM.isPending || rotateApiClientM.isPending || rotateServiceAccountM.isPending || revokeApiClientM.isPending || revokeServiceAccountM.isPending || decommissionExternalEngineM.isPending || reactivateExternalEngineM.isPending || reconcileExternalEngineM.isPending}
                 generatedToken={apiClientToken}
                 generatedServiceAccountToken={serviceAccountToken}
+                onStoredGeneratedToken={() => setApiClientToken(null)}
+                onStoredGeneratedServiceAccountToken={() => setServiceAccountToken(null)}
                 externalSystems={externalSystems}
                 externalSystemsLoading={externalSystemsQ.isLoading}
                 externalEngines={externalEngines}

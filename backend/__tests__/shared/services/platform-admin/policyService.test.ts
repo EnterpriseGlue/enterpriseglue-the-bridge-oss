@@ -539,10 +539,11 @@ describe('policyService', () => {
     await expect(policyService.updatePolicy('missing', {})).rejects.toMatchObject({ statusCode: 404 });
     policyRepo.findOne.mockResolvedValueOnce(null);
     await expect(policyService.deletePolicy('missing')).rejects.toMatchObject({ statusCode: 404 });
-    await expect(policyService.getAuditLog({ tenantId: ' tenant-a ', userId: 'user-1', resourceType: 'project', resourceId: 'project-1', decision: 'deny', limit: 25, offset: 10 })).resolves.toEqual([]);
+    await expect(policyService.getAuditLog({ tenantId: ' tenant-a ', userId: 'user-1', action: 'project:deploy', resourceType: 'project', resourceId: 'project-1', decision: 'deny', limit: 25, offset: 10 })).resolves.toEqual([]);
     await expect(policyService.getAuditLog({})).resolves.toEqual([]);
     const auditQb = auditRepo.createQueryBuilder.mock.results[0].value;
     expect(auditQb.andWhere).toHaveBeenCalledWith('(a.tenantId = :tenantId OR a.tenantId IS NULL)', { tenantId: 'tenant-a' });
+    expect(auditQb.andWhere).toHaveBeenCalledWith('a.action = :action', { action: 'project:deploy' });
     expect(auditQb.take).toHaveBeenCalledWith(25);
     expect(auditQb.skip).toHaveBeenCalledWith(10);
 

@@ -277,6 +277,8 @@ describe('AccessControl helpers', () => {
           userId: 'user-1',
           principalType: 'user',
           principalId: 'user-1',
+          principalDisplayName: 'Ada Lovelace',
+          principalSecondary: 'ada@example.test',
           roleId: 'custom.engine.operator',
           roleName: 'Custom Operator',
           resourceType: 'engine',
@@ -330,6 +332,8 @@ describe('AccessControl helpers', () => {
 
     const user = summaries.find((summary) => summary.key === 'user:user-1');
     expect(user).toMatchObject({
+      label: 'Ada Lovelace',
+      detail: 'ada@example.test',
       directAssignmentCount: 1,
       inheritedAssignmentCount: 1,
       relationshipCount: 1,

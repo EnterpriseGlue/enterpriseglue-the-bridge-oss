@@ -64,6 +64,24 @@ describe('ApiClientService', () => {
     expect(listed[0]).not.toHaveProperty('token');
   });
 
+  it('normalizes PostgreSQL bigint timestamps before returning API-client views', async () => {
+    const created = await service.createClient({ name: 'Timestamp client' });
+    rows[0].createdAt = '1700000000000';
+    rows[0].updatedAt = '1700000000100';
+    rows[0].lastUsedAt = '1700000000200';
+    rows[0].revokedAt = '1700000000300';
+
+    await expect(service.listClients()).resolves.toEqual([
+      expect.objectContaining({
+        id: created.client.id,
+        createdAt: 1700000000000,
+        updatedAt: 1700000000100,
+        lastUsedAt: 1700000000200,
+        revokedAt: 1700000000300,
+      }),
+    ]);
+  });
+
   it('normalizes default scopes and rejects blank names or unsupported scopes', async () => {
     const defaulted = await service.createClient({ name: '  Default client  ', scopes: [' ', ApiClientScopes.ENGINE_REGISTER, ApiClientScopes.ENGINE_REGISTER] });
 

@@ -2,10 +2,12 @@ import React from 'react';
 import {
   Button,
   Checkbox,
+  CodeSnippet,
   DataTable,
   DataTableSkeleton,
   Dropdown,
   InlineNotification,
+  Modal,
   NumberInput,
   Table,
   TableBody,
@@ -201,6 +203,57 @@ function getCapabilityTagType(value: string | null | undefined) {
   return 'gray';
 }
 
+function RevealOnceMachineCredential({
+  credential,
+  onStored,
+}: {
+  credential: { type: 'API client' | 'service account'; token: string } | null;
+  onStored: () => void;
+}) {
+  const [stored, setStored] = React.useState(false);
+
+  React.useEffect(() => {
+    setStored(false);
+  }, [credential?.token]);
+
+  return (
+    <Modal
+      open={Boolean(credential)}
+      modalHeading={`Copy the ${credential?.type.toLowerCase() || 'machine identity'} credential now`}
+      primaryButtonText="I've stored the credential"
+      primaryButtonDisabled={!stored}
+      preventCloseOnClickOutside
+      onRequestClose={() => {
+        if (stored) onStored();
+      }}
+      onRequestSubmit={onStored}
+      size="sm"
+    >
+      <InlineNotification
+        kind="warning"
+        title="Reveal once"
+        subtitle="This bearer token cannot be retrieved again. Copy it to an approved secret manager before closing this dialog."
+        hideCloseButton
+        lowContrast
+      />
+      {credential && (
+        <>
+          <p className="cds--label" style={{ marginTop: 'var(--spacing-4)' }}>BEARER TOKEN</p>
+          <CodeSnippet type="multi" feedback="Bearer token copied" maxCollapsedNumberOfRows={4} maxExpandedNumberOfRows={8}>
+            {credential.token}
+          </CodeSnippet>
+          <Checkbox
+            id="machine-credential-stored"
+            labelText="I have stored the bearer token in the approved secret manager"
+            checked={stored}
+            onChange={(_event, data) => setStored(Boolean(data.checked))}
+          />
+        </>
+      )}
+    </Modal>
+  );
+}
+
 export function ApiClientsPanel({
   clients,
   serviceAccounts,
@@ -209,6 +262,8 @@ export function ApiClientsPanel({
   pending,
   generatedToken,
   generatedServiceAccountToken,
+  onStoredGeneratedToken,
+  onStoredGeneratedServiceAccountToken,
   externalSystems,
   externalSystemsLoading,
   externalEngines,
@@ -261,6 +316,8 @@ export function ApiClientsPanel({
   pending: boolean;
   generatedToken: string | null;
   generatedServiceAccountToken: string | null;
+  onStoredGeneratedToken: () => void;
+  onStoredGeneratedServiceAccountToken: () => void;
   externalSystems: ExternalEngineSystem[];
   externalSystemsLoading: boolean;
   externalEngines: ExternalEngineRegistration[];
@@ -306,6 +363,11 @@ export function ApiClientsPanel({
   externalEngineApiUpsertDecision: UiAuthzDecision;
   externalEngineApiDecommissionDecision: UiAuthzDecision;
 }) {
+  const generatedCredential = generatedToken
+    ? { type: 'API client' as const, token: generatedToken, onStored: onStoredGeneratedToken }
+    : generatedServiceAccountToken
+      ? { type: 'service account' as const, token: generatedServiceAccountToken, onStored: onStoredGeneratedServiceAccountToken }
+      : null;
   const [name, setName] = React.useState('');
   const [scopes, setScopes] = React.useState<string[]>(['engine:register']);
   const [serviceAccountName, setServiceAccountName] = React.useState('');
@@ -382,22 +444,10 @@ export function ApiClientsPanel({
 
   return (
     <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-      {generatedToken && (
-        <InlineNotification
-          kind="success"
-          title="API client token generated"
-          subtitle={generatedToken}
-          lowContrast
-        />
-	      )}
-	      {generatedServiceAccountToken && (
-	        <InlineNotification
-	          kind="success"
-	          title="Service account token generated"
-	          subtitle={generatedServiceAccountToken}
-	          lowContrast
-	        />
-	      )}
+      <RevealOnceMachineCredential
+        credential={generatedCredential}
+        onStored={generatedCredential?.onStored || (() => undefined)}
+      />
       <div aria-label="Machine identity diagnostics" style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
         <h3 style={{ margin: 0 }}>Machine identity diagnostics</h3>
         <div style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center', flexWrap: 'wrap' }}>

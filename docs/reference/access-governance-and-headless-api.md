@@ -460,6 +460,29 @@ means the portal exposes **View configuration** and safe diagnostics only.
 `config_warn` remains editable but records drift. These interface rules do not
 replace route enforcement: mutation endpoints evaluate ownership again.
 
+## Authorization Audit Contract
+
+`GET /api/authz/audit` is the tenant-scoped authorization-decision log. It
+requires `platform.audit.read` and accepts exact-match `userId`, `action`,
+`resourceType`, `resourceId`, and `decision=allow|deny` filters, plus bounded
+`limit` and `offset` pagination controls. The portal's **Access Control >
+Audit** view uses the same query contract; **Export current view** exports only
+the already-filtered response, not an unbounded background dataset.
+
+The API recursively replaces values whose keys identify credentials,
+authorization headers, passwords, secrets, or tokens before returning event
+context. The event-detail dialog and CSV export therefore consume the same
+server-redacted payload. Clients must not attempt to recover, enrich, or join
+secret material into audit context.
+
+API-client and service-account create and rotate responses return a bearer
+token exactly once. The portal prevents Escape, close-button, and backdrop
+dismissal until the operator confirms that the token was copied to an approved
+secret manager. Headless clients must implement the equivalent handoff:
+capture the successful response directly into a secret manager, verify the
+stored version, and only then discard the response. List, audit, and export
+APIs never return the token again; rotation invalidates the previous token.
+
 ## External Registry API
 
 Identity-provisioning automation uses the same two-gate machine model. A

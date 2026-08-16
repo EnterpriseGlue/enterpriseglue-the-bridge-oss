@@ -56,6 +56,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
           if (!engine) return null;
           const capabilities = parseExternalEngineCapabilities(registration.capabilitiesJson || engine.capabilitiesJson);
           const capabilityDiagnostics = getExternalEngineCapabilityDiagnostics(engine.type, capabilities);
+          const lastExternalSyncAt = registration.lastExternalSyncAt || engine.lastExternalSyncAt || registration.lastRegisteredAt || engine.externalUpdatedAt || null;
           return {
             id: engine.id, registrationId: registration.id, name: engine.name, baseUrl: engine.baseUrl, type: engine.type,
             connectionMode: engine.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
@@ -67,9 +68,12 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
             fieldOwnership: parseExternalEngineFieldOwnership(registration.fieldOwnershipJson || engine.fieldOwnershipJson),
             driftStatus: registration.driftStatus || engine.driftStatus,
             lifecycleStatus: registration.lifecycleStatus || engine.lifecycleStatus || 'active',
-            lastExternalSyncAt: registration.lastExternalSyncAt || engine.lastExternalSyncAt || registration.lastRegisteredAt || engine.externalUpdatedAt || null,
+            lastExternalSyncAt: lastExternalSyncAt === null ? null : Number(lastExternalSyncAt),
             capabilities, capabilityStatus: registration.capabilityStatus || engine.capabilityStatus || capabilityDiagnostics.status,
-            capabilityDiagnostics, externalUpdatedAt: registration.lastRegisteredAt, createdAt: engine.createdAt, updatedAt: engine.updatedAt,
+            capabilityDiagnostics,
+            externalUpdatedAt: Number(registration.lastRegisteredAt),
+            createdAt: Number(engine.createdAt),
+            updatedAt: Number(engine.updatedAt),
           };
         }).filter(Boolean));
         return;
@@ -91,9 +95,14 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
           externalSystemName: engine.externalSystemId ? systemsById.get(engine.externalSystemId)?.name || null : null,
           managementMode: engine.managementMode || (engine.registrationSource === 'external_api' ? 'external_managed' : 'manual'),
           fieldOwnership: parseExternalEngineFieldOwnership(engine.fieldOwnershipJson), driftStatus: engine.driftStatus,
-          lifecycleStatus: engine.lifecycleStatus || 'active', lastExternalSyncAt: engine.lastExternalSyncAt || engine.externalUpdatedAt || null,
+          lifecycleStatus: engine.lifecycleStatus || 'active',
+          lastExternalSyncAt: engine.lastExternalSyncAt === null && engine.externalUpdatedAt === null
+            ? null
+            : Number(engine.lastExternalSyncAt || engine.externalUpdatedAt),
           capabilities, capabilityStatus: engine.capabilityStatus || capabilityDiagnostics.status, capabilityDiagnostics,
-          externalUpdatedAt: engine.externalUpdatedAt, createdAt: engine.createdAt, updatedAt: engine.updatedAt,
+          externalUpdatedAt: engine.externalUpdatedAt === null ? null : Number(engine.externalUpdatedAt),
+          createdAt: Number(engine.createdAt),
+          updatedAt: Number(engine.updatedAt),
         };
       }));
     } catch (error: any) {
@@ -103,7 +112,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.get('/api/authz/external-engines/:id/audit', apiLimiter, requireAuth, requireAction('platform.external-engines.audit.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateQuery(ExternalEngineRegistrationAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/external-engines/:id/audit', apiLimiter, requireAuth, requireAction('platform.external-engines.audit.read', { resourceResolver: 'platform.self' }), validateParams(resourceIdParamSchema), validateQuery(ExternalEngineRegistrationAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const action = req.query.action === 'all' ? undefined : req.query.action;
       const entries = await (await getDataSource()).getRepository(AuditLog).find({
@@ -112,7 +121,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
       });
       res.json(entries.map((entry) => ({
         id: entry.id, userId: entry.userId, action: entry.action, resourceType: entry.resourceType, resourceId: entry.resourceId,
-        ipAddress: entry.ipAddress, userAgent: entry.userAgent, details: redactExternalEngineAuditDetails(parseExternalEngineJson(entry.details)), createdAt: entry.createdAt,
+        ipAddress: entry.ipAddress, userAgent: entry.userAgent, details: redactExternalEngineAuditDetails(parseExternalEngineJson(entry.details)), createdAt: Number(entry.createdAt),
       })));
     } catch (error: any) {
       if (error.statusCode) throw error;
@@ -121,7 +130,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.post('/api/authz/external-engines/:id/decommission', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateBody(ExternalEngineLifecycleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/external-engines/:id/decommission', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'platform.self' }), validateParams(resourceIdParamSchema), validateBody(ExternalEngineLifecycleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
       const engineRepo = dataSource.getRepository(Engine);
@@ -153,7 +162,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateBody(ExternalEngineLifecycleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'platform.self' }), validateParams(resourceIdParamSchema), validateBody(ExternalEngineLifecycleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
       const engineRepo = dataSource.getRepository(Engine);
@@ -194,7 +203,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requireAction('platform.external-engines.reconcile', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/external-engines/:id/reconcile', apiLimiter, requireAuth, reconciliationLimiter, requireAction('platform.external-engines.reconcile', { resourceResolver: 'platform.self' }), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
       const engineRepo = dataSource.getRepository(Engine);

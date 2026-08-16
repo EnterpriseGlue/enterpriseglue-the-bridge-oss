@@ -756,6 +756,7 @@ class PolicyServiceClass {
   async getAuditLog(options: {
     tenantId?: string | null;
     userId?: string;
+    action?: string;
     resourceType?: string;
     resourceId?: string;
     decision?: 'allow' | 'deny';
@@ -769,6 +770,7 @@ class PolicyServiceClass {
 
     this.addTenantScopeFilter(qb, 'a', options.tenantId);
     if (options.userId) qb.andWhere('a.userId = :userId', { userId: options.userId });
+    if (options.action) qb.andWhere('a.action = :action', { action: options.action });
     if (options.resourceType) qb.andWhere('a.resourceType = :resourceType', { resourceType: options.resourceType });
     if (options.resourceId) qb.andWhere('a.resourceId = :resourceId', { resourceId: options.resourceId });
     if (options.decision) qb.andWhere('a.decision = :decision', { decision: options.decision });

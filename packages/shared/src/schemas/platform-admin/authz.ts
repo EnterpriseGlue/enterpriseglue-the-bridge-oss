@@ -245,6 +245,7 @@ export const AuthzAuditLogSchema = AuthzAuditLogSchemaRaw.transform((l) => ({
 /** Query contract for the tenant-scoped authorization audit API. */
 export const AuthzAuditQuerySchema = z.object({
   userId: z.string().optional(),
+  action: z.string().optional(),
   resourceType: z.string().optional(),
   resourceId: z.string().optional(),
   decision: z.enum(['allow', 'deny']).optional(),

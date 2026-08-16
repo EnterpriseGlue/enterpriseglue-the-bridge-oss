@@ -747,26 +747,26 @@ describe('authorization route inventory validation', () => {
       {
         actionId: 'platform.external-engines.reconcile',
         permissionId: 'platform:engine-registration:manage',
-        resourceType: 'engine',
+        resourceType: 'platform',
         operation: 'sync',
         risk: 'high',
         category: 'External Engine Registration',
         surfaceId: 'admin.access-control.external-engines.reconcile',
         routes: [
-          ['POST', '/api/authz/external-engines/{id}/reconcile', 'engine.byId'],
+          ['POST', '/api/authz/external-engines/{id}/reconcile', 'platform.self'],
         ],
       },
       {
         actionId: 'platform.external-engines.lifecycle.manage',
         permissionId: 'platform:engine-registration:manage',
-        resourceType: 'engine',
+        resourceType: 'platform',
         operation: 'manage',
         risk: 'critical',
         category: 'External Engine Registration',
         surfaceId: 'admin.access-control.external-engines.lifecycle-actions',
         routes: [
-          ['POST', '/api/authz/external-engines/{id}/decommission', 'engine.byId'],
-          ['POST', '/api/authz/external-engines/{id}/reactivate', 'engine.byId'],
+          ['POST', '/api/authz/external-engines/{id}/decommission', 'platform.self'],
+          ['POST', '/api/authz/external-engines/{id}/reactivate', 'platform.self'],
         ],
       },
       {

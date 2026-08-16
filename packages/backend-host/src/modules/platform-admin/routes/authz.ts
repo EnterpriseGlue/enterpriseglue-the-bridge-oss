@@ -320,7 +320,7 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
     };
 
     const base = await permissionService.evaluatePermission(permission as Permission, context);
-    const policy = await policyService.evaluate(permission as Permission, context);
+    const policy = await policyService.evaluateAndLog(permission as Permission, context);
 
     res.json({
       allowed: policy.decision === 'allow',

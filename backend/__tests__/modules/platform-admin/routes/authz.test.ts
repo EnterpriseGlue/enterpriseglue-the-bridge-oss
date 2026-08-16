@@ -438,12 +438,12 @@ describe('platform-admin authz routes', () => {
                 fieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
                 driftStatus: 'in_sync',
                 lifecycleStatus: 'active',
-                lastExternalSyncAt: 1000,
+                lastExternalSyncAt: '1000',
                 capabilitiesJson: JSON.stringify({ operations: ['engine.read'], supportLevel: 'compatible' }),
                 capabilityStatus: 'mismatch',
-                lastRegisteredAt: 1000,
-                createdAt: 900,
-                updatedAt: 1000,
+                lastRegisteredAt: '1000',
+                createdAt: '900',
+                updatedAt: '1000',
               },
             ]),
           };
@@ -459,8 +459,8 @@ describe('platform-admin authz routes', () => {
             defaultFieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
             isActive: true,
             createdById: 'user-1',
-            createdAt: 900,
-            updatedAt: 1000,
+            createdAt: '900',
+            updatedAt: '1000',
           };
           return {
             find: vi.fn().mockResolvedValue([system]),
@@ -487,12 +487,12 @@ describe('platform-admin authz routes', () => {
             fieldOwnershipJson: JSON.stringify({ connection: 'external', auth: 'external', display: 'manual' }),
             driftStatus: 'in_sync',
             lifecycleStatus: 'active',
-            lastExternalSyncAt: 1000,
+            lastExternalSyncAt: '1000',
             capabilitiesJson: JSON.stringify({ operations: ['engine.read'], supportLevel: 'compatible' }),
             capabilityStatus: 'mismatch',
-            externalUpdatedAt: 1000,
-            createdAt: 900,
-            updatedAt: 1000,
+            externalUpdatedAt: '1000',
+            createdAt: '900',
+            updatedAt: '1000',
           };
           return {
             find: vi.fn().mockResolvedValue([engine]),
@@ -545,7 +545,7 @@ describe('platform-admin authz routes', () => {
                 ipAddress: '127.0.0.1',
                 userAgent: 'vitest',
                 details: JSON.stringify({ externalId: 'cluster-a/prod', labels: { environment: 'prod' } }),
-                createdAt: 1000,
+                createdAt: '1000',
               },
             ]),
           };
@@ -709,15 +709,15 @@ describe('platform-admin authz routes', () => {
       decision: 'allow',
       reason: 'role assignment',
       policyId: null,
-      context: '{}',
+      context: JSON.stringify({ tenantId: 'tenant-default', accessToken: 'do-not-return', nested: { authorization: 'Bearer private-value', safe: 'visible' } }),
       ipAddress: null,
       userAgent: null,
-      timestamp: 1,
+      timestamp: '1',
       createdAt: 1,
       updatedAt: 1,
     }] as any);
 
-    const response = await request(app).get('/api/authz/audit?limit=25');
+    const response = await request(app).get('/api/authz/audit?limit=25&action=authz.check');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([{
@@ -730,12 +730,12 @@ describe('platform-admin authz routes', () => {
       decision: 'allow',
       reason: 'role assignment',
       policyId: null,
-      context: '{}',
+      context: JSON.stringify({ tenantId: 'tenant-default', accessToken: '[REDACTED]', nested: { authorization: '[REDACTED]', safe: 'visible' } }),
       ipAddress: null,
       userAgent: null,
       timestamp: 1,
     }]);
-    expect(policyService.getAuditLog).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-default', limit: 25 }));
+    expect(policyService.getAuditLog).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-default', action: 'authz.check', limit: 25 }));
   });
 
   it('never serializes runtime-resource keys into the coarse current-user permission snapshot', async () => {
@@ -1628,6 +1628,10 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.allowed).toBe(true);
     expect(response.body.baseReason).toBe('role:platform:admin');
+    expect(policyService.evaluateAndLog).toHaveBeenCalledWith(
+      'platform:authz:check',
+      expect.objectContaining({ userId: '00000000-0000-4000-8000-000000000001', tenantId: 'tenant-default', resourceType: 'platform' }),
+    );
   });
 
   it('rejects a permission paired with an incompatible resource type', async () => {
@@ -1973,6 +1977,24 @@ describe('platform-admin authz routes', () => {
     expect(update).toHaveBeenCalledWith({ id: 'system-2' }, expect.objectContaining({ isActive: false }));
   });
 
+  it('queries the canonical OSS tenant when listing external engine systems without tenant middleware', async () => {
+    const find = vi.fn().mockResolvedValue([]);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity.name === 'ExternalEngineSystem'
+        ? { find }
+        : { find: vi.fn().mockResolvedValue([]) },
+    });
+
+    const response = await request(app).get('/api/authz/external-engine-systems');
+
+    expect(response.status).toBe(200);
+    expect(find).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.arrayContaining([
+        expect.objectContaining({ tenantId: 'tenant-default' }),
+      ]),
+    }));
+  });
+
   it('lists externally registered engines and registration audit entries', async () => {
     const listResponse = await request(app).get('/api/authz/external-engines');
     expect(listResponse.status).toBe(200);
@@ -2010,13 +2032,14 @@ describe('platform-admin authz routes', () => {
       'platform:engine-registration:manage',
       expect.objectContaining({
         userId: 'user-1',
-        resourceType: 'engine',
-        resourceId: 'engine-1',
+        resourceType: 'platform',
+        resourceId: undefined,
       })
     );
     expect(auditResponse.body[0]).toMatchObject({
       id: 'audit-1',
       action: 'engine.external_registration.update',
+      createdAt: 1000,
       details: {
         externalId: 'cluster-a/prod',
         labels: { environment: 'prod' },
@@ -2254,9 +2277,7 @@ describe('platform-admin authz routes', () => {
 
     const decommissionedRegistration = { ...registration, lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned' };
     const decommissionedEngine = { ...engine, lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned' };
-    const findReactivationEngine = vi.fn()
-      .mockResolvedValueOnce(decommissionedEngine)
-      .mockResolvedValueOnce(null);
+    const findReactivationEngine = vi.fn().mockResolvedValue(null);
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity.name === 'ExternalEngineRegistration') {
@@ -2317,7 +2338,6 @@ describe('platform-admin authz routes', () => {
       lifecycleStatus: 'decommissioned',
     };
     const findReactivationEngine = vi.fn()
-      .mockResolvedValueOnce(retired)
       .mockResolvedValueOnce({
         id: 'engine-replacement',
         externalId: retired.externalId,
@@ -2372,7 +2392,7 @@ describe('platform-admin authz routes', () => {
       .post('/api/authz/external-engines/engine-foreign/decommission')
       .send({ reason: 'Cross-tenant request' });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
     expect(engineUpdate).not.toHaveBeenCalled();
   });
 

@@ -72,10 +72,10 @@ function toView(client: ApiClient, ownership?: Parameters<typeof adminConfigOwne
     scopes: parseScopes(client.scopesJson),
     isActive: client.isActive,
     createdById: client.createdById,
-    lastUsedAt: client.lastUsedAt,
-    revokedAt: client.revokedAt,
-    createdAt: client.createdAt,
-    updatedAt: client.updatedAt,
+    lastUsedAt: client.lastUsedAt === null ? null : Number(client.lastUsedAt),
+    revokedAt: client.revokedAt === null ? null : Number(client.revokedAt),
+    createdAt: Number(client.createdAt),
+    updatedAt: Number(client.updatedAt),
     ...adminConfigOwnershipFields(ownership),
   };
 }

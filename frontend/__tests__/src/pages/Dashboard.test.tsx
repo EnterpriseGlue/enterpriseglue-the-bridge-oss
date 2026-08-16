@@ -130,6 +130,56 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Total: 0 files')).not.toBeInTheDocument();
   });
 
+  it('fails closed when the dashboard authorization context cannot be loaded and can retry', async () => {
+    let contextAttempts = 0;
+    ;(apiClient.get as unknown as Mock).mockImplementation((url: string) => {
+      if (url === '/api/dashboard/context') {
+        contextAttempts += 1;
+        if (contextAttempts === 1) return Promise.reject(new Error('context unavailable'));
+        return Promise.resolve({
+          isPlatformAdmin: false,
+          canViewActiveUsers: false,
+          canViewEngines: true,
+          canViewProcessData: false,
+          canViewDeployments: false,
+          canViewMetrics: false,
+          projectMemberships: [],
+        });
+      }
+      if (url === '/api/dashboard/stats') return Promise.resolve({ totalProjects: 0, totalFiles: 0, fileTypes: { bpmn: 0, dmn: 0, form: 0 } });
+      return Promise.resolve([]);
+    });
+
+    renderDashboard();
+
+    expect(await screen.findByText('Dashboard context could not be loaded')).toBeInTheDocument();
+    expect(screen.queryByText('Projects')).not.toBeInTheDocument();
+    screen.getByRole('button', { name: 'Retry' }).click();
+    await waitFor(() => expect(screen.getByText('Projects')).toBeInTheDocument());
+    expect(contextAttempts).toBe(2);
+  });
+
+  it('shows a degraded-state notification when project statistics fail', async () => {
+    ;(apiClient.get as unknown as Mock).mockImplementation((url: string) => {
+      if (url === '/api/dashboard/context') return Promise.resolve({
+        isPlatformAdmin: false,
+        canViewActiveUsers: false,
+        canViewEngines: true,
+        canViewProcessData: false,
+        canViewDeployments: false,
+        canViewMetrics: false,
+        projectMemberships: [],
+      });
+      if (url === '/api/dashboard/stats') return Promise.reject(new Error('stats unavailable'));
+      return Promise.resolve([]);
+    });
+
+    renderDashboard();
+
+    expect(await screen.findByText('Project statistics are unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('Get started')).not.toBeInTheDocument();
+  });
+
   it('shows the file structure section when files exist', async () => {
     mockDashboardApi({
       totalFiles: 3,

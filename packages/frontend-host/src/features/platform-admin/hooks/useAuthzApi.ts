@@ -1002,6 +1002,7 @@ export function useCheckPermission() {
 export function useAuthzAuditLog(params?: SharedAuthzAuditQuery, options?: { enabled?: boolean }) {
   const searchParams = new URLSearchParams();
   if (params?.userId) searchParams.set('userId', params.userId);
+  if (params?.action) searchParams.set('action', params.action);
   if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
   if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
   if (params?.decision) searchParams.set('decision', params.decision);
