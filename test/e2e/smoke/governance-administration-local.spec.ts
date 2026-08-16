@@ -345,6 +345,21 @@ test.describe.serial('Governance administration with the real local API', () => 
     await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    const mobileControls = await page.locator('.eg-dashboard-controls').boundingBox();
+    const mobileRuntimeNotice = await page.locator('.cds--inline-notification').filter({ hasText: 'Runtime access is scoped' }).boundingBox();
+    const mobileKpiTiles = page.locator('.eg-dashboard-tile');
+    const firstMobileKpi = await mobileKpiTiles.nth(0).boundingBox();
+    const secondMobileKpi = await mobileKpiTiles.nth(1).boundingBox();
+    expect(mobileControls).not.toBeNull();
+    expect(mobileRuntimeNotice).not.toBeNull();
+    expect(firstMobileKpi).not.toBeNull();
+    expect(secondMobileKpi).not.toBeNull();
+    expect(Math.abs(mobileRuntimeNotice!.x - mobileControls!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(mobileRuntimeNotice!.width - mobileControls!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstMobileKpi!.x - mobileControls!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(firstMobileKpi!.width - mobileControls!.width)).toBeLessThanOrEqual(1);
+    expect(secondMobileKpi!.y).toBeGreaterThanOrEqual(firstMobileKpi!.y + firstMobileKpi!.height);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await captureManualScreenshot(page, '262-dashboard-real-mobile.jpg', { stabilize: false });
 
     await page.setViewportSize({ width: 1440, height: 900 });

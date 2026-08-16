@@ -2012,6 +2012,19 @@
     justify-content: stretch;
   }
 
+  .eg-dashboard-content > .cds--inline-notification {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: none;
+  }
+
+  .eg-dashboard-kpi-grid,
+  .eg-dashboard-chart-grid {
+    inline-size: calc(100% + var(--spacing-4));
+    max-inline-size: none;
+    margin-inline: 0;
+  }
+
   .eg-dashboard-get-started__actions .cds--btn {
     max-inline-size: none;
     inline-size: 100%;
@@ -2020,6 +2033,7 @@
   .eg-dashboard-tile,
   .eg-dashboard-chart-tile {
     min-block-size: auto;
+    padding: var(--spacing-4);
   }
 
   .eg-access-control-content,

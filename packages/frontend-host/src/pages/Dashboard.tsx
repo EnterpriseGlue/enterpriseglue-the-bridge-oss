@@ -106,7 +106,7 @@ function DashboardKpi({ label, value, icon: Icon, tone = 'blue' }: {
 }
 
 function DashboardKpiColumn({ children }: { children: React.ReactNode }) {
-  return <Column sm={2} md={2} lg={4}>{children}</Column>
+  return <Column sm={4} md={2} lg={4}>{children}</Column>
 }
 
 function DashboardChartColumn({ children }: { children: React.ReactNode }) {
