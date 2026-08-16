@@ -41,6 +41,7 @@ const rootRouter = Router();
 const router = Router({ mergeParams: true });
 const directoryKeySchema = z.string().min(1).max(128).regex(/^[a-z][a-z0-9._-]*$/);
 const resourceIdSchema = z.string().min(1).max(255);
+const MAX_SCIM_AUTHORIZATION_HEADER_LENGTH = 8192;
 
 function basicClientCredentials(req: Request): { clientId: string; clientSecret: string } | null {
   const authorization = req.headers.authorization;
@@ -55,6 +56,29 @@ function basicClientCredentials(req: Request): { clientId: string; clientSecret:
       clientSecret: decodeURIComponent(decoded.slice(separator + 1)),
     };
   } catch { return null; }
+}
+
+function bearerCredential(authorization: string | undefined): string {
+  if (typeof authorization !== 'string' || authorization.length > MAX_SCIM_AUTHORIZATION_HEADER_LENGTH) return '';
+  const value = authorization.trim();
+  if (value.length < 8 || value.slice(0, 6).toLowerCase() !== 'bearer' || value[6] !== ' ') return '';
+
+  let tokenStart = 7;
+  while (value[tokenStart] === ' ') tokenStart += 1;
+  const token = value.slice(tokenStart);
+  if (!token) return '';
+
+  // RFC 6750 b64token characters. Fixed character validation avoids regex backtracking on an attacker-controlled header.
+  for (let index = 0; index < token.length; index += 1) {
+    const code = token.charCodeAt(index);
+    const allowed = (code >= 48 && code <= 57)
+      || (code >= 65 && code <= 90)
+      || (code >= 97 && code <= 122)
+      || code === 43 || code === 45 || code === 46 || code === 47
+      || code === 61 || code === 95 || code === 126;
+    if (!allowed) return '';
+  }
+  return token;
 }
 
 function scimError(status: number, detail: string, scimType?: string) {
@@ -173,14 +197,10 @@ router.use((req, res, next) => {
 router.use(async (req, res, next) => {
   try {
     const directoryKey = directoryKeySchema.parse(req.params.directoryKey);
-    const authorization = req.headers.authorization;
-    const match = typeof authorization === 'string' ? /^Bearer\s+(.+)$/i.exec(authorization.trim()) : null;
-    if (!match) {
-      res.setHeader('WWW-Authenticate', 'Bearer realm="EnterpriseGlue SCIM"');
-      return res.status(401).json(scimError(401, 'A valid provisioning bearer credential is required'));
-    }
-    const verified = await identityProvisioningDirectoryService.verifyCredential(directoryKey, match[1])
-      || await identityProvisioningDirectoryService.verifyOAuthAccessToken(directoryKey, match[1]);
+    const credential = bearerCredential(req.headers.authorization);
+    // Both missing/malformed and well-formed credentials follow the same server-side verification path.
+    const verified = await identityProvisioningDirectoryService.verifyCredential(directoryKey, credential)
+      || await identityProvisioningDirectoryService.verifyOAuthAccessToken(directoryKey, credential);
     if (!verified) {
       res.setHeader('WWW-Authenticate', 'Bearer realm="EnterpriseGlue SCIM", error="invalid_token"');
       return res.status(401).json(scimError(401, 'A valid provisioning bearer credential is required'));

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
@@ -62,7 +62,8 @@ export interface ScimListInput {
 }
 
 function scopedIdentity(domain: string, ...values: string[]): string {
-  return createHash('sha256').update([domain, ...values].join('\u0000')).digest('hex');
+  // This is a stable, domain-separated identifier for non-secret SCIM data, never a password or credential hash.
+  return createHmac('sha256', `enterpriseglue:${domain}`).update(values.join('\u0000')).digest('hex');
 }
 
 export function scimUserNameIdentity(directoryId: string, userName: string): string {

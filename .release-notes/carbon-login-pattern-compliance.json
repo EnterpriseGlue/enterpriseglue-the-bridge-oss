@@ -73,7 +73,8 @@
     "ETags, serializable transactions, bounded payloads/results/groups/Bulk operations, atomic PATCH, sanitized errors, source-scoped access removal, audit reasons, and immediate session invalidation protect lifecycle operations.",
     "Conditional access evaluates trusted IPv4/IPv6/CIDR context and verified OIDC/SAML MFA assurance fail closed; federated logout validates signed protocol evidence before targeted revocation.",
     "Reveal-once administration responses are non-cacheable; the portal prevents closing the credential dialog until the operator confirms secure storage, and the supported CLI writes secrets only to new mode-0600 files without logging them.",
-    "Authorization audit display and export recursively redact sensitive context, and dashboard data is withheld when its authorization context cannot be loaded."
+    "Authorization audit display and export recursively redact sensitive context, and dashboard data is withheld when its authorization context cannot be loaded.",
+    "SCIM bearer credentials are extracted with an 8 KiB header bound and fixed RFC 6750 character validation; missing, malformed, and valid credentials all use the same server-side verification path."
   ],
   "documentation": [
     "Architecture and trust model: `docs/architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md` and `docs/concepts/authentication-and-authoritative-provisioning.md`",
@@ -104,6 +105,7 @@
     "Fifty-two final Carbon authentication, navigation, settings, identity-workflow, user-lifecycle, provisioning, narrow, and 200%-reflow screenshots passed deterministic dimension, uniqueness, overflow, accessibility, and visual inspection checks, including explicit provider and mapping form-bottom evidence.",
     "Four real-browser governance journeys passed against a pristine Docker deployment, covering principal and resource exploration, policy lifecycle and evaluation, authorization audit, machine identities, external registration, configuration ownership, and dashboard success, mobile, and controlled-error states.",
     "The governance regression set passed 169 targeted backend tests and 13 targeted frontend tests; the secret-boundary suite passed 436 tests, and policy plus machine-identity services retained 100% statement, branch, function, and line coverage.",
+    "Fourteen focused SCIM route and service tests passed after hardening Bearer parsing and deterministic identity generation, including malformed and oversized authorization-header cases.",
     "Fourteen additional governance screenshots passed desktop and mobile dimension, uniqueness, and visual inspection checks; the dashboard mobile E2E also asserts equal filter, notification, and KPI widths plus single-column stacking at 390 pixels.",
     "The exact worktree passed a local source-image deployment, while the fail-closed image-only Compose path independently pulled and smoke-tested the published multi-architecture Docker Hub images without falling back to a build.",
     "Configuration-bundle, documentation, release-note, authorization, browser, database-adapter, and protocol-rehearsal gates are recorded in the implementation plan and UI evidence report."

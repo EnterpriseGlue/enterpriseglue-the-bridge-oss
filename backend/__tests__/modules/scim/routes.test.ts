@@ -71,6 +71,16 @@ describe('SCIM 2.0 routes', () => {
     expect(missing.type).toBe('application/scim+json');
     expect(missing.body).toMatchObject({ status: '401', schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'] });
 
+    const malformed = await request(app)
+      .get('/scim/v2/workday/ServiceProviderConfig')
+      .set('Authorization', 'Bearer not a bearer token');
+    expect(malformed.status).toBe(401);
+
+    const oversized = await request(app)
+      .get('/scim/v2/workday/ServiceProviderConfig')
+      .set('Authorization', `Bearer ${'a'.repeat(8_200)}`);
+    expect(oversized.status).toBe(401);
+
     const wrongDirectory = await request(app)
       .get('/scim/v2/other/ServiceProviderConfig')
       .set('Authorization', `Bearer ${token}`)
