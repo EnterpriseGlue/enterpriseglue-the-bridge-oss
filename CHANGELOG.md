@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.13.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.13.0...v0.13.1) (2026-08-16)
+
+
+### Bug Fixes
+
+* **mission-control:** bootstrap engine selection for deep links ([#372](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/372)) ([fb6cbb4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fb6cbb44691ceddfbea5b655a43fe7fc2f1a7b21))
+
 ## [0.13.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.12.0...v0.13.0) (2026-08-16)
 
 
