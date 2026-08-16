@@ -18,6 +18,8 @@ import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastruct
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityProvisioningCredential } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvisioningCredential.js';
+import { IdentityProvisioningDirectory } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvisioningDirectory.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
@@ -185,6 +187,45 @@ function setupDataSource() {
   });
   const providerRepo: any = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   providerRepo.findOne = vi.fn(async ({ where }: any) => (await providerRepo.find()).find((provider: any) => provider.key === where.key) || null);
+  const provisioningDirectoryRows: any[] = [];
+  const provisioningDirectoryRepo: any = {
+    find: vi.fn(async () => provisioningDirectoryRows.map((row) => ({ ...row }))),
+    findOneBy: vi.fn(async (where: any) => provisioningDirectoryRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null),
+    create: vi.fn((row: any) => ({ ...row })),
+    insert: vi.fn(async (row: any) => { provisioningDirectoryRows.push({ ...row }); }),
+    save: vi.fn(async (row: any) => {
+      const index = provisioningDirectoryRows.findIndex((candidate) => candidate.id === row.id);
+      if (index >= 0) provisioningDirectoryRows[index] = { ...row };
+      else provisioningDirectoryRows.push({ ...row });
+      return row;
+    }),
+  };
+  const provisioningCredentialRows: any[] = [];
+  const provisioningCredentialRepo: any = {
+    findOneBy: vi.fn(async (where: any) => provisioningCredentialRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null),
+    create: vi.fn((row: any) => ({ ...row })),
+    insert: vi.fn(async (row: any) => { provisioningCredentialRows.push({ ...row }); }),
+    save: vi.fn(async (row: any) => {
+      const index = provisioningCredentialRows.findIndex((candidate) => candidate.id === row.id);
+      if (index >= 0) provisioningCredentialRows[index] = { ...row };
+      else provisioningCredentialRows.push({ ...row });
+      return row;
+    }),
+    update: vi.fn(async (where: any, values: any) => {
+      provisioningCredentialRows.forEach((row) => {
+        const matches = Object.entries(where).every(([key, value]: [string, any]) => {
+          if (value && typeof value === 'object' && '_type' in value) return row[key] !== value._value;
+          return row[key] === value;
+        });
+        if (matches) Object.assign(row, values);
+      });
+      return { affected: 1 };
+    }),
+  };
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const groupMembershipRepo = { find: vi.fn().mockResolvedValue([]), delete: vi.fn().mockResolvedValue(undefined) };
   const auditRepo = { insert: auditInsert };
@@ -255,6 +296,8 @@ function setupDataSource() {
     if (entity === Project) return projectRepo;
     if (entity === ProjectEngineTarget) return targetRepo;
     if (entity === IdentityProvider) return providerRepo;
+    if (entity === IdentityProvisioningDirectory) return provisioningDirectoryRepo;
+    if (entity === IdentityProvisioningCredential) return provisioningCredentialRepo;
     if (entity === IdentityEntitlementMapping) return identityMappingRepo;
     if (entity === AuthzGroupMembership) return groupMembershipRepo;
     if (entity === RbacRolePermission) return permissionRepo;
@@ -268,10 +311,11 @@ function setupDataSource() {
   };
   const dataSource = {
     getRepository: repositories,
+    hasMetadata: vi.fn((entity: unknown) => entity === IdentityProvisioningDirectory),
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, platformSettingsRepo, environmentTagRows, ownershipRows, dataSource, get platformSettingsRow() { return platformSettingsRow; } };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, provisioningDirectoryRows, provisioningCredentialRows, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, platformSettingsRepo, environmentTagRows, ownershipRows, dataSource, get platformSettingsRow() { return platformSettingsRow; } };
 }
 
 describe('configBundleApplyService', () => {
@@ -282,7 +326,9 @@ describe('configBundleApplyService', () => {
       'ENGINE_PASSWORD', 'PAYMENTS_ENGINE_TOKEN', 'PAYMENTS_ENGINE_PASSWORD', 'CENTRAL_ENGINE_PASSWORD',
       'ENGINE_BASIC_PASSWORD', 'ENGINE_BEARER_TOKEN', 'ENGINE_OAUTH_SECRET', 'PAYMENTS_PASSWORD',
       'PII_TOKEN', 'OPERATON_SIDECAR_PASSWORD', 'OPERATON_SIDECAR_OPERATORS_GROUP', 'secret/entra',
+      'SCIM_PROVISIONING_TOKEN',
     ]) process.env[name] = `test-${name}`;
+    process.env.SCIM_PROVISIONING_TOKEN = `egscim_configcred.${'s'.repeat(48)}`;
   });
 
   it('applies a hash-bound role and group bundle through one transaction with audit records', async () => {
@@ -1880,5 +1926,89 @@ describe('configBundleApplyService', () => {
       if (previousSecret === undefined) delete process.env.OPERATON_SIDECAR_OPERATORS_GROUP;
       else process.env.OPERATON_SIDECAR_OPERATORS_GROUP = previousSecret;
     }
+  });
+
+  it('round-trips a config-owned provisioning directory without persisting or exporting bearer material', async () => {
+    const state = setupDataSource();
+    const provisioningBundle = {
+      ...bundle,
+      imports: ['./identity-provisioning-directories.json'],
+    };
+    const provisioningFiles = {
+      './identity-provisioning-directories.json': {
+        identityProvisioningDirectories: [{
+          key: 'directory.entra',
+          displayName: 'Microsoft Entra ID provisioning',
+          enabled: true,
+          credentialSecretRef: 'env://SCIM_PROVISIONING_TOKEN',
+          ownershipMode: 'config_locked',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: provisioningBundle, files: provisioningFiles });
+    expect(preview).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+
+    const applied = await configBundleApplyService.apply({
+      bundle: provisioningBundle,
+      files: provisioningFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(applied).toMatchObject({ created: 1, updated: 0, archived: 0 });
+    expect(state.provisioningDirectoryRows).toEqual([
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        key: 'directory.entra',
+        status: 'active',
+        sourceRef: 'config_bundle:acme.authz',
+        credentialSecretRef: 'env://SCIM_PROVISIONING_TOKEN',
+      }),
+    ]);
+    expect(state.provisioningCredentialRows).toEqual([
+      expect.objectContaining({ id: 'configcred', status: 'active', tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/) }),
+    ]);
+    expect(state.provisioningCredentialRows[0]).not.toHaveProperty('token');
+    expect(JSON.stringify(state.auditInsert.mock.calls)).not.toContain(process.env.SCIM_PROVISIONING_TOKEN);
+
+    const exported = await configBundleExportService.exportBundle({ bundleKey: 'acme.authz', tenantId: 'tenant-a' });
+    expect(exported.files['./identity-provisioning-directories.json']).toEqual({
+      identityProvisioningDirectories: [{
+        key: 'directory.entra',
+        displayName: 'Microsoft Entra ID provisioning',
+        enabled: true,
+        authoritative: true,
+        credentialSecretRef: 'env://SCIM_PROVISIONING_TOKEN',
+        ownershipMode: 'config_locked',
+      }],
+    });
+    expect(JSON.stringify(exported)).not.toContain(process.env.SCIM_PROVISIONING_TOKEN);
+
+    const exportedPreview = configBundlePreviewService.preview(exported);
+    const reapplied = await configBundleApplyService.apply({
+      ...exported,
+      expectedPreviewHash: exportedPreview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'system:config-bootstrap',
+    });
+    expect(reapplied).toMatchObject({ created: 0, updated: 0, archived: 0 });
+    expect(reapplied.changes).toEqual([
+      expect.objectContaining({ objectType: 'identity_provisioning_directory', key: 'directory.entra', operation: 'noop' }),
+    ]);
+
+    const removalFiles = { './identity-provisioning-directories.json': { identityProvisioningDirectories: [] } };
+    const removalPreview = configBundlePreviewService.preview({ bundle: provisioningBundle, files: removalFiles });
+    const removed = await configBundleApplyService.apply({
+      bundle: provisioningBundle,
+      files: removalFiles,
+      expectedPreviewHash: removalPreview.canonicalHash!,
+      acknowledgements: ['config.authoritative_archive:identity_provisioning_directory:directory.entra'],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+    expect(removed).toMatchObject({ created: 0, updated: 0, archived: 1 });
+    expect(state.provisioningDirectoryRows[0]).toMatchObject({ status: 'archived', driftStatus: 'in_sync' });
+    expect(state.provisioningCredentialRows[0]).toMatchObject({ status: 'revoked', revokedAt: expect.any(Number) });
   });
 });

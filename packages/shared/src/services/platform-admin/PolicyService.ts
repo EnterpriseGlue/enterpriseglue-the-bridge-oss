@@ -25,6 +25,8 @@ import {
   adminConfigOwnershipFields,
   type AdminConfigOwnershipFields,
 } from './AdminConfigObjectOwnershipService.js';
+import { isIP } from 'node:net';
+import { PolicyConditionSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 // ============================================================================
 // Types
@@ -82,6 +84,58 @@ export interface EvaluationContext extends PermissionContext {
   timestamp?: number;
   userAttributes?: Record<string, any>;
   resourceAttributes?: Record<string, any>;
+  /** Verified authentication assurance from the signed application session. */
+  mfaVerified?: boolean;
+}
+
+interface ParsedIpAddress { version: 4 | 6; bits: number; value: bigint }
+
+function parseIpv4(value: string): bigint {
+  return value.split('.').reduce((result, part) => (result << 8n) | BigInt(Number(part)), 0n);
+}
+
+function parseIpv6(value: string): bigint {
+  let source = value.toLowerCase().split('%')[0];
+  if (source.includes('.')) {
+    const lastColon = source.lastIndexOf(':');
+    const ipv4 = parseIpv4(source.slice(lastColon + 1));
+    source = `${source.slice(0, lastColon)}:${Number((ipv4 >> 16n) & 0xffffn).toString(16)}:${Number(ipv4 & 0xffffn).toString(16)}`;
+  }
+  const halves = source.split('::');
+  const left = halves[0] ? halves[0].split(':') : [];
+  const right = halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - left.length - right.length;
+  const groups = [...left, ...Array(missing).fill('0'), ...right];
+  return groups.reduce((result, group) => (result << 16n) | BigInt(Number.parseInt(group, 16)), 0n);
+}
+
+function parseIpAddress(raw: string): ParsedIpAddress | null {
+  const value = raw.trim().replace(/^\[|\]$/g, '');
+  const version = isIP(value);
+  if (version === 4) {
+    return { version: 4, bits: 32, value: parseIpv4(value) };
+  }
+  if (version === 6) {
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(value);
+    return mapped
+      ? { version: 4, bits: 32, value: parseIpv4(mapped[1]) }
+      : { version: 6, bits: 128, value: parseIpv6(value) };
+  }
+  return null;
+}
+
+/** Exact-address and CIDR matching for IPv4/IPv6. Invalid input never matches. */
+export function ipAddressMatchesRange(address: string, range: string): boolean {
+  const [networkRaw, prefixRaw, ...extra] = range.trim().split('/');
+  if (extra.length > 0) return false;
+  const candidate = parseIpAddress(address);
+  const network = parseIpAddress(networkRaw);
+  if (!candidate || !network || candidate.version !== network.version) return false;
+  const prefix = prefixRaw === undefined ? candidate.bits : Number(prefixRaw);
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > candidate.bits) return false;
+  if (prefix === 0) return true;
+  const shift = BigInt(candidate.bits - prefix);
+  return (candidate.value >> shift) === (network.value >> shift);
 }
 
 export interface EvaluationResult {
@@ -231,8 +285,10 @@ class PolicyServiceClass {
     const timestamp = context.timestamp || Date.now();
     const policies = await this.getApplicablePolicies(action, context.resourceType, context.tenantId);
     let matchedAllow: PolicyDefinition | null = null;
+    let hasConditionalAllow = false;
 
     for (const policy of policies) {
+      if (policy.effect === 'allow') hasConditionalAllow = true;
       if (!this.evaluateConditions(policy.conditions, context, timestamp)) {
         continue;
       }
@@ -257,6 +313,13 @@ class PolicyServiceClass {
         reason: `policy:${matchedAllow.name}`,
         policyId: matchedAllow.id,
         policyName: matchedAllow.name,
+      };
+    }
+
+    if (hasConditionalAllow) {
+      return {
+        decision: 'deny',
+        reason: 'policy-conditions-not-satisfied',
       };
     }
 
@@ -324,9 +387,12 @@ class PolicyServiceClass {
    */
   private parseConditions(conditionsJson: string): PolicyCondition {
     try {
-      return JSON.parse(conditionsJson) as PolicyCondition;
+      return PolicyConditionSchema.parse(JSON.parse(conditionsJson)) as PolicyCondition;
     } catch {
-      return {};
+      // A malformed or obsolete persisted condition must never become an
+      // unconditional match. Stopping the authorization decision is safer for
+      // both allow and deny policies and makes the invalid record operable.
+      throw Errors.internal('Authorization policy conditions are invalid');
     }
   }
 
@@ -443,20 +509,13 @@ class PolicyServiceClass {
     condition: NonNullable<PolicyCondition['environment']>,
     context: EvaluationContext
   ): boolean {
-    // IP range check (simplified - would need proper CIDR matching in production)
-    if (condition.ipRange && condition.ipRange.length > 0 && context.ipAddress) {
-      const ipInRange = condition.ipRange.some(range => {
-        // Simple prefix match for now
-        if (range.endsWith('*')) {
-          return context.ipAddress!.startsWith(range.slice(0, -1));
-        }
-        return context.ipAddress === range;
-      });
+    if (condition.ipRange && condition.ipRange.length > 0) {
+      if (!context.ipAddress) return false;
+      const ipInRange = condition.ipRange.some((range) => ipAddressMatchesRange(context.ipAddress!, range));
       if (!ipInRange) return false;
     }
 
-    // MFA check would require additional context
-    // if (condition.requireMfa && !context.mfaVerified) return false;
+    if (condition.requireMfa === true && context.mfaVerified !== true) return false;
 
     return true;
   }
@@ -697,6 +756,7 @@ class PolicyServiceClass {
   async getAuditLog(options: {
     tenantId?: string | null;
     userId?: string;
+    action?: string;
     resourceType?: string;
     resourceId?: string;
     decision?: 'allow' | 'deny';
@@ -710,6 +770,7 @@ class PolicyServiceClass {
 
     this.addTenantScopeFilter(qb, 'a', options.tenantId);
     if (options.userId) qb.andWhere('a.userId = :userId', { userId: options.userId });
+    if (options.action) qb.andWhere('a.action = :action', { action: options.action });
     if (options.resourceType) qb.andWhere('a.resourceType = :resourceType', { resourceType: options.resourceType });
     if (options.resourceId) qb.andWhere('a.resourceId = :resourceId', { resourceId: options.resourceId });
     if (options.decision) qb.andWhere('a.decision = :decision', { decision: options.decision });

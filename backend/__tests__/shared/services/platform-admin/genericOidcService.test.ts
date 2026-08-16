@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
+import { MockOidcProvider } from '../../../../test/identity-mocks/index.js';
 
 const configuration = {
   issuerUrl: 'https://issuer.example.test',
@@ -45,5 +46,42 @@ describe('GenericOidcService endpoint policy', () => {
 
     await expect(genericOidcService.testConnection(configuration)).rejects.toThrow('OIDC discovery request failed');
     expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('verifies an OIDC back-channel logout token and returns only its trusted identifiers', async () => {
+    const provider = new MockOidcProvider();
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+    const logoutToken = provider.issueLogoutToken({
+      sub: 'subject-1', sid: 'session-1',
+      events: { 'http://schemas.openid.net/event/backchannel-logout': {} },
+    });
+
+    await expect(genericOidcService.verifyBackChannelLogoutToken(provider.configuration(), logoutToken)).resolves.toMatchObject({
+      sub: 'subject-1', sid: 'session-1',
+    });
+  });
+
+  it.each([
+    ['a nonce', { sub: 'subject-1', nonce: 'not-allowed', events: { 'http://schemas.openid.net/event/backchannel-logout': {} } }],
+    ['no logout event', { sub: 'subject-1', events: {} }],
+    ['no subject or session', { events: { 'http://schemas.openid.net/event/backchannel-logout': {} } }],
+  ])('rejects a cryptographically valid logout token with %s', async (_label, claims) => {
+    const provider = new MockOidcProvider();
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+    await expect(genericOidcService.verifyBackChannelLogoutToken(provider.configuration(), provider.issueLogoutToken(claims)))
+      .rejects.toMatchObject({ code: 'invalid_signature' });
+  });
+
+  it('creates a provider end-session request with only a canonical local return URL', async () => {
+    const provider = new MockOidcProvider();
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+    const result = await genericOidcService.createLogoutRequest({
+      ...provider.configuration(), postLogoutRedirectUrl: 'http://localhost:5173/login',
+    }, 'logout-state');
+    const target = new URL(result!);
+    expect(target.origin).toBe(provider.issuer);
+    expect(target.searchParams.get('client_id')).toBe(provider.clientId);
+    expect(target.searchParams.get('post_logout_redirect_uri')).toBe('http://localhost:5173/login');
+    expect(target.searchParams.get('state')).toBe('logout-state');
   });
 });

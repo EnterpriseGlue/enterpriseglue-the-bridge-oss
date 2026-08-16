@@ -119,6 +119,7 @@ const AllowedImportPaths = [
   './groups.json',
   './assignments.json',
   './identity-providers.json',
+  './identity-provisioning-directories.json',
   './identity-mappings.json',
   './project-engine-targets.json',
 ] as const;
@@ -223,6 +224,7 @@ export const ConfigBundleDiffObjectTypeSchema = z.enum([
   'authorization_policy', 'api_client', 'service_account', 'external_engine_system',
   'role', 'group', 'engine', 'engine_tenant_mapping', 'engine_set', 'runtime_resource_set',
   'engine_backstop_mapping', 'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
+  'identity_provisioning_directory',
   'platform_settings',
 ]);
 const ConfigBundleRuntimeResourceReferenceSchema = z.object({
@@ -809,7 +811,7 @@ const ConfigApiClientSchema = z.object({
   key: ConfigKeySchema.regex(/^api-client[._-]/, 'API client keys must begin with api-client'),
   name: z.string().trim().min(1).max(255),
   tokenRef: ConfigExternalSecretReferenceSchema,
-  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute'])).min(1),
+  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute', 'identity:provisioning:manage'])).min(1),
   active: z.boolean().default(true),
   ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
 }).strict();
@@ -1256,6 +1258,30 @@ export const ConfigIdentityProvidersFileSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['identityProviders'],
       message: 'Only one identity provider may be preferred in a tenant-scoped provider file',
+    });
+  }
+});
+
+export const ConfigIdentityProvisioningDirectorySchema = z.object({
+  key: ConfigKeySchema,
+  displayName: z.string().trim().min(1).max(255),
+  description: z.string().trim().max(1000).nullable().optional(),
+  identityProviderKey: ReferenceKeySchema.nullable().optional(),
+  enabled: z.boolean().default(false),
+  authoritative: z.literal(true).default(true),
+  credentialSecretRef: ConfigExternalSecretReferenceSchema.optional(),
+  ownershipMode: z.enum(['config_locked', 'config_warn']).default('config_locked'),
+}).strict();
+
+export const ConfigIdentityProvisioningDirectoriesFileSchema = z.object({
+  identityProvisioningDirectories: z.array(ConfigIdentityProvisioningDirectorySchema).max(10),
+}).strict().superRefine((file, ctx) => {
+  uniqueKeys(file.identityProvisioningDirectories, ctx, 'identityProvisioningDirectories');
+  if (file.identityProvisioningDirectories.filter((directory) => directory.enabled).length > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['identityProvisioningDirectories'],
+      message: 'Only one authoritative provisioning directory may be enabled in a tenant-scoped bundle',
     });
   }
 });

@@ -43,6 +43,14 @@ export interface MockSamlResponseOptions {
   notOnOrAfter?: Date;
 }
 
+export interface MockSamlLogoutRequestOptions {
+  destination?: string;
+  issuer?: string;
+  nameID?: string;
+  nameIDFormat?: string;
+  sessionIndex?: string;
+}
+
 export const MOCK_SAML_REQUEST_ID = '_mock_authentication_request_00000000000000000000000000000001';
 
 interface SigningMaterial {
@@ -113,6 +121,12 @@ export class MockOidcProvider {
     });
   }
 
+  issueLogoutToken(claims: Record<string, unknown>): string {
+    return jwt.sign({ ...claims, iss: this.issuer, aud: this.clientId }, this.signingMaterial.privateKey, {
+      algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m',
+    });
+  }
+
   issueIdTokenWithNotBefore(
     claims: Record<string, unknown>,
     notBefore: Exclude<jwt.SignOptions['notBefore'], undefined>,
@@ -131,6 +145,7 @@ export class MockOidcProvider {
       return Response.json({
         issuer: this.failureMode === 'wrong_issuer' ? 'https://wrong-issuer.example.test' : this.issuer,
         authorization_endpoint: `${this.issuer}/authorize`, token_endpoint: `${this.issuer}/token`, jwks_uri: `${this.issuer}/jwks`,
+        end_session_endpoint: `${this.issuer}/logout`,
       });
     }
     if (url.href === `${this.issuer}/jwks`) return Response.json({ keys: [this.signingMaterial.publicJwk] });
@@ -492,6 +507,18 @@ export class MockSamlIdentityProvider {
     const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response-${sequence}" Version="2.0" IssueInstant="${issueInstant}" Destination="${callbackUrl}"${inResponseTo}><saml:Issuer>${issuer}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signedAssertion}</samlp:Response>`;
     const signedResponse = signXml(response, "/*[local-name(.)='Response']", { reference: "/*[local-name(.)='Response']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
     return Buffer.from(signedResponse).toString('base64');
+  }
+
+  signedLogoutRequest(options: MockSamlLogoutRequestOptions = {}): string {
+    const sequence = ++this.sequence;
+    const issuer = options.issuer || this.issuer;
+    const destination = options.destination || 'http://localhost:5173/api/auth/identity/identity.saml.main/saml/logout';
+    const nameID = options.nameID || String(this.attributes.nameID || 'person@example.test');
+    const format = options.nameIDFormat || 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress';
+    const sessionIndex = options.sessionIndex || `session-${sequence}`;
+    const request = `<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_logout-${sequence}" Version="2.0" IssueInstant="${(this.now || new Date()).toISOString()}" Destination="${xmlEscape(destination)}"><saml:Issuer>${xmlEscape(issuer)}</saml:Issuer><saml:NameID Format="${xmlEscape(format)}">${xmlEscape(nameID)}</saml:NameID><samlp:SessionIndex>${xmlEscape(sessionIndex)}</samlp:SessionIndex></samlp:LogoutRequest>`;
+    const signed = signXml(request, "/*[local-name(.)='LogoutRequest']", { reference: "/*[local-name(.)='LogoutRequest']/*[local-name(.)='Issuer']", action: 'after' }, { ...this.signingMaterial, publicCert: this.signingMaterial.certificate, signatureAlgorithm: 'sha256' });
+    return Buffer.from(signed).toString('base64');
   }
 }
 

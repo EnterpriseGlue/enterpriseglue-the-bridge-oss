@@ -96,11 +96,14 @@ next successful sign-in. An `additive` mapping only adds memberships. Manual
 memberships and memberships sourced from another provider are unaffected. If
 reconciliation fails, EnterpriseGlue fails closed and issues no session.
 
-Scheduled LDAP directory reconciliation and applying saved membership data are supplementary
-ways to refresh identities that have not signed in; they do not replace the
-mandatory fresh reconciliation at sign-in. OIDC/Entra obtains fresh verified
-claims through the sign-in flow. A future Graph or SCIM poller would be a
-separate background capability, not an opt-out from this requirement.
+Scheduled LDAP directory reconciliation, authoritative SCIM provisioning, and
+applying saved membership data are supplementary ways to refresh identities
+that have not signed in; they do not replace the mandatory fresh
+reconciliation at sign-in. OIDC/Entra obtains fresh verified claims through
+the sign-in flow. For OIDC or SAML deployments, the configured directory
+client pushes background user and group lifecycle changes to EnterpriseGlue's
+SCIM service-provider API. A separate vendor-specific Microsoft Graph poller
+is neither required nor another competing lifecycle authority.
 
 After a complete, non-truncated LDAP snapshot, users previously known to that
 provider but now deleted, disabled, or outside the authoritative enumeration
@@ -109,6 +112,47 @@ memberships, revokes its refresh sessions, and invalidates current access
 tokens; manual and other-provider access remains. Enumeration, group-budget,
 bind, or network failure is incomplete evidence and never triggers this
 absence-based sweep.
+
+### MFA assurance and conditional access
+
+`requireMfa` policies consume only assurance from a verified authentication
+result. For OIDC, configure the AMR and/or ACR values your provider issues
+after MFA in `mfaAmrValues` and `mfaAcrValues`; the portable AMR defaults are
+`mfa`, `otp`, `hwk`, `swk`, and `fido`. `requestedAcrValues` asks the provider
+for the desired authentication context but never proves it by itself. For
+SAML, `requestedAuthnContext` requests contexts and
+`mfaAuthnContextValues` identifies the signed assertion contexts that satisfy
+the policy. Local password, LDAP, and administrator-recovery sessions are not
+silently promoted to MFA.
+
+IP conditions accept exact IPv4/IPv6 addresses and CIDR ranges. They use the
+trusted Express client address after the deployment's reviewed proxy
+configuration; missing or malformed addresses fail closed. When an applicable
+allow policy has conditions and none match, it denies the action instead of
+falling back to the base role grant.
+
+### Federated logout
+
+Browser logout always revokes EnterpriseGlue sessions first. If the current
+session came from a configured direct provider, the response can then continue
+to the provider's standards-based logout endpoint. Provider discovery or
+availability failure never restores the local session.
+
+- OIDC uses the discovered `end_session_endpoint`, a signed state value, the
+  client ID, and an optional canonical `postLogoutRedirectUrl` ending in
+  `/login`. The provider-specific
+  `POST /api/auth/providers/{providerId}/oidc/backchannel-logout` endpoint
+  verifies the logout token's signature, issuer, audience, event, issue time,
+  and `sid`/`sub` before targeted revocation.
+- SAML requires `sloUrl`, a provider-specific `logoutCallbackUrl`, and
+  `requestSigningPrivateKeyRef`. RP LogoutRequest and IdP response messages are
+  signed and correlated. IdP-initiated HTTP-POST LogoutRequest messages must be
+  XML-signed; unsigned Redirect messages are never accepted.
+
+Provider subject and session identifiers are copied only from verified
+ID-token/assertion evidence into indexed refresh-session lineage. This allows
+one provider session or subject to be revoked without scanning unrelated
+accounts or providers.
 
 ### Portal language and API values
 
@@ -419,7 +463,11 @@ mapping itself stays platform-wide.
         "callbackUrl": "https://enterpriseglue.example.test/api/auth/identity/callback",
         "scopes": ["openid", "profile", "email"],
         "groupClaim": "groups",
-        "expectedAudience": "enterpriseglue-web"
+        "expectedAudience": "enterpriseglue-web",
+        "requestedAcrValues": ["urn:example:mfa"],
+        "mfaAmrValues": ["mfa", "otp", "fido"],
+        "mfaAcrValues": ["urn:example:mfa"],
+        "postLogoutRedirectUrl": "https://enterpriseglue.example.test/login"
       },
       "ownershipMode": "config_locked"
     }
@@ -466,7 +514,13 @@ recipient, and signature trust.
         "emailAttribute": "email",
         "groupAttribute": "groups",
         "signingCertificateRef": "env://CORPORATE_SAML_SIGNING_CERT",
-        "signatureAlgorithm": "sha256"
+        "signatureAlgorithm": "sha256",
+        "requestedAuthnContext": ["urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken"],
+        "mfaAuthnContextValues": ["urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken"],
+        "sloUrl": "https://idp.example.test/slo",
+        "logoutCallbackUrl": "https://enterpriseglue.example.test/api/auth/identity/identity.corporate-saml/saml/logout",
+        "requestSigningPrivateKeyRef": "env://ENTERPRISEGLUE_SAML_SP_PRIVATE_KEY",
+        "requestSigningCertificateRef": "env://ENTERPRISEGLUE_SAML_SP_CERTIFICATE"
       },
       "ownershipMode": "config_locked"
     }
@@ -547,9 +601,10 @@ in; every LDAP sign-in still performs mandatory fresh reconciliation first.
 ```
 
 Every supported provider option is available in the configuration bundle and the direct
-provider API: OIDC supports `groupClaim` and an optional `expectedAudience`
-confirmation that must equal `clientId`; SAML supports
-metadata by URL or secret reference plus certificate/signature settings; LDAP
+provider API: OIDC supports `groupClaim`, assurance values, RP/back-channel
+logout, and an optional `expectedAudience` confirmation that must equal
+`clientId`; SAML supports metadata by URL or secret reference, assurance
+contexts, signed single logout, and certificate/signature settings; LDAP
 supports immutable subject/email attributes, nested groups, paging, and an
 optional TLS trust reference. The external IdP client, redirect-URI trust, and
 upstream group membership are still configured at the IdP—usually through that
@@ -578,6 +633,8 @@ the value itself in JSON or commit it to the repository.
 | Provider create/test reports that a host is not permitted | Confirm every configured and discovery-derived host is reviewed and present in `EG_IDENTITY_PROVIDER_ALLOWED_HOSTS`. Private endpoints require an exact entry plus the private-host opt-in. | Correct the allowlist and restart; do not disable the production policy. |
 | OIDC discovery or callback fails | Confirm issuer equality, canonical callback origin/path, provider-bound cookie state, PKCE, nonce, and the IdP redirect registration. | Keep local login policy unchanged, correct the provider, then retry a controlled sign-in. |
 | SAML metadata is reachable but sign-in fails | Metadata reachability is not a trust match. Confirm `idpEntityId`, signing certificate reference, canonical callback, audience/recipient, and that the response contains the issued `InResponseTo` value. | Correct the IdP/SP trust pair; do not accept unsolicited assertions or remove issuer pinning. |
+| Logout ends locally but not at the IdP | Confirm OIDC discovery publishes `end_session_endpoint`, or confirm SAML SLO/callback URLs and the SP request-signing key reference. | Keep the local revocation, repair the provider configuration, and test logout again; never weaken signature or correlation checks. |
+| A require-MFA policy denies a valid SSO user | Compare the verified token/assertion AMR, ACR, or AuthnContext with the configured accepted values. | Correct provider claim issuance or the exact allowlist; do not trust a browser-supplied MFA flag. |
 | LDAP test exceeds an identity, group, or aggregate budget | Compare the directory population, group nesting, and filters with `EG_LDAP_RECONCILIATION_IDENTITY_LIMIT`, `EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT`, `EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT`, and the per-identity `EG_LDAP_GROUP_SEARCH_*` limits. | Narrow the authoritative filters or deliberately raise a bounded limit; the failed run applies no absence-based removals. |
 | Sign-in fails during membership refresh | Inspect the sanitized sync-run events and mapping configuration. Mandatory reconciliation is fail closed for every direct provider. | Fix the provider/mapping evidence and sign in again; stale membership is never used to issue a new session. |
 | SSO policy prevents administrator access | Use the separate `/admin-recovery` route with the active canonical local platform administrator. | Disable or correct only the affected provider/mapping, verify recovery and controlled sign-in, then re-enable enforcement. |
@@ -645,6 +702,16 @@ Entra-compatible and optional real-tenant rehearsals are documented in
 [Identity Protocol Rehearsal and LDAP Test Harness](./ldap-protocol-test-harness.md).
 An Entra group or app-role change takes effect on the user's next successful
 sign-in, when its fresh token claims complete the mandatory reconciliation.
+
+### Authoritative SCIM provisioning
+
+OIDC and SAML sign users in; they do not provide background account lifecycle.
+For create, update, suspension, reactivation, and group synchronization,
+configure the independent SCIM directory described in
+[Configure SCIM provisioning](./configure-scim-provisioning.md). Associate it
+with this provider key so an already verified provider identity can be reused
+safely and SCIM groups can reuse explicit exact Identity mappings. SCIM never
+becomes an authentication method and never grants a product role implicitly.
 
 ## Email (Optional)
 - Seed the default email configuration with `EMAIL_*` variables on first deploy so verification/reset flows work out of the box.

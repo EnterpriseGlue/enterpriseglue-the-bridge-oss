@@ -86,7 +86,7 @@ test.describe('Login experience screenshot gallery', () => {
           preferred: true,
           loginDomains: ['example.com'],
         }),
-        provider('partner-saml', 'Partner sign-in', {
+        provider('partner-saml', 'Partner login', {
           organization: 'Contoso partners',
           protocol: 'saml',
           loginDomains: ['contoso.example'],
@@ -96,9 +96,9 @@ test.describe('Login experience screenshot gallery', () => {
     });
 
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Choose how to sign in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Choose how to log in' })).toBeVisible();
     await expect(page.getByRole('button', { name: /Microsoft Entra ID Example Corporation/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Partner sign-in Contoso partners/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Partner login Contoso partners/ })).toBeVisible();
     await expect(page.getByLabel('Password')).toHaveCount(0);
     await captureManualScreenshot(page, '63-login-provider-chooser.jpg');
   });
@@ -109,16 +109,16 @@ test.describe('Login experience screenshot gallery', () => {
       providerSelection: 'progressive',
       autoRedirectProviderId: null,
       providers: [
-        provider('entra-employees', 'Employee sign-in', {
+        provider('entra-employees', 'Employee login', {
           organization: 'Example Corporation',
           preferred: true,
           loginDomains: ['example.com'],
         }),
-        provider('entra-contractors', 'Contractor sign-in', {
+        provider('entra-contractors', 'Contractor login', {
           organization: 'Example Corporation',
           loginDomains: ['example.com'],
         }),
-        provider('partner-saml', 'Partner sign-in', {
+        provider('partner-saml', 'Partner login', {
           protocol: 'saml',
           loginDomains: ['partner.example'],
         }),
@@ -127,14 +127,14 @@ test.describe('Login experience screenshot gallery', () => {
     });
 
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Sign in to your organization' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Use your work email' })).toBeVisible();
     await captureManualScreenshot(page, '64-login-progressive-discovery.jpg');
 
     await page.getByLabel('Work email').fill('person@example.com');
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('button', { name: /Employee sign-in Example Corporation/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Contractor sign-in Example Corporation/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Partner sign-in/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Employee login Example Corporation/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Contractor login Example Corporation/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Partner login/ })).toHaveCount(0);
     await expect(page.getByText(/account (exists|found|not found)/i)).toHaveCount(0);
     await captureManualScreenshot(page, '65-login-progressive-provider-match.jpg');
   });
@@ -157,12 +157,12 @@ test.describe('Login experience screenshot gallery', () => {
 
     await page.goto('/login');
     await page.getByRole('button', { name: /Continue with Corporate directory Example Corporation/ }).click();
-    await expect(page.getByRole('heading', { name: 'Sign in with Corporate directory' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Log in with Corporate directory' })).toBeVisible();
     await expect(page.getByLabel('Username')).toBeFocused();
     await expect(page.getByLabel('Username')).toHaveAttribute('autocomplete', 'username');
     await expect(page.locator('#ldap-password')).toHaveAttribute('autocomplete', 'current-password');
     await expect(page.getByRole('button', { name: 'Show password' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Choose another sign-in method' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Choose another login method' })).toBeVisible();
     await captureManualScreenshot(page, '66-login-direct-ldap.jpg');
   });
 
@@ -187,14 +187,15 @@ test.describe('Login experience screenshot gallery', () => {
     await captureManualScreenshot(page, '67-login-local-and-sso-policy.jpg');
   });
 
-  test('keeps administrator recovery separate from ordinary sign-in @login-gallery @identity-lifecycle', async ({ page }) => {
+  test('keeps administrator recovery separate from ordinary login @login-gallery @identity-lifecycle', async ({ page }) => {
     await installUnauthenticatedLogin(page, null);
 
     await page.goto('/admin-recovery');
     await expect(page.getByText('Administrator recovery', { exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Recover platform access' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in for recovery' })).toBeDisabled();
-    await expect(page.getByText('Choose how to sign in')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Log in for administrator recovery' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recovery credentials' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log in for recovery' })).toBeEnabled();
+    await expect(page.getByText('Choose how to log in')).toHaveCount(0);
     await captureManualScreenshot(page, '68-login-administrator-recovery.jpg');
   });
 
@@ -207,15 +208,15 @@ test.describe('Login experience screenshot gallery', () => {
       configurationStatus: 'no_login_method',
     });
     await page.goto('/login');
-    await expect(page.getByText('No sign-in method is available', { exact: true })).toBeVisible();
-    await expect(page.getByText('Ask a platform administrator to enable work-account sign-in or local password sign-in.', { exact: true })).toBeVisible();
+    await expect(page.getByText('No login method is available', { exact: true })).toBeVisible();
+    await expect(page.getByText('Ask a platform administrator to enable work-account login or local password login.', { exact: true })).toBeVisible();
     await expect(page.getByRole('button')).toHaveCount(0);
     await captureManualScreenshot(page, '69-login-no-method-configured.jpg');
 
     await page.unroute('**/auth/login-methods');
     await page.route('**/auth/login-methods', (route) => json(route, { error: 'Login policy unavailable' }, 503));
     await page.reload();
-    await expect(page.getByText('Sign-in methods could not be loaded', { exact: true })).toBeVisible();
+    await expect(page.getByText('Login methods could not be loaded', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
     await captureManualScreenshot(page, '70-login-policy-fail-closed.jpg');
   });
@@ -237,13 +238,12 @@ test.describe('Login experience screenshot gallery', () => {
     await page.mouse.move(0, 0);
     await page.getByRole('button', { name: /Continue with Microsoft Entra ID Example Corporation/ }).click();
     await expect(page.getByRole('heading', { name: 'Opening Microsoft Entra ID' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Choose another sign-in method' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Choose another login method' })).toBeVisible();
     await captureManualScreenshot(page, '71-login-provider-redirect-transition.jpg', { stabilize: false });
   });
 
-  test('shortens legacy provider names without clipping at laptop width @login-gallery @identity-lifecycle', async ({ page }) => {
-    const longProviderName = 'Sign-in service for international employees, contractors, partners, and delegated regional administrators';
-    const shortProviderName = `${longProviderName.slice(0, 39).trimEnd()}…`;
+  test('wraps complete legacy provider names without clipping at laptop width @login-gallery @identity-lifecycle', async ({ page }) => {
+    const longProviderName = 'Login service for international employees, contractors, partners, and delegated regional administrators';
     const longOrganization = 'Example Corporation global identity and workforce access management organization';
     await installUnauthenticatedLogin(page, {
       localPassword: { enabled: false },
@@ -256,8 +256,8 @@ test.describe('Login experience screenshot gallery', () => {
     await page.goto('/login');
     const providerButton = page.getByRole('button', { name: `Continue with ${longProviderName} ${longOrganization}` });
     await expect(providerButton).toBeVisible();
-    await expect(providerButton.getByText(`Continue with ${shortProviderName}`)).toBeVisible();
-    await expect(page.getByTitle(longProviderName)).toBeVisible();
+    await expect(providerButton.getByText(`Continue with ${longProviderName}`)).toBeVisible();
+    await expect(page.getByTitle(longProviderName)).toHaveCount(0);
     await expect.poll(() => providerButton.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await captureManualScreenshot(page, '72-login-long-provider-content.jpg');
@@ -277,9 +277,91 @@ test.describe('Login experience screenshot gallery', () => {
     });
 
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Choose how to sign in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Choose how to log in' })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await expect(page.getByRole('button', { name: /Microsoft Entra ID for the international workforce Example Corporation/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Partner and supplier organization sign-in Contoso partner network/ })).toBeVisible();
+  });
+
+  test('uses Carbon semantics, inline validation, and safe credential-error recovery @login-gallery @identity-lifecycle @accessibility', async ({ page }) => {
+    await installUnauthenticatedLogin(page, {
+      localPassword: { enabled: true },
+      providerSelection: 'chooser',
+      autoRedirectProviderId: null,
+      providers: [],
+      configurationStatus: 'ready',
+    });
+    await page.route('**/api/auth/login', (route) => json(route, { error: 'Invalid credentials' }, 401));
+
+    await page.goto('/login');
+    const main = page.getByRole('main', { name: 'Log in' });
+    const header = page.getByRole('banner', { name: 'EnterpriseGlue application header' });
+    const email = page.getByLabel('Email');
+    const password = page.locator('#password');
+    const submit = page.getByRole('button', { name: 'Log in' });
+    await expect(main).toBeVisible();
+    await expect(header).toBeVisible();
+    await expect(header.getByRole('link', { name: 'EnterpriseGlue' })).toBeVisible();
+    await expect(page.locator('.eg-login-panel').getByText('EnterpriseGlue')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Forgot password?' })).toHaveClass(/cds--link/);
+    await expect(header.locator('img')).toHaveAttribute('alt', '');
+
+    await submit.click();
+    await expect(page.getByText('Email is required', { exact: true })).toBeVisible();
+    await expect(page.getByText('Password is required', { exact: true })).toBeVisible();
+    await expect(email).toBeFocused();
+
+    await email.fill('user@example.com');
+    await password.fill('incorrect-password');
+    await submit.click();
+    await expect(page.getByText('Log in failed', { exact: true })).toBeVisible();
+    await expect(password).toHaveValue('');
+    await expect(email).toBeFocused();
+    await captureManualScreenshot(page, '86-login-carbon-error-recovery.jpg');
+  });
+
+  test('supports keyboard provider activation, 200 percent zoom, and reduced motion @login-gallery @identity-lifecycle @accessibility', async ({ page, browserName }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await installUnauthenticatedLogin(page, {
+      localPassword: { enabled: false },
+      providerSelection: 'chooser',
+      autoRedirectProviderId: null,
+      providers: [provider('keyboard-provider', 'Corporate identity', { preferred: true })],
+      configurationStatus: 'ready',
+    });
+
+    await page.goto('/login');
+    const providerButton = page.getByRole('button', { name: 'Continue with Corporate identity' });
+    const headerBrandLink = page.getByRole('banner').getByRole('link', { name: 'EnterpriseGlue' });
+    await expect(page.getByRole('heading', { name: 'Choose how to log in' })).toBeVisible();
+    await expect(headerBrandLink).toHaveAttribute('href', '/');
+    if (browserName === 'webkit') {
+      // WebKit follows the host platform's Full Keyboard Access preference,
+      // which does not Tab to buttons by default on macOS runners.
+      await providerButton.focus();
+    } else {
+      let headerReached = false;
+      let providerReached = false;
+      for (let tabIndex = 0; tabIndex < 3 && !providerReached; tabIndex += 1) {
+        await page.keyboard.press('Tab');
+        headerReached ||= await headerBrandLink.evaluate((element) => element === document.activeElement);
+        providerReached = await providerButton.evaluate((element) => element === document.activeElement);
+      }
+      expect(headerReached).toBe(true);
+      expect(providerReached).toBe(true);
+    }
+    await expect(providerButton).toBeFocused();
+    await expect(page.evaluate(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)).resolves.toBe(true);
+
+    await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+    await expect.poll(() => page.evaluate(() =>
+      document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    )).toBe(true);
+    await expect(providerButton).toBeVisible();
+    await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('heading', { name: 'Opening Corporate identity' })).toBeVisible();
   });
 });

@@ -14,6 +14,19 @@ deployment targets. It deliberately does not configure users, sessions,
 in-flight invitations, audit history, diagnostics, or one-off operational
 actions.
 
+Operational identity-provisioning credential creation and rotation are
+available headlessly through a separate, least-privilege API client. They are
+not configuration-bundle apply actions because their clear-text result is
+revealed once. See [Headless identity-provisioning control plane](../development/headless-identity-provisioning.md).
+
+The same reveal-once rule applies when automation creates or rotates an API
+client or service account through the administration API. Stream the response
+token directly into the target secret manager and fail the pipeline if that
+write cannot be verified. Do not print the response, persist it as a build
+artifact, or expect a later GET/export call to recover it. The interactive
+portal enforces this handoff with a guarded confirmation dialog; headless
+automation owns the equivalent confirmation boundary.
+
 The portal remains available for inspection. A `config_locked` object is
 read-only there and in ordinary mutation APIs; its response includes the
 owning source and drift status. A `config_warn` object may be changed by an

@@ -9,7 +9,7 @@ async function login(page: Page) {
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
@@ -18,10 +18,12 @@ test.describe('Smoke: identity provider administration', () => {
 
   test('shows the complete direct LDAP configuration form @smoke', async ({ page }) => {
     await login(page);
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Providers' }).click();
-    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.goto('/admin/settings/identity-providers');
+    await page.getByRole('button', { name: 'Create provider' }).click();
     await page.getByLabel('Protocol').selectOption('ldap');
+    await page.getByLabel('Sign-in name').fill('Test LDAP');
+    await page.getByLabel('Provider key').fill('test-ldap');
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
     await expect(page.getByLabel('LDAPS URL')).toBeVisible();
     await expect(page.getByLabel('Service bind DN')).toBeVisible();

@@ -15,10 +15,14 @@ import { samlAssertionReplayService } from '@enterpriseglue/shared/services/plat
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
-import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { IsNull, type FindOptionsWhere } from 'typeorm';
+import { verifyFederatedLogoutState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { PublicLoginMethodsResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -30,6 +34,62 @@ const stateCookie = 'identity_oidc_state';
 const verifierCookie = 'identity_oidc_verifier';
 const samlRequestCookie = 'identity_saml_request';
 const ldapLoginSchema = z.object({ username: z.string().min(1).max(320), password: z.string().min(1).max(4096) });
+const oidcBackChannelLogoutSchema = z.object({ logout_token: z.string().min(1).max(64 * 1024) }).strict();
+const samlLogoutPostSchema = z.object({
+  SAMLRequest: z.string().min(1).max(512 * 1024).optional(),
+  SAMLResponse: z.string().min(1).max(512 * 1024).optional(),
+  RelayState: z.string().max(4096).optional(),
+}).strict().refine((body) => Boolean(body.SAMLRequest) !== Boolean(body.SAMLResponse), 'Provide exactly one SAMLRequest or SAMLResponse');
+
+function parseFederatedLogoutState(value: unknown): { providerId: string; requestId?: string } | null {
+  const verified = verifyFederatedLogoutState(value);
+  if (!verified) return null;
+  try {
+    const parsed = JSON.parse(verified) as Record<string, unknown>;
+    if (typeof parsed.providerId !== 'string' || !/^[A-Za-z0-9._-]{1,160}$/.test(parsed.providerId)) return null;
+    if (typeof parsed.issuedAt !== 'number' || Date.now() - parsed.issuedAt > 10 * 60 * 1000 || parsed.issuedAt > Date.now() + 60 * 1000) return null;
+    const requestId = typeof parsed.requestId === 'string' && /^_[A-Za-z0-9_-]{32,160}$/.test(parsed.requestId) ? parsed.requestId : undefined;
+    return { providerId: parsed.providerId, ...(requestId ? { requestId } : {}) };
+  } catch { return null; }
+}
+
+async function directProviderById(providerId: string): Promise<IdentityProvider> {
+  const provider = await (await getDataSource()).getRepository(IdentityProvider).findOne({ where: { id: providerId } });
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  return provider;
+}
+
+async function revokeFederatedSessions(providerId: string, input: { subjectId?: string; sessionId?: string }): Promise<number> {
+  if (!input.subjectId && !input.sessionId) throw Errors.validation('Federated logout did not identify a subject or session');
+  const where: FindOptionsWhere<RefreshToken> = {
+    identityProviderId: providerId,
+    revokedAt: IsNull(),
+    ...(input.subjectId ? { providerSubjectId: input.subjectId } : {}),
+    ...(input.sessionId ? { providerSessionId: input.sessionId } : {}),
+  };
+  const result = await (await getDataSource()).getRepository(RefreshToken).update(where, { revokedAt: Date.now() });
+  return result.affected || 0;
+}
+
+function providerLogoutConfiguration(provider: IdentityProvider): Record<string, unknown> {
+  const rawConfiguration = configuration(provider);
+  if (provider.protocol === 'saml') {
+    const callback = typeof rawConfiguration.logoutCallbackUrl === 'string' ? new URL(rawConfiguration.logoutCallbackUrl) : null;
+    if (!callback || callback.pathname !== `/api/auth/identity/${encodeURIComponent(provider.key)}/saml/logout`) {
+      throw Errors.validation('SAML logout callback does not match the provider route');
+    }
+  }
+  return rawConfiguration;
+}
+
+async function directSamlProvidersByKey(providerKey: string): Promise<IdentityProvider[]> {
+  if (!/^[A-Za-z0-9._-]{1,160}$/.test(providerKey)) throw Errors.notFound('Identity provider not found');
+  return (await getDataSource()).getRepository(IdentityProvider).find({
+    where: { key: providerKey, protocol: 'saml', isEnabled: true, authenticationMode: 'direct' },
+    order: { tenantId: 'ASC', id: 'ASC' },
+    take: 50,
+  });
+}
 
 function configuration(provider: { configurationJson: string }): Record<string, unknown> {
   try {
@@ -97,7 +157,18 @@ function constantTimeEqual(left: string, right: string): boolean {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-async function setProviderSession(req: Request, res: Response, user: { id: string; email: string; authSessionVersion?: number }, provider: IdentityProvider): Promise<void> {
+async function setProviderSession(
+  req: Request,
+  res: Response,
+  user: { id: string; email: string; authSessionVersion?: number },
+  provider: IdentityProvider,
+  evidence: {
+    mfaVerified: boolean;
+    subjectId: string;
+    sessionId?: string | null;
+    nameIdFormat?: string | null;
+  },
+): Promise<void> {
   const session = await authSessionService.issue(user, {
     identityProviderId: provider.id,
     identityProviderUpdatedAt: Number(provider.updatedAt),
@@ -107,6 +178,13 @@ async function setProviderSession(req: Request, res: Response, user: { id: strin
     identityProviderConfigurationJson: provider.configurationJson,
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
+    authenticationMethod: provider.protocol,
+    mfaVerified: evidence.mfaVerified,
+    federationSession: {
+      subjectId: evidence.subjectId,
+      sessionId: evidence.sessionId,
+      nameIdFormat: evidence.nameIdFormat,
+    },
   });
   const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: session.expiresIn * 1000, path: '/' };
   res.cookie('accessToken', session.accessToken, cookieOptions);
@@ -119,7 +197,10 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
     const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
     const user = await identityProviderProvisioningService.reconcileLdapLogin(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-    await setProviderSession(req, res, user, provider);
+    await setProviderSession(req, res, user, provider, {
+      mfaVerified: false,
+      subjectId: identity.subjectId,
+    });
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
     const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id]);
     res.json(AuthenticatedSessionLoginResponseSchema.parse({
@@ -236,10 +317,16 @@ router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, async
     requireDirectOidc(provider);
     selectedProvider = provider;
     if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
-    const claims = await genericOidcService.exchangeCode(configuration(provider), { code: req.query.code, codeVerifier: verifier, nonce: parsed.nonce });
+    const rawConfiguration = configuration(provider);
+    const claims = await genericOidcService.exchangeCode(rawConfiguration, { code: req.query.code, codeVerifier: verifier, nonce: parsed.nonce });
     const user = await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-    await setProviderSession(req, res, user, provider);
+    const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
+    await setProviderSession(req, res, user, provider, {
+      mfaVerified: assurance.mfaVerified,
+      subjectId: claims.sub,
+      sessionId: typeof claims.sid === 'string' ? claims.sid : null,
+    });
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
     recordLoginExperienceMetric({ method: 'oidc', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
     res.redirect(getSsoRedirectUrl(parsed));
@@ -287,7 +374,13 @@ router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter
       claims: identity.claims,
     });
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-    await setProviderSession(req, res, user, provider);
+    const assurance = genericSamlService.authenticationAssurance(rawConfiguration, profile);
+    await setProviderSession(req, res, user, provider, {
+      mfaVerified: assurance.mfaVerified,
+      subjectId: identity.subjectId,
+      sessionId: typeof profile.sessionIndex === 'string' ? profile.sessionIndex : null,
+      nameIdFormat: typeof profile.nameIDFormat === 'string' ? profile.nameIDFormat : null,
+    });
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'saml' } }));
     recordLoginExperienceMetric({ method: 'saml', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
     res.redirect(getSsoRedirectUrl(parsed));
@@ -309,5 +402,93 @@ router.post('/api/auth/identity/:key/ldap/login', apiLimiter, identityFlowLimite
 }));
 
 router.post('/api/auth/providers/:providerId/login', apiLimiter, identityFlowLimiter, authLimiter, validateBody(ldapLoginSchema), asyncHandler(loginProviderById));
+
+/** OpenID Connect Back-Channel Logout 1.0: token-authenticated, browser-independent revocation. */
+router.post('/api/auth/providers/:providerId/oidc/backchannel-logout', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
+  if (!req.is('application/x-www-form-urlencoded')) throw Errors.validation('OIDC back-channel logout requires form-urlencoded content');
+  const parsed = oidcBackChannelLogoutSchema.safeParse(req.body);
+  if (!parsed.success) throw Errors.validation('OIDC logout_token is invalid');
+  const provider = await directProviderById(String(req.params.providerId || ''));
+  requireDirectOidc(provider);
+  const claims = await genericOidcService.verifyBackChannelLogoutToken(providerLogoutConfiguration(provider), parsed.data.logout_token);
+  const revoked = await revokeFederatedSessions(provider.id, {
+    ...(claims.sub ? { subjectId: claims.sub } : {}),
+    ...(claims.sid ? { sessionId: claims.sid } : {}),
+  });
+  await logAudit(auditFromRequest(req, {
+    action: AuditActions.LOGOUT,
+    resourceType: 'identity_provider',
+    resourceId: provider.id,
+    details: { protocol: 'oidc', mode: 'back_channel', sessionsRevoked: revoked },
+  }));
+  res.status(200).send();
+}));
+
+async function completeSamlLogoutResponse(req: Request, res: Response, provider: IdentityProvider, samlResponse: string, relayState: string, binding: 'redirect' | 'post'): Promise<void> {
+  const state = parseFederatedLogoutState(relayState);
+  if (!state?.requestId || state.providerId !== provider.id) throw Errors.unauthorized('SAML logout correlation is invalid or expired');
+  const rawConfiguration = providerLogoutConfiguration(provider);
+  if (binding === 'redirect') {
+    const queryStart = req.originalUrl.indexOf('?');
+    const originalQuery = queryStart >= 0 ? req.originalUrl.slice(queryStart + 1) : '';
+    await genericSamlService.validateRedirectLogoutResponse(rawConfiguration, req.query as Record<string, unknown>, originalQuery, state.requestId);
+  } else {
+    await genericSamlService.validatePostLogoutResponse(rawConfiguration, samlResponse, state.requestId);
+  }
+  res.redirect(`${config.frontendUrl.replace(/\/$/, '')}/login`);
+}
+
+/** Signed SAML HTTP-POST LogoutRequest/Response endpoint. */
+router.post('/api/auth/identity/:providerKey/saml/logout', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
+  if (!req.is('application/x-www-form-urlencoded')) throw Errors.validation('SAML logout requires form-urlencoded content');
+  const parsed = samlLogoutPostSchema.safeParse(req.body);
+  if (!parsed.success) throw Errors.validation('SAML logout message is invalid');
+  const candidates = await directSamlProvidersByKey(String(req.params.providerKey || ''));
+  if (candidates.length === 0) throw Errors.notFound('Identity provider not found');
+  if (parsed.data.SAMLResponse) {
+    const state = parseFederatedLogoutState(parsed.data.RelayState || '');
+    const provider = state ? candidates.find((candidate) => candidate.id === state.providerId) : null;
+    if (!provider) throw Errors.unauthorized('SAML logout correlation is invalid or expired');
+    await completeSamlLogoutResponse(req, res, provider, parsed.data.SAMLResponse, parsed.data.RelayState || '', 'post');
+    return;
+  }
+  let verified: {
+    provider: IdentityProvider;
+    configuration: Record<string, unknown>;
+    request: Awaited<ReturnType<typeof genericSamlService.validatePostLogoutRequest>>;
+  } | null = null;
+  for (const candidate of candidates) {
+    try {
+      const candidateConfiguration = providerLogoutConfiguration(candidate);
+      const request = await genericSamlService.validatePostLogoutRequest(candidateConfiguration, parsed.data.SAMLRequest!);
+      verified = { provider: candidate, configuration: candidateConfiguration, request };
+      break;
+    } catch { /* A same-key provider is selected only by successful signature and issuer validation. */ }
+  }
+  if (!verified) throw Errors.unauthorized('SAML LogoutRequest signature is invalid');
+  const { provider, configuration: rawConfiguration, request } = verified;
+  const subjectId = typeof request.nameID === 'string' ? request.nameID : '';
+  const sessionId = typeof request.sessionIndex === 'string' ? request.sessionIndex : undefined;
+  const revoked = await revokeFederatedSessions(provider.id, { subjectId, ...(sessionId ? { sessionId } : {}) });
+  await logAudit(auditFromRequest(req, {
+    action: AuditActions.LOGOUT,
+    resourceType: 'identity_provider',
+    resourceId: provider.id,
+    details: { protocol: 'saml', mode: 'idp_initiated', sessionsRevoked: revoked },
+  }));
+  res.redirect(await genericSamlService.createLogoutResponse(rawConfiguration, request, parsed.data.RelayState || ''));
+}));
+
+/** Signed SAML HTTP-Redirect LogoutResponse endpoint for RP-initiated logout. */
+router.get('/api/auth/identity/:providerKey/saml/logout', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
+  const samlResponse = typeof req.query.SAMLResponse === 'string' ? req.query.SAMLResponse : '';
+  const relayState = typeof req.query.RelayState === 'string' ? req.query.RelayState : '';
+  if (!samlResponse || !relayState) throw Errors.validation('SAML LogoutResponse and RelayState are required');
+  const state = parseFederatedLogoutState(relayState);
+  const candidates = await directSamlProvidersByKey(String(req.params.providerKey || ''));
+  const provider = state ? candidates.find((candidate) => candidate.id === state.providerId) : null;
+  if (!provider) throw Errors.unauthorized('SAML logout correlation is invalid or expired');
+  await completeSamlLogoutResponse(req, res, provider, samlResponse, relayState, 'redirect');
+}));
 
 export default router;

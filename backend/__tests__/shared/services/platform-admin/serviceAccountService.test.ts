@@ -72,6 +72,24 @@ describe('ServiceAccountService', () => {
     expect(listed[0]).not.toHaveProperty('token');
   });
 
+  it('normalizes PostgreSQL bigint timestamps before returning service-account views', async () => {
+    const created = await service.createServiceAccount({ name: 'Timestamp account' });
+    rows[0].createdAt = '1700000000000';
+    rows[0].updatedAt = '1700000000100';
+    rows[0].lastUsedAt = '1700000000200';
+    rows[0].revokedAt = '1700000000300';
+
+    await expect(service.listServiceAccounts()).resolves.toEqual([
+      expect.objectContaining({
+        id: created.account.id,
+        createdAt: 1700000000000,
+        updatedAt: 1700000000100,
+        lastUsedAt: 1700000000200,
+        revokedAt: 1700000000300,
+      }),
+    ]);
+  });
+
   it('normalizes default values and lists inactive accounts only when requested', async () => {
     const created = await service.createServiceAccount({
       name: '  Release service  ',

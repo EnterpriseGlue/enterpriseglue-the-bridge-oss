@@ -50,6 +50,7 @@ import {
   authzRoute,
   identityProvidersRoute,
   identityMappingsRoute,
+  identityProvisioningRoute,
 } from '@modules/platform-admin/index.js';
 
 import {
@@ -83,6 +84,7 @@ import { createNotificationsRouter } from '@modules/notifications/index.js';
 import vcsRoute from '@modules/versioning/index.js';
 
 import { invitationsRoute } from '@modules/invitations/index.js';
+import { scimRoute } from '@modules/scim/index.js';
 
 interface RegisterRoutesOptions {
   notificationTenantResolver?: NotificationTenantResolver;
@@ -172,6 +174,10 @@ function createTenantScopedRouter(options: CreateTenantScopedRouterOptions = {})
 export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}): void {
   const enterprisePluginLoaded = Boolean(app.locals?.enterprisePluginLoaded);
   // ============ Platform-Level Routes (no tenant prefix) ============
+
+  // Directory-scoped machine API. The bearer credential, not a caller-supplied
+  // tenant header, establishes the directory and tenant boundary.
+  app.use(scimRoute);
   
   // Authentication routes
   app.use(loginRoute);
@@ -202,6 +208,7 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   // SSO Provider Management API (platform-level)
   app.use(identityProvidersRoute);
   app.use(identityMappingsRoute);
+  app.use(identityProvisioningRoute);
 
   // Authorization API (platform-level)
   app.use(authzRoute);

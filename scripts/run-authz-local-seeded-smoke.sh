@@ -114,6 +114,10 @@ fi
 smoke_specs=(
   test/e2e/smoke/login.spec.ts
   test/e2e/smoke/access-control-local.spec.ts
+  test/e2e/smoke/access-model-pages-local.spec.ts
+  test/e2e/smoke/governance-administration-local.spec.ts
+  test/e2e/smoke/resource-administration-local.spec.ts
+  test/e2e/smoke/resource-scope-assignments-local.spec.ts
   test/e2e/smoke/fine-grained-access-local.spec.ts
   test/e2e/smoke/variable-access-control-local.spec.ts
 )

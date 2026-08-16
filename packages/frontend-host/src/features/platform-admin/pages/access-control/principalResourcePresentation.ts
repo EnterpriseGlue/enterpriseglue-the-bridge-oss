@@ -138,12 +138,20 @@ export function buildPrincipalSummaries(
     const key = principalKey(type, id);
     const existing = summaries.get(key);
     if (existing) return existing;
+    const userAssignment = type === 'user'
+      ? assignments.find((assignment) => getAssignmentPrincipalType(assignment) === 'user' && getAssignmentPrincipalId(assignment) === id)
+      : null;
+    const userMembership = type === 'user'
+      ? memberships.find((membership) => membership.userId === id)
+      : null;
+    const userLabel = userAssignment?.principalDisplayName || userMembership?.userDisplayName || userMembership?.userEmail || id;
+    const userDetail = userAssignment?.principalSecondary || userMembership?.userEmail || 'User principal';
     const summary: PrincipalSummary = {
       key,
       type,
       id,
-      label: getPrincipalLabel(type, id, groups, apiClients, serviceAccounts),
-      detail: getPrincipalDetail(type, id, groups, apiClients, serviceAccounts),
+      label: type === 'user' ? userLabel : getPrincipalLabel(type, id, groups, apiClients, serviceAccounts),
+      detail: type === 'user' ? userDetail : getPrincipalDetail(type, id, groups, apiClients, serviceAccounts),
       directAssignmentCount: 0,
       inheritedAssignmentCount: 0,
       relationshipCount: 0,

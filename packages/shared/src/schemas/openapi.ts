@@ -51,6 +51,7 @@ const {
   AuthenticatedSessionOnboardingResponseSchema,
   AuthenticatedSessionUserSchema,
   RefreshAccessTokenResponseSchema,
+  LogoutResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/auth/session.js');
 
 const {
@@ -1974,6 +1975,7 @@ const {
   ConfigEngineSetsFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
+  ConfigIdentityProvisioningDirectoriesFileSchema,
   ConfigIdentityProvidersFileSchema,
   ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema,
@@ -2044,6 +2046,39 @@ const {
   EmailTestRequestSchema,
   EmailTestResponseSchema,
   AdminMutationSuccessResponseSchema,
+  PlatformUserCreateRequestSchema,
+  PlatformUserUpdateRequestSchema,
+  PlatformUserResponseSchema,
+  PlatformUserCreateResponseSchema,
+  UserOperationMessageSchema,
+  UserAuditQuerySchema,
+  UserAuditResponseSchema,
+  UserDeactivateRequestSchema,
+  UserDirectoryListResponseSchema,
+  UserDirectoryQuerySchema,
+  UserEffectiveAccessResponseSchema,
+  UserIdentityContextSchema,
+  UserLifecycleMutationResponseSchema,
+  UserReactivateRequestSchema,
+  UserRevokeSessionsRequestSchema,
+  UserSessionsResponseSchema,
+  IdentityProvisioningDirectoryKeySchema,
+  IdentityProvisioningDirectoryCreateSchema,
+  IdentityProvisioningDirectoryUpdateSchema,
+  IdentityProvisioningDirectoryQuerySchema,
+  IdentityProvisioningDirectoryRecordSchema,
+  IdentityProvisioningDirectoryListResponseSchema,
+  IdentityProvisioningCredentialCreateSchema,
+  IdentityProvisioningCredentialRotateSchema,
+  IdentityProvisioningCredentialMetadataSchema,
+  IdentityProvisioningCredentialIssuedSchema,
+  IdentityProvisioningIdempotencyKeySchema,
+  IdentityProvisioningCredentialListResponseSchema,
+  IdentityProvisioningDirectoryTestResponseSchema,
+  IdentityProvisioningDiagnosticsQuerySchema,
+  IdentityProvisioningDiagnosticsListResponseSchema,
+  ScimOAuthTokenRequestSchema,
+  ScimOAuthTokenResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/index.js');
 
 // Environment Tags
@@ -2327,6 +2362,71 @@ registry.registerPath({
   request: { params: z.object({ key: z.string() }) },
   responses: { 204: { description: 'Identity provider archived' }, 404: { description: 'Identity provider not found' } },
 });
+
+// Authoritative provisioning directories are deliberately separate from
+// sign-in providers. Credential responses expose token material only on create
+// or rotate; all list/read contracts contain metadata and fingerprints only.
+const ProvisioningDirectoryParamsSchema = z.object({ key: IdentityProvisioningDirectoryKeySchema });
+const ProvisioningCredentialParamsSchema = ProvisioningDirectoryParamsSchema.extend({ credentialId: z.string().min(1).max(255) });
+registry.register('IdentityProvisioningDirectory', IdentityProvisioningDirectoryRecordSchema);
+registry.register('IdentityProvisioningCredentialMetadata', IdentityProvisioningCredentialMetadataSchema);
+registry.registerPath({ method: 'get', path: '/api/identity/provisioning-directories', ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/provisioning-directories'), request: { query: IdentityProvisioningDirectoryQuerySchema }, responses: { 200: { description: 'List tenant-scoped authoritative provisioning directories', content: { 'application/json': { schema: IdentityProvisioningDirectoryListResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/provisioning-directories', ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/provisioning-directories'), request: { body: { content: { 'application/json': { schema: IdentityProvisioningDirectoryCreateSchema } } } }, responses: { 201: { description: 'Provisioning directory created', content: { 'application/json': { schema: IdentityProvisioningDirectoryRecordSchema } } }, 409: { description: 'Directory key conflict or another authoritative directory is already active' } } });
+registry.registerPath({ method: 'get', path: '/api/identity/provisioning-directories/{key}', ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/provisioning-directories/{key}'), request: { params: ProvisioningDirectoryParamsSchema }, responses: { 200: { description: 'Provisioning directory', content: { 'application/json': { schema: IdentityProvisioningDirectoryRecordSchema } } }, 404: { description: 'Provisioning directory not found' } } });
+registry.registerPath({ method: 'put', path: '/api/identity/provisioning-directories/{key}', ...authzExtension('platform.sso.providers.manage', 'PUT', '/api/identity/provisioning-directories/{key}'), request: { params: ProvisioningDirectoryParamsSchema, body: { content: { 'application/json': { schema: IdentityProvisioningDirectoryUpdateSchema } } } }, responses: { 200: { description: 'Provisioning directory updated', content: { 'application/json': { schema: IdentityProvisioningDirectoryRecordSchema } } }, 409: { description: 'Configuration ownership or active-authority conflict' } } });
+registry.registerPath({ method: 'delete', path: '/api/identity/provisioning-directories/{key}', ...authzExtension('platform.sso.providers.manage', 'DELETE', '/api/identity/provisioning-directories/{key}'), request: { params: ProvisioningDirectoryParamsSchema }, responses: { 204: { description: 'Provisioning directory archived and all credentials revoked' }, 409: { description: 'Configuration-managed directory must be changed through its source bundle' } } });
+registry.registerPath({ method: 'post', path: '/api/identity/provisioning-directories/{key}/test', ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/provisioning-directories/{key}/test'), request: { params: ProvisioningDirectoryParamsSchema }, responses: { 200: { description: 'Sanitized provisioning readiness result without testing or returning bearer material', content: { 'application/json': { schema: IdentityProvisioningDirectoryTestResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/api/identity/provisioning-directories/{key}/credentials', ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/provisioning-directories/{key}/credentials'), request: { params: ProvisioningDirectoryParamsSchema }, responses: { 200: { description: 'Redacted provisioning credential metadata', content: { 'application/json': { schema: IdentityProvisioningCredentialListResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/provisioning-directories/{key}/credentials', ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/provisioning-directories/{key}/credentials'), request: { params: ProvisioningDirectoryParamsSchema, headers: z.object({ 'idempotency-key': IdentityProvisioningIdempotencyKeySchema.optional() }), body: { content: { 'application/json': { schema: IdentityProvisioningCredentialCreateSchema } } } }, responses: { 201: { description: 'Provisioning credential issued; the bearer token is returned exactly once and the response is non-cacheable', headers: { 'Cache-Control': { schema: { type: 'string', example: 'no-store' } }, Pragma: { schema: { type: 'string', example: 'no-cache' } } }, content: { 'application/json': { schema: IdentityProvisioningCredentialIssuedSchema } } }, 400: { description: 'Headless calls require a valid Idempotency-Key header' }, 409: { description: 'The idempotency key already completed a reveal-once operation; the secret cannot be replayed' } } });
+registry.registerPath({ method: 'post', path: '/api/identity/provisioning-directories/{key}/credentials/{credentialId}/rotate', ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/provisioning-directories/{key}/credentials/{credentialId}/rotate'), request: { params: ProvisioningCredentialParamsSchema, headers: z.object({ 'idempotency-key': IdentityProvisioningIdempotencyKeySchema.optional() }), body: { content: { 'application/json': { schema: IdentityProvisioningCredentialRotateSchema } } } }, responses: { 201: { description: 'Replacement credential issued once with bounded overlap for the old credential; the response is non-cacheable', headers: { 'Cache-Control': { schema: { type: 'string', example: 'no-store' } }, Pragma: { schema: { type: 'string', example: 'no-cache' } } }, content: { 'application/json': { schema: IdentityProvisioningCredentialIssuedSchema } } }, 400: { description: 'Headless calls require a valid Idempotency-Key header' }, 409: { description: 'The idempotency key already completed a reveal-once operation; the secret cannot be replayed' } } });
+registry.registerPath({ method: 'delete', path: '/api/identity/provisioning-directories/{key}/credentials/{credentialId}', ...authzExtension('platform.sso.providers.manage', 'DELETE', '/api/identity/provisioning-directories/{key}/credentials/{credentialId}'), request: { params: ProvisioningCredentialParamsSchema }, responses: { 204: { description: 'Provisioning credential revoked immediately' } } });
+registry.registerPath({ method: 'get', path: '/api/identity/provisioning-directories/{key}/events', ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/provisioning-directories/{key}/events'), request: { params: ProvisioningDirectoryParamsSchema, query: IdentityProvisioningDiagnosticsQuerySchema }, responses: { 200: { description: 'Bounded sanitized provisioning diagnostics', content: { 'application/json': { schema: IdentityProvisioningDiagnosticsListResponseSchema } } } } });
+
+// SCIM 2.0 machine provisioning API. Every operation uses a separate
+// directory-scoped bearer security scheme and SCIM media/error contracts.
+const scimSchemas = await import('./scim.js');
+registry.registerComponent('securitySchemes', 'ScimBearer', {
+  type: 'http',
+  scheme: 'bearer',
+  bearerFormat: 'EnterpriseGlue directory credential',
+  description: 'Directory-scoped provisioning credential. The credential binds the request to its directory and tenant.',
+});
+registry.registerComponent('securitySchemes', 'ScimOAuthClient', {
+  type: 'http',
+  scheme: 'basic',
+  description: 'Reveal-once provisioning client ID and client secret used only at the directory token endpoint.',
+});
+const ScimSecurity = [{ ScimBearer: [] }];
+const ScimOAuthClientSecurity = [{ ScimOAuthClient: [] }];
+const ScimDirectoryParamsSchema = z.object({ directoryKey: IdentityProvisioningDirectoryKeySchema });
+const ScimResourceParamsSchema = ScimDirectoryParamsSchema.extend({ id: scimSchemas.ScimResourceIdSchema });
+const ScimSchemaParamsSchema = ScimDirectoryParamsSchema.extend({ schemaId: z.string().min(1).max(512) });
+const ScimResourceTypeParamsSchema = ScimDirectoryParamsSchema.extend({ resourceType: z.enum(['User', 'Group']) });
+const ScimErrorResponse = { description: 'SCIM protocol error', content: { 'application/scim+json': { schema: scimSchemas.ScimErrorSchema } } };
+const ScimSchemaListResponseSchema = scimSchemas.createScimListResponseSchema(scimSchemas.ScimSchemaResourceSchema);
+const ScimResourceTypeListResponseSchema = scimSchemas.createScimListResponseSchema(scimSchemas.ScimResourceTypeSchema);
+registry.register('ScimUser', scimSchemas.ScimUserResponseSchema);
+registry.register('ScimGroup', scimSchemas.ScimGroupResponseSchema);
+registry.register('ScimError', scimSchemas.ScimErrorSchema);
+registry.registerPath({ method: 'post', path: '/scim/v2/{directoryKey}/oauth/token', security: ScimOAuthClientSecurity, ...authzExemption('POST', '/scim/v2/{directoryKey}/oauth/token'), request: { params: ScimDirectoryParamsSchema, body: { content: { 'application/x-www-form-urlencoded': { schema: ScimOAuthTokenRequestSchema } } } }, responses: { 200: { description: 'Short-lived directory-scoped SCIM access token', content: { 'application/json': { schema: ScimOAuthTokenResponseSchema } } }, 400: { description: 'Invalid OAuth request or scope' }, 401: { description: 'Invalid or revoked client credential' } } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/ServiceProviderConfig', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/ServiceProviderConfig'), request: { params: ScimDirectoryParamsSchema }, responses: { 200: { description: 'SCIM service-provider capabilities', content: { 'application/scim+json': { schema: scimSchemas.ScimServiceProviderConfigSchema } } }, 401: ScimErrorResponse } });
+registry.registerPath({ method: 'post', path: '/scim/v2/{directoryKey}/Bulk', security: ScimSecurity, ...authzExemption('POST', '/scim/v2/{directoryKey}/Bulk'), request: { params: ScimDirectoryParamsSchema, body: { content: { 'application/scim+json': { schema: scimSchemas.ScimBulkRequestSchema } } } }, responses: { 200: { description: 'Bounded SCIM Bulk operation results', content: { 'application/scim+json': { schema: scimSchemas.ScimBulkResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 413: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/Schemas', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/Schemas'), request: { params: ScimDirectoryParamsSchema }, responses: { 200: { description: 'SCIM core schemas', content: { 'application/scim+json': { schema: ScimSchemaListResponseSchema } } }, 401: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/Schemas/{schemaId}', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/Schemas/{schemaId}'), request: { params: ScimSchemaParamsSchema }, responses: { 200: { description: 'SCIM schema', content: { 'application/scim+json': { schema: scimSchemas.ScimSchemaResourceSchema } } }, 401: ScimErrorResponse, 404: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/ResourceTypes', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/ResourceTypes'), request: { params: ScimDirectoryParamsSchema }, responses: { 200: { description: 'SCIM resource types', content: { 'application/scim+json': { schema: ScimResourceTypeListResponseSchema } } }, 401: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/ResourceTypes/{resourceType}', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/ResourceTypes/{resourceType}'), request: { params: ScimResourceTypeParamsSchema }, responses: { 200: { description: 'SCIM resource type', content: { 'application/scim+json': { schema: scimSchemas.ScimResourceTypeSchema } } }, 401: ScimErrorResponse, 404: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/Users', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/Users'), request: { params: ScimDirectoryParamsSchema, query: scimSchemas.ScimListQuerySchema }, responses: { 200: { description: 'Filtered and paginated SCIM users', content: { 'application/scim+json': { schema: scimSchemas.ScimUserListResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse } });
+registry.registerPath({ method: 'post', path: '/scim/v2/{directoryKey}/Users', security: ScimSecurity, ...authzExemption('POST', '/scim/v2/{directoryKey}/Users'), request: { params: ScimDirectoryParamsSchema, body: { content: { 'application/scim+json': { schema: scimSchemas.ScimUserCreateSchema } } } }, responses: { 201: { description: 'SCIM user created', headers: { Location: { schema: { type: 'string', format: 'uri' } }, ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimUserResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 409: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/Users/{id}', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/Users/{id}'), request: { params: ScimResourceParamsSchema }, responses: { 200: { description: 'SCIM user', headers: { ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimUserResponseSchema } } }, 401: ScimErrorResponse, 404: ScimErrorResponse } });
+registry.registerPath({ method: 'put', path: '/scim/v2/{directoryKey}/Users/{id}', security: ScimSecurity, ...authzExemption('PUT', '/scim/v2/{directoryKey}/Users/{id}'), request: { params: ScimResourceParamsSchema, headers: z.object({ 'if-match': scimSchemas.ScimVersionSchema.optional() }), body: { content: { 'application/scim+json': { schema: scimSchemas.ScimUserReplaceSchema } } } }, responses: { 200: { description: 'SCIM user replaced', headers: { ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimUserResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 404: ScimErrorResponse, 409: ScimErrorResponse, 412: ScimErrorResponse } });
+registry.registerPath({ method: 'patch', path: '/scim/v2/{directoryKey}/Users/{id}', security: ScimSecurity, ...authzExemption('PATCH', '/scim/v2/{directoryKey}/Users/{id}'), request: { params: ScimResourceParamsSchema, headers: z.object({ 'if-match': scimSchemas.ScimVersionSchema.optional() }), body: { content: { 'application/scim+json': { schema: scimSchemas.ScimPatchRequestSchema } } } }, responses: { 200: { description: 'SCIM user patched atomically', headers: { ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimUserResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 404: ScimErrorResponse, 409: ScimErrorResponse, 412: ScimErrorResponse } });
+registry.registerPath({ method: 'delete', path: '/scim/v2/{directoryKey}/Users/{id}', security: ScimSecurity, ...authzExemption('DELETE', '/scim/v2/{directoryKey}/Users/{id}'), request: { params: ScimResourceParamsSchema, headers: z.object({ 'if-match': scimSchemas.ScimVersionSchema.optional() }) }, responses: { 204: { description: 'SCIM user soft-deprovisioned; sessions invalidated and authored resources retained' }, 401: ScimErrorResponse, 404: ScimErrorResponse, 412: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/Groups', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/Groups'), request: { params: ScimDirectoryParamsSchema, query: scimSchemas.ScimListQuerySchema }, responses: { 200: { description: 'Filtered and paginated SCIM groups', content: { 'application/scim+json': { schema: scimSchemas.ScimGroupListResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse } });
+registry.registerPath({ method: 'post', path: '/scim/v2/{directoryKey}/Groups', security: ScimSecurity, ...authzExemption('POST', '/scim/v2/{directoryKey}/Groups'), request: { params: ScimDirectoryParamsSchema, body: { content: { 'application/scim+json': { schema: scimSchemas.ScimGroupCreateSchema } } } }, responses: { 201: { description: 'SCIM group created', headers: { Location: { schema: { type: 'string', format: 'uri' } }, ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimGroupResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 409: ScimErrorResponse } });
+registry.registerPath({ method: 'get', path: '/scim/v2/{directoryKey}/Groups/{id}', security: ScimSecurity, ...authzExemption('GET', '/scim/v2/{directoryKey}/Groups/{id}'), request: { params: ScimResourceParamsSchema }, responses: { 200: { description: 'SCIM group', headers: { ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimGroupResponseSchema } } }, 401: ScimErrorResponse, 404: ScimErrorResponse } });
+registry.registerPath({ method: 'put', path: '/scim/v2/{directoryKey}/Groups/{id}', security: ScimSecurity, ...authzExemption('PUT', '/scim/v2/{directoryKey}/Groups/{id}'), request: { params: ScimResourceParamsSchema, headers: z.object({ 'if-match': scimSchemas.ScimVersionSchema.optional() }), body: { content: { 'application/scim+json': { schema: scimSchemas.ScimGroupReplaceSchema } } } }, responses: { 200: { description: 'SCIM group replaced', headers: { ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimGroupResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 404: ScimErrorResponse, 409: ScimErrorResponse, 412: ScimErrorResponse } });
+registry.registerPath({ method: 'patch', path: '/scim/v2/{directoryKey}/Groups/{id}', security: ScimSecurity, ...authzExemption('PATCH', '/scim/v2/{directoryKey}/Groups/{id}'), request: { params: ScimResourceParamsSchema, headers: z.object({ 'if-match': scimSchemas.ScimVersionSchema.optional() }), body: { content: { 'application/scim+json': { schema: scimSchemas.ScimPatchRequestSchema } } } }, responses: { 200: { description: 'SCIM group membership patched atomically', headers: { ETag: { schema: { type: 'string' } } }, content: { 'application/scim+json': { schema: scimSchemas.ScimGroupResponseSchema } } }, 400: ScimErrorResponse, 401: ScimErrorResponse, 404: ScimErrorResponse, 409: ScimErrorResponse, 412: ScimErrorResponse } });
+registry.registerPath({ method: 'delete', path: '/scim/v2/{directoryKey}/Groups/{id}', security: ScimSecurity, ...authzExemption('DELETE', '/scim/v2/{directoryKey}/Groups/{id}'), request: { params: ScimResourceParamsSchema, headers: z.object({ 'if-match': scimSchemas.ScimVersionSchema.optional() }) }, responses: { 204: { description: 'SCIM group archived; internal users and groups retained' }, 401: ScimErrorResponse, 404: ScimErrorResponse, 412: ScimErrorResponse } });
 
 const identityMappingSchemas = await import('./platform-admin/authz.js');
 registry.register('IdentityMapping', identityMappingSchemas.IdentityMappingResponseSchema);
@@ -3007,7 +3107,8 @@ registry.registerPath({
   method: 'post',
   path: '/api/auth/logout',
   ...authzExemption('POST', '/api/auth/logout'),
-  responses: { 200: { description: 'Logged out' } },
+  request: { body: { content: { 'application/json': { schema: z.object({ refreshToken: z.string().optional() }).strict() } } } },
+  responses: { 200: { description: 'Local sessions revoked; optional standards-based provider logout target returned', content: { 'application/json': { schema: LogoutResponseSchema } } } },
 });
 registry.registerPath({
   method: 'get',
@@ -3148,6 +3249,33 @@ registry.registerPath({ method: 'get', path: '/api/auth/login-methods', ...authz
 registry.registerPath({ method: 'get', path: '/api/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/providers/{providerId}/start'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to the selected provider-neutral OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/providers/{providerId}/login'), request: { params: z.object({ providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/providers/saml/callback', ...authzExemption('POST', '/api/auth/providers/saml/callback'), request: { body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } } } }, responses: { 302: { description: 'Provider-neutral SAML callback redirect' }, 401: { description: 'Invalid identity provider state' } } });
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/providers/{providerId}/oidc/backchannel-logout',
+  ...authzExemption('POST', '/api/auth/providers/{providerId}/oidc/backchannel-logout'),
+  request: {
+    params: z.object({ providerId: z.string() }),
+    body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ logout_token: z.string() }).strict() } } },
+  },
+  responses: { 200: { description: 'Verified provider sessions revoked' }, 400: { description: 'Invalid logout request' }, 401: { description: 'Logout token validation failed' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/identity/{providerKey}/saml/logout',
+  ...authzExemption('POST', '/api/auth/identity/{providerKey}/saml/logout'),
+  request: {
+    params: z.object({ providerKey: z.string() }),
+    body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLRequest: z.string().optional(), SAMLResponse: z.string().optional(), RelayState: z.string().optional() }).strict() } } },
+  },
+  responses: { 302: { description: 'Signed SAML logout request handled or correlated response completed' }, 401: { description: 'Signature or correlation validation failed' } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/identity/{providerKey}/saml/logout',
+  ...authzExemption('GET', '/api/auth/identity/{providerKey}/saml/logout'),
+  request: { params: z.object({ providerKey: z.string() }), query: z.object({ SAMLResponse: z.string(), RelayState: z.string(), SigAlg: z.string(), Signature: z.string() }) },
+  responses: { 302: { description: 'Signed and correlated SAML Redirect LogoutResponse completed' }, 401: { description: 'Signature or correlation validation failed' } },
+});
 
 const TenantProviderParamsSchema = z.object({ tenantSlug: z.string(), providerId: z.string() });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/login-methods', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/login-methods'), request: { params: z.object({ tenantSlug: z.string() }) }, responses: { 200: { description: 'Tenant-scoped policy-resolved login methods safe to show before authentication', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } } } });
@@ -3460,6 +3588,7 @@ const ConfigBundleFilesOpenApiSchema = z.object({
   './assignments.json': ConfigAssignmentsFileSchema.optional(),
   './project-engine-targets.json': ConfigProjectEngineTargetsFileSchema.optional(),
   './identity-providers.json': ConfigIdentityProvidersFileSchema.optional(),
+  './identity-provisioning-directories.json': ConfigIdentityProvisioningDirectoriesFileSchema.optional(),
   './identity-mappings.json': ConfigIdentityMappingsFileSchema.optional(),
 }).strict();
 registry.register('ConfigEngineRegistration', ConfigEngineSchema);
@@ -3737,27 +3866,19 @@ registry.registerPath({ method: 'get', path: '/api/notifications/stream', ...aut
 // -----------------------------
 // Users API
 // -----------------------------
-const CreatePlatformUserRequestSchema = z.object({
-  email: z.string().email(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  role: z.enum(['admin', 'user']).optional(),
-  platformRole: z.enum(['admin', 'user']).optional(),
-  sendEmail: z.boolean().optional(),
-});
-const UpdatePlatformUserRequestSchema = z.object({
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  role: z.enum(['admin', 'user']).optional(),
-  platformRole: z.enum(['admin', 'user']).optional(),
-  isActive: z.boolean().optional(),
-});
-const UserOperationMessageSchema = z.object({ message: z.string() });
-
-registry.registerPath({ method: 'get', path: '/api/users', ...authzExtension('platform.users.read', 'GET', '/api/users'), request: { query: z.object({ limit: z.string().optional(), offset: z.string().optional() }) }, responses: { 200: { description: 'List users', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
-registry.registerPath({ method: 'post', path: '/api/users', ...authzExtension('platform.users.create', 'POST', '/api/users'), request: { body: { content: { 'application/json': { schema: CreatePlatformUserRequestSchema } } } }, responses: { 201: { description: 'User created', content: { 'application/json': { schema: z.unknown() } } } } });
-registry.registerPath({ method: 'get', path: '/api/users/{id}', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User details', content: { 'application/json': { schema: z.unknown() } } }, 404: { description: 'Not found' } } });
-registry.registerPath({ method: 'put', path: '/api/users/{id}', ...authzExtension('platform.users.update', 'PUT', '/api/users/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdatePlatformUserRequestSchema } } } }, responses: { 200: { description: 'User updated', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'get', path: '/api/users', ...authzExtension('platform.users.read', 'GET', '/api/users'), responses: { 200: { description: 'List users', content: { 'application/json': { schema: z.array(PlatformUserResponseSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/api/users', ...authzExtension('platform.users.create', 'POST', '/api/users'), request: { body: { content: { 'application/json': { schema: PlatformUserCreateRequestSchema } } } }, responses: { 201: { description: 'User created', content: { 'application/json': { schema: PlatformUserCreateResponseSchema } } } } });
+const UserDirectoryParamsSchema = z.object({ id: z.string().min(1).max(255) });
+registry.registerPath({ method: 'get', path: '/api/users/directory', summary: 'List users with authentication and provisioning lineage', ...authzExtension('platform.users.read', 'GET', '/api/users/directory'), request: { query: UserDirectoryQuerySchema }, responses: { 200: { description: 'Bounded source-aware user directory page', content: { 'application/json': { schema: UserDirectoryListResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/api/users/{id}/identity-context', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}/identity-context'), request: { params: UserDirectoryParamsSchema }, responses: { 200: { description: 'Linked identities and field ownership', content: { 'application/json': { schema: UserIdentityContextSchema } } }, 404: { description: 'User not found' } } });
+registry.registerPath({ method: 'get', path: '/api/users/{id}/effective-access', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}/effective-access'), request: { params: UserDirectoryParamsSchema }, responses: { 200: { description: 'Effective access with source lineage', content: { 'application/json': { schema: UserEffectiveAccessResponseSchema } } }, 404: { description: 'User not found' } } });
+registry.registerPath({ method: 'get', path: '/api/users/{id}/sessions', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}/sessions'), request: { params: UserDirectoryParamsSchema }, responses: { 200: { description: 'Redacted user refresh-session inventory', content: { 'application/json': { schema: UserSessionsResponseSchema } } }, 404: { description: 'User not found' } } });
+registry.registerPath({ method: 'get', path: '/api/users/{id}/audit', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}/audit'), request: { params: UserDirectoryParamsSchema, query: UserAuditQuerySchema }, responses: { 200: { description: 'Bounded user audit summary', content: { 'application/json': { schema: UserAuditResponseSchema } } }, 404: { description: 'User not found' } } });
+registry.registerPath({ method: 'post', path: '/api/users/{id}/deactivate', ...authzExtension('platform.users.deactivate', 'POST', '/api/users/{id}/deactivate'), request: { params: UserDirectoryParamsSchema, body: { content: { 'application/json': { schema: UserDeactivateRequestSchema } } } }, responses: { 200: { description: 'User deactivated and sessions invalidated', content: { 'application/json': { schema: UserLifecycleMutationResponseSchema } } }, 409: { description: 'Recovery continuity conflict' } } });
+registry.registerPath({ method: 'post', path: '/api/users/{id}/reactivate', ...authzExtension('platform.users.update', 'POST', '/api/users/{id}/reactivate'), request: { params: UserDirectoryParamsSchema, body: { content: { 'application/json': { schema: UserReactivateRequestSchema } } } }, responses: { 200: { description: 'Locally managed user reactivated', content: { 'application/json': { schema: UserLifecycleMutationResponseSchema } } }, 409: { description: 'Directory-managed users must be reactivated in their source directory' } } });
+registry.registerPath({ method: 'post', path: '/api/users/{id}/revoke-sessions', ...authzExtension('platform.users.update', 'POST', '/api/users/{id}/revoke-sessions'), request: { params: UserDirectoryParamsSchema, body: { content: { 'application/json': { schema: UserRevokeSessionsRequestSchema } } } }, responses: { 200: { description: 'Every current session revoked and access-session version advanced', content: { 'application/json': { schema: UserLifecycleMutationResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/api/users/{id}', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User details', content: { 'application/json': { schema: PlatformUserResponseSchema } } }, 404: { description: 'Not found' } } });
+registry.registerPath({ method: 'put', path: '/api/users/{id}', ...authzExtension('platform.users.update', 'PUT', '/api/users/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: PlatformUserUpdateRequestSchema } } } }, responses: { 200: { description: 'User updated', content: { 'application/json': { schema: PlatformUserResponseSchema } } } } });
 registry.registerPath({ method: 'delete', path: '/api/users/{id}', ...authzExtension('platform.users.deactivate', 'DELETE', '/api/users/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User deactivated', content: { 'application/json': { schema: UserOperationMessageSchema } } } } });
 registry.registerPath({ method: 'delete', path: '/api/users/{id}/permanent', ...authzExtension('platform.users.permanent-delete', 'DELETE', '/api/users/{id}/permanent'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User permanently deleted', content: { 'application/json': { schema: UserOperationMessageSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/users/{id}/unlock', ...authzExtension('platform.users.unlock', 'POST', '/api/users/{id}/unlock'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User unlocked', content: { 'application/json': { schema: UserOperationMessageSchema } } } } });

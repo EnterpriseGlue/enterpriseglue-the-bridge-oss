@@ -14,10 +14,31 @@ export interface AuditRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
 }
 
+const sensitiveAuditContextKey = /(?:authorization|cookie|credential|password|secret|token)/i;
+
+function redactAuditContextValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactAuditContextValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+    key,
+    sensitiveAuditContextKey.test(key) ? '[REDACTED]' : redactAuditContextValue(child),
+  ]));
+}
+
+function redactAuditContext(context: string): string {
+  if (!context) return context;
+  try {
+    return JSON.stringify(redactAuditContextValue(JSON.parse(context)));
+  } catch {
+    return context.replace(/\b(Bearer\s+)[A-Za-z0-9._~+\/-]+=*/gi, '$1[REDACTED]');
+  }
+}
+
 export function registerAuditRoutes(router: Router, { requirePlatformAction }: AuditRouteDependencies): void {
   router.get('/api/authz/audit', apiLimiter, requireAuth, requirePlatformAction('platform.audit.read'), validateQuery(AuthzAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const action = typeof req.query.action === 'string' ? req.query.action : undefined;
       const resourceType = typeof req.query.resourceType === 'string' ? req.query.resourceType : undefined;
       const resourceId = typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined;
       const decision = req.query.decision === 'allow' || req.query.decision === 'deny' ? req.query.decision : undefined;
@@ -26,6 +47,7 @@ export function registerAuditRoutes(router: Router, { requirePlatformAction }: A
       const entries = await policyService.getAuditLog({
         tenantId: req.tenant?.tenantId || null,
         userId,
+        action,
         resourceType,
         resourceId,
         decision,
@@ -42,10 +64,10 @@ export function registerAuditRoutes(router: Router, { requirePlatformAction }: A
         decision: entry.decision,
         reason: entry.reason,
         policyId: entry.policyId,
-        context: entry.context,
+        context: redactAuditContext(entry.context),
         ipAddress: entry.ipAddress,
         userAgent: entry.userAgent,
-        timestamp: entry.timestamp,
+        timestamp: Number(entry.timestamp),
       })));
     } catch (error: any) {
       logger.error('Get audit log error:', error);

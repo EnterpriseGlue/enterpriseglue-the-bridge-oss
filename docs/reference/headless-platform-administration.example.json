@@ -19,6 +19,7 @@
       "./assignments.json",
       "./authorization-policies.json",
       "./machine-principals.json",
+      "./identity-provisioning-directories.json",
       "./external-engine-systems.json"
     ],
     "governance": {
@@ -209,6 +210,17 @@
             "type": "platform"
           },
           "ownershipMode": "config_locked"
+        },
+        {
+          "principal": {
+            "type": "api_client",
+            "key": "api-client.identity-provisioning"
+          },
+          "roleKey": "system.api.identity_provisioning_admin",
+          "scope": {
+            "type": "platform"
+          },
+          "ownershipMode": "config_locked"
         }
       ]
     },
@@ -255,6 +267,30 @@
             "deployment:execute"
           ],
           "active": true,
+          "ownershipMode": "config_locked"
+        },
+        {
+          "kind": "api_client",
+          "key": "api-client.identity-provisioning",
+          "name": "Identity provisioning automation",
+          "tokenRef": "env://IDENTITY_PROVISIONING_API_CLIENT_TOKEN",
+          "scopes": [
+            "identity:provisioning:manage"
+          ],
+          "active": true,
+          "ownershipMode": "config_locked"
+        }
+      ]
+    },
+    "./identity-provisioning-directories.json": {
+      "identityProvisioningDirectories": [
+        {
+          "key": "entra-workforce",
+          "displayName": "Microsoft Entra workforce",
+          "description": "Authoritative employee and group lifecycle",
+          "enabled": false,
+          "authoritative": true,
+          "credentialSecretRef": "env://ENTRA_WORKFORCE_SCIM_TOKEN",
           "ownershipMode": "config_locked"
         }
       ]

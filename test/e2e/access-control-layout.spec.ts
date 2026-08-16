@@ -34,7 +34,14 @@ test.describe('Access Control responsive layout', () => {
 
     await page.goto('/admin/access-control');
     await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
-    await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
+    const sectionSelector = page.getByRole('combobox', { name: 'Access Control section', exact: true });
+    if (await sectionSelector.isVisible()) {
+      await sectionSelector.click();
+      await page.getByRole('option', { name: 'Permissions', exact: true }).click();
+    } else {
+      await page.getByRole('link', { name: 'Permissions', exact: true }).click();
+    }
+    await expect(page.getByRole('heading', { name: 'Permissions', exact: true })).toBeVisible();
     const permissionLabel = page.locator('td:visible', { hasText: longPermissionLabel });
     await expect(permissionLabel).toBeVisible();
 

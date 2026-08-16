@@ -3,6 +3,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 
 const SAML_AUDIENCE = 'identity-saml-state';
 const OIDC_AUDIENCE = 'identity-oidc-state';
+const FEDERATED_LOGOUT_AUDIENCE = 'identity-federated-logout-state';
 const ISSUER = 'enterpriseglue';
 
 function signState(state: string, audience: string): string {
@@ -45,4 +46,13 @@ export function signOidcState(state: string): string {
 
 export function verifyOidcState(value: unknown): string | null {
   return verifyState(value, OIDC_AUDIENCE);
+}
+
+/** Uses a distinct audience so login RelayState cannot be replayed as logout correlation. */
+export function signFederatedLogoutState(state: string): string {
+  return signState(state, FEDERATED_LOGOUT_AUDIENCE);
+}
+
+export function verifyFederatedLogoutState(value: unknown): string | null {
+  return verifyState(value, FEDERATED_LOGOUT_AUDIENCE);
 }

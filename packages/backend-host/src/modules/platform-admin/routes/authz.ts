@@ -130,6 +130,7 @@ router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(AuthzCheck
       resourceAttributes,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
+      mfaVerified: req.user!.mfaVerified === true,
       timestamp: Date.now(),
     };
 
@@ -166,6 +167,7 @@ router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(Auth
           resourceId: check.resourceId,
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'],
+          mfaVerified: req.user!.mfaVerified === true,
           timestamp: Date.now(),
         };
 
@@ -313,11 +315,12 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
       resourceId: resolvedResourceId,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
+      mfaVerified: req.user!.mfaVerified === true,
       timestamp: Date.now(),
     };
 
     const base = await permissionService.evaluatePermission(permission as Permission, context);
-    const policy = await policyService.evaluate(permission as Permission, context);
+    const policy = await policyService.evaluateAndLog(permission as Permission, context);
 
     res.json({
       allowed: policy.decision === 'allow',

@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({
@@ -13,6 +13,10 @@ const ownership = (mode: 'config_locked' | 'config_warn', driftStatus: 'in_sync'
   ownershipMode: mode,
   driftStatus,
 });
+
+const ownershipTag = (row: Locator, label: string) => row
+  .locator('.cds--tag__label')
+  .filter({ hasText: new RegExp(`^${label}$`) });
 
 async function installHeadlessAdminStack(page: Page) {
   const stack = new MockBrowserIdentityStack();
@@ -123,40 +127,39 @@ test('renders and enforces headless ownership across all administrator surfaces 
   await expect(page.getByText('Git sync options are read-only', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Push (StarBase → Git)')).toBeDisabled();
   const lockedGit = page.getByText('Managed GitLab').locator('..');
-  await expect(lockedGit.getByText('Managed by configuration', { exact: true })).toBeVisible();
+  await expect(ownershipTag(lockedGit, 'Managed by configuration')).toBeVisible();
   await expect(lockedGit.getByRole('button', { name: 'Configure' })).toBeDisabled();
   const warnGit = page.getByText('Review GitHub').locator('..');
-  await expect(warnGit.getByText('Configuration-linked', { exact: true })).toBeVisible();
-  await expect(warnGit.getByText('Drifted', { exact: true })).toBeVisible();
+  await expect(ownershipTag(warnGit, 'Configuration-linked')).toBeVisible();
+  await expect(ownershipTag(warnGit, 'Drifted')).toBeVisible();
 
-  await page.goto('/admin/settings');
-  await page.getByRole('tab', { name: 'Email', exact: true }).click();
+  await page.goto('/admin/settings/email');
   const emailRow = page.getByText('Release email').locator('..');
-  await expect(emailRow.getByText('Managed by configuration', { exact: true })).toBeVisible();
+  await expect(ownershipTag(emailRow, 'Managed by configuration')).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Email Templates', exact: true }).click();
+  await page.goto('/admin/settings/email-templates');
   await expect(page.getByText('Email platform name is managed by configuration', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Email Platform Name')).toBeDisabled();
   const templateRow = page.getByText('Welcome template').locator('..');
-  await expect(templateRow.getByText('Configuration-linked', { exact: true })).toBeVisible();
-  await expect(templateRow.getByText('Drifted', { exact: true })).toBeVisible();
+  await expect(ownershipTag(templateRow, 'Configuration-linked')).toBeVisible();
+  await expect(ownershipTag(templateRow, 'Drifted')).toBeVisible();
 
   await page.goto('/admin/access-control?tab=policies');
   const lockedPolicy = page.getByText('Locked policy').locator('..');
-  await expect(lockedPolicy.getByText('Managed by configuration', { exact: true })).toBeVisible();
+  await expect(ownershipTag(lockedPolicy, 'Managed by configuration')).toBeVisible();
   await lockedPolicy.getByRole('button', { name: 'Actions for Locked policy' }).click();
   await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeDisabled();
   const warnPolicy = page.getByText('Review policy').locator('..');
-  await expect(warnPolicy.getByText('Drifted', { exact: true })).toBeVisible();
+  await expect(ownershipTag(warnPolicy, 'Drifted')).toBeVisible();
 
   await page.goto('/admin/access-control?tab=external-registration');
   const clientRow = page.getByText('Bundle client').locator('..');
-  await expect(clientRow.getByText('Managed by configuration', { exact: true })).toBeVisible();
+  await expect(ownershipTag(clientRow, 'Managed by configuration')).toBeVisible();
   await expect(clientRow.getByRole('button', { name: 'Rotate' })).toBeDisabled();
   await expect(clientRow.getByRole('button', { name: 'Revoke' })).toBeDisabled();
   const serviceRow = page.getByText('Bundle service').locator('..');
-  await expect(serviceRow.getByText('Configuration-linked', { exact: true })).toBeVisible();
-  await expect(serviceRow.getByText('Drifted', { exact: true })).toBeVisible();
+  await expect(ownershipTag(serviceRow, 'Configuration-linked')).toBeVisible();
+  await expect(ownershipTag(serviceRow, 'Drifted')).toBeVisible();
   const systemRow = page.getByText('Terraform').locator('..');
   await expect(systemRow.getByRole('button', { name: 'Edit Terraform' })).toBeDisabled();
   await expect(systemRow.getByRole('button', { name: 'Archive Terraform' })).toBeDisabled();

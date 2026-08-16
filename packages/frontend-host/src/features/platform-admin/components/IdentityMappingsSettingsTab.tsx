@@ -29,6 +29,8 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { useSafeDestructiveModalFocus } from '../../../shared/hooks/useSafeDestructiveModalFocus';
+import { useUnsavedChangesGuard } from '../../../shared/hooks/useUnsavedChangesGuard';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
 import type { AuthzGroup, HumanIdentityEntitlementType, IdentityEntitlementMapping } from '../hooks/useAuthzApi';
@@ -120,6 +122,7 @@ export default function IdentityMappingsSettingsTab() {
   const [createdSummary, setCreatedSummary] = useState<CreatedSummary | null>(null);
   const testResultRef = useRef<HTMLDivElement | null>(null);
   const snapshotResultRef = useRef<HTMLDivElement | null>(null);
+  const initialWorkflowSnapshotRef = useRef('');
   const mappingViewOnly = Boolean(editing?.sourceRef) && editing?.ownershipMode !== 'config_warn';
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((current) => ({ ...current, [key]: value }));
   const providers = (providersQuery.data || []).filter((provider) => provider.isEnabled);
@@ -163,19 +166,40 @@ export default function IdentityMappingsSettingsTab() {
     const target = snapshotResult ? snapshotResultRef.current : testResultRef.current;
     if (!target) return undefined;
     const animationFrame = window.requestAnimationFrame(() => {
-      const modalContent = target.closest<HTMLElement>('.cds--modal-content');
-      if (!modalContent) return;
-      const targetBounds = target.getBoundingClientRect();
-      const contentBounds = modalContent.getBoundingClientRect();
-      const comfortableBottom = contentBounds.bottom - 80;
-      if (targetBounds.bottom <= comfortableBottom) return;
-      const previousScrollBehavior = modalContent.style.scrollBehavior;
-      modalContent.style.scrollBehavior = 'auto';
-      modalContent.scrollTop += targetBounds.bottom - comfortableBottom;
-      modalContent.style.scrollBehavior = previousScrollBehavior;
+      target.scrollIntoView({ block: 'nearest' });
     });
     return () => window.cancelAnimationFrame(animationFrame);
   }, [snapshotResult, testResult]);
+
+  useEffect(() => {
+    if (!open) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      const stepHeadingId = creationStep === 1
+        ? 'identity-mapping-identity-step-heading'
+        : creationStep === 2
+          ? 'identity-mapping-access-step-heading'
+          : 'identity-mapping-review-step-heading';
+      const target = document.getElementById(stepHeadingId)
+        || document.getElementById('identity-mapping-workflow-title');
+      const workflow = target?.closest<HTMLElement>('.eg-settings-workflow');
+      const workflowBody = target?.closest<HTMLElement>('.eg-settings-workflow__body');
+      if (workflow) {
+        workflow.scrollTop = 0;
+        workflow.scrollLeft = 0;
+      }
+      if (workflowBody) {
+        workflowBody.scrollTop = 0;
+        workflowBody.scrollLeft = 0;
+      }
+      target?.focus({ preventScroll: true });
+      let ancestor = target?.parentElement;
+      while (ancestor) {
+        ancestor.scrollLeft = 0;
+        ancestor = ancestor.parentElement;
+      }
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [creationStep, open]);
 
   const save = useMutation({
     mutationFn: async (value: FormState) => {
@@ -286,8 +310,46 @@ export default function IdentityMappingsSettingsTab() {
     onSuccess: (result) => setSnapshotResult(`${countPhrase(result.matches, 'saved identity', 'saved identities')} would match and ${countPhrase(result.nonMatches, 'saved identity', 'saved identities')} would not${result.failed ? `; ${countPhrase(result.failed, 'identity', 'identities')} could not be checked` : ''}${result.truncated ? '. More saved identities remain' : ''}. No identity or access was changed.`),
     onError: (value: unknown) => setSnapshotResult(parseApiError(value, 'Stored identity preview failed').message),
   });
-  const startCreate = () => { setEditing(null); setCreationStep(1); setForm(emptyForm()); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionScopeType('engine'); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); setCreatedSummary(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
-  const startEdit = (mapping: Mapping) => { setEditing(mapping); setCreationStep(1); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setForm({ ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode, isActive: mapping.isActive }); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };
+  const serializeWorkflow = (
+    nextForm: FormState,
+    nextCreateGroup = false,
+    nextGroupName = '',
+    nextGroupKey = '',
+    nextProvisionAccess = false,
+    nextRoleId = '',
+    nextScopeType: typeof provisionScopeType = 'engine',
+    nextResourceId = '',
+    nextRuntimeEngineId = '',
+  ) => JSON.stringify({
+    form: nextForm,
+    createGroupInFlow: nextCreateGroup,
+    newGroupName: nextGroupName,
+    newGroupKey: nextGroupKey,
+    provisionAccessInFlow: nextProvisionAccess,
+    provisionRoleId: nextRoleId,
+    provisionScopeType: nextScopeType,
+    provisionResourceId: nextResourceId,
+    provisionRuntimeEngineId: nextRuntimeEngineId,
+  });
+  const closeMappingWorkflow = React.useCallback(() => {
+    setOpen(false);
+    setEditing(null);
+  }, []);
+  const startCreate = () => {
+    const nextForm = emptyForm();
+    initialWorkflowSnapshotRef.current = serializeWorkflow(nextForm);
+    setEditing(null); setCreationStep(1); setForm(nextForm); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionScopeType('engine'); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); setCreatedSummary(null); setTestResult(null); setSnapshotResult(null); setOpen(true);
+  };
+  const startEdit = (mapping: Mapping) => {
+    const nextForm = { ...emptyForm(), providerKey: mapping.providerKey, targetGroupKey: mapping.targetGroupKey, entitlementType: mapping.entitlementType, externalId: mapping.externalId || '', matchOperator: mapping.matchOperator, syncMode: mapping.syncMode, isActive: mapping.isActive };
+    initialWorkflowSnapshotRef.current = serializeWorkflow(nextForm);
+    setEditing(mapping); setCreationStep(1); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setForm(nextForm); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true);
+  };
+  const currentWorkflowSnapshot = serializeWorkflow(form, createGroupInFlow, newGroupName, newGroupKey, provisionAccessInFlow, provisionRoleId, provisionScopeType, provisionResourceId, provisionRuntimeEngineId);
+  const mappingWorkflowDirty = open && !mappingViewOnly
+    && currentWorkflowSnapshot !== initialWorkflowSnapshotRef.current;
+  const unsavedChanges = useUnsavedChangesGuard(mappingWorkflowDirty, closeMappingWorkflow);
+  useSafeDestructiveModalFocus(unsavedChanges.confirmationOpen, 'Leave without saving?', 'Keep editing');
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity mappings unavailable" reason={read.reason || 'Missing identity mapping read permission.'} />;
   if (mappingsQuery.isLoading) return <SkeletonText paragraph lineCount={5} />;
@@ -302,24 +364,60 @@ export default function IdentityMappingsSettingsTab() {
     ['EnterpriseGlue group', createGroupInFlow ? `${newGroupName || 'New group'} (${newGroupKey || 'key pending'})` : selectedGroup ? `${selectedGroup.name} (${selectedGroup.key})` : form.targetGroupKey || 'Not selected'],
     ['Scoped engine access', provisionAccessInFlow ? `${provisionedRole?.name || provisionRoleId || 'Role pending'} · ${accessTargetTypeName[provisionScopeType]} · ${provisionResourceId ? accessTargetName(provisionScopeType, provisionResourceId) : 'Target pending'}` : 'Not included'],
   ];
+  const mappingConfigurationItems = [
+    ['Identity provider', form.providerKey ? `${identityProviderName(providers.find((provider) => provider.key === form.providerKey))} (${form.providerKey})` : 'Not configured'],
+    ['External identity data type', form.entitlementType],
+    ['Match rule', form.matchOperator === 'exact' ? 'Equals this value' : form.matchOperator === 'contains' ? 'Contains this text' : 'Any value of this type'],
+    ['External value', form.matchOperator === 'exists' ? 'Any value' : form.externalId || 'Not configured'],
+    ['EnterpriseGlue group', selectedGroup ? `${selectedGroup.name} (${selectedGroup.key})` : form.targetGroupKey || 'Not configured'],
+    ['Membership behavior', form.syncMode === 'authoritative' ? 'Keep in sync — add and remove members' : 'Add only — never remove automatically'],
+    ['Status', form.isActive ? 'Enabled' : 'Disabled'],
+    ['Configuration source', configurationSourceName(editing?.sourceRef)],
+  ];
   return <>
+    {!open &&
     <Tile>
-      <div className="eg-settings-section-header"><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Identity mappings</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Connect external groups, roles, attributes, or authenticated identities to EnterpriseGlue groups. OAuth scopes are reserved for machine and API access.</p></div><GuardedAction actionId="platform.sso.group-mappings.manage" resource={resource}><Button size="sm" kind="primary" renderIcon={Add} onClick={startCreate}>Add mapping</Button></GuardedAction></div>
+      <div className="eg-settings-section-header"><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Identity mappings</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Connect external groups, roles, attributes, or authenticated identities to EnterpriseGlue groups. OAuth scopes are reserved for machine and API access.</p></div><GuardedAction actionId="platform.sso.group-mappings.manage" resource={resource}><Button size="sm" kind="primary" renderIcon={Add} onClick={startCreate}>Create mapping</Button></GuardedAction></div>
       {createdSummary && <InlineNotification kind="success" title={createdSummary.title} subtitle={createdSummary.description} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-      <DataTable rows={rows} headers={[{ key: 'provider', header: 'Sign-in provider' }, { key: 'entitlement', header: 'External group, role, or attribute' }, { key: 'group', header: 'EnterpriseGlue group' }, { key: 'sync', header: 'Membership behavior' }, { key: 'status', header: 'Status' }, { key: 'source', header: 'Management source' }, { key: 'actions', header: '' }]}>{({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => <TableContainer><Table {...getTableProps()} size="md"><TableHead><TableRow>{headers.map((header) => { const { key, ...headerProps } = getHeaderProps({ header }); return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>; })}</TableRow></TableHead><TableBody>{tableRows.length === 0 ? <TableRow><TableCell colSpan={headers.length}>No identity mappings yet. Add a mapping to connect provider identity data to an EnterpriseGlue group.</TableCell></TableRow> : tableRows.map((row) => { const mapping = rows.find((item) => item.id === row.id)!; const { key, ...rowProps } = getRowProps({ row }); const configLocked = Boolean(mapping.sourceRef) && mapping.ownershipMode !== 'config_warn'; const configWarning = Boolean(mapping.sourceRef) && mapping.ownershipMode === 'config_warn'; const provider = providers.find((item) => item.key === mapping.providerKey); const group = groups.find((item) => item.key === mapping.targetGroupKey); const membershipBehavior = membershipBehaviorCopy(mapping.syncMode); return <TableRow key={key} {...rowProps}><TableCell><div>{identityProviderName(provider)}</div><small style={{ color: 'var(--cds-text-secondary)' }}>{mapping.providerKey}</small></TableCell><TableCell><Tag type="cool-gray">{mapping.entitlementType}</Tag> {mapping.matchOperator === 'exists' ? 'Any value' : mapping.externalId}</TableCell><TableCell><div>{group?.name || mapping.targetGroupKey}</div>{group && <small style={{ color: 'var(--cds-text-secondary)' }}>{mapping.targetGroupKey}</small>}</TableCell><TableCell><div>{membershipBehavior.label}</div><small style={{ color: 'var(--cds-text-secondary)' }}>{membershipBehavior.description}</small></TableCell><TableCell><Tag type={mapping.isActive ? 'green' : 'gray'}>{mapping.isActive ? 'Enabled' : 'Disabled'}</Tag></TableCell><TableCell><div><Tag type={configWarning ? 'warm-gray' : mapping.sourceRef ? 'purple' : 'gray'}>{configurationOwnershipLabel(configLocked ? 'config_locked' : mapping.ownershipMode)}</Tag></div>{configWarning && <small style={{ display: 'block', marginTop: 'var(--spacing-2)', color: 'var(--cds-text-secondary)' }}>{configurationOwnershipDescription(mapping.ownershipMode, mapping.sourceRef)}</small>}</TableCell><TableCell><GuardedOverflowMenu size="sm" flipped iconDescription="Mapping actions">{!configLocked && <GuardedOverflowMenuItem decision={rolesManage} itemText="Grant engine access" unavailableReason={rolesManage.allowed ? null : rolesManage.reason || 'You do not have permission to assign engine roles.'} onClick={() => { setAccessTarget(mapping); setAccessRoleId(''); setAccessScopeType('engine'); setAccessEngineId(''); setAccessRuntimeEngineId(''); }} />}<GuardedOverflowMenuItem decision={configLocked ? read : manage} itemText={configLocked ? 'View configuration' : 'Edit'} onClick={() => startEdit(mapping)} />{!configLocked && <GuardedOverflowMenuItem decision={manage} itemText="Delete" isDelete disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'This mapping is configuration-linked. Disable it here or remove it from configuration.' : null} onClick={() => setRemoveTarget(mapping)} />}</GuardedOverflowMenu></TableCell></TableRow>; })}</TableBody></Table></TableContainer>}</DataTable>
+      <DataTable rows={rows} headers={[{ key: 'provider', header: 'Sign-in provider' }, { key: 'entitlement', header: 'External group, role, or attribute' }, { key: 'group', header: 'EnterpriseGlue group' }, { key: 'sync', header: 'Membership behavior' }, { key: 'status', header: 'Status' }, { key: 'source', header: 'Management source' }, { key: 'actions', header: '' }]}>{({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => <TableContainer><Table {...getTableProps()} size="md"><TableHead><TableRow>{headers.map((header) => { const { key, ...headerProps } = getHeaderProps({ header }); return <TableHeader key={key} {...headerProps}>{header.header}</TableHeader>; })}</TableRow></TableHead><TableBody>{tableRows.length === 0 ? <TableRow><TableCell colSpan={headers.length}>No identity mappings yet. Create a mapping to connect provider identity data to an EnterpriseGlue group.</TableCell></TableRow> : tableRows.map((row) => { const mapping = rows.find((item) => item.id === row.id)!; const { key, ...rowProps } = getRowProps({ row }); const configLocked = Boolean(mapping.sourceRef) && mapping.ownershipMode !== 'config_warn'; const configWarning = Boolean(mapping.sourceRef) && mapping.ownershipMode === 'config_warn'; const provider = providers.find((item) => item.key === mapping.providerKey); const group = groups.find((item) => item.key === mapping.targetGroupKey); const membershipBehavior = membershipBehaviorCopy(mapping.syncMode); return <TableRow key={key} {...rowProps}><TableCell><div>{identityProviderName(provider)}</div><small style={{ color: 'var(--cds-text-secondary)' }}>{mapping.providerKey}</small></TableCell><TableCell><Tag type="cool-gray">{mapping.entitlementType}</Tag> {mapping.matchOperator === 'exists' ? 'Any value' : mapping.externalId}</TableCell><TableCell><div>{group?.name || mapping.targetGroupKey}</div>{group && <small style={{ color: 'var(--cds-text-secondary)' }}>{mapping.targetGroupKey}</small>}</TableCell><TableCell><div>{membershipBehavior.label}</div><small style={{ color: 'var(--cds-text-secondary)' }}>{membershipBehavior.description}</small></TableCell><TableCell><Tag type={mapping.isActive ? 'green' : 'gray'}>{mapping.isActive ? 'Enabled' : 'Disabled'}</Tag></TableCell><TableCell><div><Tag type={configWarning ? 'warm-gray' : mapping.sourceRef ? 'purple' : 'gray'}>{configurationOwnershipLabel(configLocked ? 'config_locked' : mapping.ownershipMode)}</Tag></div>{configWarning && <small style={{ display: 'block', marginTop: 'var(--spacing-2)', color: 'var(--cds-text-secondary)' }}>{configurationOwnershipDescription(mapping.ownershipMode, mapping.sourceRef)}</small>}</TableCell><TableCell><GuardedOverflowMenu size="sm" flipped iconDescription="Mapping actions">{!configLocked && <GuardedOverflowMenuItem decision={rolesManage} itemText="Grant engine access" unavailableReason={rolesManage.allowed ? null : rolesManage.reason || 'You do not have permission to assign engine roles.'} onClick={() => { setAccessTarget(mapping); setAccessRoleId(''); setAccessScopeType('engine'); setAccessEngineId(''); setAccessRuntimeEngineId(''); }} />}<GuardedOverflowMenuItem decision={configLocked ? read : manage} itemText={configLocked ? 'View configuration' : 'Edit'} onClick={() => startEdit(mapping)} />{!configLocked && <GuardedOverflowMenuItem decision={manage} itemText="Delete" isDelete disabled={Boolean(mapping.sourceRef)} unavailableReason={mapping.sourceRef ? 'This mapping is configuration-linked. Disable it here or remove it from configuration.' : null} onClick={() => setRemoveTarget(mapping)} />}</GuardedOverflowMenu></TableCell></TableRow>; })}</TableBody></Table></TableContainer>}</DataTable>
     </Tile>
-    <Modal open={open} size="lg" passiveModal={mappingViewOnly} modalHeading={mappingViewOnly ? 'View identity mapping configuration' : editing ? 'Edit identity mapping' : 'Add identity mapping'} primaryButtonText={editing ? 'Save' : creationStep < 3 ? 'Continue' : 'Create mapping'} secondaryButtonText={!editing && creationStep > 1 ? 'Back' : 'Cancel'} primaryButtonDisabled={Boolean(!manage.allowed || save.isPending || (!editing && !creationStepValid) || (editing && ((createGroupInFlow && (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim())) || (provisionAccessInFlow && (!groupsManage.allowed || !rolesManage.allowed || !provisionRoleId || !provisionResourceId)))))} onRequestClose={() => setOpen(false)} onSecondarySubmit={() => { if (!editing && creationStep > 1) setCreationStep((step) => step - 1); else setOpen(false); }} onRequestSubmit={() => { if (mappingViewOnly) return; if (!editing && creationStep < 3) { setCreationStep((step) => step + 1); return; } save.mutate(form); }}>
+    }
+    {open && <section className="eg-settings-workflow" role="region" aria-labelledby="identity-mapping-workflow-title" data-unsaved-changes={mappingWorkflowDirty ? 'true' : 'false'}>
+      <div className="eg-settings-workflow__header">
+        <div>
+          <h2 id="identity-mapping-workflow-title">{mappingViewOnly ? 'View identity mapping configuration' : editing ? 'Edit identity mapping' : 'Create identity mapping'}</h2>
+          <p>{editing ? 'Review the match rule, group membership behavior, and saved-identity preview.' : 'Create a provider mapping, choose group and scoped access, then review the complete change.'}</p>
+        </div>
+        <Button kind="ghost" size="sm" onClick={unsavedChanges.requestExit}>Back to identity mappings</Button>
+      </div>
+      <div className="eg-settings-workflow__body" role="region" aria-label={mappingViewOnly ? 'Identity mapping configuration details' : 'Identity mapping form fields'} tabIndex={0}>
       <div className="eg-identity-mapping-flow">
       {error && <InlineNotification kind="error" title="Mapping not saved" subtitle={error} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {mappingViewOnly && <InlineNotification kind="info" lowContrast hideCloseButton title="Managed by configuration" subtitle={`This mapping cannot be changed here. Update ${configurationSourceName(editing?.sourceRef)} and apply it again. Preview tools remain available.`} style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {mappingViewOnly ? <>
+        <section className="eg-settings-readonly-section" aria-labelledby="identity-mapping-readonly-heading">
+          <h3 id="identity-mapping-readonly-heading">Mapping configuration</h3>
+          <dl className="eg-settings-readonly-list">
+            {mappingConfigurationItems.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+          </dl>
+        </section>
+        <section className="eg-settings-readonly-tools" aria-labelledby="identity-mapping-preview-heading">
+          <div><h3 id="identity-mapping-preview-heading">Preview tools</h3><p>Evaluate the saved configuration without changing identities, memberships, or access.</p></div>
+          <div className="eg-settings-readonly-tools__actions"><Button kind="tertiary" size="sm" renderIcon={Checkmark} disabled={!form.providerKey || test.isPending} onClick={() => test.mutate(form)}>Preview with sample claims</Button><Button kind="tertiary" size="sm" disabled={!form.providerKey || previewSnapshots.isPending} onClick={() => previewSnapshots.mutate(form)}>Check saved identities</Button></div>
+          {testResult && <div ref={testResultRef}><InlineNotification kind={testResult.startsWith('The sample matches') ? 'success' : 'info'} title="Sample sign-in claim preview" subtitle={testResult} hideCloseButton style={{ marginTop: 'var(--spacing-4)' }} /></div>}
+          {snapshotResult && <div ref={snapshotResultRef}><InlineNotification kind="info" title="Saved identity preview" subtitle={snapshotResult} hideCloseButton style={{ marginTop: 'var(--spacing-3)' }} /></div>}
+        </section>
+      </> : <>
       {!editing && <ProgressIndicator currentIndex={creationStep - 1} spaceEqually>
-        <ProgressStep label="External identity data" secondaryLabel="Provider and match rule" complete={creationStep > 1} />
-        <ProgressStep label="Group and access" secondaryLabel="Membership and scoped role" complete={creationStep > 2} />
-        <ProgressStep label="Review" secondaryLabel="Review all changes" />
+        <ProgressStep label="Identity" complete={creationStep > 1} />
+        <ProgressStep label="Access" complete={creationStep > 2} />
+        <ProgressStep label="Review" />
       </ProgressIndicator>}
-      <fieldset disabled={mappingViewOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      <div hidden={!editing && creationStep !== 1}><ComboBox id="identity-mapping-provider" titleText="Identity provider" items={providers} itemToString={(item) => item ? `${identityProviderName(item)} (${item.key})` : ''} selectedItem={providers.find((provider) => provider.key === form.providerKey) || null} onChange={({ selectedItem }) => set('providerKey', selectedItem?.key || '')} /></div>
-      <div hidden={!editing && creationStep !== 2}>
+      {!editing && <p className="eg-visually-hidden" aria-live="polite">Step {creationStep} of 3: {['Identity', 'Access', 'Review'][creationStep - 1]}</p>}
+      <fieldset className="eg-settings-workflow__fieldset" hidden={!editing && creationStep === 3}>
+      <div className="eg-settings-form-column" hidden={!editing && creationStep !== 1}><div className="eg-settings-step-introduction"><h3 id="identity-mapping-identity-step-heading" tabIndex={-1}>Identity</h3><p>Choose the provider data that grants membership.</p></div><ComboBox id="identity-mapping-provider" titleText="Identity provider" items={providers} itemToString={(item) => item ? `${identityProviderName(item)} (${item.key})` : ''} selectedItem={providers.find((provider) => provider.key === form.providerKey) || null} onChange={({ selectedItem }) => set('providerKey', selectedItem?.key || '')} /></div>
+      <div className="eg-settings-form-column" hidden={!editing && creationStep !== 2}>
+        {!editing && <div className="eg-settings-step-introduction"><h3 id="identity-mapping-access-step-heading" tabIndex={-1}>Access</h3><p>Choose the EnterpriseGlue group and optional scoped engine access.</p></div>}
         {!editing && <RadioButtonGroup
           name="identity-mapping-group-choice"
           legendText="EnterpriseGlue group"
@@ -339,7 +437,7 @@ export default function IdentityMappingsSettingsTab() {
           <TextInput id="identity-mapping-new-group-key" labelText="New group key" helperText="Stable lowercase key used by JSON configuration and automation." value={newGroupKey} onChange={(event) => setNewGroupKey(event.target.value)} />
         </div> : <ComboBox id="identity-mapping-group" titleText="Existing EnterpriseGlue group" items={groups} itemToString={(item) => item ? `${item.name} (${item.key})` : ''} selectedItem={groups.find((group) => group.key === form.targetGroupKey) || null} onChange={({ selectedItem }) => set('targetGroupKey', selectedItem?.key || '')} />}
       </div>
-      <div hidden={!editing && creationStep !== 1}><Select id="identity-mapping-type" labelText="External identity data type" value={form.entitlementType} onChange={(event) => set('entitlementType', event.target.value as EntitlementType)}><SelectItem value="group" text="Group" /><SelectItem value="role" text="Role" /><SelectItem value="attribute" text="Attribute" /><SelectItem value="authenticated" text="Authenticated identity" /></Select>
+      <div className="eg-settings-form-column" hidden={!editing && creationStep !== 1}><Select id="identity-mapping-type" labelText="External identity data type" value={form.entitlementType} onChange={(event) => set('entitlementType', event.target.value as EntitlementType)}><SelectItem value="group" text="Group" /><SelectItem value="role" text="Role" /><SelectItem value="attribute" text="Attribute" /><SelectItem value="authenticated" text="Authenticated identity" /></Select>
       <Select id="identity-mapping-operator" labelText="Match rule" value={form.matchOperator} onChange={(event) => set('matchOperator', event.target.value as MatchOperator)}><SelectItem value="exact" text="Equals this value" /><SelectItem value="contains" text="Contains this text" /><SelectItem value="exists" text="Any value of this type" /></Select>
       {form.matchOperator !== 'exact' && <InlineNotification kind="warning" title="Broad entitlement match" subtitle={form.matchOperator === 'contains' ? 'Contains matching can grant access from a partial display value. Prefer an exact immutable external ID and verify coverage before saving.' : 'Exists matching grants access for every entitlement of this type. Verify stored-identity coverage before saving.'} hideCloseButton style={{ marginTop: 'var(--spacing-3)' }} />}
       {form.matchOperator !== 'exists' && <TextInput id="identity-mapping-external-id" labelText="External group, role, or attribute value" value={form.externalId} onChange={(event) => set('externalId', event.target.value)} helperText="Use a stable group ID, role ID, or attribute value rather than a display name." />}
@@ -356,8 +454,37 @@ export default function IdentityMappingsSettingsTab() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}><Button kind="tertiary" size="sm" renderIcon={Checkmark} disabled={!form.providerKey || test.isPending} onClick={() => test.mutate(form)}>Preview with sample claims</Button><Button kind="tertiary" size="sm" disabled={!form.providerKey || previewSnapshots.isPending} onClick={() => previewSnapshots.mutate(form)}>Check saved identities</Button></div>
       {testResult && <div ref={testResultRef}><InlineNotification kind={testResult.startsWith('The sample matches') ? 'success' : 'info'} title="Sample sign-in claim preview" subtitle={testResult} hideCloseButton style={{ marginTop: 'var(--spacing-4)' }} /></div>}
       {snapshotResult && <div ref={snapshotResultRef}><InlineNotification kind="info" title="Saved identity preview" subtitle={snapshotResult} hideCloseButton style={{ marginTop: 'var(--spacing-3)' }} /></div>}</div>
-      {!editing && creationStep === 3 && <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}><InlineNotification kind="success" title="Ready to create" subtitle={atomicCreationCopy(createGroupInFlow, provisionAccessInFlow)} hideCloseButton /><dl aria-label="Identity mapping review" style={{ display: 'grid', gridTemplateColumns: 'minmax(10rem, 1fr) minmax(0, 2fr)', columnGap: 'var(--spacing-5)', rowGap: 'var(--spacing-3)', margin: 0, padding: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}>{mappingReviewItems.map(([label, value]) => <React.Fragment key={label}><dt style={{ color: 'var(--cds-text-secondary)' }}>{label}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{value}</dd></React.Fragment>)}</dl></div>}
+      {!editing && creationStep === 3 && <div className="eg-settings-form-column"><div className="eg-settings-step-introduction"><h3 id="identity-mapping-review-step-heading" tabIndex={-1}>Review</h3><p>Confirm the identity and access changes before creating the mapping.</p></div><InlineNotification kind="info" lowContrast title="Review before creating" subtitle={atomicCreationCopy(createGroupInFlow, provisionAccessInFlow)} hideCloseButton /><dl className="eg-settings-review-list" aria-label="Identity mapping review">{mappingReviewItems.map(([label, value]) => <React.Fragment key={label}><dt>{label}</dt><dd>{value}</dd></React.Fragment>)}</dl></div>}
+      </>}
       </div>
+      </div>
+      <div className="eg-settings-workflow__actions">
+        <Button kind="ghost" onClick={mappingViewOnly ? closeMappingWorkflow : unsavedChanges.requestExit}>{mappingViewOnly ? 'Close' : 'Cancel'}</Button>
+        {!editing && creationStep > 1 && <Button kind="secondary" onClick={() => setCreationStep((step) => step - 1)}>Back</Button>}
+        {!mappingViewOnly && <Button
+          kind="primary"
+          disabled={Boolean(!manage.allowed || save.isPending || (!editing && !creationStepValid) || (editing && ((createGroupInFlow && (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim())) || (provisionAccessInFlow && (!groupsManage.allowed || !rolesManage.allowed || !provisionRoleId || !provisionResourceId)))))}
+          onClick={() => {
+            if (!editing && creationStep < 3) {
+              setCreationStep((step) => step + 1);
+              return;
+            }
+            save.mutate(form);
+          }}
+        >{save.isPending ? 'Saving…' : editing ? 'Save' : creationStep < 3 ? 'Continue' : 'Create mapping'}</Button>}
+      </div>
+    </section>}
+    <Modal
+      open={unsavedChanges.confirmationOpen}
+      danger
+      modalHeading="Leave without saving?"
+      primaryButtonText="Leave"
+      secondaryButtonText="Keep editing"
+      selectorPrimaryFocus=".cds--btn--secondary"
+      onRequestClose={unsavedChanges.keepEditing}
+      onRequestSubmit={unsavedChanges.leaveWithoutSaving}
+    >
+      <p>Your identity mapping changes have not been saved. Leaving this page will discard them.</p>
     </Modal>
     <Modal open={Boolean(removeTarget)} danger modalHeading="Delete this identity mapping?" primaryButtonText="Delete mapping" secondaryButtonText="Cancel" onRequestClose={() => setRemoveTarget(null)} onRequestSubmit={() => removeTarget && remove.mutate(removeTarget.id)} primaryButtonDisabled={remove.isPending}>Memberships created only by this mapping will be removed immediately. Manual memberships and memberships from other providers will remain.</Modal>
     <Modal open={Boolean(accessTarget)} modalHeading="Grant engine access" primaryButtonText="Grant access" secondaryButtonText="Cancel" onRequestClose={() => setAccessTarget(null)} onRequestSubmit={() => grantEngineAccess.mutate()} primaryButtonDisabled={!rolesManage.allowed || !accessRoleId || !accessEngineId || grantEngineAccess.isPending}>

@@ -157,7 +157,7 @@ async function login(page: Page, email?: string, password?: string): Promise<voi
   const loginResponse = page.waitForResponse((response) =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/login',
   );
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   expect((await loginResponse).status()).toBe(200);
   await page.waitForURL(/\/t\/default(?:\/|$)/);
 }

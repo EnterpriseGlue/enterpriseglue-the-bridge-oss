@@ -336,8 +336,7 @@ body {
 html,
 body,
 #root,
-.cds--content,
-* {
+.cds--content {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
 }
@@ -345,8 +344,7 @@ body,
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 #root::-webkit-scrollbar,
-.cds--content::-webkit-scrollbar,
-*::-webkit-scrollbar {
+.cds--content::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 

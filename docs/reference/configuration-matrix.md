@@ -112,7 +112,7 @@ in `engine-tenant-mappings.json`. See
 | EG_LDAP_GROUP_SEARCH_RESULT_LIMIT | No | 5000 | Hard returned/unique-group budget per identity; maximum 10000 |
 | CAMUNDA_USERNAME | No | Camunda auth |
 | CAMUNDA_PASSWORD | No | Camunda auth |
-| Identity provider credentials | Platform Settings | Configure OIDC, SAML, or LDAP providers as `IdentityProvider` records with secret references; set the production endpoint allowlist separately; legacy `MICROSOFT_*` and `GOOGLE_*` environment variables are unsupported. SCIM and Microsoft Graph scheduled reconciliation are deferred. |
+| Identity provider and provisioning credentials | Platform settings | Configure OIDC, SAML, or LDAP providers as `IdentityProvider` records with secret references; configure independent SCIM 2.0 directories as `IdentityProvisioningDirectory` records with a reveal-once credential or a configuration-bundle secret reference; set the production endpoint allowlist separately. Legacy `MICROSOFT_*` and `GOOGLE_*` environment variables are unsupported. Background OIDC/SAML lifecycle is provider-push through SCIM rather than a vendor-specific Microsoft Graph polling job. |
 | RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS | No | disabled | Positive milliseconds for scheduled runtime inventory refresh of active resource-aware engines |
 | RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS | No | global | Comma-separated tenant ids; use `global`/`null` for the OSS/default tenant |
 | RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START | No | false | Run a reconciliation pass after backend startup |
@@ -133,7 +133,9 @@ via dedicated backend environment variables.
 Provider-neutral SSO callbacks are global:
 
 - OIDC (including Microsoft Entra ID): `/api/auth/identity/callback`
+- OIDC back-channel logout: `/api/auth/providers/{providerId}/oidc/backchannel-logout`
 - SAML ACS / Reply URL: `/api/auth/providers/saml/callback`
+- SAML single logout: `/api/auth/identity/{providerKey}/saml/logout`
 
 Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 `RelayState`; do not register `/api/t/:tenantSlug/...` callback URLs with Entra.

@@ -10,6 +10,11 @@ import {
   HeaderNavigation,
   HeaderMenu,
   HeaderMenuItem,
+  SideNav,
+  SideNavItems,
+  SideNavMenu,
+  SideNavMenuItem,
+  SkipToContent,
   Theme,
   Modal,
   Button,
@@ -166,7 +171,9 @@ export default function LayoutWithProSidebar() {
   const navigate = useNavigate()
   const { logout, user, permissions, refreshUser } = useAuth()
   const queryClient = useQueryClient()
-  const { sidebarOpen, setSidebarOpen, sidebarCollapsed, setSidebarCollapsed, toggleSidebarCollapsed } = useLayoutStore()
+  const { sidebarCollapsed, setSidebarCollapsed } = useLayoutStore()
+  const [globalNavigationOpen, setGlobalNavigationOpen] = useState(false)
+  const previousPathnameRef = React.useRef(pathname)
 
   const [cachedBranding] = useState(() => readCachedBranding())
 
@@ -278,7 +285,7 @@ export default function LayoutWithProSidebar() {
       ],
     },
     {
-      label: 'Platform Settings',
+      label: 'Platform settings',
       path: '/admin/settings',
       visible: platformSettingsHubVisible,
       actionIds: [
@@ -536,7 +543,6 @@ export default function LayoutWithProSidebar() {
   const titleFontWeight = brandingQuery.data?.titleFontWeight ?? '600'
   const titleFontSize = brandingQuery.data?.titleFontSize ?? 14
   const titleVerticalOffset = brandingQuery.data?.titleVerticalOffset ?? 0
-  const brandingLoading = brandingQuery.isLoading && !brandingQuery.data
 
   // Generate unique font family name for custom font
   const customFontFamily = titleFontUrl ? 'CustomBrandingFont' : undefined
@@ -643,19 +649,45 @@ export default function LayoutWithProSidebar() {
   }
 
   React.useEffect(() => {
-    if (!sidebarOpen) return
-    if (inMissionControl) return
+    if (!globalNavigationOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Only collapse if expanded, don't expand if already collapsed
-        if (!sidebarCollapsed) {
-          setSidebarCollapsed(true)
-        }
+        setGlobalNavigationOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sidebarOpen, sidebarCollapsed, setSidebarCollapsed, inMissionControl])
+  }, [globalNavigationOpen])
+
+  React.useEffect(() => {
+    setGlobalNavigationOpen(false)
+    if (previousPathnameRef.current === pathname) return
+    previousPathnameRef.current = pathname
+    const focusPageHeading = () => {
+      const pageHeading = document.querySelector<HTMLElement>('#main-content h1')
+      if (!pageHeading) return false
+      if (!pageHeading.hasAttribute('tabindex')) pageHeading.setAttribute('tabindex', '-1')
+      pageHeading.focus({ preventScroll: true })
+      return true
+    }
+    let observer: MutationObserver | null = null
+    let observerTimeout: number | undefined
+    const animationFrame = window.requestAnimationFrame(() => {
+      if (focusPageHeading()) return
+      const mainContent = document.getElementById('main-content')
+      if (!mainContent) return
+      observer = new MutationObserver(() => {
+        if (focusPageHeading()) observer?.disconnect()
+      })
+      observer.observe(mainContent, { childList: true, subtree: true })
+      observerTimeout = window.setTimeout(() => observer?.disconnect(), 3000)
+    })
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      observer?.disconnect()
+      if (observerTimeout !== undefined) window.clearTimeout(observerTimeout)
+    }
+  }, [pathname])
 
   React.useEffect(() => {
     if (!inMissionControl) return
@@ -732,32 +764,35 @@ export default function LayoutWithProSidebar() {
         </div>
       </Modal>
       {/* Entire app shell uses g100 dark theme - header menus inherit this */}
-      <Header aria-label="Voyager">
-              {!inMissionControl && (
-                <HeaderMenuButton
-                  aria-label="Toggle sidebar"
-                  onClick={toggleSidebarCollapsed}
-                  isActive={!sidebarCollapsed}
-                />
-              )}
+      <Header aria-label={`${effectiveBrandTitle} application header`}>
+              <SkipToContent href="#main-content">Skip to main content</SkipToContent>
+              <HeaderMenuButton
+                aria-label={globalNavigationOpen ? 'Close global navigation' : 'Open global navigation'}
+                aria-controls="enterpriseglue-global-navigation"
+                aria-expanded={globalNavigationOpen}
+                onClick={() => setGlobalNavigationOpen((open) => !open)}
+                isActive={globalNavigationOpen}
+              />
               <HeaderName href={toTenantPath('/')} prefix="">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
                   {safeCustomLogoSrc ? (
                     <img
                       src={safeCustomLogoSrc}
-                      alt={customLogoTitle || 'Logo'}
+                      alt=""
+                      aria-hidden="true"
                       style={{ height: `${scaledLogoHeight}px`, width: 'auto', objectFit: 'contain' }}
                     />
                   ) : (
                     <img
                       src={logoPng}
-                      alt="EnterpriseGlue Logo"
+                      alt=""
+                      aria-hidden="true"
                       className="default-logo"
-                      style={{ height: `${scaledLogoHeight}px`, width: 'auto', visibility: brandingLoading ? 'hidden' : 'visible' }}
+                      style={{ height: `${scaledLogoHeight}px`, width: 'auto' }}
                     />
                   )}
-                  {(customLogoTitle || (!safeCustomLogoSrc && !brandingLoading)) && (
-                    <span style={{
+                  {(customLogoTitle || !safeCustomLogoSrc) && (
+                    <span className="eg-header-brand-title" style={{
                       fontFamily: customFontFamily ? `'${customFontFamily}', sans-serif` : 'inherit',
                       fontSize: `${titleFontSize}px`,
                       fontWeight: titleFontWeight,
@@ -879,6 +914,76 @@ export default function LayoutWithProSidebar() {
                   </HeaderMenu>
                 )}
               </HeaderNavigation>
+              <SideNav
+                id="enterpriseglue-global-navigation"
+                className="eg-responsive-global-navigation"
+                aria-label="Global navigation"
+                expanded={globalNavigationOpen}
+                isChildOfHeader
+                onOverlayClick={() => setGlobalNavigationOpen(false)}
+              >
+                <SideNavItems>
+                  {showVoyagerMenu && (
+                    <SideNavMenu title="Voyager" defaultExpanded isActive={effectivePathname.startsWith('/starbase') || effectivePathname.startsWith('/mission-control') || effectivePathname.startsWith('/engines')}>
+                      {showStarbaseMenu && <SideNavMenuItem
+                        href={toTenantPath('/starbase')}
+                        isActive={effectivePathname.startsWith('/starbase')}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath('/starbase')) }}
+                      >Starbase</SideNavMenuItem>}
+                      {showMissionControlMenu && <SideNavMenuItem
+                        href={toTenantPath('/mission-control/processes')}
+                        isActive={effectivePathname.startsWith('/mission-control')}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath('/mission-control/processes')) }}
+                      >Mission Control</SideNavMenuItem>}
+                      {showEnginesMenu && <SideNavMenuItem
+                        href={toTenantPath('/engines')}
+                        isActive={effectivePathname.startsWith('/engines')}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath('/engines')) }}
+                      >Engines</SideNavMenuItem>}
+                    </SideNavMenu>
+                  )}
+                  {visibleEnterpriseNavItems.length > 0 && (
+                    <SideNavMenu title="Enterprise" defaultExpanded={visibleEnterpriseNavItems.some((item) => effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`))} isActive={visibleEnterpriseNavItems.some((item) => effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`))}>
+                      {visibleEnterpriseNavItems.map((item) => <SideNavMenuItem
+                        key={`mobile:${item.path}:${item.label}`}
+                        href={toTenantPath(item.path)}
+                        isActive={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath(item.path)) }}
+                      >{item.label}</SideNavMenuItem>)}
+                    </SideNavMenu>
+                  )}
+                  {!isMultiTenant && platformAdminMenuVisible && adminNavItems.length > 0 && (
+                    <SideNavMenu title="Admin" defaultExpanded={effectivePathname.startsWith('/admin/')} isActive={effectivePathname.startsWith('/admin/')}>
+                      {adminNavItems.map((item) => <SideNavMenuItem
+                        key={`mobile:${item.path}`}
+                        href={toTenantPath(item.path)}
+                        isActive={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath(item.path)) }}
+                      >{item.label}</SideNavMenuItem>)}
+                    </SideNavMenu>
+                  )}
+                  {isMultiTenant && !platformAdminMenuVisible && tenantAdminChecked && isTenantAdmin && tenantAdminExtensionNavItems.length > 0 && (
+                    <SideNavMenu title="Admin" defaultExpanded={effectivePathname.startsWith('/admin/')} isActive={effectivePathname.startsWith('/admin/')}>
+                      {tenantAdminExtensionNavItems.map((item) => <SideNavMenuItem
+                        key={`mobile:${item.id}`}
+                        href={toTenantPath(item.path)}
+                        isActive={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath(item.path)) }}
+                      >{item.label}</SideNavMenuItem>)}
+                    </SideNavMenu>
+                  )}
+                  {isMultiTenant && platformAdminMenuVisible && platformAdminExtensionNavItems.length > 0 && (
+                    <SideNavMenu title="Admin" defaultExpanded={effectivePathname.startsWith('/admin/')} isActive={effectivePathname.startsWith('/admin/')}>
+                      {platformAdminExtensionNavItems.map((item) => <SideNavMenuItem
+                        key={`mobile:${item.id}`}
+                        href={toTenantPath(item.path)}
+                        isActive={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath(item.path)) }}
+                      >{item.label}</SideNavMenuItem>)}
+                    </SideNavMenu>
+                  )}
+                </SideNavItems>
+              </SideNav>
               <HeaderGlobalBar>
                 <HeaderGlobalAction
                   aria-label="Notifications"
@@ -1075,7 +1180,7 @@ export default function LayoutWithProSidebar() {
 
         {/* Page content - g10 light theme for pages */}
         <Theme theme="g10" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <main style={{
+          <main id="main-content" tabIndex={-1} style={{
             flex: 1,
             minWidth: 0,
             overflow: 'auto',

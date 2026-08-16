@@ -151,6 +151,45 @@ export function validateIdentityProviderCallbackUrl(raw: string, protocol: 'oidc
   return parsed;
 }
 
+/** OIDC post-logout navigation is constrained to the canonical local login page. */
+export function validateIdentityProviderLogoutRedirectUrl(raw: string): URL {
+  const label = 'OIDC postLogoutRedirectUrl';
+  let parsed: URL;
+  try { parsed = new URL(raw); } catch { throw new Error(`${label} must be a valid URL`); }
+  const frontend = new URL(config.frontendUrl);
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error(`${label} must not include credentials, query parameters, or a fragment`);
+  }
+  if (parsed.origin !== frontend.origin || parsed.pathname !== '/login') {
+    throw new Error(`${label} must be the canonical ${frontend.origin}/login endpoint`);
+  }
+  if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    throw new Error(`${label} must use HTTPS in production`);
+  }
+  return parsed;
+}
+
+/** SAML SLO callbacks stay on the provider-addressed local authentication route. */
+export function validateIdentityProviderSamlLogoutCallbackUrl(raw: string): URL {
+  const label = 'SAML logoutCallbackUrl';
+  let parsed: URL;
+  try { parsed = new URL(raw); } catch { throw new Error(`${label} must be a valid URL`); }
+  const frontend = new URL(config.frontendUrl);
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error(`${label} must not include credentials, query parameters, or a fragment`);
+  }
+  if (parsed.origin !== frontend.origin || !/^\/api\/auth\/identity\/[A-Za-z0-9._-]{1,160}\/saml\/logout$/.test(parsed.pathname)) {
+    throw new Error(`${label} must use the canonical ${frontend.origin}/api/auth/identity/{providerKey}/saml/logout endpoint`);
+  }
+  if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    throw new Error(`${label} must use HTTPS in production`);
+  }
+  if (parsed.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && frontend.protocol === 'http:' && parsed.protocol === 'http:')) {
+    throw new Error(`${label} protocol must match the configured EnterpriseGlue frontend`);
+  }
+  return parsed;
+}
+
 export async function readBoundedIdentityProviderResponse(
   response: Response,
   label: string,

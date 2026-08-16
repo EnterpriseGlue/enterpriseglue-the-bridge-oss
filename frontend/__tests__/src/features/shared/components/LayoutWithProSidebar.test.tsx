@@ -171,10 +171,25 @@ describe('LayoutWithProSidebar', () => {
     expect(typeof LayoutWithProSidebar).toBe('function');
   });
 
+  it('exposes semantic header, skip link, responsive navigation trigger, and main focus target', async () => {
+    renderLayout();
+
+    expect(screen.getByRole('banner', { name: 'EnterpriseGlue application header' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main-content');
+    expect(screen.getByRole('button', { name: 'Open global navigation' })).toHaveAttribute('aria-controls', 'enterpriseglue-global-navigation');
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content'));
+  });
+
+  it('does not render an empty Enterprise navigation group in OSS', async () => {
+    renderLayout();
+
+    await waitFor(() => expect(screen.queryByText('Enterprise')).toBeNull());
+  });
+
   it('shows the Engines nav item when the user can create engines', async () => {
     renderLayout();
 
-    expect(await screen.findByText('Engines')).toBeInTheDocument();
+    expect((await screen.findAllByText('Engines')).length).toBeGreaterThan(0);
   });
 
   it('shows the Starbase nav item when the user can create projects', async () => {
@@ -188,7 +203,7 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Starbase')).toBeInTheDocument();
+    expect((await screen.findAllByText('Starbase')).length).toBeGreaterThan(0);
   });
 
   it('shows the Starbase nav item when the user has project-scoped access', async () => {
@@ -202,7 +217,7 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Starbase')).toBeInTheDocument();
+    expect((await screen.findAllByText('Starbase')).length).toBeGreaterThan(0);
   });
 
   it('shows the Mission Control nav item when the user has runtime engine read access', async () => {
@@ -216,7 +231,7 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Mission Control')).toBeInTheDocument();
+    expect((await screen.findAllByText('Mission Control')).length).toBeGreaterThan(0);
   });
 
   it('links the Mission Control top nav item directly to Processes', async () => {
@@ -230,8 +245,8 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    const missionControlLink = await screen.findByText('Mission Control');
-    expect(missionControlLink.closest('a')).toHaveAttribute('href', '/mission-control/processes');
+    const missionControlLinks = await screen.findAllByText('Mission Control');
+    expect(missionControlLinks.every((item) => item.closest('a')?.getAttribute('href') === '/mission-control/processes')).toBe(true);
   });
 
   it('hides the Engines nav item when the user has no engine UI access', async () => {
@@ -263,9 +278,9 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('User Management')).toBeInTheDocument();
-    expect(screen.queryByText('Platform Settings')).toBeNull();
+    expect((await screen.findAllByText('Admin')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('User Management').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Platform settings')).toBeNull();
     expect(screen.queryByText('Access Control')).toBeNull();
     expect(screen.queryByText('Authorization Audit')).toBeNull();
   });
@@ -281,9 +296,9 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('User Management')).toBeInTheDocument();
-    expect(screen.queryByText('Platform Settings')).toBeNull();
+    expect((await screen.findAllByText('Admin')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('User Management').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Platform settings')).toBeNull();
     expect(screen.queryByText('Access Control')).toBeNull();
   });
 
@@ -298,8 +313,8 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('Platform Settings')).toBeInTheDocument();
+    expect((await screen.findAllByText('Admin')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Platform settings').length).toBeGreaterThan(0);
     expect(screen.queryByText('Access Control')).toBeNull();
     expect(screen.queryByText('User Management')).toBeNull();
     expect(screen.queryByText('Authorization Policies')).toBeNull();
@@ -320,8 +335,8 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('Platform Settings')).toBeInTheDocument();
+    expect((await screen.findAllByText('Admin')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Platform settings').length).toBeGreaterThan(0);
     expect(screen.queryByText('Git Settings')).toBeNull();
     expect(screen.queryByText('Engine Settings')).toBeNull();
     expect(screen.queryByText('SSO Settings')).toBeNull();
@@ -340,8 +355,8 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('Platform Settings')).toBeInTheDocument();
+    expect((await screen.findAllByText('Admin')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Platform settings').length).toBeGreaterThan(0);
     expect(screen.queryByText('Authorization Audit')).toBeNull();
     expect(screen.queryByText('System Audit Logs')).toBeNull();
     expect(screen.queryByText('User Management')).toBeNull();
@@ -383,9 +398,9 @@ describe('LayoutWithProSidebar', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Enterprise')).toBeInTheDocument();
-    expect(screen.getByText('Audit Extension')).toBeInTheDocument();
-    expect(screen.getByText('Public Extension')).toBeInTheDocument();
+    expect((await screen.findAllByText('Enterprise')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Audit Extension').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Public Extension').length).toBeGreaterThan(0);
     expect(screen.queryByText('Users Extension')).toBeNull();
     expect(screen.queryByText('Tenant Extension')).toBeNull();
   });

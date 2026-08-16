@@ -186,7 +186,7 @@ export function EngineSetsPanel({
       {materializeSummary && (
         <InlineNotification kind="info" title="Matching engines refreshed" subtitle={materializeSummary} lowContrast />
       )}
-      <TableContainer>
+      <TableContainer className="eg-admin-data-table">
         <DataTable
           rows={engineSets.map((engineSet) => ({
             id: engineSet.id,
@@ -275,7 +275,7 @@ export function EngineSetsPanel({
         <DataTableSkeleton headers={engineSetMaterializationHeaders} rowCount={3} />
       ) : selectedEngineSet ? (
         <>
-          <TableContainer title={`${selectedEngineSetLabel} matching engines`}>
+          <TableContainer className="eg-admin-data-table" title={`${selectedEngineSetLabel} matching engines`}>
             <DataTable
               rows={selectedEngineSetMaterializations.map((materialization) => ({
                 id: materialization.id,
@@ -317,7 +317,7 @@ export function EngineSetsPanel({
             assignmentLoading ? (
               <DataTableSkeleton headers={engineSetAssignmentUsageHeaders} rowCount={3} />
             ) : (
-              <TableContainer title={`${selectedEngineSetLabel} assignment usage`}>
+              <TableContainer className="eg-admin-data-table" title={`${selectedEngineSetLabel} assignment usage`}>
                 <DataTable
                   rows={selectedAssignments.map((assignment) => ({
                     id: assignment.id,
@@ -366,7 +366,7 @@ export function EngineSetsPanel({
             auditLoading ? (
               <DataTableSkeleton headers={engineSetAuditPreviewHeaders} rowCount={3} />
             ) : (
-              <TableContainer title={`${selectedEngineSetLabel} authorization audit`}>
+              <TableContainer className="eg-admin-data-table" title={`${selectedEngineSetLabel} authorization audit`}>
                 <DataTable
                   rows={auditEntries.map((entry) => ({
                     id: entry.id,

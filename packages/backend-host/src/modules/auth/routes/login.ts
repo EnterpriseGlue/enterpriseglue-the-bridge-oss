@@ -209,6 +209,8 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
         userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
         ipAddress: req.ip,
         administratorRecovery: true,
+        authenticationMethod: 'recovery',
+        mfaVerified: false,
         store: manager,
       });
     }
@@ -243,6 +245,8 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
   session ||= await authSessionService.issue(user, {
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
+    authenticationMethod: 'local',
+    mfaVerified: false,
   });
 
   // Check email verification status

@@ -34,6 +34,12 @@ describe('useAuthzApi', () => {
     expect(authzQueryKeys.apiClients).toEqual(['platform-admin', 'authz', 'api-clients']);
     expect(authzQueryKeys.externalEngines).toEqual(['platform-admin', 'authz', 'external-engines']);
     expect(authzQueryKeys.externalEngineAudit('engine-1')).toEqual(['platform-admin', 'authz', 'external-engines', 'engine-1', 'audit', undefined]);
+    expect(authzQueryKeys.engineSets()).toEqual(['platform-admin', 'authz', 'engine-sets', undefined]);
+    expect(authzQueryKeys.engineSet()).toEqual(['platform-admin', 'authz', 'engine-sets', 'detail', undefined]);
+    expect(authzQueryKeys.engineSet()).not.toEqual(authzQueryKeys.engineSets());
+    expect(authzQueryKeys.projectEngineTargets()).toEqual(['platform-admin', 'authz', 'project-engine-targets', undefined]);
+    expect(authzQueryKeys.projectEngineTarget()).toEqual(['platform-admin', 'authz', 'project-engine-targets', 'detail', undefined]);
+    expect(authzQueryKeys.projectEngineTarget()).not.toEqual(authzQueryKeys.projectEngineTargets());
     expect(authzQueryKeys.policies).toEqual(['platform-admin', 'authz', 'policies']);
     expect(authzQueryKeys.auditLog({})).toEqual(['platform-admin', 'authz', 'audit', {}]);
   });

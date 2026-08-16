@@ -267,7 +267,7 @@ export const authzQueryKeys = {
   externalEngines: ['platform-admin', 'authz', 'external-engines'] as const,
   externalEngineAudit: (id?: string, params?: ExternalEngineAuditParams) => ['platform-admin', 'authz', 'external-engines', id, 'audit', params] as const,
   engineSets: (params?: Record<string, any>) => ['platform-admin', 'authz', 'engine-sets', params] as const,
-  engineSet: (id?: string) => ['platform-admin', 'authz', 'engine-sets', id] as const,
+  engineSet: (id?: string) => ['platform-admin', 'authz', 'engine-sets', 'detail', id] as const,
   runtimeResources: (engineId?: string, options?: { resourceKind?: RuntimeResourceKind; includeInactive?: boolean }) => ['platform-admin', 'authz', 'runtime-resources', engineId, options] as const,
   runtimeResourceSets: (engineId?: string, options?: { includeArchived?: boolean }) => ['platform-admin', 'authz', 'runtime-resource-sets', engineId, options] as const,
   configBundleRuns: (limit = 25) => ['platform-admin', 'authz', 'config-bundles', 'runs', limit] as const,
@@ -277,7 +277,7 @@ export const authzQueryKeys = {
   governanceOwnership: ['platform-admin', 'authz', 'config-bundles', 'governance-ownership'] as const,
   governanceOwnershipReceipts: (limit = 25) => ['platform-admin', 'authz', 'config-bundles', 'governance-ownership', 'receipts', limit] as const,
   projectEngineTargets: (params?: Record<string, any>) => ['platform-admin', 'authz', 'project-engine-targets', params] as const,
-  projectEngineTarget: (id?: string) => ['platform-admin', 'authz', 'project-engine-targets', id] as const,
+  projectEngineTarget: (id?: string) => ['platform-admin', 'authz', 'project-engine-targets', 'detail', id] as const,
   policies: ['platform-admin', 'authz', 'policies'] as const,
   auditLog: (params?: Record<string, any>) => ['platform-admin', 'authz', 'audit', params] as const,
 };
@@ -1002,6 +1002,7 @@ export function useCheckPermission() {
 export function useAuthzAuditLog(params?: SharedAuthzAuditQuery, options?: { enabled?: boolean }) {
   const searchParams = new URLSearchParams();
   if (params?.userId) searchParams.set('userId', params.userId);
+  if (params?.action) searchParams.set('action', params.action);
   if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
   if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
   if (params?.decision) searchParams.set('decision', params.decision);

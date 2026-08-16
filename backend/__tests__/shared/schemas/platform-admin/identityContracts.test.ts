@@ -136,17 +136,21 @@ describe('provider-neutral identity shared contracts', () => {
 
   it('shares policy writes without route-local persistence fields', () => {
     expect(AuthzPolicyCreateSchema.parse({
-      name: 'Deny risky production action', effect: 'deny', action: 'engine.deploy.execute', conditions: { environment: 'production' },
+      name: 'Deny risky production action', effect: 'deny', action: 'engine.deploy.execute',
+      conditions: { resourceAttribute: { key: 'environment', operator: 'eq', value: 'production' } },
     }).effect).toBe('deny');
+    expect(() => AuthzPolicyCreateSchema.parse({
+      name: 'Legacy untyped condition', effect: 'allow', conditions: { environment: 'production' },
+    })).toThrow();
     expect(AuthzPolicyUpdateSchema.parse({ priority: 10, isActive: false })).toMatchObject({ priority: 10, isActive: false });
     expect(() => AuthzPolicyCreateSchema.parse({ name: 'bad', effect: 'allow', priority: -1 })).toThrow();
   });
 
   it('shares machine-principal write contracts with the route and OpenAPI', () => {
     expect(ApiClientCreateSchema.parse({
-      name: 'Engine registration',
-      scopes: ['engine:register'],
-    })).toMatchObject({ scopes: ['engine:register'] });
+      name: 'Identity provisioning',
+      scopes: ['identity:provisioning:manage'],
+    })).toMatchObject({ scopes: ['identity:provisioning:manage'] });
     expect(ServiceAccountCreateSchema.parse({
       name: 'Release service',
       description: 'Release automation',
@@ -204,9 +208,9 @@ describe('provider-neutral identity shared contracts', () => {
   it('keeps the public policy response aligned with the service view', () => {
     expect(AuthzPolicyResponseSchema.parse({
       id: 'policy-1', tenantId: null, name: 'Deny risky production action', effect: 'deny', priority: 10,
-      conditions: { environment: 'production' }, isActive: true,
+      conditions: { resourceAttribute: { key: 'environment', operator: 'eq', value: 'production' } }, isActive: true,
       configKey: null, sourceRef: null, ownershipMode: 'manual', driftStatus: null,
-    }).conditions).toEqual({ environment: 'production' });
+    }).conditions).toEqual({ resourceAttribute: { key: 'environment', operator: 'eq', value: 'production' } });
     expect(() => AuthzPolicyResponseSchema.parse({
       id: 'policy-1', tenantId: null, name: 'Deny', effect: 'deny', priority: 10, conditions: {}, isActive: true, createdAt: 1,
     })).toThrow();

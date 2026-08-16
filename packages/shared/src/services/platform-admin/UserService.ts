@@ -27,6 +27,7 @@ import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandle
 import { authzGroupService } from './AuthzGroupService.js';
 import { getActivePlatformAdministratorUserIds } from './PlatformAdministratorMembershipService.js';
 import { IsNull } from 'typeorm';
+import type { PlatformUserResponse } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 
 export interface CreateUserInput {
   email: string;
@@ -43,24 +44,7 @@ export interface UpdateUserInput {
   isActive?: boolean;
 }
 
-export interface UserDTO {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  platformRole: string;
-  authProvider: string;
-  isActive: boolean;
-  isEmailVerified: boolean;
-  mustResetPassword: boolean;
-  adminStatus: AdminUserStatus;
-  createdAt: number;
-  updatedAt: number;
-  lastLoginAt: number | null;
-  createdByUserId: string | null;
-  failedLoginAttempts?: number;
-  lockedUntil?: number | null;
-}
+export type UserDTO = PlatformUserResponse;
 
 export interface CreateUserResult {
   user: UserDTO;
@@ -333,6 +317,7 @@ export class UserService {
     await dataSource.transaction(async (manager) => {
       await manager.getRepository(User).update({ id }, {
         isActive: false,
+        authSessionVersion: Number(existing.authSessionVersion || 0) + 1,
         updatedAt: now,
       });
       await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, id);

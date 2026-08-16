@@ -50,9 +50,9 @@ describe('PasswordResetWithToken', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => expect(screen.getByLabelText(/new password/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('New password', { exact: true })).toBeInTheDocument());
 
-    await user.type(screen.getByLabelText(/new password/i), 'Password123!');
+    await user.type(screen.getByLabelText('New password', { exact: true }), 'Password123!');
     await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
     await user.click(screen.getByRole('button', { name: /update password/i }));
 

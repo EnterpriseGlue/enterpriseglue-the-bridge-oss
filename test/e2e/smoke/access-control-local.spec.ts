@@ -42,20 +42,20 @@ test.describe('Smoke: local Access Control authorization', () => {
 
     await page.goto('/login?local=1');
     await enterLocalCredentials(page, email, password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
     await page.goto('/t/default/admin/access-control');
     await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Assignments', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Runtime Resources', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Roles', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('link', { name: 'Assignments', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Runtime Resources', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Roles', exact: true })).toHaveAttribute('aria-current', 'page');
 
-    await page.getByRole('tab', { name: 'Runtime Resources', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Runtime resources' })).toBeVisible();
+    await page.getByRole('link', { name: 'Runtime Resources', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Runtime Resources', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Engine' })).toBeVisible();
 
-    await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
+    await page.getByRole('link', { name: 'Effective Access', exact: true }).click();
     const panel = page.getByRole('tabpanel', { name: 'Effective Access' });
     const unnamedVisibleControls = await panel.locator('input, button, [role="combobox"]').evaluateAll((elements) => elements
       .filter((element) => (element as HTMLElement).offsetParent !== null)
@@ -95,10 +95,10 @@ test.describe('Smoke: local Access Control authorization', () => {
 
     await page.goto('/login?local=1');
     await enterLocalCredentials(page, email, password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
     await page.goto('/t/default/admin/access-control');
-    await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
+    await page.getByRole('link', { name: 'Effective Access', exact: true }).click();
     const panel = page.getByRole('tabpanel', { name: 'Effective Access' });
     await expect(panel).toBeVisible();
 

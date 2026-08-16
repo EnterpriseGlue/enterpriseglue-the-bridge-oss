@@ -312,8 +312,11 @@ function getExternalRegistrationUrlError(raw: string): string | null {
 }
 
 const baseUrlSchema = z.string().min(1).url().refine(
-  (url) => config.nodeEnv !== 'production' || url.startsWith('https://') || isLocalOrPrivate(url),
-  { message: 'Engine base URL must use HTTPS in production (HTTP allowed for localhost/private networks)' }
+  (url) => config.nodeEnv !== 'production'
+    || url.startsWith('https://')
+    || isLocalOrPrivate(url)
+    || process.env.EG_ALLOW_INSECURE_ENGINE_HTTP === 'true',
+  { message: 'Engine base URL must use HTTPS in production unless insecure HTTP is explicitly enabled for a reviewed endpoint' }
 )
 
 const externalRegistrationUrlSchema = baseUrlSchema.superRefine((url, ctx) => {

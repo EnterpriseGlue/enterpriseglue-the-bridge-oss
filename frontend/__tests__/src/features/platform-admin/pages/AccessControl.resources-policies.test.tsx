@@ -73,7 +73,7 @@ describe('AccessControl resources and policies', () => {
   it('renders By Principal access chains including inherited group assignments', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /By Principal/i }));
+    fireEvent.click(screen.getByRole('link', { name: /By Principal/i }));
 
     expect(screen.getByText('Principals')).toBeInTheDocument();
     expect(screen.getAllByText('Engine registration').length).toBeGreaterThan(0);
@@ -97,9 +97,9 @@ describe('AccessControl resources and policies', () => {
   it('renders By Resource access chains and related project targets', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /By Resource/i }));
+    fireEvent.click(screen.getByRole('link', { name: /By Resource/i }));
 
-    expect(screen.getByText('Resources')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Resources' })).toBeInTheDocument();
     expect(screen.getAllByText('External Engine').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /View resource External Engine/i }));
@@ -117,7 +117,7 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getByText(/Matches selected Engine resource type/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Open audit event authz.sso_assignment.create/i }));
-    expect(screen.getByRole('tab', { name: /^Audit$/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: /^Audit$/i })).toHaveAttribute('aria-current', 'page');
     expect(document.getElementById('authz-audit-resource-type-filter')).toHaveValue('role_assignment');
     expect(document.getElementById('authz-audit-resource-id-filter')).toHaveValue('assignment-sso-1');
   }, 60000);
@@ -125,7 +125,7 @@ describe('AccessControl resources and policies', () => {
   it('renders authorization audit events with filters', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Audit$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Audit$/i }));
 
     expect(screen.getByText('platform.authz.roles.read')).toBeInTheDocument();
     expect(screen.getByText('engine.instances.mutate')).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('AccessControl resources and policies', () => {
   it('renders Engine Sets with materialization lineage and management actions', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Engine sets$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Engine sets$/i }));
 
     expect(screen.getAllByText('Production Engines').length).toBeGreaterThan(0);
     expect(screen.getByText('Labels (all): environment=prod')).toBeInTheDocument();
@@ -174,12 +174,12 @@ describe('AccessControl resources and policies', () => {
   it('requires acknowledgement before creating broad Engine Sets', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Engine sets$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Engine sets$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Create engine set/i }));
     expect(screen.getByText('Enter one or more engine IDs, separated by commas.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Engine set name'), { target: { value: 'All Engines' } });
 
-    const engineSetModal = screen.getByRole('heading', { name: /^Create engine set$/i }).closest('.cds--modal-container') as HTMLElement;
+    const engineSetModal = screen.getByRole('heading', { name: /^Create engine set$/i }).closest('.eg-access-control-workflow') as HTMLElement;
     fireEvent.click(within(engineSetModal).getByRole('combobox', { name: /Selector/i }));
     const allEnginesOption = screen.getAllByText('All engines')
       .find((element) => element.classList.contains('cds--list-box__menu-item__option')) as HTMLElement;
@@ -205,7 +205,7 @@ describe('AccessControl resources and policies', () => {
   it('renders project-engine targets with manage, sync, and eligibility actions', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Project Targets$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Project Targets$/i }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Advanced integration status' }));
     const projectTargets = screen;
@@ -254,7 +254,7 @@ describe('AccessControl resources and policies', () => {
   it('creates manual project-engine targets from Access Control', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Project Targets$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Project Targets$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Create Target/i }));
 
     fireEvent.click(document.getElementById('project-target-project')!);
@@ -266,7 +266,7 @@ describe('AccessControl resources and policies', () => {
     fireEvent.change(document.getElementById('project-target-external-project-id')!, { target: { value: 'cmdb-project-new' } });
     fireEvent.change(document.getElementById('project-target-policy-tags')!, { target: { value: 'prod, sox' } });
 
-    const projectTargetModal = screen.getByRole('heading', { name: /^Create Project Target$/i }).closest('.cds--modal-container') as HTMLElement;
+    const projectTargetModal = screen.getByRole('heading', { name: /^Create Project Target$/i }).closest('.eg-access-control-workflow') as HTMLElement;
     const createButton = within(projectTargetModal).getByRole('button', { name: /^Create$/i });
     expect(createButton).toBeDefined();
     await act(async () => fireEvent.click(createButton!));
@@ -285,7 +285,7 @@ describe('AccessControl resources and policies', () => {
   it('renders authorization policies with manage actions', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Policies$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Policies$/i }));
 
     expect(screen.getByText('Block production deploys outside hours')).toBeInTheDocument();
     expect(screen.getAllByText('engine:deploy').length).toBeGreaterThan(0);
@@ -306,7 +306,7 @@ describe('AccessControl resources and policies', () => {
   it('creates authorization policies from Access Control', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Policies$/i }));
+    fireEvent.click(screen.getByRole('link', { name: /^Policies$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Add policy/i }));
     expect(screen.getByRole('combobox', { name: 'Effect' })).toHaveTextContent('Select an effect');
 
@@ -355,7 +355,7 @@ describe('AccessControl resources and policies', () => {
   it('renders effective access query controls', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    fireEvent.click(screen.getByRole('link', { name: /Effective Access/i }));
 
     expect(document.querySelector('#effective-user')).toBeInTheDocument();
     expect(document.querySelector('#effective-permission')).toBeInTheDocument();
@@ -365,7 +365,7 @@ describe('AccessControl resources and policies', () => {
   it('only offers permissions compatible with the selected Effective Access resource', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    fireEvent.click(screen.getByRole('link', { name: /Effective Access/i }));
     fireEvent.click(document.querySelector('#effective-permission button')!);
 
     expect(screen.getByText('Check Access (platform:authz:check)')).toBeInTheDocument();
@@ -383,7 +383,7 @@ describe('AccessControl resources and policies', () => {
   it('shows runtime resource selector fields for effective access', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    fireEvent.click(screen.getByRole('link', { name: /Effective Access/i }));
     const resourceTypeDropdown = document.querySelector('#effective-resource-type button');
     expect(resourceTypeDropdown).not.toBeNull();
     fireEvent.click(resourceTypeDropdown as HTMLButtonElement);
@@ -447,7 +447,7 @@ describe('AccessControl resources and policies', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    fireEvent.click(screen.getByRole('link', { name: /Effective Access/i }));
 
     expect(screen.getByText('Why this access decision was made')).toBeInTheDocument();
     expect(screen.getAllByText('system.engine.operator').length).toBeGreaterThan(0);
@@ -502,7 +502,7 @@ describe('AccessControl resources and policies', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    fireEvent.click(screen.getByRole('link', { name: /Effective Access/i }));
 
     expect(screen.getByText('group:Operators')).toBeInTheDocument();
     expect(screen.getByText(/Group membership: sso/)).toBeInTheDocument();
@@ -512,7 +512,7 @@ describe('AccessControl resources and policies', () => {
   it('renders machine identity authorization audit references', () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
+    fireEvent.click(screen.getByRole('link', { name: /External Registration/i }));
 
     expect(screen.getByText('Machine identity diagnostics')).toBeInTheDocument();
     expect(screen.getByText('1 active API client')).toBeInTheDocument();
@@ -530,7 +530,7 @@ describe('AccessControl resources and policies', () => {
     expect(within(serviceAccountRow).getByRole('button', { name: /Open audit event authz.role_assignment.create/i })).toBeInTheDocument();
 
     fireEvent.click(within(apiClientRow).getByRole('button', { name: /Open audit event platform.api_client.rotate/i }));
-    expect(screen.getByRole('tab', { name: /^Audit$/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: /^Audit$/i })).toHaveAttribute('aria-current', 'page');
     expect(document.getElementById('authz-audit-resource-type-filter')).toHaveValue('api_client');
     expect(document.getElementById('authz-audit-resource-id-filter')).toHaveValue('client-1');
   });

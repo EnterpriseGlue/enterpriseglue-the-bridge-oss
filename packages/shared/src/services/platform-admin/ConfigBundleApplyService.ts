@@ -15,6 +15,7 @@ import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastruct
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityProvisioningDirectory } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvisioningDirectory.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
@@ -44,6 +45,7 @@ import { operatorSafeConfigBundleFailure } from './ConfigBundleSafeDiagnostics.j
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
 import { archiveIdentityProviderInStore, identityProviderService } from './IdentityProviderService.js';
+import { identityProvisioningDirectoryService } from './IdentityProvisioningDirectoryService.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import { authzGroupService } from './AuthzGroupService.js';
 import { runtimeResourceSetService } from './RuntimeResourceSetService.js';
@@ -141,6 +143,10 @@ function identityMappingConfigKeyIdentity(tenantId: string | null, key: string):
 
 function objectFingerprint(kind: string, key: string, value: unknown): string {
   return hashCanonicalConfig({ kind, key, value });
+}
+
+function provisioningDirectoryFingerprint(directory: Record<string, unknown>): string {
+  return hashCanonicalConfig({ objectType: 'identity_provisioning_directory', key: directory.key, value: directory });
 }
 
 function engineCredentialFields(auth: any): Record<string, string | null> {
@@ -343,7 +349,7 @@ class ConfigBundleApplyService {
       './roles.json', './groups.json', './engines.json', './engine-backstop-mappings.json',
       './engine-tenant-mappings.json', './engine-sets.json', './runtime-resource-sets.json',
       './assignments.json', './project-engine-targets.json', './identity-providers.json',
-      './identity-mappings.json',
+      './identity-provisioning-directories.json', './identity-mappings.json',
     ].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
@@ -415,6 +421,7 @@ class ConfigBundleApplyService {
     const desiredTargets = entries(compilation.files, './project-engine-targets.json', 'projectEngineTargets');
     const desiredIdentityMappings = entries(compilation.files, './identity-mappings.json', 'identityMappings');
     const desiredIdentityProviders = new Map(entries(compilation.files, './identity-providers.json', 'identityProviders').map((provider) => [provider.key, provider]));
+    const desiredIdentityProvisioningDirectories = new Map(entries(compilation.files, './identity-provisioning-directories.json', 'identityProvisioningDirectories').map((directory) => [directory.key, directory]));
     const desiredEnvironmentTags = entries(compilation.files, './environment-tags.json', 'environmentTags');
     const desiredPlatformSettings = (compilation.files['./platform-settings.json'] as { platformSettings?: Record<string, any> } | undefined)?.platformSettings;
     const materializeIds: string[] = [];
@@ -441,6 +448,10 @@ class ConfigBundleApplyService {
       const projectRepo = manager.getRepository(Project);
       const targetRepo = manager.getRepository(ProjectEngineTarget);
       const providerRepo = manager.getRepository(IdentityProvider);
+      const provisioningDirectoryRepo = desiredIdentityProvisioningDirectories.size > 0
+        || diff.changes.some((change) => change.objectType === 'identity_provisioning_directory')
+        ? manager.getRepository(IdentityProvisioningDirectory)
+        : null;
       const identityMappingRepo = manager.getRepository(IdentityEntitlementMapping);
 
       const environmentChanges = diff.changes.filter((change) => change.objectType === 'environment_tag' && change.operation !== 'noop' && change.operation !== 'conflict');
@@ -889,6 +900,58 @@ class ConfigBundleApplyService {
             if (!provider) fail(`Identity provider ${change.key} disappeared during apply`, 409);
             const cleanup = await archiveIdentityProviderInStore(manager, provider);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.identity_provider.archive', resourceType: 'identity_provider', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, providerKey: change.key, canonicalHash: diff.canonicalHash, cleanup } });
+            archived += 1;
+          }
+        }
+        if (change.objectType === 'identity_provisioning_directory') {
+          const desired = desiredIdentityProvisioningDirectories.get(change.key);
+          if ((change.operation === 'create' || change.operation === 'update') && desired) {
+            const credentialSecretRef = desired.credentialSecretRef || null;
+            const credentialToken = credentialSecretRef
+              ? secretResolver.resolveStored(`ref:${credentialSecretRef}`)
+              : null;
+            const directory = await identityProvisioningDirectoryService.upsertConfigured({
+              tenantId,
+              key: desired.key,
+              displayName: desired.displayName,
+              description: desired.description || null,
+              identityProviderKey: desired.identityProviderKey || null,
+              enabled: desired.enabled,
+              ownershipMode: desired.ownershipMode || 'config_locked',
+              sourceRef: `config_bundle:${manifest.metadata.key}`,
+              sourceHash: provisioningDirectoryFingerprint(desired),
+              appliedAt: now,
+              credentialSecretRef,
+              credentialToken,
+            }, manager);
+            await writeAudit(manager, {
+              tenantId,
+              actorId: input.actorId,
+              action: `authz.config_bundle.identity_provisioning_directory.${change.operation}`,
+              resourceType: 'identity_provisioning_directory',
+              resourceId: directory.id,
+              details: {
+                bundleKey: manifest.metadata.key,
+                directoryKey: desired.key,
+                canonicalHash: diff.canonicalHash,
+                credentialReferenceConfigured: Boolean(credentialSecretRef),
+              },
+            });
+            if (change.operation === 'create') created += 1;
+            else updated += 1;
+          } else if (change.operation === 'archive' && change.currentId) {
+            if (!provisioningDirectoryRepo) fail('Provisioning-directory repository is unavailable during apply', 500);
+            const directory = await provisioningDirectoryRepo.findOneBy({ id: change.currentId });
+            if (!directory) fail(`Provisioning directory ${change.key} disappeared during apply`, 409);
+            await identityProvisioningDirectoryService.archiveConfigured(directory, manager, now);
+            await writeAudit(manager, {
+              tenantId,
+              actorId: input.actorId,
+              action: 'authz.config_bundle.identity_provisioning_directory.archive',
+              resourceType: 'identity_provisioning_directory',
+              resourceId: directory.id,
+              details: { bundleKey: manifest.metadata.key, directoryKey: change.key, canonicalHash: diff.canonicalHash },
+            });
             archived += 1;
           }
         }

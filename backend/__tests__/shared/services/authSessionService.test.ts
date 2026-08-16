@@ -34,11 +34,14 @@ describe('authSessionService', () => {
   it('persists provider lineage for a renewable provider-neutral session', async () => {
     await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }, {
       identityProviderId: 'provider-1', ...providerTrust, userAgent: 'test-agent', ipAddress: '127.0.0.1',
+      authenticationMethod: 'oidc', mfaVerified: true,
+      federationSession: { subjectId: 'subject-1', sessionId: 'sid-1' },
     })).resolves.toEqual(expect.objectContaining({ accessToken: 'access-token', refreshToken: 'refresh-token' }));
 
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       id: 'session-1', userId: 'user-1', identityProviderId: 'provider-1', revokedAt: null,
-      deviceInfo: JSON.stringify({ userAgent: 'test-agent', ip: '127.0.0.1' }),
+      providerSubjectId: 'subject-1', providerSessionId: 'sid-1', providerNameIdFormat: null,
+      deviceInfo: JSON.stringify({ userAgent: 'test-agent', ip: '127.0.0.1', authenticationMethod: 'oidc', mfaVerified: true, federationSession: { subjectId: 'subject-1', sessionId: 'sid-1', nameIdFormat: null } }),
     }));
     expect(providerUpdate).toHaveBeenCalledWith(expect.objectContaining({
       id: 'provider-1', updatedAt: 1234, protocol: 'oidc', configurationJson: providerTrust.identityProviderConfigurationJson,
@@ -55,19 +58,19 @@ describe('authSessionService', () => {
 
     await authSessionService.issue(user, { identityProviderId: 'provider-1', ...providerTrust });
 
-    expect(generateAccessToken).toHaveBeenCalledWith(user, { administratorRecovery: false });
-    expect(generateRefreshToken).toHaveBeenCalledWith(user, { administratorRecovery: false });
+    expect(generateAccessToken).toHaveBeenCalledWith(user, { administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false });
+    expect(generateRefreshToken).toHaveBeenCalledWith(user, { administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false });
   });
 
   it('marks administrator-recovery access, refresh, and durable session metadata', async () => {
     const user = { id: 'user-1', email: 'person@example.test', authSessionVersion: 7 };
 
-    await authSessionService.issue(user, { administratorRecovery: true, userAgent: 'recovery-agent' });
+    await authSessionService.issue(user, { administratorRecovery: true, authenticationMethod: 'recovery', userAgent: 'recovery-agent' });
 
-    expect(generateAccessToken).toHaveBeenCalledWith(user, { administratorRecovery: true });
-    expect(generateRefreshToken).toHaveBeenCalledWith(user, { administratorRecovery: true });
+    expect(generateAccessToken).toHaveBeenCalledWith(user, { administratorRecovery: true, authenticationMethod: 'recovery', mfaVerified: false });
+    expect(generateRefreshToken).toHaveBeenCalledWith(user, { administratorRecovery: true, authenticationMethod: 'recovery', mfaVerified: false });
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
-      deviceInfo: JSON.stringify({ userAgent: 'recovery-agent', ip: null, recovery: 'platform_administrator' }),
+      deviceInfo: JSON.stringify({ userAgent: 'recovery-agent', ip: null, recovery: 'platform_administrator', authenticationMethod: 'recovery' }),
     }));
   });
 

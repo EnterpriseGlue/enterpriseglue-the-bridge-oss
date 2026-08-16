@@ -54,6 +54,7 @@ import AcceptInvite from '../pages/AcceptInvite'
 // Admin pages
 const AuditLogViewer = React.lazy(() => import('../pages/AuditLogViewer'))
 const UserManagement = React.lazy(() => import('../pages/admin/UserManagement'))
+const UserDetail = React.lazy(() => import('../pages/admin/UserDetail'))
 
 // Dashboard
 import Dashboard from '../pages/Dashboard'
@@ -233,6 +234,16 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       )
     }] : []),
     ...(!multiTenantEnabled ? [
+      {
+        path: `${pathPrefix}admin/settings/:settingsSection`,
+        element: (
+          <ProtectedRoute requireAdmin requiredPlatformPermissions={PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS}>
+            <LazyRoute message="Loading settings...">
+              <PlatformSettingsPage />
+            </LazyRoute>
+          </ProtectedRoute>
+        )
+      },
       {
         path: `${pathPrefix}admin/settings/git`,
         element: (
@@ -431,6 +442,15 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         <ProtectedRoute requireAdmin requiredPlatformPermissions={USER_MANAGEMENT_PLATFORM_PERMISSIONS}>
           <LazyRoute message="Loading users...">
             <UserManagement />
+          </LazyRoute>
+        </ProtectedRoute>
+      )
+    }, {
+      path: `${pathPrefix}admin/users/:userId`,
+      element: (
+        <ProtectedRoute requireAdmin requiredPlatformPermissions={USER_MANAGEMENT_PLATFORM_PERMISSIONS}>
+          <LazyRoute message="Loading user details...">
+            <UserDetail />
           </LazyRoute>
         </ProtectedRoute>
       )

@@ -17,6 +17,7 @@ import {
   ConfigGitProvidersFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
+  ConfigIdentityProvisioningDirectoriesFileSchema,
   ConfigBundleLoginPolicySchema,
   ConfigIdentityProviderSchema,
   ConfigIdentityProvidersFileSchema,
@@ -63,6 +64,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   ConfigGitProvidersFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
+  ConfigIdentityProvisioningDirectoriesFileSchema,
   ConfigBundleLoginPolicySchema,
   ConfigIdentityProviderSchema,
   ConfigIdentityProvidersFileSchema,
@@ -175,6 +177,7 @@ describe('published machine-readable JSON examples', () => {
       './assignments.json': ConfigAssignmentsFileSchema,
       './authorization-policies.json': ConfigAuthorizationPoliciesFileSchema,
       './machine-principals.json': ConfigMachinePrincipalsFileSchema,
+      './identity-provisioning-directories.json': ConfigIdentityProvisioningDirectoriesFileSchema,
       './external-engine-systems.json': ConfigExternalEngineSystemsFileSchema,
     } as const;
 

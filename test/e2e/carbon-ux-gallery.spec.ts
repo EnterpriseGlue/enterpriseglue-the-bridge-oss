@@ -318,6 +318,108 @@ async function installGalleryStack(page: Page): Promise<void> {
 test.describe('Carbon UX screenshot gallery', () => {
   test.setTimeout(90_000);
 
+  test('captures the final Carbon administration redesign surfaces @carbon-admin-redesign', async ({ page }) => {
+    await installGalleryStack(page);
+
+    const dashboardUsers = Array.from({ length: 14 }, (_, index) => ({
+      id: `gallery-user-${index + 1}`,
+      email: `user.${index + 1}@example.test`,
+      firstName: index === 0 ? 'Ada' : `Gallery ${index + 1}`,
+      lastName: index === 0 ? 'Lovelace' : 'Operator',
+      platformRole: index === 0 ? 'admin' : 'user',
+      authProvider: index % 2 === 0 ? 'oidc' : 'local',
+      authenticationSources: index % 2 === 0 ? ['oidc'] : ['local'],
+      provisioningSource: index % 3 === 0 ? 'scim' : 'none',
+      provisioningDirectoryKey: index % 3 === 0 ? 'entra-workforce' : null,
+      isActive: index !== 12,
+      isEmailVerified: true,
+      adminStatus: index === 12 ? 'inactive' : 'active',
+      createdAt: now,
+      lastLoginAt: now - index * 3_600_000,
+    }));
+
+    await page.route('**/api/dashboard/context', (route) => json(route, {
+      canViewActiveUsers: true,
+      canViewProcessData: true,
+      canViewMetrics: true,
+      runtimeScopedEngineIds: [],
+    }));
+    await page.route('**/api/users/directory**', (route) => json(route, {
+      items: dashboardUsers.map((item) => ({
+        ...item,
+        displayName: `${item.firstName} ${item.lastName}`,
+        status: item.isActive ? 'active' : 'deactivated',
+        lastSignInAt: item.lastLoginAt,
+        lastProvisionedAt: item.provisioningSource === 'scim' ? now - 7_200_000 : null,
+        provisioningHealth: item.provisioningSource === 'scim' ? 'healthy' : 'not_applicable',
+      })),
+      total: dashboardUsers.length,
+      limit: 200,
+      offset: 0,
+    }));
+    await page.route('**/api/dashboard/stats', (route) => json(route, {
+      totalProjects: 8,
+      totalFiles: 28,
+      fileTypes: { bpmn: 16, dmn: 7, form: 5 },
+    }));
+    await page.route('**/api/users', (route) => json(route, dashboardUsers));
+    await page.route('**/mission-control-api/process-instances**', (route) => json(route, [
+      { id: 'instance-running', state: 'ACTIVE', startTime: new Date(now - 480_000).toISOString(), hasIncident: false },
+      { id: 'instance-incident', state: 'INCIDENT', startTime: new Date(now - 600_000).toISOString(), hasIncident: true },
+      { id: 'instance-completed', state: 'COMPLETED', startTime: new Date(now - 360_000).toISOString(), endTime: new Date(now).toISOString(), hasIncident: false },
+      { id: 'instance-canceled', state: 'CANCELED', startTime: new Date(now - 720_000).toISOString(), endTime: new Date(now - 120_000).toISOString(), hasIncident: false },
+    ]));
+
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'File Structure', exact: true })).toBeVisible();
+    await captureManualScreenshot(page, '200-dashboard-carbon-grid-desktop.jpg');
+    await page.getByText('View data table', { exact: true }).first().click();
+    await page.getByRole('table', { name: 'File Structure data table', exact: true }).scrollIntoViewIfNeeded();
+    await captureManualScreenshot(page, '201-dashboard-accessible-data-desktop.jpg');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await captureManualScreenshot(page, '202-dashboard-carbon-grid-mobile.jpg', { stabilize: false });
+    await page.getByRole('heading', { name: 'File Structure', exact: true }).scrollIntoViewIfNeeded();
+    await captureManualScreenshot(page, '203-dashboard-chart-mobile.jpg', { stabilize: false });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.route('**/api/admin/settings**', (route) => json(route, {
+      localPasswordLoginMode: 'enabled',
+      ssoProviderSelectionMode: 'provider_list',
+      inviteAllowAllDomains: true,
+      inviteAllowedDomains: [],
+    }));
+    await page.route('**/api/admin/environment-tags**', (route) => json(route, []));
+    await page.goto('/admin/settings/access-control');
+    await expect(page.getByRole('heading', { name: 'Access control', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
+    await captureManualScreenshot(page, '210-platform-settings-access-control-desktop.jpg');
+
+    await page.getByRole('button', { name: 'Create role', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Create custom role', exact: true })).toBeVisible();
+    await captureManualScreenshot(page, '211-access-control-full-page-workflow-desktop.jpg');
+    await page.keyboard.press('Escape');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await captureManualScreenshot(page, '212-platform-settings-access-control-mobile.jpg', { stabilize: false });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.route('**/api/t/default/invitations/capabilities', (route) => json(route, {
+      ssoRequired: true,
+      emailConfigured: true,
+    }));
+    await page.goto('/admin/users');
+    await expect(page.getByRole('heading', { name: 'User management', exact: true })).toBeVisible();
+    await expect(page.getByText('1–10 of 14 items')).toBeVisible();
+    await captureManualScreenshot(page, '220-data-heavy-user-administration-desktop.jpg');
+    await page.getByText('1–10 of 14 items').scrollIntoViewIfNeeded();
+    await captureManualScreenshot(page, '222-data-heavy-pagination-desktop.jpg', { stabilize: false });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await captureManualScreenshot(page, '221-data-heavy-user-administration-mobile.jpg', { stabilize: false });
+  });
+
   test('captures user access ownership without the dashboard @carbon-gallery', async ({ page }) => {
     await installGalleryStack(page);
     await page.route('**/api/users', (route) => json(route, [
@@ -349,7 +451,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     }));
 
     await page.goto('/admin/users');
-    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'User management' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Access source' })).toBeVisible();
     await expect(page.getByText('SSO-managed', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '02-user-management-platform-role.jpg');
@@ -399,9 +501,12 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '05-custom-role-scope-selector.jpg');
     await page.getByRole('option', { name: 'Platform', exact: true }).click();
     await captureManualScreenshot(page, '06-custom-role-editor-platform-permissions.jpg');
-    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Create custom role' })
+      .locator('footer')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
 
-    await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
+    await page.getByRole('link', { name: 'Permissions', exact: true }).click();
     const permissionSearch = page.getByRole('searchbox', { name: 'Filter table' });
     await permissionSearch.fill('variable');
     await expect(page.getByText('View process variable values', { exact: true }).first()).toBeVisible();
@@ -410,7 +515,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     await expect(page.getByText('Edit process variable values', { exact: true }).first()).toBeVisible();
     await captureManualScreenshot(page, '08-permission-catalog-variable-edit.jpg');
 
-    await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
+    await page.getByRole('link', { name: 'Assignments', exact: true }).click();
     await page.getByRole('textbox', { name: 'User', exact: true }).fill('operator');
     await page.getByRole('button', { name: /Operations User.*operator@example\.test/ }).click();
     await page.getByRole('combobox', { name: 'Access target', exact: true }).click();
@@ -421,7 +526,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     await page.getByRole('option', { name: 'Workflow Operator', exact: true }).click();
     await captureManualScreenshot(page, '09-role-assignments.jpg');
 
-    await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
+    await page.getByRole('link', { name: 'Effective Access', exact: true }).click();
     await page.getByRole('textbox', { name: 'User', exact: true }).fill('operator');
     await page.getByRole('button', { name: /Operations User.*operator@example\.test/ }).click();
     await page.getByRole('combobox', { name: 'Resource type', exact: true }).click();
@@ -447,7 +552,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     await expect(page.getByText('Access is denied', { exact: true })).toHaveCount(0);
     await captureManualScreenshot(page, '82-effective-access-no-compatible-permissions.jpg');
 
-    await page.getByRole('tab', { name: 'Groups', exact: true }).click();
+    await page.getByRole('link', { name: 'Groups', exact: true }).click();
     await expect(page.getByText('Operations members', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '12-authorization-groups.jpg');
     await page.getByRole('button', { name: 'Actions for Platform administrators', exact: true }).click();
@@ -467,23 +572,23 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '83-group-member-removal-human-labels.jpg');
     await removeMemberDialog.getByRole('button', { name: 'Cancel' }).click();
 
-    await page.getByRole('tab', { name: 'Runtime Resources', exact: true }).click();
-    await expect(page.getByText('No runtime resources recorded', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Runtime Resources', exact: true }).click();
+    await expect(page.getByText('Choose an engine to inspect its runtime resource inventory.', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '14-runtime-resource-controls-empty-state.jpg');
 
-    await page.getByRole('tab', { name: 'Engine sets', exact: true }).click();
+    await page.getByRole('link', { name: 'Engine sets', exact: true }).click();
     await page.getByRole('button', { name: 'Create engine set', exact: true }).click();
     await page.getByLabel('Engine set name', { exact: true }).fill('Regulated production engines');
     await page.getByLabel('Label key', { exact: true }).fill('environment');
     await page.getByLabel('Label value', { exact: true }).fill('production');
     await page.getByRole('dialog', { name: 'Create engine set', exact: true })
-      .locator('.cds--modal-content')
+      .locator('.eg-access-control-workflow__body')
       .evaluate((element) => { element.scrollTop = element.scrollHeight; });
     await expect(page.getByRole('combobox', { name: 'Label match', exact: true })).toBeVisible();
     await captureManualScreenshot(page, '15-engine-set-editor.jpg');
     await page.keyboard.press('Escape');
 
-    await page.getByRole('tab', { name: 'Project Targets', exact: true }).click();
+    await page.getByRole('link', { name: 'Project Targets', exact: true }).click();
     await expect(page.getByRole('cell', { name: 'Payments automation', exact: true })).toBeVisible();
     await captureManualScreenshot(page, '16-project-target-controls.jpg');
   });
@@ -578,8 +683,7 @@ test.describe('Carbon UX screenshot gallery', () => {
       ],
     }));
 
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Engines', exact: true }).click();
+    await page.goto('/admin/settings/engines');
     await expect(page.getByText('Changes save automatically.', { exact: true })).toBeVisible();
     await expect(page.getByRole('radio', { name: /Hybrid ownership/ })).toBeChecked();
     await captureManualScreenshot(page, '29-engine-onboarding-and-authorization-modes.jpg');
@@ -608,7 +712,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '75-engine-governance-modes-narrow.jpg', { stabilize: false });
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    await page.getByRole('tab', { name: 'Role Library', exact: true }).click();
+    await page.goto('/admin/settings/role-library');
     await page.getByRole('button', { name: /Workflow Operator/ }).click();
     await expect(page.locator('#role-library-edit-name')).toHaveValue('Workflow Operator');
     await expect(page.getByText('3 selected', { exact: true }).first()).toBeVisible();

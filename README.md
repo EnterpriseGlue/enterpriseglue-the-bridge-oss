@@ -27,7 +27,7 @@ To stop: `docker compose -f docker-compose.selfhost.yml down`
 
 To upgrade: change `IMAGE_TAG=latest` (or pin to e.g. `v1.2.3`) and re-run `up -d`.
 
-> **Images:** published to `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}` and `docker.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}` on every release.
+> **Images:** published to `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}` and mirrored to `docker.io/haryenterpriseglue/enterpriseglue-the-bridge-oss-{backend,frontend}` on every release. Published-image mode always pulls and fails closed instead of silently building local source.
 
 ---
 

@@ -72,26 +72,26 @@ function normalizeRoleValue(role?: string | null): 'admin' | 'user' {
 
 export const PolicyConditionSchema = z.object({
   timeWindow: z.object({
-    start: z.string().optional(),
-    end: z.string().optional(),
-    timezone: z.string().optional(),
-    daysOfWeek: z.array(z.number().int()).optional(),
-  }).optional(),
+    start: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    end: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    timezone: z.string().min(1).max(100).optional(),
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  }).strict().optional(),
   userAttribute: z.object({
-    key: z.string().min(1),
+    key: z.string().min(1).max(255),
     operator: z.enum(['eq', 'neq', 'in', 'notIn', 'contains']),
-    value: z.union([z.string(), z.array(z.string())]),
-  }).optional(),
+    value: z.union([z.string().max(2000), z.array(z.string().max(2000)).max(100)]),
+  }).strict().optional(),
   resourceAttribute: z.object({
-    key: z.string().min(1),
+    key: z.string().min(1).max(255),
     operator: z.enum(['eq', 'neq', 'in', 'notIn']),
-    value: z.union([z.string(), z.array(z.string()), z.boolean()]),
-  }).optional(),
+    value: z.union([z.string().max(2000), z.array(z.string().max(2000)).max(100), z.boolean()]),
+  }).strict().optional(),
   environment: z.object({
-    ipRange: z.array(z.string()).optional(),
+    ipRange: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
     requireMfa: z.boolean().optional(),
-  }).optional(),
-});
+  }).strict().optional(),
+}).strict();
 
 function parsePolicyConditions(value: string | null): z.infer<typeof PolicyConditionSchema> {
   if (!value) return {};
@@ -146,7 +146,7 @@ export const AuthzPolicyResponseSchema = z.object({
   priority: z.number().int(),
   resourceType: z.string().optional(),
   action: z.string().optional(),
-  conditions: z.record(z.string(), z.unknown()),
+  conditions: PolicyConditionSchema,
   isActive: z.boolean(),
   configKey: z.string().nullable(),
   sourceRef: z.string().nullable(),
@@ -161,7 +161,7 @@ export const AuthzPolicyCreateSchema = z.object({
   effect: z.enum(['allow', 'deny']),
   resourceType: z.string().optional(),
   action: z.string().optional(),
-  conditions: z.record(z.string(), z.unknown()).optional(),
+  conditions: PolicyConditionSchema.optional(),
   priority: z.number().int().min(0).optional(),
 });
 export const AuthzPolicyUpdateSchema = AuthzPolicyCreateSchema.partial().extend({
@@ -245,6 +245,7 @@ export const AuthzAuditLogSchema = AuthzAuditLogSchemaRaw.transform((l) => ({
 /** Query contract for the tenant-scoped authorization audit API. */
 export const AuthzAuditQuerySchema = z.object({
   userId: z.string().optional(),
+  action: z.string().optional(),
   resourceType: z.string().optional(),
   resourceId: z.string().optional(),
   decision: z.enum(['allow', 'deny']).optional(),
@@ -457,7 +458,7 @@ export const RoleAssignmentCreateResponseSchema = AuthzCreatedIdResponseSchema.e
 export const ProjectEngineTargetSyncLegacyRequestSchema = z.object({ projectId: z.string().min(1) });
 export const ProjectEngineTargetSyncLegacyResponseSchema = z.object({ createdOrUpdated: z.number().int().nonnegative() });
 
-export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'identity_provider', 'api', 'automation', 'system', 'config']);
+export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'scim', 'identity_provider', 'api', 'automation', 'system', 'config']);
 
 export const AuthzGroupSchema = z.object({
   id: z.string(),
@@ -532,7 +533,7 @@ export const ApiClientSchema = z.object({
 
 export const ApiClientCreateSchema = z.object({
   name: z.string().min(1).max(255),
-  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute'])).min(1).optional(),
+  scopes: z.array(z.enum(['config:bundle:manage', 'engine:register', 'deployment:execute', 'identity:provisioning:manage'])).min(1).optional(),
 });
 
 export const ApiClientWithTokenSchema = z.object({

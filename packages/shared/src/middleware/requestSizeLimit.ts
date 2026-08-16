@@ -3,6 +3,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 export const CONFIG_BUNDLE_JSON_LIMIT_BYTES = 1024 * 1024;
 export const IDENTITY_ADMIN_JSON_LIMIT_BYTES = 256 * 1024;
 export const ENGINE_REGISTRATION_JSON_LIMIT_BYTES = 256 * 1024;
+export const SCIM_JSON_LIMIT_BYTES = 256 * 1024;
 
 function parsedBodySize(body: unknown): number {
   if (body === undefined || body === null) return 0;
@@ -29,3 +30,6 @@ export function enforceParsedPayloadLimit(maxBytes: number): RequestHandler {
 export const configBundleJsonPayloadLimit = enforceParsedPayloadLimit(CONFIG_BUNDLE_JSON_LIMIT_BYTES);
 export const identityAdminJsonPayloadLimit = enforceParsedPayloadLimit(IDENTITY_ADMIN_JSON_LIMIT_BYTES);
 export const engineRegistrationJsonPayloadLimit = enforceParsedPayloadLimit(ENGINE_REGISTRATION_JSON_LIMIT_BYTES);
+
+/** SCIM-shaped payload budget; the router converts this generic response to the protocol error envelope. */
+export const scimJsonPayloadLimit = enforceParsedPayloadLimit(SCIM_JSON_LIMIT_BYTES);

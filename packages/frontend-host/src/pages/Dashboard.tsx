@@ -2,7 +2,21 @@ import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { safeRelativePath, sanitizePathParam } from '../shared/utils/sanitize'
 import { useQuery } from '@tanstack/react-query'
-import { Button, ClickableTile, Tile, Dropdown, InlineNotification, SkeletonPlaceholder } from '@carbon/react'
+import {
+  Button,
+  ClickableTile,
+  Column,
+  Dropdown,
+  Grid,
+  InlineNotification,
+  SkeletonPlaceholder,
+  StructuredListBody,
+  StructuredListCell,
+  StructuredListHead,
+  StructuredListRow,
+  StructuredListWrapper,
+  Tile,
+} from '@carbon/react'
 import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, WarningAlt } from '@carbon/icons-react'
 import { useDashboardFilterStore } from '../stores/dashboardFilterStore'
 import { apiClient } from '../shared/api/client'
@@ -10,23 +24,162 @@ import { EngineSelector, useSelectedEngine } from '../components/EngineSelector'
 import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 import { useAuth } from '../shared/hooks/useAuth'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
-import { evaluateActionSnapshot, WhyUnavailableLink } from '../shared/auth/guards'
+import { evaluateActionSnapshot } from '../shared/auth/guards'
 import type { DashboardContext, DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
 import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../shared/components/PageLayout'
 
-// Simple bar component
-function SimpleBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = max > 0 ? (value / max) * 100 : 0
+type DashboardBarTone = 'blue' | 'purple' | 'orange' | 'green' | 'red' | 'gray'
+type DashboardBarDatum = { label: string; value: number; tone: DashboardBarTone }
+
+function AccessibleBarChart({
+  id,
+  title,
+  data,
+  totalLabel,
+}: {
+  id: string
+  title: string
+  data: DashboardBarDatum[]
+  totalLabel?: string
+}) {
+  const max = Math.max(...data.map((item) => item.value), 1)
   return (
-    <div style={{ marginBottom: '0.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '2px' }}>
-        <span>{label}</span>
-        <span>{value}</span>
+    <section className="eg-dashboard-chart" aria-labelledby={`${id}-title`}>
+      <h2 id={`${id}-title`}>{title}</h2>
+      <div className="eg-dashboard-chart__plot" role="list" aria-label={`${title} values`}>
+        {data.map((item) => {
+          const percentage = (item.value / max) * 100
+          return (
+            <div key={item.label} className="eg-dashboard-chart__row" role="listitem">
+              <div className="eg-dashboard-chart__label">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+              <div className="eg-dashboard-chart__track" aria-hidden="true">
+                <span
+                  className={`eg-dashboard-chart__bar eg-dashboard-chart__bar--${item.tone}`}
+                  style={{ '--eg-dashboard-bar-size': `${percentage}%` } as React.CSSProperties}
+                />
+              </div>
+            </div>
+          )
+        })}
       </div>
-      <div style={{ height: '8px', background: 'var(--cds-layer-02)', borderRadius: '4px', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.3s' }} />
-      </div>
+      {totalLabel ? <p className="eg-dashboard-chart__total">{totalLabel}</p> : null}
+      <details className="eg-dashboard-chart__data">
+        <summary>View data table</summary>
+        <StructuredListWrapper aria-label={`${title} data table`}>
+          <StructuredListHead>
+            <StructuredListRow head>
+              <StructuredListCell head>Category</StructuredListCell>
+              <StructuredListCell head>Count</StructuredListCell>
+            </StructuredListRow>
+          </StructuredListHead>
+          <StructuredListBody>
+            {data.map((item) => (
+              <StructuredListRow key={item.label}>
+                <StructuredListCell>{item.label}</StructuredListCell>
+                <StructuredListCell>{item.value}</StructuredListCell>
+              </StructuredListRow>
+            ))}
+          </StructuredListBody>
+        </StructuredListWrapper>
+      </details>
+    </section>
+  )
+}
+
+function DashboardKpi({ label, value, icon: Icon, tone = 'blue' }: {
+  label: string
+  value: React.ReactNode
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  tone?: DashboardBarTone
+}) {
+  return (
+    <div className="eg-dashboard-kpi">
+      <Icon size={24} className={`eg-dashboard-kpi__icon eg-dashboard-kpi__icon--${tone}`} />
+      <span className="eg-dashboard-kpi__label">{label}</span>
+      <strong className="eg-dashboard-kpi__value">{value}</strong>
     </div>
+  )
+}
+
+function DashboardKpiColumn({ children }: { children: React.ReactNode }) {
+  return <Column sm={4} md={2} lg={4}>{children}</Column>
+}
+
+function DashboardChartColumn({ children }: { children: React.ReactNode }) {
+  return <Column sm={4} md={4} lg={5}>{children}</Column>
+}
+
+function DashboardSummary({ active, incidents, completed, total }: { active: number; incidents: number; completed: number; total: number }) {
+  return (
+    <section className="eg-dashboard-summary" aria-labelledby="dashboard-summary-title">
+      <h2 id="dashboard-summary-title">Summary</h2>
+      <dl>
+        <div><dt>Running</dt><dd>{active}</dd></div>
+        <div><dt>Incidents</dt><dd>{incidents}</dd></div>
+        <div><dt>Completed</dt><dd>{completed}</dd></div>
+        <div><dt>Total</dt><dd>{total}</dd></div>
+      </dl>
+    </section>
+  )
+}
+
+function DashboardTile({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return onClick ? (
+    <ClickableTile className="eg-dashboard-tile" onClick={onClick}>{children}</ClickableTile>
+  ) : (
+    <Tile className="eg-dashboard-tile">{children}</Tile>
+  )
+}
+
+function DashboardChartTile({ children }: { children: React.ReactNode }) {
+  return <Tile className="eg-dashboard-chart-tile">{children}</Tile>
+}
+
+function DashboardLoading() {
+  return (
+    <PageLayout padding="0">
+      <SkeletonPlaceholder className="eg-dashboard-loading" />
+    </PageLayout>
+  )
+}
+
+function DashboardUnauthorized({ reason }: { reason: string }) {
+  return (
+    <PageLayout padding="0" className="eg-dashboard-page">
+      <div className="eg-dashboard-content">
+        <InlineNotification kind="warning" title="Dashboard unavailable" subtitle={reason} lowContrast hideCloseButton />
+      </div>
+    </PageLayout>
+  )
+}
+
+function DashboardError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <PageLayout padding="0" className="eg-dashboard-page">
+      <PageHeader
+        icon={Activity}
+        title="Dashboard"
+        subtitle="Real-time overview of your platform activity"
+        gradient={PAGE_GRADIENTS.blue}
+        variant="productive"
+      />
+      <div className="eg-dashboard-content">
+        <div style={{ display: 'grid', gap: 'var(--spacing-3)', justifyItems: 'start' }}>
+          <InlineNotification
+            kind="error"
+            title="Dashboard context could not be loaded"
+            subtitle="No dashboard data is shown because its authorization context is unavailable. Try again after checking the platform connection."
+            lowContrast
+            hideCloseButton
+          />
+          <Button kind="primary" size="sm" onClick={onRetry}>Retry</Button>
+        </div>
+      </div>
+    </PageLayout>
   )
 }
 
@@ -90,14 +243,14 @@ export default function Dashboard() {
   // Fetch engines
   const enginesQuery = useQuery({
     queryKey: ['engines'],
-    queryFn: () => getAccessibleEngines().catch(() => []),
+    queryFn: () => getAccessibleEngines(),
     enabled: canReadDashboard,
   })
 
   // Fetch users
   const usersQuery = useQuery({
     queryKey: ['users'],
-    queryFn: () => apiClient.get<any[]>('/api/users').catch(() => []),
+    queryFn: () => apiClient.get<any[]>('/api/users'),
     enabled: canReadDashboard && canViewActiveUsers,
   })
 
@@ -112,7 +265,7 @@ export default function Dashboard() {
       suspended: true,
       engineId: selectedEngineId || undefined,
       startedAfter: timePeriod ? startedAfter : undefined,
-    }).catch(() => []),
+    }),
     enabled: canReadDashboard && !!selectedEngineId && canViewProcessData,
   })
 
@@ -122,7 +275,7 @@ export default function Dashboard() {
   const instances = instancesQuery.data || []
 
   const totalProjects = statsQuery.data?.totalProjects || 0
-  const showGettingStarted = !statsQuery.isLoading && !enginesQuery.isLoading && (totalProjects === 0 || connectedEngines === 0)
+  const showGettingStarted = !statsQuery.isLoading && !enginesQuery.isLoading && !statsQuery.isError && !enginesQuery.isError && (totalProjects === 0 || connectedEngines === 0)
 
   const instanceStates = React.useMemo(() => ({
     active: instances.filter(i => i.state === 'ACTIVE' && !i.hasIncident).length,
@@ -163,51 +316,57 @@ export default function Dashboard() {
     return `${seconds.toFixed(0)}s`
   }
 
-  const tileStyle: React.CSSProperties = {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    minHeight: '120px', textAlign: 'center',
-  }
-
-  const chartTileStyle: React.CSSProperties = { padding: '1rem', minHeight: '200px' }
-
   if (!canReadDashboard) {
-    return (
-      <div style={{ padding: '2rem' }}>
-        <InlineNotification
-          kind="warning"
-          title="Dashboard unavailable"
-          subtitle={dashboardReadDecision.reason || 'Missing permission to view dashboard data.'}
-          lowContrast
-          hideCloseButton
-        />
-        <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12 }}>
-          <WhyUnavailableLink decision={dashboardReadDecision} />
-        </div>
-      </div>
-    )
+    return <DashboardUnauthorized reason={dashboardReadDecision.reason || 'Missing permission to view dashboard data.'} />
   }
 
   if (contextQuery.isLoading) {
-    return <div style={{ padding: '2rem' }}><SkeletonPlaceholder style={{ height: '400px' }} /></div>
+    return <DashboardLoading />
   }
 
-  const maxState = Math.max(instanceStates.active, instanceStates.incidents, instanceStates.suspended, instanceStates.completed, instanceStates.canceled, 1)
+  if (contextQuery.isError) {
+    return <DashboardError onRetry={() => { void contextQuery.refetch() }} />
+  }
+
   const fileTypes = statsQuery.data?.fileTypes || { bpmn: 0, dmn: 0, form: 0 }
   const totalFiles = statsQuery.data?.totalFiles || 0
   const hasFilesToReport = totalFiles > 0
-  const maxFile = Math.max(fileTypes.bpmn, fileTypes.dmn, fileTypes.form, 1)
+  const fileChartData = ([
+    { label: 'BPMN', value: fileTypes.bpmn, tone: 'blue' },
+    { label: 'DMN', value: fileTypes.dmn, tone: 'purple' },
+    { label: 'Forms', value: fileTypes.form, tone: 'orange' },
+  ] satisfies DashboardBarDatum[]).filter((item) => item.value > 0)
+  const processStateData: DashboardBarDatum[] = [
+    { label: 'Active', value: instanceStates.active, tone: 'green' },
+    { label: 'Incidents', value: instanceStates.incidents, tone: 'red' },
+    { label: 'Suspended', value: instanceStates.suspended, tone: 'orange' },
+    { label: 'Completed', value: instanceStates.completed, tone: 'blue' },
+    { label: 'Canceled', value: instanceStates.canceled, tone: 'gray' },
+  ]
 
   return (
-    <div style={{ padding: '2rem', background: 'var(--cds-background)', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 600, color: 'var(--cds-text-primary)' }}>Dashboard</h1>
-          <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--cds-text-secondary)' }}>
-            Real-time overview of your platform activity
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+    <PageLayout padding="0" className="eg-dashboard-page">
+      <PageHeader
+        icon={Activity}
+        title="Dashboard"
+        subtitle="Real-time overview of your platform activity"
+        gradient={PAGE_GRADIENTS.blue}
+        variant="productive"
+      />
+      <div className="eg-dashboard-content">
+        {statsQuery.isError && (
+          <InlineNotification kind="error" title="Project statistics are unavailable" subtitle="Project and file totals could not be loaded. Other available dashboard data is still shown." lowContrast hideCloseButton />
+        )}
+        {enginesQuery.isError && (
+          <InlineNotification kind="error" title="Engine summary is unavailable" subtitle="Connected engine totals could not be loaded. Other available dashboard data is still shown." lowContrast hideCloseButton />
+        )}
+        {usersQuery.isError && (
+          <InlineNotification kind="warning" title="Active user total is unavailable" subtitle="The user directory could not be loaded for this dashboard view." lowContrast hideCloseButton />
+        )}
+        {instancesQuery.isError && (
+          <InlineNotification kind="warning" title="Process metrics are unavailable" subtitle="Process instances could not be loaded for the selected engine and time period." lowContrast hideCloseButton />
+        )}
+        <div className="eg-dashboard-controls" aria-label="Dashboard filters">
           <EngineSelector size="sm" label="Engine" />
           <Dropdown
             id="time-period"
@@ -218,21 +377,19 @@ export default function Dashboard() {
             itemToString={(item: any) => item?.label || ''}
             selectedItem={{ id: timePeriod, label: `Last ${timePeriod} days` }}
             onChange={({ selectedItem }: any) => setTimePeriod(selectedItem?.id || 7)}
-            style={{ minWidth: '160px' }}
           />
         </div>
-      </div>
 
       {showGettingStarted && (
-        <Tile style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+        <Tile className="eg-dashboard-get-started">
+          <div className="eg-dashboard-get-started__content">
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 600 }}>Get started</div>
-              <div style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', marginTop: '0.25rem' }}>
+              <h2>Get started</h2>
+              <p>
                 Create a project and connect an engine to start deploying and monitoring processes.
-              </div>
+              </p>
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="eg-dashboard-get-started__actions">
               {totalProjects === 0 && (
                 <Button
                   kind="primary"
@@ -271,109 +428,36 @@ export default function Dashboard() {
         />
       )}
 
-      {/* KPI Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+      <Grid fullWidth narrow className="eg-dashboard-kpi-grid" aria-label="Platform key performance indicators">
         {canViewActiveUsers && (
-          <ClickableTile style={tileStyle} onClick={() => safeNavigate(toTenantPath('/admin/users'))}>
-            <UserAvatar size={24} style={{ color: 'var(--cds-link-primary)', marginBottom: '0.5rem' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Active Users</span>
-            <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{totalUsers}</span>
-          </ClickableTile>
+          <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/admin/users'))}><DashboardKpi label="Active Users" value={totalUsers} icon={UserAvatar} /></DashboardTile></DashboardKpiColumn>
         )}
-        <ClickableTile style={tileStyle} onClick={() => safeNavigate(toTenantPath('/starbase'))}>
-          <FolderOpen size={24} style={{ color: '#8a3ffc', marginBottom: '0.5rem' }} />
-          <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Projects</span>
-          <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{statsQuery.data?.totalProjects || 0}</span>
-        </ClickableTile>
-        <ClickableTile style={tileStyle} onClick={() => safeNavigate(toTenantPath('/engines'))}>
-          <Chip size={24} style={{ color: '#0f62fe', marginBottom: '0.5rem' }} />
-          <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Engines</span>
-          <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{connectedEngines}</span>
-        </ClickableTile>
+        <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/starbase'))}><DashboardKpi label="Projects" value={statsQuery.data?.totalProjects || 0} icon={FolderOpen} tone="purple" /></DashboardTile></DashboardKpiColumn>
+        <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/engines'))}><DashboardKpi label="Engines" value={connectedEngines} icon={Chip} /></DashboardTile></DashboardKpiColumn>
         {canViewProcessData && (
-          <ClickableTile style={tileStyle} onClick={() => safeNavigate(toTenantPath('/mission-control/processes'))}>
-            <Activity size={24} style={{ color: '#24a148', marginBottom: '0.5rem' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Instances</span>
-            <span style={{ fontSize: '1.75rem', fontWeight: 600 }}>{instances.length}</span>
-          </ClickableTile>
+          <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/mission-control/processes'))}><DashboardKpi label="Instances" value={instances.length} icon={Activity} tone="green" /></DashboardTile></DashboardKpiColumn>
         )}
         {canViewMetrics && (
           <>
-            <Tile style={tileStyle}>
-              <Time size={24} style={{ color: '#0f62fe', marginBottom: '0.5rem' }} />
-              <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Avg Duration</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 600 }}>{formatDuration(metrics.avgDurationMs)}</span>
-            </Tile>
-            <Tile style={tileStyle}>
-              <Checkmark size={24} style={{ color: '#24a148', marginBottom: '0.5rem' }} />
-              <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Success Rate</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 600, color: metrics.successRate >= 80 ? '#24a148' : metrics.successRate >= 50 ? '#f1c21b' : '#da1e28' }}>
-                {metrics.successRate.toFixed(0)}%
-              </span>
-            </Tile>
-            <Tile style={tileStyle}>
-              <WarningAlt size={24} style={{ color: metrics.errorRate > 20 ? '#da1e28' : '#f1c21b', marginBottom: '0.5rem' }} />
-              <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Failure Rate</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 600, color: metrics.errorRate > 20 ? '#da1e28' : metrics.errorRate > 10 ? '#f1c21b' : '#24a148' }}>
-                {metrics.errorRate.toFixed(1)}%
-              </span>
-            </Tile>
+            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Avg Duration" value={formatDuration(metrics.avgDurationMs)} icon={Time} /></DashboardTile></DashboardKpiColumn>
+            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Success Rate" value={`${metrics.successRate.toFixed(0)}%`} icon={Checkmark} tone={metrics.successRate >= 80 ? 'green' : metrics.successRate >= 50 ? 'orange' : 'red'} /></DashboardTile></DashboardKpiColumn>
+            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Failure Rate" value={`${metrics.errorRate.toFixed(1)}%`} icon={WarningAlt} tone={metrics.errorRate > 20 ? 'red' : metrics.errorRate > 10 ? 'orange' : 'green'} /></DashboardTile></DashboardKpiColumn>
           </>
         )}
-      </div>
+      </Grid>
 
-      {/* Charts Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-        {/* File Structure */}
+      <Grid fullWidth narrow className="eg-dashboard-chart-grid">
         {hasFilesToReport && (
-          <Tile style={chartTileStyle}>
-            <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>File Structure</h4>
-            {fileTypes.bpmn > 0 && <SimpleBar label="BPMN" value={fileTypes.bpmn} max={maxFile} color="#0f62fe" />}
-            {fileTypes.dmn > 0 && <SimpleBar label="DMN" value={fileTypes.dmn} max={maxFile} color="#8a3ffc" />}
-            {fileTypes.form > 0 && <SimpleBar label="Form" value={fileTypes.form} max={maxFile} color="#ff832b" />}
-            <div style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>
-              Total: {totalFiles} files
-            </div>
-          </Tile>
+          <DashboardChartColumn><DashboardChartTile><AccessibleBarChart id="file-structure" title="File Structure" data={fileChartData} totalLabel={`Total: ${totalFiles} files`} /></DashboardChartTile></DashboardChartColumn>
         )}
-
-        {/* Process States */}
         {canViewProcessData && (
-          <Tile style={chartTileStyle}>
-            <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>Process States</h4>
-            <SimpleBar label="Active" value={instanceStates.active} max={maxState} color="#24a148" />
-            <SimpleBar label="Incidents" value={instanceStates.incidents} max={maxState} color="#da1e28" />
-            <SimpleBar label="Suspended" value={instanceStates.suspended} max={maxState} color="#ff832b" />
-            <SimpleBar label="Completed" value={instanceStates.completed} max={maxState} color="#697077" />
-            <SimpleBar label="Canceled" value={instanceStates.canceled} max={maxState} color="#697077" />
-          </Tile>
+          <DashboardChartColumn><DashboardChartTile><AccessibleBarChart id="process-states" title="Process States" data={processStateData} /></DashboardChartTile></DashboardChartColumn>
         )}
-
-        {/* Quick Stats */}
         {canViewMetrics && (
-          <Tile style={chartTileStyle}>
-            <h4 style={{ margin: '0 0 1rem', fontSize: '0.875rem', fontWeight: 600 }}>Summary</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{ textAlign: 'center', padding: '1rem', background: 'var(--cds-layer-02)', borderRadius: '8px' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#24a148' }}>{instanceStates.active}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Running</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '1rem', background: 'var(--cds-layer-02)', borderRadius: '8px' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#da1e28' }}>{instanceStates.incidents}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Incidents</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '1rem', background: 'var(--cds-layer-02)', borderRadius: '8px' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{instanceStates.completed}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Completed</div>
-              </div>
-              <div style={{ textAlign: 'center', padding: '1rem', background: 'var(--cds-layer-02)', borderRadius: '8px' }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{instances.length}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)' }}>Total</div>
-              </div>
-            </div>
-          </Tile>
+          <DashboardChartColumn><DashboardChartTile><DashboardSummary active={instanceStates.active} incidents={instanceStates.incidents} completed={instanceStates.completed} total={instances.length} /></DashboardChartTile></DashboardChartColumn>
         )}
+      </Grid>
       </div>
-    </div>
+    </PageLayout>
   )
 }

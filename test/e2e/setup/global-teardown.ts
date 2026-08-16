@@ -288,6 +288,74 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   const hasTenantMemberships = await tenantMembershipsSupported(pool, schema);
   await cleanupDisposableIdentityProviderArtifacts(pool, schema);
 
+  // Access Model browser coverage creates roles, permissions, assignments,
+  // groups, and memberships through the public UI. These records are owned by
+  // the disposable E2E user, so remove their dependants before deleting that
+  // user. This keeps real-API browser runs repeatable without relying on
+  // product hard-delete endpoints for normally archived administration data.
+  const [createdRoleRows, createdPermissionRows, createdGroupRows] = await Promise.all([
+    pool.query(`SELECT id FROM ${schema}.roles WHERE created_by_id = $1 AND kind = 'custom'`, [userId]),
+    pool.query(`SELECT id FROM ${schema}.permissions WHERE created_by_id = $1 AND kind = 'custom'`, [userId]),
+    pool.query(`SELECT id FROM ${schema}.authz_groups WHERE created_by_id = $1 AND is_system = false`, [userId]),
+  ]);
+  const createdRoleIds = createdRoleRows.rows.map((row: { id: string }) => row.id);
+  const createdPermissionIds = createdPermissionRows.rows.map((row: { id: string }) => row.id);
+  const createdGroupIds = createdGroupRows.rows.map((row: { id: string }) => row.id);
+  await pool.query(
+    `DELETE FROM ${schema}.role_assignments
+     WHERE created_by_id = $1
+        OR role_id = ANY($2::text[])
+        OR (principal_type = 'group' AND principal_id = ANY($3::text[]))`,
+    [userId, createdRoleIds, createdGroupIds],
+  );
+  await pool.query(
+    `DELETE FROM ${schema}.authz_group_memberships
+     WHERE created_by_id = $1 OR group_id = ANY($2::text[])`,
+    [userId, createdGroupIds],
+  );
+  await pool.query(
+    `DELETE FROM ${schema}.role_permissions
+     WHERE role_id = ANY($1::text[]) OR permission_id = ANY($2::text[])`,
+    [createdRoleIds, createdPermissionIds],
+  );
+  await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [createdRoleIds]);
+  await pool.query(`DELETE FROM ${schema}.authz_groups WHERE id = ANY($1::text[])`, [createdGroupIds]);
+  await pool.query(`DELETE FROM ${schema}.permissions WHERE id = ANY($1::text[])`, [createdPermissionIds]);
+
+  // Resource-administration browser coverage creates manually owned Engine
+  // Sets and Project Targets through the public UI. Archive is intentionally
+  // a soft-delete in the product, so the disposable E2E owner is the safest
+  // cleanup boundary for both active and archived rows.
+  const [createdEngineSetRows, createdProjectTargetRows] = await Promise.all([
+    pool.query(`SELECT id FROM ${schema}.engine_sets WHERE created_by_id = $1`, [userId]),
+    pool.query(`SELECT id FROM ${schema}.project_engine_targets WHERE created_by_id = $1`, [userId]),
+  ]);
+  const createdEngineSetIds = createdEngineSetRows.rows.map((row: { id: string }) => row.id);
+  const createdProjectTargetIds = createdProjectTargetRows.rows.map((row: { id: string }) => row.id);
+  if (createdEngineSetIds.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.role_assignments
+       WHERE scope_type = 'engine_set' AND scope_id = ANY($1::text[])`,
+      [createdEngineSetIds],
+    );
+    await pool.query(
+      `DELETE FROM ${schema}.engine_set_materializations WHERE engine_set_id = ANY($1::text[])`,
+      [createdEngineSetIds],
+    );
+    await pool.query(`DELETE FROM ${schema}.engine_sets WHERE id = ANY($1::text[])`, [createdEngineSetIds]);
+  }
+  if (createdProjectTargetIds.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.role_assignments
+       WHERE scope_type = 'project_engine_target' AND scope_id = ANY($1::text[])`,
+      [createdProjectTargetIds],
+    );
+    await pool.query(
+      `DELETE FROM ${schema}.project_engine_targets WHERE id = ANY($1::text[])`,
+      [createdProjectTargetIds],
+    );
+  }
+
   if (membershipSourceRef) {
     const [engineSetRows, runtimeResourceSetRows] = await Promise.all([
       pool.query(`SELECT id FROM ${schema}.engine_sets WHERE source_ref = $1`, [membershipSourceRef]),
@@ -326,6 +394,10 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   const projectIds = projectIdsResult.rows.map((row) => row.id);
 
   if (projectIds.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.project_engine_targets WHERE project_id = ANY($1::text[])`,
+      [projectIds]
+    );
     await pool.query(
       `DELETE FROM ${schema}.project_member_roles WHERE project_id = ANY($1::text[])`,
       [projectIds]
@@ -376,6 +448,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   );
   const staleIds = staleProjectIds.rows.map((r: any) => r.id);
   if (staleIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.project_engine_targets WHERE project_id = ANY($1::text[])`, [staleIds]);
     await pool.query(`DELETE FROM ${schema}.project_member_roles WHERE project_id = ANY($1::text[])`, [staleIds]);
     await pool.query(`DELETE FROM ${schema}.project_members WHERE project_id = ANY($1::text[])`, [staleIds]);
     await pool.query(`DELETE FROM ${schema}.files WHERE project_id = ANY($1::text[])`, [staleIds]);

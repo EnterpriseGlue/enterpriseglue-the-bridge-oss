@@ -730,6 +730,7 @@ export const SYSTEM_ROLE_IDS = {
   API_ENGINE_REGISTRAR: 'system.api.engine_registrar',
   API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR: 'system.api.external_engine_system_registrar',
   API_PROJECT_ENGINE_TARGET_REGISTRAR: 'system.api.project_engine_target_registrar',
+  API_IDENTITY_PROVISIONING_ADMIN: 'system.api.identity_provisioning_admin',
 } as const;
 
 export const ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE: Record<string, 'owner' | 'delegate' | 'operator' | 'deployer'> = {
@@ -1613,6 +1614,17 @@ export const SystemRoleDefinitions: SystemRoleDefinition[] = [
     isAssignable: true,
     permissions: [ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE],
   },
+  {
+    id: SYSTEM_ROLE_IDS.API_IDENTITY_PROVISIONING_ADMIN,
+    key: SYSTEM_ROLE_IDS.API_IDENTITY_PROVISIONING_ADMIN,
+    name: 'API Identity Provisioning Administrator',
+    description: 'Machine role for API clients that manage authoritative provisioning directories and their credential lifecycle.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [PlatformPermissions.SSO_PROVIDERS_VIEW, PlatformPermissions.SSO_PROVIDERS_MANAGE],
+  },
 ];
 
 const MACHINE_PRINCIPAL_TYPES = new Set<PrincipalType>(['api_client', 'service_account']);
@@ -1620,6 +1632,7 @@ const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set<string>([
   SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
   SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
   SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
+  SYSTEM_ROLE_IDS.API_IDENTITY_PROVISIONING_ADMIN,
   SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
   SYSTEM_ROLE_IDS.TENANT_VIEWER,
   SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
@@ -2955,6 +2968,9 @@ class PermissionServiceClass {
           throw new Error('Role is assignable only to API client principals');
         }
         if (role.id === SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR && principal.principalType !== 'api_client') {
+          throw new Error('Role is assignable only to API client principals');
+        }
+        if (role.id === SYSTEM_ROLE_IDS.API_IDENTITY_PROVISIONING_ADMIN && principal.principalType !== 'api_client') {
           throw new Error('Role is assignable only to API client principals');
         }
         return;

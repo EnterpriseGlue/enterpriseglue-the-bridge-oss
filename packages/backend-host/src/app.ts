@@ -102,7 +102,9 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
       },
     },
   }));
-  app.use(express.json({ limit: '2mb' }));
+  // SCIM and other standards-based JSON protocols use structured syntax
+  // suffix media types such as application/scim+json.
+  app.use(express.json({ limit: '2mb', type: ['application/json', 'application/*+json'] }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
   app.use((req, _res, next) => {
     const headerRequestId = req.headers['x-request-id'] || req.headers['x-correlation-id'];

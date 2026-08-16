@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -77,8 +77,8 @@ describe('Login', () => {
       </QueryClientProvider>
     );
 
-    const submit = await screen.findByRole('button', { name: /sign in/i });
-    expect(submit.hasAttribute('disabled')).toBe(true);
+    const submit = await screen.findByRole('button', { name: /^log in$/i });
+    expect(submit).toBeEnabled();
 
     const emailInput = await screen.findByLabelText(/email/i);
     const passwordInput = screen.getByLabelText(/^password$/i);
@@ -87,8 +87,6 @@ describe('Login', () => {
     expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
     await user.type(emailInput, 'user@example.com');
     await user.type(passwordInput, 'Password123!');
-
-    expect(submit.hasAttribute('disabled')).toBe(false);
 
     await user.click(submit);
 
@@ -120,7 +118,41 @@ describe('Login', () => {
     );
 
     expect(await screen.findByText('OneJOP')).toBeDefined();
-    expect(document.title).toBe('OneJOP');
+    expect(document.title).toBe('Log in | OneJOP');
+  });
+
+  it('uses Carbon login landmarks, headings, links, and inline validation', async () => {
+    const user = userEvent.setup();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/login']}>
+            <Login />
+          </MemoryRouter>
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    const main = await screen.findByRole('main', { name: 'Log in' });
+    expect(main).toBeInTheDocument();
+    const header = screen.getByRole('banner', { name: 'EnterpriseGlue application header' });
+    expect(within(header).getByRole('link', { name: 'EnterpriseGlue' })).toBeInTheDocument();
+    expect(within(main).queryByText('EnterpriseGlue')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveClass('cds--link');
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+
+    const emailInput = screen.getByLabelText(/email/i);
+    await user.type(emailInput, 'not-an-email');
+    await user.tab();
+    expect(await screen.findByText('Enter a valid email address')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^log in$/i }));
+    expect(screen.getByText('Password is required')).toBeInTheDocument();
+    await waitFor(() => expect(emailInput).toHaveFocus());
+    expect(loginMock).not.toHaveBeenCalled();
   });
 
   it('redirects authenticated users away from the login page', async () => {
@@ -170,7 +202,7 @@ describe('Login', () => {
     expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
     await user.type(usernameInput, 'person@example.test');
     await user.type(passwordInput, 'directory-password');
-    await user.click(screen.getByRole('button', { name: /^Sign in$/i }));
+    await user.click(screen.getByRole('button', { name: /^Log in$/i }));
 
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/t/default/auth/providers/ldap-1/login', { username: 'person@example.test', password: 'directory-password' }));
     expect(redirectTo).toHaveBeenCalledWith('/t/default/');

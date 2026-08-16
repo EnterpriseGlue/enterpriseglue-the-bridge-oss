@@ -6,16 +6,10 @@ import { MemoryRouter } from 'react-router-dom';
 import ForgotPassword from '@src/pages/ForgotPassword';
 import { authService } from '@src/services/auth';
 
-const notifyMock = vi.fn();
-
 vi.mock('@src/services/auth', () => ({
   authService: {
     forgotPassword: vi.fn(),
   },
-}));
-
-vi.mock('@src/shared/notifications/ToastProvider', () => ({
-  useToast: () => ({ notify: notifyMock }),
 }));
 
 describe('ForgotPassword', () => {
@@ -37,8 +31,7 @@ describe('ForgotPassword', () => {
     await user.click(screen.getByRole('button', { name: /send reset link/i }));
 
     expect(authService.forgotPassword).toHaveBeenCalledWith({ email: 'user@example.com' });
-    expect(notifyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'success', title: 'Reset email sent' })
-    );
+    expect(await screen.findByText('Reset email sent')).toBeInTheDocument();
+    expect(screen.getByText('If an account exists, a reset link has been sent.')).toBeInTheDocument();
   });
 });

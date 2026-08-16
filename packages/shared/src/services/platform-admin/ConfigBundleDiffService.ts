@@ -9,6 +9,7 @@ import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infras
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityProvisioningDirectory } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvisioningDirectory.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
@@ -45,7 +46,7 @@ import { isProductSeededEnvironmentTag } from './EnvironmentTagService.js';
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'environment_tag' | 'git_provider' | 'email_configuration' | 'email_template' | 'permission' | 'authorization_policy' | 'api_client' | 'service_account' | 'external_engine_system' | 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
+  objectType: 'environment_tag' | 'git_provider' | 'email_configuration' | 'email_template' | 'permission' | 'authorization_policy' | 'api_client' | 'service_account' | 'external_engine_system' | 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_provisioning_directory' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -80,6 +81,10 @@ export interface ConfigBundleDiffChange {
 
 function configEngineIdentity(tenantId: string | null, key: string): string {
   return `${tenantId || 'platform'}:${key}`;
+}
+
+function provisioningDirectoryFingerprint(directory: Record<string, unknown>): string {
+  return hashCanonicalConfig({ objectType: 'identity_provisioning_directory', key: directory.key, value: directory });
 }
 
 function desiredDedicatedTenantId(engine: any, tenantId: string | null): string | null {
@@ -356,8 +361,9 @@ class ConfigBundleDiffService {
     const dataSource = await getDataSource();
     const explicitPlatformSettings = Boolean(compilation.files['./platform-settings.json']);
     const explicitEnvironmentTags = Boolean(compilation.files['./environment-tags.json']);
+    const explicitIdentityProvisioningDirectories = Boolean(compilation.files['./identity-provisioning-directories.json']);
     const desiredAssignments = values(compilation.files, './assignments.json', 'assignments');
-    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships, platformSettings, platformSettingsOwnership, environmentTags, users] = await Promise.all([
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityProvisioningDirectories, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships, platformSettings, platformSettingsOwnership, environmentTags, users] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -368,6 +374,9 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RuntimeResourceSetMaterialization).find(),
       dataSource.getRepository(RbacRolePermission).find(),
       dataSource.getRepository(IdentityProvider).find(),
+      explicitIdentityProvisioningDirectories
+        ? dataSource.getRepository(IdentityProvisioningDirectory).find()
+        : Promise.resolve([]),
       dataSource.getRepository(IdentityEntitlementMapping).find(),
       dataSource.getRepository(ProjectEngineTarget).find(),
       dataSource.getRepository(RbacRoleAssignment).find(),
@@ -461,6 +470,8 @@ class ConfigBundleDiffService {
     const runtimeResourceSetsByKey = new Map(tenantRuntimeResourceSets.map((set) => [set.key, set]));
     const tenantIdentityProviders = identityProviders.filter((provider) => (provider.tenantId || null) === normalizedTenantId);
     const identityProvidersByKey = new Map(tenantIdentityProviders.map((provider) => [provider.key, provider]));
+    const tenantIdentityProvisioningDirectories = identityProvisioningDirectories.filter((directory) => (directory.tenantId || null) === normalizedTenantId);
+    const identityProvisioningDirectoriesByKey = new Map(tenantIdentityProvisioningDirectories.map((directory) => [directory.key, directory]));
     const tenantIdentityMappings = identityMappings.filter((mapping) => (mapping.tenantId || null) === normalizedTenantId);
     const identityMappingsByKey = new Map(tenantIdentityMappings.filter((mapping) => mapping.configKey).map((mapping) => [mapping.configKey!, mapping]));
     const tenantProjectEngineTargets = projectEngineTargets.filter((target) => (target.tenantId || null) === normalizedTenantId);
@@ -912,6 +923,8 @@ class ConfigBundleDiffService {
     const desiredRuntimeResourceSetKeys = new Set(desiredRuntimeResourceSets.map((set) => set.key));
     const desiredIdentityProviders = values(compilation.files, './identity-providers.json', 'identityProviders');
     const desiredIdentityProviderKeys = new Set(desiredIdentityProviders.map((provider) => provider.key));
+    const desiredIdentityProvisioningDirectories = values(compilation.files, './identity-provisioning-directories.json', 'identityProvisioningDirectories');
+    const desiredIdentityProvisioningDirectoryKeys = new Set(desiredIdentityProvisioningDirectories.map((directory) => directory.key));
     for (const role of desiredRoles) {
       const existing = rolesByKey.get(role.key);
       const permissions = compilation.preview.expandedRolePermissions?.[role.key] || role.permissions || [];
@@ -1300,6 +1313,32 @@ class ConfigBundleDiffService {
       }
     }
 
+    for (const directory of desiredIdentityProvisioningDirectories) {
+      const existing = identityProvisioningDirectoriesByKey.get(directory.key);
+      const associatedProvider = directory.identityProviderKey
+        ? identityProvidersByKey.get(directory.identityProviderKey)
+        : null;
+      const stagedProvider = Boolean(directory.identityProviderKey && desiredIdentityProviderKeys.has(directory.identityProviderKey));
+      if (directory.identityProviderKey && !associatedProvider && !stagedProvider) {
+        changes.push({ objectType: 'identity_provisioning_directory', key: directory.key, operation: 'conflict', reason: 'Provisioning directory references an unresolved identity provider' });
+      } else if (!existing) {
+        changes.push({ objectType: 'identity_provisioning_directory', key: directory.key, operation: 'create', reason: 'No persisted provisioning directory uses this tenant-scoped key' });
+      } else if (existing.sourceRef !== sourceRef) {
+        changes.push({ objectType: 'identity_provisioning_directory', key: directory.key, operation: 'conflict', currentId: existing.id, reason: 'Existing provisioning directory is not owned by this configuration bundle' });
+      } else if (
+        existing.displayName !== directory.displayName
+        || (existing.description || null) !== (directory.description || null)
+        || existing.identityProviderKey !== (directory.identityProviderKey || null)
+        || existing.status !== (directory.enabled ? 'active' : 'disabled')
+        || existing.ownershipMode !== directory.ownershipMode
+        || existing.sourceHash !== provisioningDirectoryFingerprint(directory)
+      ) {
+        changes.push({ objectType: 'identity_provisioning_directory', key: directory.key, operation: 'update', currentId: existing.id, reason: 'Config-owned provisioning directory differs from desired association, lifecycle, credential reference, or ownership state' });
+      } else {
+        changes.push({ objectType: 'identity_provisioning_directory', key: directory.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned provisioning directory already matches the desired state' });
+      }
+    }
+
     const desiredIdentityMappings = values(compilation.files, './identity-mappings.json', 'identityMappings');
     const desiredIdentityMappingKeys = new Set(desiredIdentityMappings.map((mapping) => mapping.key));
     for (const mapping of desiredIdentityMappings) {
@@ -1589,6 +1628,13 @@ class ConfigBundleDiffService {
       for (const provider of tenantIdentityProviders) {
         if (provider.sourceRef === sourceRef && !desiredIdentityProviderKeys.has(provider.key) && provider.isEnabled) {
           changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'archive', currentId: provider.id, reason: 'Config-owned identity provider is absent from an authoritative bundle' });
+        }
+      }
+      if (explicitIdentityProvisioningDirectories) {
+        for (const directory of tenantIdentityProvisioningDirectories) {
+          if (directory.sourceRef === sourceRef && !desiredIdentityProvisioningDirectoryKeys.has(directory.key) && directory.status !== 'archived') {
+            changes.push({ objectType: 'identity_provisioning_directory', key: directory.key, operation: 'archive', currentId: directory.id, reason: 'Config-owned provisioning directory is absent from an authoritative bundle' });
+          }
         }
       }
       for (const mapping of tenantIdentityMappings) {

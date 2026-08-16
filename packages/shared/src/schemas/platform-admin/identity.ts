@@ -81,6 +81,10 @@ export const OidcIdentityProviderConfigurationSchema = IdentityProviderAuthoriza
   scopes: z.array(z.string().min(1).max(255)).min(1),
   groupClaim: z.string().min(1).max(255).optional(),
   expectedAudience: z.string().min(1).max(2000).optional(),
+  requestedAcrValues: z.array(z.string().trim().min(1).max(512)).max(20).optional(),
+  mfaAmrValues: z.array(z.string().trim().min(1).max(128)).max(20).optional(),
+  mfaAcrValues: z.array(z.string().trim().min(1).max(512)).max(20).optional(),
+  postLogoutRedirectUrl: z.string().url().optional(),
 }).strict();
 
 export const SamlIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
@@ -95,7 +99,20 @@ export const SamlIdentityProviderConfigurationSchema = IdentityProviderAuthoriza
   groupAttribute: z.string().min(1).max(255).optional(),
   signingCertificateRef: IdentityProviderSecretReferenceSchema,
   signatureAlgorithm: z.enum(['sha256', 'sha512']).default('sha256'),
-}).strict();
+  sloUrl: z.string().url().optional(),
+  logoutCallbackUrl: z.string().url().optional(),
+  requestSigningPrivateKeyRef: IdentityProviderSecretReferenceSchema.optional(),
+  requestSigningCertificateRef: IdentityProviderSecretReferenceSchema.optional(),
+  requestedAuthnContext: z.array(z.string().url()).max(20).optional(),
+  mfaAuthnContextValues: z.array(z.string().url()).max(20).optional(),
+}).strict().superRefine((provider, context) => {
+  if (provider.sloUrl && !provider.logoutCallbackUrl) {
+    context.addIssue({ code: 'custom', path: ['logoutCallbackUrl'], message: 'A logout callback URL is required when SAML single logout is enabled' });
+  }
+  if (provider.sloUrl && !provider.requestSigningPrivateKeyRef) {
+    context.addIssue({ code: 'custom', path: ['requestSigningPrivateKeyRef'], message: 'A request-signing private key reference is required when SAML single logout is enabled' });
+  }
+});
 
 export const LdapIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
   url: z.string().url().refine((url) => url.startsWith('ldaps://'), 'LDAP URLs must use LDAPS'),

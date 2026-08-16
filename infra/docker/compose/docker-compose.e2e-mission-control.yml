@@ -31,6 +31,14 @@ services:
   backend:
     environment:
       CAMUNDA_BASE_URL: ${CAMUNDA_BASE_URL:-http://camunda-mock:9080/engine-rest}
+      # This overlay connects only to the private, disposable HTTP mock above.
+      # Production Compose keeps HTTPS enforcement enabled; the exception is
+      # explicit here so live reconciliation browser tests exercise the mock
+      # instead of failing before the request leaves the backend container.
+      EG_ENFORCE_ENGINE_ENDPOINT_POLICY: "false"
+      EG_ALLOW_INSECURE_ENGINE_HTTP: "true"
+      EG_ENGINE_ALLOW_PRIVATE_HOSTS: "true"
+      EG_ENGINE_ALLOWED_HOSTS: "camunda-mock,camunda-mock.example.test"
       # Disposable mock credential used by configuration-bundle E2E coverage.
       E2E_ENGINE_PASSWORD: ${E2E_ENGINE_PASSWORD:-e2e-local-only}
     depends_on:

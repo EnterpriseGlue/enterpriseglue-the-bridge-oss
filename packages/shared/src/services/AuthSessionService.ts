@@ -6,6 +6,7 @@ import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persiste
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
+import type { JwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { IsNull, type EntityManager } from 'typeorm';
 
 export interface IssueAuthSessionInput {
@@ -20,6 +21,15 @@ export interface IssueAuthSessionInput {
   ipAddress?: string | null;
   /** Break-glass sessions remain valid only while canonical administrator membership is active. */
   administratorRecovery?: boolean;
+  authenticationMethod?: JwtPayload['authenticationMethod'];
+  /** Must be derived from verified authentication evidence, never request input. */
+  mfaVerified?: boolean;
+  /** Provider session identifiers required for standards-based federated logout. */
+  federationSession?: {
+    subjectId: string;
+    sessionId?: string | null;
+    nameIdFormat?: string | null;
+  } | null;
   /** Existing transaction used by security-sensitive login serialization. */
   store?: EntityManager;
 }
@@ -33,7 +43,11 @@ export interface IssuedAuthSession {
 /** Issues a renewable user session with optional provider lineage for targeted revocation. */
 class AuthSessionService {
   async issue(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput = {}): Promise<IssuedAuthSession> {
-    const tokenOptions = { administratorRecovery: input.administratorRecovery === true };
+    const tokenOptions = {
+      administratorRecovery: input.administratorRecovery === true,
+      authenticationMethod: input.authenticationMethod,
+      mfaVerified: input.mfaVerified === true,
+    };
     const accessToken = generateAccessToken(user, tokenOptions);
     const refreshToken = generateRefreshToken(user, tokenOptions);
     const now = Date.now();
@@ -41,6 +55,9 @@ class AuthSessionService {
       id: generateId(),
       userId: user.id,
       identityProviderId: input.identityProviderId?.trim() || null,
+      providerSubjectId: input.federationSession?.subjectId?.trim() || null,
+      providerSessionId: input.federationSession?.sessionId?.trim() || null,
+      providerNameIdFormat: input.federationSession?.nameIdFormat?.trim() || null,
       tokenHash: await bcrypt.hash(refreshToken, 10),
       expiresAt: now + config.jwtRefreshTokenExpires * 1000,
       createdAt: now,
@@ -49,6 +66,15 @@ class AuthSessionService {
         userAgent: input.userAgent || null,
         ip: input.ipAddress || null,
         ...(input.administratorRecovery ? { recovery: 'platform_administrator' } : {}),
+        ...(input.authenticationMethod ? { authenticationMethod: input.authenticationMethod } : {}),
+        ...(input.mfaVerified === true ? { mfaVerified: true } : {}),
+        ...(input.federationSession ? {
+          federationSession: {
+            subjectId: input.federationSession.subjectId,
+            sessionId: input.federationSession.sessionId || null,
+            nameIdFormat: input.federationSession.nameIdFormat || null,
+          },
+        } : {}),
       }),
     };
     const dataSource = await getDataSource();

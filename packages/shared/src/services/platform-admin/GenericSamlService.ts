@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
+import { randomBytes } from 'node:crypto';
 import { secretResolver } from './SecretResolver.js';
 import { classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
-import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
+import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl, validateIdentityProviderSamlLogoutCallbackUrl } from './IdentityProviderEndpointPolicy.js';
 
 const require = createRequire(import.meta.url);
 const nodeSaml = require('@node-saml/node-saml');
@@ -16,6 +17,12 @@ export interface GenericSamlProviderConfiguration {
   ssoUrl: string;
   signingCertificateRef: string;
   signatureAlgorithm: SignatureAlgorithm;
+  sloUrl?: string;
+  logoutCallbackUrl?: string;
+  requestSigningPrivateKeyRef?: string;
+  requestSigningCertificateRef?: string;
+  requestedAuthnContext: string[];
+  mfaAuthnContextValues: string[];
   nameIdAttribute?: string;
   emailAttribute?: string;
   groupAttribute?: string;
@@ -63,6 +70,17 @@ function configuration(raw: Record<string, unknown>): GenericSamlProviderConfigu
     throw new Error('SAML signatureAlgorithm must be sha256 or sha512');
   }
   const signatureAlgorithm: SignatureAlgorithm = raw.signatureAlgorithm === 'sha512' ? 'sha512' : 'sha256';
+  const sloUrl = typeof raw.sloUrl === 'string' && raw.sloUrl.trim()
+    ? validateIdentityProviderEndpointUrl(raw.sloUrl, 'SAML sloUrl', ['https:']).toString()
+    : undefined;
+  const logoutCallbackUrl = typeof raw.logoutCallbackUrl === 'string' && raw.logoutCallbackUrl.trim()
+    ? validateIdentityProviderSamlLogoutCallbackUrl(raw.logoutCallbackUrl).toString()
+    : undefined;
+  const requestSigningPrivateKeyRef = typeof raw.requestSigningPrivateKeyRef === 'string' && raw.requestSigningPrivateKeyRef.trim()
+    ? raw.requestSigningPrivateKeyRef.trim()
+    : undefined;
+  if (sloUrl && !logoutCallbackUrl) throw new Error('SAML logoutCallbackUrl is required when sloUrl is configured');
+  if (sloUrl && !requestSigningPrivateKeyRef) throw new Error('SAML requestSigningPrivateKeyRef is required when sloUrl is configured');
   return {
     entityId: required(raw.entityId, 'entityId'),
     idpEntityId: required(raw.idpEntityId, 'idpEntityId'),
@@ -70,6 +88,18 @@ function configuration(raw: Record<string, unknown>): GenericSamlProviderConfigu
     ssoUrl: validateIdentityProviderEndpointUrl(required(raw.ssoUrl, 'ssoUrl'), 'SAML ssoUrl', ['https:']).toString(),
     signingCertificateRef: required(raw.signingCertificateRef, 'signingCertificateRef'),
     signatureAlgorithm,
+    sloUrl,
+    logoutCallbackUrl,
+    requestSigningPrivateKeyRef,
+    requestSigningCertificateRef: typeof raw.requestSigningCertificateRef === 'string' && raw.requestSigningCertificateRef.trim()
+      ? raw.requestSigningCertificateRef.trim()
+      : undefined,
+    requestedAuthnContext: Array.isArray(raw.requestedAuthnContext)
+      ? raw.requestedAuthnContext.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim())).slice(0, 20)
+      : [],
+    mfaAuthnContextValues: Array.isArray(raw.mfaAuthnContextValues)
+      ? raw.mfaAuthnContextValues.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim())).slice(0, 20)
+      : [],
     nameIdAttribute: typeof raw.nameIdAttribute === 'string' ? raw.nameIdAttribute.trim() || undefined : undefined,
     emailAttribute: typeof raw.emailAttribute === 'string' ? raw.emailAttribute.trim() || undefined : undefined,
     groupAttribute: typeof raw.groupAttribute === 'string' ? raw.groupAttribute.trim() || undefined : undefined,
@@ -135,6 +165,13 @@ function client(raw: Record<string, unknown>, expectedRequestId: string): { conf
   const config = configuration(raw);
   const certificate = secretResolver.resolveStored(config.signingCertificateRef.startsWith('ref:') ? config.signingCertificateRef : `ref:${config.signingCertificateRef}`);
   if (!certificate) throw new Error('SAML signing certificate reference is unavailable');
+  const requestSigningPrivateKey = config.requestSigningPrivateKeyRef
+    ? secretResolver.resolveStored(config.requestSigningPrivateKeyRef.startsWith('ref:') ? config.requestSigningPrivateKeyRef : `ref:${config.requestSigningPrivateKeyRef}`)
+    : null;
+  const requestSigningCertificate = config.requestSigningCertificateRef
+    ? secretResolver.resolveStored(config.requestSigningCertificateRef.startsWith('ref:') ? config.requestSigningCertificateRef : `ref:${config.requestSigningCertificateRef}`)
+    : null;
+  if (config.sloUrl && !requestSigningPrivateKey) throw new Error('SAML request-signing private key reference is unavailable');
   return {
     config,
     saml: new nodeSaml.SAML({
@@ -151,6 +188,11 @@ function client(raw: Record<string, unknown>, expectedRequestId: string): { conf
       acceptedClockSkewMs: 300_000,
       wantAssertionsSigned: true,
       wantAuthnResponseSigned: true,
+      ...(config.sloUrl ? { logoutUrl: config.sloUrl } : {}),
+      ...(requestSigningPrivateKey ? { privateKey: requestSigningPrivateKey } : {}),
+      ...(requestSigningCertificate ? { publicCert: normalizePemCertificate(requestSigningCertificate) } : {}),
+      disableRequestedAuthnContext: config.requestedAuthnContext.length === 0,
+      ...(config.requestedAuthnContext.length > 0 ? { authnContext: config.requestedAuthnContext } : {}),
     }),
   };
 }
@@ -196,6 +238,80 @@ export class GenericSamlService {
         claims,
       };
     } catch (error) { throw classifyIdentityProviderFailure(error, 'missing_subject'); }
+  }
+
+  authenticationAssurance(raw: Record<string, unknown>, profile: SamlProfile): { mfaVerified: boolean; authnContext: string[] } {
+    const config = configuration(raw);
+    const getAssertion = profile.getAssertion;
+    const assertion = typeof getAssertion === 'function' ? getAssertion() : null;
+    const authnContext = records(assertion).flatMap((entry) => records(entry.Assertion))
+      .flatMap((entry) => records(entry.AuthnStatement))
+      .flatMap((entry) => records(entry.AuthnContext))
+      .flatMap((entry) => records(entry.AuthnContextClassRef))
+      .map((entry) => entry._)
+      .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry));
+    return {
+      mfaVerified: config.mfaAuthnContextValues.length > 0
+        && authnContext.some((value) => config.mfaAuthnContextValues.includes(value)),
+      authnContext,
+    };
+  }
+
+  async createLogoutRequest(
+    raw: Record<string, unknown>,
+    relayState: string,
+    profile: { nameID: string; nameIDFormat: string; sessionIndex?: string },
+    correlatedRequestId?: string,
+  ): Promise<{ url: string; requestId: string } | null> {
+    const requestId = correlatedRequestId || `_${randomBytes(32).toString('base64url')}`;
+    try {
+      const { config, saml } = client(raw, requestId);
+      if (!config.sloUrl) return null;
+      return { url: await saml.getLogoutUrlAsync(profile, relayState, {}), requestId };
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
+  }
+
+  /** Accepts only XML-signed HTTP-POST LogoutRequest messages from the configured IdP. */
+  async validatePostLogoutRequest(raw: Record<string, unknown>, samlRequest: string): Promise<SamlProfile> {
+    const requestId = `_${randomBytes(32).toString('base64url')}`;
+    try {
+      const { config, saml } = client(raw, requestId);
+      if (!config.sloUrl) throw new Error('SAML single logout is not configured');
+      const { profile, loggedOut } = await saml.validatePostRequestAsync({ SAMLRequest: samlRequest });
+      if (!loggedOut || !profile || profile.issuer !== config.idpEntityId) throw new Error('Invalid SAML LogoutRequest');
+      return profile as SamlProfile;
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
+  }
+
+  async createLogoutResponse(raw: Record<string, unknown>, request: SamlProfile, relayState: string): Promise<string> {
+    const requestId = `_${randomBytes(32).toString('base64url')}`;
+    try {
+      const { config, saml } = client(raw, requestId);
+      if (!config.sloUrl) throw new Error('SAML single logout is not configured');
+      return await saml.getLogoutResponseUrlAsync(request, relayState, {}, true);
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
+  }
+
+  async validateRedirectLogoutResponse(
+    raw: Record<string, unknown>,
+    query: Record<string, unknown>,
+    originalQuery: string,
+    expectedRequestId: string,
+  ): Promise<void> {
+    try {
+      if (typeof query.Signature !== 'string' || typeof query.SigAlg !== 'string') throw new Error('SAML Redirect LogoutResponse must be signed');
+      const { saml } = client(raw, expectedRequestId);
+      const { loggedOut } = await saml.validateRedirectAsync(query, originalQuery);
+      if (!loggedOut) throw new Error('Invalid SAML LogoutResponse');
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
+  }
+
+  async validatePostLogoutResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string): Promise<void> {
+    try {
+      const { saml } = client(raw, expectedRequestId);
+      const { loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
+      if (!loggedOut) throw new Error('Invalid SAML LogoutResponse');
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
   }
 }
 

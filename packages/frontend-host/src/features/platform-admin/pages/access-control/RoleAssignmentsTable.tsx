@@ -24,6 +24,7 @@ import type {
 import { AssignmentSourceTag } from './AssignmentSourceTag';
 import { useActionDecision } from '../../../../shared/auth/guards';
 import type { RuntimeResourceEngineOption } from './runtimeResourceOptions';
+import { AdminTableEmptyState, AdminTablePagination, useAdminTablePagination } from '../../../../shared/components/AdminDataTable';
 
 const headers = [
   { key: 'principal', header: 'Assignee' }, { key: 'role', header: 'Role' },
@@ -112,8 +113,9 @@ export function RoleAssignmentsTable({
 }) {
   const engineAccessDeleteDecision = useActionDecision('platform.authz.assignments.delete.engine-access', { type: 'platform' });
   const projectAccessDeleteDecision = useActionDecision('platform.authz.assignments.delete.project-access', { type: 'platform' });
+  const pagination = useAdminTablePagination(assignments);
   if (loading) return <DataTableSkeleton headers={headers} rowCount={5} />;
-  const rows = assignments.map((assignment) => ({
+  const rows = pagination.pageItems.map((assignment) => ({
     id: assignment.id,
     principal: formatPrincipal(assignment, apiClients, groups, serviceAccounts),
     role: assignment.roleName || roles.find((role) => role.id === assignment.roleId)?.name || assignment.roleId,
@@ -121,10 +123,12 @@ export function RoleAssignmentsTable({
     source: assignment.source,
     actions: '',
   }));
-  return <TableContainer><DataTable rows={rows} headers={headers}>{({ rows: tableRows, headers: tableHeaders, getHeaderProps, getRowProps, getTableProps }) => (
+  return <TableContainer className="eg-admin-data-table"><DataTable rows={rows} headers={headers}>{({ rows: tableRows, headers: tableHeaders, getHeaderProps, getRowProps, getTableProps }) => assignments.length === 0 ? (
+    <AdminTableEmptyState title="No role assignments" description="Create an assignment to grant a user, group, or machine identity access to a governed resource." />
+  ) : (
     <Table {...getTableProps()} size="md"><TableHead><TableRow>{tableHeaders.map((header) => <TableHeader {...getHeaderProps({ header })} key={header.key}>{header.header}</TableHeader>)}</TableRow></TableHead><TableBody>
       {tableRows.map((row) => {
-        const assignment = assignments.find((item) => item.id === row.id);
+        const assignment = pagination.pageItems.find((item) => item.id === row.id);
         return <TableRow {...getRowProps({ row })} key={row.id}>{row.cells.map((cell) => {
           if (cell.info.header === 'source') {
             const configWarning = assignment?.source === 'config' && assignment.ownershipMode === 'config_warn';
@@ -184,5 +188,5 @@ export function RoleAssignmentsTable({
         })}</TableRow>;
       })}
     </TableBody></Table>
-  )}</DataTable></TableContainer>;
+  )}</DataTable><AdminTablePagination totalItems={assignments.length} page={pagination.page} pageSize={pagination.pageSize} onChange={pagination.setPagination} /></TableContainer>;
 }

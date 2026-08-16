@@ -74,10 +74,10 @@ function toView(account: ServiceAccount, ownership?: Parameters<typeof adminConf
     description: account.description,
     isActive: account.isActive,
     createdById: account.createdById,
-    lastUsedAt: account.lastUsedAt,
-    revokedAt: account.revokedAt,
-    createdAt: account.createdAt,
-    updatedAt: account.updatedAt,
+    lastUsedAt: account.lastUsedAt === null ? null : Number(account.lastUsedAt),
+    revokedAt: account.revokedAt === null ? null : Number(account.revokedAt),
+    createdAt: Number(account.createdAt),
+    updatedAt: Number(account.updatedAt),
     ...adminConfigOwnershipFields(ownership),
   };
 }

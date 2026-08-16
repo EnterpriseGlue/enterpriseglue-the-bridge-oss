@@ -104,7 +104,7 @@ export default function InviteMemberModal({
     }
 
     if (deliveryMethod === 'email' && !emailConfigured) {
-      setError('Email delivery is not configured. Configure a provider in Admin UI → Platform Settings → Email.');
+      setError('Email delivery is not configured. Configure a provider in Admin UI → Platform settings → Email.');
       return;
     }
 
@@ -210,7 +210,7 @@ export default function InviteMemberModal({
           <InlineNotification
             kind="info"
             title="Email delivery unavailable"
-            subtitle="Email is not configured in Admin UI → Platform Settings → Email, so invitations must be delivered manually."
+            subtitle="Email is not configured in Admin UI → Platform settings → Email, so invitations must be delivered manually."
             hideCloseButton
           />
         )}

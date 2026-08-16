@@ -11,6 +11,8 @@ interface PageHeaderProps {
   gradient?: [string, string]
   /** Optional action buttons to display on the right */
   actions?: React.ReactNode
+  /** Productive headers use Carbon layers and square geometry for dense administration pages. */
+  variant?: 'expressive' | 'productive'
 }
 
 interface PageLayoutProps {
@@ -20,6 +22,8 @@ interface PageLayoutProps {
   padding?: string
   /** Optional additional styles */
   style?: React.CSSProperties
+  /** Optional class name for surface-specific responsive layout */
+  className?: string
 }
 
 /**
@@ -31,36 +35,39 @@ export function PageHeader({
   subtitle,
   gradient = ['#0f62fe', '#0043ce'],
   actions,
+  variant = 'expressive',
 }: PageHeaderProps) {
   const [startColor, endColor] = gradient
+  const productive = variant === 'productive'
   // Calculate shadow color from start color with 30% opacity
   const shadowColor = startColor + '4D' // 4D = 30% opacity in hex
 
   return (
-    <div style={{ 
+    <div className="eg-page-header" style={{
       display: 'flex', 
       alignItems: 'flex-start', 
       justifyContent: 'space-between', 
       gap: 'var(--spacing-4)',
-      marginBottom: 'var(--spacing-5)'
+      flexWrap: 'wrap',
+      marginBottom: productive ? 0 : 'var(--spacing-5)'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)' }}>
+      <div className="eg-page-header__identity" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)' }}>
         <div style={{ 
-          background: `linear-gradient(135deg, ${startColor} 0%, ${endColor} 100%)`, 
-          borderRadius: '8px', 
-          padding: '12px', 
+          background: productive ? 'var(--cds-layer-02)' : `linear-gradient(135deg, ${startColor} 0%, ${endColor} 100%)`,
+          borderRadius: productive ? 0 : '8px',
+          padding: productive ? '8px' : '12px',
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          boxShadow: `0 2px 8px ${shadowColor}`
+          boxShadow: productive ? 'none' : `0 2px 8px ${shadowColor}`
         }}>
-          <Icon size={24} style={{ color: 'white' }} />
+          <Icon size={24} style={{ color: productive ? 'var(--cds-icon-primary)' : 'white' }} />
         </div>
         <div>
           <h1 style={{ 
             margin: 0, 
             fontSize: '28px', 
-            fontWeight: 600, 
+            fontWeight: productive ? 400 : 600,
             color: 'var(--color-text-primary)' 
           }}>
             {title}
@@ -77,7 +84,7 @@ export function PageHeader({
         </div>
       </div>
       {actions && (
-        <div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'center' }}>
+        <div className="eg-page-header__actions" style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'center', flexWrap: 'wrap' }}>
           {actions}
         </div>
       )}
@@ -91,10 +98,11 @@ export function PageHeader({
 export function PageLayout({ 
   children, 
   padding = 'var(--spacing-6)',
-  style 
+  style,
+  className,
 }: PageLayoutProps) {
   return (
-    <div style={{ 
+    <div className={className} style={{
       padding,
       ...style
     }}>

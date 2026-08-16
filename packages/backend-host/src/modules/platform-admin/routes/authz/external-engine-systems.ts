@@ -11,6 +11,7 @@ import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/pers
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { normalizeTenantIdForPersistence, OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import {
   adminConfigObjectOwnershipService,
   adminConfigOwnershipFields,
@@ -64,8 +65,8 @@ function serializeExternalEngineSystem(
     defaultFieldOwnership: parseExternalEngineFieldOwnership(system.defaultFieldOwnershipJson),
     isActive: system.isActive,
     createdById: system.createdById,
-    createdAt: system.createdAt,
-    updatedAt: system.updatedAt,
+    createdAt: Number(system.createdAt),
+    updatedAt: Number(system.updatedAt),
     ...adminConfigOwnershipFields(ownership),
   };
 }
@@ -74,7 +75,7 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
   router.get('/api/authz/external-engine-systems', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.read'), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
-      const tenantId = req.tenant?.tenantId || null;
+      const tenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
       const tenantWhere = tenantId === null ? IsNull() : tenantId;
       const [systems, ownershipRows] = await Promise.all([
         dataSource.getRepository(ExternalEngineSystem).find({
@@ -95,7 +96,7 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
   router.post('/api/authz/external-engine-systems', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateBody(externalEngineSystemCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const repo = (await getDataSource()).getRepository(ExternalEngineSystem);
-      const tenantId = req.tenant?.tenantId || null;
+      const tenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
       const now = Date.now();
       const key = req.body.key?.trim() || normalizeExternalSystemKey(req.body.name);
       const existing = await repo.findOne({ where: { tenantId: tenantId === null ? IsNull() : tenantId, key } });
@@ -123,7 +124,7 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
   router.put('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateParams(resourceIdParamSchema), validateBody(externalEngineSystemUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
-      const tenantId = req.tenant?.tenantId || null;
+      const tenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
       const tenantWhere = tenantId === null ? IsNull() : tenantId;
       const updates = {
         name: req.body.name,
@@ -160,7 +161,7 @@ export function registerExternalEngineSystemRoutes(router: Router, { requirePlat
   router.delete('/api/authz/external-engine-systems/:id', apiLimiter, requireAuth, requirePlatformAction('platform.external-engine-systems.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
-      const tenantId = req.tenant?.tenantId || null;
+      const tenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
       const tenantWhere = tenantId === null ? IsNull() : tenantId;
       const system = await dataSource.transaction(async (manager) => {
         const repo = manager.getRepository(ExternalEngineSystem);

@@ -1,0 +1,13 @@
+{
+  "identityProvisioningDirectories": [
+    {
+      "key": "entra-workforce",
+      "displayName": "Microsoft Entra workforce",
+      "description": "Authoritative employee and group lifecycle",
+      "identityProviderKey": "identity.oidc.entra",
+      "enabled": false,
+      "authoritative": true,
+      "credentialSecretRef": "env://ENTERPRISEGLUE_SCIM_ENTRA_TOKEN"
+    }
+  ]
+}

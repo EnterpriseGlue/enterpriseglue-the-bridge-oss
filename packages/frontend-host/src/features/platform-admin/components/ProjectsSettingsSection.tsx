@@ -47,7 +47,7 @@ export function ProjectsSettingsSection({
               <Folder size={20} style={{ color: 'var(--color-text-secondary)' }} />
               <div>
                 <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>
-                  Project Governance
+                  Project governance
                 </h3>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                   Assign owners or delegates to projects (for employee departures, recovery)
@@ -77,12 +77,12 @@ export function ProjectsSettingsSection({
             )}
 
             {canReadGovernance && (
-            <div style={{ display: 'flex', gap: 'var(--spacing-4)', alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, maxWidth: '400px' }}>
+            <div className="eg-project-governance-controls">
+              <div className="eg-project-governance-controls__project">
                 <ComboBox
                   key={`project-combo-${projectComboKey}`}
                   id="project-combobox"
-                  titleText="Select Project"
+                  titleText="Select project"
                   placeholder="Find a project..."
                   items={allProjects || []}
                   itemToString={(item: ProjectGovernanceItem | null) => item?.name || ''}
@@ -97,7 +97,7 @@ export function ProjectsSettingsSection({
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
+              <div className="eg-project-governance-controls__actions">
                 <Button
                   kind="tertiary"
                   size="md"
@@ -105,7 +105,7 @@ export function ProjectsSettingsSection({
                   title={!canAssign ? assignDisabledReason : undefined}
                   onClick={() => selectedProject && onAssignOwner({ id: selectedProject.id, name: selectedProject.name })}
                 >
-                  Assign Owner
+                  Assign owner
                 </Button>
                 <Button
                   kind="tertiary"
@@ -114,7 +114,7 @@ export function ProjectsSettingsSection({
                   title={!canAssign ? assignDisabledReason : undefined}
                   onClick={() => selectedProject && onAssignDelegate({ id: selectedProject.id, name: selectedProject.name })}
                 >
-                  Assign Delegate
+                  Assign delegate
                 </Button>
               </div>
             </div>

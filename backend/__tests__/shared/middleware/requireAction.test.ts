@@ -2470,6 +2470,9 @@ describe('requireAction project resource resolvers', () => {
       tenantId: 'tenant-default',
       resourceType: 'project',
       resourceId: projectId,
+      ipAddress: '::ffff:127.0.0.1',
+      userAgent: undefined,
+      mfaVerified: false,
     });
   });
 

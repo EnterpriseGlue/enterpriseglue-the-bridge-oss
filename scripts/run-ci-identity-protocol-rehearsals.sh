@@ -170,6 +170,12 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$root_dir"
+
+echo '[identity-protocol-rehearsal] Running SCIM HTTP-to-relational-database protocol journey.'
+pnpm --dir backend exec vitest run test/integration/identity/scimProtocol.e2e.test.ts \
+  --config vitest.config.ts --reporter=dot --maxWorkers=1 --no-file-parallelism \
+  2>&1 | tee "$artifact_dir/scim-protocol-rehearsal.log"
+
 KEYCLOAK_TLS_DIR="$tls_dir" ./infra/docker/keycloak/generate-local-tls.sh
 # Keycloak and the TLS frontend run as non-root users whose UIDs differ from
 # the GitHub runner. The material remains inside the mode-0700 temporary
@@ -235,8 +241,8 @@ node - "$artifact_dir/summary.txt" <<'NODE'
 const { writeFileSync } = require('node:fs');
 writeFileSync(process.argv[2], [
   'status=passed',
-  'protocols=oidc-config,oidc,entra-compatible-oidc,saml,ldap',
-  'scope=disposable-localhost-docker-stack',
+  'protocols=scim-http-relational,oidc-config,oidc,entra-compatible-oidc,saml,ldap',
+  'scope=scim-http-relational-harness,disposable-localhost-docker-stack',
   'artifacts=compose-status,service-logs,playwright-output,protocol-run-logs',
   'credentials=ephemeral-and-not-retained',
   '',

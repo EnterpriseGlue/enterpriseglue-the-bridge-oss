@@ -176,12 +176,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * Logout and clear session
    */
   const logout = useCallback(async () => {
+    let federatedLogoutUrl: string | null = null;
     try {
-      await authService.logout();
+      const response = await authService.logout();
+      federatedLogoutUrl = response?.federatedLogoutUrl || null;
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
       clearAuth();
+    }
+    if (federatedLogoutUrl) {
+      try {
+        const target = new URL(federatedLogoutUrl);
+        if (target.protocol === 'https:' || (import.meta.env.DEV && target.protocol === 'http:')) window.location.assign(target.toString());
+      } catch {
+        console.error('Identity provider returned an invalid logout URL');
+      }
     }
   }, [clearAuth]);
 

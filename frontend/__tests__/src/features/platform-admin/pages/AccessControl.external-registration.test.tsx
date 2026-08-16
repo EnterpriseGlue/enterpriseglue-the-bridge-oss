@@ -74,7 +74,7 @@ describe('AccessControl external registration', () => {
   it('renders external registration API clients', async () => {
     renderAccessControl();
 
-    fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
+    fireEvent.click(screen.getByRole('link', { name: /External Registration/i }));
 
     expect(screen.getAllByText('Engine registration').length).toBeGreaterThan(0);
     expect(screen.getByText('engine:register')).toBeInTheDocument();
@@ -119,7 +119,7 @@ describe('AccessControl external registration', () => {
 
     renderAccessControl();
 
-    fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
+    fireEvent.click(screen.getByRole('link', { name: /External Registration/i }));
     fireEvent.change(screen.getByLabelText('Client name'), { target: { value: 'Deploy bot' } });
     fireEvent.click(document.getElementById('api-client-scope-config-bundle-manage')!);
     fireEvent.click(document.getElementById('api-client-scope-deployment-execute')!);
@@ -141,7 +141,7 @@ describe('AccessControl external registration', () => {
 
     renderAccessControl();
 
-    fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
+    fireEvent.click(screen.getByRole('link', { name: /External Registration/i }));
     fireEvent.change(screen.getByLabelText('Service account name'), { target: { value: 'Release service' } });
     fireEvent.change(screen.getByLabelText('Service account description'), { target: { value: 'Release automation' } });
     const createServiceAccountButton = screen.getByRole('button', { name: /Create Service Account/i });
@@ -158,7 +158,7 @@ describe('AccessControl external registration', () => {
   it('creates, edits, and archives external engine systems', () => {
     renderAccessControl();
 
-    fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
+    fireEvent.click(screen.getByRole('link', { name: /External Registration/i }));
     fireEvent.change(document.getElementById('external-system-key')!, { target: { value: 'cmdb' } });
     fireEvent.change(document.getElementById('external-system-name')!, { target: { value: 'CMDB' } });
     fireEvent.change(document.getElementById('external-system-description')!, { target: { value: 'External CMDB' } });

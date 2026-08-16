@@ -1531,6 +1531,14 @@ describe('permissionService', () => {
       PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW,
       PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_MANAGE,
     ]);
+    expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.API_IDENTITY_PROVISIONING_ADMIN)).toMatchObject({
+      scope: 'platform',
+      isAssignable: true,
+      permissions: [
+        PlatformPermissions.SSO_PROVIDERS_VIEW,
+        PlatformPermissions.SSO_PROVIDERS_MANAGE,
+      ],
+    });
     expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_ENGINE_REGISTRY_ADMIN)?.permissions).toEqual([
       PlatformPermissions.ENGINE_REGISTRATION_MANAGE,
       PlatformPermissions.ENGINE_SETS_VIEW,
@@ -2156,7 +2164,10 @@ describe('permissionService', () => {
     }));
   });
 
-  it('allows API clients to receive the API engine registrar system role', async () => {
+  it.each([
+    SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+    SYSTEM_ROLE_IDS.API_IDENTITY_PROVISIONING_ADMIN,
+  ])('allows API clients to receive the %s system role', async (roleId) => {
     const insertAssignment = vi.fn().mockResolvedValue(undefined);
     const auditInsert = vi.fn().mockResolvedValue(undefined);
     const duplicateQb = {
@@ -2169,7 +2180,7 @@ describe('permissionService', () => {
       getRepository: (entity: unknown) => {
         if (entity === RbacRole) return {
           findOne: vi.fn().mockResolvedValue({
-            id: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+            id: roleId,
             scope: 'platform',
             kind: 'system',
             tenantId: null,
@@ -2190,7 +2201,7 @@ describe('permissionService', () => {
     const result = await permissionService.assignRole({
       principalType: 'api_client',
       principalId: 'api-client-1',
-      roleId: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+      roleId,
       resourceType: 'platform',
       resourceId: null,
       createdById: 'admin-1',
@@ -2200,7 +2211,7 @@ describe('permissionService', () => {
     expect(insertAssignment).toHaveBeenCalledWith(expect.objectContaining({
       principalType: 'api_client',
       principalId: 'api-client-1',
-      roleId: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+      roleId,
       scopeType: 'platform',
       scopeId: null,
     }));

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 vi.unmock('@enterpriseglue/shared/services/platform-admin/PolicyService.js');
 
-import { policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
+import { ipAddressMatchesRange, policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/db/entities/AuditLog.js';
 import { AuthzPolicy } from '@enterpriseglue/shared/db/entities/AuthzPolicy.js';
@@ -186,6 +186,55 @@ describe('policyService', () => {
       policyName: 'business-hours',
     });
     expect(permissionSpy).not.toHaveBeenCalled();
+  });
+
+  it('evaluateGate denies when an applicable conditional allow does not satisfy MFA', async () => {
+    const policyRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        getMany: vi.fn().mockResolvedValue([{
+          id: 'p-mfa', name: 'mfa-required', description: null, effect: 'allow', priority: 5,
+          resourceType: 'project', action: 'project:deploy',
+          conditions: JSON.stringify({ environment: { requireMfa: true } }), isActive: true,
+        }]),
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzPolicy) return policyRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(policyService.evaluateGate('project:deploy', {
+      userId: 'user-1', resourceType: 'project', resourceId: 'project-1', mfaVerified: false,
+    })).resolves.toEqual({ decision: 'deny', reason: 'policy-conditions-not-satisfied' });
+  });
+
+  it('fails closed instead of converting malformed persisted conditions into an unconditional policy', async () => {
+    const policyRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        getMany: vi.fn().mockResolvedValue([{
+          id: 'p-invalid', name: 'invalid-policy', description: null, effect: 'allow', priority: 5,
+          resourceType: 'project', action: 'project:deploy', conditions: '{"environment":"production"}', isActive: true,
+        }]),
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzPolicy) return policyRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(policyService.evaluateGate('project:deploy', {
+      userId: 'user-1', resourceType: 'project', resourceId: 'project-1',
+    })).rejects.toThrow('Authorization policy conditions are invalid');
   });
 
   it('logs decisions with audit records', async () => {
@@ -388,6 +437,7 @@ describe('policyService', () => {
       userAttributes: { department: 'engineering', tags: 'release-manager' },
       resourceAttributes: { production: true, owner: 'user-1' },
       ipAddress: '10.10.2.3',
+      mfaVerified: true,
     };
     const timestamp = Date.UTC(2024, 0, 3, 12, 0, 0); // Wednesday noon UTC
 
@@ -401,16 +451,44 @@ describe('policyService', () => {
     expect(service.evaluateConditions({ userAttribute: { key: 'department', operator: 'unknown', value: 'engineering' } as any }, context, timestamp)).toBe(false);
     expect(service.evaluateConditions({ resourceAttribute: { key: 'missing', operator: 'eq', value: true } }, context, timestamp)).toBe(false);
     expect(service.evaluateConditions({ resourceAttribute: { key: 'production', operator: 'eq', value: true } }, context, timestamp)).toBe(true);
-    expect(service.evaluateConditions({ environment: { ipRange: ['10.10.*'] } }, context, timestamp)).toBe(true);
+    expect(service.evaluateConditions({ environment: { ipRange: ['10.10.0.0/16'] } }, context, timestamp)).toBe(true);
     expect(service.evaluateConditions({ environment: { ipRange: ['10.10.2.3'] } }, context, timestamp)).toBe(true);
-    expect(service.evaluateConditions({ environment: { ipRange: ['192.168.*'] } }, context, timestamp)).toBe(false);
-    expect(service.evaluateConditions({ environment: { ipRange: ['10.10.2.3'] } }, { userId: 'user-1' }, timestamp)).toBe(true);
+    expect(service.evaluateConditions({ environment: { ipRange: ['192.168.0.0/16'] } }, context, timestamp)).toBe(false);
+    expect(service.evaluateConditions({ environment: { ipRange: ['10.10.2.3'] } }, { userId: 'user-1' }, timestamp)).toBe(false);
+    expect(service.evaluateConditions({ environment: { ipRange: ['2001:db8::/32'] } }, { ...context, ipAddress: '2001:db8::1' }, timestamp)).toBe(true);
+    expect(service.evaluateConditions({ environment: { ipRange: ['invalid'] } }, context, timestamp)).toBe(false);
+    expect(service.evaluateConditions({ environment: { requireMfa: true } }, context, timestamp)).toBe(true);
+    expect(service.evaluateConditions({ environment: { requireMfa: true } }, { ...context, mfaVerified: false }, timestamp)).toBe(false);
     expect(service.evaluateConditions({ timeWindow: { daysOfWeek: [3], start: '09:00', end: '17:00' } }, context, timestamp)).toBe(true);
     expect(service.evaluateConditions({ timeWindow: { daysOfWeek: [2] } }, context, timestamp)).toBe(false);
     expect(service.evaluateConditions({ timeWindow: { start: '13:00', end: '17:00' } }, context, timestamp)).toBe(false);
     expect(service.evaluateConditions({ timeWindow: { start: '22:00', end: '06:00' } }, context, timestamp)).toBe(false);
     expect(service.evaluateConditions({ timeWindow: { start: '09:00' } }, context, timestamp)).toBe(true);
     expect(service.evaluateConditions({ timeWindow: { start: '22:00', end: '06:00' } }, context, Date.UTC(2024, 0, 3, 23, 0, 0))).toBe(true);
+  });
+
+  it.each([
+    ['192.0.2.42', '192.0.2.0/24', true],
+    ['192.0.3.42', '192.0.2.0/24', false],
+    ['192.0.2.42', '192.0.2.42', true],
+    ['192.0.2.42', '198.51.100.42', false],
+    ['192.0.2.42', '0.0.0.0/0', true],
+    ['::ffff:192.0.2.42', '192.0.2.0/24', true],
+    ['2001:db8::192.0.2.42', '2001:db8::/32', true],
+    ['2001:db8:0:0:0:0:0:1', '2001:db8::/32', true],
+    ['::1', '::1', true],
+    ['2001:db8::', '2001:db8::', true],
+    ['[2001:db8::1]', '2001:db8::/32', true],
+    ['fe80::1%lo0', 'fe80::/10', true],
+    ['192.0.2.42', '2001:db8::/32', false],
+    ['not-an-ip', '192.0.2.0/24', false],
+    ['192.0.2.42', 'not-a-network/24', false],
+    ['192.0.2.42', '192.0.2.0/not-a-prefix', false],
+    ['192.0.2.42', '192.0.2.0/-1', false],
+    ['192.0.2.42', '192.0.2.0/33', false],
+    ['192.0.2.42', '192.0.2.0/24/extra', false],
+  ] as const)('matches IP address %s against %s as %s', (address, range, expected) => {
+    expect(ipAddressMatchesRange(address, range)).toBe(expected);
   });
 
   it('covers policy CRUD, tenant filtering, invalid persisted conditions, and audit query filters', async () => {
@@ -453,17 +531,19 @@ describe('policyService', () => {
     await policyService.deletePolicy(created.id);
     expect(auditRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ userId: null, action: 'authz.policy.delete' }));
 
-    await expect(policyService.getAllPolicies(' tenant-a ')).resolves.toEqual([expect.objectContaining({ conditions: {}, description: undefined, resourceType: undefined, action: undefined })]);
-    await expect(policyService.getAllPolicies()).resolves.toHaveLength(1);
-    await expect(policyService.getPolicy('policy-1')).resolves.toMatchObject({ id: 'policy-1', conditions: {} });
+    await expect(policyService.getAllPolicies(' tenant-a ')).rejects.toThrow('Authorization policy conditions are invalid');
+    policyRepo.find.mockResolvedValue([policyRow({ id: 'policy-1', tenantId: 'tenant-a', description: '', resourceType: '', action: '', conditions: '{}' })]);
+    await expect(policyService.getAllPolicies()).resolves.toEqual([expect.objectContaining({ conditions: {}, description: undefined, resourceType: undefined, action: undefined })]);
+    await expect(policyService.getPolicy('policy-1')).rejects.toThrow('Authorization policy conditions are invalid');
     await expect(policyService.getPolicy('missing')).resolves.toBeNull();
     await expect(policyService.updatePolicy('missing', {})).rejects.toMatchObject({ statusCode: 404 });
     policyRepo.findOne.mockResolvedValueOnce(null);
     await expect(policyService.deletePolicy('missing')).rejects.toMatchObject({ statusCode: 404 });
-    await expect(policyService.getAuditLog({ tenantId: ' tenant-a ', userId: 'user-1', resourceType: 'project', resourceId: 'project-1', decision: 'deny', limit: 25, offset: 10 })).resolves.toEqual([]);
+    await expect(policyService.getAuditLog({ tenantId: ' tenant-a ', userId: 'user-1', action: 'project:deploy', resourceType: 'project', resourceId: 'project-1', decision: 'deny', limit: 25, offset: 10 })).resolves.toEqual([]);
     await expect(policyService.getAuditLog({})).resolves.toEqual([]);
     const auditQb = auditRepo.createQueryBuilder.mock.results[0].value;
     expect(auditQb.andWhere).toHaveBeenCalledWith('(a.tenantId = :tenantId OR a.tenantId IS NULL)', { tenantId: 'tenant-a' });
+    expect(auditQb.andWhere).toHaveBeenCalledWith('a.action = :action', { action: 'project:deploy' });
     expect(auditQb.take).toHaveBeenCalledWith(25);
     expect(auditQb.skip).toHaveBeenCalledWith(10);
 

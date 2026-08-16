@@ -74,7 +74,7 @@ async function login(page: Page): Promise<void> {
     && new URL(response.url()).pathname === '/api/authz/me/permissions'
     && response.status() === 200,
   );
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   expect((await loginResponse).status()).toBe(200);
   await page.waitForURL(/\/t\/default(?:\/|$)/);
   await permissionsResponse;
