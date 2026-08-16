@@ -14,6 +14,17 @@ vi.mock('@src/features/mission-control/shared/stores/processesFilterStore', () =
   useProcessesFilterStore: () => ({ selectedProcess: null, selectedVersion: null }),
 }));
 
+vi.mock('@src/components/EngineSelector', () => ({
+  useEngineSelection: () => ({
+    selectedEngineId: 'engine-1',
+    isResolving: false,
+    isEmpty: false,
+    isError: false,
+    error: null,
+  }),
+  useSelectedEngine: () => 'engine-1',
+}));
+
 vi.mock('@src/shared/hooks/useAlert', () => ({
   useAlert: () => ({ alertState: null, showAlert: vi.fn(), closeAlert: vi.fn() }),
 }));

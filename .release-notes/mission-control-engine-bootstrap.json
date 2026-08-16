@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "mission-control-engine-bootstrap",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Ensures Mission Control deep links resolve an accessible engine before loading runtime data, eliminating empty detail shells and release-smoke timing races.",
+  "userImpact": [
+    "Authenticated users can open bookmarked process-instance detail links in a fresh browser session without first visiting the dashboard or process overview.",
+    "Engine-dependent detail pages show an explicit loading, no-engine, or engine-discovery error state instead of an indefinitely empty runtime shell."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Persisted engine choices are validated against the caller's current authorization-filtered engine inventory before runtime requests are enabled."
+  ],
+  "documentation": [
+    "Mission Control engine selection and deep-link behavior: `docs/development/mission-control-engine-selection.md`"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend image or `@enterpriseglue/frontend-host` package; no configuration or database rollback is required."
+  ],
+  "validation": [
+    "Focused frontend unit tests cover missing, valid, stale, empty, and failed accessible-engine resolution.",
+    "The Mission Control process-instance browser smoke clears persisted engine state before direct navigation and verifies the engine inventory plus history, variables, activity history, and process XML responses."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.6.0",
+      "newVersion": "0.6.1",
+      "impact": "patch"
+    }
+  ]
+}

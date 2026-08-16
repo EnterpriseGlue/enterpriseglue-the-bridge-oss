@@ -3,6 +3,63 @@ import { useQuery } from '@tanstack/react-query'
 import { Dropdown } from '@carbon/react'
 import { useEngineSelectorStore } from '../stores/engineSelectorStore'
 import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
+import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+
+export const ENGINE_SELECTOR_QUERY_KEY = ['engines-selector'] as const
+
+export function sortAccessibleEngines(engines: AccessibleEngineSummary[]): AccessibleEngineSummary[] {
+  return [...engines].sort((left, right) => {
+    const leftLabel = left.name ?? left.baseUrl ?? ''
+    const rightLabel = right.name ?? right.baseUrl ?? ''
+    return leftLabel.localeCompare(rightLabel)
+      || String(left.baseUrl ?? '').localeCompare(String(right.baseUrl ?? ''))
+      || left.id.localeCompare(right.id)
+  })
+}
+
+export function resolveSelectedEngineId(
+  engines: AccessibleEngineSummary[],
+  persistedEngineId: string | undefined,
+): string | undefined {
+  if (engines.length === 0) return undefined
+  if (persistedEngineId && engines.some((engine) => engine.id === persistedEngineId)) {
+    return persistedEngineId
+  }
+  return engines[0].id
+}
+
+export function useEngineSelection() {
+  const { selectedEngineId: persistedEngineId, setSelectedEngineId } = useEngineSelectorStore()
+  const enginesQuery = useQuery({
+    queryKey: ENGINE_SELECTOR_QUERY_KEY,
+    queryFn: getAccessibleEngines,
+    staleTime: 60000,
+    retry: false,
+  })
+
+  const engines = React.useMemo(
+    () => sortAccessibleEngines(enginesQuery.data || []),
+    [enginesQuery.data],
+  )
+  const selectedEngineId = enginesQuery.isSuccess
+    ? resolveSelectedEngineId(engines, persistedEngineId)
+    : undefined
+
+  React.useEffect(() => {
+    if (!enginesQuery.isSuccess || selectedEngineId === persistedEngineId) return
+    setSelectedEngineId(selectedEngineId)
+  }, [enginesQuery.isSuccess, persistedEngineId, selectedEngineId, setSelectedEngineId])
+
+  return {
+    engines,
+    selectedEngineId,
+    isResolving: enginesQuery.isPending,
+    isEmpty: enginesQuery.isSuccess && engines.length === 0,
+    isError: enginesQuery.isError,
+    error: enginesQuery.error,
+    refetch: enginesQuery.refetch,
+  }
+}
 
 interface EngineSelectorProps {
   style?: React.CSSProperties
@@ -11,29 +68,8 @@ interface EngineSelectorProps {
 }
 
 export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineSelectorProps) {
-  const { selectedEngineId, setSelectedEngineId } = useEngineSelectorStore()
-
-  const enginesQuery = useQuery({
-    queryKey: ['engines-selector'],
-    queryFn: () => getAccessibleEngines().catch(() => []),
-    staleTime: 60000,
-  })
-
-  const engines = React.useMemo(() => {
-    // The route is guarded by engine.visibleCollection. Do not re-filter by
-    // legacy display roles here: custom and runtime-derived grants may not
-    // have a synthetic owner/delegate/operator value.
-    return [...(enginesQuery.data || [])].sort((a, b) =>
-      (a.name ?? a.baseUrl ?? '').localeCompare(b.name ?? b.baseUrl ?? '')
-    )
-  }, [enginesQuery.data])
-
-  // Auto-select engine: single engine or first alphabetically
-  React.useEffect(() => {
-    if (engines.length > 0 && (!selectedEngineId || !engines.some((engine) => engine.id === selectedEngineId))) {
-      setSelectedEngineId(engines[0].id)
-    }
-  }, [engines, selectedEngineId, setSelectedEngineId])
+  const { setSelectedEngineId } = useEngineSelectorStore()
+  const { engines, selectedEngineId, isResolving, isError } = useEngineSelection()
 
   // Build items list (no "All Engines" option)
   const items = React.useMemo(() => {
@@ -53,7 +89,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
   }, [items, selectedEngineId])
 
   // Don't render if loading or no engines - but keep hook count stable
-  if (enginesQuery.isLoading || engines.length === 0) {
+  if (isResolving || isError || engines.length === 0) {
     return null
   }
 
@@ -87,6 +123,5 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
 
 // Hook to get the current engine filter for queries
 export function useSelectedEngine() {
-  const { selectedEngineId } = useEngineSelectorStore()
-  return selectedEngineId
+  return useEngineSelection().selectedEngineId
 }
