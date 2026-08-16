@@ -35,7 +35,7 @@ test('Docker Hub examples use the configured release namespace', () => {
   ];
   for (const relativePath of publicFiles) {
     const source = read(relativePath);
-    assert.doesNotMatch(source, /docker\.io\/enterpriseglue\/enterpriseglue-the-bridge-oss-/);
-    assert.match(source, /docker\.io\/haryenterpriseglue\/enterpriseglue-the-bridge-oss-/);
+    assert.equal(source.includes('docker.io/enterpriseglue/enterpriseglue-the-bridge-oss-'), false);
+    assert.equal(source.includes('docker.io/haryenterpriseglue/enterpriseglue-the-bridge-oss-'), true);
   }
 });
