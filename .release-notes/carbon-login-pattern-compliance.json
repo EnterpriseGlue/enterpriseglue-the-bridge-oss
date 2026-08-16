@@ -12,14 +12,17 @@
     "developers",
     "security"
   ],
-  "summary": "Adds a Carbon-aligned authentication and identity-administration experience with provider-neutral SCIM 2.0 provisioning, source-aware user lifecycle controls, headless configuration, and complete API contracts.",
+  "summary": "Adds Carbon-aligned authentication, identity and access administration with provider-neutral SCIM 2.0 provisioning, source-aware lifecycle controls, headless configuration, governed machine identities, and responsive dashboards.",
   "userImpact": [
     "Desktop navigation keeps Voyager and Admin while narrow viewports expose the same allowed destinations in Carbon side navigation; OSS does not show an empty Enterprise menu.",
     "Public login, recovery, verification, signup guidance, and invitation onboarding share the application header and a consistent Carbon authentication composition.",
     "Platform settings now provides responsive grouped navigation plus focused provider, mapping, and provisioning creation workflows.",
     "Administrators can configure one active authoritative SCIM 2.0 directory per tenant, issue reveal-once credentials, inspect sanitized diagnostics, and manage credential rotation and revocation.",
     "User management identifies authentication, provisioning, lifecycle, health, effective-access, session, and audit sources while keeping directory-owned fields read-only.",
-    "SCIM deactivation immediately revokes sessions and directory-owned access while preserving the user, authored resources, audit history, and unrelated assignments."
+    "SCIM deactivation immediately revokes sessions and directory-owned access while preserving the user, authored resources, audit history, and unrelated assignments.",
+    "Access Control now groups roles, assignments, principal and resource exploration, runtime resources, policies, authorization audit, machine identities, and external registration into responsive task-based navigation.",
+    "Authorization policies can be created, evaluated, disabled, deleted, and traced through filtered, exportable and redacted audit evidence; configuration-owned policies and external systems remain visible but locked against portal mutation.",
+    "The dashboard now fails closed when its authorization context is unavailable and uses aligned full-width controls, notifications, KPI tiles, charts, and mobile reflow."
   ],
   "upgrade": {
     "required": true,
@@ -33,7 +36,8 @@
   "configuration": [
     "Configuration bundles may import `identity-provisioning-directories.json` using canonical secret references; resolved tokens and hashes are rejected from portable output.",
     "`EG_SCIM_RATE_LIMIT_MAX` optionally changes the per-credential request budget for each 15-minute window; production defaults to 30000.",
-    "Existing bundles remain valid because provisioning directories are optional and disabled by default."
+    "Existing bundles remain valid because provisioning directories are optional and disabled by default.",
+    "Configuration bundles can own authorization policies and external-engine systems; the portal exposes their source and disables conflicting manual lifecycle operations."
   ],
   "api": {
     "compatibility": "additive",
@@ -43,6 +47,8 @@
       "Adds authenticated provisioning-directory, credential, readiness-test, and diagnostics endpoints under `/api/identity/provisioning-directories`.",
       "Provisioning administration also accepts a least-privilege API client with `identity:provisioning:manage`, matching RBAC, and durable at-most-once keys for reveal-once credential operations.",
       "Adds source-aware user directory, identity-context, effective-access, session, audit, deactivate, reactivate, and revoke-session endpoints.",
+      "Authorization audit queries accept an optional action filter, return normalized timestamps, and recursively redact credential, password, secret, token, and authorization values before display or CSV export.",
+      "External-engine audit, reconcile, decommission, and reactivate operations use the platform registration-management action contract while retaining explicit tenant visibility and external-registration checks.",
       "Generated OpenAPI uses canonical shared request, response, authorization, media-type, and error schemas; compatible existing user APIs remain available."
     ]
   },
@@ -66,7 +72,8 @@
     "SCIM and identity mappings cannot grant Platform Administrator access, and local recovery administrators cannot be linked, modified, or deactivated by SCIM.",
     "ETags, serializable transactions, bounded payloads/results/groups/Bulk operations, atomic PATCH, sanitized errors, source-scoped access removal, audit reasons, and immediate session invalidation protect lifecycle operations.",
     "Conditional access evaluates trusted IPv4/IPv6/CIDR context and verified OIDC/SAML MFA assurance fail closed; federated logout validates signed protocol evidence before targeted revocation.",
-    "Reveal-once administration responses are non-cacheable; the supported CLI writes secrets only to new mode-0600 files and never logs them."
+    "Reveal-once administration responses are non-cacheable; the portal prevents closing the credential dialog until the operator confirms secure storage, and the supported CLI writes secrets only to new mode-0600 files without logging them.",
+    "Authorization audit display and export recursively redact sensitive context, and dashboard data is withheld when its authorization context cannot be loaded."
   ],
   "documentation": [
     "Architecture and trust model: `docs/architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md` and `docs/concepts/authentication-and-authoritative-provisioning.md`",
@@ -93,8 +100,11 @@
     "Fifty-one accessibility scenarios passed in Chromium, Firefox, and WebKit, and the authorization layout browser gate passed.",
     "The focused identity-administration accessibility suite passed all 36 Chromium, Firefox, and WebKit cases, including keyboard access to the true end of internally scrolling provider and mapping forms.",
     "The complete backend, frontend, and frontend-host TypeScript check plus the production frontend-host build passed.",
-    "Authorization inventory reports all 444 authenticated backend routes classified, with zero remaining.",
+    "Authorization inventory reports all 433 currently authenticated backend routes classified, with zero remaining.",
     "Fifty-two final Carbon authentication, navigation, settings, identity-workflow, user-lifecycle, provisioning, narrow, and 200%-reflow screenshots passed deterministic dimension, uniqueness, overflow, accessibility, and visual inspection checks, including explicit provider and mapping form-bottom evidence.",
+    "Four real-browser governance journeys passed against a pristine Docker deployment, covering principal and resource exploration, policy lifecycle and evaluation, authorization audit, machine identities, external registration, configuration ownership, and dashboard success, mobile, and controlled-error states.",
+    "The governance regression set passed 169 targeted backend tests and 13 targeted frontend tests; the secret-boundary suite passed 436 tests, and policy plus machine-identity services retained 100% statement, branch, function, and line coverage.",
+    "Fourteen additional governance screenshots passed desktop and mobile dimension, uniqueness, and visual inspection checks; the dashboard mobile E2E also asserts equal filter, notification, and KPI widths plus single-column stacking at 390 pixels.",
     "The exact worktree passed a local source-image deployment, while the fail-closed image-only Compose path independently pulled and smoke-tested the published multi-architecture Docker Hub images without falling back to a build.",
     "Configuration-bundle, documentation, release-note, authorization, browser, database-adapter, and protocol-rehearsal gates are recorded in the implementation plan and UI evidence report."
   ],
