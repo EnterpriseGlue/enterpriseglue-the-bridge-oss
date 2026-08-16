@@ -94,7 +94,8 @@ async function csrfToken(page: Page): Promise<string> {
   return body.csrfToken;
 }
 
-function mutationOptions(token: string, data?: unknown) {
+async function mutationOptions(page: Page, data?: unknown) {
+  const token = await csrfToken(page);
   return {
     headers: { 'X-CSRF-Token': token },
     ...(data === undefined ? {} : { data }),
@@ -104,7 +105,6 @@ function mutationOptions(token: string, data?: unknown) {
 async function applyReadyClassificationRows(
   page: Page,
   report: ClassificationReport,
-  token: string,
   ownedEngineIds: ReadonlySet<string>,
 ): Promise<string[]> {
   const applied: string[] = [];
@@ -118,13 +118,13 @@ async function applyReadyClassificationRows(
       requiredAcknowledgements: string[];
     }>(
       await page.request.post(`/engines-api/engines/${encodeURIComponent(row.engineId)}/tenancy/preview`, {
-        ...mutationOptions(token, { tenancy: row.proposed }),
+        ...await mutationOptions(page, { tenancy: row.proposed }),
       }),
       `preview tenancy classification for ${row.engineId}`,
     );
     await responseJson(
       await page.request.post(`/engines-api/engines/${encodeURIComponent(row.engineId)}/tenancy/apply`, {
-        ...mutationOptions(token, {
+        ...await mutationOptions(page, {
           tenancy: row.proposed,
           previewHash: preview.previewHash,
           previewExpiresAt: preview.previewExpiresAt,
@@ -148,8 +148,6 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
     page,
   }, testInfo: TestInfo) => {
     await login(page);
-    const token = await csrfToken(page);
-
     const initialReport = await classificationReport(page);
     const seededMigrationEngineId = getE2ESeedData().migrationEngineId;
     expect(seededMigrationEngineId, 'the evidence fixture must include a quarantined migration engine').toBeTruthy();
@@ -167,7 +165,6 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       appliedEngineIds = await applyReadyClassificationRows(
         page,
         initialReport,
-        token,
         new Set([seededMigrationEngineId!]),
       );
       expect(appliedEngineIds).toEqual([seededMigrationEngineId]);
@@ -198,7 +195,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
 
     try {
       const unsafeShared = await page.request.post('/engines-api/engines', {
-        ...mutationOptions(token, {
+        ...await mutationOptions(page, {
           name: `tenancy-evidence-unsafe-${suffix}`,
           baseUrl: engineBaseUrl,
           type: 'camunda7',
@@ -214,7 +211,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
 
       dedicated = await responseJson<Record<string, unknown>>(
         await page.request.post('/engines-api/engines', {
-          ...mutationOptions(token, {
+          ...await mutationOptions(page, {
             name: `tenancy-evidence-dedicated-${suffix}`,
             baseUrl: engineBaseUrl,
             type: 'camunda7',
@@ -233,7 +230,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
 
       shared = await responseJson<Record<string, unknown>>(
         await page.request.post('/engines-api/engines', {
-          ...mutationOptions(token, {
+          ...await mutationOptions(page, {
             name: `tenancy-evidence-shared-${suffix}`,
             baseUrl: engineBaseUrl,
             type: 'camunda7',
@@ -257,7 +254,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       await responseJson(
         await page.request.post(
           `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
-          mutationOptions(token),
+          await mutationOptions(page),
         ),
         'reconcile unmapped shared inventory',
       );
@@ -287,7 +284,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       }>(
         await page.request.put(
           `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenant-mappings`,
-          mutationOptions(token, {
+          await mutationOptions(page, {
               expectedMappingVersion: 0,
               dryRun: false,
               atomic: true,
@@ -306,7 +303,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       await responseJson(
         await page.request.post(
           `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
-          mutationOptions(token),
+          await mutationOptions(page),
         ),
         'reconcile mapped shared inventory',
       );
@@ -400,7 +397,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       for (const engineId of createdEngineIds.reverse()) {
         const response = await page.request.delete(
           `/engines-api/engines/${encodeURIComponent(engineId)}`,
-          mutationOptions(token),
+          await mutationOptions(page),
         );
         expect(
           [204, 404],

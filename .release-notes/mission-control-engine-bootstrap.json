@@ -42,7 +42,8 @@
   ],
   "validation": [
     "Focused frontend unit tests cover missing, valid, stale, empty, and failed accessible-engine resolution.",
-    "The Mission Control process-instance browser smoke clears persisted engine state before direct navigation and verifies the engine inventory plus history, variables, activity history, and process XML responses."
+    "The Mission Control process-instance browser smoke clears persisted engine state before direct navigation and verifies the engine inventory plus history, variables, activity history, and process XML responses.",
+    "The engine-tenancy browser gate obtains a matching double-submit CSRF token immediately before every mutation so intervening responses cannot invalidate the evidence run."
   ],
   "packages": [
     {
