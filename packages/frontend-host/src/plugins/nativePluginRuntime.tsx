@@ -11,6 +11,7 @@ import {
   type PluginFrontendModuleV1,
   type PluginId,
   type PluginRoutePropsV1,
+  type PluginSettingsContributionV1,
   type PluginSlotContextMapV1,
   type PluginSlotIdV1,
 } from '@enterpriseglue/plugin-sdk';
@@ -35,6 +36,11 @@ import {
   type PluginFrontendFailureCodeV1,
   type PluginFrontendFailureTargetV1,
 } from './frontendFailureCircuit';
+import {
+  bindPluginContextualFlowControllerV1,
+  type HostContextualFlowSurfaceV1,
+  useGlobalContextualFlowSurfaceV1,
+} from './contextualFlowRuntime';
 
 const SHARED_RUNTIME_GLOBAL = '__ENTERPRISEGLUE_PLUGIN_SHARED_V1__';
 const FRONTEND_BOOTSTRAP_API = '/api/plugins/v1/frontend';
@@ -77,9 +83,32 @@ export interface NativePluginNavigationV1 {
   label: string;
   path: string;
   section: 'main' | 'tenant' | 'settings' | 'administration';
+  destination?: 'voyager' | 'operations' | 'tenant' | 'admin';
+  parentDestination?:
+    | 'mission-control'
+    | 'engines'
+    | 'platform-settings'
+    | 'plugins';
   order?: number;
+  icon?: React.ComponentType<{ size?: number }>;
   pluginId: PluginId;
   scope: 'root' | 'tenant';
+}
+
+/**
+ * A safe, host-owned projection of an installed plugin's deployment or tenant
+ * settings contribution. The browser receives only the declared label and
+ * route; configuration, credentials, and plugin operational data stay behind
+ * the signed plugin operation boundary.
+ */
+export interface NativePluginSettingsV1 {
+  id: string;
+  label: string;
+  relativePath: string;
+  order?: number;
+  pluginId: PluginId;
+  scope: PluginSettingsContributionV1['scope'];
+  routeScope: 'root' | 'tenant';
 }
 
 type PluginImporter = (url: string) => Promise<unknown>;
@@ -367,6 +396,9 @@ function hostContext(
           : '';
         window.history.pushState({}, '', `${prefix}/${path}`);
         window.dispatchEvent(new PopStateEvent('popstate'));
+      },
+      back() {
+        window.history.back();
       },
     },
     notifications: {
@@ -687,6 +719,13 @@ export function getNativePluginNavigationV1(): NativePluginNavigationV1[] {
               label: navigation.label,
               path: `/${route.relativePath}`,
               section,
+              ...(navigation.destination
+                ? { destination: navigation.destination }
+                : {}),
+              ...(navigation.parentDestination
+                ? { parentDestination: navigation.parentDestination }
+                : {}),
+              ...(navigation.icon ? { icon: navigation.icon } : {}),
               order: navigation.order,
               pluginId: navigation.pluginId,
               scope: route.scope,
@@ -697,13 +736,54 @@ export function getNativePluginNavigationV1(): NativePluginNavigationV1[] {
   );
 }
 
+/**
+ * Returns settings surfaces declared by active signed plugins. Unlike
+ * navigation contributions, these are deliberately rendered by the host's
+ * administration surface so a commercial plugin cannot create a parallel
+ * application menu just to expose deployment-owned status.
+ */
+export function getNativePluginSettingsV1(
+  scope: PluginSettingsContributionV1['scope'],
+): NativePluginSettingsV1[] {
+  const routes = new Map(
+    [...registry.getRoutes('root'), ...registry.getRoutes('tenant')].map(
+      (route) => [route.id, route],
+    ),
+  );
+  return registry.getSettings(scope).flatMap((settings) => {
+    const route = routes.get(settings.routeId);
+    return route
+      ? [
+          {
+            id: settings.id,
+            label: settings.label,
+            relativePath: route.relativePath,
+            order: settings.order,
+            pluginId: settings.pluginId,
+            scope: settings.scope,
+            routeScope: route.scope,
+          },
+        ]
+      : [];
+  });
+}
+
 export function NativePluginSlotV1<Slot extends PluginSlotIdV1>({
   slot,
   context,
+  contextualFlowSurface,
 }: {
   slot: Slot;
-  context: Omit<PluginSlotContextMapV1[Slot], 'slot'>;
+  context: Omit<
+    PluginSlotContextMapV1[Slot],
+    'slot' | 'contextualFlow'
+  >;
+  contextualFlowSurface?: HostContextualFlowSurfaceV1;
 }) {
+  const globalContextualFlowSurface = useGlobalContextualFlowSurfaceV1();
+  // Contextual host surfaces calculate this flag from their own FGA decision.
+  // Do not let a plugin render an alternate path around a host-denied action.
+  if (context.disabled) return null;
   const contributions = registry.getSlotContributions(slot);
   if (contributions.length === 0) return null;
   return (
@@ -712,14 +792,39 @@ export function NativePluginSlotV1<Slot extends PluginSlotIdV1>({
         const Component = contribution.component as React.ComponentType<
           PluginSlotContextMapV1[Slot]
         >;
+        const surface =
+          contextualFlowSurface ?? globalContextualFlowSurface ?? undefined;
+        const launcherKey = `${slot}:${contribution.pluginId}:${contribution.id}`;
+        const contextualFlow = surface
+          ? bindPluginContextualFlowControllerV1(
+              surface,
+              contribution.pluginId,
+              launcherKey,
+              () =>
+                registry
+                  .getSlotContributions(slot)
+                  .some(
+                    (candidate) =>
+                      candidate.pluginId === contribution.pluginId &&
+                      candidate.id === contribution.id,
+                  ),
+            )
+          : undefined;
         const slotContext = {
           ...context,
           slot,
+          ...(contextualFlow ? { contextualFlow } : {}),
         } as PluginSlotContextMapV1[Slot];
         return (
-          <PluginErrorBoundary key={`${contribution.pluginId}:${contribution.id}`}>
-            <Component {...slotContext} />
-          </PluginErrorBoundary>
+          <span
+            key={`${contribution.pluginId}:${contribution.id}`}
+            data-eg-contextual-flow-launcher={launcherKey}
+            style={{ display: 'contents' }}
+          >
+            <PluginErrorBoundary>
+              <Component {...slotContext} />
+            </PluginErrorBoundary>
+          </span>
         );
       })}
     </>

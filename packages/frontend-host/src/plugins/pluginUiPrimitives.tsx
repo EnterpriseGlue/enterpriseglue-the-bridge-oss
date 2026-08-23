@@ -35,9 +35,9 @@ export function PluginPageLayoutV1({
         inlineSize: '100%',
         maxInlineSize: maxWidths[maxWidth],
         marginInline: maxWidth === 'full' ? undefined : 'auto',
-        paddingBlock: 'clamp(var(--cds-spacing-05), 3vw, var(--cds-spacing-07))',
+        paddingBlock: 'clamp(var(--spacing-4), 3vw, var(--spacing-6))',
         paddingInline:
-          'clamp(var(--cds-spacing-05), 4vw, var(--cds-spacing-07))',
+          'clamp(var(--spacing-4), 4vw, var(--spacing-6))',
         ...style,
       },
     },
@@ -61,8 +61,8 @@ export function PluginPageHeaderV1({
         flexWrap: 'wrap',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
-        gap: 'var(--cds-spacing-05)',
-        marginBlockEnd: 'var(--cds-spacing-06)',
+        gap: 'var(--spacing-4)',
+        marginBlockEnd: 'var(--spacing-5)',
       },
     },
     React.createElement(
@@ -71,7 +71,7 @@ export function PluginPageHeaderV1({
         style: {
           display: 'flex',
           alignItems: 'flex-start',
-          gap: 'var(--cds-spacing-04)',
+          gap: 'var(--spacing-3)',
           minInlineSize: 0,
         },
       },
@@ -83,10 +83,10 @@ export function PluginPageHeaderV1({
               style: {
                 display: 'inline-flex',
                 flex: '0 0 auto',
-                padding: 'var(--cds-spacing-03)',
-                color: 'var(--cds-icon-primary)',
-                background: 'var(--cds-layer-02)',
-                border: '1px solid var(--cds-border-subtle-01)',
+                padding: 'var(--spacing-2)',
+                color: 'var(--color-icon-primary)',
+                background: 'var(--color-bg-secondary)',
+                border: '1px solid var(--color-border-primary)',
               },
             },
             React.createElement(Icon, {
@@ -104,8 +104,9 @@ export function PluginPageHeaderV1({
               {
                 style: {
                   margin: 0,
-                  color: 'var(--cds-text-secondary)',
-                  font: 'var(--cds-label-01-font)',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 'var(--text-12)',
+                  lineHeight: 'var(--leading-normal)',
                 },
               },
               eyebrow,
@@ -118,7 +119,9 @@ export function PluginPageHeaderV1({
             style: {
               margin: 0,
               overflowWrap: 'anywhere',
-              font: 'var(--cds-heading-05-font)',
+              fontSize: 'var(--text-32)',
+              fontWeight: 'var(--font-weight-regular)',
+              lineHeight: 'var(--leading-tight)',
             },
           },
           title,
@@ -129,8 +132,10 @@ export function PluginPageHeaderV1({
               {
                 style: {
                   maxInlineSize: '70ch',
-                  marginBlock: 'var(--cds-spacing-03) 0',
-                  color: 'var(--cds-text-secondary)',
+                  marginBlock: 'var(--spacing-2) 0',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: 'var(--text-16)',
+                  lineHeight: 'var(--leading-normal)',
                 },
               },
               subtitle,
@@ -145,7 +150,7 @@ export function PluginPageHeaderV1({
             style: {
               display: 'flex',
               flexWrap: 'wrap',
-              gap: 'var(--cds-spacing-03)',
+              gap: 'var(--spacing-2)',
             },
           },
           actions,
@@ -208,7 +213,7 @@ export function PluginConfirmModalV1({
       {
         style: {
           marginBlock: 0,
-          color: 'var(--cds-text-primary)',
+          color: 'var(--color-text-primary)',
         },
       },
       description,

@@ -63,6 +63,11 @@ type AdminNavItem = {
   actionIds: string[]
 }
 
+type ScopedNavigationItem = {
+  path: string
+  scope?: 'root' | 'tenant'
+}
+
 type NotificationItem = {
   id: string
   state: 'success' | 'info' | 'warning' | 'error'
@@ -266,6 +271,12 @@ export default function LayoutWithProSidebar() {
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
+  const extensionItemPath = (item: ScopedNavigationItem) =>
+    item.scope === 'root' ? item.path : toTenantPath(item.path)
+  const isExtensionItemCurrent = (item: ScopedNavigationItem) => {
+    const currentPath = item.scope === 'root' ? pathname : effectivePathname
+    return currentPath === item.path || currentPath.startsWith(`${item.path}/`)
+  }
 
   const inMissionControl = effectivePathname.startsWith('/mission-control')
   const platformAdminMenuVisible = hasAnyPlatformPermission(permissions, ADMIN_NAV_PLATFORM_PERMISSIONS)
@@ -322,11 +333,21 @@ export default function LayoutWithProSidebar() {
 
   const hideVoyagerForPlatformAdmin = isMultiTenant && platformSettingsManager
 
+  const nativePluginNavItems = getNativePluginNavigationV1()
+    .filter((item) => item.section === 'main' || item.section === 'tenant')
+    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+  const nativeVoyagerNavItems = nativePluginNavItems.filter((item) => item.destination === 'voyager')
+  const nativeVoyagerRootNavItems = nativeVoyagerNavItems.filter((item) => !item.parentDestination)
+  const nativeOperationsNavItems = nativePluginNavItems.filter((item) => item.destination === 'operations')
+  const nativeTenantNavItems = nativePluginNavItems.filter((item) => item.destination === 'tenant')
+  const nativeAdminNavItems = nativePluginNavItems.filter((item) => item.destination === 'admin')
+  const nativeFallbackNavItems = nativePluginNavItems.filter((item) => !item.destination)
+
   const showVoyagerMenuBase = isVoyagerEnabled && !hideVoyagerForPlatformAdmin
   const showStarbaseMenu = showVoyagerMenuBase && isStarbaseEnabled && canViewStarbaseMenu
   const showEnginesMenu = showVoyagerMenuBase && isEnginesEnabled && canViewEnginesMenu
   const showMissionControlMenu = showVoyagerMenuBase && isMissionControlEnabled && missionControlMenuVisible
-  const showVoyagerMenu = showVoyagerMenuBase && (showStarbaseMenu || showEnginesMenu || showMissionControlMenu)
+  const showVoyagerMenu = showVoyagerMenuBase && (showStarbaseMenu || showEnginesMenu || showMissionControlMenu || nativeVoyagerRootNavItems.length > 0)
   const visibleEnterpriseNavItems = useFilteredExtensionNavItems({
     items: enterpriseNavItems,
     capabilities: user?.capabilities,
@@ -852,6 +873,20 @@ export default function LayoutWithProSidebar() {
                         Engines
                       </HeaderMenuItem>
                     )}
+                    {nativeVoyagerRootNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:voyager:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          navigate(extensionItemPath(item))
+                          ;(document.activeElement as HTMLElement | null)?.blur()
+                        }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
                   </HeaderMenu>
                 )}
                 {visibleEnterpriseNavItems.length > 0 && (
@@ -859,16 +894,71 @@ export default function LayoutWithProSidebar() {
                     {visibleEnterpriseNavItems.map((item) => (
                       <HeaderMenuItem
                         key={`${item.path}:${item.label}`}
-                        href={item.scope === 'root' ? item.path : toTenantPath(item.path)}
-                        isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
-                        onClick={(e) => { e.preventDefault(); navigate(item.scope === 'root' ? item.path : toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(e) => { e.preventDefault(); navigate(extensionItemPath(item)); (document.activeElement as HTMLElement)?.blur() }}
                       >
                         {item.label}
                       </HeaderMenuItem>
                     ))}
                   </HeaderMenu>
                 )}
-                {!isMultiTenant && platformAdminMenuVisible && adminNavItems.length > 0 && (
+                {nativeOperationsNavItems.length > 0 && (
+                  <HeaderMenu menuLinkName="Operations">
+                    {nativeOperationsNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:operations:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          navigate(extensionItemPath(item))
+                          ;(document.activeElement as HTMLElement | null)?.blur()
+                        }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
+                  </HeaderMenu>
+                )}
+                {nativeTenantNavItems.length > 0 && (
+                  <HeaderMenu menuLinkName="Tenant">
+                    {nativeTenantNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:tenant:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          navigate(extensionItemPath(item))
+                          ;(document.activeElement as HTMLElement | null)?.blur()
+                        }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
+                  </HeaderMenu>
+                )}
+                {nativeFallbackNavItems.length > 0 && (
+                  <HeaderMenu menuLinkName="Plugins">
+                    {nativeFallbackNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          navigate(extensionItemPath(item))
+                          const activeElement = document.activeElement as HTMLElement | null
+                          activeElement?.blur()
+                        }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
+                  </HeaderMenu>
+                )}
+                {!isMultiTenant && ((platformAdminMenuVisible && adminNavItems.length > 0) || nativeAdminNavItems.length > 0) && (
                   <HeaderMenu menuLinkName="Admin">
                     {adminNavItems.map((item) => {
                       const itemPath = toTenantPath(item.path)
@@ -896,12 +986,26 @@ export default function LayoutWithProSidebar() {
                         </GuardedMenuItem>
                       )
                     })}
+                    {nativeAdminNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:admin:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          navigate(extensionItemPath(item))
+                          ;(document.activeElement as HTMLElement | null)?.blur()
+                        }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
                   </HeaderMenu>
                 )}
                 {/* Tenant Admin menu - only shows if EE plugin registers tenant-admin nav items */}
-                {isMultiTenant && !platformAdminMenuVisible && tenantAdminChecked && isTenantAdmin && tenantAdminExtensionNavItems.length > 0 && (
+                {isMultiTenant && !platformAdminMenuVisible && tenantAdminChecked && ((isTenantAdmin && tenantAdminExtensionNavItems.length > 0) || nativeAdminNavItems.length > 0) && (
                   <HeaderMenu menuLinkName="Admin">
-                    {tenantAdminExtensionNavItems.map((item: NavExtension) => (
+                    {isTenantAdmin && tenantAdminExtensionNavItems.map((item: NavExtension) => (
                       <HeaderMenuItem
                         key={item.id}
                         href={toTenantPath(item.path)}
@@ -911,9 +1015,19 @@ export default function LayoutWithProSidebar() {
                         {item.label}
                       </HeaderMenuItem>
                     ))}
+                    {nativeAdminNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:tenant-admin:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => { event.preventDefault(); navigate(extensionItemPath(item)); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
                   </HeaderMenu>
                 )}
-                {isMultiTenant && platformAdminMenuVisible && platformAdminExtensionNavItems.length > 0 && (
+                {isMultiTenant && platformAdminMenuVisible && (platformAdminExtensionNavItems.length > 0 || nativeAdminNavItems.length > 0) && (
                   <HeaderMenu menuLinkName="Admin">
                     {/* EE-only admin nav items (e.g., Tenants) - rendered from extension registry */}
                     {platformAdminExtensionNavItems.map((item: NavExtension) => (
@@ -922,6 +1036,16 @@ export default function LayoutWithProSidebar() {
                         href={toTenantPath(item.path)}
                         isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
                         onClick={(e) => { e.preventDefault(); navigate(toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
+                      >
+                        {item.label}
+                      </HeaderMenuItem>
+                    ))}
+                    {nativeAdminNavItems.map((item) => (
+                      <HeaderMenuItem
+                        key={`native:platform-admin:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isCurrentPage={isExtensionItemCurrent(item)}
+                        onClick={(event) => { event.preventDefault(); navigate(extensionItemPath(item)); (document.activeElement as HTMLElement)?.blur() }}
                       >
                         {item.label}
                       </HeaderMenuItem>
@@ -939,7 +1063,7 @@ export default function LayoutWithProSidebar() {
               >
                 <SideNavItems>
                   {showVoyagerMenu && (
-                    <SideNavMenu title="Voyager" defaultExpanded isActive={effectivePathname.startsWith('/starbase') || effectivePathname.startsWith('/mission-control') || effectivePathname.startsWith('/engines')}>
+                    <SideNavMenu title="Voyager" defaultExpanded isActive={effectivePathname.startsWith('/starbase') || effectivePathname.startsWith('/mission-control') || effectivePathname.startsWith('/engines') || nativeVoyagerRootNavItems.some(isExtensionItemCurrent)}>
                       {showStarbaseMenu && <SideNavMenuItem
                         href={toTenantPath('/starbase')}
                         isActive={effectivePathname.startsWith('/starbase')}
@@ -955,25 +1079,99 @@ export default function LayoutWithProSidebar() {
                         isActive={effectivePathname.startsWith('/engines')}
                         onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath('/engines')) }}
                       >Engines</SideNavMenuItem>}
+                      {nativeVoyagerRootNavItems.map((item) => (
+                        <SideNavMenuItem
+                          key={`mobile:native:voyager:${item.pluginId}:${item.id}`}
+                          href={extensionItemPath(item)}
+                          isActive={isExtensionItemCurrent(item)}
+                          onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(extensionItemPath(item)) }}
+                        >
+                          {item.label}
+                        </SideNavMenuItem>
+                      ))}
                     </SideNavMenu>
                   )}
                   {visibleEnterpriseNavItems.length > 0 && (
-                    <SideNavMenu title="Enterprise" defaultExpanded={visibleEnterpriseNavItems.some((item) => effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`))} isActive={visibleEnterpriseNavItems.some((item) => effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`))}>
+                    <SideNavMenu title="Enterprise" defaultExpanded={visibleEnterpriseNavItems.some(isExtensionItemCurrent)} isActive={visibleEnterpriseNavItems.some(isExtensionItemCurrent)}>
                       {visibleEnterpriseNavItems.map((item) => <SideNavMenuItem
                         key={`mobile:${item.path}:${item.label}`}
-                        href={toTenantPath(item.path)}
-                        isActive={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
-                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath(item.path)) }}
+                        href={extensionItemPath(item)}
+                        isActive={isExtensionItemCurrent(item)}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(extensionItemPath(item)) }}
                       >{item.label}</SideNavMenuItem>)}
                     </SideNavMenu>
                   )}
-                  {!isMultiTenant && platformAdminMenuVisible && adminNavItems.length > 0 && (
+                  {nativeOperationsNavItems.length > 0 && (
+                    <SideNavMenu
+                      title="Operations"
+                      defaultExpanded={nativeOperationsNavItems.some(isExtensionItemCurrent)}
+                      isActive={nativeOperationsNavItems.some(isExtensionItemCurrent)}
+                    >
+                      {nativeOperationsNavItems.map((item) => (
+                        <SideNavMenuItem
+                          key={`mobile:native:operations:${item.pluginId}:${item.id}`}
+                          href={extensionItemPath(item)}
+                          isActive={isExtensionItemCurrent(item)}
+                          onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(extensionItemPath(item)) }}
+                        >
+                          {item.label}
+                        </SideNavMenuItem>
+                      ))}
+                    </SideNavMenu>
+                  )}
+                  {nativeTenantNavItems.length > 0 && (
+                    <SideNavMenu
+                      title="Tenant"
+                      defaultExpanded={nativeTenantNavItems.some(isExtensionItemCurrent)}
+                      isActive={nativeTenantNavItems.some(isExtensionItemCurrent)}
+                    >
+                      {nativeTenantNavItems.map((item) => (
+                        <SideNavMenuItem
+                          key={`mobile:native:tenant:${item.pluginId}:${item.id}`}
+                          href={extensionItemPath(item)}
+                          isActive={isExtensionItemCurrent(item)}
+                          onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(extensionItemPath(item)) }}
+                        >
+                          {item.label}
+                        </SideNavMenuItem>
+                      ))}
+                    </SideNavMenu>
+                  )}
+                  {nativeFallbackNavItems.length > 0 && (
+                    <SideNavMenu
+                      title="Plugins"
+                      defaultExpanded={nativeFallbackNavItems.some(isExtensionItemCurrent)}
+                      isActive={nativeFallbackNavItems.some(isExtensionItemCurrent)}
+                    >
+                      {nativeFallbackNavItems.map((item) => (
+                        <SideNavMenuItem
+                          key={`mobile:native:${item.pluginId}:${item.id}`}
+                          href={extensionItemPath(item)}
+                          isActive={isExtensionItemCurrent(item)}
+                          onClick={(event: React.MouseEvent<HTMLElement>) => {
+                            event.preventDefault()
+                            setGlobalNavigationOpen(false)
+                            navigate(extensionItemPath(item))
+                          }}
+                        >
+                          {item.label}
+                        </SideNavMenuItem>
+                      ))}
+                    </SideNavMenu>
+                  )}
+                  {!isMultiTenant && ((platformAdminMenuVisible && adminNavItems.length > 0) || nativeAdminNavItems.length > 0) && (
                     <SideNavMenu title="Admin" defaultExpanded={effectivePathname.startsWith('/admin/')} isActive={effectivePathname.startsWith('/admin/')}>
                       {adminNavItems.map((item) => <SideNavMenuItem
                         key={`mobile:${item.path}`}
                         href={toTenantPath(item.path)}
                         isActive={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
                         onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(toTenantPath(item.path)) }}
+                      >{item.label}</SideNavMenuItem>)}
+                      {nativeAdminNavItems.map((item) => <SideNavMenuItem
+                        key={`mobile:native:admin:${item.pluginId}:${item.id}`}
+                        href={extensionItemPath(item)}
+                        isActive={isExtensionItemCurrent(item)}
+                        onClick={(event: React.MouseEvent<HTMLElement>) => { event.preventDefault(); setGlobalNavigationOpen(false); navigate(extensionItemPath(item)) }}
                       >{item.label}</SideNavMenuItem>)}
                     </SideNavMenu>
                   )}

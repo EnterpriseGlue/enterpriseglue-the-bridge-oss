@@ -3,11 +3,14 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Settings } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
 import {
+  Button,
   SkeletonText,
   InlineNotification,
   Modal,
+  Tag,
   TextInput,
   TextArea,
+  Tile,
   ComboBox,
   Dropdown,
   SideNav,
@@ -48,6 +51,7 @@ import IdentityProvisioningSettingsTab from '../components/IdentityProvisioningS
 import IdentityMappingsSettingsTab from '../components/IdentityMappingsSettingsTab';
 import ConfigurationBundleSettingsTab from '../components/ConfigurationBundleSettingsTab';
 import RoleLibrarySettingsTab from '../components/RoleLibrarySettingsTab';
+import { getNativePluginSettingsV1 } from '../../../plugins/nativePluginRuntime';
 import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
 import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
@@ -71,6 +75,7 @@ const AccessControl = React.lazy(() => import('./AccessControl'));
 const AuthzPolicies = React.lazy(() => import('./AuthzPolicies'));
 const AuthzAuditLog = React.lazy(() => import('./AuthzAuditLog'));
 const AuditLogViewer = React.lazy(() => import('../../../pages/AuditLogViewer'));
+const PluginManagement = React.lazy(() => import('./PluginManagement'));
 
 // Predefined colors for environment tags
 const TAG_COLORS = [
@@ -119,6 +124,7 @@ const PLATFORM_SETTINGS_SECTION_REGISTRY = [
   { id: 'authz-policies', label: 'Authorization policies', group: 'identity-access', visibility: 'authz-policies' },
   { id: 'git', label: 'Git', group: 'operations', visibility: 'settings-or-git-manage' },
   { id: 'configuration', label: 'Configuration', group: 'operations', visibility: 'configuration' },
+  { id: 'plugins', label: 'Plugins', group: 'operations', visibility: 'settings' },
   { id: 'email', label: 'Email', group: 'communications', visibility: 'settings' },
   { id: 'email-templates', label: 'Email templates', group: 'communications', visibility: 'settings' },
   { id: 'authz-audit', label: 'Authorization audit', group: 'audit', visibility: 'audit' },
@@ -135,7 +141,8 @@ interface PlatformSettingsPageProps {
 export default function PlatformSettingsPage({ section }: PlatformSettingsPageProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const params = useParams<{ settingsSection?: string }>();
+  const params = useParams<{ settingsSection?: string; tenantSlug?: string }>();
+  const tenantSlug = params.tenantSlug;
   const authContext = useContext(AuthContext);
   const platformResource = { type: 'platform' as const, id: null };
   const hasPermissionSnapshot = Boolean(authContext?.permissions);
@@ -598,7 +605,6 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   const renderAccessControl = () => renderAdminSurface(<AccessControl embedded />);
 
-
   const renderAuthzPolicies = () => renderAdminSurface(<AuthzPolicies />);
 
   const renderAuthzAudit = () => renderAdminSurface(<AuthzAuditLog />);
@@ -628,6 +634,65 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     />
   );
 
+  const deploymentPluginSettings = getNativePluginSettingsV1('deployment');
+  const pluginSettingsPath = (entry: (typeof deploymentPluginSettings)[number]) => {
+    const relativePath = entry.relativePath.replace(/^\/+/, '');
+    if (entry.routeScope === 'root') return `/${relativePath}`;
+    const safeTenantSlug = tenantSlug ?? 'default';
+    return `/t/${encodeURIComponent(safeTenantSlug)}/${relativePath}`;
+  };
+
+  const renderPlugins = () => (
+    <section aria-label="Plugin administration" style={{ display: 'grid', gap: 'var(--spacing-6)' }}>
+      {renderAdminSurface(<PluginManagement embedded />)}
+      {deploymentPluginSettings.length > 0 && (
+        <section aria-labelledby="plugin-settings-pages-heading">
+          <div className="eg-settings-section-header">
+            <div>
+              <h2 id="plugin-settings-pages-heading" style={{ margin: 0 }}>Plugin pages</h2>
+              <p className="eg-settings-field-description">
+                Signed plugins can expose a safe deployment status or configuration page here. Credentials and deployment policy remain outside the browser.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+            {deploymentPluginSettings.map((entry) => (
+              <Tile key={`${entry.pluginId}:${entry.id}`}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 'var(--spacing-4)',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                      <h3 style={{ margin: 0 }}>{entry.label}</h3>
+                      <Tag type="cool-gray" size="sm">Deployment</Tag>
+                    </div>
+                    <p className="eg-settings-field-description">
+                      Open the plugin’s safe status and configuration guidance.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    kind="tertiary"
+                    size="sm"
+                    onClick={() => navigate(pluginSettingsPath(entry))}
+                  >
+                    Open page
+                  </Button>
+                </div>
+              </Tile>
+            ))}
+          </div>
+        </section>
+      )}
+    </section>
+  );
+
   const sectionRenderers: Record<PlatformSettingsSection, () => React.ReactNode> = {
     git: renderGit,
     projects: renderProjects,
@@ -646,6 +711,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     email: renderEmail,
     'email-templates': renderEmailTemplates,
     branding: renderBranding,
+    plugins: renderPlugins,
   };
   const platformSettingsTabs = PLATFORM_SETTINGS_SECTION_REGISTRY
     .filter((tab) => sectionVisibility[tab.visibility])

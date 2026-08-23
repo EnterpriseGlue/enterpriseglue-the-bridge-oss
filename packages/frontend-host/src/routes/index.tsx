@@ -31,7 +31,6 @@ const PlatformSettingsPage = React.lazy(() => import('../features/platform-admin
 const AccessControl = React.lazy(() => import('../features/platform-admin/pages/AccessControl'))
 const AuthzPolicies = React.lazy(() => import('../features/platform-admin/pages/AuthzPolicies'))
 const AuthzAuditLog = React.lazy(() => import('../features/platform-admin/pages/AuthzAuditLog'))
-const PluginManagement = React.lazy(() => import('../features/platform-admin/pages/PluginManagement'))
 
 // EE-only pages (rendered via ExtensionPage)
 import { ExtensionPage } from '../enterprise/ExtensionSlot'
@@ -247,13 +246,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       },
       {
         path: `${pathPrefix}admin/plugins`,
-        element: (
-          <ProtectedRoute requireAdmin>
-            <LazyRoute message="Loading plugin management...">
-              <PluginManagement />
-            </LazyRoute>
-          </ProtectedRoute>
-        )
+        element: <Navigate to={isRootLevel ? '/admin/settings/plugins' : '../settings/plugins'} replace />
       },
       {
         path: `${pathPrefix}admin/settings/git`,
@@ -775,7 +768,9 @@ export function createTenantLayoutRoute(enterpriseChildren: RouteObject[] = []):
  */
 export function createAppRoutes(
   enterpriseRootChildren: EnterpriseExtensionRoute[] = [],
-  enterpriseTenantChildren: EnterpriseExtensionRoute[] = []
+  enterpriseTenantChildren: EnterpriseExtensionRoute[] = [],
+  nativePluginRootChildren: RouteObject[] = [],
+  nativePluginTenantChildren: RouteObject[] = [],
 ): RouteObject[] {
   // Merge all root routes: plugin interface + extension registry
   const allRootChildren = prepareExtensionRoutes([
@@ -791,7 +786,11 @@ export function createAppRoutes(
 
   return [
     ...getPublicRoutes(),
-    createRootLayoutRoute(allRootChildren),
-    createTenantLayoutRoute(allTenantChildren),
+    // Native plugin routes have already passed signed manifest parity,
+    // contribution availability, and activation validation. Keep them out of
+    // the legacy extension-route FGA validator; their data operations are
+    // authorized again by the plugin broker at invocation time.
+    createRootLayoutRoute([...allRootChildren, ...nativePluginRootChildren]),
+    createTenantLayoutRoute([...allTenantChildren, ...nativePluginTenantChildren]),
   ]
 }

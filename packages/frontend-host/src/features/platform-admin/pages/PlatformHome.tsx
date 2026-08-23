@@ -1,7 +1,6 @@
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { UserAvatar, Document, Security, Settings, Policy, RecentlyViewed, Enterprise, Power } from '@carbon/icons-react'
-import { isMultiTenantEnabled } from '../../../enterprise/extensionRegistry'
+import { UserAvatar, Document, Security, Settings, Policy, RecentlyViewed, Enterprise } from '@carbon/icons-react'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 
 export default function PlatformHome() {
@@ -63,14 +62,7 @@ export default function PlatformHome() {
       icon: Document,
       path: '/admin/audit-logs',
       color: '#6929c4'
-    },
-    ...(!isMultiTenantEnabled() ? [{
-      title: 'Plugin Management',
-      description: 'View installed plugins, change runtime gates, and use the platform emergency stop.',
-      icon: Power,
-      path: '/admin/plugins',
-      color: '#da1e28'
-    }] : [])
+    }
   ]
 
   return (

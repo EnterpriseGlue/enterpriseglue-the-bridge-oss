@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/frontend-host",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "OSS frontend host for EnterpriseGlue — routes, enterprise loader, extension registry, and feature components",
   "license": "Apache-2.0",
   "repository": {
@@ -17,7 +17,7 @@
     "typecheck": "pnpm run build:shared && tsc -p tsconfig.build.json --noEmit",
     "build": "pnpm run build:shared && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "clean": "rm -rf dist",
-    "test:plugin-bridge": "vitest run src/enterprise/extensionRegistry.test.ts src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/shared/api/client.test.ts",
+    "test:plugin-bridge": "vitest run src/enterprise/extensionRegistry.test.ts src/plugins/contextualFlowRuntime.test.tsx src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/shared/api/client.test.ts",
     "prepublishOnly": "pnpm run clean && pnpm run build"
   },
   "files": [
@@ -76,6 +76,7 @@
     "react-is": "19.2.6",
     "react-loading-skeleton": "^3.5.0",
     "react-pro-sidebar": "^1.1.0",
+    "react-router": "^7.18.2",
     "react-router-dom": "^7.18.2",
     "react-split-pane": "^3.2.0",
     "svg2pdf.js": "^2.7.0",
@@ -84,6 +85,7 @@
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
     "typescript": "~5.9.3",

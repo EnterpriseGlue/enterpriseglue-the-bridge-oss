@@ -5,7 +5,6 @@ import styles from '../styles/InstanceDetail.module.css'
 import { WrenchIcon } from './Icons'
 import { formatDurationMs } from './activityDetailUtils'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
-import { NativePluginSlotV1 } from '../../../../plugins/nativePluginRuntime'
 
 type HistoryContext = {
   kind?: 'group' | 'execution'
@@ -21,7 +20,6 @@ interface InstanceInfoBarProps {
   historyContext: HistoryContext | null
   defName?: string
   instanceId: string
-  engineRef?: string
   defs: Array<{ key: string; version: number }>
   defKey?: string
   histData?: { startTime?: string; endTime?: string | null }
@@ -52,7 +50,6 @@ export function InstanceInfoBar({
   historyContext,
   defName,
   instanceId,
-  engineRef,
   defs,
   defKey,
   histData,
@@ -216,17 +213,6 @@ export function InstanceInfoBar({
             </>
           )}
           <div className={styles.infoBarTextWithFlex} style={{ justifyContent: 'flex-end' }}>
-            {engineRef && (
-              <NativePluginSlotV1
-                slot="mission-control.process-instance.actions.v1"
-                context={{
-                  schemaVersion: 1,
-                  disabled: false,
-                  engineRef,
-                  processInstanceRef: instanceId,
-                }}
-              />
-            )}
             {onRetry && incidentCount > 0 && !isTerminalStatus && (
               <Button
                 hasIconOnly

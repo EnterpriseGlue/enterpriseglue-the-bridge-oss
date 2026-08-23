@@ -4,6 +4,8 @@ import { Button } from '@carbon/react'
 import styles from '../styles/InstanceDetail.module.css'
 import { InstanceInfoBar } from './InstanceInfoBar'
 import { ActivityDetailPanel } from './ActivityDetailPanel'
+import { NativePluginSlotV1 } from '../../../../plugins/nativePluginRuntime'
+import { useActionDecision } from '../../../../shared/auth/guards'
 import type { VariableHistoryTarget } from './types'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
@@ -145,13 +147,17 @@ export function ProcessInstanceBottomPane({
   onVerticalSplitChange,
   activityPanelProps,
 }: ProcessInstanceBottomPaneProps) {
+  const pluginActionDecision = useActionDecision(
+    'engine.instances.read',
+    { type: 'engine', id: engineRef ?? null },
+  )
+
   return (
     <div className={styles.bottomPaneContainer}>
       <InstanceInfoBar
         historyContext={historyContext}
         defName={defName}
         instanceId={instanceId}
-        engineRef={engineRef}
         defs={defs}
         defKey={defKey}
         histData={histData}
@@ -173,11 +179,27 @@ export function ProcessInstanceBottomPane({
         incidentCount={incidentCount}
       />
       {showIncidentBanner && (
-        <div className={styles.incidentBanner}>
+        <div
+          className={styles.incidentBanner}
+          role="region"
+          aria-label="Process incident"
+        >
           <div className={styles.incidentBannerText}>
             {incidentCount} incident{incidentCount === 1 ? '' : 's'} occurred in this instance.
           </div>
-          <div>
+          <div className={styles.incidentBannerActions}>
+            {engineRef && (
+              <NativePluginSlotV1
+                slot="mission-control.process-instance.actions.v1"
+                context={{
+                  schemaVersion: 1,
+                  disabled: !pluginActionDecision.allowed,
+                  engineRef,
+                  processInstanceRef: instanceId,
+                  ...(defName ? { displayName: defName } : {}),
+                }}
+              />
+            )}
             <Button size="sm" kind="ghost" onClick={onViewIncident} className={styles.incidentBannerButton}>
               View incidents
             </Button>

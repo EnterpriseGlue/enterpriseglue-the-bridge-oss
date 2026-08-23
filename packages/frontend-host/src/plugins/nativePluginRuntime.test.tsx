@@ -1,4 +1,5 @@
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type {
   EnterpriseGluePluginManifestV1,
   FrontendPluginHostContextV1,
@@ -9,6 +10,8 @@ import {
   activateNativePluginBootstrapV1,
   getNativePluginNavigationV1,
   getNativePluginRoutesV1,
+  getNativePluginSettingsV1,
+  NativePluginSlotV1,
   __nativePluginRuntimeTestUtils,
 } from './nativePluginRuntime';
 import {
@@ -298,7 +301,11 @@ describe('native plugin frontend host', () => {
       'PageLayout',
     ]);
 
-    vi.stubGlobal('window', { location: { pathname: '/' } });
+    const historyBack = vi.fn();
+    vi.stubGlobal('window', {
+      location: { pathname: '/' },
+      history: { back: historyBack },
+    });
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(
@@ -320,10 +327,167 @@ describe('native plugin frontend host', () => {
         )}?path=v1%2Fengines%2Fengine-1`,
         expect.objectContaining({ method: 'DELETE' }),
       );
+      activatedHost!.navigation.back?.();
+      expect(historyBack).toHaveBeenCalledTimes(1);
     } finally {
       fetchMock.mockRestore();
       vi.unstubAllGlobals();
     }
+  });
+
+  it('does not render contextual plugin actions when the host FGA decision disables the slot', async () => {
+    const slotManifest = manifest();
+    slotManifest.contributions = [
+      {
+        id: `${pluginId}.incident-action`,
+        kind: 'slot',
+        slot: 'mission-control.incident.actions.v1',
+      },
+    ];
+    await activateNativePluginBootstrapV1(
+      {
+        apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1',
+        revision: 4,
+        issues: [],
+        plugins: [{
+          pluginId,
+          version,
+          displayName: 'Reference',
+          manifest: slotManifest,
+          entryUrl: `/_enterpriseglue/plugins/${pluginId}/${version}/frontend/index.js`,
+        }],
+      },
+      async () => ({
+        default: {
+          apiVersion: 'frontend.plugin.enterpriseglue.io/v1',
+          pluginId,
+          version,
+          activate: () => ({
+            routes: [],
+            navigation: [],
+            slots: [{
+              id: `${pluginId}.incident-action`,
+              slot: 'mission-control.incident.actions.v1',
+              component: IncidentAction,
+            }],
+          }),
+        },
+      }),
+    );
+
+    const html = renderToStaticMarkup(
+      <NativePluginSlotV1
+        slot="mission-control.incident.actions.v1"
+        context={{
+          schemaVersion: 1,
+          disabled: true,
+          engineRef: 'engine-denied',
+          incidentRef: 'incident-1',
+        }}
+      />,
+    );
+    expect(html).not.toContain('Analyze');
+  });
+
+  it('projects a deployment settings contribution through the host administration surface', async () => {
+    const settingsRouteId = `${pluginId}.settings`;
+    const settingsContributionId = `${pluginId}.deployment-settings`;
+    const signedManifest = manifest();
+    signedManifest.contributions.push(
+      {
+        id: settingsRouteId,
+        kind: 'route',
+        scope: 'tenant',
+        relativePath: 'admin/settings/reference',
+      },
+      {
+        id: settingsContributionId,
+        kind: 'settings',
+        routeId: settingsRouteId,
+        scope: 'deployment',
+      },
+    );
+
+    const result = await activateNativePluginBootstrapV1(
+      {
+        apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1',
+        revision: 4,
+        issues: [],
+        plugins: [
+          {
+            pluginId,
+            version,
+            displayName: 'Reference',
+            manifest: signedManifest,
+            entryUrl: `/_enterpriseglue/plugins/${pluginId}/${version}/frontend/index.js`,
+          },
+        ],
+      },
+      async () => ({
+        default: {
+          apiVersion: 'frontend.plugin.enterpriseglue.io/v1',
+          pluginId,
+          version,
+          activate: () => ({
+            routes: [
+              {
+                id: `${pluginId}.home`,
+                scope: 'tenant',
+                relativePath: 'plugins/reference',
+                component: Page,
+              },
+              {
+                id: settingsRouteId,
+                scope: 'tenant',
+                relativePath: 'admin/settings/reference',
+                component: Page,
+              },
+            ],
+            navigation: [
+              {
+                id: `${pluginId}.navigation`,
+                label: 'Reference',
+                routeId: `${pluginId}.home`,
+                section: 'main',
+              },
+            ],
+            slots: [
+              {
+                id: `${pluginId}.incident-action`,
+                slot: 'mission-control.incident.actions.v1',
+                component: IncidentAction,
+              },
+            ],
+            settings: [
+              {
+                id: settingsContributionId,
+                label: 'Reference settings',
+                routeId: settingsRouteId,
+                scope: 'deployment',
+                order: 40,
+              },
+            ],
+          }),
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      revision: 4,
+      activePluginIds: [pluginId],
+      failures: [],
+    });
+    expect(getNativePluginSettingsV1('deployment')).toEqual([
+      {
+        id: settingsContributionId,
+        label: 'Reference settings',
+        relativePath: 'admin/settings/reference',
+        order: 40,
+        pluginId,
+        scope: 'deployment',
+        routeScope: 'tenant',
+      },
+    ]);
   });
 
   it('fails closed when the module identity differs from bootstrap state', async () => {

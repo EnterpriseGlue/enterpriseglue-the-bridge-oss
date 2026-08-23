@@ -1,16 +1,28 @@
 import { Power, Renew, WarningAlt } from '@carbon/icons-react';
 import {
+  Accordion,
+  AccordionItem,
   Button,
   InlineLoading,
   InlineNotification,
   Modal,
+  OverflowMenu,
+  OverflowMenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
   Tag,
-  Tile,
 } from '@carbon/react';
 import React, { useCallback, useEffect, useState } from 'react';
 import type { PluginPlatformCapabilityCatalogV1 } from '@enterpriseglue/plugin-sdk';
 
 import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
+import { useAuth } from '../../../shared/hooks/useAuth';
+import { evaluateActionSnapshot } from '../../../shared/auth/guards';
 import {
   getPluginDeploymentExecution,
   getPluginPlatformCapabilities,
@@ -48,10 +60,10 @@ function idempotencyKey(scope: string): string {
 }
 
 function statusTag(plugin: PluginSafeSummaryV1) {
-  if (!plugin.compatible) return <Tag type="red">Incompatible</Tag>;
-  if (!plugin.enabled) return <Tag type="gray">Disabled</Tag>;
-  if (!plugin.healthy) return <Tag type="warm-gray">Degraded</Tag>;
-  return <Tag type="green">Enabled</Tag>;
+  if (!plugin.compatible) return <Tag size="sm" type="red">Incompatible</Tag>;
+  if (!plugin.enabled) return <Tag size="sm" type="gray">Disabled</Tag>;
+  if (!plugin.healthy) return <Tag size="sm" type="warm-gray">Degraded</Tag>;
+  return <Tag size="sm" type="green">Enabled</Tag>;
 }
 
 function executionStatusTag(
@@ -78,7 +90,22 @@ function executionStatusTag(
   return <Tag type="blue">{observation.execution.status}</Tag>;
 }
 
-export default function PluginManagement() {
+export default function PluginManagement({ embedded = false }: { embedded?: boolean }) {
+  const { permissions } = useAuth();
+  const hasPermissionSnapshot = Boolean(permissions);
+  const platformResource = { type: 'platform' as const, id: null };
+  const settingsRead = evaluateActionSnapshot(
+    permissions,
+    'platform.settings.read',
+    platformResource,
+  );
+  const settingsManage = evaluateActionSnapshot(
+    permissions,
+    'platform.settings.manage',
+    platformResource,
+  );
+  const canReadPlugins = !hasPermissionSnapshot || settingsRead.allowed;
+  const canManagePlugins = !hasPermissionSnapshot || settingsManage.allowed;
   const [plugins, setPlugins] = useState<PluginSafeSummaryV1[]>([]);
   const [emergency, setEmergency] =
     useState<PluginPlatformEmergencyStateV1 | null>(null);
@@ -121,11 +148,15 @@ export default function PluginManagement() {
   }, []);
 
   useEffect(() => {
+    if (!canReadPlugins) {
+      setLoading(false);
+      return;
+    }
     void refresh();
-  }, [refresh]);
+  }, [canReadPlugins, refresh]);
 
   const applyPending = async () => {
-    if (!pending || !emergency) return;
+    if (!pending || !emergency || !canManagePlugins) return;
     setBusy(true);
     setError(null);
     try {
@@ -168,21 +199,57 @@ export default function PluginManagement() {
         ? !pending.enabled
         : false;
 
+  if (!canReadPlugins) {
+    const unavailable = (
+      <InlineNotification
+        kind="error"
+        title="Plugin administration unavailable"
+        subtitle={settingsRead.reason || 'The current user cannot read platform settings.'}
+        hideCloseButton
+        lowContrast
+      />
+    );
+    return embedded ? unavailable : (
+      <PageLayout style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
+        <PageHeader
+          icon={Power}
+          title="Plugin management"
+          subtitle="View installed plugins and control their runtime access. Installation and upgrades remain installer operations."
+          gradient={PAGE_GRADIENTS.red}
+          variant="productive"
+        />
+        {unavailable}
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout
+      padding={embedded ? '0' : undefined}
+      className={`eg-plugin-management${embedded ? ' eg-plugin-management--embedded' : ''}`}
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: 'var(--spacing-5)',
-        minHeight: '100vh',
+        minHeight: embedded ? undefined : '100vh',
       }}
     >
-      <PageHeader
-        icon={Power}
-        title="Plugin management"
-        subtitle="View installed plugins and control their runtime access. Installation and upgrades remain installer operations."
-        gradient={PAGE_GRADIENTS.red}
-      />
+      {!embedded && (
+        <PageHeader
+          icon={Power}
+          title="Plugin management"
+          subtitle="View installed plugins and control their runtime access. Installation and upgrades remain installer operations."
+          gradient={PAGE_GRADIENTS.red}
+          variant="productive"
+        />
+      )}
+
+      {embedded && (
+        <header className="eg-plugin-management__intro">
+          <h2 id="plugins-title">Plugins</h2>
+          <p>Manage installed plugins and their runtime availability.</p>
+        </header>
+      )}
 
       {error && (
         <InlineNotification
@@ -197,377 +264,229 @@ export default function PluginManagement() {
       {emergencyActive && (
         <InlineNotification
           kind="error"
-          title="Emergency stop is active"
-          subtitle="All new plugin execution is blocked. Ordinary EnterpriseGlue OSS remains available, and desired plugin state is preserved."
+          title="Emergency controls are active"
+          subtitle="New plugin execution is blocked. Plugin configuration is unchanged."
           hideCloseButton
           lowContrast
         />
       )}
 
-      <Tile>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 'var(--spacing-5)',
-            flexWrap: 'wrap',
-          }}
-        >
+      <section className="eg-plugin-management__section" aria-labelledby="installed-plugins-title">
+        <div className="eg-plugin-management__section-header">
           <div>
-            <h2 style={{ marginTop: 0 }}>Platform emergency control</h2>
-            <p style={{ marginBottom: 0, maxWidth: '72ch' }}>
-              Stops every plugin through one durable gate without changing which plugins were
-              enabled. Clearing the stop resumes only previously eligible plugins.
-            </p>
-            {emergency && (
-              <p style={{ marginBottom: 0 }}>
-                Revision {emergency.revision} · Last changed{' '}
-                {new Date(emergency.updatedAt).toLocaleString()}
-              </p>
-            )}
+            <h3 id="installed-plugins-title">Installed plugins</h3>
+            <p>Runtime controls do not install, upgrade, or remove plugin packages.</p>
           </div>
-          {loading ? (
-            <InlineLoading description="Loading emergency state" />
-          ) : (
-            <Button
-              kind={emergencyActive ? 'primary' : 'danger'}
-              renderIcon={emergencyActive ? Renew : WarningAlt}
-              disabled={!emergency || busy}
-              onClick={() =>
-                setPending({
-                  kind: 'emergency',
-                  disabled: !emergencyActive,
-                })
-              }
-            >
-              {emergencyActive ? 'Clear emergency stop' : 'Stop all plugins'}
-            </Button>
-          )}
+          <Button
+            kind="ghost"
+            size="sm"
+            renderIcon={Renew}
+            disabled={loading || busy}
+            onClick={() => {
+              setLoading(true);
+              void refresh();
+            }}
+          >
+            Refresh
+          </Button>
         </div>
-      </Tile>
 
-      <Tile>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 'var(--spacing-5)',
-            flexWrap: 'wrap',
-          }}
-        >
+        {loading ? (
+          <InlineLoading description="Loading installed plugins" />
+        ) : plugins.length === 0 ? (
+          <InlineNotification
+            kind="info"
+            title="No installed plugins"
+            subtitle="Install a verified package with the supported installer."
+            hideCloseButton
+            lowContrast
+          />
+        ) : (
+          <TableContainer className="eg-plugin-management__table">
+            <Table aria-label="Installed plugins" size="md" useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Plugin</TableHeader>
+                  <TableHeader>Version</TableHeader>
+                  <TableHeader>Status</TableHeader>
+                  <TableHeader>Health</TableHeader>
+                  <TableHeader>Runtime access</TableHeader>
+                  <TableHeader className="eg-plugin-management__actions-heading">Actions</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {plugins.map((plugin) => (
+                  <TableRow key={plugin.pluginId}>
+                    <TableCell>
+                      <div className="eg-plugin-management__plugin-name">{plugin.displayName}</div>
+                      <code className="eg-plugin-management__plugin-id">{plugin.pluginId}</code>
+                    </TableCell>
+                    <TableCell>
+                      <div>{plugin.version}</div>
+                      <span className="eg-plugin-management__meta">Revision {plugin.revision}</span>
+                    </TableCell>
+                    <TableCell>{statusTag(plugin)}</TableCell>
+                    <TableCell>
+                      <Tag size="sm" type={plugin.healthy ? 'green' : 'warm-gray'}>
+                        {plugin.healthy ? 'Healthy' : 'Needs attention'}
+                      </Tag>
+                      {plugin.reasonCode !== 'none' && (
+                        <div className="eg-plugin-management__meta">{plugin.reasonCode}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="eg-plugin-management__meta">Runtime {plugin.state}</span>
+                      <div className="eg-plugin-management__meta">Entitlement {plugin.entitled}</div>
+                    </TableCell>
+                    <TableCell className="eg-plugin-management__actions-cell">
+                      <OverflowMenu
+                        size="sm"
+                        flipped
+                        iconDescription={`Actions for ${plugin.displayName}`}
+                        aria-label={`Actions for ${plugin.displayName}`}
+                      >
+                        <OverflowMenuItem
+                          itemText={plugin.enabled ? `Disable ${plugin.displayName}` : `Enable ${plugin.displayName}`}
+                          isDelete={plugin.enabled}
+                          disabled={
+                            busy ||
+                            !canManagePlugins ||
+                            emergencyActive ||
+                            (!plugin.enabled && !plugin.compatible)
+                          }
+                          onClick={() =>
+                            setPending({
+                              kind: 'plugin',
+                              plugin,
+                              enabled: !plugin.enabled,
+                            })
+                          }
+                        />
+                      </OverflowMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </section>
+
+      <section className="eg-plugin-management__section" aria-labelledby="advanced-plugin-operations-title">
+        <div className="eg-plugin-management__section-header">
           <div>
-            <h2 style={{ marginTop: 0 }}>Host plugin contract</h2>
-            <p style={{ maxWidth: '72ch' }}>
-              Exact machine-readable capabilities enforced by this host. Named egress policies
-              and trusted publisher identifiers are shown, but destinations, credentials, trust
-              keys, tenant data, and plugin payloads are never included.
-            </p>
-            {loading ? (
-              <InlineLoading description="Loading host plugin contract" />
-            ) : capabilities ? (
-              <>
-                <p>
-                  Host {capabilities.compatibility.hostVersion} · SDK{' '}
-                  {capabilities.compatibility.sdkVersion} · Catalog{' '}
-                  {capabilities.metadata.catalogRevision}
-                </p>
-                <p>
-                  {capabilities.permissions.length} permissions · {capabilities.slots.length}{' '}
-                  extension slots · {capabilities.events.length} event types
-                  <br />
-                  Supported host lines{' '}
-                  {capabilities.compatibility.supportWindow.hostMinorLines.join(', ')} · SDK
-                  lines {capabilities.compatibility.supportWindow.sdkMinorLines.join(', ')}
-                  <br />
-                  Supported SDK packages{' '}
-                  {capabilities.compatibility.supportWindow.sdkVersions.join(', ')}
-                </p>
-                <p style={{ marginBottom: 0 }}>
-                  Egress policies:{' '}
-                  {capabilities.egressPolicies.map((entry) => entry.id).join(', ')}
-                  <br />
-                  Trusted publishers:{' '}
-                  {capabilities.trustedPublishers.length > 0
-                    ? capabilities.trustedPublishers.map((entry) => entry.id).join(', ')
-                    : 'none'}
-                </p>
-              </>
-            ) : (
-              <p>The host plugin contract is unavailable.</p>
-            )}
+            <h3 id="advanced-plugin-operations-title">Advanced operations</h3>
+            <p>Use these controls only when recovery or platform intervention is needed.</p>
           </div>
-          {!loading && capabilities && <Tag type="blue">Protocol v1</Tag>}
         </div>
-      </Tile>
-
-      <Tile>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 'var(--spacing-4)',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div>
-            <h2 style={{ marginTop: 0 }}>Deployment lifecycle</h2>
-            <p style={{ maxWidth: '72ch' }}>
-              Safe installer progress from the local execution mirror. Runtime workload
-              reconciliation has not been checked.
-            </p>
-            {loading ? (
-              <InlineLoading description="Loading deployment lifecycle" />
-            ) : deploymentExecution?.execution ? (
-              <>
-                <p>
-                  <code>{deploymentExecution.execution.pluginId}</code> ·{' '}
-                  {deploymentExecution.execution.operation} · desired revision{' '}
-                  {deploymentExecution.desiredRevision}
-                </p>
-                <p>
-                  Completed {deploymentExecution.execution.completedPhases.length} phase
-                  {deploymentExecution.execution.completedPhases.length === 1 ? '' : 's'}
-                  {deploymentExecution.execution.nextPhase
-                    ? ` · Next ${deploymentExecution.execution.nextPhase}`
-                    : ' · No remaining phase'}
-                  <br />
-                  Updated{' '}
-                  {new Date(deploymentExecution.execution.updatedAt).toLocaleString()}
-                </p>
-                {deploymentExecution.execution.reasonCode !== 'none' && (
-                  <p>
-                    Safe reason:{' '}
-                    <code>{deploymentExecution.execution.reasonCode}</code>
-                  </p>
-                )}
-              </>
-            ) : deploymentExecution ? (
-              <p>
-                Desired revision {deploymentExecution.desiredRevision} ·{' '}
-                {deploymentExecution.observationState === 'not_started'
-                  ? 'No lifecycle execution has started.'
-                  : `Execution details are hidden because the observation is ${deploymentExecution.observationReason.replace(
-                      /_/g,
-                      ' ',
-                    )}.`}
-              </p>
-            ) : (
-              <p>No deployment lifecycle observation is available.</p>
-            )}
-          </div>
-          {!loading && deploymentExecution && executionStatusTag(deploymentExecution)}
-        </div>
-      </Tile>
-
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 'var(--spacing-4)',
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Installed plugins</h2>
-        <Button
-          kind="ghost"
-          size="sm"
-          renderIcon={Renew}
-          disabled={loading || busy}
-          onClick={() => {
-            setLoading(true);
-            void refresh();
-          }}
-        >
-          Refresh
-        </Button>
-      </div>
-
-      {loading ? (
-        <InlineLoading description="Loading installed plugins" />
-      ) : plugins.length === 0 ? (
-        <InlineNotification
-          kind="info"
-          title="No installed plugins"
-          subtitle="Install a verified package with the supported installer. This page never acquires or deploys plugin artifacts."
-          hideCloseButton
-          lowContrast
-        />
-      ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 'var(--spacing-4)',
-          }}
-        >
-          {plugins.map((plugin) => (
-            <Tile key={plugin.pluginId}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 'var(--spacing-3)',
-                }}
-              >
-                <div>
-                  <h3 style={{ marginTop: 0, marginBottom: 'var(--spacing-2)' }}>
-                    {plugin.displayName}
-                  </h3>
-                  <code>{plugin.pluginId}</code>
-                </div>
-                {statusTag(plugin)}
-              </div>
-              <p>
-                Version {plugin.version} · State {plugin.state}
-                <br />
-                Entitlement {plugin.entitled} · Revision {plugin.revision}
-              </p>
-              {plugin.reasonCode !== 'none' && (
-                <p>
-                  Safe reason: <code>{plugin.reasonCode}</code>
+        <Accordion className="eg-plugin-management__accordion">
+          <AccordionItem title="Emergency controls">
+            <div className="eg-plugin-management__accordion-content">
+              <p>Stop all plugin execution without changing which plugins are enabled. Clearing the stop resumes eligible plugins.</p>
+              {emergency && (
+                <p className="eg-plugin-management__meta">
+                  Revision {emergency.revision} · Last changed {new Date(emergency.updatedAt).toLocaleString()}
                 </p>
               )}
-              <Button
-                size="sm"
-                kind={plugin.enabled ? 'danger--tertiary' : 'tertiary'}
-                disabled={
-                  busy ||
-                  emergencyActive ||
-                  (!plugin.enabled && !plugin.compatible)
-                }
-                onClick={() =>
-                  setPending({
-                    kind: 'plugin',
-                    plugin,
-                    enabled: !plugin.enabled,
-                  })
-                }
-              >
-                {plugin.enabled ? 'Disable runtime' : 'Enable runtime'}
-              </Button>
-            </Tile>
-          ))}
-        </div>
-      )}
+              {loading ? (
+                <InlineLoading description="Loading emergency controls" />
+              ) : (
+                <Button
+                  kind={emergencyActive ? 'primary' : 'danger--tertiary'}
+                  size="sm"
+                  renderIcon={emergencyActive ? Renew : WarningAlt}
+                  disabled={!emergency || busy || !canManagePlugins}
+                  onClick={() => setPending({ kind: 'emergency', disabled: !emergencyActive })}
+                >
+                  {emergencyActive ? 'Clear emergency controls' : 'Stop all plugins'}
+                </Button>
+              )}
+            </div>
+          </AccordionItem>
 
-      <h2 style={{ marginBottom: 0 }}>Event delivery recovery</h2>
-      <p style={{ marginTop: 0, maxWidth: '72ch' }}>
-        Payload-free failures from isolated plugin event delivery. Tenant, engine, incident,
-        job, exception, and request content are deliberately hidden. Requeue only after the
-        plugin or policy problem has been corrected.
-      </p>
-      {loading ? (
-        <InlineLoading description="Loading event delivery failures" />
-      ) : deadLetters.length === 0 ? (
-        <InlineNotification
-          kind="success"
-          title="No dead-lettered plugin events"
-          subtitle="There are no event deliveries waiting for administrator recovery."
-          hideCloseButton
-          lowContrast
-        />
-      ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: 'var(--spacing-4)',
-          }}
-        >
-          {deadLetters.map((delivery) => (
-            <Tile key={delivery.deliveryId}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 'var(--spacing-3)',
-                }}
-              >
-                <div>
-                  <strong>{delivery.pluginId}</strong>
-                  <div>
-                    {delivery.subscriptionType
-                      .replace('io.enterpriseglue.host.', '')
-                      .replace('.v1', '')
-                      .replace(/[-_]/g, ' ')}
+          <AccordionItem title="Host compatibility">
+            <div className="eg-plugin-management__accordion-content">
+              {loading ? (
+                <InlineLoading description="Loading host compatibility" />
+              ) : capabilities ? (
+                <>
+                  <div className="eg-plugin-management__compatibility-summary">
+                    Host {capabilities.compatibility.hostVersion} · SDK {capabilities.compatibility.sdkVersion} ·{' '}
+                    <Tag size="sm" type="blue">Protocol v1</Tag>
                   </div>
-                </div>
-                <Tag type="red">Dead letter</Tag>
-              </div>
-              <p>
-                Attempt {delivery.attempt} of {delivery.maxAttempts}
-                <br />
-                Safe reason: <code>{delivery.reasonCode}</code>
-                <br />
-                Updated {new Date(delivery.updatedAt).toLocaleString()}
-              </p>
-              <Button
-                size="sm"
-                kind="tertiary"
-                renderIcon={Renew}
-                disabled={busy}
-                onClick={() =>
-                  setPending({
-                    kind: 'dead-letter',
-                    delivery,
-                  })
-                }
-              >
-                Requeue delivery
-              </Button>
-            </Tile>
-          ))}
-        </div>
-      )}
+                  <p className="eg-plugin-management__meta">
+                    Supports host {capabilities.compatibility.supportWindow.hostMinorLines.join(', ')} · SDK {capabilities.compatibility.supportWindow.sdkVersions.join(', ')}
+                  </p>
+                  <p className="eg-plugin-management__meta">
+                    {capabilities.permissions.length} permissions · {capabilities.slots.length} extension slots · {capabilities.events.length} event types
+                  </p>
+                </>
+              ) : (
+                <p>Host compatibility information is unavailable.</p>
+              )}
+            </div>
+          </AccordionItem>
 
-      <h2 style={{ marginBottom: 0 }}>Recent control activity</h2>
-      {loading ? (
-        <InlineLoading description="Loading recent control activity" />
-      ) : audits.length === 0 ? (
-        <p>No plugin control activity has been recorded yet.</p>
-      ) : (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--spacing-3)',
-          }}
-        >
-          {audits.slice(0, 20).map((event) => (
-            <Tile key={event.eventId}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 'var(--spacing-4)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div>
-                  <strong>{event.eventType.replace(/_/g, ' ')}</strong>
-                  <div>
-                    {event.pluginId ?? 'All plugins'} · {event.fromState ?? 'none'} →{' '}
-                    {event.toState ?? 'none'}
-                  </div>
-                  <div>
-                    Actor <code>{event.actorRef}</code> · Correlation{' '}
-                    <code>{event.correlationId}</code>
-                  </div>
-                </div>
-                <div>
-                  <Tag type={event.reasonCode === 'none' ? 'gray' : 'warm-gray'}>
-                    {event.reasonCode}
-                  </Tag>
-                  <div>{new Date(event.occurredAt).toLocaleString()}</div>
-                </div>
+          {deploymentExecution?.execution && (
+            <AccordionItem title="Deployment lifecycle">
+              <div className="eg-plugin-management__accordion-content">
+                <p>
+                  <code>{deploymentExecution.execution.pluginId}</code> · {deploymentExecution.execution.operation} · desired revision {deploymentExecution.desiredRevision}
+                </p>
+                <p className="eg-plugin-management__meta">
+                  Completed {deploymentExecution.execution.completedPhases.length} phases · Updated {new Date(deploymentExecution.execution.updatedAt).toLocaleString()}
+                </p>
+                {executionStatusTag(deploymentExecution)}
               </div>
-            </Tile>
-          ))}
-        </div>
-      )}
+            </AccordionItem>
+          )}
+
+          {deadLetters.length > 0 && (
+            <AccordionItem title={`Event delivery recovery (${deadLetters.length})`}>
+              <div className="eg-plugin-management__accordion-content eg-plugin-management__recovery-list">
+                <p>Failures are payload-free. Requeue only after the plugin or policy problem is corrected.</p>
+                {deadLetters.map((delivery) => (
+                  <div className="eg-plugin-management__recovery-item" key={delivery.deliveryId}>
+                    <div>
+                      <strong>{delivery.pluginId}</strong>
+                      <div className="eg-plugin-management__meta">
+                        Attempt {delivery.attempt} of {delivery.maxAttempts} · {delivery.reasonCode}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      kind="tertiary"
+                      renderIcon={Renew}
+                      disabled={busy || !canManagePlugins}
+                      onClick={() => setPending({ kind: 'dead-letter', delivery })}
+                    >
+                      Requeue delivery
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </AccordionItem>
+          )}
+
+          {audits.length > 0 && (
+            <AccordionItem title="Recent control activity">
+              <div className="eg-plugin-management__accordion-content eg-plugin-management__audit-list">
+                {audits.slice(0, 20).map((event) => (
+                  <div className="eg-plugin-management__audit-item" key={event.eventId}>
+                    <div>
+                      <strong>{event.eventType.replace(/_/g, ' ')}</strong>
+                      <div className="eg-plugin-management__meta">
+                        {event.pluginId ?? 'All plugins'} · {event.fromState ?? 'none'} → {event.toState ?? 'none'}
+                      </div>
+                    </div>
+                    <span className="eg-plugin-management__meta">{new Date(event.occurredAt).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </AccordionItem>
+          )}
+        </Accordion>
+      </section>
 
       <Modal
         open={pending !== null}

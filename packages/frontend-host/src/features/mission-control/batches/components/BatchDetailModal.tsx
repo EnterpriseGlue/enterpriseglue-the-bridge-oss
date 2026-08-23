@@ -4,6 +4,12 @@ import { ComposedModal, ModalHeader, ModalBody, ModalFooter, Button, InlineNotif
 import { apiClient } from '../../../../shared/api/client'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import type { BatchDetail, BatchRuntimeActionDecisions } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
+import { NativePluginSlotV1 } from '../../../../plugins/nativePluginRuntime'
+import {
+  HostContextualFlowContentV1,
+  useHostContextualFlowSurfaceV1,
+} from '../../../../plugins/contextualFlowRuntime'
+import { useActionDecision } from '../../../../shared/auth/guards'
 
 type RuntimeActionDecision = BatchRuntimeActionDecisions['suspension']
 
@@ -20,7 +26,13 @@ interface Props {
 
 export default function BatchDetailModal({ open, batchId, onClose }: Props) {
   const qc = useQueryClient()
+  const contextualFlowSurface = useHostContextualFlowSurfaceV1()
+  const activeFlow = contextualFlowSurface.active
   const selectedEngineId = useSelectedEngine()
+  const pluginActionDecision = useActionDecision(
+    'engine.instances.read',
+    { type: 'engine', id: selectedEngineId ?? null },
+  )
 
   const q = useQuery({
     queryKey: ['batches', 'detail', batchId, selectedEngineId],
@@ -96,15 +108,24 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
     suspendMutation.mutate({ id: batchId, suspended: !isSuspended })
   }
 
+  function closeModal() {
+    if (activeFlow) {
+      contextualFlowSurface.close(activeFlow.ownerPluginId, 'closed')
+    }
+    onClose()
+  }
+
   return (
-    <ComposedModal open={open} onClose={onClose} size="lg">
+    <ComposedModal open={open} onClose={closeModal} size="lg">
       <ModalHeader
-        label="Batch"
-        title={batchId ? `Batch ${batchId}` : 'Batch'}
-        closeModal={onClose}
+        label={activeFlow?.request.title ?? 'Batch'}
+        title={activeFlow?.request.title ?? (batchId ? `Batch ${batchId}` : 'Batch')}
+        closeModal={closeModal}
       />
       <ModalBody>
-        {q.isLoading ? (
+        {activeFlow ? (
+          <HostContextualFlowContentV1 surface={contextualFlowSurface} />
+        ) : q.isLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--spacing-7)' }}>
             <InlineLoading description="Loading batch..." />
           </div>
@@ -138,7 +159,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
                 <div>Total jobs</div><div>{totalJobs ?? '--'}</div>
                 <div>Jobs created</div><div>{jobsCreated ?? '--'}</div>
                 <div>Completed jobs</div><div>{(typeof displayCompleted === 'number') ? displayCompleted : '--'}</div>
-                <div>Failed jobs</div><div style={{ color: (failedJobs ?? 0) > 0 ? '#da1e28' : undefined, fontWeight: (failedJobs ?? 0) > 0 ? 'var(--font-weight-semibold)' : undefined }}>{failedJobs ?? '--'}</div>
+                <div>Failed jobs</div><div style={{ color: (failedJobs ?? 0) > 0 ? 'var(--cds-support-error)' : undefined, fontWeight: (failedJobs ?? 0) > 0 ? 'var(--font-weight-semibold)' : undefined }}>{failedJobs ?? '--'}</div>
                 <div>Remaining jobs</div><div>{remainingJobs ?? '--'}</div>
                 <div>Invocations per job</div><div>{invPerJob ?? '--'}</div>
                 <div>Seed Job Def</div><div>{seedDef ?? '--'}</div>
@@ -158,9 +179,17 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
             </div>
 
             {!!q.data?.batch?.lastError && (
-              <div style={{ background: '#fff1f1', border: '1px solid #da1e28', padding: 'var(--spacing-4)' }}>
-                <div style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)', color: '#da1e28' }}>Error</div>
-                <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-12)' }}>{q.data.batch.lastError}</div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+                <InlineNotification
+                  kind="error"
+                  lowContrast
+                  title="Batch failure"
+                  subtitle="The batch stopped before all jobs completed."
+                  hideCloseButton
+                />
+                <pre style={{ margin: 0, padding: 'var(--spacing-3)', background: 'var(--cds-layer-02)', border: '1px solid var(--cds-border-subtle)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-12)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {q.data.batch.lastError}
+                </pre>
               </div>
             )}
 
@@ -169,20 +198,38 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
                 <div style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>Failed Job Details</div>
                 <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
                   {q.data.failedJobDetails.map((job: any, i: number) => (
-                    <div key={job.id || i} style={{ fontSize: 'var(--text-12)', padding: 'var(--spacing-2)', background: '#fff1f1', borderRadius: 'var(--border-radius-md)' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', color: '#666', marginBottom: '4px' }}>{job.id}</div>
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{job.exceptionMessage}</div>
-                      {(job.jobDefinitionId || job.processInstanceId) && (
-                        <div style={{ marginTop: '6px', fontFamily: 'var(--font-mono)', color: '#666' }}>
-                          {job.jobDefinitionId ? `jobDefinitionId=${job.jobDefinitionId}` : ''}
-                          {job.jobDefinitionId && job.processInstanceId ? '  ' : ''}
-                          {job.processInstanceId ? `processInstanceId=${job.processInstanceId}` : ''}
+                    <div key={job.id || i} style={{ display: 'grid', gap: 'var(--spacing-3)', padding: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}>
+                      <InlineNotification
+                        kind="error"
+                        lowContrast
+                        title={job.id || 'Failed job'}
+                        subtitle={job.exceptionMessage || 'A job failed during execution.'}
+                        hideCloseButton
+                      />
+                      {selectedEngineId && typeof job.id === 'string' && (
+                        <div aria-label="Plugin failed-job actions">
+                          <NativePluginSlotV1
+                            slot="mission-control.failed-job.actions.v1"
+                            context={{
+                              schemaVersion: 1,
+                              disabled: !pluginActionDecision.allowed,
+                              engineRef: selectedEngineId,
+                              failedJobRef: job.id,
+                            }}
+                            contextualFlowSurface={contextualFlowSurface}
+                          />
                         </div>
                       )}
+                      {(job.jobDefinitionId || job.processInstanceId) && (
+                        <dl style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: 'var(--spacing-2) var(--spacing-4)', margin: 0 }}>
+                          {job.jobDefinitionId && <><dt>Job definition</dt><dd style={{ margin: 0, fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>{job.jobDefinitionId}</dd></>}
+                          {job.processInstanceId && <><dt>Process instance</dt><dd style={{ margin: 0, fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere' }}>{job.processInstanceId}</dd></>}
+                        </dl>
+                      )}
                       {job.stacktrace && (
-                        <div style={{ marginTop: '8px', whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-12)', color: '#333' }}>
+                        <pre style={{ margin: 0, padding: 'var(--spacing-3)', background: 'var(--cds-layer-02)', border: '1px solid var(--cds-border-subtle)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-12)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                           {job.stacktrace}
-                        </div>
+                        </pre>
                       )}
                     </div>
                   ))}
@@ -193,7 +240,16 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
         )}
       </ModalBody>
       <ModalFooter>
-        {canToggleSuspended && (
+        {activeFlow ? (
+          <Button
+            kind="secondary"
+            size="sm"
+            onClick={() => contextualFlowSurface.back(activeFlow.ownerPluginId)}
+          >
+            {activeFlow.request.backLabel ?? 'Back to failed job'}
+          </Button>
+        ) : null}
+        {!activeFlow && canToggleSuspended && (
           <Button
             kind="secondary"
             size="sm"
@@ -206,12 +262,12 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
               : (isSuspended ? 'Resume batch' : 'Pause batch')}
           </Button>
         )}
-        {canCancel && (
+        {!activeFlow && canCancel && (
           <Button kind="danger" size="sm" onClick={cancelBatch} disabled={q.isLoading || q.isFetching || !!cancelDeniedReason} title={cancelDeniedReason || undefined}>
             Cancel batch
           </Button>
         )}
-        <Button kind="secondary" size="sm" onClick={onClose}>
+        <Button kind="secondary" size="sm" onClick={closeModal}>
           Close
         </Button>
       </ModalFooter>

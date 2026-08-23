@@ -195,6 +195,37 @@ function getEngineInventoryReadDecision(engine: EngineActionSubject, permissions
   return evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
 }
 
+function EnginePluginActions({
+  engineRef,
+  displayName,
+  product,
+  productVersion,
+}: {
+  engineRef: string
+  displayName?: string
+  product?: string
+  productVersion?: string
+}) {
+  const pluginActionDecision = useActionDecision(
+    'engine.instances.read',
+    { type: 'engine', id: engineRef },
+  )
+
+  return (
+    <NativePluginSlotV1
+      slot="mission-control.engine.actions.v1"
+      context={{
+        schemaVersion: 1,
+        disabled: !pluginActionDecision.allowed,
+        engineRef,
+        ...(displayName ? { displayName } : {}),
+        ...(product ? { product } : {}),
+        ...(productVersion ? { productVersion } : {}),
+      }}
+    />
+  )
+}
+
 export type EngineDetailSectionId = 'registration' | 'access' | 'deployment' | 'runtime'
 
 export function resolveEngineDetailSections(options: {
@@ -1645,7 +1676,7 @@ export default function Engines() {
       { key: 'environment', header: 'Environment' },
       { key: 'health', header: 'Health' },
       { key: 'version', header: 'Version' },
-      { key: 'actions', header: '' },
+      { key: 'actions', header: 'Actions' },
     ],
     []
   )
@@ -1841,7 +1872,7 @@ export default function Engines() {
                             {...headerProps}
                             style={
                               header.key === 'actions'
-                                ? { width: 48, textAlign: 'right' }
+                                ? { width: 144, textAlign: 'right' }
                                 : undefined
                             }
                           >
@@ -1983,13 +2014,11 @@ export default function Engines() {
                               return (
                                 <TableCell key={cell.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
                                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-                                    <NativePluginSlotV1
-                                      slot="mission-control.engine.actions.v1"
-                                      context={{
-                                        schemaVersion: 1,
-                                        disabled: !inventoryReadDecision.allowed,
-                                        engineRef: row.id,
-                                      }}
+                                    <EnginePluginActions
+                                      engineRef={row.id}
+                                      displayName={engine?.name ?? undefined}
+                                      product={engine?.type ?? undefined}
+                                      productVersion={engine?.version ?? undefined}
                                     />
                                     {hasActions && (
                                       <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
@@ -2522,6 +2551,11 @@ function EngineHealthBadge({ engineId, version }: { engineId: string; version?: 
   )
 }
 
+/**
+ * The engine table already owns the health query used by its health badge.
+ * Pass only the compact, non-sensitive state to contextual plugins so their
+ * action can describe the current user intent without gaining host access.
+ */
 function EngineVersionCell({ engineId, initialVersion }: { engineId: string; initialVersion?: string | null }) {
   const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => getEngineConnectionHealth(engineId) })
   const v = initialVersion || q.data?.version

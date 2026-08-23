@@ -12,6 +12,7 @@ import {
   Checkmark,
   Warning,
   Error as ErrorIcon,
+  Chat,
 } from '@carbon/icons-react'
 import { Dropdown, Checkbox, ComboBox, TextInput, DatePicker, DatePickerInput, TimePicker, Modal, Button, Link } from '@carbon/react'
 import { useQuery } from '@tanstack/react-query'
@@ -34,6 +35,7 @@ import {
   MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS,
   PlatformPermission,
 } from '../../../shared/auth/permissions'
+import { getNativePluginNavigationV1 } from '../../../plugins/nativePluginRuntime'
 
 // Legacy neon colors (no longer applied; sidebar now uses Carbon theme tokens)
 const NEON_COLORS = {
@@ -58,6 +60,21 @@ export default function ProSidebar() {
   const { sidebarOpen, sidebarCollapsed, setSidebarOpen, setSidebarCollapsed } = useLayoutStore()
   const { futuristicMode } = useDashboardThemeStore()
   const { user, permissions } = useAuth()
+  const [compactViewport, setCompactViewport] = React.useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia('(max-width: 65.99rem)').matches
+      : false
+  )
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 65.99rem)')
+    const updateViewport = (event: MediaQueryListEvent | MediaQueryList) => {
+      setCompactViewport(event.matches)
+    }
+    updateViewport(mediaQuery)
+    mediaQuery.addEventListener('change', updateViewport)
+    return () => mediaQuery.removeEventListener('change', updateViewport)
+  }, [])
 
   const missionControlAllowed = hasMissionControlUiAccess(permissions, user)
   const canViewProcessesMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS)
@@ -73,6 +90,15 @@ export default function ProSidebar() {
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
+  const missionControlPluginNavItems = getNativePluginNavigationV1()
+    .filter((item) => item.parentDestination === 'mission-control')
+    .sort((left, right) =>
+      (left.order ?? 100) - (right.order ?? 100) ||
+      left.pluginId.localeCompare(right.pluginId) ||
+      left.id.localeCompare(right.id)
+    )
+  const pluginItemPath = (item: (typeof missionControlPluginNavItems)[number]) =>
+    item.scope === 'tenant' ? toTenantPath(item.path) : item.path
 
   const isValidTime = (value: string) => {
     if (!value) return true
@@ -137,13 +163,17 @@ export default function ProSidebar() {
   const onDecisionsOverviewPage = effectivePathname === '/mission-control/decisions'
   const onBatchesOverviewPage = effectivePathname === '/mission-control/batches'
 
-  // Mission Control sidebar should always be expanded (ignore persisted collapsed state)
-  const effectiveCollapsed = inMissionControl ? false : sidebarCollapsed
+  // Keep Mission Control navigation discoverable as a compact icon rail at
+  // phone, tablet, and 200%-zoom-equivalent widths. A permanently expanded
+  // 205 px sidebar left too little room for the contextual incident surface.
+  const effectiveCollapsed = inMissionControl
+    ? compactViewport
+    : sidebarCollapsed
 
   React.useEffect(() => {
     if (!inMissionControl) return
-    if (sidebarCollapsed) setSidebarCollapsed(false)
-  }, [inMissionControl, sidebarCollapsed, setSidebarCollapsed])
+    if (!compactViewport && sidebarCollapsed) setSidebarCollapsed(false)
+  }, [compactViewport, inMissionControl, sidebarCollapsed, setSidebarCollapsed])
   
   // Processes filter store
   const {
@@ -402,6 +432,20 @@ export default function ProSidebar() {
             Batches
           </MenuItem>
         )}
+        {missionControlPluginNavItems.map((item) => {
+          const Icon = item.icon ?? Chat
+          return (
+            <MenuItem
+              key={`native:mission-control:${item.pluginId}:${item.id}`}
+              icon={<Icon size={effectiveCollapsed ? 20 : 16} />}
+              active={effectivePathname.startsWith(item.path)}
+              onClick={() => navigate(pluginItemPath(item))}
+              title={item.label}
+            >
+              {item.label}
+            </MenuItem>
+          )
+        })}
       </Menu>
 
       {/* Divider and Filter Section - only visible on Processes overview page when sidebar is expanded */}
