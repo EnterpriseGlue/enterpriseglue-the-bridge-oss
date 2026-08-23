@@ -22,7 +22,10 @@ The package defines:
   exact supported package versions so resolver behavior is reproducible. The projection cannot contain
   destinations, credentials, trust keys, tenant identifiers, or plugin
   payloads.
-- Namespaced frontend route, navigation, settings, and typed slot contributions.
+- Namespaced frontend route, navigation, settings, and typed slot contributions. Deployment
+  settings are discovered by the native OSS Platform Settings → Plugins surface rather than
+  creating a second product menu; the host projects only the signed label and route, never plugin
+  configuration or credentials.
 - An additive, feature-detectable host UI surface with responsive logical `PageLayout`, semantic
   `PageHeader`, Carbon-owned `ConfirmModal`, and locale/direction/reduced-motion presentation
   preferences. Existing SDK 0.1.x consumers remain compatible because plugins must retain an
@@ -30,6 +33,9 @@ The package defines:
   helpers perform no I/O and grant no authority. Plugins pass the mounted destructive-action
   launcher ref to `ConfirmModal` so the host can restore keyboard focus after close or successful
   submit.
+  The optional `navigation.back()` helper returns to the browser location that opened a contextual
+  plugin surface. It takes no route argument, so a plugin cannot discover or compose arbitrary
+  host paths.
 - Optional tenant-scoped contribution-availability declarations, closed boolean/reason
   projections, and a read-only frontend snapshot. The background host owns tenant selection,
   scheduling, CAS/lease/expiry state, and fail-closed filtering of only the declared IDs; this is

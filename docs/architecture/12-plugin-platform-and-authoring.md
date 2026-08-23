@@ -3,7 +3,7 @@
 Status: local implementation foundation; public review, publication, and customer acceptance are
 still required before this is a supported release channel.
 
-Last reviewed: 2026-07-28
+Last reviewed: 2026-08-19
 
 ## Purpose
 
@@ -14,6 +14,40 @@ OSS deployment or giving the plugin host-internal privileges.
 The OSS repository owns generic contracts, host runtime, lifecycle controls, installer, and
 security policy. A plugin publisher owns plugin behavior, entitlement, private product source,
 and its signed release. The platform is intentionally not coupled to any particular paid plugin.
+
+## OSS v0.13.1 integration baseline
+
+The generic platform is being integrated on top of EnterpriseGlue OSS `v0.13.1`, which is the
+first target for the next plugin-platform release (`v0.14.0`). The integration deliberately
+follows the OSS Carbon navigation and grouped settings workspace rather than adding a separate
+administration application.
+
+| Surface | Host behavior | Why it belongs there |
+| --- | --- | --- |
+| Main or tenant plugin route | The responsive desktop header and mobile SideNav group active signed plugin navigation under **Plugins**. Root and tenant route scopes retain their own canonical paths. | A general-purpose plugin may have a product page, but it must remain visibly separate from built-in OSS navigation. |
+| Platform Settings → Operations → Plugins | The generic lifecycle and emergency controls live here. Deployment-owned plugin settings appear as host-rendered links below the controls. `/admin/plugins` remains a redirect for old bookmarks. | Lifecycle state changes the whole deployment and is therefore a platform operation, not an engine action. |
+| Mission Control engine, incident, failed-job, and process-instance actions | Diagnostic plugins contribute compact contextual actions at the object being investigated. A plugin may also declare one Mission Control child workspace, such as a case overview, through `parentDestination: mission-control`. | The user sends exact context at the source, while longer-running investigations remain discoverable in the same product area. |
+
+Every added surface inherits the existing OSS Carbon Design System runtime and responsive
+navigation behavior. Plugin frontend code uses the host's React, router, Carbon package, page
+layout primitives, spacing tokens, and accessible fallback controls; it must not ship a parallel
+design system or a second React runtime.
+
+### Control-plane authorization
+
+The plugin control API uses static OSS FGA actions instead of a broad administrator middleware:
+
+- `platform.settings.read` protects safe plugin lifecycle, capability, audit, metrics, and
+  tenant-enablement reads.
+- `platform.settings.manage` protects enable/disable, emergency stop, and dead-letter replay
+  mutations.
+- contextual diagnostic slots use the selected engine's `engine.instances.read` decision. A
+  denied engine hides the action; the invocation gateway independently enforces the static action
+  before contacting the plugin.
+
+The temporary `deploymentAdminMiddleware` and `tenantAdminMiddleware` route options remain only
+as compatibility aliases for existing host tests and deployments. New integrations must use the
+explicit read/manage lanes above.
 
 ## Supported plugin shapes
 
@@ -87,7 +121,7 @@ The authoritative TypeScript and Zod contracts are in
 
 | Contract | Rule |
 | --- | --- |
-| Manifest | Closed, versioned, reverse-DNS identity, immutable image digest, declared compatibility and permissions |
+| Manifest | Closed, versioned, reverse-DNS identity, immutable image digest, declared compatibility, permissions, and an optional static end-user authorization action for each interactive backend operation |
 | Frontend module | Same-origin ESM, manifest-equal identity and contributions, shared host React/router/Carbon runtime |
 | Backend capability | Fixed health/readiness/capability paths plus closed declared operations |
 | Invocation claim | Short-lived Ed25519 token with plugin, tenant, deployment, subject, operation, request digest, and one-time ID |
@@ -105,6 +139,38 @@ The host exposes a safe, no-store capability projection to deployment administra
 supported protocol and SDK lines, exact shared frontend runtime, named permissions, slots, events,
 egress-policy identifiers, and trusted publishers. It does not expose credentials, destinations,
 tenant/resource identifiers, customer content, or plugin payloads.
+
+### Fine-grained authorization contract
+
+Fine-grained access control (FGA) in OSS is the authority for an end user's ability to invoke a
+plugin operation. Plugin installation, entitlement, and `permissions.required` are separate
+controls: they decide whether the plugin may exist or use a host capability; they never grant a
+user access to customer data.
+
+An interactive operation may declare exactly one host-owned authorization mapping:
+
+```yaml
+authorization:
+  actionId: engine.instances.read
+  resource: engine.binding
+```
+
+`actionId` must be an existing, static EnterpriseGlue action. The SDK only permits
+`platform.self` or `engine.binding` as the resource mapping. An engine mapping also requires the
+operation's declared engine resource binding. The gateway—not the plugin—resolves the current
+user, tenant, and bound engine reference. It rejects unknown actions, mismatched resource types,
+missing bindings, tenant-invisible engines, FGA permission denials, and ABAC policy denials.
+
+No dynamic plugin action identifiers, caller-provided resource references, permission snapshots,
+or raw browser access tokens are passed to the plugin. This keeps the action registry reviewable
+and prevents a paid plugin from becoming an authorization bypass.
+
+Older manifests that have no `authorization` mapping remain wire-compatible but are fail-closed
+behind a deliberately conservative host baseline: `platform.dashboard.read` for an unbound
+operation and `engine.instances.read` for an engine-bound operation. Plugin publishers should
+migrate to an explicit mapping before relying on a more specific action. A future support-case
+resource type must add its resolver and static action to OSS before a case-bound operation is
+allowed; it must not be simulated with a customer-provided case ID.
 
 ## Frontend authoring
 
@@ -137,7 +203,9 @@ sequenceDiagram
   Frontend->>Frontend: "Check identity, digest, manifest, and slot ownership"
   Frontend->>Browser: "Render additive Carbon contribution"
   Browser->>Gateway: "Invoke declared operation"
-  Gateway->>Gateway: "Authenticate and authorize host context"
+  Gateway->>Gateway: "Authenticate; resolve tenant and bound resource"
+  Gateway->>Gateway: "Evaluate static FGA action and ABAC policy"
+  Gateway->>Gateway: "Apply optional host-only resource policy"
   Gateway->>Service: "Closed request plus signed one-time invocation"
   Service-->>Gateway: "Closed response or bounded SSE"
   Gateway-->>Browser: "Validated response"
@@ -148,16 +216,41 @@ The frontend host keeps a bounded browser-local failure circuit for exact
 does not expose customer content in the record, and never disables the ordinary Mission Control
 experience.
 
+The host passes its already-computed FGA decision into contextual slots. A denied slot does not
+render, including its label or action, while the gateway independently enforces the same class of
+decision for every request. Hiding an action is therefore an ergonomics improvement, not the
+security control.
+
 ## Backend isolation and brokers
 
 A plugin backend is a separate process or workload. It never receives the Express application,
 host database connection, Docker socket, Kubernetes credential, raw secret, or unrestricted
 network access.
 
-For every operation the host validates the plugin/version/protocol/schema hashes, user and
-tenant context, deployment and tenant enablement, emergency state, permission grants, admission
-limits, and the declared operation. It then signs one short-lived invocation. The plugin must
+For every operation the host validates the plugin/version/protocol/schema hashes, authenticated
+user and tenant context, deployment and tenant enablement, emergency state, permission grants,
+the manifest's static FGA mapping, the resolved resource and policy decision, admission limits,
+and the declared operation. Only then does it sign one short-lived invocation. The plugin must
 verify the claim and durably consume the one-time ID before performing work.
+
+```mermaid
+flowchart TD
+  Request["Browser API request"] --> Identity["Host authentication + canonical tenant"]
+  Identity --> Lifecycle["Plugin lifecycle, grants, schema and path validation"]
+  Lifecycle --> Binding["Host resolves declared platform or engine binding"]
+  Binding --> FGA["Static action: permission + ABAC policy"]
+  FGA -->|"deny"| Deny["403; sidecar is never contacted"]
+  FGA -->|"allow"| Extra["Optional host resource policy"]
+  Extra -->|"deny"| Deny
+  Extra -->|"allow"| Token["One-time signed invocation with host-derived scope"]
+  Token --> Sidecar["Plugin service"]
+  Sidecar --> Broker["Scoped broker request"]
+  Broker --> Scope["Broker verifies signed resourceRefs"]
+```
+
+The signed broker claim carries only the host-resolved `resourceRefs`. A broker rechecks that an
+engine read is within that signed scope and the canonical tenant visibility boundary; it does not
+recreate legacy role checks or trust an ID sent by the plugin.
 
 The available broker families are deliberately scoped:
 
@@ -170,6 +263,21 @@ The available broker families are deliberately scoped:
 
 An entitlement is a plugin-owned decision. The host may present a safe reason code, but a paid
 plugin backend must check its entitlement on every paid operation.
+
+### Customer-side diagnostics and full logs
+
+The diagnostic collector is part of the OSS host and runs in the same customer environment as
+the EnterpriseGlue adapter. Its PII/secret filtering executes before any support plugin or cloud
+endpoint sees a bundle. The plugin receives a sanitized, bounded handoff only; raw logs are not
+stored by the host broker or sent through a browser.
+
+Full sanitized log bundles are an explicit opt-in diagnostic policy, not a default. The host
+requires user confirmation and marks the signed evidence level as
+`sanitized_full_log_bundle_confirmed`; it limits the handoff to 10 MiB and one million lines.
+The customer adapter remains the privacy boundary whether EnterpriseGlue OSS is deployed
+on-premises or the support agent itself is cloud-hosted. A plugin may distill a confirmed,
+sanitized case into generic knowledge only through the separately governed knowledge-promotion
+workflow; it must never infer permission to retain raw artifacts from the diagnostic request.
 
 ## Installation and lifecycle
 
@@ -289,6 +397,9 @@ contractual acceptance.
 
 - [x] Generic public SDK, runtime, host, installer, charts, and reference-plugin source exist in
   a clean local OSS worktree.
+- [x] Interactive plugin operations and contextual plugin slots bridge to OSS FGA without
+  transmitting an authorization bypass to a plugin.
+- [x] Customer-side sanitized full-log collection is bounded and requires explicit confirmation.
 - [x] Local focused tests, container checks, Compose lifecycle, Helm security, and two-replica
   acceptance pass.
 - [x] OSS source boundary guard rejects private plugin dependencies and imports.
@@ -297,5 +408,28 @@ contractual acceptance.
 - [ ] Review and merge the stacked generic OSS slices.
 - [ ] Run protected public CI, including source and final-image boundary guards.
 - [ ] Publish immutable SDK/runtime, host images, installer image, and charts.
-- [ ] Run private plugin CI against released OSS tags and digests.
+- [ ] Migrate each private plugin manifest to explicit static FGA operation mappings and run its
+  private CI against released OSS tags and digests.
 - [ ] Publish a signed private plugin artifact and perform customer deployment acceptance.
+## Mission Control child navigation and readable-engine broker
+
+Navigation contributions may use the existing host vocabulary
+`parentDestination: mission-control`. The host places those contributions in the Mission Control
+sidebar and omits them from the top-level Voyager plugin list. The contributed tenant route should
+use a Mission Control-relative path such as `mission-control/<plugin-area>` so the normal
+Mission Control shell and responsive navigation remain present.
+
+Plugins that need to authorize a tenant-level workspace against the caller's current engine access
+may request the explicit `host.engine.access.list_safe` permission. The matching host broker:
+
+- derives subject and tenant exclusively from the signed invocation;
+- returns a bounded, paged list of opaque engine references;
+- includes only engines with full `engine:instance:view` permission;
+- excludes runtime-resource-only grants from whole-engine visibility;
+- never returns engine endpoints, credentials, names, health payloads, or arbitrary metadata; and
+- does not replace the plugin backend's own object-level access check.
+
+The request is closed and cannot contain a tenant or subject. A plugin operation must declare the
+permission, the installer must grant it, and the signed invocation must include it. A navigation
+entry, active contribution, or successful broker call is not authority to return plugin-owned
+customer content.
