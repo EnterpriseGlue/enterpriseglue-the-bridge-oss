@@ -58,11 +58,6 @@
     "email": "henri.bergius@iki.fi",
     "url": "http://bergie.iki.fi"
   },
-  "@tanstack/react-query@5.101.4": {
-    "licenses": "MIT",
-    "repository": "git+https://github.com/TanStack/query.git",
-    "publisher": "tannerlinsley"
-  },
   "@tanstack/react-query@5.102.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/TanStack/query.git",

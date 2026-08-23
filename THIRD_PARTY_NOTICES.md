@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-08-23T03:13:14.295Z
+Generated at: 2026-08-23T07:35:01.191Z
 
 Generated from:
 - third_party_licenses.json
@@ -26,7 +26,7 @@ Generated from:
 | BSD-2-Clause | 1 |
 | BSD-3-Clause | 1 |
 | ISC | 4 |
-| MIT | 61 |
+| MIT | 60 |
 | MIT-0 | 1 |
 | SEE LICENSE IN LICENSE | 2 |
 
@@ -45,7 +45,6 @@ Generated from:
 | @gitbeaker/rest | 43.8.0 | MIT | https://github.com/jdalrymple/gitbeaker | backend, frontend, packages/shared |
 | @google-cloud/spanner | 8.11.0 | Apache-2.0 | https://github.com/googleapis/google-cloud-node.git | backend, frontend, packages/shared |
 | @node-saml/node-saml | 5.1.0 | MIT | https://github.com/node-saml/node-saml.git | backend, frontend, packages/shared |
-| @tanstack/react-query | 5.101.4 | MIT | git+https://github.com/TanStack/query.git | frontend |
 | @tanstack/react-query | 5.102.0 | MIT | git+https://github.com/TanStack/query.git | frontend, packages/frontend-host |
 | @tanstack/react-table | 8.21.3 | MIT | https://github.com/TanStack/table.git | frontend, packages/frontend-host |
 | adm-zip | 0.6.0 | MIT | https://github.com/cthackers/adm-zip.git | backend, frontend, packages/shared |
