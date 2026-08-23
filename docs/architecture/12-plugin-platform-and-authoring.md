@@ -379,10 +379,10 @@ already built immutable backend and frontend images and wants to scan those exac
 
 The current local implementation is covered by focused checks:
 
-- SDK compatibility fixtures and 52 SDK tests;
-- 60 runtime tests;
-- 70 backend control-plane tests;
-- 28 Carbon frontend host tests;
+- SDK compatibility fixtures and 57 SDK tests;
+- 61 runtime tests;
+- 75 backend host and control-plane tests;
+- 32 Carbon frontend host tests;
 - 58 installer and lifecycle tests;
 - a hardened reference-plugin container that rejects invocation replay after restart;
 - Helm/RBAC security rendering checks;

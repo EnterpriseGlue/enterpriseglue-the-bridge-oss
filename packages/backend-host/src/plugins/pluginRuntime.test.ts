@@ -7,7 +7,7 @@ import {
 } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import {
   pluginPermissionValues,
@@ -361,6 +361,13 @@ describe('PluginHostRuntimeV1', () => {
     });
     await expect(
       runtime.readAsset(pluginId, version, '../state.json'),
+    ).resolves.toBeNull();
+    await writeFile(
+      join(files.assetRoot, pluginId, 'frontend', 'unsigned.js'),
+      'export default "unsigned";',
+    );
+    await expect(
+      runtime.readAsset(pluginId, version, 'frontend/unsigned.js'),
     ).resolves.toBeNull();
     await expect(runtime.controlSnapshot()).resolves.toMatchObject({
       revision: 7,

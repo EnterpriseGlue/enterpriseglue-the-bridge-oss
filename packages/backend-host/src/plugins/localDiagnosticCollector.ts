@@ -5,7 +5,7 @@ import {
   sign,
   type KeyObject,
 } from 'node:crypto';
-import { open, readFile, realpath, stat } from 'node:fs/promises';
+import { open, realpath, stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 
 import {
@@ -27,6 +27,7 @@ import { fetch, type Dispatcher, type RequestInit } from 'undici';
 import { z } from 'zod';
 
 import type { PluginDiagnosticMetricsRegistryV1 } from './pluginDiagnosticMetrics.js';
+import { readSecureRegularFileV1 } from './secureFile.js';
 
 const MAX_POLICY_BYTES = 1024 * 1024;
 const MAX_CREDENTIAL_BYTES = 32 * 1024;
@@ -448,12 +449,16 @@ implements PluginDiagnosticCollectorV1 {
 async function loadPolicy(
   path: string,
 ): Promise<LocalDiagnosticCollectorPolicyV1> {
-  const details = await stat(path);
-  if (!details.isFile() || details.size > MAX_POLICY_BYTES) {
+  let bytes: Buffer;
+  try {
+    bytes = await readSecureRegularFileV1(path, {
+      maxBytes: MAX_POLICY_BYTES,
+    });
+  } catch {
     throw new Error('collector_policy_invalid');
   }
   return parseLocalDiagnosticCollectorPolicyV1(
-    JSON.parse(await readFile(path, 'utf8')),
+    JSON.parse(bytes.toString('utf8')),
   );
 }
 
@@ -845,15 +850,14 @@ async function readProtectedFile(
   path: string,
   code: string,
 ): Promise<Buffer> {
-  const details = await stat(path);
-  if (
-    !details.isFile() ||
-    details.size > MAX_CREDENTIAL_BYTES ||
-    (details.mode & 0o077) !== 0
-  ) {
+  try {
+    return await readSecureRegularFileV1(path, {
+      maxBytes: MAX_CREDENTIAL_BYTES,
+      requirePrivateMode: true,
+    });
+  } catch {
     throw new Error(code);
   }
-  return readFile(path);
 }
 
 async function boundedResponse(

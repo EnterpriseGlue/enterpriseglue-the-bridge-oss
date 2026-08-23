@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, randomUUID } from 'node:crypto';
-import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 
 import {
@@ -102,6 +102,7 @@ import {
 } from './pluginContributionAvailabilityStore.js';
 import { PluginDiagnosticMetricsRegistryV1 } from './pluginDiagnosticMetrics.js';
 import { PluginEventMetricsRegistryV1 } from './pluginEventMetrics.js';
+import { readSecureRegularFileV1 } from './secureFile.js';
 
 const MAX_STATE_BYTES = 10 * 1024 * 1024;
 const MAX_EXECUTION_OBSERVATION_BYTES = 64 * 1024;
@@ -205,6 +206,7 @@ interface ActiveAsset {
   version: string;
   root: string;
   entry: string;
+  entryAssetPath: string;
   entrySha256: string;
 }
 
@@ -429,11 +431,10 @@ function safeRecord(input: unknown, key: string): InstallerRecord {
 
 async function loadStateFile(path: string | undefined): Promise<LoadedState> {
   if (!path) return { revision: 0, records: [], lifecyclePlan: null };
-  const details = await stat(path);
-  if (!details.isFile() || details.size > MAX_STATE_BYTES) {
-    throw new Error('Plugin installer state file has an invalid size');
-  }
-  const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+  const bytes = await readSecureRegularFileV1(path, {
+    maxBytes: MAX_STATE_BYTES,
+  });
+  const parsed = JSON.parse(bytes.toString('utf8')) as unknown;
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Plugin installer state must be an object');
   }
@@ -517,9 +518,12 @@ async function loadExecutionObservationFile(
   state: LoadedState,
 ): Promise<PluginDeploymentExecutionObservationV1> {
   if (!path) return notStartedExecutionObservation(state.revision);
-  let details;
+  let bytes: Buffer;
   try {
-    details = await lstat(path);
+    bytes = await readSecureRegularFileV1(path, {
+      maxBytes: MAX_EXECUTION_OBSERVATION_BYTES,
+      followSymlinks: false,
+    });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return notStartedExecutionObservation(state.revision);
@@ -530,20 +534,9 @@ async function loadExecutionObservationFile(
       'observation_invalid',
     );
   }
-  if (
-    !details.isFile() ||
-    details.isSymbolicLink() ||
-    details.size > MAX_EXECUTION_OBSERVATION_BYTES
-  ) {
-    return unavailableExecutionObservation(
-      state.revision,
-      'invalid',
-      'observation_invalid',
-    );
-  }
   let input: unknown;
   try {
-    input = JSON.parse(await readFile(path, 'utf8'));
+    input = JSON.parse(bytes.toString('utf8'));
   } catch {
     return unavailableExecutionObservation(
       state.revision,
@@ -721,11 +714,10 @@ export class PluginHostRuntimeV1 {
         if (!isContained(root, entry)) {
           throw new Error('Plugin entry escapes its asset root');
         }
-        const entryDetails = await stat(entry);
-        if (!entryDetails.isFile() || entryDetails.size > MAX_ASSET_BYTES) {
-          throw new Error('Plugin entry has an invalid size');
-        }
-        const entryBytes = await readFile(entry);
+        const entryBytes = await readSecureRegularFileV1(entry, {
+          maxBytes: MAX_ASSET_BYTES,
+          followSymlinks: false,
+        });
         if (digest(entryBytes) !== frontend.sha256) {
           issues.push({ pluginId, code: 'asset_digest_invalid' });
           activeRecords.delete(pluginId);
@@ -743,6 +735,7 @@ export class PluginHostRuntimeV1 {
           version: record.version,
           root,
           entry,
+          entryAssetPath: frontend.entry,
           entrySha256: frontend.sha256,
         });
         plugins.push({
@@ -788,21 +781,17 @@ export class PluginHostRuntimeV1 {
     await this.frontendBootstrap();
     const active = this.activeAssets.get(pluginId.data);
     if (!active || active.version !== version.data) return null;
+    if (assetPathInput !== active.entryAssetPath) return null;
 
     try {
-      const target = await realpath(resolve(active.root, assetPathInput));
-      if (!isContained(active.root, target)) return null;
-      const details = await stat(target);
-      if (!details.isFile() || details.size > MAX_ASSET_BYTES) return null;
-      const contentType = contentTypeFor(target);
+      const bytes = await readSecureRegularFileV1(active.entry, {
+        maxBytes: MAX_ASSET_BYTES,
+        followSymlinks: false,
+      });
+      const contentType = contentTypeFor(active.entry);
       if (!contentType) return null;
-      if (
-        target === active.entry &&
-        digest(await readFile(target)) !== active.entrySha256
-      ) {
-        return null;
-      }
-      return { bytes: await readFile(target), contentType };
+      if (digest(bytes) !== active.entrySha256) return null;
+      return { bytes, contentType };
     } catch {
       return null;
     }
@@ -888,18 +877,19 @@ export class PluginHostRuntimeV1 {
           'Plugin operation schema escapes its bundle',
         );
       }
-      const details = await stat(path);
-      if (
-        !details.isFile() ||
-        details.size === 0 ||
-        details.size > PLUGIN_OPERATION_SCHEMA_MAX_BYTES
-      ) {
+      let bytes: Buffer;
+      try {
+        bytes = await readSecureRegularFileV1(path, {
+          minBytes: 1,
+          maxBytes: PLUGIN_OPERATION_SCHEMA_MAX_BYTES,
+          followSymlinks: false,
+        });
+      } catch {
         throw new PluginGatewayError(
           'schema_document_invalid',
           'Plugin operation schema has an invalid size',
         );
       }
-      const bytes = await readFile(path);
       compiled = compilePluginOperationSchemaV1({
         bytes,
         expectedSha256: reference.sha256,
@@ -1136,11 +1126,14 @@ async function readInvocationPrivateKey(): Promise<string> {
   const path =
     process.env.ENTERPRISEGLUE_PLUGIN_INVOCATION_PRIVATE_KEY_FILE?.trim();
   if (!path) throw new Error('Plugin invocation signing key is not configured');
-  const details = await stat(path);
-  if (!details.isFile() || details.size > INVOCATION_PRIVATE_KEY_MAX_BYTES) {
+  try {
+    const bytes = await readSecureRegularFileV1(path, {
+      maxBytes: INVOCATION_PRIVATE_KEY_MAX_BYTES,
+    });
+    return bytes.toString('utf8');
+  } catch {
     throw new Error('Plugin invocation signing key file is invalid');
   }
-  return readFile(path, 'utf8');
 }
 
 async function readInvocationPublicKey(): Promise<string> {
