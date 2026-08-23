@@ -77,7 +77,7 @@
     "Plugin SDK, compatibility fixtures, runtime, installer, reference plugin, backend host, frontend host, broker, control-plane, multi-replica, database-portability, and package-content tests.",
     "Fine-grained authorization structure, action-registry, sibling denial, cross-tenant denial, resource mismatch, revocation, disabled entitlement, OSS boot, paid-source boundary, and final-image boundary checks.",
     "Deterministic Carbon UI evidence for plugin lifecycle, Mission Control case list, question flow, contextual incident and failed-job analysis, process-instance analysis, completed answers, diagnostics, retention, escalation, responsive layout, keyboard focus, and Axe WCAG checks.",
-    "Customer-like no-build Compose and Helm install, v0.13.1 database upgrade, repeated startup, multi-replica migration, plugin disable/remove, application rollback, plugin rollback, and clean immutable artifact rehearsal."
+    "Local Compose lifecycle and multi-replica PostgreSQL acceptance, signed installer and Helm toolchain rehearsal, plugin disable/remove, application rollback, exact plugin rollback, and immutable artifact tamper rejection."
   ],
   "packages": [
     { "name": "@enterpriseglue/shared", "previousVersion": "0.5.0", "newVersion": "0.6.0", "impact": "minor" },
