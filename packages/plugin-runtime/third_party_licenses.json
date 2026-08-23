@@ -9,7 +9,7 @@
     "repository": "git+https://github.com/guybedford/es-module-lexer.git",
     "publisher": "Guy Bedford"
   },
-  "semver@7.7.4": {
+  "semver@7.8.5": {
     "licenses": "ISC",
     "repository": "git+https://github.com/npm/node-semver.git",
     "publisher": "GitHub Inc."

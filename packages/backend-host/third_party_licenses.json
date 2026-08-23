@@ -29,14 +29,14 @@
     "publisher": "TJ Holowaychuk",
     "email": "tj@vision-media.ca"
   },
-  "helmet@8.1.0": {
+  "helmet@8.3.0": {
     "licenses": "MIT",
     "repository": "git://github.com/helmetjs/helmet.git",
     "publisher": "Adam Baldwin",
     "email": "adam@npmjs.com",
     "url": "https://evilpacket.net"
   },
-  "morgan@1.10.1": {
+  "morgan@1.11.0": {
     "licenses": "MIT",
     "repository": "expressjs/morgan"
   },
@@ -53,7 +53,7 @@
     "publisher": "Stephen Scott",
     "email": "scottie1984@gmail.com"
   },
-  "typeorm@0.3.30": {
+  "typeorm@0.3.31": {
     "licenses": "MIT",
     "repository": "https://github.com/typeorm/typeorm.git",
     "publisher": "TypeORM",
@@ -64,7 +64,7 @@
     "repository": "https://github.com/microsoft/TypeScript.git",
     "publisher": "Microsoft Corp."
   },
-  "undici@7.28.0": {
+  "undici@7.29.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/nodejs/undici.git"
   },

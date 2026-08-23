@@ -5,9 +5,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 function splitNameAndVersion(packageKey) {
-  const idx = packageKey.lastIndexOf('@');
-  if (idx <= 0) return { name: packageKey, version: '' };
-  return { name: packageKey.slice(0, idx), version: packageKey.slice(idx + 1) };
+  // pnpm appends peer-resolution context, for example
+  // @carbon/react@1.107.0(react@19.2.6). That context is not part of either
+  // the package name or published version and would otherwise make notices
+  // unstable whenever a peer graph changes.
+  const normalizedKey = String(packageKey).replace(/\(.+\)$/, '');
+  const idx = normalizedKey.lastIndexOf('@');
+  if (idx <= 0) return { name: normalizedKey, version: '' };
+  return {
+    name: normalizedKey.slice(0, idx),
+    version: normalizedKey.slice(idx + 1),
+  };
 }
 
 function normalizeLicense(license) {
@@ -197,14 +205,42 @@ function runNpmLs(repoRoot, workspace) {
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: 'utf8',
+    // A full pnpm workspace graph can be several megabytes. Node's default
+    // spawnSync buffer is too small and used to leave truncated JSON that was
+    // then reported as a misleading parse failure.
+    maxBuffer: 64 * 1024 * 1024,
   });
+
+  const invocation = `${isPnpm ? 'corepack pnpm@11.0.8' : 'npm'} ls`;
+  if (result.error) {
+    throw new Error(
+      `${invocation} could not start for ${workspace || 'root'}: ${result.error.message}`,
+    );
+  }
+  if (result.signal) {
+    throw new Error(
+      `${invocation} was terminated by ${result.signal} for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`,
+    );
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `${invocation} exited with status ${result.status} for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`,
+    );
+  }
 
   const output = String(result.stdout || '').trim();
   if (!output) {
-    throw new Error(`${isPnpm ? 'corepack pnpm@11.0.8' : 'npm'} ls returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
+    throw new Error(`${invocation} returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
   }
 
-  const parsed = JSON.parse(output);
+  let parsed;
+  try {
+    parsed = JSON.parse(output);
+  } catch (error) {
+    throw new Error(
+      `${invocation} returned invalid JSON for ${workspace || 'root'} (${Buffer.byteLength(output, 'utf8')} bytes): ${error.message}`,
+    );
+  }
   
   // pnpm returns an array of workspace packages, npm returns a single object
   if (isPnpm) {

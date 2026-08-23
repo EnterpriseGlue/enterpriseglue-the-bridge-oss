@@ -47,8 +47,6 @@ if [[ "$CHECK_MODE" == "true" && -f THIRD_PARTY_NOTICES.md ]]; then
   fi
 fi
 
-node scripts/generate-third-party-notices.mjs
-
 generated_files=(
   THIRD_PARTY_NOTICES.md
   third_party_licenses.json
@@ -58,11 +56,31 @@ while IFS= read -r generated_file; do
   generated_files+=("$generated_file")
 done < <(find backend frontend packages -mindepth 1 -maxdepth 2 -name third_party_licenses.json -print 2>/dev/null | LC_ALL=C sort)
 
+snapshot_dir=""
 if [[ "$CHECK_MODE" == "true" ]]; then
-  if [[ -n "$(git status --porcelain -- "${generated_files[@]}")" ]]; then
+  snapshot_dir="$(mktemp -d)"
+  trap 'rm -rf "$snapshot_dir"' EXIT
+  for generated_file in "${generated_files[@]}"; do
+    if [[ -f "$generated_file" ]]; then
+      mkdir -p "$snapshot_dir/$(dirname "$generated_file")"
+      cp "$generated_file" "$snapshot_dir/$generated_file"
+    fi
+  done
+fi
+
+node scripts/generate-third-party-notices.mjs
+
+if [[ "$CHECK_MODE" == "true" ]]; then
+  changed_files=()
+  for generated_file in "${generated_files[@]}"; do
+    if [[ ! -f "$snapshot_dir/$generated_file" ]] || ! cmp -s "$snapshot_dir/$generated_file" "$generated_file"; then
+      changed_files+=("$generated_file")
+    fi
+  done
+  if [[ ${#changed_files[@]} -gt 0 ]]; then
     echo "❌ Third-party notice artifacts are out of date. Re-run:" >&2
     echo "   bash ./scripts/update-third-party-notices.sh" >&2
-    git --no-pager diff -- "${generated_files[@]}" || true
+    printf '   %s\n' "${changed_files[@]}" >&2
     exit 1
   fi
   echo "✅ Third-party notice artifacts are up to date."
