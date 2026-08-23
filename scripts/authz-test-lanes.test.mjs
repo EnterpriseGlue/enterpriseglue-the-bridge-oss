@@ -338,6 +338,8 @@ test('the accessibility matrix uses the same local browser fallback without open
   assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_WEBKIT_EXECUTION/);
   assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_CONTAINER_SUITE=accessibility/);
   assert.match(accessibilityMatrixRunner, /E2E_SEED_USER=false/);
+  assert.match(accessibilityMatrixRunner, /corepack pnpm exec playwright test/);
+  assert.match(accessibilityMatrixRunner, /if \[\[ "\$base_url" == https:\/\/\* \]\]/);
   assert.match(accessibilityMatrixRunner, /identity-administration-accessibility\.spec\.ts/);
   assert.match(accessibilityMatrixRunner, /write-authz-accessibility-evidence\.mjs/);
 });
@@ -497,6 +499,10 @@ test('the identity browser lifecycle runner accepts the generated local TLS CA',
   assert.match(identityBrowserRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
   assert.match(identityBrowserRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(identityBrowserRunner, /localhost, loopback, or a \.local host/);
+  assert.match(identityBrowserRunner, /test\/e2e\/identity-config-lifecycle\.spec\.ts/);
+  assert.match(identityBrowserRunner, /test\/e2e\/login-experience-gallery\.spec\.ts/);
+  assert.match(identityBrowserRunner, /test\/e2e\/access-control-layout\.spec\.ts/);
+  assert.match(identityBrowserRunner, /corepack pnpm exec playwright test "\$\{browser_e2e_files\[@\]\}"/);
 });
 
 test('the live local SAML rehearsal is opt-in and guarded to local browser targets', () => {
