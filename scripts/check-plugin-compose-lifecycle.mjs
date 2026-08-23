@@ -38,7 +38,16 @@ const generatedCompose = resolve(
 const projectName = `egpluginlifecycle${process.pid}`;
 const service = 'eg-plugin-io-enterpriseglue-reference-health';
 const gatewayNetwork = 'enterpriseglue-plugin-gateway';
+const registryName = `eg-plugin-compose-registry-${process.pid}`;
+const registryPort = Number(
+  process.env.EG_PLUGIN_COMPOSE_REGISTRY_PORT ?? '5004',
+);
+const zotImage =
+  process.env.EG_PLUGIN_COMPOSE_REGISTRY_IMAGE ??
+  'ghcr.io/project-zot/zot-minimal@sha256:892f2a5a63dd99bdf85320fee5448506119328a6d5e1a2d14d4db876be595236';
 let createdNetwork = false;
+let registryStarted = false;
+const publishedImages = [];
 
 function command(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -65,27 +74,67 @@ function digest(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function immutableLocalReference(repository, tag) {
-  const id = docker([
-    'image',
-    'inspect',
-    `${repository}:${tag}`,
-    '--format',
-    '{{.Id}}',
-  ]);
-  if (!/^sha256:[a-f0-9]{64}$/.test(id)) {
-    throw new Error('Local Docker image did not produce an immutable ID');
+async function startRegistry() {
+  if (
+    !Number.isInteger(registryPort) ||
+    registryPort < 1_024 ||
+    registryPort > 65_535
+  ) {
+    throw new Error(
+      'EG_PLUGIN_COMPOSE_REGISTRY_PORT must be an unprivileged TCP port',
+    );
   }
-  return `${repository}@${id}`;
+  docker([
+    'run',
+    '--detach',
+    '--name',
+    registryName,
+    '--publish',
+    `127.0.0.1:${registryPort}:5000`,
+    zotImage,
+  ]);
+  registryStarted = true;
+  const registry = `127.0.0.1:${registryPort}`;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await fetch(`http://${registry}/v2/`);
+      if (response.ok) return registry;
+    } catch {
+      // The registry can take a moment to bind after Docker reports it running.
+    }
+    await new Promise((resolvePromise) =>
+      setTimeout(resolvePromise, 250),
+    );
+  }
+  throw new Error('Disposable OCI registry did not become ready');
+}
+
+function publishImage(localImage, repository) {
+  const tag = `${repository}:compose-lifecycle`;
+  docker(['tag', localImage, tag]);
+  docker(['push', tag]);
+  const repoDigests = JSON.parse(
+    docker(['image', 'inspect', tag, '--format', '{{json .RepoDigests}}']),
+  );
+  const reference = repoDigests.find((candidate) =>
+    candidate.startsWith(`${repository}@sha256:`),
+  );
+  if (
+    !reference ||
+    !new RegExp(
+      `^${repository.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}@sha256:[a-f0-9]{64}$`,
+    ).test(reference)
+  ) {
+    throw new Error('Published OCI image did not produce an immutable digest');
+  }
+  publishedImages.push(tag, reference);
+  return reference;
 }
 
 function wrapper(image, args) {
   return command(resolve(root, 'scripts/eg-plugin'), args, {
     env: {
       EG_PLUGIN_INSTALLER_IMAGE: image,
-      EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID: image.slice(
-        image.lastIndexOf('@') + 1,
-      ),
     },
   });
 }
@@ -187,13 +236,14 @@ async function main() {
       '.',
     ]);
   }
-  const pluginImage = immutableLocalReference(
-    'enterpriseglue/reference-health',
-    'compose-lifecycle',
+  const registry = await startRegistry();
+  const pluginImage = publishImage(
+    'enterpriseglue/reference-health:compose-lifecycle',
+    `${registry}/enterpriseglue/reference-health`,
   );
-  const installerImage = immutableLocalReference(
-    'enterpriseglue/plugin-installer',
-    'compose-lifecycle',
+  const installerImage = publishImage(
+    'enterpriseglue/plugin-installer:compose-lifecycle',
+    `${registry}/enterpriseglue/plugin-installer`,
   );
 
   const networkExists =
@@ -448,6 +498,18 @@ try {
       spawnSync('docker', ['network', 'rm', gatewayNetwork], {
         stdio: 'ignore',
       });
+    }
+    if (registryStarted) {
+      spawnSync('docker', ['rm', '--force', registryName], {
+        stdio: 'ignore',
+      });
+    }
+    if (publishedImages.length > 0) {
+      spawnSync(
+        'docker',
+        ['image', 'rm', '--force', ...publishedImages],
+        { stdio: 'ignore' },
+      );
     }
     await rm(project, { recursive: true, force: true });
   }

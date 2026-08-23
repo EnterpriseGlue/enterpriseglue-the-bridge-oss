@@ -169,35 +169,6 @@ if [ "${1:-}" = "apply-compose" ]; then
     socket_gid="$(stat -c %g "$socket")"
     socket_group_args="--group-add $socket_gid"
   fi
-  runtime_image="$image"
-  local_image_id="${EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID:-}"
-  if [ -n "$local_image_id" ]; then
-    case "$local_image_id" in
-      sha256:*)
-        ;;
-      *)
-        echo "EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID must be a sha256 image ID" >&2
-        exit 2
-        ;;
-    esac
-    local_image_digest="${local_image_id#sha256:}"
-    case "$local_image_digest" in
-      ''|*[!0-9a-f]*)
-        echo "EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID must be a sha256 image ID" >&2
-        exit 2
-        ;;
-    esac
-    if [ "${#local_image_digest}" -ne 64 ] || [ "$local_image_id" != "${image##*@}" ]; then
-      echo "EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID must exactly match the configured immutable reference" >&2
-      exit 2
-    fi
-    inspected_image_id="$(docker image inspect "$local_image_id" --format '{{.Id}}' 2>/dev/null || true)"
-    if [ "$inspected_image_id" != "$local_image_id" ]; then
-      echo "EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID is not present in the local Docker image store" >&2
-      exit 2
-    fi
-    runtime_image="$local_image_id"
-  fi
   workspace="$(pwd)"
   # The group arguments are generated only from numeric stat output above.
   # shellcheck disable=SC2086
@@ -214,7 +185,7 @@ if [ "${1:-}" = "apply-compose" ]; then
     --env "DOCKER_HOST=unix:///var/run/docker.sock" \
     --env "EG_PLUGIN_INSTALLER_IMAGE=$image" \
     --workdir "$workspace" \
-    "$runtime_image" \
+    "$image" \
     "$@"
 fi
 
