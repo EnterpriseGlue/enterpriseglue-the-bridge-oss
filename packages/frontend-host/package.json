@@ -13,11 +13,11 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build:shared": "pnpm --filter shared run build",
+    "build:shared": "pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter shared run build",
     "typecheck": "pnpm run build:shared && tsc -p tsconfig.build.json --noEmit",
     "build": "pnpm run build:shared && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "clean": "rm -rf dist",
-    "test:plugin-bridge": "vitest run src/enterprise/extensionRegistry.test.ts src/plugins/contextualFlowRuntime.test.tsx src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/shared/api/client.test.ts",
+    "test:plugin-bridge": "pnpm run build:shared && vitest run src/enterprise/extensionRegistry.test.ts src/plugins/contextualFlowRuntime.test.tsx src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/shared/api/client.test.ts",
     "prepublishOnly": "pnpm run clean && pnpm run build"
   },
   "files": [
