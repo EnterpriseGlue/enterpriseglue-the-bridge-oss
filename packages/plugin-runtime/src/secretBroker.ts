@@ -16,7 +16,7 @@ import {
 import {
   verifyPluginInvocationV1,
   type PluginInvocationReplayStoreV1,
-} from '@enterpriseglue/plugin-runtime/gateway';
+} from './gateway.js';
 const SECRET_USE_PERMISSION = 'host.secret.use_reference' as const;
 const DEFAULT_SECRET_ROOT =
   '/run/enterpriseglue/plugin-broker/secrets';

@@ -11,7 +11,7 @@ import type {
 import {
   signPluginInvocationV1,
   type PluginInvocationReplayStoreV1,
-} from '@enterpriseglue/plugin-runtime/gateway';
+} from './gateway.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
