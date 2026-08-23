@@ -109,10 +109,8 @@ async function startRegistry() {
   throw new Error('Disposable OCI registry did not become ready');
 }
 
-function publishImage(localImage, repository) {
-  const tag = `${repository}:compose-lifecycle`;
-  docker(['tag', localImage, tag]);
-  docker(['push', tag]);
+function resolvePublishedImage(tag, repository) {
+  docker(['pull', tag]);
   const repoDigests = JSON.parse(
     docker(['image', 'inspect', tag, '--format', '{{json .RepoDigests}}']),
   );
@@ -129,6 +127,29 @@ function publishImage(localImage, repository) {
   }
   publishedImages.push(tag, reference);
   return reference;
+}
+
+function publishImage(localImage, repository) {
+  const tag = `${repository}:compose-lifecycle`;
+  docker(['tag', localImage, tag]);
+  docker(['push', tag]);
+  return resolvePublishedImage(tag, repository);
+}
+
+function buildAndPublishImage(dockerfile, repository) {
+  const tag = `${repository}:compose-lifecycle`;
+  docker([
+    'buildx',
+    'build',
+    '--provenance=true',
+    '--file',
+    dockerfile,
+    '--tag',
+    tag,
+    '--push',
+    '.',
+  ]);
+  return resolvePublishedImage(tag, repository);
 }
 
 function wrapper(image, args) {
@@ -218,33 +239,27 @@ async function writeInitialOutput(state) {
 async function main() {
   const reuseImages =
     process.env.EG_PLUGIN_LIFECYCLE_REUSE_IMAGES === 'true';
-  if (!reuseImages) {
-    docker([
-      'build',
-      '--file',
-      'packages/plugin-reference/Dockerfile',
-      '--tag',
-      'enterpriseglue/reference-health:compose-lifecycle',
-      '.',
-    ]);
-    docker([
-      'build',
-      '--file',
-      'packages/plugin-installer/Dockerfile',
-      '--tag',
-      'enterpriseglue/plugin-installer:compose-lifecycle',
-      '.',
-    ]);
-  }
   const registry = await startRegistry();
-  const pluginImage = publishImage(
-    'enterpriseglue/reference-health:compose-lifecycle',
-    `${registry}/enterpriseglue/reference-health`,
-  );
-  const installerImage = publishImage(
-    'enterpriseglue/plugin-installer:compose-lifecycle',
-    `${registry}/enterpriseglue/plugin-installer`,
-  );
+  const pluginRepository = `${registry}/enterpriseglue/reference-health`;
+  const installerRepository = `${registry}/enterpriseglue/plugin-installer`;
+  const pluginImage = reuseImages
+    ? publishImage(
+        'enterpriseglue/reference-health:compose-lifecycle',
+        pluginRepository,
+      )
+    : buildAndPublishImage(
+        'packages/plugin-reference/Dockerfile',
+        pluginRepository,
+      );
+  const installerImage = reuseImages
+    ? publishImage(
+        'enterpriseglue/plugin-installer:compose-lifecycle',
+        installerRepository,
+      )
+    : buildAndPublishImage(
+        'packages/plugin-installer/Dockerfile',
+        installerRepository,
+      );
 
   const networkExists =
     spawnSync(
