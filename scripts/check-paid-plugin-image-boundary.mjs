@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,9 +12,6 @@ const allowedLegacyLoaderPackages = new Set([
   '@enterpriseglue/enterprise-backend',
   '@enterpriseglue/enterprise-frontend',
 ]);
-const enterprisePackagePattern =
-  '@enterpriseglue(?:/|\\+)[A-Za-z0-9][A-Za-z0-9._-]*';
-
 function readArgument(name) {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -72,29 +69,31 @@ async function discoverPublicPackages() {
   return publicPackages;
 }
 
-function collectImagePackageMarkers(directory) {
-  const result = spawnSync(
-    'rg',
-    [
-      '--text',
-      '--no-messages',
-      '--only-matching',
-      '--no-filename',
-      enterprisePackagePattern,
-      directory,
-    ],
-    {
-      encoding: 'utf8',
-      maxBuffer: 128 * 1024 * 1024,
-    },
-  );
+async function collectImagePackageMarkers(directory) {
+  const packages = new Set();
 
-  // ripgrep returns 1 when no markers are present; that is a valid result.
-  if (result.error || (result.status !== 0 && result.status !== 1)) {
-    throw result.error ?? new Error(`rg image scan failed with exit code ${result.status}`);
+  async function walk(currentDirectory) {
+    for (const entry of await readdir(currentDirectory, { withFileTypes: true })) {
+      const entryPath = path.join(currentDirectory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      // Package names are ASCII, so latin1 gives a lossless one-byte mapping
+      // for both text and binary image content without external scan tools.
+      const content = (await readFile(entryPath)).toString('latin1');
+      for (const packageName of collectEnterprisePackages(content)) {
+        packages.add(packageName);
+      }
+    }
   }
 
-  return collectEnterprisePackages(result.stdout ?? '');
+  await walk(directory);
+  return packages;
 }
 
 function collectImagePathPackageMarkers(kind, image) {
@@ -199,7 +198,7 @@ try {
           violations.push(`${kind} image path references ${packageName}`);
         }
       }
-      for (const packageName of collectImagePackageMarkers(destination)) {
+      for (const packageName of await collectImagePackageMarkers(destination)) {
         if (!allowedPackages.has(packageName)) {
           violations.push(`${kind} image content references ${packageName}`);
         }
