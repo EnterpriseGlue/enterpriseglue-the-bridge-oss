@@ -16,6 +16,7 @@ export class AddPluginStorage1700000000116 implements MigrationInterface {
         name: tablePath,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },
+          { name: 'identity_hash', type: 'text' },
           { name: 'plugin_id', type: 'text' },
           { name: 'deployment_ref', type: 'text' },
           { name: 'scope', type: 'text' },
@@ -30,13 +31,7 @@ export class AddPluginStorage1700000000116 implements MigrationInterface {
         indices: [
           new TableIndex({
             name: 'idx_plugin_storage_identity',
-            columnNames: [
-              'plugin_id',
-              'deployment_ref',
-              'scope',
-              'tenant_ref_key',
-              'storage_key',
-            ],
+            columnNames: ['identity_hash'],
             isUnique: true,
           }),
           new TableIndex({

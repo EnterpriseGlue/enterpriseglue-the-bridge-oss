@@ -392,9 +392,9 @@ async function recordFreshMigrationBaseline(
     return;
   }
 
-  // TypeORM's Spanner migration table declares an auto-generated numeric ID,
-  // but Spanner has no auto-increment columns. Record the baseline through the
-  // native mutation API with explicit deterministic IDs.
+  // The Spanner migration ledger derives its generated primary key from the
+  // complete migration name. Record the baseline through the native mutation API
+  // without writing that generated column explicitly.
   const migrationsTableName = dataSource.options.migrationsTableName || 'migrations';
   if (!(await queryRunner.hasTable(migrationsTableName))) {
     await queryRunner.createTable(new Table({
@@ -417,8 +417,7 @@ async function recordFreshMigrationBaseline(
       return { name, timestamp };
     })
     .sort((left, right) => left.timestamp - right.timestamp)
-    .map((migration, index) => ({
-      id: index + 1,
+    .map((migration) => ({
       timestamp: migration.timestamp,
       name: migration.name,
     }));

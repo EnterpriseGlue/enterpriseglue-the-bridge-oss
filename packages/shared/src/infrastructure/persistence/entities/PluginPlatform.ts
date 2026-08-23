@@ -272,11 +272,7 @@ export class PluginBrokerReplay extends AppBaseEntity {
   createdAt!: number;
 }
 
-@Index(
-  'idx_plugin_storage_identity',
-  ['pluginId', 'deploymentRef', 'scope', 'tenantRefKey', 'storageKey'],
-  { unique: true },
-)
+@Index('idx_plugin_storage_identity', ['identityHash'], { unique: true })
 @Index('idx_plugin_storage_namespace', [
   'pluginId',
   'deploymentRef',
@@ -285,6 +281,9 @@ export class PluginBrokerReplay extends AppBaseEntity {
 ])
 @Entity({ name: 'plugin_storage_entries', schema: 'main' })
 export class PluginStorageEntry extends AppBaseEntity {
+  @Column({ name: 'identity_hash', type: 'text' })
+  identityHash!: string;
+
   @Column({ name: 'plugin_id', type: 'text' })
   pluginId!: string;
 

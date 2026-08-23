@@ -11,9 +11,10 @@ const DEFAULT_MIGRATIONS_TABLE = 'migrations';
  * plain INT64 column. Every migration insert then omits `id` and fails.
  *
  * Create the ledger first with a deterministic generated id derived from the
- * migration timestamp. Migration class timestamps are already unique and are
- * safe JavaScript integers, so TypeORM can keep its normal ordering and ledger
- * queries without lossy INT64 conversion.
+ * complete migration name. Released v0.13.1 contains one explicitly allowed
+ * duplicate timestamp, so the timestamp alone is not a safe primary key.
+ * TypeORM can still use the timestamp for ordering while Spanner generates a
+ * stable INT64 key without auto-increment support.
  */
 export async function ensureSpannerTypeOrmMigrationLedgerV1(
   dataSource: DataSource,
@@ -30,7 +31,7 @@ export async function ensureSpannerTypeOrmMigrationLedgerV1(
     const escape = dataSource.driver.escape.bind(dataSource.driver);
     await (queryRunner as SpannerDdlQueryRunner).updateDDL(
       `CREATE TABLE ${escape(tableName)} (` +
-        `${escape('id')} INT64 AS (${escape('timestamp')}) STORED, ` +
+        `${escape('id')} INT64 AS (FARM_FINGERPRINT(${escape('name')})) STORED, ` +
         `${escape('timestamp')} INT64 NOT NULL, ` +
         `${escape('name')} STRING(MAX) NOT NULL` +
         `) PRIMARY KEY (${escape('id')})`,

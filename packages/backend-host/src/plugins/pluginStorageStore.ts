@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import {
   HostBrokerErrorV1,
@@ -52,7 +52,7 @@ export class DatabasePluginStorageStoreV1 implements PluginStorageStoreV1 {
 }
 
 function identity(input: PluginStorageStoreInputV1) {
-  return {
+  const values = {
     pluginId: input.pluginId,
     deploymentRef: input.deploymentRef,
     scope: input.scope,
@@ -61,6 +61,21 @@ function identity(input: PluginStorageStoreInputV1) {
         ? requiredTenant(input.tenantRef)
         : DEPLOYMENT_SCOPE_KEY,
     storageKey: input.key,
+  };
+  return {
+    identityHash: createHash('sha256')
+      .update(
+        [
+          values.pluginId,
+          values.deploymentRef,
+          values.scope,
+          values.tenantRefKey,
+          values.storageKey,
+        ].join('\0'),
+        'utf8',
+      )
+      .digest('hex'),
+    ...values,
   };
 }
 

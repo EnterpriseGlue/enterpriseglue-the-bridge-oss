@@ -15,6 +15,7 @@ const PLUGIN_KEY_LENGTH_BY_COLUMN: Readonly<Record<string, number>> = {
   event_type: 250,
   grant_set_hash: 128,
   idempotency_key_hash: 128,
+  identity_hash: 64,
   invocation_hash: 128,
   job_ref: 256,
   job_type: 250,
