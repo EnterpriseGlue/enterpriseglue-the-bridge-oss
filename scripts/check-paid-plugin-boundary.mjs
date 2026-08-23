@@ -28,6 +28,11 @@ const boundaryPolicyImplementations = new Set([
   'scripts/check-paid-plugin-boundary.mjs',
   'scripts/check-paid-plugin-image-boundary.mjs',
 ]);
+const privateProductMarkers = [
+  /\bio\.enterpriseglue\.ion-support\b/i,
+  /\bion support\b/i,
+  /\b(?:enterpriseglue-)?ion-support-agent\b/i,
+];
 
 // These are legacy optional OSS/EE loader seams, not paid plugin imports. They stay constrained
 // to their existing single-purpose loaders by check-oss-ee-boundary.sh.
@@ -108,6 +113,18 @@ function collectEnterpriseSpecifiers(source) {
   return specifiers;
 }
 
+function privateProductMarker(source) {
+  return privateProductMarkers.find((marker) => marker.test(source));
+}
+
+function isTestOrFixture(relativePath) {
+  return (
+    /\.(?:spec|test)\.[cm]?[jt]sx?$/.test(relativePath) ||
+    relativePath.includes('/fixtures/') ||
+    relativePath.includes('/test/')
+  );
+}
+
 function importIsAllowed(specifier, relativePath, publicPackages) {
   const base = packageBase(specifier);
   if (!base) {
@@ -168,6 +185,12 @@ function checkSyntheticClassifier(publicPackages) {
   ) {
     throw new Error('Legacy loader classifier failed its constrained allow fixture');
   }
+  if (!privateProductMarker('io.enterpriseglue.ion-support')) {
+    throw new Error('Private product marker classifier failed its deny fixture');
+  }
+  if (privateProductMarker('io.enterpriseglue.reference-health')) {
+    throw new Error('Private product marker classifier rejected the neutral reference fixture');
+  }
 }
 
 const violations = [];
@@ -214,6 +237,14 @@ for (const sourceRoot of sourceRoots) {
       continue;
     }
     const source = await readFile(path.join(root, relativePath), 'utf8');
+    const marker = isTestOrFixture(relativePath)
+      ? undefined
+      : privateProductMarker(source);
+    if (marker) {
+      violations.push(
+        `${relativePath}: contains private product marker ${marker.source}`,
+      );
+    }
     for (const specifier of collectEnterpriseSpecifiers(source)) {
       if (!importIsAllowed(specifier, relativePath, publicPackages)) {
         violations.push(
@@ -261,6 +292,7 @@ process.stdout.write(
     publicWorkspacePackages: [...publicPackages].sort().length,
     privateDependencies: 0,
     privateSourceReferences: 0,
+    privateProductMarkers: 0,
     productionDockerfiles: productionDockerfiles.length,
     dependencyClosure: 'public-workspace-only',
   })}\n`,

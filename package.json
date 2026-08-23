@@ -1,5 +1,4 @@
 {
-  "packageManager": "pnpm@11.0.8",
   "engines": {
     "node": ">=24 <25"
   },
@@ -35,6 +34,7 @@
     "typecheck:plugin-installer": "pnpm --filter @enterpriseglue/plugin-installer run typecheck",
     "typecheck:plugin-reference": "pnpm --filter @enterpriseglue/plugin-reference run typecheck",
     "typecheck:plugin-platform": "pnpm --filter @enterpriseglue/plugin-sdk run typecheck && pnpm --filter @enterpriseglue/plugin-runtime run typecheck && pnpm run typecheck:plugin-installer && pnpm run typecheck:plugin-reference && pnpm --filter @enterpriseglue/backend-host run typecheck:plugin-acceptance && pnpm --filter @enterpriseglue/frontend-host run typecheck",
+    "build:plugin-platform": "pnpm --filter @enterpriseglue/shared run build && pnpm --filter @enterpriseglue/plugin-sdk run build && pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter @enterpriseglue/plugin-installer run build && pnpm --filter @enterpriseglue/backend-host run build && pnpm --filter @enterpriseglue/frontend-host run build && pnpm --filter @enterpriseglue/plugin-reference run build",
     "guard:published-package-runtime": "pnpm --filter shared run build && pnpm --filter backend-host run build && node scripts/check-published-host-package.mjs",
     "test:ci-change-detection": "node --test scripts/ci-change-detection.test.mjs scripts/pr-release-label-workflows.test.mjs scripts/security-workflow-contract.test.mjs scripts/enforce-security-severity-gate.test.mjs scripts/verify-oci-image-metadata.test.mjs",
     "test:release-notes": "node --test scripts/release-notes.test.mjs scripts/release-notes-preflight.test.mjs",
@@ -125,7 +125,7 @@
     "test:engine-tenancy:documentation-review-evidence": "node scripts/run-engine-tenancy-documentation-review-evidence.mjs",
     "record:engine-tenancy:documentation-review": "node scripts/record-engine-tenancy-documentation-review.mjs",
     "test:engine-tenancy:database-contract": "node --test scripts/engine-tenancy-database-matrix.test.mjs",
-    "test:database-portability:unit": "pnpm --dir backend run guard:no-raw-sql && pnpm --dir backend exec vitest run __tests__/shared/db/migrationPortability.test.ts __tests__/shared/db/configProvenanceMigrations.test.ts __tests__/shared/db/lazyConnectionPool.test.ts __tests__/shared/db/persistenceMigrationBridge.test.ts --config vitest.config.ts --reporter=dot --maxWorkers=1 --no-file-parallelism",
+    "test:database-portability:unit": "pnpm run guard:migration-identifiers && pnpm --dir backend run guard:no-raw-sql && pnpm --dir backend exec vitest run __tests__/shared/db/migrationPortability.test.ts __tests__/shared/db/configProvenanceMigrations.test.ts __tests__/shared/db/lazyConnectionPool.test.ts __tests__/shared/db/persistenceMigrationBridge.test.ts --config vitest.config.ts --reporter=dot --maxWorkers=1 --no-file-parallelism",
     "test:engine-tenancy:database-matrix": "pnpm run test:engine-tenancy:database-contract && pnpm run test:database-portability:unit && node scripts/run-engine-tenancy-database-matrix.mjs",
     "test:engine-tenancy:provisioning-journey-contract": "node --test scripts/engine-tenancy-provisioning-journeys.test.mjs",
     "test:engine-tenancy:provisioning-evidence": "pnpm run test:engine-tenancy:provisioning-journey-contract && node scripts/write-engine-tenancy-provisioning-evidence.mjs",
@@ -205,6 +205,7 @@
     "test:ci": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e && pnpm --filter webmodeler-backend run db:cleanup-test-data",
     "test:ci:pr": "pnpm run test:unit && pnpm run test:integration && pnpm run test:e2e:smoke && pnpm --filter webmodeler-backend run db:cleanup-test-data",
     "guard:oss-ee-boundary": "bash ./scripts/check-oss-ee-boundary.sh",
+    "guard:migration-identifiers": "node --test scripts/check-migration-identifiers.test.mjs && node scripts/check-migration-identifiers.mjs",
     "guard:authz-route-inventory": "pnpm --filter ./packages/shared run build && node ./scripts/check-authz-route-inventory.mjs --strict-action-routes --strict-openapi-classification --strict-backend-routes",
     "guard:backend-authz": "node ./scripts/check-backend-authz-guards.mjs",
     "guard:authz-test-coverage": "pnpm --filter ./packages/shared run build && node ./scripts/check-authz-test-coverage.mjs",
@@ -222,7 +223,7 @@
     "licenses:check": "bash ./scripts/update-third-party-notices.sh --check --strict",
     "plugin-api:pack": "mkdir -p ./.artifacts && cd packages/enterprise-plugin-api && pnpm pack && mv *.tgz ../../.artifacts/",
     "plugin-installer:pack": "mkdir -p ./.artifacts && pnpm --filter @enterpriseglue/plugin-installer run build && cd packages/plugin-installer && pnpm pack && mv *.tgz ../../.artifacts/",
-    "test:plugin-toolchain-release-policy": "node ./scripts/check-plugin-toolchain-release-policy.mjs",
+    "test:plugin-toolchain-release-policy": "node ./scripts/check-plugin-toolchain-release-policy.mjs && node ./scripts/check-plugin-package-release-policy.mjs",
     "test:plugin-toolchain-release:local": "bash ./scripts/check-plugin-toolchain-oci-local.sh",
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"

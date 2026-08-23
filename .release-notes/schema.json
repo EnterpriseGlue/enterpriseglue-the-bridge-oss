@@ -83,9 +83,14 @@
         "required": ["name", "previousVersion", "newVersion", "impact"],
         "properties": {
           "name": { "type": "string", "minLength": 2 },
-          "previousVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "previousVersion": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" }
+            ]
+          },
           "newVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
-          "impact": { "enum": ["patch", "minor", "major"] }
+          "impact": { "enum": ["initial", "patch", "minor", "major"] }
         }
       }
     }

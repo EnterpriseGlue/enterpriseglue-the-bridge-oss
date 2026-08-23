@@ -35,6 +35,19 @@ test('package impact must match its semantic version change', () => {
   assert.throws(() => validateFragment(candidate), /declares minor.*is patch/)
 })
 
+test('initial package publication is explicit and cannot masquerade as an upgrade', () => {
+  const candidate = structuredClone(fragment)
+  candidate.packages = [{
+    name: '@enterpriseglue/plugin-sdk',
+    previousVersion: null,
+    newVersion: '0.2.0',
+    impact: 'initial',
+  }]
+  assert.doesNotThrow(() => validateFragment(candidate))
+  candidate.packages[0].impact = 'minor'
+  assert.throws(() => validateFragment(candidate), /not previously published.*is initial/)
+})
+
 test('path-aware validation requires migration, API, security, config, UI, and package coverage', () => {
   const changedFiles = [
     'packages/shared/src/db/migrations/1700000000107-example.ts',
