@@ -83,6 +83,9 @@ function wrapper(image, args) {
   return command(resolve(root, 'scripts/eg-plugin'), args, {
     env: {
       EG_PLUGIN_INSTALLER_IMAGE: image,
+      EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID: image.slice(
+        image.lastIndexOf('@') + 1,
+      ),
     },
   });
 }
@@ -164,22 +167,26 @@ async function writeInitialOutput(state) {
 }
 
 async function main() {
-  docker([
-    'build',
-    '--file',
-    'packages/plugin-reference/Dockerfile',
-    '--tag',
-    'enterpriseglue/reference-health:compose-lifecycle',
-    '.',
-  ]);
-  docker([
-    'build',
-    '--file',
-    'packages/plugin-installer/Dockerfile',
-    '--tag',
-    'enterpriseglue/plugin-installer:compose-lifecycle',
-    '.',
-  ]);
+  const reuseImages =
+    process.env.EG_PLUGIN_LIFECYCLE_REUSE_IMAGES === 'true';
+  if (!reuseImages) {
+    docker([
+      'build',
+      '--file',
+      'packages/plugin-reference/Dockerfile',
+      '--tag',
+      'enterpriseglue/reference-health:compose-lifecycle',
+      '.',
+    ]);
+    docker([
+      'build',
+      '--file',
+      'packages/plugin-installer/Dockerfile',
+      '--tag',
+      'enterpriseglue/plugin-installer:compose-lifecycle',
+      '.',
+    ]);
+  }
   const pluginImage = immutableLocalReference(
     'enterpriseglue/reference-health',
     'compose-lifecycle',

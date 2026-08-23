@@ -460,6 +460,10 @@ describe('connected OCI plugin acquisition', () => {
       'if [ "${1:-}" = "apply-compose" ]',
     );
     const connectedBranch = wrapper.slice(connectedStart, connectedEnd);
+    const composeEnd = wrapper.indexOf(
+      'if [ "${1:-}" = "apply-kubernetes" ]',
+    );
+    const composeBranch = wrapper.slice(connectedEnd, composeEnd);
 
     expect(connectedStart).toBeGreaterThanOrEqual(0);
     expect(connectedEnd).toBeGreaterThan(connectedStart);
@@ -495,6 +499,17 @@ describe('connected OCI plugin acquisition', () => {
     expect(connectedBranch).not.toContain('--env "HTTPS_PROXY=');
     expect(connectedBranch).not.toContain('docker.sock');
     expect(connectedBranch).not.toContain('kubeconfig');
+    expect(composeEnd).toBeGreaterThan(connectedEnd);
+    expect(composeBranch).toContain(
+      'local_image_id="${EG_PLUGIN_INSTALLER_LOCAL_IMAGE_ID:-}"',
+    );
+    expect(composeBranch).toContain(
+      '[ "$local_image_id" != "${image##*@}" ]',
+    );
+    expect(composeBranch).toContain(
+      'docker image inspect "$local_image_id"',
+    );
+    expect(composeBranch).toContain('"$runtime_image"');
   });
 
   it('passes proxy credentials through a private env file instead of Docker arguments', async () => {

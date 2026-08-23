@@ -75,6 +75,12 @@ importers:
       '@enterpriseglue/backend-host':
         specifier: workspace:*
         version: link:../packages/backend-host
+      '@enterpriseglue/plugin-runtime':
+        specifier: workspace:*
+        version: link:../packages/plugin-runtime
+      '@enterpriseglue/plugin-sdk':
+        specifier: workspace:*
+        version: link:../packages/plugin-sdk
       '@gitbeaker/rest':
         specifier: ^43.8.0
         version: 43.8.0

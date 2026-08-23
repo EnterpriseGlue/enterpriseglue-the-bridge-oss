@@ -27,6 +27,8 @@
   },
   "dependencies": {
     "@enterpriseglue/backend-host": "workspace:*",
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",

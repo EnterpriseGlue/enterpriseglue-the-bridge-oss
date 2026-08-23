@@ -21,7 +21,6 @@ COPY packages/plugin-reference packages/plugin-reference
 RUN pnpm --filter @enterpriseglue/plugin-sdk build \
   && pnpm --filter @enterpriseglue/plugin-runtime build \
   && pnpm --filter @enterpriseglue/plugin-reference build \
-  && pnpm deploy --legacy --filter @enterpriseglue/plugin-sdk --prod /sdk-output \
   && mkdir -p \
       /output/dist \
       /output/node_modules/@enterpriseglue/plugin-runtime \
@@ -36,7 +35,7 @@ RUN pnpm --filter @enterpriseglue/plugin-sdk build \
       /output/node_modules/@enterpriseglue/plugin-sdk/package.json \
   && cp -R packages/plugin-sdk/dist \
       /output/node_modules/@enterpriseglue/plugin-sdk/dist \
-  && cp -RL /sdk-output/node_modules/zod /output/node_modules/zod
+  && cp -RL packages/plugin-sdk/node_modules/zod /output/node_modules/zod
 
 FROM node:24.10.0-alpine3.22
 RUN addgroup -S -g 65532 reference \
