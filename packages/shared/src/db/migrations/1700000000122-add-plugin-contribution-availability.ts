@@ -3,9 +3,9 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 import { pluginMigrationTable } from './plugin-migration-schema.js';
 
-export class AddPluginContributionAvailability1700000000024
+export class AddPluginContributionAvailability1700000000122
 implements MigrationInterface {
-  name = 'AddPluginContributionAvailability1700000000024';
+  name = 'AddPluginContributionAvailability1700000000122';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tablePath = queryRunner.connection.getMetadata(

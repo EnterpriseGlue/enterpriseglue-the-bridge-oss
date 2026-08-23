@@ -67,7 +67,10 @@ export class PostgresAdapter implements DatabaseAdapter {
     const migrationsPath = this.getMigrationsPath();
     const migrations = config.nodeEnv === 'test'
       ? []
-      : [migrationsPath + (path.isAbsolute(migrationsPath) ? '/*.js' : '/*.ts')];
+      // Migration support modules share this directory but are not TypeORM
+      // migration classes. All timestamped migrations begin with a digit,
+      // so keep helpers such as plugin-migration-schema out of discovery.
+      : [migrationsPath + (path.isAbsolute(migrationsPath) ? '/[0-9]*.js' : '/[0-9]*.ts')];
 
     const base = {
       type: 'postgres' as const,

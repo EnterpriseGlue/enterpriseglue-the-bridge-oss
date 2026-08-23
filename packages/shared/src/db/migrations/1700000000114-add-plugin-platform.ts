@@ -176,8 +176,8 @@ const tables: TableDefinition[] = [
   },
 ];
 
-export class AddPluginPlatform1700000000016 implements MigrationInterface {
-  name = 'AddPluginPlatform1700000000016';
+export class AddPluginPlatform1700000000114 implements MigrationInterface {
+  name = 'AddPluginPlatform1700000000114';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     for (const definition of tables) {

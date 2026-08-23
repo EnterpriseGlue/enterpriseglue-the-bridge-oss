@@ -19,6 +19,7 @@ import { resolve } from 'node:path';
 
 import {
   parseEnterpriseGluePluginManifestV1,
+  pluginPlatformReleaseIdentityV1,
   type EnterpriseGluePluginManifestV1,
   type PluginHostEventV1,
   type PluginResourceDescriptorV1,
@@ -27,12 +28,12 @@ import {
   PluginGatewayCircuitBreakerV1,
   verifyPluginInvocationV1,
 } from '@enterpriseglue/plugin-runtime/gateway';
-import { AddPluginPlatform1700000000016 } from '@enterpriseglue/shared/db/migrations/1700000000016-add-plugin-platform.js';
-import { AddPluginStorage1700000000018 } from '@enterpriseglue/shared/db/migrations/1700000000018-add-plugin-storage.js';
-import { AddPluginEvents1700000000019 } from '@enterpriseglue/shared/db/migrations/1700000000019-add-plugin-events.js';
-import { AddPluginEmergencyControl1700000000021 } from '@enterpriseglue/shared/db/migrations/1700000000021-add-plugin-emergency-control.js';
-import { AddPluginGatewayAdmission1700000000022 } from '@enterpriseglue/shared/db/migrations/1700000000022-add-plugin-gateway-admission.js';
-import { AddPluginEventCircuit1700000000023 } from '@enterpriseglue/shared/db/migrations/1700000000023-add-plugin-event-circuit.js';
+import { AddPluginPlatform1700000000114 } from '@enterpriseglue/shared/db/migrations/1700000000114-add-plugin-platform.js';
+import { AddPluginStorage1700000000116 } from '@enterpriseglue/shared/db/migrations/1700000000116-add-plugin-storage.js';
+import { AddPluginEvents1700000000117 } from '@enterpriseglue/shared/db/migrations/1700000000117-add-plugin-events.js';
+import { AddPluginEmergencyControl1700000000119 } from '@enterpriseglue/shared/db/migrations/1700000000119-add-plugin-emergency-control.js';
+import { AddPluginGatewayAdmission1700000000120 } from '@enterpriseglue/shared/db/migrations/1700000000120-add-plugin-gateway-admission.js';
+import { AddPluginEventCircuit1700000000121 } from '@enterpriseglue/shared/db/migrations/1700000000121-add-plugin-event-circuit.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from '@enterpriseglue/shared/db/spanner-migration-ledger.js';
 import { MySQLAdapter } from '@enterpriseglue/shared/db/adapters/MySQLAdapter.js';
 import { OracleAdapter } from '@enterpriseglue/shared/db/adapters/OracleAdapter.js';
@@ -81,6 +82,17 @@ const tenantRef = 'tenant-multi-replica';
 const otherTenantRef = 'tenant-other';
 const subjectRef = 'subject-multi-replica';
 const deploymentRef = 'deployment-multi-replica';
+
+function currentHostCompatibilityRange(): string {
+  const version = pluginPlatformReleaseIdentityV1.hostVersion;
+  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version);
+  if (!match) {
+    throw new Error('invalid_plugin_platform_host_version');
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return `>=${version} <${major}.${minor + 1}.0`;
+}
 
 type OperationMode = 'success' | 'hold' | 'crash' | 'timeout';
 type EventMode = 'success' | 'unavailable';
@@ -139,12 +151,12 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
       new SpannerAdapter();
     }
     const migrationSource = acceptanceDataSource(databaseUrl, [
-        AddPluginPlatform1700000000016,
-        AddPluginStorage1700000000018,
-        AddPluginEvents1700000000019,
-        AddPluginEmergencyControl1700000000021,
-        AddPluginGatewayAdmission1700000000022,
-        AddPluginEventCircuit1700000000023,
+        AddPluginPlatform1700000000114,
+        AddPluginStorage1700000000116,
+        AddPluginEvents1700000000117,
+        AddPluginEmergencyControl1700000000119,
+        AddPluginGatewayAdmission1700000000120,
+        AddPluginEventCircuit1700000000121,
     ]);
     const replicaSourceA = acceptanceDataSource(databaseUrl);
     const replicaSourceB = acceptanceDataSource(databaseUrl);
@@ -963,6 +975,10 @@ function createReplica(
       failureThreshold: 1,
       openMs: 200,
     }),
+    operationAuthorizer: async (input) =>
+      input.actionId === 'platform.dashboard.read' &&
+      input.subjectRef === subjectRef &&
+      input.tenantRef === tenantRef,
     eventDispatcher,
     startEventWorker: false,
     startScheduleWorker: false,
@@ -993,12 +1009,12 @@ function createReplica(
 function acceptanceDataSource(
   databaseUrl: string,
   migrations: Array<
-    | typeof AddPluginPlatform1700000000016
-    | typeof AddPluginEvents1700000000019
-    | typeof AddPluginStorage1700000000018
-    | typeof AddPluginEmergencyControl1700000000021
-    | typeof AddPluginGatewayAdmission1700000000022
-    | typeof AddPluginEventCircuit1700000000023
+    | typeof AddPluginPlatform1700000000114
+    | typeof AddPluginEvents1700000000117
+    | typeof AddPluginStorage1700000000116
+    | typeof AddPluginEmergencyControl1700000000119
+    | typeof AddPluginGatewayAdmission1700000000120
+    | typeof AddPluginEventCircuit1700000000121
   > = [],
 ): DataSource {
   if (acceptanceDatabaseType(databaseUrl) === 'mysql') {
@@ -1331,7 +1347,7 @@ async function createFixture(
       publisher: 'io.enterpriseglue',
     },
     compatibility: {
-      host: '>=0.4.0 <0.5.0',
+      host: currentHostCompatibilityRange(),
       sdk: '^0.1.0',
       backendProtocol: 1,
       requiredSlots: [],
@@ -1458,7 +1474,7 @@ async function createFixture(
       publisher: 'io.enterpriseglue',
     },
     compatibility: {
-      host: '>=0.4.0 <0.5.0',
+      host: currentHostCompatibilityRange(),
       sdk: '^0.1.0',
       backendProtocol: 1,
       requiredSlots: [],

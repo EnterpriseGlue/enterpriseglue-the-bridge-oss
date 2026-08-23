@@ -7,9 +7,9 @@ import {
   pluginMigrationTable,
 } from './plugin-migration-schema.js';
 
-export class AddPluginEmergencyControl1700000000021
+export class AddPluginEmergencyControl1700000000119
 implements MigrationInterface {
-  name = 'AddPluginEmergencyControl1700000000021';
+  name = 'AddPluginEmergencyControl1700000000119';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const statePath =

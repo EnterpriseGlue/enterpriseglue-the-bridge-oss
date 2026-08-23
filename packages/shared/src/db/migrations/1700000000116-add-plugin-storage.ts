@@ -3,8 +3,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 import { pluginMigrationTable } from './plugin-migration-schema.js';
 
-export class AddPluginStorage1700000000018 implements MigrationInterface {
-  name = 'AddPluginStorage1700000000018';
+export class AddPluginStorage1700000000116 implements MigrationInterface {
+  name = 'AddPluginStorage1700000000116';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tablePath =

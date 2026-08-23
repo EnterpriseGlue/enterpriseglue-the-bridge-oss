@@ -5,9 +5,9 @@ import {
   pluginMigrationColumn,
 } from './plugin-migration-schema.js';
 
-export class AddPluginEventCircuit1700000000023
+export class AddPluginEventCircuit1700000000121
 implements MigrationInterface {
-  name = 'AddPluginEventCircuit1700000000023';
+  name = 'AddPluginEventCircuit1700000000121';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tablePath = queryRunner.connection.getMetadata(

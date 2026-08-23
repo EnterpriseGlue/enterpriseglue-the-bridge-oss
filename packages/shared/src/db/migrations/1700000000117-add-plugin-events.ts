@@ -3,8 +3,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 import { pluginMigrationTable } from './plugin-migration-schema.js';
 
-export class AddPluginEvents1700000000019 implements MigrationInterface {
-  name = 'AddPluginEvents1700000000019';
+export class AddPluginEvents1700000000117 implements MigrationInterface {
+  name = 'AddPluginEvents1700000000117';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const deliveryPath =

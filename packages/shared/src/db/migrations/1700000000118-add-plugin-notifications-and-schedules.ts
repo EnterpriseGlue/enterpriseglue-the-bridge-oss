@@ -3,9 +3,9 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 import { pluginMigrationTable } from './plugin-migration-schema.js';
 
-export class AddPluginNotificationsAndSchedules1700000000020
+export class AddPluginNotificationsAndSchedules1700000000118
 implements MigrationInterface {
-  name = 'AddPluginNotificationsAndSchedules1700000000020';
+  name = 'AddPluginNotificationsAndSchedules1700000000118';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const notificationPath = queryRunner.connection.getMetadata(

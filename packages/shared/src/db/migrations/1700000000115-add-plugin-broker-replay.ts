@@ -3,10 +3,10 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 import { pluginMigrationTable } from './plugin-migration-schema.js';
 
-export class AddPluginBrokerReplay1700000000017
+export class AddPluginBrokerReplay1700000000115
   implements MigrationInterface
 {
-  name = 'AddPluginBrokerReplay1700000000017';
+  name = 'AddPluginBrokerReplay1700000000115';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tablePath =
