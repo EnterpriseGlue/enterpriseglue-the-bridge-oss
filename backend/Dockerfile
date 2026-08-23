@@ -2,9 +2,16 @@ FROM node:24-alpine
 
 WORKDIR /repo
 
-# Install patched package managers globally. npm 11.19.0 still bundles
-# brace-expansion 5.0.7, so replace that bundled copy with its patched release.
-RUN npm install -g npm@11.19.0 pnpm@11.19.0 brace-expansion@5.0.9 \
+# Source builds advertise the in-development host release identity. Published images override
+# this from their immutable vX.Y.Z release tag; the workspace runtime contract guards both paths.
+ARG ENTERPRISEGLUE_HOST_VERSION=0.14.0
+ENV ENTERPRISEGLUE_HOST_VERSION=${ENTERPRISEGLUE_HOST_VERSION}
+
+# package.json is the authority for the pnpm version. The workspace runtime
+# contract fails CI if this explicit Docker pin ever drifts from it.
+# npm 11.19.0 still bundles brace-expansion 5.0.7, so replace that bundled
+# copy with its patched release without changing the workspace package manager.
+RUN npm install -g npm@11.19.0 pnpm@11.0.8 brace-expansion@5.0.9 \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
     && cp -R /usr/local/lib/node_modules/brace-expansion /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
     && rm -rf /usr/local/lib/node_modules/brace-expansion

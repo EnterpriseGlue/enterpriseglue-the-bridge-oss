@@ -68,7 +68,9 @@ FROM runtime-base
 
 USER root
 WORKDIR /app
+ARG ENTERPRISEGLUE_HOST_VERSION=0.14.0
 ENV NODE_ENV=production
+ENV ENTERPRISEGLUE_HOST_VERSION=${ENTERPRISEGLUE_HOST_VERSION}
 
 # The optional Compose/OpenShift config projection targets this directory. It
 # must exist and be readable by the non-root Chainguard runtime user.

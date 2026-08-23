@@ -1,0 +1,53 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "source-compose-package-manager-contract",
+  "type": "fix",
+  "scope": "container-and-plugin-release-contracts",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps source-built Docker environments aligned with the package-manager contract and makes published plugin host identity follow the immutable OSS release tag.",
+  "userImpact": [
+    "Source-built EnterpriseGlue deployments no longer restart because a development Docker image installs a pnpm version that cannot read the committed lockfile.",
+    "Published backends advertise their exact OSS release to the plugin compatibility resolver, so untested host and paid-plugin combinations remain blocked."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Rebuild source-based backend images so they use the corrected package-manager version."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The patched npm and brace-expansion installation remains unchanged; only pnpm is aligned with the repository's declared package manager."
+  ],
+  "documentation": [
+    "The workspace runtime contract documents and enforces the root packageManager field as the authority for Docker build environments and the immutable release tag as the authority for published plugin host identity.",
+    "Plugin compatibility across OSS releases: `docs/architecture/12-plugin-platform-and-authoring.md`",
+    "Release implementation checklist: `docs/architecture/13-plugin-platform-v0.14.0-implementation-and-release-plan.md`"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the previous source Dockerfile and rebuild the image; production image contracts and persisted data are unaffected."
+  ],
+  "validation": [
+    "Workspace runtime contract tests across all pnpm-installing Dockerfiles",
+    "Clean source backend Docker image build with frozen-lockfile installation",
+    "Source Compose backend and frontend readiness checks",
+    "Published-image plugin host identity verification against the immutable release tag"
+  ],
+  "packages": []
+}

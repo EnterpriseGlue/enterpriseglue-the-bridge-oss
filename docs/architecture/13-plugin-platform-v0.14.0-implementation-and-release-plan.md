@@ -142,10 +142,11 @@ Acceptance:
 
 - [x] Replace the prototype default host version `0.4.6` with one authoritative OSS product
   version source.
-- [x] Make source, Compose, Docker, Helm, capability API, installer, and release evidence all
-  report `0.14.0` for the first release.
-- [x] Fail closed in production when the host version cannot be resolved; allow an explicit test
-  override only in test fixtures.
+- [x] Make source and non-release builds use the checked-in `0.14.0` candidate identity.
+- [x] Derive the published backend's host identity from its immutable `vX.Y.Z` release tag and
+  verify the value from inside the built runtime image.
+- [x] Keep exact private-CI host evidence separate from a manifest's broader SemVer range, so an
+  untested patch release fails closed even when it is inside the declared range.
 - [x] Align React, React DOM, React Is, React Router DOM, Carbon React, Carbon styles, and Carbon
   icons to one exact shared-frontend set.
 - [x] Update the SDK peer dependencies, host capability catalog, reference plugin, private ION
@@ -154,6 +155,10 @@ Acceptance:
 - [x] Prove the candidate ION manifest resolves successfully against the candidate OSS catalog.
 - [x] Prove wrong host version, wrong SDK package, wrong React/router/Carbon version, and an
   untested patch release fail closed with safe reason codes.
+- [x] Enforce one package-manager version across source Dockerfiles, production Dockerfiles,
+  plugin toolchain Dockerfiles, local scripts, and every CI setup action.
+- [x] Build the real source backend Dockerfile in protected CI so frozen-lockfile compatibility is
+  exercised rather than inferred from production-image success.
 
 Recommended first-release identities:
 
