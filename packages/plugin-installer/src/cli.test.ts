@@ -4,6 +4,7 @@ import {
   sign,
 } from 'node:crypto';
 import {
+  chmod,
   mkdtemp,
   mkdir,
   readFile,
@@ -284,6 +285,10 @@ describe('eg-plugin CLI', () => {
     ).rejects.toThrow('regular non-symlink file');
     await unlink(deploymentFile);
     await writeFile(deploymentFile, '', { mode: 0o600 });
+    await chmod(
+      resolve(output, 'plugin-invocation-public.pem'),
+      0o600,
+    );
 
     await runPluginInstallerCliV1(
       [
@@ -310,6 +315,14 @@ describe('eg-plugin CLI', () => {
     expect(
       await readFile(resolve(output, 'plugin-invocation-public.pem'), 'utf8'),
     ).toContain('PUBLIC KEY');
+    expect(
+      (await stat(resolve(output, 'plugin-invocation-private.pem'))).mode &
+        0o777,
+    ).toBe(0o600);
+    expect(
+      (await stat(resolve(output, 'plugin-invocation-public.pem'))).mode &
+        0o777,
+    ).toBe(0o644);
     expect(
       JSON.parse(
         await readFile(

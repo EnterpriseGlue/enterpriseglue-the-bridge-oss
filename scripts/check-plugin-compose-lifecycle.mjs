@@ -176,7 +176,7 @@ async function writeInitialOutput(state) {
     pair.publicKey
       .export({ type: 'spki', format: 'pem' })
       .toString(),
-    { mode: 0o600 },
+    { mode: 0o644 },
   );
   await writeFile(
     resolve(output, 'plugin-installer-state.json'),

@@ -699,13 +699,17 @@ async function loadState(output: string): Promise<PluginInstallerStateV1> {
   return parsePluginInstallerStateV1(await readJson(path));
 }
 
-async function atomicWrite(path: string, content: string): Promise<void> {
+async function atomicWrite(
+  path: string,
+  content: string,
+  mode = 0o600,
+): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   await writeFile(temporary, content, {
     encoding: 'utf8',
     flag: 'wx',
-    mode: 0o600,
+    mode,
   });
   try {
     await rename(temporary, path);
@@ -726,7 +730,10 @@ async function ensureInvocationKeyPair(output: string): Promise<void> {
       'Plugin invocation key pair is incomplete; restore both files or rotate both explicitly',
     );
   }
-  if (privateExists) return;
+  if (privateExists) {
+    await chmod(publicPath, 0o644);
+    return;
+  }
 
   const pair = generateKeyPairSync('ed25519');
   await atomicWrite(
@@ -736,6 +743,7 @@ async function ensureInvocationKeyPair(output: string): Promise<void> {
   await atomicWrite(
     publicPath,
     pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    0o644,
   );
 }
 
