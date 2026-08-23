@@ -236,6 +236,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@enterpriseglue/shared": "workspace:*",
     "@google-cloud/spanner": "^8.0.0",
     "@playwright/test": "^1.59.1",
     "eslint": "^10.8.0",

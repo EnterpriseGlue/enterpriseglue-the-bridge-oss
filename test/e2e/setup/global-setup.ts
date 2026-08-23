@@ -382,7 +382,9 @@ export default async function globalSetup() {
     );
   }
 
-  const { canonicalRoleAssignmentKey } = await import('../../../packages/shared/src/authz/role-assignment-identity.ts');
+  const { canonicalRoleAssignmentKey } = await import(
+    '@enterpriseglue/shared/authz/role-assignment-identity.js'
+  );
   const operatorRoleId = 'system.engine.operator';
 
   // Variable disclosure browser evidence needs three distinct principals at
