@@ -12,7 +12,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Pool } from 'pg';
-import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import {
   getE2ECredentials,
   getE2EFineGrainedFixture,
@@ -3430,6 +3429,9 @@ test.describe('Engine tenancy provisioning journeys', () => {
       expect(dedicatedEngineId).not.toBe('undefined');
       expect(sharedEngineId).not.toBe('undefined');
 
+      const { canonicalRoleAssignmentKey } = await import(
+        '@enterpriseglue/shared/authz/role-assignment-identity.js'
+      );
       for (const engineId of [dedicatedEngineId, sharedEngineId]) {
         const now = Date.now();
         const assignmentKey = canonicalRoleAssignmentKey({
