@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-installer-archive-version-alignment",
+  "type": "fix",
+  "scope": "product-neutral-plugin-platform",
+  "breaking": false,
+  "audiences": ["administrators", "operators", "developers"],
+  "summary": "Keeps the plugin installer container build aligned with the generated SDK, runtime, and installer package versions and streams lifecycle build evidence without a fixed child-process buffer.",
+  "userImpact": [
+    "Plugin installer images can be built after an internal plugin package version changes without editing version-coupled archive filenames.",
+    "Lifecycle qualification reports the complete Docker build output instead of masking an actionable packaging error behind a buffer failure."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use @enterpriseglue/plugin-installer 0.1.2 or the matching v0.14.0 installer image when the plugin platform is released."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This packaging correction changes no database schema or stored plugin data."
+    ]
+  },
+  "security": [
+    "The installer image still consumes only the three package archives produced in its isolated build stage and now asserts that exactly one archive exists for each package."
+  ],
+  "documentation": [
+    "Release readiness checklist: `docs/architecture/13-plugin-platform-v0.14.0-implementation-and-release-plan.md`"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the installer image and @enterpriseglue/plugin-installer package together; the earlier unreleased build requires manually aligned archive versions."
+  ],
+  "validation": [
+    "Build and typecheck @enterpriseglue/plugin-installer 0.1.2.",
+    "Run the generic plugin compose lifecycle with a clean Docker cache and require image build, local OCI publication, install, enable, disable, and cleanup to pass.",
+    "Run published-package version discipline, release-note preflight, CodeQL, and the full OSS pull-request gate."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.1.1",
+      "newVersion": "0.1.2",
+      "impact": "patch"
+    }
+  ]
+}

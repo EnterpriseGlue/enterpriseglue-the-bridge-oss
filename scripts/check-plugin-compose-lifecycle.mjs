@@ -50,24 +50,35 @@ let registryStarted = false;
 const publishedImages = [];
 
 function command(command, args, options = {}) {
+  const captureOutput = options.captureOutput !== false;
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? root,
     env: { ...process.env, ...options.env },
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
+    ...(captureOutput
+      ? {
+          encoding: 'utf8',
+          maxBuffer: 16 * 1024 * 1024,
+        }
+      : { stdio: 'inherit' }),
   });
   if (result.status !== 0) {
+    const capturedOutput = captureOutput
+      ? (result.stderr || result.stdout || '').trim()
+      : '';
+    const detail =
+      result.error?.message ||
+      (result.signal ? `terminated by ${result.signal}` : '') ||
+      capturedOutput.slice(-4_000) ||
+      `exit status ${String(result.status)}`;
     throw new Error(
-      `${command} failed: ${(result.stderr || result.stdout)
-        .trim()
-        .slice(0, 1_000)}`,
+      `${command} failed: ${detail}`,
     );
   }
-  return result.stdout.trim();
+  return captureOutput ? result.stdout.trim() : '';
 }
 
-function docker(args) {
-  return command('docker', args);
+function docker(args, options) {
+  return command('docker', args, options);
 }
 
 function digest(bytes) {
@@ -138,14 +149,21 @@ function publishImage(localImage, repository) {
 
 function buildAndPublishImage(dockerfile, repository) {
   const tag = `${repository}:compose-lifecycle`;
-  docker([
-    'build',
-    '--file',
-    dockerfile,
-    '--tag',
-    tag,
-    '.',
-  ]);
+  // BuildKit can emit more than Node's synchronous child-process buffer while
+  // installing and compiling the workspace. Stream this evidence directly so
+  // a successful build cannot be misclassified as ENOBUFS and failures retain
+  // their actionable tail in CI.
+  docker(
+    [
+      'build',
+      '--file',
+      dockerfile,
+      '--tag',
+      tag,
+      '.',
+    ],
+    { captureOutput: false },
+  );
   docker(['push', tag]);
   return resolvePublishedImage(tag, repository);
 }

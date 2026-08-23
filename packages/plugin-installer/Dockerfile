@@ -25,10 +25,13 @@ RUN pnpm --filter @enterpriseglue/plugin-sdk build \
   && pnpm --filter @enterpriseglue/plugin-sdk pack --pack-destination /packs \
   && pnpm --filter @enterpriseglue/plugin-runtime pack --pack-destination /packs \
   && pnpm --filter @enterpriseglue/plugin-installer pack --pack-destination /packs \
+  && test "$(find /packs -maxdepth 1 -name 'enterpriseglue-plugin-sdk-*.tgz' | wc -l)" -eq 1 \
+  && test "$(find /packs -maxdepth 1 -name 'enterpriseglue-plugin-runtime-*.tgz' | wc -l)" -eq 1 \
+  && test "$(find /packs -maxdepth 1 -name 'enterpriseglue-plugin-installer-*.tgz' | wc -l)" -eq 1 \
   && npm install --prefix /output --omit=dev --omit=peer --legacy-peer-deps \
-      /packs/enterpriseglue-plugin-sdk-0.2.0.tgz \
-      /packs/enterpriseglue-plugin-runtime-0.1.0.tgz \
-      /packs/enterpriseglue-plugin-installer-0.1.0.tgz
+      /packs/enterpriseglue-plugin-sdk-*.tgz \
+      /packs/enterpriseglue-plugin-runtime-*.tgz \
+      /packs/enterpriseglue-plugin-installer-*.tgz
 
 FROM ghcr.io/oras-project/oras:v1.3.3@sha256:a4c54befd87d0366e0ba3ac3a9536a5288c8a3735acd3b635cdace59a2c559c8 AS oras
 
