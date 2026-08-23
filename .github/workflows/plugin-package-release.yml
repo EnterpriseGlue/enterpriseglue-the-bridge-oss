@@ -1,0 +1,171 @@
+name: Publish plugin SDK packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact 40-character OSS commit to build and publish
+        required: true
+        type: string
+      dry_run:
+        description: Build, pack, and validate without publishing
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: enterpriseglue-plugin-packages-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify and publish public plugin packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: plugin-packages-production
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      SOURCE_REF: ${{ inputs.source_ref }}
+      PACKAGE_DIRECTORY: .artifacts/plugin-packages
+    steps:
+      - name: Validate protected release authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "source_ref must be an immutable 40-character commit" >&2
+            exit 1
+          }
+          [[ "$GITHUB_REPOSITORY_OWNER" == "EnterpriseGlue" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "The protected package workflow must run from refs/heads/main" >&2
+            exit 1
+          }
+          [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
+            echo "source_ref must equal the protected workflow commit" >&2
+            exit 1
+          }
+
+      - name: Checkout the exact public OSS revision
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Verify checked-out source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          test -z "$(git status --porcelain)"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Set up Node.js and GitHub Packages
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          registry-url: https://npm.pkg.github.com
+          scope: "@enterpriseglue"
+
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Test and build public packages
+        run: |
+          set -euo pipefail
+          pnpm --filter @enterpriseglue/plugin-sdk run test
+          pnpm --filter @enterpriseglue/plugin-sdk run build
+          pnpm --filter @enterpriseglue/plugin-sdk run test:compat
+          pnpm --filter @enterpriseglue/plugin-runtime run test
+          pnpm --filter @enterpriseglue/plugin-runtime run build
+          pnpm --filter @enterpriseglue/plugin-installer run test
+          pnpm --filter @enterpriseglue/plugin-installer run build
+
+      - name: Pack and validate immutable package payloads
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$PACKAGE_DIRECTORY"
+          pnpm --dir packages/plugin-sdk pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+          pnpm --dir packages/plugin-runtime pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+          pnpm --dir packages/plugin-installer pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+          node scripts/verify-plugin-package-tarballs.mjs "$PACKAGE_DIRECTORY" |
+            tee "$PACKAGE_DIRECTORY/release-receipt.json"
+
+      - name: Reject immutable version reuse
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node -e 'const r=require(`./${process.env.PACKAGE_DIRECTORY}/release-receipt.json`); for (const p of r.packages) console.log(`${p.name}@${p.version}`)' |
+          while IFS= read -r subject; do
+            if npm view "$subject" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "$subject already exists; immutable package versions cannot be reused" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish dry run
+        if: inputs.dry_run == true
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for tarball in "$PACKAGE_DIRECTORY"/*.tgz; do
+            npm publish "$tarball" --dry-run --registry=https://npm.pkg.github.com
+          done
+
+      - name: Publish packages in dependency order
+        if: inputs.dry_run != true
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for name in plugin-sdk plugin-runtime plugin-installer; do
+            tarball="$(find "$PACKAGE_DIRECTORY" -maxdepth 1 -name "enterpriseglue-${name}-*.tgz" -print -quit)"
+            test -n "$tarball"
+            npm publish "$tarball" --ignore-scripts --registry=https://npm.pkg.github.com
+          done
+
+      - name: Attest published package payloads
+        if: inputs.dry_run != true
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: ${{ env.PACKAGE_DIRECTORY }}/*.tgz
+
+      - name: Verify registry visibility
+        if: inputs.dry_run != true
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node -e 'const r=require(`./${process.env.PACKAGE_DIRECTORY}/release-receipt.json`); for (const p of r.packages) console.log(`${p.name}@${p.version}`)' |
+          while IFS= read -r subject; do
+            test "$(npm view "$subject" version --registry=https://npm.pkg.github.com)" = "${subject##*@}"
+          done
+
+      - name: Retain non-secret package receipt and tarballs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: plugin-packages-${{ inputs.source_ref }}
+          path: ${{ env.PACKAGE_DIRECTORY }}
+          if-no-files-found: error
+          retention-days: 30

@@ -54,6 +54,8 @@ export interface NavExtension {
   label: string;
   icon?: ComponentType<{ size?: number }>;
   path: string;
+  /** Route mount point. Tenant-scoped items are prefixed by the active tenant. */
+  scope?: 'root' | 'tenant';
   order?: number;
   /** Action id required to show this item. Prefer action ids for route/menu parity. */
   actionId?: string;
@@ -124,6 +126,9 @@ export interface MenuExtension {
 
 /**
  * Feature flag override from EE plugin
+ *
+ * @deprecated Legacy singular enterprise-plugin bridge only. Native plugins
+ * must use additive, manifest-declared contributions and host capabilities.
  */
 export interface FeatureOverride {
   flag: string;
@@ -132,6 +137,9 @@ export interface FeatureOverride {
 
 /**
  * Component override (replace OSS component with EE version)
+ *
+ * @deprecated Legacy singular enterprise-plugin bridge only. Native plugins
+ * must use typed additive slots from `@enterpriseglue/plugin-sdk`.
  */
 export interface ComponentOverride {
   name: string;
@@ -157,11 +165,10 @@ export interface ExtensionRegistry {
 
   /** Header component slots */
   headerSlots: HeaderSlot[];
-
-  /** Feature flag overrides */
+  /** @deprecated Legacy singular enterprise-plugin bridge only. */
   featureOverrides: FeatureOverride[];
 
-  /** Component overrides (name → component) */
+  /** @deprecated Legacy singular enterprise-plugin bridge only. */
   componentOverrides: Map<string, ComponentType<Record<string, unknown>>>;
 
   /** Whether the registry has been initialized by EE plugin */
@@ -183,6 +190,16 @@ export const extensions: ExtensionRegistry = {
   componentOverrides: new Map(),
   initialized: false,
 };
+
+/**
+ * Stable owner used by the temporary singular enterprise-plugin bridge.
+ *
+ * Native v2 plugins use the neutral plugin runtime. This owner-aware bridge
+ * exists so the legacy package can be replaced or removed atomically while
+ * consumers migrate.
+ */
+export const LEGACY_ENTERPRISE_PLUGIN_OWNER =
+  'io.enterpriseglue.legacy-enterprise';
 
 // =============================================================================
 // Registration Functions (called by EE plugin)
@@ -237,6 +254,9 @@ export function registerHeaderSlot(slot: HeaderSlot): void {
 
 /**
  * Register a feature flag override
+ *
+ * @deprecated Legacy enterprise integration only. Native plugins cannot
+ * replace host feature flags.
  */
 export function registerFeatureOverride(override: FeatureOverride): void {
   // Remove existing override for same flag if present
@@ -249,6 +269,9 @@ export function registerFeatureOverride(override: FeatureOverride): void {
 
 /**
  * Register a component override (replaces OSS component)
+ *
+ * @deprecated Legacy enterprise integration only. Native plugins must
+ * contribute through typed additive slots.
  */
 export function registerComponentOverride(
   name: string,
@@ -322,34 +345,161 @@ export interface PluginExtensions {
   navItems?: NavExtension[];
   menuItems?: MenuExtension[];
   headerSlots?: HeaderSlot[];
+  /** @deprecated Legacy singular enterprise-plugin bridge only. */
   featureOverrides?: FeatureOverride[];
+  /** @deprecated Legacy singular enterprise-plugin bridge only. */
   componentOverrides?: Array<{ name: string; component: ComponentType<Record<string, unknown>> }>;
+}
+
+const pluginExtensionsByOwner = new Map<string, PluginExtensions>();
+const ownerIdPattern =
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+
+function copyPluginExtensions(plugin: PluginExtensions): PluginExtensions {
+  return {
+    rootRoutes: [...(plugin.rootRoutes ?? [])],
+    tenantRoutes: [...(plugin.tenantRoutes ?? [])],
+    navItems: [...(plugin.navItems ?? [])],
+    menuItems: [...(plugin.menuItems ?? [])],
+    headerSlots: [...(plugin.headerSlots ?? [])],
+    featureOverrides: [...(plugin.featureOverrides ?? [])],
+    componentOverrides: [...(plugin.componentOverrides ?? [])],
+  };
+}
+
+function assertUniqueOwnedKeys(
+  records: ReadonlyMap<string, PluginExtensions>,
+): void {
+  const keys = new Map<string, string>();
+
+  const claim = (kind: string, key: string, ownerId: string) => {
+    const composite = `${kind}:${key}`;
+    const existingOwner = keys.get(composite);
+    if (existingOwner && existingOwner !== ownerId) {
+      throw new Error(
+        `[Enterprise] Legacy plugin extension conflict for ${composite}: ${existingOwner} and ${ownerId}`,
+      );
+    }
+    keys.set(composite, ownerId);
+  };
+
+  for (const [ownerId, plugin] of records) {
+    for (const route of plugin.rootRoutes ?? []) {
+      if (typeof route.path === 'string') claim('root-route', route.path, ownerId);
+    }
+    for (const route of plugin.tenantRoutes ?? []) {
+      if (typeof route.path === 'string') claim('tenant-route', route.path, ownerId);
+    }
+    for (const item of plugin.navItems ?? []) claim('navigation', item.id, ownerId);
+    for (const item of plugin.menuItems ?? []) claim('menu', item.id, ownerId);
+    for (const slot of plugin.headerSlots ?? []) claim('header-slot', slot.id, ownerId);
+    for (const override of plugin.featureOverrides ?? []) {
+      claim('feature-override', override.flag, ownerId);
+    }
+    for (const override of plugin.componentOverrides ?? []) {
+      claim('component-override', override.name, ownerId);
+    }
+  }
+}
+
+function rebuildOwnedExtensions(
+  records: ReadonlyMap<string, PluginExtensions>,
+): void {
+  const orderedRecords = [...records.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+
+  extensions.rootRoutes = orderedRecords.flatMap(
+    ([, plugin]) => plugin.rootRoutes ?? [],
+  );
+  extensions.tenantRoutes = orderedRecords.flatMap(
+    ([, plugin]) => plugin.tenantRoutes ?? [],
+  );
+  extensions.navItems = orderedRecords
+    .flatMap(([, plugin]) => plugin.navItems ?? [])
+    .sort(
+      (left, right) =>
+        (left.order ?? 100) - (right.order ?? 100) ||
+        left.id.localeCompare(right.id),
+    );
+  extensions.menuItems = orderedRecords
+    .flatMap(([, plugin]) => plugin.menuItems ?? [])
+    .sort(
+      (left, right) =>
+        (left.order ?? 100) - (right.order ?? 100) ||
+        left.id.localeCompare(right.id),
+    );
+  extensions.headerSlots = orderedRecords
+    .flatMap(([, plugin]) => plugin.headerSlots ?? [])
+    .sort(
+      (left, right) =>
+        (left.order ?? 100) - (right.order ?? 100) ||
+        left.id.localeCompare(right.id),
+    );
+  extensions.featureOverrides = orderedRecords.flatMap(
+    ([, plugin]) => plugin.featureOverrides ?? [],
+  );
+  extensions.componentOverrides = new Map(
+    orderedRecords.flatMap(([, plugin]) =>
+      (plugin.componentOverrides ?? []).map(
+        ({ name, component }) => [name, component] as const,
+      ),
+    ),
+  );
+  extensions.initialized = records.size > 0;
+}
+
+/**
+ * Atomically activate or replace a complete legacy plugin record.
+ *
+ * This compatibility API deliberately does not make legacy feature/component
+ * overrides available to native v2 plugins.
+ */
+export function replacePluginExtensions(
+  ownerId: string,
+  plugin: PluginExtensions,
+): void {
+  if (!ownerIdPattern.test(ownerId)) {
+    throw new Error(
+      `[Enterprise] Legacy plugin owner must be a lowercase reverse-DNS identifier: ${ownerId}`,
+    );
+  }
+  if (
+    ownerId !== LEGACY_ENTERPRISE_PLUGIN_OWNER &&
+    ((plugin.featureOverrides?.length ?? 0) > 0 ||
+      (plugin.componentOverrides?.length ?? 0) > 0)
+  ) {
+    throw new Error(
+      '[Enterprise] Feature and component overrides are restricted to the legacy enterprise-plugin bridge',
+    );
+  }
+
+  const candidate = new Map(pluginExtensionsByOwner);
+  candidate.set(ownerId, copyPluginExtensions(plugin));
+  assertUniqueOwnedKeys(candidate);
+
+  pluginExtensionsByOwner.clear();
+  for (const [id, record] of candidate) {
+    pluginExtensionsByOwner.set(id, record);
+  }
+  rebuildOwnedExtensions(pluginExtensionsByOwner);
+}
+
+export function unregisterPluginExtensions(ownerId: string): boolean {
+  const removed = pluginExtensionsByOwner.delete(ownerId);
+  if (removed) {
+    rebuildOwnedExtensions(pluginExtensionsByOwner);
+  }
+  return removed;
+}
+
+export function listPluginExtensionOwners(): string[] {
+  return [...pluginExtensionsByOwner.keys()].sort();
 }
 
 /**
  * Register all extensions from a plugin at once
  */
 export function registerPluginExtensions(plugin: PluginExtensions): void {
-  if (plugin.rootRoutes) {
-    plugin.rootRoutes.forEach(r => extensions.rootRoutes.push(r));
-  }
-  if (plugin.tenantRoutes) {
-    plugin.tenantRoutes.forEach(r => extensions.tenantRoutes.push(r));
-  }
-  if (plugin.navItems) {
-    registerNavItems(plugin.navItems);
-  }
-  if (plugin.menuItems) {
-    plugin.menuItems.forEach(m => registerMenuItem(m));
-  }
-  if (plugin.headerSlots) {
-    plugin.headerSlots.forEach(s => registerHeaderSlot(s));
-  }
-  if (plugin.featureOverrides) {
-    plugin.featureOverrides.forEach(o => registerFeatureOverride(o));
-  }
-  if (plugin.componentOverrides) {
-    plugin.componentOverrides.forEach(c => registerComponentOverride(c.name, c.component));
-  }
-  markInitialized();
+  replacePluginExtensions(LEGACY_ENTERPRISE_PLUGIN_OWNER, plugin);
 }

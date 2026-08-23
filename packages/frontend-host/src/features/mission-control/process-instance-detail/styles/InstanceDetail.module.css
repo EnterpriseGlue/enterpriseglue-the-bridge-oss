@@ -171,19 +171,33 @@
 .incidentBanner {
   background: var(--cds-support-error);
   color: var(--cds-text-on-color);
-  height: 36px;
-  min-height: 36px;
-  max-height: 36px;
+  min-height: var(--cds-spacing-09, 3rem);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-4);
+  column-gap: var(--cds-spacing-05, 1rem);
+  row-gap: var(--cds-spacing-03, 0.5rem);
+  padding: var(--cds-spacing-03, 0.5rem) var(--cds-spacing-05, 1rem);
   border-top: 1px solid var(--color-border-primary);
 }
 
 .incidentBannerText {
   font-size: var(--text-14);
   font-weight: 500;
+  line-height: 1.25rem;
+  min-width: 0;
+  flex: 1 1 20rem;
+}
+
+.incidentBannerActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  margin-inline-start: auto;
 }
 
 .incidentBannerButton {
@@ -192,10 +206,23 @@
 }
 
 .incidentBannerButton:hover,
-.incidentBannerButton:focus {
+.incidentBannerButton:focus-visible {
   color: var(--cds-text-on-color) !important;
   background-color: rgba(255, 255, 255, 0.12) !important;
   text-decoration: underline;
+}
+
+.incidentBannerButton:focus-visible {
+  outline: 2px solid var(--cds-focus-inset, #ffffff);
+  outline-offset: -2px;
+}
+
+@media (max-width: 42rem) {
+  .incidentBannerActions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-inline-start: 0;
+  }
 }
 
 /* Modification mode banner */

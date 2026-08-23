@@ -24,47 +24,47 @@
      ============================================ */
   
   /* Primary Colors (bridge to Carbon tokens) */
-  --color-primary: var(--cds-interactive-01);
-  --color-primary-hover: var(--cds-interactive-01-hover, var(--cds-interactive-01));
+  --color-primary: var(--cds-interactive-01, #0f62fe);
+  --color-primary-hover: var(--cds-interactive-01-hover, #0043ce);
   
   /* Text Colors (Carbon theme tokens) */
-  --color-text-primary: var(--cds-text-primary);
-  --color-text-secondary: var(--cds-text-secondary);
-  --color-text-tertiary: var(--cds-text-secondary);
-  --color-text-disabled: var(--cds-text-disabled);
-  --color-text-inverse: var(--cds-text-inverse);
+  --color-text-primary: var(--cds-text-primary, #161616);
+  --color-text-secondary: var(--cds-text-secondary, #525252);
+  --color-text-tertiary: var(--cds-text-secondary, #525252);
+  --color-text-disabled: var(--cds-text-disabled, #8d8d8d);
+  --color-text-inverse: var(--cds-text-inverse, #ffffff);
   
   /* Background Colors (Carbon layer tokens) */
-  --color-bg-primary: var(--cds-layer-01);
-  --color-bg-secondary: var(--cds-layer-02);
-  --color-bg-tertiary: var(--cds-layer-03);
-  --color-bg-hover: var(--cds-layer-hover);
-  --color-bg-active: var(--cds-layer-active);
-  --color-bg-action-bar: var(--cds-background-brand, var(--cds-interactive-01));
+  --color-bg-primary: var(--cds-layer-01, #ffffff);
+  --color-bg-secondary: var(--cds-layer-02, #f4f4f4);
+  --color-bg-tertiary: var(--cds-layer-03, #e0e0e0);
+  --color-bg-hover: var(--cds-layer-hover, #e8e8e8);
+  --color-bg-active: var(--cds-layer-active, #c6c6c6);
+  --color-bg-action-bar: var(--cds-background-brand, #0f62fe);
   
   /* Border Colors */
-  --color-border-primary: var(--cds-border-subtle-01);
-  --color-border-secondary: var(--cds-border-subtle-02, var(--cds-border-subtle-01));
-  --color-border-active: var(--cds-border-interactive);
-  --color-border-active-level2: var(--cds-border-strong-01, var(--cds-border-interactive));
-  --color-border-active-level3: var(--cds-border-danger, var(--cds-support-error));
+  --color-border-primary: var(--cds-border-subtle-01, #e0e0e0);
+  --color-border-secondary: var(--cds-border-subtle-02, #c6c6c6);
+  --color-border-active: var(--cds-border-interactive, #0f62fe);
+  --color-border-active-level2: var(--cds-border-strong-01, #8d8d8d);
+  --color-border-active-level3: var(--cds-border-danger, #da1e28);
   --color-border-neutral: var(--cds-border-subtle-00, #ffffff);
   
   /* UI Element Colors */
-  --color-header-bg: var(--cds-background); /* follows g10/g90/g100 */
-  --color-sidebar-bg: var(--cds-layer-01);
-  --color-divider: var(--cds-border-subtle-01);
+  --color-header-bg: var(--cds-background, #f4f4f4); /* follows g10/g90/g100 */
+  --color-sidebar-bg: var(--cds-layer-01, #ffffff);
+  --color-divider: var(--cds-border-subtle-01, #e0e0e0);
   
   /* Status Colors */
-  --color-success: var(--cds-support-success);
-  --color-warning: var(--cds-support-warning);
-  --color-error: var(--cds-support-error);
-  --color-info: var(--cds-support-info);
+  --color-success: var(--cds-support-success, #24a148);
+  --color-warning: var(--cds-support-warning, #f1c21b);
+  --color-error: var(--cds-support-error, #da1e28);
+  --color-info: var(--cds-support-info, #0043ce);
   
   /* Icon Colors */
-  --color-icon-primary: var(--cds-icon-primary);
-  --color-icon-secondary: var(--cds-icon-secondary);
-  --color-icon-tertiary: var(--cds-icon-tertiary);
+  --color-icon-primary: var(--cds-icon-primary, #161616);
+  --color-icon-secondary: var(--cds-icon-secondary, #525252);
+  --color-icon-tertiary: var(--cds-icon-tertiary, #8d8d8d);
 
   /* ============================================
      TYPOGRAPHY - ENTERPRISEGLUE.AI

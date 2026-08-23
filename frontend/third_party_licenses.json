@@ -1,1 +1,384 @@
-{}
+{
+  "@asteasolutions/zod-to-openapi@8.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/asteasolutions/zod-to-openapi",
+    "publisher": "Astea Solutions",
+    "email": "info@asteasolutions.com"
+  },
+  "@azure/msal-node@5.6.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
+    "publisher": "Microsoft",
+    "email": "nugetaad@microsoft.com",
+    "url": "https://www.microsoft.com"
+  },
+  "@bpmn-io/properties-panel@3.51.2": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/bpmn-io/properties-panel.git",
+    "publisher": "Niklas Kiefer",
+    "email": "niklas.kiefer@camunda.com",
+    "url": "https://github.com/pinussilvestrus"
+  },
+  "@carbon/charts-react@1.27.18": {
+    "licenses": "Apache-2.0",
+    "repository": "git+https://github.com/carbon-design-system/carbon-charts.git",
+    "publisher": "IBM"
+  },
+  "@carbon/charts@1.27.18": {
+    "licenses": "Apache-2.0",
+    "repository": "git+https://github.com/carbon-design-system/carbon-charts.git",
+    "publisher": "IBM"
+  },
+  "@carbon/icons-react@11.80.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/carbon-design-system/carbon.git"
+  },
+  "@carbon/react@1.107.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/carbon-design-system/carbon.git"
+  },
+  "@carbon/styles@1.106.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/carbon-design-system/carbon.git"
+  },
+  "@gitbeaker/rest@43.8.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/jdalrymple/gitbeaker",
+    "publisher": "Justin Dalrymple"
+  },
+  "@google-cloud/spanner@8.11.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/googleapis/google-cloud-node.git",
+    "publisher": "Google Inc."
+  },
+  "@node-saml/node-saml@5.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/node-saml/node-saml.git",
+    "publisher": "Henri Bergius",
+    "email": "henri.bergius@iki.fi",
+    "url": "http://bergie.iki.fi"
+  },
+  "@tanstack/react-query@5.102.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/TanStack/query.git",
+    "publisher": "tannerlinsley"
+  },
+  "@tanstack/react-table@8.21.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/TanStack/table.git",
+    "publisher": "Tanner Linsley"
+  },
+  "adm-zip@0.6.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/cthackers/adm-zip.git",
+    "publisher": "Nasca Iacob",
+    "email": "adm-zip@pm.me",
+    "url": "https://github.com/cthackers"
+  },
+  "azure-devops-node-api@15.1.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/Microsoft/azure-devops-node-api",
+    "publisher": "Microsoft Corporation"
+  },
+  "bcryptjs@3.0.3": {
+    "licenses": "BSD-3-Clause",
+    "repository": "https://github.com/dcodeIO/bcrypt.js.git",
+    "publisher": "Daniel Wirtz",
+    "email": "dcode@dcode.io"
+  },
+  "bitbucket@2.12.0": {
+    "licenses": "MIT",
+    "repository": "github:MunifTanjim/node-bitbucket",
+    "publisher": "MunifTanjim",
+    "url": "https://muniftanjim.dev"
+  },
+  "bpmn-js-bpmnlint@0.24.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/bpmn-io/bpmn-js-bpmnlint.git",
+    "publisher": "Philipp Fromme",
+    "email": "https://github.com/philippfromme"
+  },
+  "bpmn-js-create-append-anything@1.3.1": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/bpmn-io/bpmn-js-create-append-anything.git",
+    "publisher": "bpmn.io"
+  },
+  "bpmn-js-element-templates@2.33.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/bpmn-js-element-templates",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "bpmn-js-properties-panel@5.65.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/bpmn-js-properties-panel",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "bpmn-js@17.11.1": {
+    "licenses": "SEE LICENSE IN LICENSE",
+    "repository": "https://github.com/bpmn-io/bpmn-js",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "bpmnlint-plugin-camunda-compat@2.59.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/bpmnlint-plugin-camunda-compat",
+    "publisher": "Philipp Fromme",
+    "url": "https://github.com/philippfromme"
+  },
+  "bpmnlint@11.13.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/bpmnlint",
+    "publisher": "Seif Eddine Ghezala",
+    "email": "siffogh3@gmail.com"
+  },
+  "camunda-bpmn-js@5.32.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/camunda-bpmn-js",
+    "publisher": "Niklas Kiefer",
+    "url": "https://github.com/pinussilvestrus"
+  },
+  "camunda-bpmn-moddle@7.0.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/camunda-bpmn-moddle",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "camunda-dmn-js@3.8.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/camunda-dmn-js",
+    "publisher": "Maciej Barelkowski",
+    "url": "https://github.com/barmac"
+  },
+  "class-variance-authority@0.7.1": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/joe-bell/cva.git",
+    "publisher": "Joe Bell",
+    "url": "https://joebell.co.uk"
+  },
+  "clsx@2.1.1": {
+    "licenses": "MIT",
+    "repository": "lukeed/clsx",
+    "publisher": "Luke Edwards",
+    "email": "luke.edwards05@gmail.com",
+    "url": "https://lukeed.com"
+  },
+  "cookie-parser@1.4.7": {
+    "licenses": "MIT",
+    "repository": "expressjs/cookie-parser",
+    "publisher": "TJ Holowaychuk",
+    "email": "tj@vision-media.ca",
+    "url": "http://tjholowaychuk.com"
+  },
+  "cors@2.8.6": {
+    "licenses": "MIT",
+    "repository": "expressjs/cors",
+    "publisher": "Troy Goode",
+    "email": "troygoode@gmail.com",
+    "url": "https://github.com/troygoode/"
+  },
+  "dmn-js-properties-panel@3.11.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/dmn-js-properties-panel",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "dmn-js@17.10.1": {
+    "licenses": "SEE LICENSE IN LICENSE",
+    "repository": "https://github.com/bpmn-io/dmn-js",
+    "publisher": "Sebastian Stamm",
+    "url": "https://github.com/SebastianStamm"
+  },
+  "dotenv@17.4.2": {
+    "licenses": "BSD-2-Clause",
+    "repository": "git://github.com/motdotla/dotenv.git"
+  },
+  "escape-html@1.0.3": {
+    "licenses": "MIT",
+    "repository": "component/escape-html"
+  },
+  "express-rate-limit@8.6.2": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/express-rate-limit/express-rate-limit.git",
+    "publisher": "Nathan Friedly",
+    "url": "http://nfriedly.com/"
+  },
+  "express@5.2.1": {
+    "licenses": "MIT",
+    "repository": "expressjs/express",
+    "publisher": "TJ Holowaychuk",
+    "email": "tj@vision-media.ca"
+  },
+  "google-auth-library@10.9.1": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/googleapis/google-cloud-node.git",
+    "publisher": "Google Inc."
+  },
+  "helmet@8.3.0": {
+    "licenses": "MIT",
+    "repository": "git://github.com/helmetjs/helmet.git",
+    "publisher": "Adam Baldwin",
+    "email": "adam@npmjs.com",
+    "url": "https://evilpacket.net"
+  },
+  "inferno@5.6.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/infernojs/inferno",
+    "publisher": "Dominic Gannaway",
+    "email": "dg@domgan.com"
+  },
+  "ip-address@10.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/beaugunderson/ip-address.git",
+    "publisher": "Beau Gunderson",
+    "email": "beau@beaugunderson.com",
+    "url": "https://beaugunderson.com/"
+  },
+  "jsonwebtoken@9.0.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/auth0/node-jsonwebtoken",
+    "publisher": "auth0"
+  },
+  "jspdf@4.2.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/parallax/jsPDF.git"
+  },
+  "ldapts@9.0.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/ldapts/ldapts.git",
+    "publisher": "jim@biacreations.com"
+  },
+  "lucide-react@0.577.0": {
+    "licenses": "ISC",
+    "repository": "https://github.com/lucide-icons/lucide.git",
+    "publisher": "Eric Fennis"
+  },
+  "mssql@12.7.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/tediousjs/node-mssql.git",
+    "publisher": "Patrik Simek",
+    "url": "https://patriksimek.cz"
+  },
+  "mysql2@3.23.4": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/sidorares/node-mysql2.git",
+    "publisher": "Andrey Sidorov",
+    "email": "andrey.sidorov@gmail.com"
+  },
+  "nodemailer@9.0.5": {
+    "licenses": "MIT-0",
+    "repository": "https://github.com/nodemailer/nodemailer.git",
+    "publisher": "Andris Reinman"
+  },
+  "octokit@5.0.5": {
+    "licenses": "MIT",
+    "repository": "github:octokit/octokit.js",
+    "publisher": "Gregor Martynus",
+    "url": "https://github.com/gr2m"
+  },
+  "oracledb@6.10.0": {
+    "licenses": "(Apache-2.0 OR UPL-1.0)",
+    "repository": "git://github.com/oracle/node-oracledb.git"
+  },
+  "pg@8.23.0": {
+    "licenses": "MIT",
+    "repository": "git://github.com/brianc/node-postgres.git",
+    "publisher": "Brian Carlson",
+    "email": "brian.m.carlson@gmail.com"
+  },
+  "react-dom@19.2.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/facebook/react.git"
+  },
+  "react-icons@5.7.0": {
+    "licenses": "MIT",
+    "repository": "git+ssh://git@github.com:react-icons/react-icons.git",
+    "publisher": "Goran Gajic"
+  },
+  "react-is@19.2.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/facebook/react.git"
+  },
+  "react-loading-skeleton@3.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/dvtng/react-loading-skeleton.git",
+    "publisher": "David Tang"
+  },
+  "react-pro-sidebar@1.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/azouaoui-med/react-pro-sidebar.git",
+    "publisher": "Mohamed Azouaoui",
+    "email": "azouaoui.med@gmail.com"
+  },
+  "react-router-dom@7.18.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/remix-run/react-router",
+    "publisher": "Remix Software",
+    "email": "hello@remix.run"
+  },
+  "react-router@7.18.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/remix-run/react-router",
+    "publisher": "Remix Software",
+    "email": "hello@remix.run"
+  },
+  "react-split-pane@3.2.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/tomkp/react-split-pane",
+    "publisher": "tomkp",
+    "email": "tom@tomkp.com"
+  },
+  "react@19.2.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/facebook/react.git"
+  },
+  "reflect-metadata@0.2.2": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/rbuckton/reflect-metadata.git",
+    "publisher": "Ron Buckton",
+    "email": "ron.buckton@microsoft.com",
+    "url": "http://github.com/rbuckton"
+  },
+  "resend@6.22.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/resend/resend-node.git"
+  },
+  "svg2pdf.js@2.7.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/yWorks/svg2pdf.js.git",
+    "publisher": "yFiles for HTML Support Team",
+    "email": "yfileshtml@yworks.com",
+    "url": "https://www.yworks.com/yfileshtml"
+  },
+  "tailwind-merge@3.6.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/dcastil/tailwind-merge.git",
+    "publisher": "Dany Castillo"
+  },
+  "typeorm@0.3.31": {
+    "licenses": "MIT",
+    "repository": "https://github.com/typeorm/typeorm.git",
+    "publisher": "TypeORM",
+    "email": "maintainers@typeorm.io"
+  },
+  "undici@7.29.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/nodejs/undici.git"
+  },
+  "uuid@14.0.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/uuidjs/uuid.git"
+  },
+  "zod@4.4.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/colinhacks/zod.git",
+    "publisher": "Colin McDonnell",
+    "email": "zod@colinhacks.com"
+  },
+  "zustand@5.0.15": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/pmndrs/zustand.git",
+    "publisher": "Paul Henschel"
+  }
+}

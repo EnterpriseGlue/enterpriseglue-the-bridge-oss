@@ -75,6 +75,18 @@ check_package() {
 
   changed_count=$((changed_count + 1))
 
+  if ! git cat-file -e "${MERGE_BASE}:${manifest}" 2>/dev/null; then
+    local initial_version
+    initial_version="$(read_json_version "$manifest")"
+    if [ -z "$initial_version" ]; then
+      echo "::error file=${manifest}::Could not read initial package version for ${package_name}."
+      failures=1
+      return 0
+    fi
+    echo "[package-version-discipline] ${package_name}: initial publication ${initial_version}"
+    return 0
+  fi
+
   if git diff --quiet "$MERGE_BASE"...HEAD -- "$manifest"; then
     echo "::error file=${manifest}::${package_name} changed without a version bump in ${manifest}. Bump the published package version in the same PR."
     failures=1
@@ -111,6 +123,9 @@ check_package "@enterpriseglue/shared" "packages/shared" "packages/shared/packag
 check_package "@enterpriseglue/backend-host" "packages/backend-host" "packages/backend-host/package.json"
 check_package "@enterpriseglue/frontend-host" "packages/frontend-host" "packages/frontend-host/package.json"
 check_package "@enterpriseglue/enterprise-plugin-api" "packages/enterprise-plugin-api" "packages/enterprise-plugin-api/package.json"
+check_package "@enterpriseglue/plugin-sdk" "packages/plugin-sdk" "packages/plugin-sdk/package.json"
+check_package "@enterpriseglue/plugin-runtime" "packages/plugin-runtime" "packages/plugin-runtime/package.json"
+check_package "@enterpriseglue/plugin-installer" "packages/plugin-installer" "packages/plugin-installer/package.json"
 
 if [ "$changed_count" -eq 0 ]; then
   echo "[package-version-discipline] No relevant published OSS package changes detected."

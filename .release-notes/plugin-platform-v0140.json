@@ -1,0 +1,90 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-platform-v0140",
+  "type": "feature",
+  "scope": "product-neutral-plugin-platform",
+  "breaking": false,
+  "audiences": ["users", "administrators", "operators", "developers", "security"],
+  "summary": "Introduces the product-neutral OSS plugin platform, signed installer, isolated runtime, Carbon contribution surfaces, fine-grained host brokers, and lifecycle controls required by independently distributed plugins.",
+  "userImpact": [
+    "Administrators can install and operate compatible signed plugins without rebuilding EnterpriseGlue OSS or placing private plugin source in the public deployment.",
+    "Authorized users see plugin workspaces inside their declared Mission Control parent and contextual actions only on engines, incidents, failed jobs, process instances, and batches they may read.",
+    "Support-style plugins can present paged cases, questions, analysis, resolution choices, locally sanitized diagnostics, export, retention, deletion, stronger-model escalation, and human escalation through host-owned Carbon surfaces."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Deploy the v0.14.0 OSS host before installing a plugin that declares host compatibility >=0.14.0 <0.15.0.",
+      "Allow the normal TypeORM startup migration process to create the additive plugin tables and columns before enabling any plugin.",
+      "Install plugins only from immutable signed OCI digests and use the v0.14.0 capability endpoint to verify exact SDK and shared-frontend compatibility."
+    ]
+  },
+  "configuration": [
+    "Trusted plugin publishers, named egress policies, gateway limits, circuit-breaker settings, event retention, notification delivery, schedules, and local diagnostic sources remain deployment-owned host configuration.",
+    "The installer must explicitly grant each host-broker permission; plugins cannot select another tenant, principal, engine, diagnostic path, credential, or egress destination.",
+    "ION Support remains a separately distributed private plugin and is not included in the OSS image, repository, configuration defaults, or release artifact."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds versioned plugin manifest, resource, capability, distribution, control, contribution-availability, event, notification, schedule, storage, secret-use, and broker contracts.",
+      "Adds authenticated plugin lifecycle, capability, asset, event-recovery, health, admission, and emergency-control APIs guarded by platform.settings.read or platform.settings.manage.",
+      "Adds closed host brokers for safe identity, engine metadata, authorization-filtered engine access, local sanitized diagnostics, notifications, schedules, plugin-private storage, events, and indirect secret use.",
+      "Adds host-owned desktop and responsive plugin navigation, route, settings, engine, incident, failed-job, process-instance, batch, and global-shell contribution points."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000114-add-plugin-platform",
+      "1700000000115-add-plugin-broker-replay",
+      "1700000000116-add-plugin-storage",
+      "1700000000117-add-plugin-events",
+      "1700000000118-add-plugin-notifications-and-schedules",
+      "1700000000119-add-plugin-emergency-control",
+      "1700000000120-add-plugin-gateway-admission",
+      "1700000000121-add-plugin-event-circuit",
+      "1700000000122-add-plugin-contribution-availability"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "The migrations are additive and run after the v0.13.1 migration sequence on PostgreSQL, MySQL/MariaDB, SQL Server, Oracle, and Spanner adapters.",
+      "Disabling, emergency-stopping, removing, or rolling the application back does not require destructive schema reversal.",
+      "A full schema reversal can remove plugin lifecycle, delivery, schedule, storage, and availability data and therefore requires an approved export or database backup/restore plan."
+    ]
+  },
+  "security": [
+    "The host authenticates the caller, derives tenant and resource scope, enforces fine-grained access before rendering and execution, signs bounded gateway calls, and reauthorizes broker operations server-side.",
+    "Plugin frontend assets are same-origin and integrity checked; plugin backend services are isolated behind the signed host gateway with explicit permissions, egress, rate, concurrency, and circuit-breaker policy.",
+    "Raw customer logs, filesystem paths, credentials, signing keys, and unsanitized diagnostic bytes are not exposed to plugin frontend code or sent to a cloud agent; approved local collectors sanitize before signed handoff.",
+    "The paid-plugin source and final-image boundary guards ensure private ION Support code, entitlements, prompts, cases, models, credentials, and customer data remain outside OSS artifacts."
+  ],
+  "documentation": [
+    "Architecture, security model, authoring contract, lifecycle, customer installation, and private boundary: `docs/architecture/12-plugin-platform-and-authoring.md`",
+    "End-to-end v0.14.0 implementation, verification, publication, private-consumer, upgrade, rollback, and acceptance checklist: `docs/architecture/13-plugin-platform-v0.14.0-implementation-and-release-plan.md`"
+  ],
+  "knownLimitations": [
+    "v0.14.0 supports the current SDK package and retains the previous SDK minor only where that package line and exact host evidence are present; compatibility is never inferred from a semver range alone.",
+    "A plugin release is not supported until its private evidence is bound to the exact OSS commit, package versions, image digests, toolchain digests, and tested compatibility catalog.",
+    "Plugin-specific customer cases, product governance, commercial entitlement, and human support workflows remain in the independently distributed plugin rather than the generic OSS administration plane."
+  ],
+  "rollback": [
+    "Disable or emergency-stop affected plugins first, then redeploy the previous OSS application image while preserving the additive plugin tables.",
+    "Reinstall the previous signed plugin digest and matching runtime chart if the rollback includes a plugin release.",
+    "Do not run destructive down migrations as part of routine rollback; export required plugin data or restore an approved database backup if complete schema removal is required."
+  ],
+  "validation": [
+    "Plugin SDK, compatibility fixtures, runtime, installer, reference plugin, backend host, frontend host, broker, control-plane, multi-replica, database-portability, and package-content tests.",
+    "Fine-grained authorization structure, action-registry, sibling denial, cross-tenant denial, resource mismatch, revocation, disabled entitlement, OSS boot, paid-source boundary, and final-image boundary checks.",
+    "Deterministic Carbon UI evidence for plugin lifecycle, Mission Control case list, question flow, contextual incident and failed-job analysis, process-instance analysis, completed answers, diagnostics, retention, escalation, responsive layout, keyboard focus, and Axe WCAG checks.",
+    "Local Compose lifecycle and multi-replica PostgreSQL acceptance, signed installer and Helm toolchain rehearsal, plugin disable/remove, application rollback, exact plugin rollback, and immutable artifact tamper rejection."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.5.0", "newVersion": "0.6.0", "impact": "minor" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.4.0", "newVersion": "0.5.0", "impact": "minor" },
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.6.1", "newVersion": "0.7.0", "impact": "minor" },
+    { "name": "@enterpriseglue/plugin-sdk", "previousVersion": null, "newVersion": "0.2.0", "impact": "initial" },
+    { "name": "@enterpriseglue/plugin-runtime", "previousVersion": null, "newVersion": "0.1.0", "impact": "initial" },
+    { "name": "@enterpriseglue/plugin-installer", "previousVersion": null, "newVersion": "0.1.0", "impact": "initial" }
+  ]
+}

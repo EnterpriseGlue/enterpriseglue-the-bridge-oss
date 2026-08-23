@@ -1,0 +1,31 @@
+{{- range $plugin := .Values.pluginRuntime.plugins }}
+{{- $context := dict "root" $ "plugin" $plugin }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+  labels:
+    {{- include "enterpriseglue-plugin-runtime.labels" $context | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml $.Values.hostGateway.podSelector | nindent 14 }}
+      ports:
+        - port: {{ $plugin.service.containerPort }}
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml $.Values.hostGateway.podSelector | nindent 14 }}
+      ports:
+        - port: {{ $.Values.hostGateway.port }}
+          protocol: TCP
+{{- end }}

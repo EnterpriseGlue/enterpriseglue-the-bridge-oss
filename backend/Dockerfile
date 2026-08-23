@@ -13,6 +13,8 @@ RUN npm install -g npm@11.19.0 pnpm@11.19.0 brace-expansion@5.0.9 \
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY --chown=node:node backend/package.json backend/
 COPY --chown=node:node packages/shared/package.json packages/shared/
+COPY --chown=node:node packages/plugin-sdk/package.json packages/plugin-sdk/
+COPY --chown=node:node packages/plugin-runtime/package.json packages/plugin-runtime/
 COPY --chown=node:node packages/backend-host/package.json packages/backend-host/
 COPY --chown=node:node packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY --chown=node:node packages/frontend-host/package.json packages/frontend-host/

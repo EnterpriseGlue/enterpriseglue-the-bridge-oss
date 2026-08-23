@@ -20,14 +20,31 @@ import { ToastProvider } from './shared/notifications/ToastProvider'
 import { createAppRoutes } from './routes'
 
 import { getEnterpriseFrontendPlugin } from './enterprise/loadEnterpriseFrontendPlugin'
+import {
+  getNativePluginRoutesV1,
+  loadInstalledNativePluginsV1,
+} from './plugins/nativePluginRuntime'
+import { HostContextualFlowProviderV1 } from './plugins/contextualFlowRuntime'
 
 export async function startApp() {
   const enterprisePlugin = await getEnterpriseFrontendPlugin()
-  const enterpriseRootChildren = (enterprisePlugin.routes || []) as any[]
-  const enterpriseTenantChildren = (enterprisePlugin.tenantRoutes || []) as any[]
+  await loadInstalledNativePluginsV1()
+  const enterpriseRootChildren = [
+    ...((enterprisePlugin.routes || []) as any[]),
+  ]
+  const enterpriseTenantChildren = [
+    ...((enterprisePlugin.tenantRoutes || []) as any[]),
+  ]
+  const nativePluginRootChildren = getNativePluginRoutesV1('root')
+  const nativePluginTenantChildren = getNativePluginRoutesV1('tenant')
 
   const qc = new QueryClient()
-  const routes = createAppRoutes(enterpriseRootChildren, enterpriseTenantChildren)
+  const routes = createAppRoutes(
+    enterpriseRootChildren,
+    enterpriseTenantChildren,
+    nativePluginRootChildren,
+    nativePluginTenantChildren,
+  )
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
@@ -36,7 +53,9 @@ export async function startApp() {
           <FeatureFlagsProvider>
             <QueryClientProvider client={qc}>
               <ToastProvider>
-                <RouterProvider router={createBrowserRouter(routes)} />
+                <HostContextualFlowProviderV1>
+                  <RouterProvider router={createBrowserRouter(routes)} />
+                </HostContextualFlowProviderV1>
               </ToastProvider>
             </QueryClientProvider>
           </FeatureFlagsProvider>
@@ -45,4 +64,3 @@ export async function startApp() {
     </React.StrictMode>
   )
 }
-

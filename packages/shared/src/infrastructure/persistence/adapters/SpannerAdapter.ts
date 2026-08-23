@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
+  isPluginLargeTextColumn,
+  pluginKeyColumnLength,
+} from '../pluginColumnPolicy.js';
+import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
@@ -17,6 +21,7 @@ import {
   Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  pluginPlatformEntities,
 } from '../entities/index.js';
 
 const entities = [
@@ -32,7 +37,11 @@ const entities = [
   Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  ...pluginPlatformEntities,
 ];
+const pluginEntityTargetNames = new Set(
+  pluginPlatformEntities.map((entity) => entity.name),
+);
 
 /**
  * Google Cloud Spanner Database Adapter
@@ -53,12 +62,19 @@ export class SpannerAdapter implements DatabaseAdapter {
     this.normalizeColumnsForSpanner();
   }
 
+  /**
+    * Shared entities use portable logical types. TypeORM's Spanner driver only
+    * accepts the native GoogleSQL names and requires an explicit length for
+    * STRING columns. Keep indexed identifiers bounded while allowing payload
+    * columns to use STRING(MAX).
+    */
   private normalizeColumnsForSpanner(): void {
     const metadata = getMetadataArgsStorage();
     const indexedColumns = new Set<string>();
     const uniqueConstraintColumns = new Set<string>();
 
     for (const table of metadata.tables) {
+      // Spanner GoogleSQL databases do not expose Postgres-style schemas.
       table.schema = undefined;
     }
 
@@ -80,7 +96,6 @@ export class SpannerAdapter implements DatabaseAdapter {
           indexedColumns.add(`${targetName}:${columnName}`);
         }
       }
-
       if (index.unique) {
         index.nullFiltered = index.columns.some((propertyName) =>
           typeof propertyName === 'string'
@@ -94,34 +109,45 @@ export class SpannerAdapter implements DatabaseAdapter {
     for (const column of metadata.columns) {
       const targetName = this.getTargetName(column.target);
       const key = `${targetName}:${column.propertyName}`;
-      const needsKeyLength =
-        Boolean(column.options.primary)
-        || Boolean(column.options.unique)
-        || indexedColumns.has(key)
-        || uniqueConstraintColumns.has(key);
-
-      if (column.options.type === 'text') {
-        column.options.type = 'string';
-        if ((targetName === 'CamundaNativeGrantImportRun' || targetName === 'EngineBackstopSyncRun')
-          && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
-          column.options.length = 'max';
-        } else if (column.options.length == null) {
-          column.options.length = needsKeyLength ? 191 : 4096;
-        }
-        continue;
-      }
-
       if (column.options.type === 'boolean') {
         column.options.type = 'bool';
         continue;
       }
-
       if (
-        column.options.type === 'bigint'
-        || column.options.type === 'integer'
-        || column.options.type === 'int'
+        column.options.type === 'bigint' ||
+        column.options.type === 'integer' ||
+        column.options.type === 'int'
       ) {
         column.options.type = 'int64';
+        continue;
+      }
+      if (column.options.type !== 'text') continue;
+
+      const databaseColumnName =
+        typeof column.options.name === 'string'
+          ? column.options.name
+          : column.propertyName.replace(
+              /[A-Z]/g,
+              (character) => `_${character.toLowerCase()}`,
+            );
+      const requiresBoundedText =
+        Boolean(column.options.primary) ||
+        Boolean(column.options.unique) ||
+        indexedColumns.has(key) ||
+        uniqueConstraintColumns.has(key) ||
+        column.options.default != null;
+
+      column.options.type = 'string';
+      if (requiresBoundedText) {
+        column.options.length = pluginEntityTargetNames.has(targetName)
+          ? pluginKeyColumnLength(databaseColumnName)
+          : 191;
+      } else {
+        column.options.length =
+          pluginEntityTargetNames.has(targetName) &&
+          !isPluginLargeTextColumn(databaseColumnName)
+            ? 4000
+            : 'max';
       }
     }
   }

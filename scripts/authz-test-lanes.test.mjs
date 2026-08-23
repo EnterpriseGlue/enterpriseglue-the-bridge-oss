@@ -30,6 +30,14 @@ const identityProtocolRehearsalWorkflow = readFileSync(new URL('../.github/workf
 const entraIdRehearsalWorkflow = readFileSync(new URL('../.github/workflows/entra-id-rehearsal.yml', import.meta.url), 'utf8');
 const codeqlWorkflow = readFileSync(new URL('../.github/workflows/codeql.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
+const backendVitestConfig = readFileSync(new URL('../backend/vitest.config.ts', import.meta.url), 'utf8');
+const backendPackageJson = JSON.parse(readFileSync(new URL('../backend/package.json', import.meta.url), 'utf8'));
+const sharedPackageJson = JSON.parse(readFileSync(new URL('../packages/shared/package.json', import.meta.url), 'utf8'));
+const pluginRuntimePackageJson = JSON.parse(readFileSync(new URL('../packages/plugin-runtime/package.json', import.meta.url), 'utf8'));
+const pluginInstallerPackageJson = JSON.parse(readFileSync(new URL('../packages/plugin-installer/package.json', import.meta.url), 'utf8'));
+const pluginReferencePackageJson = JSON.parse(readFileSync(new URL('../packages/plugin-reference/package.json', import.meta.url), 'utf8'));
+const backendHostPackageJson = JSON.parse(readFileSync(new URL('../packages/backend-host/package.json', import.meta.url), 'utf8'));
+const frontendHostPackageJson = JSON.parse(readFileSync(new URL('../packages/frontend-host/package.json', import.meta.url), 'utf8'));
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
 const customRoleMatrixRunner = readFileSync(new URL('./run-local-safe-custom-role-matrix.sh', import.meta.url), 'utf8');
@@ -96,6 +104,17 @@ test('the authorization structure gate requires exhaustive registry action cover
   assert.match(scripts['test:authz:structure'], /test:authz:api-client-middleware-coverage/);
   assert.match(scripts['test:authz:structure'], /test:authz:require-action-coverage/);
   assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
+});
+
+test('clean-checkout authorization tests resolve plugin SDK source before package build output exists', () => {
+  assert.match(backendVitestConfig, /'@enterpriseglue\/plugin-sdk': path\.resolve\(rootDir, '\.\.', 'packages', 'plugin-sdk', 'src'\)/);
+  assert.match(sharedPackageJson.scripts.build, /^pnpm --filter @enterpriseglue\/plugin-sdk run build/);
+  assert.match(pluginRuntimePackageJson.scripts['build:dependencies'], /@enterpriseglue\/plugin-sdk run build/);
+  assert.match(pluginInstallerPackageJson.scripts['build:dependencies'], /@enterpriseglue\/plugin-runtime run build/);
+  assert.match(pluginReferencePackageJson.scripts['build:dependencies'], /@enterpriseglue\/plugin-runtime run build/);
+  assert.match(backendHostPackageJson.scripts['build:plugin-dependencies'], /@enterpriseglue\/plugin-runtime run build/);
+  assert.match(frontendHostPackageJson.scripts['build:shared'], /@enterpriseglue\/plugin-runtime run build/);
+  assert.match(backendPackageJson.scripts['build:plugin-dependencies'], /@enterpriseglue\/plugin-runtime run build/);
 });
 
 test('CI enforces headless admin parity and the real PostgreSQL persistence lifecycle', () => {
@@ -192,6 +211,9 @@ test('the pull-request workflow retains browser and database evidence when autho
 test('the CodeQL gate queries every alert for the pull request instead of an unindexed merge SHA', () => {
   assert.match(codeqlWorkflow, /--paginate/);
   assert.match(codeqlWorkflow, /-F pr="\$\{PR_NUMBER\}"/);
+  assert.match(codeqlWorkflow, /MERGE_GROUP_HEAD_REF: \$\{\{ github\.event\.merge_group\.head_ref \|\| '' \}\}/);
+  assert.match(codeqlWorkflow, /\(\^\|\/\)pr-\(\[0-9\]\+\)-/);
+  assert.match(codeqlWorkflow, /GITHUB_EVENT_NAME.*merge_group/);
   assert.match(codeqlWorkflow, /-f tool_name=CodeQL/);
   assert.match(codeqlWorkflow, /jq -s 'map\(length\) \| add \/\/ 0'/);
   assert.doesNotMatch(codeqlWorkflow, /ref=\$\{GITHUB_SHA\}/);
@@ -338,6 +360,8 @@ test('the accessibility matrix uses the same local browser fallback without open
   assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_WEBKIT_EXECUTION/);
   assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_CONTAINER_SUITE=accessibility/);
   assert.match(accessibilityMatrixRunner, /E2E_SEED_USER=false/);
+  assert.match(accessibilityMatrixRunner, /corepack pnpm exec playwright test/);
+  assert.match(accessibilityMatrixRunner, /if \[\[ "\$base_url" == https:\/\/\* \]\]/);
   assert.match(accessibilityMatrixRunner, /identity-administration-accessibility\.spec\.ts/);
   assert.match(accessibilityMatrixRunner, /write-authz-accessibility-evidence\.mjs/);
 });
@@ -497,6 +521,10 @@ test('the identity browser lifecycle runner accepts the generated local TLS CA',
   assert.match(identityBrowserRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
   assert.match(identityBrowserRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(identityBrowserRunner, /localhost, loopback, or a \.local host/);
+  assert.match(identityBrowserRunner, /test\/e2e\/identity-config-lifecycle\.spec\.ts/);
+  assert.match(identityBrowserRunner, /test\/e2e\/login-experience-gallery\.spec\.ts/);
+  assert.match(identityBrowserRunner, /test\/e2e\/access-control-layout\.spec\.ts/);
+  assert.match(identityBrowserRunner, /corepack pnpm exec playwright test "\$\{browser_e2e_files\[@\]\}"/);
 });
 
 test('the live local SAML rehearsal is opt-in and guarded to local browser targets', () => {

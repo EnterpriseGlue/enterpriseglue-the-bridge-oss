@@ -1,0 +1,8 @@
+{
+  "yaml@2.9.0": {
+    "licenses": "ISC",
+    "repository": "github:eemeli/yaml",
+    "publisher": "Eemeli Aro",
+    "email": "eemeli@gmail.com"
+  }
+}

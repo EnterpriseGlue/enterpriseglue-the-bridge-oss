@@ -25,6 +25,7 @@ export default defineConfig({
       '@enterpriseglue/shared/db/entities': path.resolve(rootDir, '..', 'packages', 'shared', 'src', 'infrastructure', 'persistence', 'entities'),
       '@enterpriseglue/shared': path.resolve(rootDir, '..', 'packages', 'shared', 'src'),
       '@enterpriseglue/backend-host': path.resolve(rootDir, '..', 'packages', 'backend-host', 'src'),
+      '@enterpriseglue/plugin-sdk': path.resolve(rootDir, '..', 'packages', 'plugin-sdk', 'src'),
       '@modules': path.resolve(rootDir, '..', 'packages', 'backend-host', 'src', 'modules'),
     },
   },

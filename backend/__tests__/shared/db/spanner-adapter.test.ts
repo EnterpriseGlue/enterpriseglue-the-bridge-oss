@@ -82,7 +82,7 @@ describe('SpannerAdapter metadata normalization', () => {
 
     expect(usersTable?.schema).toBeUndefined();
     expect(idColumn?.options).toMatchObject({ type: 'string', length: 191 });
-    expect(descriptionColumn?.options).toMatchObject({ type: 'string', length: 4096 });
+    expect(descriptionColumn?.options).toMatchObject({ type: 'string', length: 'max' });
     expect(activeColumn?.options.type).toBe('bool');
     expect(observedAtColumn?.options.type).toBe('int64');
     expect(versionColumn?.options.type).toBe('int64');

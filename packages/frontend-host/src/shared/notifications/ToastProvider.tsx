@@ -79,6 +79,39 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient, removeToast]);
 
   React.useEffect(() => {
+    const onPluginNotification = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      if (!detail || typeof detail !== 'object') return;
+      const candidate = detail as Record<string, unknown>;
+      if (
+        !['success', 'info', 'warning', 'error'].includes(String(candidate.kind)) ||
+        typeof candidate.title !== 'string' ||
+        candidate.title.length === 0 ||
+        candidate.title.length > 160 ||
+        (candidate.subtitle !== undefined &&
+          (typeof candidate.subtitle !== 'string' ||
+            candidate.subtitle.length > 500))
+      ) {
+        return;
+      }
+      notify({
+        kind: candidate.kind as ToastKind,
+        title: candidate.title,
+        subtitle: candidate.subtitle as string | undefined,
+      });
+    };
+    window.addEventListener(
+      'enterpriseglue:plugin-notification:v1',
+      onPluginNotification,
+    );
+    return () =>
+      window.removeEventListener(
+        'enterpriseglue:plugin-notification:v1',
+        onPluginNotification,
+      );
+  }, [notify]);
+
+  React.useEffect(() => {
     return () => {
       timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
       timersRef.current.clear();

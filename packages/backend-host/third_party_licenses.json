@@ -1,1 +1,77 @@
-{}
+{
+  "archiver@7.0.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/archiverjs/node-archiver.git",
+    "publisher": "Chris Talkington",
+    "url": "http://christalkington.com/"
+  },
+  "bcryptjs@3.0.3": {
+    "licenses": "BSD-3-Clause",
+    "repository": "https://github.com/dcodeIO/bcrypt.js.git",
+    "publisher": "Daniel Wirtz",
+    "email": "dcode@dcode.io"
+  },
+  "cors@2.8.6": {
+    "licenses": "MIT",
+    "repository": "expressjs/cors",
+    "publisher": "Troy Goode",
+    "email": "troygoode@gmail.com",
+    "url": "https://github.com/troygoode/"
+  },
+  "csrf-csrf@4.0.3": {
+    "licenses": "ISC",
+    "repository": "https://github.com/Psifi-Solutions/csrf-csrf",
+    "publisher": "psibean"
+  },
+  "express@5.2.1": {
+    "licenses": "MIT",
+    "repository": "expressjs/express",
+    "publisher": "TJ Holowaychuk",
+    "email": "tj@vision-media.ca"
+  },
+  "helmet@8.3.0": {
+    "licenses": "MIT",
+    "repository": "git://github.com/helmetjs/helmet.git",
+    "publisher": "Adam Baldwin",
+    "email": "adam@npmjs.com",
+    "url": "https://evilpacket.net"
+  },
+  "morgan@1.11.0": {
+    "licenses": "MIT",
+    "repository": "expressjs/morgan"
+  },
+  "reflect-metadata@0.2.2": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/rbuckton/reflect-metadata.git",
+    "publisher": "Ron Buckton",
+    "email": "ron.buckton@microsoft.com",
+    "url": "http://github.com/rbuckton"
+  },
+  "swagger-ui-express@5.0.1": {
+    "licenses": "MIT",
+    "repository": "git@github.com:scottie1984/swagger-ui-express.git",
+    "publisher": "Stephen Scott",
+    "email": "scottie1984@gmail.com"
+  },
+  "typeorm@0.3.31": {
+    "licenses": "MIT",
+    "repository": "https://github.com/typeorm/typeorm.git",
+    "publisher": "TypeORM",
+    "email": "maintainers@typeorm.io"
+  },
+  "typescript@5.9.3": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/microsoft/TypeScript.git",
+    "publisher": "Microsoft Corp."
+  },
+  "undici@7.29.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/nodejs/undici.git"
+  },
+  "zod@4.4.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/colinhacks/zod.git",
+    "publisher": "Colin McDonnell",
+    "email": "zod@colinhacks.com"
+  }
+}

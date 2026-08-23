@@ -196,15 +196,16 @@ describe('runMigrations bootstrap behavior', () => {
 
     expect(dataSource.synchronize).toHaveBeenCalledTimes(1);
     expect(dataSource.runMigrations).toHaveBeenCalledTimes(1);
-    expect(dataSource.runMigrations).toHaveBeenCalledWith();
+    expect(dataSource.runMigrations).toHaveBeenCalledWith({ transaction: 'all' });
     expect(dataSource.runMigrations).not.toHaveBeenCalledWith({ fake: true });
   });
 
-  it('records a fresh Spanner migration baseline with explicit IDs', async () => {
+  it('records a fresh Spanner migration baseline without generated IDs', async () => {
     (adapter.getDatabaseType as unknown as Mock).mockReturnValue('spanner');
     (adapter.getSchemaName as unknown as Mock).mockReturnValue('');
 
     const insert = vi.fn().mockResolvedValue(undefined);
+    const ledgerRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
     const bootstrapRunner = {
       ...createBootstrapRunner(vi.fn().mockResolvedValue(false)),
       createTable: vi.fn().mockResolvedValue(undefined),
@@ -212,6 +213,7 @@ describe('runMigrations bootstrap behavior', () => {
     const integrityRunner = createIntegrityRunner();
     const dataSource = {
       createQueryRunner: vi.fn()
+        .mockReturnValueOnce(ledgerRunner)
         .mockReturnValueOnce(bootstrapRunner)
         .mockReturnValueOnce(integrityRunner),
       getMetadata: vi.fn((entity: any) => ({
@@ -220,7 +222,7 @@ describe('runMigrations bootstrap behavior', () => {
       synchronize: vi.fn().mockResolvedValue(undefined),
       showMigrations: vi.fn().mockResolvedValue(true),
       runMigrations: vi.fn().mockResolvedValue(undefined),
-      options: {},
+      options: { type: 'spanner' },
       migrations: [
         { name: 'FirstMigration1700000000001' },
         { name: 'SecondMigration1700000000002' },
@@ -237,11 +239,44 @@ describe('runMigrations bootstrap behavior', () => {
     await runMigrations();
 
     expect(dataSource.runMigrations).not.toHaveBeenCalled();
+    expect(ledgerRunner.release).toHaveBeenCalledTimes(1);
     expect(bootstrapRunner.createTable).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith([
-      { id: 1, timestamp: 1700000000001, name: 'FirstMigration1700000000001' },
-      { id: 2, timestamp: 1700000000002, name: 'SecondMigration1700000000002' },
+      { timestamp: 1700000000001, name: 'FirstMigration1700000000001' },
+      { timestamp: 1700000000002, name: 'SecondMigration1700000000002' },
     ]);
+  });
+
+  it('runs pending Spanner migrations without a transaction', async () => {
+    (adapter.getDatabaseType as unknown as Mock).mockReturnValue('spanner');
+    (adapter.getSchemaName as unknown as Mock).mockReturnValue('');
+
+    const ledgerRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const integrityRunner = createIntegrityRunner();
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(ledgerRunner)
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: String(entity.name).toLowerCase(),
+      })),
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+      options: { type: 'spanner' },
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations();
+
+    expect(dataSource.synchronize).not.toHaveBeenCalled();
+    expect(dataSource.runMigrations).toHaveBeenCalledWith({ transaction: 'none' });
+    expect(ledgerRunner.release).toHaveBeenCalledTimes(1);
+    expect(bootstrapRunner.release).toHaveBeenCalledTimes(1);
+    expect(integrityRunner.release).toHaveBeenCalledTimes(1);
   });
 
   it('skips synchronize when all core bootstrap tables already exist', async () => {

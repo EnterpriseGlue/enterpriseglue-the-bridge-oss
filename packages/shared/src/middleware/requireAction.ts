@@ -179,6 +179,45 @@ export interface ResolvedAuthzActionResource {
   id?: string | null;
 }
 
+/**
+ * Evaluates a static FGA action after a trusted host has already resolved the
+ * resource. It is intentionally independent of Express request parsing so
+ * host-owned integrations (such as the native plugin gateway) can use exactly
+ * the same permission and ABAC policy decision as guarded API routes.
+ */
+export async function evaluateResolvedAuthzAction(input: {
+  actionId: string;
+  userId: string;
+  tenantId?: string | null;
+  resource: ResolvedAuthzActionResource;
+}): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    const action = assertKnownAuthzAction(input.actionId);
+    if (action.resourceType !== input.resource.type) {
+      return { allowed: false, reason: 'Action resource type is not allowed' };
+    }
+    const context: PermissionContext = {
+      userId: input.userId,
+      tenantId:
+        input.resource.type === 'project'
+          ? effectiveProjectTenantId(input.tenantId)
+          : input.tenantId || null,
+      resourceType: input.resource.type,
+      resourceId: input.resource.id || undefined,
+    };
+    if (!(await permissionService.hasPermission(action.permissionId, context))) {
+      return { allowed: false, reason: `Missing permission ${action.permissionId}` };
+    }
+    const policy = await policyService.evaluateGate(action.permissionId, context);
+    if (policy.decision === 'deny') {
+      return { allowed: false, reason: policy.reason };
+    }
+    return { allowed: true };
+  } catch {
+    return { allowed: false, reason: 'Authorization decision unavailable' };
+  }
+}
+
 export interface ResolvedCompositeActionResource {
   kind: CompositeActionKind;
   actionId: string;

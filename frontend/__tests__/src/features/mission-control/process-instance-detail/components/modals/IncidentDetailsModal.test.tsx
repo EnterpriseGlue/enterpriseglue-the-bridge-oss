@@ -3,6 +3,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { IncidentDetailsModal } from '@src/features/mission-control/process-instance-detail/components/modals/IncidentDetailsModal';
 
+vi.mock('@src/shared/auth/guards', () => ({
+  useActionDecision: vi.fn(() => ({ allowed: true })),
+}));
+
 vi.mock('@carbon/react', async () => {
   const actual = await vi.importActual<any>('@carbon/react');
   return {

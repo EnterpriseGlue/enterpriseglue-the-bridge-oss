@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/backend-host",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "OSS backend host for EnterpriseGlue — Express app, route modules, enterprise loader, and server bootstrap",
   "license": "Apache-2.0",
   "repository": {
@@ -13,8 +13,11 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build": "tsc && node scripts/rewrite-modules.mjs",
-    "clean": "rm -rf dist"
+    "build:plugin-dependencies": "pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter shared run build",
+    "build": "pnpm run build:plugin-dependencies && tsc && node scripts/rewrite-modules.mjs",
+    "clean": "rm -rf dist",
+    "typecheck:plugin-acceptance": "pnpm run build:plugin-dependencies && tsc -p test/tsconfig.json",
+    "test:plugin-runtime": "pnpm run build:plugin-dependencies && vitest run src/plugins/secureFile.test.ts src/plugins/pluginRuntime.test.ts src/plugins/pluginControlPlane.test.ts src/plugins/pluginControlRoutes.test.ts src/plugins/pluginDatabaseLock.test.ts src/plugins/pluginDatabaseTransaction.test.ts src/plugins/pluginEventDeliveryStore.test.ts src/plugins/pluginEventDispatcher.test.ts src/plugins/pluginEngineEventPoller.test.ts src/plugins/pluginScheduleDispatcher.test.ts src/plugins/localDiagnosticCollector.test.ts src/plugins/pluginDiagnosticMetrics.test.ts src/plugins/pluginEventMetrics.test.ts src/plugins/pluginSseProxy.test.ts src/plugins/pluginContributionAvailabilityStore.test.ts src/plugins/pluginContributionAvailabilityDispatcher.test.ts"
   },
   "files": [
     "dist/**/*.js",
@@ -27,6 +30,8 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "morgan": "^1.11.0",
@@ -45,7 +50,8 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^25.3.5",
     "@types/swagger-ui-express": "^4.1.8",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.0.18"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",

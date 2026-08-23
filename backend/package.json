@@ -10,8 +10,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "dotenv run node dist/backend/src/server.js",
-    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
-    "build:skip-generate": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
+    "build:plugin-dependencies": "pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter shared run build",
+    "build": "pnpm run build:plugin-dependencies && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
+    "build:skip-generate": "pnpm run build:plugin-dependencies && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node scripts/resolve-dist-imports.mjs",
     "start:compiled": "node dist/backend/src/server.js",
     "typecheck": "tsc --noEmit",
     "guard:no-raw-sql": "tsx scripts/check-no-raw-sql.ts",
@@ -26,6 +27,8 @@
   },
   "dependencies": {
     "@enterpriseglue/backend-host": "workspace:*",
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",

@@ -17,6 +17,7 @@ import { FileSnapshot } from '../infrastructure/persistence/entities/FileSnapsho
 import { Invitation } from '../infrastructure/persistence/entities/Invitation.js';
 import { AuthzMigrationState } from '../infrastructure/persistence/entities/AuthzMigrationState.js';
 import { generateId } from '../utils/id.js';
+import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -391,9 +392,9 @@ async function recordFreshMigrationBaseline(
     return;
   }
 
-  // TypeORM's Spanner migration table declares an auto-generated numeric ID,
-  // but Spanner has no auto-increment columns. Record the baseline through the
-  // native mutation API with explicit deterministic IDs.
+  // The Spanner migration ledger derives its generated primary key from the
+  // complete migration name. Record the baseline through the native mutation API
+  // without writing that generated column explicitly.
   const migrationsTableName = dataSource.options.migrationsTableName || 'migrations';
   if (!(await queryRunner.hasTable(migrationsTableName))) {
     await queryRunner.createTable(new Table({
@@ -416,8 +417,7 @@ async function recordFreshMigrationBaseline(
       return { name, timestamp };
     })
     .sort((left, right) => left.timestamp - right.timestamp)
-    .map((migration, index) => ({
-      id: index + 1,
+    .map((migration) => ({
       timestamp: migration.timestamp,
       name: migration.name,
     }));
@@ -457,6 +457,9 @@ export async function runMigrations() {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
     let initializedFreshSchema = false;
+    if (dbType === 'spanner') {
+      await ensureSpannerTypeOrmMigrationLedgerV1(dataSource);
+    }
 
     const queryRunner = dataSource.createQueryRunner();
     try {
@@ -534,7 +537,9 @@ export async function runMigrations() {
       const pendingMigrations = await dataSource.showMigrations();
       if (pendingMigrations) {
         console.log('  Running pending migrations...');
-        await dataSource.runMigrations();
+        await dataSource.runMigrations({
+          transaction: dbType === 'spanner' ? 'none' : 'all',
+        });
       }
     }
 

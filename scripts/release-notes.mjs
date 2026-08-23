@@ -10,7 +10,7 @@ const FRAGMENT_SCHEMA_VERSION = 1
 const TYPES = new Set(['feature', 'fix', 'security', 'performance', 'deprecation', 'breaking', 'docs', 'internal'])
 const AUDIENCES = new Set(['users', 'administrators', 'operators', 'developers', 'security'])
 const API_COMPATIBILITY = new Set(['none', 'additive', 'deprecated', 'breaking'])
-const PACKAGE_IMPACTS = new Set(['patch', 'minor', 'major'])
+const PACKAGE_IMPACTS = new Set(['initial', 'patch', 'minor', 'major'])
 const REQUIRED_FIELDS = [
   'schemaVersion',
   'id',
@@ -37,6 +37,9 @@ const PUBLISHED_PACKAGES = new Map([
   ['packages/backend-host/', '@enterpriseglue/backend-host'],
   ['packages/frontend-host/', '@enterpriseglue/frontend-host'],
   ['packages/enterprise-plugin-api/', '@enterpriseglue/enterprise-plugin-api'],
+  ['packages/plugin-sdk/', '@enterpriseglue/plugin-sdk'],
+  ['packages/plugin-runtime/', '@enterpriseglue/plugin-runtime'],
+  ['packages/plugin-installer/', '@enterpriseglue/plugin-installer'],
 ])
 
 function fail(message) {
@@ -172,12 +175,17 @@ export function validateFragment(fragment, source = 'release-note fragment') {
     assertString(entry.name, `${context}.name`)
     if (packageNames.has(entry.name)) fail(`${source}.packages contains duplicate package ${entry.name}.`)
     packageNames.add(entry.name)
-    parseVersion(entry.previousVersion, `${context}.previousVersion`)
+    if (entry.previousVersion !== null) {
+      parseVersion(entry.previousVersion, `${context}.previousVersion`)
+    }
     parseVersion(entry.newVersion, `${context}.newVersion`)
     if (!PACKAGE_IMPACTS.has(entry.impact)) fail(`${context}.impact is unsupported: ${entry.impact}.`)
-    const actualImpact = versionImpact(entry.previousVersion, entry.newVersion)
+    const actualImpact =
+      entry.previousVersion === null
+        ? 'initial'
+        : versionImpact(entry.previousVersion, entry.newVersion)
     if (actualImpact !== entry.impact) {
-      fail(`${context} declares ${entry.impact}, but ${entry.previousVersion} -> ${entry.newVersion} is ${actualImpact}.`)
+      fail(`${context} declares ${entry.impact}, but ${entry.previousVersion ?? 'not previously published'} -> ${entry.newVersion} is ${actualImpact}.`)
     }
   })
   if (fragment.api.compatibility === 'breaking' && !fragment.breaking) {
@@ -384,13 +392,19 @@ function consolidatePackages(entries) {
       packages.set(entry.name, { ...entry })
       continue
     }
-    if (compareVersions(entry.previousVersion, existing.previousVersion) < 0) {
+    if (
+      entry.previousVersion === null ||
+      (existing.previousVersion !== null &&
+        compareVersions(entry.previousVersion, existing.previousVersion) < 0)
+    ) {
       existing.previousVersion = entry.previousVersion
     }
     if (compareVersions(entry.newVersion, existing.newVersion) > 0) {
       existing.newVersion = entry.newVersion
     }
-    existing.impact = versionImpact(existing.previousVersion, existing.newVersion)
+    existing.impact = existing.previousVersion === null
+      ? 'initial'
+      : versionImpact(existing.previousVersion, existing.newVersion)
   }
   return [...packages.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
@@ -444,7 +458,7 @@ export function renderReleaseNotes(fragments, { version = 'next', baseRef = '' }
   if (packages.length > 0) {
     output += '## Published packages\n\n| Package | Previous | New | Impact |\n|---|---:|---:|---|\n'
     output += packages
-      .map((entry) => `| \`${entry.name}\` | \`${entry.previousVersion}\` | \`${entry.newVersion}\` | ${entry.impact} |`)
+      .map((entry) => `| \`${entry.name}\` | ${entry.previousVersion === null ? 'Not previously published' : `\`${entry.previousVersion}\``} | \`${entry.newVersion}\` | ${entry.impact} |`)
       .join('\n')
     output += '\n\n'
   }

@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
+import {
+  isPluginLargeTextColumn,
+  pluginKeyColumnLength,
+} from '../pluginColumnPolicy.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
@@ -17,6 +21,7 @@ import {
   Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  pluginPlatformEntities,
 } from '../entities/index.js';
 
 const entities = [
@@ -32,6 +37,7 @@ const entities = [
   Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  ...pluginPlatformEntities,
 ];
 
 const ORACLE_EMPTY_RUNTIME_TENANT = '__enterpriseglue_default_tenant__';
@@ -60,6 +66,9 @@ export class OracleAdapter implements DatabaseAdapter {
 
   private normalizeColumnsForOracle(): void {
     const metadata = getMetadataArgsStorage();
+    const pluginEntityNames = new Set(
+      pluginPlatformEntities.map((entity) => entity.name),
+    );
     const indexedColumns = new Set<string>();
     const uniqueConstraintColumns = new Set<string>();
     const uniqueConstraintSignatures = new Set<string>();
@@ -153,6 +162,24 @@ export class OracleAdapter implements DatabaseAdapter {
         if ((targetName === 'CamundaNativeGrantImportRun' || targetName === 'EngineBackstopSyncRun')
           && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
           column.options.type = 'clob';
+          continue;
+        }
+        if (pluginEntityNames.has(targetName)) {
+          const columnName =
+            typeof column.options.name === 'string'
+              ? column.options.name
+              : column.propertyName;
+          const requiresBoundedText =
+            isPrimaryOrIndexedOrUnique || column.options.default != null;
+          if (isPluginLargeTextColumn(columnName) && !requiresBoundedText) {
+            column.options.type = 'clob';
+            delete column.options.length;
+          } else {
+            column.options.type = 'varchar2';
+            column.options.length = requiresBoundedText
+              ? pluginKeyColumnLength(columnName)
+              : 4000;
+          }
           continue;
         }
         column.options.type = 'varchar2';

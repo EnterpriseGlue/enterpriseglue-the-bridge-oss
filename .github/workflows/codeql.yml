@@ -66,10 +66,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref || '' }}
         run: |
           set -euo pipefail
 
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "merge_group" ]]; then
+            if [[ "${MERGE_GROUP_HEAD_REF}" =~ (^|/)pr-([0-9]+)- ]]; then
+              PR_NUMBER="${BASH_REMATCH[2]}"
+            else
+              echo "CodeQL Gate failed: could not resolve a pull-request number from merge-group ref ${MERGE_GROUP_HEAD_REF}."
+              exit 1
+            fi
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" || "${GITHUB_EVENT_NAME}" == "merge_group" ]]; then
             if [[ ! "${PR_NUMBER}" =~ ^[0-9]+$ ]]; then
               echo "CodeQL Gate failed: pull-request number is missing or invalid."
               exit 1

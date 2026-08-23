@@ -55,6 +55,8 @@ Audience: Developers and architects.
 - [ADR 0003: Separate Authentication from Authoritative Provisioning](architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md)
 - [Authentication and Authoritative Provisioning](concepts/authentication-and-authoritative-provisioning.md)
 - [ADR 0002: Fail Closed for Shared-Engine Tenant Resolution](architecture/decisions/0002-shared-engine-fail-closed-resolution.md)
+- [Plugin Platform, FGA, and Authoring](architecture/12-plugin-platform-and-authoring.md)
+- [Plugin Platform v0.14.0 Implementation and Release Plan](architecture/13-plugin-platform-v0.14.0-implementation-and-release-plan.md)
 
 ## Development and Verification
 - [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)

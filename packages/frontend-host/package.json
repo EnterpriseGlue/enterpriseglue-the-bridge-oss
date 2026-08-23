@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/frontend-host",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "OSS frontend host for EnterpriseGlue — routes, enterprise loader, extension registry, and feature components",
   "license": "Apache-2.0",
   "repository": {
@@ -13,10 +13,11 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build:shared": "pnpm --filter shared run build",
+    "build:shared": "pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter shared run build",
     "typecheck": "pnpm run build:shared && tsc -p tsconfig.build.json --noEmit",
     "build": "pnpm run build:shared && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "clean": "rm -rf dist",
+    "test:plugin-bridge": "pnpm run build:shared && vitest run src/enterprise/extensionRegistry.test.ts src/plugins/contextualFlowRuntime.test.tsx src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/shared/api/client.test.ts",
     "prepublishOnly": "pnpm run clean && pnpm run build"
   },
   "files": [
@@ -49,10 +50,12 @@
   },
   "dependencies": {
     "@bpmn-io/properties-panel": "^3.33.0",
-    "@carbon/icons-react": "^11.80.0",
-    "@carbon/react": "^1.71.0",
-    "@carbon/styles": "^1.101.0",
+    "@carbon/icons-react": "11.80.0",
+    "@carbon/react": "1.107.0",
+    "@carbon/styles": "1.106.0",
     "@enterpriseglue/enterprise-plugin-api": "workspace:*",
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
     "@enterpriseglue/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.11",
     "@tanstack/react-table": "^8.20.5",
@@ -68,10 +71,12 @@
     "dmn-js-properties-panel": "^3.8.0",
     "inferno": "~5.6.3",
     "jspdf": "^4.2.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "react-is": "19.2.6",
     "react-loading-skeleton": "^3.5.0",
     "react-pro-sidebar": "^1.1.0",
+    "react-router": "^7.18.2",
     "react-router-dom": "^7.18.2",
     "react-split-pane": "^3.2.0",
     "svg2pdf.js": "^2.7.0",
@@ -80,7 +85,8 @@
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
-    "@types/react": "^19.2.4",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
     "typescript": "~5.9.3",
     "vite": "^7.3.5",

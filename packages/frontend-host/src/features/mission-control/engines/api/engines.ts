@@ -114,7 +114,11 @@ export async function checkEngineBackstopDrift(engineId: string, runId: string):
  * the sanitized inventory contract rather than a persistence-shaped engine.
  */
 export async function getAccessibleEngines(): Promise<AccessibleEngineSummary[]> {
-  return apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines', undefined, { credentials: 'include' })
+  const response = await apiClient.get<unknown>('/engines-api/engines', undefined, { credentials: 'include' })
+  if (!Array.isArray(response)) {
+    throw new Error('The engine inventory response is not an array')
+  }
+  return response as AccessibleEngineSummary[]
 }
 
 /**
@@ -123,11 +127,15 @@ export async function getAccessibleEngines(): Promise<AccessibleEngineSummary[]>
  * must continue to use getAccessibleEngines so quarantine stays fail-closed.
  */
 export async function getManageableEngines(): Promise<AccessibleEngineSummary[]> {
-  return apiClient.get<AccessibleEngineSummary[]>(
+  const response = await apiClient.get<unknown>(
     '/engines-api/engines',
     { includeManageableShared: 'true' },
     { credentials: 'include' },
   )
+  if (!Array.isArray(response)) {
+    throw new Error('The manageable engine inventory response is not an array')
+  }
+  return response as AccessibleEngineSummary[]
 }
 
 export async function createEngine(payload: CreateEngineRequest): Promise<AccessibleEngineSummary> {

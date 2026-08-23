@@ -13,6 +13,7 @@ import {
 
 interface ProcessInstanceModalsProps {
   incidentDetails: any | null
+  engineRef?: string
   jobById: Map<string, any>
   onCloseIncident: () => void
   // Edit variable
@@ -91,6 +92,7 @@ interface ProcessInstanceModalsProps {
 
 export function ProcessInstanceModals({
   incidentDetails,
+  engineRef,
   jobById,
   onCloseIncident,
   editingVarKey,
@@ -160,7 +162,12 @@ export function ProcessInstanceModals({
 }: ProcessInstanceModalsProps) {
   return (
     <>
-      <IncidentDetailsModal incidentDetails={incidentDetails} jobById={jobById} onClose={onCloseIncident} />
+      <IncidentDetailsModal
+        incidentDetails={incidentDetails}
+        engineRef={engineRef}
+        jobById={jobById}
+        onClose={onCloseIncident}
+      />
 
       <EditVariableModal
         editingVarKey={editingVarKey}
