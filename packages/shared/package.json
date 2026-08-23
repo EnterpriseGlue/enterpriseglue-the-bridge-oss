@@ -14,7 +14,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build": "pnpm run clean && tsc && pnpm run build:copy",
+    "build": "pnpm --filter @enterpriseglue/plugin-sdk run build && pnpm run clean && tsc && pnpm run build:copy",
     "build:copy": "node scripts/copy-build-assets.mjs",
     "clean": "rm -rf dist"
   },

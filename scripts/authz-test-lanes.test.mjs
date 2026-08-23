@@ -30,6 +30,8 @@ const identityProtocolRehearsalWorkflow = readFileSync(new URL('../.github/workf
 const entraIdRehearsalWorkflow = readFileSync(new URL('../.github/workflows/entra-id-rehearsal.yml', import.meta.url), 'utf8');
 const codeqlWorkflow = readFileSync(new URL('../.github/workflows/codeql.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
+const backendVitestConfig = readFileSync(new URL('../backend/vitest.config.ts', import.meta.url), 'utf8');
+const sharedPackageJson = JSON.parse(readFileSync(new URL('../packages/shared/package.json', import.meta.url), 'utf8'));
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
 const customRoleMatrixRunner = readFileSync(new URL('./run-local-safe-custom-role-matrix.sh', import.meta.url), 'utf8');
@@ -96,6 +98,11 @@ test('the authorization structure gate requires exhaustive registry action cover
   assert.match(scripts['test:authz:structure'], /test:authz:api-client-middleware-coverage/);
   assert.match(scripts['test:authz:structure'], /test:authz:require-action-coverage/);
   assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
+});
+
+test('clean-checkout authorization tests resolve plugin SDK source before package build output exists', () => {
+  assert.match(backendVitestConfig, /'@enterpriseglue\/plugin-sdk': path\.resolve\(rootDir, '\.\.', 'packages', 'plugin-sdk', 'src'\)/);
+  assert.match(sharedPackageJson.scripts.build, /^pnpm --filter @enterpriseglue\/plugin-sdk run build/);
 });
 
 test('CI enforces headless admin parity and the real PostgreSQL persistence lifecycle', () => {
