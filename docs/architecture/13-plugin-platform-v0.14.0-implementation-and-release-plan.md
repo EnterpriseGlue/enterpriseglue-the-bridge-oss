@@ -118,15 +118,15 @@ The release is blocked unless all of the following remain true:
 
 ## Phase 0: establish a clean source of truth
 
-- [ ] Reconcile the existing 15 committed plugin-platform changes with all staged, unstaged, and
+- [x] Reconcile the existing 15 committed plugin-platform changes with all staged, unstaged, and
   untracked v0.13.1-port follow-up changes.
-- [ ] Decide every changed path as included, split into a later change, or removed; record the
+- [x] Decide every changed path as included, split into a later change, or removed; record the
   decision in the pull-request description.
-- [ ] Preserve existing user changes while eliminating mixed staged/unstaged versions of the same
+- [x] Preserve existing user changes while eliminating mixed staged/unstaged versions of the same
   file.
-- [ ] Ensure the branch is based on the current `origin/main` and the `v0.13.1` release commit.
-- [ ] Produce one clean working tree before creating release-looking evidence.
-- [ ] Keep implementation commits reviewable by concern: contracts, persistence, host runtime,
+- [x] Ensure the branch is based on the current `origin/main` and the `v0.13.1` release commit.
+- [x] Produce one clean working tree before creating release-looking evidence.
+- [x] Keep implementation commits reviewable by concern: contracts, persistence, host runtime,
   UI/FGA, installer/toolchain, tests, and documentation.
 - [x] Confirm `git diff --check` passes and no generated build output is tracked accidentally.
 
@@ -177,16 +177,16 @@ version. Later package releases must use the normal semantic-version discipline.
 - [x] Use `1700000000114` through `1700000000122` unless a newer mainline migration claims part of
   that range before the pull request is finalized.
 - [x] Add a guard that rejects duplicate migration identifiers.
-- [ ] Verify fresh installation creates all plugin tables, columns, indexes, and constraints.
-- [ ] Verify an actual v0.13.1 database upgrades to the candidate without dropping or rewriting
+- [x] Verify fresh installation creates all plugin tables, columns, indexes, and constraints.
+- [x] Verify an actual v0.13.1 database upgrades to the candidate without dropping or rewriting
   unrelated access-governance data.
-- [ ] Verify repeated startup is idempotent and records no duplicate migration execution.
+- [x] Verify repeated startup is idempotent and records no duplicate migration execution.
 - [x] Verify multi-replica startup cannot execute plugin migrations concurrently.
 - [x] Verify plugin disable, emergency stop, and application rollback do not require destructive
   schema reversal.
 - [x] Document that full schema reversal can remove plugin data and therefore requires export or
   backup/restore approval.
-- [ ] Qualify PostgreSQL, MySQL/MariaDB, SQL Server, Oracle, and Spanner.
+- [x] Qualify PostgreSQL, MySQL/MariaDB, SQL Server, Oracle, and Spanner.
 
 Migration order:
 
@@ -313,11 +313,11 @@ Required rules:
 - [x] `pnpm run guard:plugin-api:current`
 - [x] `pnpm run guard:plugin-api:next`
 - [x] `pnpm run test:database-portability:unit`
-- [ ] `pnpm run test:engine-tenancy:database-matrix`
+- [x] `pnpm run test:engine-tenancy:database-matrix`
 - [x] `pnpm run test:authz:structure`
 - [x] `pnpm run test:authz:pr`
 - [ ] `pnpm run test:authz:fine-grained:local`
-- [ ] `pnpm run test:authz:browser`
+- [x] `pnpm run test:authz:browser`
 - [ ] `pnpm run test:authz:accessibility:cross-browser`
 - [ ] `pnpm run test:deployment-evidence:local`
 - [x] `pnpm run test:config-bundles`
@@ -332,9 +332,9 @@ Required rules:
 
 ### Local evidence ledger — 2026-08-23
 
-The checked items above are local candidate evidence, not release evidence. The evidence checkout
-is still intentionally dirty while the implementation is being assembled, so none of it may be
-used to sign or publish a release.
+The checked items above are local candidate evidence, not protected release evidence. Protected
+CI must reproduce the required lanes from the pull-request commit before any artifact is signed or
+published.
 
 - [x] OSS plugin SDK, runtime, installer, reference plugin, backend host and frontend host suites:
   284 focused tests passed; full lint and type checking passed.
@@ -358,11 +358,25 @@ used to sign or publish a release.
   paging, questions, contextual touchpoints, diagnostics, analysis/escalation, lifecycle,
   responsive, RTL, reduced-motion, keyboard and Axe states.
 - [x] Trivy completed against the available local database cache dated 2026-08-19.
+- [x] The five-database matrix passed PostgreSQL 18, MySQL 8.4, SQL Server 2022, Oracle 21 and the
+  Spanner emulator across fresh-install and v0.13.1 upgrade baselines. The qualification caught
+  and fixed MySQL index-width and Spanner migration-ledger portability defects before delivery.
+- [x] The scoped authorization browser lane and the candidate plugin/support touchpoint suites
+  passed against the exact local frontend.
+- [x] Chromium passed all 17 cross-browser accessibility scenarios. Firefox and WebKit did not run
+  locally because their pinned macOS runtimes were unavailable and the public dependency mirror
+  timed out while refreshing the cached Linux runner; protected CI remains the required
+  three-browser authority.
 - [ ] Repeat Trivy in protected CI with a freshly downloaded vulnerability database.
 - [ ] Repeat the disposable full Support workflow from rebuilt source images. The application
   path is not known to have failed: the local Docker builder could not download pnpm from the
   public registry, and the existing cached API image predates the adapter-viewer contract.
-- [ ] Run the clean five-database fresh-install and v0.13.1-upgrade matrix.
+- [x] Run the clean five-database fresh-install and v0.13.1-upgrade matrix.
+- [ ] Complete the aggregate all-local deployment-evidence profile. Its contract, configuration,
+  identity, engine-mode, secret-boundary and OpenShift-rendering lanes passed, but the disposable
+  image build was stopped after the Alpine/package mirrors remained network-idle for an extended
+  period. The independently run production-image, Compose lifecycle, multi-replica, signed OCI
+  and database gates passed.
 
 ## Phase 8: protected OSS delivery
 
