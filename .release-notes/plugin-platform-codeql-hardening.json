@@ -1,0 +1,52 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-platform-codeql-hardening",
+  "type": "security",
+  "scope": "product-neutral-plugin-platform",
+  "breaking": false,
+  "audiences": ["administrators", "operators", "developers", "security"],
+  "summary": "Hardens plugin lifecycle and secret-broker file reads against time-of-check/time-of-use races and removes an inefficient plugin-ID validation expression before the v0.14.0 release.",
+  "userImpact": [
+    "Plugin lifecycle state, receipts, plans, credentials, and broker policy files are verified and read through the same non-symlink file descriptor.",
+    "Plugin installation and operation contracts remain compatible; no customer action is required beyond deploying the corrected v0.14.0 build."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use the corrected v0.14.0 host and installer artifacts; do not publish or deploy the earlier unreleased candidate."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This hardening changes no database schema or stored plugin data."
+    ]
+  },
+  "security": [
+    "Uses descriptor-based bounded reads with O_NOFOLLOW so file type, size, and content are evaluated without a check-then-open race.",
+    "Replaces the ambiguous repeated plugin-ID regular expression with linear validation and explicit separator checks.",
+    "Documents the secret broker's intentional credential sink only after tenant-bound signed policy, HTTPS, method, path, timeout, response-size, redirect, and reflection controls are enforced.",
+    "Scopes missing-rate-limit suppressions to ephemeral loopback-only acceptance fixtures; production plugin routes remain protected by host gateway admission and rate limits."
+  ],
+  "documentation": [
+    "Plugin platform security and trust boundaries: `docs/architecture/12-plugin-platform-and-authoring.md`",
+    "Release readiness checklist: `docs/architecture/13-plugin-platform-v0.14.0-implementation-and-release-plan.md`"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploying the merged plugin-platform candidate would reintroduce the reported CodeQL findings; roll back the complete unreleased candidate rather than selectively reverting this hardening."
+  ],
+  "validation": [
+    "Plugin installer and runtime unit, typecheck, lifecycle, multi-replica, and symlink-rejection suites",
+    "PR-scoped and merge-group CodeQL analysis with zero open alerts for the hardening PR",
+    "Full OSS PostgreSQL, Oracle, plugin-platform, package-boundary, image-smoke, and security gates"
+  ],
+  "packages": []
+}

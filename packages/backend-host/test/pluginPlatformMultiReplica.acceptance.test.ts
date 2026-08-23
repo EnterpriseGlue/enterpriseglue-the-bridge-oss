@@ -258,6 +258,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
         capabilityCalls += 1;
         response.json(capabilities(fixture.manifest));
       });
+      // lgtm[js/missing-rate-limiting] Ephemeral loopback-only acceptance fixture; production plugin operations are rate-limited by the host gateway before reaching a sidecar.
       sidecar.post('/v1/cases', async (request, response) => {
         operationCalls += 1;
         const claims = await verifyInvocation(
@@ -283,6 +284,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
         }
         response.status(201).json({ caseRef: `case-${operationCalls}` });
       });
+      // lgtm[js/missing-rate-limiting] Ephemeral loopback-only acceptance fixture; production plugin operations are rate-limited by the host gateway before reaching a sidecar.
       sidecar.post('/v1/storage/cursor', async (request, response) => {
         storageOperationCalls += 1;
         const invocationToken = request.header(
@@ -328,6 +330,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
         deniedOperationCalls += 1;
         response.status(500).json({ error: 'must_not_be_called' });
       });
+      // lgtm[js/missing-rate-limiting] Ephemeral loopback-only acceptance fixture; production plugin event delivery is admitted and rate-limited by the host.
       sidecar.post('/v1/events/incidents', async (request, response) => {
         eventCalls += 1;
         const claims = await verifyInvocation(
@@ -364,6 +367,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
           response.json(capabilities(fixture.secondaryManifest));
         },
       );
+      // lgtm[js/missing-rate-limiting] Ephemeral loopback-only acceptance fixture; production plugin operations are rate-limited by the host gateway before reaching a sidecar.
       secondarySidecar.post(
         '/v1/storage/cursor',
         async (request, response) => {

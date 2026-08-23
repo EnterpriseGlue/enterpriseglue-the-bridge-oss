@@ -15,11 +15,20 @@ import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const pluginIdPattern = /^[a-z0-9]+([.-][a-z0-9-]+)+$/;
+const pluginIdPattern = /^[a-z0-9][a-z0-9.-]*[a-z0-9-]$/;
 const storageNamePattern = /^[a-z][a-z0-9-]{0,62}$/;
 const sha256Pattern = /^[a-f0-9]{64}$/;
 const MAX_STORAGE_ENTRIES = 1_000_000;
 const MAX_STORAGE_DEPTH = 64;
+
+function validPluginId(value: string): boolean {
+  return (
+    value.length >= 3 &&
+    pluginIdPattern.test(value) &&
+    !value.includes('..') &&
+    (value.includes('.') || value.includes('-'))
+  );
+}
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -151,7 +160,7 @@ export async function runClusterLifecycleUtilityV1(): Promise<void> {
   const planSha256 = requiredEnvironment(
     'ENTERPRISEGLUE_PLUGIN_PLAN_SHA256',
   );
-  if (!pluginIdPattern.test(pluginId) || !sha256Pattern.test(planSha256)) {
+  if (!validPluginId(pluginId) || !sha256Pattern.test(planSha256)) {
     throw new Error('Lifecycle utility identity is invalid');
   }
   if (executionId.length > 256) {

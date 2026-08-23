@@ -4,7 +4,6 @@ import {
   lstat,
   mkdir,
   open,
-  readFile,
   rename,
   unlink,
   writeFile,
@@ -28,6 +27,7 @@ import type { PluginDeploymentLifecyclePhaseV1 } from './index.js';
 import {
   writePluginDeploymentExecutionObservationV1,
 } from './executionObservation.js';
+import { readBoundedRegularFileV1 } from './secureFile.js';
 
 export const pluginLifecycleExecutionFileName =
   'plugin-lifecycle-execution.json';
@@ -398,9 +398,9 @@ export class FilePluginLifecycleExecutionStoreV1 {
     path: string,
     missingCode: 'execution_not_found' | 'plan_unavailable',
   ): Promise<unknown> {
-    let details;
+    let serialized: string;
     try {
-      details = await lstat(path);
+      serialized = await readBoundedRegularFileV1(path, 1_048_576);
     } catch (error) {
       if (errorCode(error) === 'ENOENT') {
         throw storeError(
@@ -410,20 +410,13 @@ export class FilePluginLifecycleExecutionStoreV1 {
             : 'Lifecycle execution file does not exist',
         );
       }
-      throw error;
-    }
-    if (
-      !details.isFile() ||
-      details.isSymbolicLink() ||
-      details.size > 1_048_576
-    ) {
       throw storeError(
         'store_corrupt',
         'Lifecycle store inputs must be regular non-symlink files of at most 1 MiB',
       );
     }
     try {
-      return JSON.parse(await readFile(path, 'utf8'));
+      return JSON.parse(serialized);
     } catch {
       throw storeError(
         'store_corrupt',
