@@ -13,6 +13,7 @@ import {
   executePluginDiagnosticCollectorStatusBrokerV1,
   executePluginFixedScheduleBrokerV1,
   executePluginNotificationBrokerV1,
+  executePluginReadableEngineAccessBrokerV1,
   executePluginResourceBrokerV1,
   executePluginStorageBrokerV1,
   HostBrokerErrorV1,
@@ -24,6 +25,7 @@ const OPERATION_ID = `${PLUGIN_ID}.analyze`;
 const permissions: PluginPermissionV1[] = [
   'host.identity.read_safe',
   'host.engine.incidents.read_metadata',
+  'host.engine.access.list_safe',
   'host.engine.diagnostics.collect_sanitized',
   'host.plugin_storage.tenant',
   'host.notifications.publish_safe',
@@ -146,6 +148,40 @@ const base = {
 };
 
 describe('host broker runtime', () => {
+  it('derives readable-engine access from signed tenant and subject claims', async () => {
+    const seen: unknown[] = [];
+    await expect(
+      executePluginReadableEngineAccessBrokerV1({
+        ...base,
+        request: {
+          apiVersion: 'engine-access-request.plugin.enterpriseglue.io/v1',
+          callId: 'engine-access-1',
+          operationId: OPERATION_ID,
+          limit: 100,
+        },
+        invocationToken: token(),
+        replayStore: replayStore(),
+        list: async (request, claims) => {
+          seen.push({ request, claims });
+          return {
+            apiVersion: 'engine-access.plugin.enterpriseglue.io/v1',
+            engineRefs: ['engine-1'],
+          };
+        },
+      }),
+    ).resolves.toEqual({
+      apiVersion: 'engine-access.plugin.enterpriseglue.io/v1',
+      engineRefs: ['engine-1'],
+    });
+    expect(seen).toContainEqual(
+      expect.objectContaining({
+        claims: expect.objectContaining({
+          sub: 'subject-1',
+          tenantRef: 'tenant-1',
+        }),
+      }),
+    );
+  });
   it('derives safe identity only from a verified invocation', async () => {
     await expect(
       executePluginIdentityBrokerV1({
@@ -269,6 +305,7 @@ describe('host broker runtime', () => {
       status: 'requires_confirmation',
       filteringBoundary: 'not_applicable',
       rawUploadPermitted: false,
+      evidenceLevel: 'context_only',
     });
     await expect(
       executePluginDiagnosticCollectionBrokerV1({
@@ -284,6 +321,7 @@ describe('host broker runtime', () => {
     ).resolves.toMatchObject({
       status: 'metadata_ready',
       rawUploadPermitted: false,
+      evidenceLevel: 'context_only',
     });
   });
 
@@ -336,6 +374,36 @@ describe('host broker runtime', () => {
       rawUploadPermitted: false,
       consumerContextRef: 'case-1',
       artifactRef: 'artifact-1',
+      evidenceLevel: 'sanitized_window',
+    });
+
+    await expect(
+      executePluginDiagnosticCollectionBrokerV1({
+        ...base,
+        request: {
+          ...request,
+          callId: 'diagnostic-full-log-enabled',
+          mode: 'sanitized_full_log_bundle_confirmed',
+          evidenceLevel: 'full_sanitized_logs',
+          fullLogCollectionConfirmed: true,
+        },
+        invocationToken: token(),
+        replayStore: replayStore(),
+        allowSanitizedBundleAuto: true,
+        collector: {
+          collect: async () => ({
+            intentRef: 'diagnostic-full-safe-1',
+            status: 'sanitized_bundle_ready',
+            filteringBoundary: 'customer_adapter',
+            reasonCode: 'locally_filtered_and_handed_off',
+          }),
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'sanitized_bundle_ready',
+      filteringBoundary: 'customer_adapter',
+      rawUploadPermitted: false,
+      evidenceLevel: 'full_sanitized_logs',
     });
   });
 

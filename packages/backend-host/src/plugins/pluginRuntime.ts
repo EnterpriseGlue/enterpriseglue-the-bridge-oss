@@ -4,6 +4,7 @@ import { dirname, extname, resolve, sep } from 'node:path';
 
 import {
   createPluginPlatformCapabilityCatalogV1,
+  pluginPlatformReleaseIdentityV1,
   parseEnterpriseGluePluginManifestV1,
   ociDigestReferenceSchema,
   pluginDeploymentExecutionObservationV1Schema,
@@ -20,6 +21,7 @@ import {
   type PluginSafeReasonCodeV1,
   type PluginResourceDescriptorV1,
   type PluginResourceBindingV1,
+  type PluginBackendOperationV1,
   type PluginEventTypeV1,
   type PluginPermissionV1,
   type PluginDeploymentExecutionObservationV1,
@@ -51,13 +53,13 @@ import {
   type CompiledPluginOperationSchemaV1,
   type PluginOperationPayloadDirectionV1,
 } from '@enterpriseglue/plugin-runtime/json-schema';
-import { ENGINE_VIEW_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { evaluateResolvedAuthzAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import { DEFAULT_TENANT_ID } from '@enterpriseglue/shared/middleware/tenant.js';
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { isTenantVisibleForAuthz } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import type {
   Express,
   NextFunction,
@@ -107,9 +109,6 @@ const EXECUTION_OBSERVATION_FILE_NAME =
   'plugin-lifecycle-observation.json';
 const MAX_ASSET_BYTES = 20 * 1024 * 1024;
 const DEFAULT_ASSET_ROOT = '/var/lib/enterpriseglue/plugins';
-const DEFAULT_HOST_VERSION = '0.4.6';
-const PLUGIN_SDK_VERSION = '0.2.0';
-const SUPPORTED_PLUGIN_SDK_VERSIONS = ['0.2.0', '0.1.0'] as const;
 const INVOCATION_PRIVATE_KEY_MAX_BYTES = 32 * 1024;
 const CAPABILITY_DOCUMENT_MAX_BYTES = 1024 * 1024;
 const DEFAULT_GATEWAY_RATE_WINDOW_SECONDS = 60;
@@ -229,6 +228,24 @@ export type PluginResourceAuthorizerV1 = (
   input: PluginResourceAuthorizationInputV1,
 ) => Promise<boolean>;
 
+/**
+ * A host-owned projection of a manifest operation into a static FGA action.
+ * The plugin controls neither the subject nor the resource identity.
+ */
+export interface PluginOperationAuthorizationInputV1 {
+  pluginId: PluginId;
+  operationId: string;
+  actionId: string;
+  subjectRef: string;
+  tenantRef?: string;
+  resourceType: 'platform' | 'engine';
+  resourceRef?: string;
+}
+
+export type PluginOperationAuthorizerV1 = (
+  input: PluginOperationAuthorizationInputV1,
+) => Promise<boolean>;
+
 export interface PluginPlatformRouteOptionsV1 {
   gatewayAdmission?: PluginGatewayAdmissionV1;
   gatewayCircuitBreaker?: PluginGatewayCircuitBreakerV1;
@@ -238,6 +255,12 @@ export interface PluginPlatformRouteOptionsV1 {
    * A plugin manifest, frontend, or request cannot provide this callback.
    */
   resourceAuthorizer?: PluginResourceAuthorizerV1;
+  /**
+   * FGA/ABAC authorization for every interactive plugin operation. This is
+   * deliberately separate from `resourceAuthorizer`, which is retained as an
+   * optional additional host policy for resource bindings.
+   */
+  operationAuthorizer?: PluginOperationAuthorizerV1;
   hostBroker?: Partial<PluginHostBrokerRouteOptionsV1>;
   eventDispatcher?: PluginEventDispatcherV1;
   startEventWorker?: boolean;
@@ -338,16 +361,12 @@ export function defaultPluginPlatformCapabilityCatalogV1(): PluginPlatformCapabi
     : (['io.enterpriseglue'] as PluginId[]);
   return createPluginPlatformCapabilityCatalogV1({
     hostVersion:
-      process.env.ENTERPRISEGLUE_HOST_VERSION?.trim() || DEFAULT_HOST_VERSION,
-    sdkVersion: PLUGIN_SDK_VERSION,
-    supportedSdkVersions: SUPPORTED_PLUGIN_SDK_VERSIONS,
-    sharedFrontend: {
-      react: '19.2.6',
-      reactDom: '19.2.6',
-      router: '7.18.1',
-      carbonReact: '1.107.0',
-      pluginSdk: PLUGIN_SDK_VERSION,
-    },
+      process.env.ENTERPRISEGLUE_HOST_VERSION?.trim() ||
+      pluginPlatformReleaseIdentityV1.hostVersion,
+    sdkVersion: pluginPlatformReleaseIdentityV1.sdkVersion,
+    supportedSdkVersions:
+      pluginPlatformReleaseIdentityV1.supportedSdkVersions,
+    sharedFrontend: pluginPlatformReleaseIdentityV1.sharedFrontend,
     egressPolicies: [
       ...csvSet(process.env.ENTERPRISEGLUE_PLUGIN_EGRESS_POLICIES),
     ],
@@ -1046,27 +1065,71 @@ function pluginServiceBaseUrl(
   }`;
 }
 
-async function defaultPluginResourceAuthorizerV1(
-  input: PluginResourceAuthorizationInputV1,
-): Promise<boolean> {
-  if (input.resourceKind !== 'engine') return false;
-  const dataSource = await getDataSource();
-  const engine = await dataSource.getRepository(Engine).findOne({
-    where: { id: input.resourceRef },
-  });
-  if (!engine) return false;
-  if (
-    input.tenantRef &&
-    engine.tenantId &&
-    engine.tenantId !== input.tenantRef
-  ) {
-    return false;
+function operationAuthorizationV1(input: {
+  operation: PluginBackendOperationV1;
+  boundRef?: string;
+}): { actionId: string; resourceType: 'platform' | 'engine'; resourceRef?: string } | null {
+  const declared = input.operation.authorization;
+  if (declared?.resource === 'platform.self') {
+    return {
+      actionId: declared.actionId,
+      resourceType: 'platform',
+    };
   }
-  return engineService.hasEngineAccess(
-    input.subjectRef,
-    input.resourceRef,
-    ENGINE_VIEW_ROLES,
-  );
+  if (declared?.resource === 'engine.binding' && input.boundRef) {
+    return {
+      actionId: declared.actionId,
+      resourceType: 'engine',
+      resourceRef: input.boundRef,
+    };
+  }
+
+  // SDK 0.1/0.2 manifests did not yet declare an end-user action. Preserve
+  // their wire compatibility but make the host choose a conservative static
+  // FGA baseline; a plugin never receives an implicit bypass.
+  if (input.operation.resourceBinding?.kind === 'engine' && input.boundRef) {
+    return {
+      actionId: 'engine.instances.read',
+      resourceType: 'engine',
+      resourceRef: input.boundRef,
+    };
+  }
+  if (!input.operation.resourceBinding) {
+    return {
+      actionId: 'platform.dashboard.read',
+      resourceType: 'platform',
+    };
+  }
+  return null;
+}
+
+async function defaultPluginOperationAuthorizerV1(
+  input: PluginOperationAuthorizationInputV1,
+): Promise<boolean> {
+  if (input.resourceType === 'engine') {
+    if (!input.resourceRef) return false;
+    const dataSource = await getDataSource();
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: input.resourceRef },
+      select: ['id', 'tenantId'],
+    });
+    if (
+      !engine ||
+      !isTenantVisibleForAuthz(engine.tenantId, input.tenantRef)
+    ) {
+      return false;
+    }
+  }
+  const decision = await evaluateResolvedAuthzAction({
+    actionId: input.actionId,
+    userId: input.subjectRef,
+    tenantId: input.tenantRef,
+    resource: {
+      type: input.resourceType,
+      ...(input.resourceRef ? { id: input.resourceRef } : {}),
+    },
+  });
+  return decision.allowed;
 }
 
 async function readInvocationPrivateKey(): Promise<string> {
@@ -1144,7 +1207,8 @@ async function handlePluginOperation(
   control: PluginControlPlaneV1,
   admission: PluginGatewayAdmissionV1,
   circuitBreaker: PluginGatewayCircuitBreakerV1,
-  resourceAuthorizer: PluginResourceAuthorizerV1,
+  operationAuthorizer: PluginOperationAuthorizerV1,
+  resourceAuthorizer: PluginResourceAuthorizerV1 | undefined,
   request: Request,
   response: Response,
 ): Promise<void> {
@@ -1291,9 +1355,32 @@ async function handlePluginOperation(
     response.status(400).json({ error: 'Required resource reference is missing' });
     return;
   }
+  const operationAuthorization = operationAuthorizationV1({
+    operation,
+    ...(boundRef ? { boundRef } : {}),
+  });
+  if (!operationAuthorization) {
+    response.status(403).json({ error: 'Plugin operation is not authorized' });
+    return;
+  }
+  if (
+    !(await operationAuthorizer({
+      pluginId: record.pluginId,
+      operationId,
+      actionId: operationAuthorization.actionId,
+      subjectRef: request.user!.userId,
+      tenantRef: request.tenant?.tenantId,
+      resourceType: operationAuthorization.resourceType,
+      resourceRef: operationAuthorization.resourceRef,
+    }))
+  ) {
+    response.status(403).json({ error: 'Plugin operation is not authorized' });
+    return;
+  }
   if (
     operation.resourceBinding &&
     boundRef &&
+    resourceAuthorizer &&
     !(await resourceAuthorizer({
       pluginId: record.pluginId,
       operationId,
@@ -1698,7 +1785,8 @@ export function registerPluginPlatformRoutes(
       activeControl,
       gatewayAdmission,
       gatewayCircuitBreaker,
-      options.resourceAuthorizer ?? defaultPluginResourceAuthorizerV1,
+      options.operationAuthorizer ?? defaultPluginOperationAuthorizerV1,
+      options.resourceAuthorizer,
       request,
       response,
     ).catch(() => {

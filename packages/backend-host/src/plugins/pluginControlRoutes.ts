@@ -13,7 +13,8 @@ import {
   type PluginSafeReasonCodeV1,
   type PluginPlatformCapabilityCatalogV1,
 } from '@enterpriseglue/plugin-sdk';
-import { requireAdmin, requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import type {
@@ -36,7 +37,17 @@ import type { PluginDiagnosticMetricsRegistryV1 } from './pluginDiagnosticMetric
 import type { PluginEventMetricsRegistryV1 } from './pluginEventMetrics.js';
 
 export interface PluginControlRouteOptionsV1 {
+  /** Optional test or deployment override for every deployment read endpoint. */
+  deploymentReadMiddleware?: RequestHandler[];
+  /** Optional test or deployment override for every deployment mutation endpoint. */
+  deploymentManageMiddleware?: RequestHandler[];
+  /** Optional test or deployment override for every tenant-scoped read endpoint. */
+  tenantReadMiddleware?: RequestHandler[];
+  /** Optional test or deployment override for every tenant-scoped mutation endpoint. */
+  tenantManageMiddleware?: RequestHandler[];
+  /** @deprecated Use deploymentReadMiddleware or deploymentManageMiddleware. */
   deploymentAdminMiddleware?: RequestHandler[];
+  /** @deprecated Use tenantReadMiddleware or tenantManageMiddleware. */
   tenantAdminMiddleware?: RequestHandler[];
   eventOperations?: PluginEventOperationsStoreV1;
   diagnosticMetrics?: Pick<
@@ -52,14 +63,29 @@ export function registerPluginControlRoutesV1(
   control: PluginControlPlaneV1,
   options: PluginControlRouteOptionsV1 = {},
 ): void {
-  const deploymentAdmin =
-    options.deploymentAdminMiddleware ?? [apiLimiter, requireAuth, requireAdmin];
-  const tenantAdmin =
+  const deploymentRead =
+    options.deploymentReadMiddleware ??
+    options.deploymentAdminMiddleware ??
+    [apiLimiter, requireAuth, requireAction('platform.settings.read')];
+  const deploymentManage =
+    options.deploymentManageMiddleware ??
+    options.deploymentAdminMiddleware ??
+    [apiLimiter, requireAuth, requireAction('platform.settings.manage')];
+  const tenantRead =
+    options.tenantReadMiddleware ??
     options.tenantAdminMiddleware ?? [
       apiLimiter,
       requireAuth,
       resolveTenantContext({ required: true }),
-      requireAdmin,
+      requireAction('platform.settings.read'),
+    ];
+  const tenantManage =
+    options.tenantManageMiddleware ??
+    options.tenantAdminMiddleware ?? [
+      apiLimiter,
+      requireAuth,
+      resolveTenantContext({ required: true }),
+      requireAction('platform.settings.manage'),
     ];
   const eventOperations =
     options.eventOperations ?? new DatabasePluginEventDeliveryStoreV1();
@@ -67,7 +93,7 @@ export function registerPluginControlRoutesV1(
   if (options.capabilityCatalog) {
     app.get(
       '/api/plugin-platform/v1/capabilities',
-      ...deploymentAdmin,
+      ...deploymentRead,
       route(async (_request, response) => {
         noStore(response);
         response.json(options.capabilityCatalog);
@@ -76,7 +102,7 @@ export function registerPluginControlRoutesV1(
   }
   app.get(
     '/api/plugin-platform/v1/plugins',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (_request, response) => {
       noStore(response);
       response.json(await control.list());
@@ -84,7 +110,7 @@ export function registerPluginControlRoutesV1(
   );
   app.get(
     '/api/plugin-platform/v1/emergency-control',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (_request, response) => {
       noStore(response);
       response.json(await control.getEmergencyState());
@@ -92,7 +118,7 @@ export function registerPluginControlRoutesV1(
   );
   app.get(
     '/api/plugin-platform/v1/deployment-execution',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (_request, response) => {
       noStore(response);
       response.json(await control.getDeploymentExecution());
@@ -100,7 +126,7 @@ export function registerPluginControlRoutesV1(
   );
   app.put(
     '/api/plugin-platform/v1/emergency-control',
-    ...deploymentAdmin,
+    ...deploymentManage,
     route(async (request, response) => {
       const input = pluginPlatformEmergencyRequestV1Schema.parse(
         request.body,
@@ -119,7 +145,7 @@ export function registerPluginControlRoutesV1(
   );
   app.get(
     '/api/plugin-platform/v1/audit',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (_request, response) => {
       noStore(response);
       response.json(await control.listAudit());
@@ -128,7 +154,7 @@ export function registerPluginControlRoutesV1(
   if (options.diagnosticMetrics) {
     app.get(
       '/api/plugin-platform/v1/metrics/diagnostics',
-      ...deploymentAdmin,
+      ...deploymentRead,
       route(async (_request, response) => {
         noStore(response);
         response.json(options.diagnosticMetrics!.snapshot());
@@ -138,7 +164,7 @@ export function registerPluginControlRoutesV1(
   if (options.eventMetrics) {
     app.get(
       '/api/plugin-platform/v1/metrics/events',
-      ...deploymentAdmin,
+      ...deploymentRead,
       route(async (_request, response) => {
         noStore(response);
         response.json(options.eventMetrics!.snapshot());
@@ -147,7 +173,7 @@ export function registerPluginControlRoutesV1(
   }
   app.get(
     '/api/plugin-platform/v1/events/dead-letters',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (request, response) => {
       const cursor = queryCursor(request);
       const page = await eventOperations.listDeadLetters({
@@ -177,7 +203,7 @@ export function registerPluginControlRoutesV1(
   );
   app.get(
     '/api/plugin-platform/v1/plugins/:pluginId',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (request, response) => {
       noStore(response);
       response.json(
@@ -187,7 +213,7 @@ export function registerPluginControlRoutesV1(
   );
   app.post(
     '/api/plugin-platform/v1/plugins/:pluginId/enable',
-    ...deploymentAdmin,
+    ...deploymentManage,
     route(async (request, response) => {
       const input = pluginEnableRequestV1Schema.parse(request.body);
       noStore(response);
@@ -205,7 +231,7 @@ export function registerPluginControlRoutesV1(
   );
   app.post(
     '/api/plugin-platform/v1/plugins/:pluginId/events/dead-letters/:deliveryId/requeue',
-    ...deploymentAdmin,
+    ...deploymentManage,
     route(async (request, response) => {
       const input = pluginEventDeadLetterRequeueRequestV1Schema.parse(
         request.body,
@@ -236,7 +262,7 @@ export function registerPluginControlRoutesV1(
   );
   app.post(
     '/api/plugin-platform/v1/plugins/:pluginId/disable',
-    ...deploymentAdmin,
+    ...deploymentManage,
     route(async (request, response) => {
       const input = pluginDisableRequestV1Schema.parse(request.body);
       noStore(response);
@@ -255,7 +281,7 @@ export function registerPluginControlRoutesV1(
   );
   app.get(
     '/api/plugin-platform/v1/operations/:operationId',
-    ...deploymentAdmin,
+    ...deploymentRead,
     route(async (request, response) => {
       noStore(response);
       response.json(
@@ -270,7 +296,7 @@ export function registerPluginControlRoutesV1(
     '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement';
   app.get(
     tenantPath,
-    ...tenantAdmin,
+    ...tenantRead,
     route(async (request, response) => {
       noStore(response);
       response.json(
@@ -283,7 +309,7 @@ export function registerPluginControlRoutesV1(
   );
   app.put(
     tenantPath,
-    ...tenantAdmin,
+    ...tenantManage,
     route(async (request, response) => {
       const input = pluginTenantEnablementRequestV1Schema.parse(request.body);
       noStore(response);

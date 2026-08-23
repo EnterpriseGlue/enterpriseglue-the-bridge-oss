@@ -253,6 +253,27 @@ const {
   getAuthzRouteExemption,
   toOpenApiAuthzExemption,
 } = await import('../authz/route-exemptions.js');
+const {
+  pluginDeploymentExecutionObservationV1Schema,
+  pluginDiagnosticMetricsV1Schema,
+  pluginDisableRequestV1Schema,
+  pluginEnableRequestV1Schema,
+  pluginEventDeadLetterListV1Schema,
+  pluginEventDeadLetterRequeueRequestV1Schema,
+  pluginEventDeadLetterRequeueResultV1Schema,
+  pluginEventMetricsV1Schema,
+  pluginLifecycleOperationV1Schema,
+  pluginPlatformAuditListV1Schema,
+  pluginPlatformEmergencyRequestV1Schema,
+  pluginPlatformEmergencyStateV1Schema,
+  pluginSafeListV1Schema,
+  pluginSafeSummaryV1Schema,
+  pluginTenantEnablementRequestV1Schema,
+  pluginTenantEnablementV1Schema,
+} = await import('@enterpriseglue/plugin-sdk/control');
+const {
+  pluginPlatformCapabilityCatalogV1Schema,
+} = await import('@enterpriseglue/plugin-sdk/platform');
 
 function authzExtension(actionId: string, method: string, path: string): Record<string, unknown> {
   const action = getAuthzActionDefinition(actionId);
@@ -268,6 +289,35 @@ function authzExemption(method: string, path: string): Record<string, unknown> {
   if (!exemption) return {};
   return { [AUTHZ_OPENAPI_EXEMPTION_KEY]: toOpenApiAuthzExemption(exemption) };
 }
+
+const PluginControlErrorResponseSchema = z.object({
+  code: z.enum([
+    'plugin_not_found',
+    'operation_not_found',
+    'revision_conflict',
+    'idempotency_conflict',
+    'invalid_state',
+    'tenant_enablement_not_supported',
+    'request_invalid',
+    'access_denied',
+  ]),
+});
+const PluginIdPathSchema = z.object({
+  pluginId: z.string().min(3).max(200),
+});
+const PluginOperationPathSchema = z.object({
+  operationId: z.string().min(1).max(200),
+});
+const PluginDeadLetterPathSchema = PluginIdPathSchema.extend({
+  deliveryId: z.string().min(1).max(200),
+});
+const PluginTenantEnablementPathSchema = PluginIdPathSchema.extend({
+  tenantSlug: z.string().min(1).max(100),
+});
+const PluginDeadLetterQuerySchema = z.object({
+  cursor: z.string().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
 
 const ConfigBootstrapStatusOpenApiSchema = z.object({
   mode: z.enum(['disabled', 'validate', 'apply']),
@@ -2192,6 +2242,159 @@ registry.registerPath({
     200: { description: 'Updated', content: { 'application/json': { schema: SuccessResponseSchema } } },
     400: { description: 'Unsupported runtime authorization mode', content: { 'application/json': { schema: UnsupportedEngineRuntimeAuthorizationModeErrorSchema } } },
     403: { description: 'Governance settings are configuration-locked or the caller lacks permission' },
+  },
+});
+
+// Plugin platform control plane. These are host-owned deployment controls; plugin
+// packages never register or mutate this OpenAPI surface themselves.
+registry.register('PluginControlError', PluginControlErrorResponseSchema);
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/capabilities',
+  summary: 'Read the safe plugin-host capability catalog',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/capabilities'),
+  responses: { 200: { description: 'Safe capability catalog without credentials, registry destinations, or customer content', content: { 'application/json': { schema: pluginPlatformCapabilityCatalogV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/plugins',
+  summary: 'List installed plugin lifecycle state',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/plugins'),
+  responses: { 200: { description: 'Safe installed-plugin summaries', content: { 'application/json': { schema: pluginSafeListV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/plugins/{pluginId}',
+  summary: 'Read one installed plugin lifecycle state',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/plugins/:pluginId'),
+  request: { params: PluginIdPathSchema },
+  responses: {
+    200: { description: 'Safe plugin summary', content: { 'application/json': { schema: pluginSafeSummaryV1Schema } } },
+    404: { description: 'Plugin is not installed', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/emergency-control',
+  summary: 'Read the deployment-wide plugin emergency state',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/emergency-control'),
+  responses: { 200: { description: 'Current emergency state', content: { 'application/json': { schema: pluginPlatformEmergencyStateV1Schema } } } },
+});
+registry.registerPath({
+  method: 'put',
+  path: '/api/plugin-platform/v1/emergency-control',
+  summary: 'Set the deployment-wide plugin emergency state',
+  ...authzExtension('platform.settings.manage', 'PUT', '/api/plugin-platform/v1/emergency-control'),
+  request: { body: { content: { 'application/json': { schema: pluginPlatformEmergencyRequestV1Schema } } } },
+  responses: {
+    200: { description: 'Updated emergency state', content: { 'application/json': { schema: pluginPlatformEmergencyStateV1Schema } } },
+    409: { description: 'Stale revision or conflicting request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/deployment-execution',
+  summary: 'Read a safe deployment-execution observation',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/deployment-execution'),
+  responses: { 200: { description: 'Display-only lifecycle observation without worker, command, path, or cluster details', content: { 'application/json': { schema: pluginDeploymentExecutionObservationV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/audit',
+  summary: 'List safe plugin lifecycle audit events',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/audit'),
+  responses: { 200: { description: 'Payload-free plugin lifecycle audit events', content: { 'application/json': { schema: pluginPlatformAuditListV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/metrics/diagnostics',
+  summary: 'Read sanitized diagnostic collection metrics',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/metrics/diagnostics'),
+  responses: { 200: { description: 'Aggregate metrics without diagnostic content', content: { 'application/json': { schema: pluginDiagnosticMetricsV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/metrics/events',
+  summary: 'Read plugin event-delivery metrics',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/metrics/events'),
+  responses: { 200: { description: 'Aggregate event metrics without event payloads', content: { 'application/json': { schema: pluginEventMetricsV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/events/dead-letters',
+  summary: 'List payload-free plugin event dead letters',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/events/dead-letters'),
+  request: { query: PluginDeadLetterQuerySchema },
+  responses: { 200: { description: 'Safe dead-letter delivery summaries', content: { 'application/json': { schema: pluginEventDeadLetterListV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/operations/{operationId}',
+  summary: 'Read a plugin lifecycle operation',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/operations/:operationId'),
+  request: { params: PluginOperationPathSchema },
+  responses: {
+    200: { description: 'Safe lifecycle operation state', content: { 'application/json': { schema: pluginLifecycleOperationV1Schema } } },
+    404: { description: 'Operation was not found', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/plugin-platform/v1/plugins/{pluginId}/enable',
+  summary: 'Enable an installed plugin at deployment scope',
+  ...authzExtension('platform.settings.manage', 'POST', '/api/plugin-platform/v1/plugins/:pluginId/enable'),
+  request: { params: PluginIdPathSchema, body: { content: { 'application/json': { schema: pluginEnableRequestV1Schema } } } },
+  responses: {
+    200: { description: 'Lifecycle operation accepted', content: { 'application/json': { schema: pluginLifecycleOperationV1Schema } } },
+    404: { description: 'Plugin is not installed', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/plugin-platform/v1/plugins/{pluginId}/disable',
+  summary: 'Disable an installed plugin at deployment scope',
+  ...authzExtension('platform.settings.manage', 'POST', '/api/plugin-platform/v1/plugins/:pluginId/disable'),
+  request: { params: PluginIdPathSchema, body: { content: { 'application/json': { schema: pluginDisableRequestV1Schema } } } },
+  responses: {
+    200: { description: 'Lifecycle operation accepted', content: { 'application/json': { schema: pluginLifecycleOperationV1Schema } } },
+    404: { description: 'Plugin is not installed', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/plugin-platform/v1/plugins/{pluginId}/events/dead-letters/{deliveryId}/requeue',
+  summary: 'Requeue a payload-free plugin event dead letter',
+  ...authzExtension('platform.settings.manage', 'POST', '/api/plugin-platform/v1/plugins/:pluginId/events/dead-letters/:deliveryId/requeue'),
+  request: { params: PluginDeadLetterPathSchema, body: { content: { 'application/json': { schema: pluginEventDeadLetterRequeueRequestV1Schema } } } },
+  responses: {
+    200: { description: 'Dead letter requeued', content: { 'application/json': { schema: pluginEventDeadLetterRequeueResultV1Schema } } },
+    404: { description: 'Plugin or dead letter was not found', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    409: { description: 'The delivery attempt changed before requeue', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement',
+  summary: 'Read tenant plugin enablement',
+  ...authzExtension('platform.settings.read', 'GET', '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: {
+    200: { description: 'Tenant enablement state', content: { 'application/json': { schema: pluginTenantEnablementV1Schema } } },
+    404: { description: 'Plugin is not installed or does not support tenant enablement', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'put',
+  path: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement',
+  summary: 'Set tenant plugin enablement',
+  ...authzExtension('platform.settings.manage', 'PUT', '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement'),
+  request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantEnablementRequestV1Schema } } } },
+  responses: {
+    200: { description: 'Updated tenant enablement state', content: { 'application/json': { schema: pluginTenantEnablementV1Schema } } },
+    404: { description: 'Plugin is not installed or does not support tenant enablement', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
   },
 });
 

@@ -82,6 +82,7 @@ export const pluginPermissionValues = [
   'host.engine.failed_jobs.read_metadata',
   'host.engine.process_instances.read_metadata',
   'host.engine.metadata.read',
+  'host.engine.access.list_safe',
   'host.engine.diagnostics.collect_sanitized',
   'host.events.subscribe.incident',
   'host.events.subscribe.failed_job',

@@ -15,6 +15,7 @@ import {
   type EnterpriseGluePluginManifestV1,
   type PluginResourceDescriptorV1,
 } from '@enterpriseglue/plugin-sdk';
+import { DEFAULT_TENANT_ID } from '@enterpriseglue/shared/middleware/tenant.js';
 import {
   PluginGatewayCircuitBreakerV1,
   PluginGatewayError,
@@ -275,8 +276,10 @@ describe('PluginHostRuntimeV1', () => {
     const capabilities = defaultPluginHostCapabilitiesV1();
 
     expect(catalog.compatibility).toMatchObject({
+      hostVersion: '0.14.0',
       sdkVersion: '0.2.0',
       sharedFrontend: {
+        router: '7.18.2',
         pluginSdk: '0.2.0',
       },
       supportWindow: {
@@ -617,6 +620,7 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async () => true,
     });
 
     await withServer(app, async (baseUrl) => {
@@ -706,6 +710,9 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async (input) =>
+        input.actionId === 'engine.instances.read' &&
+        input.resourceRef === 'engine-allowed',
       resourceAuthorizer: async (input) => {
         authorizationInputs.push(input);
         return input.resourceRef === 'engine-allowed';
@@ -736,7 +743,7 @@ describe('PluginHostRuntimeV1', () => {
         });
         expect(denied.status).toBe(403);
         await expect(denied.json()).resolves.toEqual({
-          error: 'Plugin resource is not accessible',
+          error: 'Plugin operation is not authorized',
         });
 
         const accepted = await fetch(url, {
@@ -753,14 +760,6 @@ describe('PluginHostRuntimeV1', () => {
         });
       });
       expect(authorizationInputs).toEqual([
-        {
-          pluginId,
-          operationId,
-          subjectRef: 'user-1',
-          tenantRef: 'default-tenant-id',
-          resourceKind: 'engine',
-          resourceRef: 'engine-denied',
-        },
         {
           pluginId,
           operationId,
@@ -837,6 +836,7 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async () => true,
     });
     const consoleError = vi
       .spyOn(console, 'error')
@@ -935,6 +935,7 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async () => true,
       gatewayCircuitBreaker: new PluginGatewayCircuitBreakerV1({
         failureThreshold: 1,
         openMs: 60_000,
@@ -986,6 +987,7 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async () => true,
       gatewayAdmission: {
         acquire: async () => {
           acquireCalls += 1;
@@ -1088,6 +1090,7 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async () => true,
       gatewayCircuitBreaker: new PluginGatewayCircuitBreakerV1({
         failureThreshold: 2,
         openMs: 60_000,
@@ -1207,6 +1210,7 @@ describe('PluginHostRuntimeV1', () => {
       host.use(express.json());
       registerPluginPlatformRoutes(host, runtime, control, {
         operationMiddleware: [authenticatedPluginRequest()],
+        operationAuthorizer: async () => true,
         gatewayCircuitBreaker: new PluginGatewayCircuitBreakerV1({
           failureThreshold: 2,
           openMs: 60_000,
@@ -1318,6 +1322,7 @@ describe('PluginHostRuntimeV1', () => {
     app.use(express.json());
     registerPluginPlatformRoutes(app, runtime, control, {
       operationMiddleware: [authenticatedPluginRequest()],
+      operationAuthorizer: async () => true,
     });
     try {
       await withServer(app, async (baseUrl) => {
@@ -1438,7 +1443,7 @@ describe('PluginHostRuntimeV1', () => {
     const now = Date.now();
     const target = {
       deploymentRef: 'oss-deployment',
-      tenantRef: 'default-tenant-id',
+      tenantRef: DEFAULT_TENANT_ID,
       pluginId,
       pluginVersion: version,
       installerRevision: 7,

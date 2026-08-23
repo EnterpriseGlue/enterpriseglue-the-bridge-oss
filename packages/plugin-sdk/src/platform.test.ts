@@ -8,6 +8,7 @@ import {
 import {
   createPluginPlatformCapabilityCatalogV1,
   getPluginPlatformCapabilityCatalogV1JsonSchema,
+  pluginPlatformReleaseIdentityV1,
   safeParsePluginPlatformCapabilityCatalogV1,
 } from './platform.js';
 
@@ -32,7 +33,7 @@ describe('plugin platform capability catalog', () => {
   it('projects every built-in contract and only safe deployment identifiers', () => {
     const value = catalog();
 
-    expect(value.metadata.catalogRevision).toBe('2026-07-27.3');
+    expect(value.metadata.catalogRevision).toBe('2026-08-19.1');
     expect(value.permissions.map((entry) => entry.id)).toEqual(
       pluginPermissionValues,
     );
@@ -89,6 +90,21 @@ describe('plugin platform capability catalog', () => {
     expect(serialized).not.toContain('credentialFile');
     expect(serialized).not.toContain('baseUrl');
     expect(serialized).not.toContain('tenantRef');
+  });
+
+  it('publishes one exact v0.14 release identity', () => {
+    expect(pluginPlatformReleaseIdentityV1).toEqual({
+      hostVersion: '0.14.0',
+      sdkVersion: '0.2.0',
+      supportedSdkVersions: ['0.2.0', '0.1.0'],
+      sharedFrontend: {
+        react: '19.2.6',
+        reactDom: '19.2.6',
+        router: '7.18.2',
+        carbonReact: '1.107.0',
+        pluginSdk: '0.2.0',
+      },
+    });
   });
 
   it('supports an exact host subset without inventing unavailable capabilities', () => {

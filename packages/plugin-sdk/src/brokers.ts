@@ -41,6 +41,29 @@ export const pluginIdentityResponseV1Schema = z
   })
   .strict();
 
+/**
+ * Lists only opaque engine references for which the signed invocation subject
+ * currently has Mission Control read access. Tenant and subject are always
+ * derived by the host from the invocation token and are intentionally not
+ * representable in the request body.
+ */
+export const pluginReadableEngineAccessRequestV1Schema = z
+  .object({
+    apiVersion: z.literal('engine-access-request.plugin.enterpriseglue.io/v1'),
+    ...brokerCallShape,
+    cursor: z.string().regex(/^v1:\d{1,9}$/).optional(),
+    limit: z.number().int().min(1).max(250).default(100),
+  })
+  .strict();
+
+export const pluginReadableEngineAccessResponseV1Schema = z
+  .object({
+    apiVersion: z.literal('engine-access.plugin.enterpriseglue.io/v1'),
+    engineRefs: z.array(opaqueReferenceSchema).max(250),
+    nextCursor: z.string().regex(/^v1:\d{1,9}$/).optional(),
+  })
+  .strict();
+
 const resourceRequestCommon = {
   apiVersion: z.literal('resource-request.plugin.enterpriseglue.io/v1'),
   ...brokerCallShape,
@@ -372,7 +395,34 @@ export const pluginDiagnosticCollectionRequestV1Schema = z
       'failed_job_minimal',
       'engine_health',
     ]),
-    mode: z.enum(['manual', 'metadata_auto', 'sanitized_bundle_auto']),
+    /**
+     * `metadata_auto` is the context-only evidence level. Both log levels are
+     * collected by the deployment-owned adapter; this request can never carry
+     * paths, log bytes, or a handoff destination.
+     */
+    mode: z.enum([
+      'manual',
+      'metadata_auto',
+      'sanitized_bundle_auto',
+      'sanitized_full_log_bundle_confirmed',
+    ]),
+    evidenceLevel: z
+      .enum(['context_only', 'sanitized_window', 'full_sanitized_logs'])
+      .optional(),
+    /**
+     * Optional customer-confirmed UTC window. The deployment-owned collector
+     * may narrow it further but must never expand it. No source path or raw
+     * content is represented here.
+     */
+    timeRange: z
+      .object({
+        startAt: z.string().datetime(),
+        endAt: z.string().datetime(),
+      })
+      .strict()
+      .optional(),
+    /** Required only for the explicit, policy-bounded full-log request. */
+    fullLogCollectionConfirmed: z.literal(true).optional(),
     idempotencyKey: opaqueReferenceSchema,
     /**
      * Optional opaque reference owned by the consuming plugin. The host does
@@ -381,7 +431,74 @@ export const pluginDiagnosticCollectionRequestV1Schema = z
      */
     consumerContextRef: opaqueReferenceSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((request, context) => {
+    const inferredEvidenceLevel =
+      request.mode === 'metadata_auto' || request.mode === 'manual'
+        ? 'context_only'
+        : request.mode === 'sanitized_full_log_bundle_confirmed'
+          ? 'full_sanitized_logs'
+          : 'sanitized_window';
+    const evidenceLevel = request.evidenceLevel ?? inferredEvidenceLevel;
+    const fullLogRequest =
+      request.mode === 'sanitized_full_log_bundle_confirmed' ||
+      evidenceLevel === 'full_sanitized_logs';
+    if (fullLogRequest && request.fullLogCollectionConfirmed !== true) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fullLogCollectionConfirmed'],
+        message: 'Full sanitized log collection requires explicit confirmation',
+      });
+    }
+    if (fullLogRequest && request.mode !== 'sanitized_full_log_bundle_confirmed') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['mode'],
+        message: 'Full sanitized log collection requires its dedicated mode',
+      });
+    }
+    if (
+      !fullLogRequest &&
+      request.fullLogCollectionConfirmed !== undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fullLogCollectionConfirmed'],
+        message: 'Confirmation is only valid for full sanitized log collection',
+      });
+    }
+    if (
+      request.evidenceLevel !== undefined &&
+      request.evidenceLevel !== inferredEvidenceLevel
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['evidenceLevel'],
+        message: 'Evidence level does not match the collection mode',
+      });
+    }
+    if (request.timeRange) {
+      const start = Date.parse(request.timeRange.startAt);
+      const end = Date.parse(request.timeRange.endAt);
+      if (start >= end || end - start > 24 * 60 * 60 * 1_000) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['timeRange'],
+          message: 'Diagnostic time range must be positive and no longer than 24 hours',
+        });
+      }
+    }
+  })
+  .transform((request) => ({
+    ...request,
+    evidenceLevel:
+      request.evidenceLevel ??
+      (request.mode === 'metadata_auto' || request.mode === 'manual'
+        ? 'context_only'
+        : request.mode === 'sanitized_full_log_bundle_confirmed'
+          ? 'full_sanitized_logs'
+          : 'sanitized_window'),
+  }));
 
 export const pluginDiagnosticCollectionResponseV1Schema = z
   .object({
@@ -402,6 +519,10 @@ export const pluginDiagnosticCollectionResponseV1Schema = z
       'not_applicable',
     ]),
     rawUploadPermitted: z.literal(false),
+    /** Present on new host responses; older host responses remain readable. */
+    evidenceLevel: z
+      .enum(['context_only', 'sanitized_window', 'full_sanitized_logs'])
+      .optional(),
     reasonCode: z
       .string()
       .min(1)
@@ -409,6 +530,8 @@ export const pluginDiagnosticCollectionResponseV1Schema = z
       .regex(/^[a-z][a-z0-9_]*$/),
     consumerContextRef: opaqueReferenceSchema.optional(),
     artifactRef: opaqueReferenceSchema.optional(),
+    /** Safe size of the sanitized handoff; raw source size is never exposed. */
+    sanitizedBytes: z.number().int().min(0).max(10 * 1024 * 1024).optional(),
   })
   .strict();
 
@@ -434,7 +557,10 @@ export const pluginDiagnosticCollectorStatusResponseV1Schema = z
       .regex(/^[a-z][a-z0-9_]*$/),
     collectionPermission: z.enum(['granted', 'not_granted']),
     sourceClass: z.enum(['none', 'single', 'multiple']),
-    filteringBoundary: z.literal('enterpriseglue_backend'),
+    filteringBoundary: z.enum([
+      'customer_adapter',
+      'enterpriseglue_backend',
+    ]),
     rawUploadPermitted: z.literal(false),
     browserEditable: z.literal(false),
     checkedAt: z.string().datetime(),
@@ -481,8 +607,9 @@ export const pluginSanitizedDiagnosticBundleV1Schema = z
     nonce: opaqueReferenceSchema,
     contentType: z.literal('text/plain; charset=utf-8'),
     contentSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    contentBytes: z.number().int().min(1).max(256 * 1024),
-    lineCount: z.number().int().min(1).max(100_000),
+    /** Full sanitized-log collection is policy-bounded to 10 MiB. */
+    contentBytes: z.number().int().min(1).max(10 * 1024 * 1024),
+    lineCount: z.number().int().min(1).max(1_000_000),
     redactionSummary: z
       .object({
         secrets: z.number().int().min(0).max(1_000_000),
@@ -491,8 +618,11 @@ export const pluginSanitizedDiagnosticBundleV1Schema = z
         identifiers: z.number().int().min(0).max(1_000_000),
       })
       .strict(),
-    filteringBoundary: z.literal('enterpriseglue_backend'),
-    sanitizedContent: z.string().min(1).max(256 * 1024),
+    filteringBoundary: z.enum([
+      'customer_adapter',
+      'enterpriseglue_backend',
+    ]),
+    sanitizedContent: z.string().min(1).max(10 * 1024 * 1024),
     signingKeyId: safeMetadataCodeSchema,
     signatureAlgorithm: z.literal('Ed25519'),
     signature: z
@@ -667,6 +797,12 @@ export type PluginIdentityRequestV1 = z.infer<
 export type PluginIdentityResponseV1 = z.infer<
   typeof pluginIdentityResponseV1Schema
 >;
+export type PluginReadableEngineAccessRequestV1 = z.infer<
+  typeof pluginReadableEngineAccessRequestV1Schema
+>;
+export type PluginReadableEngineAccessResponseV1 = z.infer<
+  typeof pluginReadableEngineAccessResponseV1Schema
+>;
 export type PluginResourceMetadataRequestV1 = z.infer<
   typeof pluginResourceMetadataRequestV1Schema
 >;
@@ -733,6 +869,11 @@ export interface PluginBrokerClientV1 {
     getMetadata(
       input: PluginResourceMetadataRequestV1,
     ): Promise<PluginResourceMetadataResponseV1>;
+  };
+  engineAccess: {
+    listReadable(
+      input: PluginReadableEngineAccessRequestV1,
+    ): Promise<PluginReadableEngineAccessResponseV1>;
   };
   storage: {
     execute(input: PluginStorageRequestV1): Promise<PluginStorageResponseV1>;

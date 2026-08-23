@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -30,6 +30,7 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^5.0.6",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
     "@google-cloud/spanner": "^8.10.0",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",

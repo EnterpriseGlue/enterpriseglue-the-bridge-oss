@@ -9,6 +9,8 @@ import {
   pluginEventDeliveryV1Schema,
   pluginFixedScheduleRequestV1Schema,
   pluginIdentityRequestV1Schema,
+  pluginReadableEngineAccessRequestV1Schema,
+  pluginReadableEngineAccessResponseV1Schema,
   pluginNotificationPublishRequestV1Schema,
   pluginResourceMetadataRequestV1Schema,
   pluginDiagnosticBundleSignaturePayloadV1,
@@ -58,6 +60,31 @@ describe('closed host broker contracts', () => {
         apiVersion: 'identity-request.plugin.enterpriseglue.io/v1',
         ...common,
         tenantRef: 'caller-selected-tenant',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps readable-engine access host-derived and bounded', () => {
+    expect(
+      pluginReadableEngineAccessRequestV1Schema.parse({
+        apiVersion: 'engine-access-request.plugin.enterpriseglue.io/v1',
+        ...common,
+        limit: 50,
+      }).limit,
+    ).toBe(50);
+    expect(
+      pluginReadableEngineAccessRequestV1Schema.safeParse({
+        apiVersion: 'engine-access-request.plugin.enterpriseglue.io/v1',
+        ...common,
+        tenantRef: 'caller-selected-tenant',
+        subjectRef: 'another-user',
+      }).success,
+    ).toBe(false);
+    expect(
+      pluginReadableEngineAccessResponseV1Schema.safeParse({
+        apiVersion: 'engine-access.plugin.enterpriseglue.io/v1',
+        engineRefs: ['engine-1'],
+        engineEndpoint: 'https://engine.internal',
       }).success,
     ).toBe(false);
   });
@@ -187,6 +214,73 @@ describe('closed host broker contracts', () => {
         mode: 'manual',
         idempotencyKey: 'diagnostic-intent-1',
         rawLogPath: '/var/log/engine.log',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires an explicit confirmation for a policy-bounded full sanitized log', () => {
+    const fullRequest = {
+      apiVersion:
+        'diagnostic-collection-request.plugin.enterpriseglue.io/v1' as const,
+      ...common,
+      engineRef: 'engine-1',
+      trigger: { kind: 'engine' as const },
+      profile: 'engine_health' as const,
+      mode: 'sanitized_full_log_bundle_confirmed' as const,
+      evidenceLevel: 'full_sanitized_logs' as const,
+      idempotencyKey: 'diagnostic-full-log-1',
+    };
+    expect(
+      pluginDiagnosticCollectionRequestV1Schema.safeParse(fullRequest).success,
+    ).toBe(false);
+    expect(
+      pluginDiagnosticCollectionRequestV1Schema.parse({
+        ...fullRequest,
+        fullLogCollectionConfirmed: true,
+      }).evidenceLevel,
+    ).toBe('full_sanitized_logs');
+  });
+
+  it('accepts only a positive diagnostic window of at most 24 hours', () => {
+    const windowedRequest = {
+      apiVersion:
+        'diagnostic-collection-request.plugin.enterpriseglue.io/v1' as const,
+      ...common,
+      engineRef: 'engine-1',
+      trigger: { kind: 'incident' as const, incidentRef: 'incident-1' },
+      profile: 'incident_minimal' as const,
+      mode: 'sanitized_bundle_auto' as const,
+      evidenceLevel: 'sanitized_window' as const,
+      idempotencyKey: 'diagnostic-window-1',
+    };
+    expect(
+      pluginDiagnosticCollectionRequestV1Schema.parse({
+        ...windowedRequest,
+        timeRange: {
+          startAt: '2026-08-19T09:30:00.000Z',
+          endAt: '2026-08-19T10:00:00.000Z',
+        },
+      }).timeRange,
+    ).toEqual({
+      startAt: '2026-08-19T09:30:00.000Z',
+      endAt: '2026-08-19T10:00:00.000Z',
+    });
+    expect(
+      pluginDiagnosticCollectionRequestV1Schema.safeParse({
+        ...windowedRequest,
+        timeRange: {
+          startAt: '2026-08-19T10:00:00.000Z',
+          endAt: '2026-08-19T09:30:00.000Z',
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      pluginDiagnosticCollectionRequestV1Schema.safeParse({
+        ...windowedRequest,
+        timeRange: {
+          startAt: '2026-08-18T09:59:59.000Z',
+          endAt: '2026-08-19T10:00:00.000Z',
+        },
       }).success,
     ).toBe(false);
   });

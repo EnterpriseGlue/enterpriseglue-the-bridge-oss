@@ -42,6 +42,19 @@ const resourceBindingV1Schema = z
   })
   .strict();
 
+/**
+ * End-user authorization is deliberately separate from a plugin's installer
+ * capabilities (`requiredPermissions`). The host resolves this declaration
+ * against its static FGA action registry; plugins cannot invent action IDs or
+ * pass a resource identity other than the host-owned binding.
+ */
+const pluginOperationAuthorizationV1Schema = z
+  .object({
+    actionId: namespacedIdentifierSchema,
+    resource: z.enum(['platform.self', 'engine.binding']),
+  })
+  .strict();
+
 const backendOperationPathSchema = safeRelativePathSchema
   .refine(
     (path) => path.startsWith('v1/'),
@@ -81,6 +94,7 @@ export const pluginBackendOperationV1Schema = z
     responseSchema: schemaReferenceV1Schema,
     requiredPermissions: z.array(pluginPermissionSchema).min(1).max(20),
     resourceBinding: resourceBindingV1Schema.optional(),
+    authorization: pluginOperationAuthorizationV1Schema.optional(),
     maxRequestBytes: z.number().int().min(0).max(100 * 1024 * 1024),
     maxResponseBytes: z.number().int().min(1).max(100 * 1024 * 1024),
     timeoutMs: z.number().int().min(100).max(120_000),
@@ -97,6 +111,28 @@ export const pluginBackendOperationV1Schema = z
         path: ['resourceBinding', 'source'],
         message:
           'GET and DELETE operations must bind resources from the path',
+      });
+    }
+    if (
+      operation.authorization?.resource === 'engine.binding' &&
+      operation.resourceBinding?.kind !== 'engine'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['authorization', 'resource'],
+        message:
+          'engine.binding authorization requires an engine resource binding',
+      });
+    }
+    if (
+      operation.authorization?.resource === 'platform.self' &&
+      operation.resourceBinding
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['authorization', 'resource'],
+        message:
+          'platform.self authorization cannot be paired with a resource binding',
       });
     }
     const pathParameters = operation.path
@@ -193,6 +229,12 @@ const navigationContributionV1Schema = z
     kind: z.literal('navigation'),
     routeId: namespacedIdentifierSchema,
     section: z.enum(['main', 'tenant', 'settings', 'administration']),
+    destination: z
+      .enum(['voyager', 'operations', 'tenant', 'admin'])
+      .optional(),
+    parentDestination: z
+      .enum(['mission-control', 'engines', 'platform-settings', 'plugins'])
+      .optional(),
   })
   .strict();
 
@@ -726,6 +768,7 @@ export type SchemaReferenceV1 = z.infer<typeof schemaReferenceV1Schema>;
 export type SharedFrontendRuntimeV1 = z.infer<typeof sharedFrontendRuntimeV1Schema>;
 export type PluginBackendOperationV1 = z.infer<typeof pluginBackendOperationV1Schema>;
 export type PluginResourceBindingV1 = z.infer<typeof resourceBindingV1Schema>;
+export type PluginOperationAuthorizationV1 = z.infer<typeof pluginOperationAuthorizationV1Schema>;
 export type DeclaredContributionV1 = z.infer<typeof declaredContributionV1Schema>;
 export type PluginContributionAvailabilityDeclarationV1 = z.infer<
   typeof pluginContributionAvailabilityDeclarationV1Schema

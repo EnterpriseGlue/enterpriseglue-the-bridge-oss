@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/backend-host",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "OSS backend host for EnterpriseGlue — Express app, route modules, enterprise loader, and server bootstrap",
   "license": "Apache-2.0",
   "repository": {
@@ -31,7 +31,6 @@
     "csrf-csrf": "^4.0.3",
     "@enterpriseglue/plugin-runtime": "workspace:*",
     "@enterpriseglue/plugin-sdk": "workspace:*",
-    "@enterpriseglue/shared": "workspace:*",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "morgan": "^1.11.0",

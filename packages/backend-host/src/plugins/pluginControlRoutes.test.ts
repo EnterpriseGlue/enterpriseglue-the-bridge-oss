@@ -162,6 +162,45 @@ describe('plugin control routes', () => {
     });
   });
 
+  it('uses the read and manage authorization lanes independently', async () => {
+    const test = fixture();
+    const denyWith = (status: number, lane: string): RequestHandler => (
+      _request,
+      response,
+    ) => response.status(status).json({ lane });
+    const app = express();
+    app.use(express.json());
+    registerPluginControlRoutesV1(app, test.control, {
+      deploymentReadMiddleware: [denyWith(418, 'deployment-read')],
+      deploymentManageMiddleware: [denyWith(419, 'deployment-manage')],
+      tenantReadMiddleware: [denyWith(420, 'tenant-read')],
+      tenantManageMiddleware: [denyWith(421, 'tenant-manage')],
+    });
+
+    await withServer(app, async (baseUrl) => {
+      await expect(
+        fetch(`${baseUrl}/api/plugin-platform/v1/plugins`),
+      ).resolves.toMatchObject({ status: 418 });
+      await expect(
+        fetch(`${baseUrl}/api/plugin-platform/v1/plugins/${pluginId}/disable`, {
+          method: 'POST',
+        }),
+      ).resolves.toMatchObject({ status: 419 });
+      await expect(
+        fetch(
+          `${baseUrl}/t/default/api/plugin-platform/v1/plugins/${pluginId}/enablement`,
+        ),
+      ).resolves.toMatchObject({ status: 420 });
+      await expect(
+        fetch(
+          `${baseUrl}/t/default/api/plugin-platform/v1/plugins/${pluginId}/enablement`,
+          { method: 'PUT' },
+        ),
+      ).resolves.toMatchObject({ status: 421 });
+    });
+    expect(test.sourceReads()).toBe(0);
+  });
+
   it('returns safe state, enforces optimistic mutation, and exposes operation status', async () => {
     const test = fixture();
     const diagnosticMetrics = new PluginDiagnosticMetricsRegistryV1(
@@ -200,7 +239,7 @@ describe('plugin control routes', () => {
       const capabilityBody = await capabilities.json();
       expect(capabilityBody).toMatchObject({
         apiVersion: 'platform-capabilities.plugin.enterpriseglue.io/v1',
-        metadata: { catalogRevision: '2026-07-27.3' },
+        metadata: { catalogRevision: '2026-08-19.1' },
         compatibility: {
           hostVersion: '0.4.6',
           sdkVersion: '0.1.0',

@@ -20,14 +20,14 @@ COPY frontend/package.json frontend/
 # BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
 # concurrent multi-platform builds safely. --frozen-lockfile ensures reproducible installs.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
-    pnpm install --filter webmodeler-backend... --frozen-lockfile
+    pnpm install --frozen-lockfile --filter webmodeler-backend...
 
 # Build OSS packages in dependency order. The backend entry point compiles the
 # backend host into its output, while that host imports the generic plugin SDK
 # and runtime at execution time.
 COPY packages packages
-RUN pnpm --filter shared run build
 RUN pnpm --filter plugin-sdk run build
+RUN pnpm --filter shared run build
 RUN pnpm --filter plugin-runtime run build
 RUN pnpm --filter backend-host run build
 
@@ -53,7 +53,7 @@ COPY frontend/package.json frontend/
 
 # BuildKit cache mount for pnpm store — same rationale as the build stage above.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
-    pnpm install --filter webmodeler-backend... --frozen-lockfile
+    pnpm install --frozen-lockfile --filter webmodeler-backend...
 
 FROM cgr.dev/chainguard/node:latest-dev AS runtime-base
 USER root

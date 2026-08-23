@@ -141,6 +141,8 @@ function validManifest() {
         kind: 'navigation',
         routeId: 'io.enterpriseglue.ion-support.cases-route',
         section: 'tenant',
+        destination: 'voyager',
+        parentDestination: 'mission-control',
       },
       {
         id: 'io.enterpriseglue.ion-support.analyze-incident',
@@ -159,6 +161,10 @@ describe('EnterpriseGluePluginManifestV1', () => {
     expect(parsed.deployment.backend?.operations).toHaveLength(2);
     expect(parsed.events.subscriptions).toHaveLength(1);
     expect(parsed.jobs.fixedSchedules).toEqual([]);
+    expect(parsed.contributions[1]).toMatchObject({
+      destination: 'voyager',
+      parentDestination: 'mission-control',
+    });
   });
 
   it('exports a closed draft 2020-12 structural JSON Schema', () => {
@@ -262,6 +268,42 @@ describe('EnterpriseGluePluginManifestV1', () => {
     expect(
       safeParseEnterpriseGluePluginManifestV1(bodyBoundGet).success,
     ).toBe(false);
+  });
+
+  it('only permits host-owned platform or bound-engine authorization declarations', () => {
+    const platform = validManifest();
+    platform.deployment.backend.operations[0]!.authorization = {
+      actionId: 'platform.dashboard.read',
+      resource: 'platform.self',
+    };
+    expect(safeParseEnterpriseGluePluginManifestV1(platform).success).toBe(true);
+
+    const engine = validManifest();
+    engine.deployment.backend.operations[0]!.path = 'v1/engines/:engineRef/cases';
+    engine.deployment.backend.operations[0]!.resourceBinding = {
+      kind: 'engine',
+      source: 'path',
+      field: 'engineRef',
+    };
+    engine.deployment.backend.operations[0]!.authorization = {
+      actionId: 'engine.instances.read',
+      resource: 'engine.binding',
+    };
+    expect(safeParseEnterpriseGluePluginManifestV1(engine).success).toBe(true);
+
+    const unboundEngine = validManifest();
+    unboundEngine.deployment.backend.operations[0]!.authorization = {
+      actionId: 'engine.instances.read',
+      resource: 'engine.binding',
+    };
+    expect(safeParseEnterpriseGluePluginManifestV1(unboundEngine).success).toBe(false);
+
+    const boundPlatform = engine;
+    boundPlatform.deployment.backend.operations[0]!.authorization = {
+      actionId: 'platform.dashboard.read',
+      resource: 'platform.self',
+    };
+    expect(safeParseEnterpriseGluePluginManifestV1(boundPlatform).success).toBe(false);
   });
 
   it('rejects navigation to an undeclared route', () => {

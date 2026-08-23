@@ -41,7 +41,7 @@ const manifest = parseEnterpriseGluePluginManifestV1({
     publisher: 'io.enterpriseglue',
   },
   compatibility: {
-    host: '>=0.4.0 <0.5.0',
+    host: '>=0.14.0 <0.15.0',
     sdk: '^0.1.0',
     frontendProtocol: 1,
     backendProtocol: 1,
@@ -54,7 +54,7 @@ const manifest = parseEnterpriseGluePluginManifestV1({
       shared: {
         react: '19.2.6',
         reactDom: '19.2.6',
-        router: '7.18.1',
+        router: '7.18.2',
         carbonReact: '1.107.0',
         pluginSdk: '0.1.0',
       },

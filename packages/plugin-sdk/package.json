@@ -65,7 +65,7 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-is": "19.2.6",
-    "react-router-dom": "7.18.1"
+    "react-router-dom": "7.18.2"
   },
   "devDependencies": {
     "@carbon/icons-react": "11.80.0",
@@ -75,7 +75,7 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-is": "19.2.6",
-    "react-router-dom": "7.18.1",
+    "react-router-dom": "7.18.2",
     "typescript": "~5.9.3",
     "vitest": "^4.0.18"
   },

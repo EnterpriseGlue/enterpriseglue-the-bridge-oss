@@ -4,7 +4,7 @@ import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AUTHZ_RESOURCE_RESOLVERS } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { getRuntimeResourceActionDecision, requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { evaluateResolvedAuthzAction, getRuntimeResourceActionDecision, requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -148,6 +148,99 @@ describe('getRuntimeResourceActionDecision', () => {
       engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: ['payments'],
     })).resolves.toEqual({ allowed: false, reason: 'Action decision unavailable for this runtime resource' });
     vi.clearAllMocks();
+  });
+});
+
+describe('evaluateResolvedAuthzAction', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (permissionService.hasPermission as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue(true);
+    (policyService.evaluateGate as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
+  });
+
+  it('evaluates a trusted engine resource through the static action permission and policy', async () => {
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'engine.instances.read',
+      userId: 'user-1',
+      tenantId: 'tenant-a',
+      resource: { type: 'engine', id: 'engine-1' },
+    })).resolves.toEqual({ allowed: true });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'engine:instance:view',
+      expect.objectContaining({
+        userId: 'user-1',
+        tenantId: 'tenant-a',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+      }),
+    );
+    expect(policyService.evaluateGate).toHaveBeenCalledWith(
+      'engine:instance:view',
+      expect.objectContaining({ resourceType: 'engine', resourceId: 'engine-1' }),
+    );
+
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'platform.dashboard.read',
+      userId: 'user-1',
+      resource: { type: 'platform' },
+    })).resolves.toEqual({ allowed: true });
+
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'project.projects.read',
+      userId: 'user-1',
+      tenantId: 'tenant-a',
+      resource: { type: 'project', id: 'project-1' },
+    })).resolves.toEqual({ allowed: true });
+  });
+
+  it('fails closed for a mismatched resource, missing permission, policy denial, and evaluation failure', async () => {
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'platform.dashboard.read',
+      userId: 'user-1',
+      resource: { type: 'engine', id: 'engine-1' },
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'Action resource type is not allowed',
+    });
+
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false);
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'engine.instances.read',
+      userId: 'user-1',
+      resource: { type: 'engine', id: 'engine-1' },
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'Missing permission engine:instance:view',
+    });
+
+    (policyService.evaluateGate as unknown as Mock).mockResolvedValueOnce({
+      decision: 'deny',
+      reason: 'Policy denied this engine',
+    });
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'engine.instances.read',
+      userId: 'user-1',
+      resource: { type: 'engine', id: 'engine-1' },
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'Policy denied this engine',
+    });
+
+    (permissionService.hasPermission as unknown as Mock).mockRejectedValueOnce(
+      new Error('permission service unavailable'),
+    );
+    await expect(evaluateResolvedAuthzAction({
+      actionId: 'engine.instances.read',
+      userId: 'user-1',
+      resource: { type: 'engine', id: 'engine-1' },
+    })).resolves.toEqual({
+      allowed: false,
+      reason: 'Authorization decision unavailable',
+    });
   });
 });
 
@@ -2781,6 +2874,22 @@ describe('requireAction project resource resolvers', () => {
       { user: { userId: 'user-1' }, params: { projectId } } as any, {} as any, projectNext,
     );
     expect(projectNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
+  });
+
+  it('fails closed when the user lacks a resolved platform action permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
+    const next = vi.fn();
+
+    await requireAction('project.files.read', { resourceResolver: 'platform.self' })(
+      { user: { userId: 'user-1' }, params: {} } as any,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 403,
+      message: 'Access denied for action project.files.read',
+    }));
   });
 
   it('uses the first non-empty array value for route resource identifiers', async () => {

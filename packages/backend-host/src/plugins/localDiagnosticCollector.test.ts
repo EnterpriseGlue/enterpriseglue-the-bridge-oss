@@ -105,6 +105,11 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
                 profiles: ['incident_minimal'],
                 maxBytes: 64 * 1024,
                 maxLines: 1_000,
+                fullLogCollection: {
+                  enabled: true,
+                  maxBytes: 10 * 1024 * 1024,
+                  maxLines: 100_000,
+                },
               },
             ],
           },
@@ -156,7 +161,7 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(result).toMatchObject({
       status: 'sanitized_bundle_ready',
-      filteringBoundary: 'enterpriseglue_backend',
+      filteringBoundary: 'customer_adapter',
       reasonCode: 'locally_filtered_and_handed_off',
       consumerContextRef: 'case-1',
       artifactRef: 'artifact-1',
@@ -169,7 +174,7 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
       state: 'ready',
       reasonCode: 'collector_ready',
       sourceClass: 'single',
-      filteringBoundary: 'enterpriseglue_backend',
+      filteringBoundary: 'customer_adapter',
       checkedAt: '2026-07-25T00:00:00.000Z',
     });
     expect(JSON.stringify(status)).not.toContain(logPath);
@@ -221,6 +226,18 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
         Buffer.from(signature, 'base64'),
       ),
     ).toBe(true);
+
+    const fullLogResult = await collector.collect({
+      pluginId,
+      claims: claims(),
+      request: request('full_sanitized_logs'),
+    });
+    expect(fullLogResult).toMatchObject({
+      status: 'sanitized_bundle_ready',
+      filteringBoundary: 'customer_adapter',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(received)).not.toContain(rawValues[0]);
   });
 
   it('fails closed for an engine or profile absent from deployment policy', async () => {
@@ -345,6 +362,64 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
     },
   );
 
+  it('never expands a customer-confirmed diagnostic time window', async () => {
+    let received: PluginSanitizedDiagnosticBundleV1 | undefined;
+    const fetchMock = vi.fn(
+      async (_url: string, init?: { body?: unknown }) => {
+        received = pluginSanitizedDiagnosticBundleV1Schema.parse(
+          JSON.parse(String(init?.body)),
+        );
+        return new Response(
+          JSON.stringify({
+            apiVersion:
+              'sanitized-diagnostic-bundle-receipt.plugin.enterpriseglue.io/v1',
+            bundleRef: received.bundleRef,
+            status: 'accepted',
+            consumerContextRef: received.consumerContextRef,
+            artifactRef: 'artifact-windowed',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      },
+    );
+    const collector = await collectorForSource(
+      'kubernetes_cri_file_tail',
+      [
+        '2026-08-19T09:00:00.000Z stdout F before-window',
+        '2026-08-19T09:45:00.000Z stderr F inside-window password=secret-value',
+        '2026-08-19T09:46:00.000Z stderr F followup-inside-window',
+        '2026-08-19T10:15:00.000Z stdout F after-window',
+      ].join('\n'),
+      fetchMock,
+    );
+
+    await expect(
+      collector.collect({
+        pluginId,
+        claims: claims(),
+        request: {
+          ...request(),
+          timeRange: {
+            startAt: '2026-08-19T09:30:00.000Z',
+            endAt: '2026-08-19T10:00:00.000Z',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'sanitized_bundle_ready',
+      artifactRef: 'artifact-windowed',
+    });
+    expect(received?.sanitizedContent).toContain('inside-window');
+    expect(received?.sanitizedContent).toContain('followup-inside-window');
+    expect(received?.sanitizedContent).toContain('password=<SECRET>');
+    expect(received?.sanitizedContent).not.toContain('before-window');
+    expect(received?.sanitizedContent).not.toContain('after-window');
+    expect(JSON.stringify(received)).not.toContain('secret-value');
+  });
+
   it('rejects a malformed structured source without a handoff', async () => {
     const fetchMock = vi.fn();
     const collector = await collectorForSource(
@@ -450,7 +525,10 @@ function claims(): PluginInvocationClaimsV1 {
   };
 }
 
-function request() {
+function request(
+  evidenceLevel: 'sanitized_window' | 'full_sanitized_logs' =
+    'sanitized_window',
+) {
   return {
     apiVersion:
       'diagnostic-collection-request.plugin.enterpriseglue.io/v1' as const,
@@ -459,7 +537,14 @@ function request() {
     engineRef: 'engine-1',
     trigger: { kind: 'incident' as const, incidentRef: 'incident-1' },
     profile: 'incident_minimal' as const,
-    mode: 'sanitized_bundle_auto' as const,
+    mode:
+      evidenceLevel === 'full_sanitized_logs'
+        ? ('sanitized_full_log_bundle_confirmed' as const)
+        : ('sanitized_bundle_auto' as const),
+    evidenceLevel,
+    ...(evidenceLevel === 'full_sanitized_logs'
+      ? { fullLogCollectionConfirmed: true as const }
+      : {}),
     idempotencyKey: 'diagnostic-intent-1',
     consumerContextRef: 'case-1',
   };

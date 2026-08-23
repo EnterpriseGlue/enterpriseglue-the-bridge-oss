@@ -32,6 +32,7 @@ const MAX_POLICY_BYTES = 1024 * 1024;
 const MAX_CREDENTIAL_BYTES = 32 * 1024;
 const MAX_HANDOFF_RESPONSE_BYTES = 4 * 1024;
 const MAX_SANITIZED_BYTES = 256 * 1024;
+const MAX_FULL_SANITIZED_BYTES = 10 * 1024 * 1024;
 
 type FetchV1 = (
   input: string,
@@ -68,6 +69,27 @@ const sourceSchema = z
       .max(3),
     maxBytes: z.number().int().min(1).max(MAX_SANITIZED_BYTES),
     maxLines: z.number().int().min(1).max(100_000),
+    /**
+     * Full-log collection is opt-in per approved source. The collector rejects
+     * an over-limit file instead of silently sending a partial file as a full
+     * log. Raw bytes still remain inside this customer deployment.
+     */
+    fullLogCollection: z
+      .object({
+        enabled: z.boolean(),
+        maxBytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_FULL_SANITIZED_BYTES),
+        maxLines: z.number().int().min(1).max(1_000_000),
+      })
+      .strict()
+      .default({
+        enabled: false,
+        maxBytes: MAX_FULL_SANITIZED_BYTES,
+        maxLines: 1_000_000,
+      }),
   })
   .strict();
 
@@ -174,6 +196,7 @@ implements PluginDiagnosticCollectorV1 {
       | 'reasonCode'
       | 'consumerContextRef'
       | 'artifactRef'
+      | 'sanitizedBytes'
     >
   > {
     const intentRef = bundleRef(input);
@@ -191,9 +214,19 @@ implements PluginDiagnosticCollectorV1 {
           candidate.profiles.includes(input.request.profile),
       );
       if (!source) throw new Error('collector_source_not_approved');
+      if (
+        input.request.evidenceLevel === 'full_sanitized_logs' &&
+        !source.fullLogCollection.enabled
+      ) {
+        throw new Error('full_log_collection_not_approved');
+      }
       let sanitized: Awaited<ReturnType<typeof collectAndRedact>>;
       try {
-        sanitized = await collectAndRedact(source);
+        sanitized = await collectAndRedact(
+          source,
+          input.request.evidenceLevel,
+          input.request.timeRange,
+        );
       } catch (error) {
         throw classified(error, 'collector_source_processing_failed');
       }
@@ -215,8 +248,9 @@ implements PluginDiagnosticCollectorV1 {
         const result = {
           intentRef,
           status: 'sanitized_bundle_ready' as const,
-          filteringBoundary: 'enterpriseglue_backend' as const,
+          filteringBoundary: 'customer_adapter' as const,
           reasonCode: 'locally_filtered_and_handed_off',
+          sanitizedBytes: sanitized.bytes,
           ...(receipt.consumerContextRef
             ? { consumerContextRef: receipt.consumerContextRef }
             : {}),
@@ -238,7 +272,7 @@ implements PluginDiagnosticCollectorV1 {
       const result = {
         intentRef,
         status: 'rejected' as const,
-        filteringBoundary: 'enterpriseglue_backend' as const,
+        filteringBoundary: 'customer_adapter' as const,
         reasonCode: safeFailureCode(error),
       };
       this.recordCollection(
@@ -272,7 +306,7 @@ implements PluginDiagnosticCollectorV1 {
         state: 'unavailable',
         reasonCode: safeFailureCode(error),
         sourceClass: 'none',
-        filteringBoundary: 'enterpriseglue_backend',
+        filteringBoundary: 'customer_adapter',
         checkedAt,
       });
     }
@@ -284,7 +318,7 @@ implements PluginDiagnosticCollectorV1 {
         state: 'disabled',
         reasonCode: 'collector_policy_disabled',
         sourceClass: 'none',
-        filteringBoundary: 'enterpriseglue_backend',
+        filteringBoundary: 'customer_adapter',
         checkedAt,
       });
     }
@@ -305,7 +339,7 @@ implements PluginDiagnosticCollectorV1 {
         state: 'ready',
         reasonCode: 'collector_ready',
         sourceClass,
-        filteringBoundary: 'enterpriseglue_backend',
+        filteringBoundary: 'customer_adapter',
         checkedAt,
       });
     } catch (error) {
@@ -313,7 +347,7 @@ implements PluginDiagnosticCollectorV1 {
         state: 'degraded',
         reasonCode: safeFailureCode(error),
         sourceClass,
-        filteringBoundary: 'enterpriseglue_backend',
+        filteringBoundary: 'customer_adapter',
         checkedAt,
       });
     }
@@ -490,6 +524,8 @@ async function validateSourceAvailable(
 
 async function collectAndRedact(
   source: PluginCollectorSourceV1,
+  evidenceLevel: PluginDiagnosticCollectionRequestV1['evidenceLevel'],
+  timeRange: PluginDiagnosticCollectionRequestV1['timeRange'],
 ): Promise<{
   content: string;
   bytes: number;
@@ -501,14 +537,26 @@ async function collectAndRedact(
   try {
     const details = await handle.stat();
     if (!details.isFile()) throw new Error('collector_source_invalid');
-    const bytesToRead = Math.min(details.size, source.maxBytes);
+    const fullLog = evidenceLevel === 'full_sanitized_logs';
+    const byteLimit = fullLog
+      ? source.fullLogCollection.maxBytes
+      : source.maxBytes;
+    const lineLimit = fullLog
+      ? source.fullLogCollection.maxLines
+      : source.maxLines;
+    if (fullLog && details.size > byteLimit) {
+      throw new Error('full_log_source_exceeds_policy');
+    }
+    const bytesToRead = fullLog
+      ? details.size
+      : Math.min(details.size, byteLimit);
     const raw = Buffer.alloc(bytesToRead);
     if (bytesToRead > 0) {
       await handle.read(
         raw,
         0,
         bytesToRead,
-        Math.max(0, details.size - bytesToRead),
+        fullLog ? 0 : Math.max(0, details.size - bytesToRead),
       );
     }
     let text: string;
@@ -520,15 +568,22 @@ async function collectAndRedact(
     const bounded = normalizeSourceText(
       source.kind,
       text,
-      details.size === bytesToRead,
-      source.maxLines,
+      fullLog || details.size === bytesToRead,
+      lineLimit,
+      fullLog,
     );
-    const redacted = redact(bounded);
+    const windowed = timeRange
+      ? filterNormalizedLogByTimeRange(bounded, timeRange)
+      : bounded;
+    const redacted = redact(windowed);
     if (containsSensitive(redacted.content)) {
       throw new Error('collector_post_redaction_verification_failed');
     }
     const bytes = Buffer.byteLength(redacted.content, 'utf8');
-    if (bytes > source.maxBytes || bytes > MAX_SANITIZED_BYTES) {
+    if (
+      bytes > byteLimit ||
+      bytes > (fullLog ? MAX_FULL_SANITIZED_BYTES : MAX_SANITIZED_BYTES)
+    ) {
       throw new Error('collector_sanitized_output_too_large');
     }
     return {
@@ -542,20 +597,58 @@ async function collectAndRedact(
   }
 }
 
+function filterNormalizedLogByTimeRange(
+  input: string,
+  timeRange: NonNullable<PluginDiagnosticCollectionRequestV1['timeRange']>,
+): string {
+  const start = Date.parse(timeRange.startAt);
+  const end = Date.parse(timeRange.endAt);
+  let timestampedEvents = 0;
+  let includeContinuation = false;
+  const selected: string[] = [];
+  for (const line of input.split('\n')) {
+    const match = /(?:^|\s)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2}))(?:\s|$)/.exec(
+      line,
+    );
+    if (match) {
+      timestampedEvents += 1;
+      const observed = Date.parse(match[1]!);
+      includeContinuation = observed >= start && observed <= end;
+    }
+    if (includeContinuation) selected.push(line);
+  }
+  if (timestampedEvents === 0) {
+    throw new Error('collector_time_range_unavailable');
+  }
+  if (selected.length === 0) {
+    throw new Error('collector_time_range_empty');
+  }
+  return selected.join('\n');
+}
+
 function normalizeSourceText(
   kind: PluginCollectorSourceV1['kind'],
   input: string,
   startsAtFileStart: boolean,
   maxLines: number,
+  preserveAll: boolean,
 ): string {
   if (kind === 'file_tail') {
-    return input.split(/\r?\n/).slice(-maxLines).join('\n');
+    const lines = input.split(/\r?\n/);
+    if (preserveAll) {
+      if (lines.length > maxLines) throw new Error('full_log_line_limit_exceeded');
+      return input;
+    }
+    return lines.slice(-maxLines).join('\n');
   }
 
   const lines = input.split(/\r?\n/);
   if (!startsAtFileStart) lines.shift();
   if (lines[lines.length - 1] === '') lines.pop();
-  const selected = lines.slice(-maxLines);
+  if (preserveAll && lines.length > maxLines) {
+    throw new Error('full_log_line_limit_exceeded');
+  }
+  const selected = preserveAll ? lines : lines.slice(-maxLines);
   if (selected.length === 0) return '';
 
   if (kind === 'docker_json_file_tail') {
@@ -724,7 +817,7 @@ async function createBundle(input: {
     contentBytes: input.sanitized.bytes,
     lineCount: input.sanitized.lineCount,
     redactionSummary: input.sanitized.summary,
-    filteringBoundary: 'enterpriseglue_backend' as const,
+    filteringBoundary: 'customer_adapter' as const,
     sanitizedContent: input.sanitized.content,
     signingKeyId: input.plugin.signingKeyId,
     signatureAlgorithm: 'Ed25519' as const,

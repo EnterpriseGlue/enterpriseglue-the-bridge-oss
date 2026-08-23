@@ -14,7 +14,26 @@ import {
   type PluginSlotIdV1,
 } from './common.js';
 
-export const pluginPlatformCatalogRevisionV1 = '2026-07-27.3';
+export const pluginPlatformCatalogRevisionV1 = '2026-08-19.1';
+
+/**
+ * Release identity consumed by the OSS host, reference plugin, installer
+ * evidence, and private-plugin compatibility checks. Keeping this alongside
+ * the capability schema prevents product, SDK, and shared-frontend versions
+ * from being assembled independently in different host entry points.
+ */
+export const pluginPlatformReleaseIdentityV1 = {
+  hostVersion: '0.14.0',
+  sdkVersion: '0.2.0',
+  supportedSdkVersions: ['0.2.0', '0.1.0'],
+  sharedFrontend: {
+    react: '19.2.6',
+    reactDom: '19.2.6',
+    router: '7.18.2',
+    carbonReact: '1.107.0',
+    pluginSdk: '0.2.0',
+  },
+} as const;
 
 const minorLineSchema = z
   .string()
@@ -38,6 +57,7 @@ const pluginPermissionCatalogEntryV1Schema = z
     broker: z.enum([
       'identity',
       'engine_metadata',
+      'engine_access',
       'diagnostics',
       'events',
       'plugin_storage',
@@ -292,6 +312,7 @@ const permissionDescriptors: ReadonlyArray<{
   broker:
     | 'identity'
     | 'engine_metadata'
+    | 'engine_access'
     | 'diagnostics'
     | 'events'
     | 'plugin_storage'
@@ -344,6 +365,14 @@ const permissionDescriptors: ReadonlyArray<{
     id: 'host.engine.metadata.read',
     broker: 'engine_metadata',
     scope: 'resource',
+    dataClass: 'safe_metadata',
+    risk: 'medium',
+    grantMode: 'explicit',
+  },
+  {
+    id: 'host.engine.access.list_safe',
+    broker: 'engine_access',
+    scope: 'tenant',
     dataClass: 'safe_metadata',
     risk: 'medium',
     grantMode: 'explicit',

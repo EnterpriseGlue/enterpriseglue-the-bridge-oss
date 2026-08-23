@@ -39,6 +39,20 @@ export interface PluginNavigationContributionV1 {
   label: string;
   routeId: string;
   section: 'main' | 'tenant' | 'settings' | 'administration';
+  /**
+   * Host-approved product area. When omitted, the host keeps the contribution
+   * in its generic Plugins fallback so older plugins remain compatible.
+   */
+  destination?: 'voyager' | 'operations' | 'tenant' | 'admin';
+  /**
+   * Optional host vocabulary used as a placement hint. Plugins cannot create
+   * arbitrary navigation parents.
+   */
+  parentDestination?:
+    | 'mission-control'
+    | 'engines'
+    | 'platform-settings'
+    | 'plugins';
   order?: number;
   icon?: ComponentType<{ size?: number }>;
 }
@@ -51,10 +65,101 @@ export interface PluginSettingsContributionV1 {
   order?: number;
 }
 
+export type PluginSerializableValueV1 =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly PluginSerializableValueV1[]
+  | { readonly [key: string]: PluginSerializableValueV1 };
+
+/**
+ * Safe, serializable identity of the object that launched a contextual flow.
+ * Product-specific payloads, variables, stack traces, and credentials do not
+ * belong here; plugins retrieve any additionally authorized data through a
+ * declared broker operation.
+ */
+export interface PluginContextualFlowSourceContextV1 {
+  schemaVersion: 1;
+  objectType:
+    | 'engine'
+    | 'process-instance'
+    | 'incident'
+    | 'failed-job'
+    | 'batch';
+  objectRef: string;
+  engineRef?: string;
+  tenantRef?: string;
+  displayName?: string;
+  product?: string;
+  productVersion?: string;
+}
+
+/** Host vocabulary needed to restore the surface that launched the flow. */
+export interface PluginContextualFlowReturnContextV1 {
+  schemaVersion: 1;
+  surface:
+    | 'engine-detail'
+    | 'process-instance'
+    | 'incident-detail'
+    | 'failed-job-detail'
+    | 'batch-detail'
+    | 'plugin-route';
+  objectRef?: string;
+}
+
+export type PluginContextualFlowLifecycleReasonV1 =
+  | 'opened'
+  | 'closed'
+  | 'cancelled'
+  | 'replaced'
+  | 'completed'
+  | 'returned';
+
+export interface PluginContextualFlowRenderContextV1 {
+  sourceContext: Readonly<PluginContextualFlowSourceContextV1>;
+  returnContext?: Readonly<PluginContextualFlowReturnContextV1>;
+  close(): void;
+  back(): void;
+  complete(): void;
+}
+
+export interface PluginContextualFlowRequestV1 {
+  /** Must be namespaced by the active plugin ID. */
+  flowId: string;
+  title: string;
+  sourceContext: PluginContextualFlowSourceContextV1;
+  returnContext?: PluginContextualFlowReturnContextV1;
+  backLabel?: string;
+  render(context: PluginContextualFlowRenderContextV1): ReactNode;
+  onLifecycle?(event: {
+    reason: PluginContextualFlowLifecycleReasonV1;
+    flowId: string;
+  }): void;
+}
+
+/**
+ * A controller is bound to one plugin contribution by the host. Ownership is
+ * enforced by the host, so one plugin cannot replace or close another
+ * plugin's active flow.
+ */
+export interface PluginContextualFlowControllerV1 {
+  open(request: PluginContextualFlowRequestV1): boolean;
+  close(reason?: 'closed' | 'cancelled' | 'completed'): void;
+  back(): void;
+}
+
 export interface PluginSlotBaseContextV1 {
   schemaVersion: 1;
   disabled: boolean;
   tenantRef?: string;
+  /** Optional host-approved display label; never an unrestricted payload. */
+  displayName?: string;
+  /** Optional normalized product family such as operaton or enterpriseglue. */
+  product?: string;
+  /** Optional installed product version visible to the current operator. */
+  productVersion?: string;
+  contextualFlow?: PluginContextualFlowControllerV1;
 }
 
 export interface MissionControlIncidentActionContextV1
@@ -82,6 +187,13 @@ export interface MissionControlEngineActionContextV1
   extends PluginSlotBaseContextV1 {
   slot: 'mission-control.engine.actions.v1';
   engineRef: string;
+  /**
+   * A safe projection of the host's most recent connection check. It contains
+   * no endpoint, credential, error payload, or timing data. Plugins can use it
+   * only to make a contextual action more helpful (for example, offering to
+   * analyse a disconnected engine).
+   */
+  engineConnection?: 'connected' | 'disconnected' | 'unknown';
 }
 
 export interface MissionControlEngineTabContextV1
@@ -232,6 +344,12 @@ export interface FrontendPluginHostContextV1 {
   };
   navigation: {
     toContribution(contributionId: string, params?: Record<string, string>): void;
+    /**
+     * Returns to the browser location that opened a contextual plugin surface.
+     * This intentionally has no arbitrary-path argument: plugins cannot use
+     * the host navigation API to discover or compose privileged host routes.
+     */
+    back?(): void;
   };
   notifications: {
     show(input: {

@@ -215,7 +215,9 @@ function assertActivationValid(
       (runtime.kind === 'navigation' &&
         declared.kind === 'navigation' &&
         runtime.routeId === declared.routeId &&
-        runtime.section === declared.section) ||
+        runtime.section === declared.section &&
+        runtime.destination === declared.destination &&
+        runtime.parentDestination === declared.parentDestination) ||
       (runtime.kind === 'slot' &&
         declared.kind === 'slot' &&
         runtime.slot === declared.slot) ||

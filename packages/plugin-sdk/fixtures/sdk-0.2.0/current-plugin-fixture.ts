@@ -28,7 +28,7 @@ export const manifestFixture = parseEnterpriseGluePluginManifestV1({
     publisher: 'io.enterpriseglue',
   },
   compatibility: {
-    host: '>=0.4.6 <0.5.0',
+    host: '>=0.14.0 <0.15.0',
     sdk: '^0.2.0',
     frontendProtocol: 1,
     backendProtocol: 1,
@@ -41,7 +41,7 @@ export const manifestFixture = parseEnterpriseGluePluginManifestV1({
       shared: {
         react: '19.2.6',
         reactDom: '19.2.6',
-        router: '7.18.1',
+        router: '7.18.2',
         carbonReact: '1.107.0',
         pluginSdk: '0.2.0',
       },
@@ -88,13 +88,13 @@ export const manifestFixture = parseEnterpriseGluePluginManifestV1({
 
 export const platformCatalogFixture =
   createPluginPlatformCapabilityCatalogV1({
-    hostVersion: '0.4.6',
+    hostVersion: '0.14.0',
     sdkVersion: '0.2.0',
     supportedSdkVersions: ['0.2.0', '0.1.0'],
     sharedFrontend: {
       react: '19.2.6',
       reactDom: '19.2.6',
-      router: '7.18.1',
+      router: '7.18.2',
       carbonReact: '1.107.0',
       pluginSdk: '0.2.0',
     },

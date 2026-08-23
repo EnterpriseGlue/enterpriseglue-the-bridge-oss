@@ -110,6 +110,14 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
     reason: 'Authenticated UI clients need non-secret platform settings before resource-specific authorization decisions.',
   },
   {
+    method: 'GET',
+    route: '/t/:tenantSlug/api/plugins/v1/frontend',
+    kind: 'auth-only',
+    risk: 'low',
+    owner: 'plugin-platform',
+    reason: 'Authenticated tenant UI clients may load only the signed, tenant-enabled frontend contribution bootstrap. It contains no customer artifacts or authorization grant; every contextual action and plugin operation remains independently FGA-enforced.',
+  },
+  {
     method: 'POST',
     route: '/api/auth/reset-password',
     kind: 'auth-only',

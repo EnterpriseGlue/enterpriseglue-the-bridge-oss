@@ -10,6 +10,8 @@ import {
   pluginFixedScheduleResponseV1Schema,
   pluginIdentityRequestV1Schema,
   pluginIdentityResponseV1Schema,
+  pluginReadableEngineAccessRequestV1Schema,
+  pluginReadableEngineAccessResponseV1Schema,
   pluginNotificationPublishRequestV1Schema,
   pluginNotificationPublishResponseV1Schema,
   pluginResourceMetadataRequestV1Schema,
@@ -19,6 +21,8 @@ import {
   type EnterpriseGluePluginManifestV1,
   type PluginId,
   type PluginIdentityResponseV1,
+  type PluginReadableEngineAccessRequestV1,
+  type PluginReadableEngineAccessResponseV1,
   type PluginInvocationClaimsV1,
   type PluginDiagnosticCollectionRequestV1,
   type PluginDiagnosticCollectionResponseV1,
@@ -39,6 +43,7 @@ import {
 } from './gateway.js';
 
 const IDENTITY_PERMISSION = 'host.identity.read_safe' as const;
+const ENGINE_ACCESS_PERMISSION = 'host.engine.access.list_safe' as const;
 const DIAGNOSTIC_PERMISSION =
   'host.engine.diagnostics.collect_sanitized' as const;
 const NOTIFICATION_PERMISSION = 'host.notifications.publish_safe' as const;
@@ -112,6 +117,18 @@ export interface ExecuteResourceBrokerInputV1
     request: PluginResourceMetadataRequestV1,
     claims: PluginInvocationClaimsV1,
   ) => Promise<PluginResourceMetadataResponseV1 | undefined>;
+}
+
+export interface ExecuteReadableEngineAccessBrokerInputV1
+  extends Omit<
+    HostBrokerInvocationInputV1,
+    'operationId' | 'callId' | 'requiredPermission' | 'tenantRequired'
+  > {
+  request: unknown;
+  list: (
+    request: PluginReadableEngineAccessRequestV1,
+    claims: PluginInvocationClaimsV1,
+  ) => Promise<PluginReadableEngineAccessResponseV1>;
 }
 
 export type PluginStorageStoreInputV1 = PluginStorageRequestV1 & {
@@ -364,6 +381,33 @@ export async function executePluginResourceBrokerV1(
   return parsedResult.data;
 }
 
+export async function executePluginReadableEngineAccessBrokerV1(
+  input: ExecuteReadableEngineAccessBrokerInputV1,
+): Promise<PluginReadableEngineAccessResponseV1> {
+  const parsed = pluginReadableEngineAccessRequestV1Schema.safeParse(
+    input.request,
+  );
+  if (!parsed.success) {
+    throw new HostBrokerErrorV1(400, 'request_invalid');
+  }
+  const request = parsed.data;
+  const claims = await verifyBrokerInvocationV1({
+    ...input,
+    operationId: request.operationId,
+    callId: request.callId,
+    requiredPermission: ENGINE_ACCESS_PERMISSION,
+    tenantRequired: true,
+  });
+  try {
+    return pluginReadableEngineAccessResponseV1Schema.parse(
+      await input.list(request, claims),
+    );
+  } catch (error) {
+    if (error instanceof HostBrokerErrorV1) throw error;
+    throw new HostBrokerErrorV1(503, 'plugin_unavailable');
+  }
+}
+
 function assertJsonStorageValue(value: unknown): void {
   let serialized: string | undefined;
   try {
@@ -510,7 +554,7 @@ export async function executePluginDiagnosticCollectionBrokerV1(
       ...(request.consumerContextRef
         ? { consumerContextRef: request.consumerContextRef }
         : {}),
-    });
+    }, 'context_only');
   }
   if (request.mode === 'metadata_auto') {
     return diagnosticResponse({
@@ -521,7 +565,7 @@ export async function executePluginDiagnosticCollectionBrokerV1(
       ...(request.consumerContextRef
         ? { consumerContextRef: request.consumerContextRef }
         : {}),
-    });
+    }, 'context_only');
   }
   if (!input.allowSanitizedBundleAuto) {
     return diagnosticResponse({
@@ -532,7 +576,7 @@ export async function executePluginDiagnosticCollectionBrokerV1(
       ...(request.consumerContextRef
         ? { consumerContextRef: request.consumerContextRef }
         : {}),
-    });
+    }, request.evidenceLevel);
   }
   if (!input.collector) {
     return diagnosticResponse({
@@ -543,7 +587,7 @@ export async function executePluginDiagnosticCollectionBrokerV1(
       ...(request.consumerContextRef
         ? { consumerContextRef: request.consumerContextRef }
         : {}),
-    });
+    }, request.evidenceLevel);
   }
   const result = await input.collector.collect({
     pluginId: input.record.pluginId,
@@ -557,7 +601,7 @@ export async function executePluginDiagnosticCollectionBrokerV1(
   ) {
     throw new HostBrokerErrorV1(503, 'plugin_unavailable');
   }
-  return diagnosticResponse(result);
+  return diagnosticResponse(result, request.evidenceLevel);
 }
 
 export async function executePluginNotificationBrokerV1(
@@ -703,13 +747,16 @@ function diagnosticResponse(
     | 'reasonCode'
     | 'consumerContextRef'
     | 'artifactRef'
+    | 'sanitizedBytes'
   >,
+  evidenceLevel: 'context_only' | 'sanitized_window' | 'full_sanitized_logs',
 ): PluginDiagnosticCollectionResponseV1 {
   return pluginDiagnosticCollectionResponseV1Schema.parse({
     apiVersion:
       'diagnostic-collection-result.plugin.enterpriseglue.io/v1',
     ...result,
     rawUploadPermitted: false,
+    evidenceLevel,
   });
 }
 
