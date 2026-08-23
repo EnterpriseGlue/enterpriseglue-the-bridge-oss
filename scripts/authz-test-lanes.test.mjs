@@ -211,6 +211,9 @@ test('the pull-request workflow retains browser and database evidence when autho
 test('the CodeQL gate queries every alert for the pull request instead of an unindexed merge SHA', () => {
   assert.match(codeqlWorkflow, /--paginate/);
   assert.match(codeqlWorkflow, /-F pr="\$\{PR_NUMBER\}"/);
+  assert.match(codeqlWorkflow, /MERGE_GROUP_HEAD_REF: \$\{\{ github\.event\.merge_group\.head_ref \|\| '' \}\}/);
+  assert.match(codeqlWorkflow, /\(\^\|\/\)pr-\(\[0-9\]\+\)-/);
+  assert.match(codeqlWorkflow, /GITHUB_EVENT_NAME.*merge_group/);
   assert.match(codeqlWorkflow, /-f tool_name=CodeQL/);
   assert.match(codeqlWorkflow, /jq -s 'map\(length\) \| add \/\/ 0'/);
   assert.doesNotMatch(codeqlWorkflow, /ref=\$\{GITHUB_SHA\}/);
