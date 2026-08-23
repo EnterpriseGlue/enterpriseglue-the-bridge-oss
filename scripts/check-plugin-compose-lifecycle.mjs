@@ -42,9 +42,9 @@ const registryName = `eg-plugin-compose-registry-${process.pid}`;
 const registryPort = Number(
   process.env.EG_PLUGIN_COMPOSE_REGISTRY_PORT ?? '5004',
 );
-const zotImage =
+const registryImage =
   process.env.EG_PLUGIN_COMPOSE_REGISTRY_IMAGE ??
-  'ghcr.io/project-zot/zot-minimal@sha256:892f2a5a63dd99bdf85320fee5448506119328a6d5e1a2d14d4db876be595236';
+  'registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e';
 let createdNetwork = false;
 let registryStarted = false;
 const publishedImages = [];
@@ -91,7 +91,7 @@ async function startRegistry() {
     registryName,
     '--publish',
     `127.0.0.1:${registryPort}:5000`,
-    zotImage,
+    registryImage,
   ]);
   registryStarted = true;
   const registry = `127.0.0.1:${registryPort}`;
@@ -139,16 +139,14 @@ function publishImage(localImage, repository) {
 function buildAndPublishImage(dockerfile, repository) {
   const tag = `${repository}:compose-lifecycle`;
   docker([
-    'buildx',
     'build',
-    '--provenance=true',
     '--file',
     dockerfile,
     '--tag',
     tag,
-    '--push',
     '.',
   ]);
+  docker(['push', tag]);
   return resolvePublishedImage(tag, repository);
 }
 
