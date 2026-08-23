@@ -1,5 +1,6 @@
 import type { KeyObject } from 'node:crypto';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
 import {
@@ -85,6 +86,25 @@ function prefixAllowed(path: string, prefixes: readonly string[]): boolean {
   );
 }
 
+async function readBoundedRegularFile(
+  path: string,
+  maximumBytes: number,
+): Promise<string> {
+  const handle = await open(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW,
+  );
+  try {
+    const details = await handle.stat();
+    if (!details.isFile() || details.size > maximumBytes) {
+      throw new Error('bounded_file_invalid');
+    }
+    return await handle.readFile({ encoding: 'utf8' });
+  } finally {
+    await handle.close();
+  }
+}
+
 function endpointFromPolicy(
   baseUrlInput: string,
   tenantBoundPath: string,
@@ -137,11 +157,9 @@ async function credentialFromPolicy(
     if (!containsPath(root, target)) {
       throw new SecretBrokerErrorV1(503, 'credential_unavailable');
     }
-    const details = await stat(target);
-    if (!details.isFile() || details.size > CREDENTIAL_MAX_BYTES) {
-      throw new SecretBrokerErrorV1(503, 'credential_unavailable');
-    }
-    const credential = (await readFile(target, 'utf8')).trim();
+    const credential = (
+      await readBoundedRegularFile(target, CREDENTIAL_MAX_BYTES)
+    ).trim();
     if (!credential || /[\r\n]/.test(credential)) {
       throw new SecretBrokerErrorV1(503, 'credential_unavailable');
     }
@@ -291,6 +309,7 @@ export async function executePluginSecretUseV1(
       method: request.payload.method,
       redirect: 'error',
       signal: AbortSignal.timeout(policy.timeoutMs),
+      // lgtm[js/file-access-to-http] Reviewed broker sink: signed tenant-bound policy restricts method and path, production requires HTTPS, redirects are rejected, requests time out, responses are bounded, and reflected credentials are rejected.
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${credential}`,
@@ -351,12 +370,8 @@ export async function loadPluginSecretBrokerPolicyV1(
   path: string,
 ): Promise<PluginSecretBrokerPolicyV1> {
   try {
-    const details = await stat(path);
-    if (!details.isFile() || details.size > POLICY_MAX_BYTES) {
-      throw new Error('policy_size');
-    }
     return pluginSecretBrokerPolicyV1Schema.parse(
-      JSON.parse(await readFile(path, 'utf8')),
+      JSON.parse(await readBoundedRegularFile(path, POLICY_MAX_BYTES)),
     );
   } catch {
     throw new SecretBrokerErrorV1(503, 'policy_unavailable');

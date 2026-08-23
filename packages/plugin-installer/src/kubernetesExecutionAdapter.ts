@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
   lstat,
-  readFile,
   realpath,
 } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
@@ -32,6 +31,7 @@ import {
   type ClusterCommandPortV1,
   type ClusterCommandResultV1,
 } from './kubernetesExecutionStore.js';
+import { readBoundedRegularFileV1 } from './secureFile.js';
 
 const MAX_CLUSTER_INPUT_BYTES = 8 * 1024 * 1024;
 const kubernetesNamePattern =
@@ -1500,17 +1500,6 @@ export class KubernetesPluginLifecyclePhaseAdapterV1
   }
 
   private async readBoundedJson(path: string): Promise<unknown> {
-    const details = await lstat(path).catch(() => undefined);
-    if (
-      !details?.isFile() ||
-      details.isSymbolicLink() ||
-      details.size > MAX_CLUSTER_INPUT_BYTES
-    ) {
-      throw new KubernetesLifecycleErrorV1(
-        'cluster_state_invalid',
-        'Cluster lifecycle input must be a bounded regular file',
-      );
-    }
     const outputReal = await realpath(this.outputDirectory);
     const pathReal = await realpath(path);
     if (!contained(outputReal, pathReal)) {
@@ -1519,7 +1508,19 @@ export class KubernetesPluginLifecyclePhaseAdapterV1
         'Cluster lifecycle input escaped its output directory',
       );
     }
-    return JSON.parse(await readFile(path, 'utf8'));
+    try {
+      return JSON.parse(
+        await readBoundedRegularFileV1(
+          pathReal,
+          MAX_CLUSTER_INPUT_BYTES,
+        ),
+      );
+    } catch {
+      throw new KubernetesLifecycleErrorV1(
+        'cluster_state_invalid',
+        'Cluster lifecycle input must be a bounded regular JSON file',
+      );
+    }
   }
 }
 

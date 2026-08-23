@@ -5,7 +5,6 @@ import {
   chmod,
   lstat,
   mkdir,
-  readFile,
   realpath,
   rename,
   unlink,
@@ -26,6 +25,7 @@ import type {
   PluginLifecyclePhaseAdapterV1,
   PluginLifecyclePhaseExecutionContextV1,
 } from './executionRunner.js';
+import { readBoundedRegularFileV1 } from './secureFile.js';
 import {
   parsePluginInstallerStateV1,
   pluginComposeServiceNameV1,
@@ -996,18 +996,11 @@ export class ComposePluginLifecyclePhaseAdapterV1
     path: string,
     context: PluginLifecyclePhaseExecutionContextV1,
   ): Promise<boolean> {
-    let details;
+    let serialized: string;
     try {
-      details = await lstat(path);
+      serialized = await readBoundedRegularFileV1(path, 64 * 1024);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-      throw error;
-    }
-    if (
-      !details.isFile() ||
-      details.isSymbolicLink() ||
-      details.size > 64 * 1024
-    ) {
       throw new ComposeLifecycleAdapterErrorV1(
         'compose_receipt_invalid',
         'Compose lifecycle receipt is not a bounded regular file',
@@ -1015,7 +1008,7 @@ export class ComposePluginLifecyclePhaseAdapterV1
     }
     let receipt: ComposePhaseReceiptV1;
     try {
-      receipt = JSON.parse(await readFile(path, 'utf8'));
+      receipt = JSON.parse(serialized);
     } catch {
       throw new ComposeLifecycleAdapterErrorV1(
         'compose_receipt_invalid',
@@ -1059,19 +1052,10 @@ export class ComposePluginLifecyclePhaseAdapterV1
   }
 
   private async readBoundedJson(path: string): Promise<unknown> {
-    const details = await lstat(path).catch(() => undefined);
-    if (
-      !details?.isFile() ||
-      details.isSymbolicLink() ||
-      details.size > MAX_STATE_BYTES
-    ) {
-      throw new ComposeLifecycleAdapterErrorV1(
-        'compose_state_invalid',
-        'Compose lifecycle input must be a bounded regular non-symlink file',
-      );
-    }
     try {
-      return JSON.parse(await readFile(path, 'utf8'));
+      return JSON.parse(
+        await readBoundedRegularFileV1(path, MAX_STATE_BYTES),
+      );
     } catch {
       throw new ComposeLifecycleAdapterErrorV1(
         'compose_state_invalid',

@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import {
   lstat,
-  readFile,
-  realpath,
   rename,
   unlink,
   writeFile,
@@ -34,6 +32,7 @@ import { pluginLifecycleExecutionFileName } from './executionStore.js';
 import {
   writePluginDeploymentExecutionObservationV1,
 } from './executionObservation.js';
+import { readBoundedRegularFileV1 } from './secureFile.js';
 
 const MAX_CLUSTER_COMMAND_OUTPUT = 4 * 1024 * 1024;
 const MAX_CLUSTER_STATE_BYTES = 512 * 1024;
@@ -381,21 +380,14 @@ export class KubernetesPluginLifecycleExecutionStoreV1
   }
 
   async readPlan(): Promise<PluginLifecyclePlanEnvelopeV1> {
-    const details = await lstat(this.planPath).catch(() => undefined);
-    if (
-      !details?.isFile() ||
-      details.isSymbolicLink() ||
-      details.size > MAX_CLUSTER_STATE_BYTES
-    ) {
-      throw new PluginLifecycleExecutionError(
-        'plan_unavailable',
-        'Cluster lifecycle plan must be a bounded regular file',
-      );
-    }
-    await realpath(this.planPath);
     let input: unknown;
     try {
-      input = JSON.parse(await readFile(this.planPath, 'utf8'));
+      input = JSON.parse(
+        await readBoundedRegularFileV1(
+          this.planPath,
+          MAX_CLUSTER_STATE_BYTES,
+        ),
+      );
     } catch {
       throw new PluginLifecycleExecutionError(
         'plan_unavailable',
