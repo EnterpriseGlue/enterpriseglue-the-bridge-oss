@@ -52,19 +52,19 @@
     {
       "name": "@enterpriseglue/backend-host",
       "previousVersion": "0.4.0",
-      "newVersion": "0.5.0",
+      "newVersion": "0.5.1",
       "impact": "minor"
     },
     {
       "name": "@enterpriseglue/plugin-installer",
       "previousVersion": null,
-      "newVersion": "0.1.0",
+      "newVersion": "0.1.1",
       "impact": "initial"
     },
     {
       "name": "@enterpriseglue/plugin-runtime",
       "previousVersion": null,
-      "newVersion": "0.1.0",
+      "newVersion": "0.1.1",
       "impact": "initial"
     }
   ]
