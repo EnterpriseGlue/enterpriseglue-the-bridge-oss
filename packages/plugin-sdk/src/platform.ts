@@ -14,7 +14,7 @@ import {
   type PluginSlotIdV1,
 } from './common.js';
 
-export const pluginPlatformCatalogRevisionV1 = '2026-08-19.1';
+export const pluginPlatformCatalogRevisionV1 = '2026-08-24.1';
 
 /**
  * Release identity consumed by the OSS host, reference plugin, installer
@@ -23,7 +23,7 @@ export const pluginPlatformCatalogRevisionV1 = '2026-08-19.1';
  * from being assembled independently in different host entry points.
  */
 export const pluginPlatformReleaseIdentityV1 = {
-  hostVersion: '0.14.0',
+  hostVersion: '0.15.0',
   sdkVersion: '0.2.0',
   supportedSdkVersions: ['0.2.0', '0.1.0'],
   sharedFrontend: {

@@ -10,9 +10,9 @@
     "operators",
     "developers"
   ],
-  "summary": "Adds an OSS-native, isolated Plugin Manager for safe connected and offline installation, lifecycle recovery, compatibility preflight, and Carbon administration workflows.",
+  "summary": "Adds an OSS-native, isolated Plugin Manager for verified connected and offline installation planning, approved install and update execution, GitOps reconciliation, and Carbon administration workflows.",
   "userImpact": [
-    "Administrators can discover, review, install, update, recover, disable, and uninstall compatible plugins without building proprietary plugin source or maintaining customer-side CI.",
+    "Administrators can discover, review, install, update, retry, or cancel compatible plugin changes without building proprietary plugin source or maintaining customer-side CI.",
     "Connected and air-gapped installations use the same digest-pinned signed release and lifecycle contracts.",
     "Registry, entitlement, and deployment credentials remain outside the browser and ordinary EnterpriseGlue backend."
   ],
@@ -20,7 +20,7 @@
     "required": false,
     "instructions": [
       "Deploy the optional Plugin Manager workload and configure its workload identity, trust policy, and deployment adapter before using managed plugin installation.",
-      "Run plugin host-upgrade preflight before upgrading installations that already have plugins."
+      "Keep the v0.14 eg-plugin CLI available for rollback and uninstall while those operations remain outside the v0.15 manager intent protocol."
     ]
   },
   "configuration": [
@@ -31,7 +31,7 @@
   "api": {
     "compatibility": "additive",
     "changes": [
-      "Adds versioned product discovery, installation intent, review, approval, observation, manager capability, and host-upgrade preflight contracts.",
+      "Adds versioned product discovery, installation intent, review, approval, observation, manager capability, release, and offline-delivery contracts.",
       "Adds authorized browser-facing Plugin Manager administration endpoints and an internal pull-based manager protocol."
     ]
   },
@@ -50,10 +50,14 @@
     "The manager is an internal-only isolated workload; ordinary backend and browser processes do not receive registry or deployment credentials."
   ],
   "documentation": [
-    "Architecture and end-to-end implementation plan: `docs/architecture/18-native-plugin-manager-and-customer-installation-plan.md`"
+    "Architecture and end-to-end implementation plan: `docs/architecture/18-native-plugin-manager-and-customer-installation-plan.md`",
+    "Connected, offline, backup, recovery, and host-upgrade operations: `docs/runbooks/plugin-manager-operations.md`",
+    "Private ION pre-release compatibility receipt: `docs/evidence/plugin-manager-v0.15/private-ion-pre-release-qualification.md`"
   ],
   "knownLimitations": [
-    "The enterpriseglue.ai commercial marketplace is deferred; v0.15 uses static/imported product descriptors and administrator-provided connected or offline delivery configuration."
+    "The enterpriseglue.ai commercial marketplace is deferred; v0.15 uses static/imported product descriptors and administrator-provided connected or offline delivery configuration.",
+    "The v0.15 manager protocol executes install and upgrade intents. Runtime enable/disable remains in the existing host controls, and rollback, export, and uninstall remain available through the retained v0.14 eg-plugin CLI until a later manager protocol version adds complete data-disposition and prior-release authority.",
+    "Whole-deployment host-upgrade preflight is not exposed by the v0.15 manager. Operators must run the existing compatibility-matrix verification before a host upgrade."
   ],
   "rollback": [
     "Disable the Plugin Manager workload to return to the v0.14 CLI/operator-managed lifecycle path.",
@@ -63,9 +67,9 @@
   "validation": [
     "Contract schema and frozen compatibility fixtures",
     "Manager restart, lease expiry, idempotent recovery, approval-digest, and revision-conflict tests",
-    "Connected OCI and physical air-gap installation, update, rollback, and uninstall tests",
-    "Carbon keyboard, accessibility, responsive, and deterministic screenshot coverage",
-    "Current/previous host and plugin compatibility matrix with Compose, Kubernetes, OpenShift, supported database, and multi-architecture qualification"
+    "Connected OCI and signed offline install/update resolution, import, digest-plan binding, and fail-closed verification tests",
+    "Carbon component, authorization, paging, responsive, and deterministic screenshot coverage",
+    "Compose and Kubernetes/OpenShift adapter tests, clean-database migration, package boundary, image boundary, and release-policy gates"
   ],
   "packages": [
     {
@@ -78,6 +82,12 @@
       "name": "@enterpriseglue/plugin-sdk",
       "previousVersion": "0.2.0",
       "newVersion": "0.3.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/plugin-runtime",
+      "previousVersion": "0.1.1",
+      "newVersion": "0.2.0",
       "impact": "minor"
     },
     {

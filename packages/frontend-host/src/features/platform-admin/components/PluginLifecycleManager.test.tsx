@@ -109,9 +109,10 @@ describe('PluginLifecycleManager', () => {
     ).toBeVisible();
     expect(screen.getByText('No deployment changes yet')).toBeVisible();
     fireEvent.click(
-      screen
-        .getAllByRole('button', { name: 'Create review' })
-        .find((button) => !button.hasAttribute('disabled'))!,
+      within(screen.getByRole('dialog', { name: 'Add ION Support' })).getByRole(
+        'button',
+        { name: 'Create review' },
+      ),
     );
 
     await waitFor(() =>
@@ -154,9 +155,9 @@ describe('PluginLifecycleManager', () => {
     expect(await screen.findByRole('button', { name: 'Review update' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Review update' }));
     fireEvent.click(
-      screen
-        .getAllByRole('button', { name: 'Create review' })
-        .find((button) => !button.hasAttribute('disabled'))!,
+      within(
+        screen.getByRole('dialog', { name: 'Update ION Support' }),
+      ).getByRole('button', { name: 'Create review' }),
     );
 
     await waitFor(() =>
@@ -167,6 +168,138 @@ describe('PluginLifecycleManager', () => {
           currentEnabled: true,
         }),
       ),
+    );
+  });
+
+  it('creates an offline intent without uploading artifact bytes', async () => {
+    render(
+      <PluginLifecycleManager
+        canManage
+        installedPlugins={[]}
+        platformRevision={9}
+        installedContent={<p>Installed plugin controls</p>}
+      />,
+    );
+
+    await screen.findByText('ION Support');
+    fireEvent.click(screen.getByRole('button', { name: 'Add offline delivery' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Plugin ID' }), {
+      target: { value: 'io.enterpriseglue.ion-support' },
+    });
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Immutable release reference' }),
+      { target: { value: releaseDigest } },
+    );
+    fireEvent.click(
+      within(
+        screen.getByRole('dialog', { name: 'Add offline delivery' }),
+      ).getByRole('button', { name: 'Create review' }),
+    );
+
+    await waitFor(() =>
+      expect(api.createPluginInstallation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pluginId: 'io.enterpriseglue.ion-support',
+          release: releaseDigest,
+          source: 'offline_delivery',
+          deploymentMode: 'compose_planner',
+          expectedPlatformRevision: 9,
+        }),
+      ),
+    );
+    expect(api.createPluginInstallation.mock.calls[0]?.[0]).not.toHaveProperty(
+      'artifact',
+    );
+  });
+
+  it('renders all review sections and rejects the exact revision-bound digests', async () => {
+    const finding = {
+      status: 'pass' as const,
+      reasonCode: 'none' as const,
+      summary: 'Verified.',
+    };
+    api.listPluginInstallations.mockResolvedValue({
+      total: 1,
+      items: [
+        {
+          intent: {
+            apiVersion: 'installation-intent.plugin.enterpriseglue.io/v1',
+            kind: 'EnterpriseGluePluginInstallationIntent',
+            installationId: 'installation-review-1',
+            pluginId: 'io.enterpriseglue.ion-support',
+            release: releaseDigest,
+            operation: 'install',
+            source: 'offline_delivery',
+            deploymentMode: 'compose_planner',
+            requesterRef: 'user-1',
+            expectedPlatformRevision: 9,
+            idempotencyKey: 'review-test-1',
+            requestedAt: '2026-08-24T00:00:00.000Z',
+          },
+          state: 'awaiting_approval',
+          reasonCode: 'approval_required',
+          revision: 3,
+          review: {
+            apiVersion: 'install-review.plugin.enterpriseglue.io/v1',
+            kind: 'EnterpriseGluePluginInstallReview',
+            installationId: 'installation-review-1',
+            pluginId: 'io.enterpriseglue.ion-support',
+            version: '1.1.0',
+            release: releaseDigest,
+            planSha256: '2'.repeat(64),
+            reviewSha256: '3'.repeat(64),
+            platformRevision: 9,
+            generatedAt: '2026-08-24T00:00:00.000Z',
+            expiresAt: '2026-08-24T01:00:00.000Z',
+            identity: finding,
+            compatibility: finding,
+            permissionsAndData: {
+              ...finding,
+              status: 'warning',
+              summary: 'Data may leave the deployment.',
+            },
+            infrastructure: finding,
+            migrationAndRollback: finding,
+            entitlement: finding,
+            entitlementState: 'active',
+            rollbackClass: 'stateless',
+            requestedPermissions: [],
+            materialChanges: ['initial-install'],
+            approvable: true,
+          },
+          approval: null,
+          latestObservation: null,
+          updatedAt: '2026-08-24T00:00:01.000Z',
+        },
+      ],
+    });
+    api.decidePluginInstallation.mockResolvedValue({ status: 'recorded' });
+
+    render(
+      <PluginLifecycleManager
+        canManage
+        installedPlugins={[]}
+        platformRevision={9}
+        installedContent={<p>Installed plugin controls</p>}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Installation activity' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review details' }));
+    expect(screen.getAllByRole('button', { name: /^\d\. / })).toHaveLength(7);
+    fireEvent.click(screen.getByRole('button', { name: '7. Final digest approval' }));
+    expect(screen.getByText('2'.repeat(64))).toBeVisible();
+    expect(screen.getByText('3'.repeat(64))).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+
+    await waitFor(() =>
+      expect(api.decidePluginInstallation).toHaveBeenCalledWith({
+        installationId: 'installation-review-1',
+        decision: 'reject',
+        reviewSha256: '3'.repeat(64),
+        planSha256: '2'.repeat(64),
+        expectedRevision: 3,
+      }),
     );
   });
 

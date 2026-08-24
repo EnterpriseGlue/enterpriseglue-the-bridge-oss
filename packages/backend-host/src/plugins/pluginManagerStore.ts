@@ -451,8 +451,9 @@ export class DatabasePluginManagerStoreV1 implements PluginManagerStoreV1 {
 
   async latestCapability(): Promise<PluginManagerCapabilityV1 | null> {
     const source = await this.dataSourceProvider();
-    const record = await source.getRepository(PluginManagerCapability).findOne({
+    const [record] = await source.getRepository(PluginManagerCapability).find({
       order: { lastSeenAt: 'DESC', managerId: 'ASC' },
+      take: 1,
     });
     return record
       ? parseJson(record.capabilityJson, pluginManagerCapabilityV1Schema)

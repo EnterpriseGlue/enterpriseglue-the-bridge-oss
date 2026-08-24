@@ -61,6 +61,28 @@ async function advertiseReadyManager(
 }
 
 describe('DatabasePluginManagerStoreV1', () => {
+  it('returns the most recently observed manager without an unbounded findOne query', async () => {
+    const store = await fixture();
+    await advertiseReadyManager(store, ['compose_planner']);
+    await store.advertiseCapability({
+      apiVersion: 'manager-capability.plugin.enterpriseglue.io/v1',
+      kind: 'EnterpriseGluePluginManagerCapability',
+      managerId: 'manager-002',
+      managerVersion: '0.2.0',
+      protocolVersions: ['v1'],
+      deploymentModes: ['kubernetes'],
+      architectures: ['amd64'],
+      operations: ['plan', 'install'],
+      state: 'ready',
+      observedAt: '2026-08-24T00:00:01.000Z',
+    });
+
+    await expect(store.latestCapability()).resolves.toMatchObject({
+      managerId: 'manager-002',
+      managerVersion: '0.2.0',
+    });
+  });
+
   it('persists revision-bound claim, review, approval, and safe observation', async () => {
     const store = await fixture();
     const intent = {
@@ -192,6 +214,7 @@ describe('DatabasePluginManagerStoreV1', () => {
       installationId: 'install-002',
       pluginId: 'io.enterpriseglue.example',
       release,
+      operation: 'install',
       source: 'static_catalog',
       deploymentMode: 'compose_planner',
       requesterRef: 'user-001',
@@ -224,6 +247,7 @@ describe('DatabasePluginManagerStoreV1', () => {
       installationId: 'install-recovery-001',
       pluginId: 'io.enterpriseglue.example',
       release,
+      operation: 'install' as const,
       source: 'connected_registry' as const,
       deploymentMode: 'kubernetes' as const,
       requesterRef: 'user-001',
@@ -238,7 +262,7 @@ describe('DatabasePluginManagerStoreV1', () => {
 
     const failed = { ...intent, installationId: 'install-recovery-002', idempotencyKey: 'installation-recovery-002' };
     await store.createIntent(failed);
-    const source = sources.at(-1)!;
+    const source = sources[sources.length - 1]!;
     await source.getRepository(PluginInstallationIntent).update(
       { installationId: failed.installationId },
       { state: 'failed', reasonCode: 'staging_failed', revision: 4 },

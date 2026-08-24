@@ -1,6 +1,6 @@
 # Native Plugin Manager and Customer Installation Plan
 
-Status: proposed implementation plan
+Status: implementation and release ledger
 
 Foundation release: EnterpriseGlue OSS `v0.14.0`
 
@@ -49,6 +49,13 @@ This allows `v0.14.0` to remain a bounded platform release while preventing the 
 customer experience from depending permanently on a multi-command operator workflow.
 
 ## Customer outcomes
+
+The list below is the complete target architecture. The v0.15 release boundary is intentionally
+narrower: manager intent v1 covers install/upgrade, retry/cancel, and the common connected/offline
+review flow. Runtime enable/disable stays in the host controls; rollback/export/uninstall and
+host-upgrade matrix verification keep the v0.14-compatible CLI fallback until their missing
+authority and data-disposition inputs are modeled in a later protocol. See the
+[operator runbook](../runbooks/plugin-manager-operations.md).
 
 When this plan is complete, a customer will be able to:
 
@@ -591,16 +598,16 @@ flowchart TD
 
 ## Phase 0: ship and freeze the v0.14 foundation
 
-- [ ] Merge the source-container and compatibility-contract fixes before the Release Please PR.
-- [ ] Release OSS `v0.14.0` with generic plugin host, SDK, runtime, installer and CLI.
-- [ ] Publish signed installer and runtime/RBAC chart digests.
-- [ ] Record public release receipts, SBOM, provenance, scans and trust policy.
-- [ ] Verify read-only non-publisher pull access and signed air-gap toolchain export/import.
-- [ ] Mark the plugin platform as foundation/developer-ready, not paid-plugin GA.
+- [x] Merge the source-container and compatibility-contract fixes before the Release Please PR.
+- [x] Release OSS `v0.14.0` with generic plugin host, SDK, runtime, installer and CLI.
+- [x] Publish signed installer and runtime/RBAC chart digests.
+- [x] Record public release receipts, SBOM, provenance, scans and trust policy.
+- [x] Verify read-only non-publisher pull access and signed air-gap toolchain export/import.
+- [x] Mark the plugin platform as foundation/developer-ready, not paid-plugin GA.
 
 Acceptance:
 
-- [ ] A customer-like environment can install the public reference plugin with the CLI without
+- [x] A customer-like environment can install the public reference plugin with the CLI without
   source, Node.js, customer CI, or a rebuilt OSS image.
 
 ## Phase 1: finalize canonical contracts
@@ -617,33 +624,33 @@ Acceptance:
 
 Acceptance:
 
-- [ ] One signed release record drives CLI, manager, UI, GitOps and offline verification.
+- [x] One signed release record drives CLI, manager, UI, GitOps and offline verification.
 
 ## Phase 2: implement the native manager core
 
-- [ ] Create `packages/plugin-manager` for orchestration/domain logic.
-- [ ] Create a minimal manager service entry point and health/readiness endpoints.
-- [ ] Compose existing installer verification, planner, execution store and phase runner.
-- [ ] Implement workload identity and pull-based intent lease protocol.
-- [ ] Implement plan-digest approval gate and idempotent recovery.
-- [ ] Implement safe review and observation projection.
-- [ ] Add TypeORM entities/migrations for intents, approvals and safe audit.
-- [ ] Add manager capability handshake and version-skew policy.
-- [ ] Package one multi-architecture manager image with no plugin-specific code.
+- [x] Create `packages/plugin-manager` for orchestration/domain logic.
+- [x] Create a minimal manager service entry point and health/readiness endpoints.
+- [x] Compose existing installer verification, planner, execution store and phase runner.
+- [x] Implement workload identity and pull-based intent lease protocol.
+- [x] Implement plan-digest approval gate and idempotent recovery.
+- [x] Implement safe review and observation projection.
+- [x] Add TypeORM entities/migrations for intents, approvals and safe audit.
+- [x] Add manager capability handshake and version-skew policy.
+- [x] Package one multi-architecture manager image with no plugin-specific code.
 
 Acceptance:
 
-- [ ] A restarted manager resumes an exact execution without repeating completed effects or
+- [x] A restarted manager resumes an exact execution without repeating completed effects or
   accepting a changed plan.
 
 ## Phase 3: connected OCI installation
 
-- [ ] Add manager-only registry/trust/CA/proxy configuration.
-- [ ] Integrate existing `install-oci` acquisition with the intent protocol.
-- [ ] Verify Cosign identity, signed release, provenance, evidence and artifact closure.
-- [ ] Add bounded retry/cleanup and no-retry security failures.
-- [ ] Add Compose planner, managed Compose and Kubernetes/OpenShift adapters.
-- [ ] Stage disabled, verify readiness/capabilities, then await enablement.
+- [x] Add manager-only registry/trust/CA/proxy configuration.
+- [x] Integrate existing `install-oci` acquisition with the intent protocol.
+- [x] Verify Cosign identity, signed release, provenance, evidence and artifact closure.
+- [x] Add bounded retry/cleanup and no-retry security failures.
+- [x] Add Compose planner, managed Compose and Kubernetes/OpenShift adapters.
+- [x] Stage disabled, verify readiness/capabilities, then await enablement.
 - [ ] Add upgrade, rollback, disable and uninstall-with-retain/export/delete.
 - [ ] Preserve exact prior artifacts and receipts for rollback.
 
@@ -654,13 +661,13 @@ Acceptance:
 
 ## Phase 4: offline delivery
 
-- [ ] Define signed `.egdelivery` outer inventory and bounded media types.
-- [ ] Reuse the existing signed package, air-gap index and OCI-layout validation.
-- [ ] Add manager intake directory and CLI import; do not relay archives through the backend.
-- [ ] Verify all content before local-registry import and verify destination digests afterward.
-- [ ] Include trust rotation, revocation, compatibility, entitlement and documentation snapshots.
+- [x] Define signed `.egdelivery` outer inventory and bounded media types.
+- [x] Reuse the existing signed package, air-gap index and OCI-layout validation.
+- [x] Add manager intake directory and CLI import; do not relay archives through the backend.
+- [x] Verify all content before local-registry import and verify destination digests afterward.
+- [x] Include trust rotation, revocation, compatibility, entitlement and documentation snapshots.
 - [ ] Add offline renewal and delta delivery formats.
-- [ ] Test registries that may not preserve OCI referrers; retain signed explicit evidence inventory.
+- [x] Test registries that may not preserve OCI referrers; retain signed explicit evidence inventory.
 - [ ] Enforce zero public egress in the air-gapped profile.
 
 Acceptance:
@@ -670,15 +677,17 @@ Acceptance:
 
 ## Phase 5: Carbon UI, FGA and customer workflow
 
-- [ ] Add Available, Installed, Updates and Installation activity routes/tables.
-- [ ] Add connected registry planning and discovered-offline-delivery entry points.
-- [ ] Implement the seven-section install review and exact-digest approval.
-- [ ] Add compatibility, entitlement, manager and release status semantics.
-- [ ] Add recovery actions for retry, rollback, cancel and manual intervention.
-- [ ] Add static catalog/install/read/approve FGA actions and default deployment-admin mapping.
-- [ ] Enforce authorization in both host route and manager claim admission.
-- [ ] Add complete Carbon spacing, typography, responsive, keyboard, RTL and reduced-motion tests.
-- [ ] Capture deterministic screenshot coverage for every state.
+- [x] Add Available, Installed, Updates and Installation activity routes/tables.
+- [x] Add connected registry planning and discovered-offline-delivery entry points.
+- [x] Implement the seven-section install review and exact-digest approval.
+- [x] Add compatibility, entitlement, manager and release status semantics.
+- [ ] Add manager recovery actions for rollback and manual intervention; retry/cancel are complete.
+- [x] Map catalog/read to `platform.settings.read` and intent/approval/recovery to
+  `platform.settings.manage`, preserving the v0.13 fine-grained deployment-admin model.
+- [x] Enforce authorization in both host route and manager claim admission.
+- [ ] Complete RTL and reduced-motion browser tests; Carbon component, spacing, responsive,
+  keyboard semantics and deterministic viewport checks are complete.
+- [x] Capture deterministic screenshot coverage for the v0.15 manager states.
 
 Acceptance:
 
@@ -688,13 +697,13 @@ Acceptance:
 ## Phase 6: update management, host preflight and GitOps
 
 - [ ] Implement host-upgrade preflight across all installed plugins.
-- [ ] Implement explicit plugin update graph and material-diff policy.
-- [ ] Keep manual commercial-plugin approval as the default.
+- [x] Implement explicit plugin update graph and material-diff policy.
+- [x] Keep manual commercial-plugin approval as the default.
 - [ ] Add maintenance-window, canary and health-gated promotion hooks.
-- [ ] Add declarative `PluginInstallation` reconciliation.
-- [ ] Make UI, CLI and GitOps produce the same plan digest and audit events.
-- [ ] Preserve host startup by disabling incompatible plugins rather than failing the host.
-- [ ] Add deprecation, withdrawal, security revocation, and replacement-release behavior.
+- [x] Add declarative `PluginInstallation` reconciliation.
+- [x] Make UI, CLI and GitOps converge on the same manager plan digest and audit records.
+- [x] Preserve host startup by disabling incompatible plugins rather than failing the host.
+- [x] Add deprecation, withdrawal, security revocation, and replacement-release behavior.
 
 Acceptance:
 
@@ -703,13 +712,17 @@ Acceptance:
 
 ## Phase 7: private ION Support qualification
 
+- [x] Run the private bundle, release-safety, entitlement-state, current/previous SDK coexistence,
+  deterministic-navigation and independent-disable pre-release qualification against the local
+  v0.15 OSS packages without copying private source into OSS.
 - [ ] Replace local OSS package links with exact released dependencies.
 - [ ] Publish a clean signed ION release from its protected private repository.
 - [ ] Produce exact `v0.15.0` Compose, Kubernetes, OpenShift, connected and offline evidence.
 - [ ] Exercise entitlement active, trial, grace, expired, revoked and unavailable states.
 - [ ] Verify customer-side diagnostic filtering and no raw-log browser/manager access.
 - [ ] Verify install, enable, incident/question flows, upgrade, rollback, export and uninstall.
-- [ ] Verify private source and commercial material remain absent from OSS images and repository.
+- [x] Verify private source and commercial material remain absent from OSS source/package closure;
+  production-image boundary is repeated after final images are built.
 - [ ] Repeat current/previous host and current/previous plugin matrix tests.
 
 Acceptance:
@@ -725,7 +738,7 @@ Acceptance:
 - [ ] Run interrupted download, manager restart, lease expiry, failed migration and recovery drills.
 - [ ] Run key rotation, catalog expiry, stale revocation and security-revoked artifact drills.
 - [ ] Run least-privilege, cross-tenant, sibling-plugin and unauthorized-engine negative tests.
-- [ ] Publish operator, backup/restore, rollback, offline renewal and incident runbooks.
+- [x] Publish operator, backup/restore, rollback, offline renewal and incident runbooks.
 - [ ] Release OSS `v0.15.0`, manager image and charts through protected CI.
 - [ ] Record signed customer-like acceptance evidence before labeling paid plugins generally
   available.

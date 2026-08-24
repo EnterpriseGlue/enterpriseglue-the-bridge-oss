@@ -177,7 +177,18 @@
 }
 
 .eg-plugin-management__table {
+  min-inline-size: 0;
   margin: 0;
+}
+
+.eg-plugin-management__table .cds--data-table-content {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.eg-plugin-management__table .cds--data-table {
+  min-inline-size: 52rem;
 }
 
 .eg-plugin-management__table .cds--data-table th,
@@ -377,7 +388,17 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 42rem) {
+@media (max-width: 52rem) {
+  .eg-plugin-management__table::before {
+    display: block;
+    padding: var(--spacing-3) var(--spacing-4);
+    color: var(--cds-text-secondary);
+    background: var(--cds-layer-01);
+    content: 'Scroll horizontally to review every column.';
+    font-size: var(--text-12);
+    line-height: 1rem;
+  }
+
   .eg-plugin-manager__panel-toolbar,
   .eg-plugin-manager__review-heading {
     align-items: stretch;
@@ -391,6 +412,10 @@
   .eg-plugin-manager__toolbar-actions,
   .eg-plugin-manager__toolbar-actions .cds--btn {
     inline-size: 100%;
+  }
+
+  .eg-plugin-manager__toolbar-actions .cds--btn {
+    max-inline-size: none;
   }
 
   .eg-plugin-manager__summary-list > div {

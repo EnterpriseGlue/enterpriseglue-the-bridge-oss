@@ -338,14 +338,36 @@ const PluginInstallationQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
-const PluginInstallationCreateSchema = pluginInstallationIntentV1Schema.pick({
-  pluginId: true,
-  release: true,
-  source: true,
-  deploymentMode: true,
-  expectedPlatformRevision: true,
-  idempotencyKey: true,
-});
+const PluginInstallationCreateSchema = z
+  .object({
+    pluginId: pluginInstallationIntentV1Schema.shape.pluginId,
+    release: pluginInstallationIntentV1Schema.shape.release,
+    operation: pluginInstallationIntentV1Schema.shape.operation,
+    fromVersion: pluginInstallationIntentV1Schema.shape.fromVersion,
+    currentEnabled: pluginInstallationIntentV1Schema.shape.currentEnabled,
+    source: pluginInstallationIntentV1Schema.shape.source,
+    deploymentMode: pluginInstallationIntentV1Schema.shape.deploymentMode,
+    expectedPlatformRevision:
+      pluginInstallationIntentV1Schema.shape.expectedPlatformRevision,
+    idempotencyKey: pluginInstallationIntentV1Schema.shape.idempotencyKey,
+  })
+  .strict()
+  .superRefine((intent, context) => {
+    if (
+      (intent.operation === 'upgrade' &&
+        (intent.fromVersion === undefined ||
+          intent.currentEnabled === undefined)) ||
+      (intent.operation === 'install' &&
+        (intent.fromVersion !== undefined ||
+          intent.currentEnabled !== undefined))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['fromVersion'],
+        message: 'Upgrade requests require fromVersion and currentEnabled',
+      });
+    }
+  });
 const PluginInstallationApprovalRequestSchema = z.object({
   decision: pluginInstallApprovalV1Schema.shape.decision,
   reviewSha256: pluginInstallApprovalV1Schema.shape.reviewSha256,

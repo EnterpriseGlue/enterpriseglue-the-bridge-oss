@@ -57,6 +57,7 @@
     "test:plugin-platform:compose-lifecycle": "pnpm --filter @enterpriseglue/plugin-sdk run build && pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter @enterpriseglue/plugin-installer run build && pnpm --filter @enterpriseglue/plugin-reference run build && node ./scripts/check-plugin-compose-lifecycle.mjs",
     "test:plugin-platform:multi-replica": "pnpm --filter @enterpriseglue/plugin-sdk run build && pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter shared run build && bash ./scripts/check-plugin-platform-multi-replica.sh",
     "test:plugin-platform:images": "bash ./scripts/check-plugin-platform-production-images.sh",
+    "prepare:plugin-manager:local-evidence": "node ./scripts/prepare-plugin-manager-local-evidence.mjs",
     "test:plugin-platform": "pnpm --filter @enterpriseglue/plugin-sdk run test && pnpm --filter @enterpriseglue/plugin-sdk run build && pnpm --filter @enterpriseglue/plugin-sdk run test:compat && pnpm --filter @enterpriseglue/plugin-runtime run test && pnpm run test:plugin-installer && pnpm run test:plugin-manager && pnpm run test:plugin-reference && pnpm --filter @enterpriseglue/backend-host run test:plugin-runtime && pnpm --filter @enterpriseglue/frontend-host run test:plugin-bridge",
     "test:plugin-platform:helm": "pnpm run test:plugin-platform:chart",
     "test:integration": "pnpm --filter webmodeler-backend run test:integration",

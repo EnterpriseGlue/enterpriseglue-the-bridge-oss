@@ -33,7 +33,7 @@ describe('plugin platform capability catalog', () => {
   it('projects every built-in contract and only safe deployment identifiers', () => {
     const value = catalog();
 
-    expect(value.metadata.catalogRevision).toBe('2026-08-19.1');
+    expect(value.metadata.catalogRevision).toBe('2026-08-24.1');
     expect(value.permissions.map((entry) => entry.id)).toEqual(
       pluginPermissionValues,
     );
@@ -92,9 +92,9 @@ describe('plugin platform capability catalog', () => {
     expect(serialized).not.toContain('tenantRef');
   });
 
-  it('publishes one exact v0.14 release identity', () => {
+  it('publishes one exact v0.15 release identity', () => {
     expect(pluginPlatformReleaseIdentityV1).toEqual({
-      hostVersion: '0.14.0',
+      hostVersion: '0.15.0',
       sdkVersion: '0.2.0',
       supportedSdkVersions: ['0.2.0', '0.1.0'],
       sharedFrontend: {
