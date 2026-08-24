@@ -101,6 +101,7 @@ jobs:
           pnpm --filter @enterpriseglue/plugin-sdk run test:compat
           pnpm --filter @enterpriseglue/plugin-runtime run test
           pnpm run test:plugin-installer
+          pnpm run test:plugin-manager
           pnpm run test:plugin-reference
           pnpm --filter @enterpriseglue/backend-host run typecheck:plugin-acceptance
           pnpm --filter @enterpriseglue/backend-host run test:plugin-runtime

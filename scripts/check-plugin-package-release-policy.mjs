@@ -16,10 +16,11 @@ assert.match(workflow, /pnpm install --frozen-lockfile --ignore-scripts/);
 assert.match(workflow, /plugin-sdk run test/);
 assert.match(workflow, /plugin-runtime run test/);
 assert.match(workflow, /plugin-installer run test/);
+assert.match(workflow, /plugin-manager run test/);
 assert.match(workflow, /verify-plugin-package-tarballs\.mjs/);
 assert.match(workflow, /Reject immutable version reuse/);
 assert.match(workflow, /Publish packages in dependency order/);
 assert.match(workflow, /actions\/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a/);
 assert.doesNotMatch(workflow, /^\s*uses:\s+[^\s@]+@(?:main|master|v?\d+(?:\.\d+){0,2})\s*$/m);
 
-console.log(JSON.stringify({ status: 'passed', packages: 3, customerCiRequired: false }));
+console.log(JSON.stringify({ status: 'passed', packages: 4, customerCiRequired: false }));

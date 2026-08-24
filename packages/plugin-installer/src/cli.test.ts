@@ -215,6 +215,17 @@ describe('eg-plugin CLI', () => {
       runPluginInstallerCliV1(incompatibleHostArguments),
     ).rejects.toMatchObject({ code: 'host_version_incompatible' });
 
+    await expect(
+      runPluginInstallerCliV1([
+        ...installArguments,
+        '--expected-plan-sha256',
+        'f'.repeat(64),
+      ]),
+    ).rejects.toMatchObject({ code: 'plan_mismatch' });
+    await expect(
+      readFile(resolve(output, 'plugin-installer-state.json'), 'utf8'),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+
     const outputLines: string[] = [];
     await expect(
       runPluginInstallerCliV1(

@@ -11,6 +11,7 @@ import {
   pluginCatalogV1Schema,
   pluginCompatibilityMatrixV1Schema,
   pluginPackageIndexV1Schema,
+  pluginReleaseV1Schema,
   semVerSchema,
   signedArtifactEnvelopeV1Schema,
   type PluginAirgapIndexV1,
@@ -19,6 +20,7 @@ import {
   type PluginCompatibilityMatrixV1,
   type PluginId,
   type PluginPackageIndexV1,
+  type PluginReleaseV1,
   type SignedArtifactEnvelopeV1,
 } from '@enterpriseglue/plugin-sdk';
 import {
@@ -42,6 +44,7 @@ export type PluginSupplyChainErrorCode =
   | 'plugin_not_in_catalog'
   | 'release_not_in_catalog'
   | 'release_revoked'
+  | 'release_signer_mismatch'
   | 'host_version_invalid'
   | 'host_compatibility_invalid'
   | 'host_version_incompatible'
@@ -186,6 +189,31 @@ export function verifySignedPluginCatalogV1(input: {
     );
   }
   return data;
+}
+
+export function verifySignedPluginReleaseV1(input: {
+  payload: Uint8Array;
+  envelope: unknown;
+  trust: readonly TrustedPluginSignerV1[];
+  maximumBytes?: number;
+}): {
+  release: PluginReleaseV1;
+  envelope: SignedArtifactEnvelopeV1;
+} {
+  const verified = verifySignedJsonPayloadV1(
+    input.payload,
+    input.envelope,
+    pluginReleaseV1Schema,
+    input.trust,
+    input.maximumBytes ?? 1024 * 1024,
+  );
+  if (verified.envelope.publisher !== verified.data.publisher) {
+    throw new PluginSupplyChainError(
+      'release_signer_mismatch',
+      'Plugin release publisher differs from its trusted signer',
+    );
+  }
+  return { release: verified.data, envelope: verified.envelope };
 }
 
 export function selectPluginCatalogReleaseV1(

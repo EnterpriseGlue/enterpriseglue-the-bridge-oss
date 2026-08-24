@@ -102,3 +102,29 @@ describe('Spanner plugin row locking', () => {
     expect(builder.setLock).not.toHaveBeenCalled();
   });
 });
+
+describe('SQLite plugin row locking', () => {
+  it.each(['sqlite', 'better-sqlite3', 'sqljs'] as const)(
+    'uses transaction serialization for %s without an unsupported lock clause',
+    async (type) => {
+      const builder = {
+        setFindOptions: vi.fn(() => builder),
+        setLock: vi.fn(() => builder),
+        getMany: vi.fn(async () => [
+          { id: 'state-1', status: 'pending' as const },
+        ]),
+      };
+      const repository = {
+        manager: { connection: { options: { type } } },
+        createQueryBuilder: vi.fn(() => builder),
+      } as unknown as Repository<Candidate>;
+
+      const record = await findPluginRowForUpdateV1(repository, {
+        id: 'state-1',
+      });
+
+      expect(record?.id).toBe('state-1');
+      expect(builder.setLock).not.toHaveBeenCalled();
+    },
+  );
+});

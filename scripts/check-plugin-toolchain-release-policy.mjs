@@ -30,6 +30,7 @@ assert.match(workflow, /id-token: write/);
 assert.match(workflow, /attestations: write/);
 assert.match(workflow, /platforms: linux\/amd64,linux\/arm64/);
 assert.match(workflow, /file: \.\/packages\/plugin-installer\/Dockerfile/);
+assert.match(workflow, /file: \.\/packages\/plugin-manager\/Dockerfile/);
 assert.match(workflow, /provenance: mode=max/);
 assert.match(workflow, /sbom: true/);
 assert.match(workflow, /pnpm test:plugin-platform/);
@@ -40,23 +41,33 @@ assert.match(
   workflow,
   /helm package infra\/kubernetes\/helm\/enterpriseglue-plugin-installer-rbac/,
 );
+assert.match(
+  workflow,
+  /helm package infra\/kubernetes\/helm\/enterpriseglue-plugin-manager/,
+);
 assert.match(workflow, /helm push "\$RUNTIME_ARCHIVE"/);
 assert.match(workflow, /helm push "\$RBAC_ARCHIVE"/);
+assert.match(workflow, /helm push "\$MANAGER_ARCHIVE"/);
 assert.match(workflow, /Reject immutable version reuse/);
 assert.match(workflow, /SOURCE_DATE_EPOCH=/);
 assert.match(workflow, /RUNTIME_CHART_REFERENCE=.*@\$RUNTIME_DIGEST/);
 assert.match(workflow, /RBAC_CHART_REFERENCE=.*@\$RBAC_DIGEST/);
+assert.match(workflow, /MANAGER_REFERENCE=.*@\$MANAGER_DIGEST/);
+assert.match(workflow, /MANAGER_CHART_REFERENCE=.*@\$MANAGER_CHART_DIGEST/);
 assert.equal(
   [...workflow.matchAll(/cosign sign --yes/g)].length,
   1,
-  'The single looped signing command must cover all three exact subjects',
+  'The single looped signing command must cover all five exact subjects',
 );
 assert.match(workflow, /"\$INSTALLER_REFERENCE"/);
+assert.match(workflow, /"\$MANAGER_REFERENCE"/);
 assert.match(workflow, /"\$RUNTIME_CHART_REFERENCE"/);
 assert.match(workflow, /"\$RBAC_CHART_REFERENCE"/);
+assert.match(workflow, /"\$MANAGER_CHART_REFERENCE"/);
 assert.match(workflow, /cosign verify/);
 assert.match(workflow, /oras manifest fetch "\$RUNTIME_CHART_REFERENCE"/);
 assert.match(workflow, /oras manifest fetch "\$RBAC_CHART_REFERENCE"/);
+assert.match(workflow, /oras manifest fetch "\$MANAGER_CHART_REFERENCE"/);
 assert.match(
   workflow,
   /application\/vnd\.cncf\.helm\.chart\.content\.v1\.tar\+gzip/,
@@ -138,7 +149,7 @@ console.log(
     status: 'passed',
     workflow: 'plugin-toolchain-release.yml',
     customerCiRequired: false,
-    immutableSubjects: 3,
+    immutableSubjects: 5,
     signedAirgapBundle: true,
   }),
 );

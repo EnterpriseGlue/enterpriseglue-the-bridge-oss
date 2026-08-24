@@ -274,6 +274,14 @@ const {
 const {
   pluginPlatformCapabilityCatalogV1Schema,
 } = await import('@enterpriseglue/plugin-sdk/platform');
+const {
+  pluginCatalogV2Schema,
+  pluginInstallApprovalV1Schema,
+  pluginInstallReviewV1Schema,
+  pluginInstallationIntentV1Schema,
+  pluginInstallationObservationV1Schema,
+  pluginManagerCapabilityV1Schema,
+} = await import('@enterpriseglue/plugin-sdk/manager');
 
 function authzExtension(actionId: string, method: string, path: string): Record<string, unknown> {
   const action = getAuthzActionDefinition(actionId);
@@ -300,6 +308,11 @@ const PluginControlErrorResponseSchema = z.object({
     'tenant_enablement_not_supported',
     'request_invalid',
     'access_denied',
+    'installation_not_found',
+    'review_not_found',
+    'review_not_approvable',
+    'approval_conflict',
+    'lease_invalid',
   ]),
 });
 const PluginIdPathSchema = z.object({
@@ -317,6 +330,60 @@ const PluginTenantEnablementPathSchema = PluginIdPathSchema.extend({
 const PluginDeadLetterQuerySchema = z.object({
   cursor: z.string().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+const PluginInstallationPathSchema = z.object({
+  installationId: z.string().min(1).max(200),
+});
+const PluginInstallationQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+const PluginInstallationCreateSchema = pluginInstallationIntentV1Schema.pick({
+  pluginId: true,
+  release: true,
+  source: true,
+  deploymentMode: true,
+  expectedPlatformRevision: true,
+  idempotencyKey: true,
+});
+const PluginInstallationApprovalRequestSchema = z.object({
+  decision: pluginInstallApprovalV1Schema.shape.decision,
+  reviewSha256: pluginInstallApprovalV1Schema.shape.reviewSha256,
+  planSha256: pluginInstallApprovalV1Schema.shape.planSha256,
+  expectedRevision: pluginInstallApprovalV1Schema.shape.expectedRevision,
+}).strict();
+const PluginInstallationSummarySchema = z.object({
+  intent: pluginInstallationIntentV1Schema,
+  state: z.string(),
+  reasonCode: z.string(),
+  revision: z.number().int().nonnegative(),
+  review: pluginInstallReviewV1Schema.nullable(),
+  approval: pluginInstallApprovalV1Schema.nullable(),
+  latestObservation: pluginInstallationObservationV1Schema.nullable(),
+  updatedAt: z.string().datetime(),
+});
+const PluginInstallationPageSchema = z.object({
+  items: z.array(PluginInstallationSummarySchema),
+  total: z.number().int().nonnegative(),
+});
+const PluginManagerStatusSchema = z.object({
+  apiVersion: z.literal('manager-status.plugin.enterpriseglue.io/v1'),
+  available: z.boolean(),
+  capability: pluginManagerCapabilityV1Schema.nullable(),
+});
+const PluginCatalogProjectionSchema = z.object({
+  apiVersion: z.literal('catalog-projection.plugin.enterpriseglue.io/v1'),
+  catalog: pluginCatalogV2Schema.nullable(),
+});
+const PluginInstallationApprovalResponseSchema = z.object({
+  approval: pluginInstallApprovalV1Schema,
+  revision: z.number().int().nonnegative(),
+});
+const PluginInstallationRecoveryRequestSchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+}).strict();
+const PluginInstallationRevisionResponseSchema = z.object({
+  revision: z.number().int().nonnegative(),
 });
 
 const ConfigBootstrapStatusOpenApiSchema = z.object({
@@ -2248,6 +2315,74 @@ registry.registerPath({
 // Plugin platform control plane. These are host-owned deployment controls; plugin
 // packages never register or mutate this OpenAPI surface themselves.
 registry.register('PluginControlError', PluginControlErrorResponseSchema);
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/catalog',
+  summary: 'Read the safe configured plugin discovery catalog',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/catalog'),
+  responses: { 200: { description: 'Discovery-only catalog without artifact or deployment credentials', content: { 'application/json': { schema: PluginCatalogProjectionSchema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/manager',
+  summary: 'Read customer-local Plugin Manager availability and capabilities',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/manager'),
+  responses: { 200: { description: 'Safe manager capability handshake', content: { 'application/json': { schema: PluginManagerStatusSchema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/installations',
+  summary: 'List paged plugin installation activity',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/installations'),
+  request: { query: PluginInstallationQuerySchema },
+  responses: { 200: { description: 'Safe intent, review, approval and observation summaries', content: { 'application/json': { schema: PluginInstallationPageSchema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/plugin-platform/v1/installations/{installationId}',
+  summary: 'Read one plugin installation and its safe review',
+  ...authzExtension('platform.settings.read', 'GET', '/api/plugin-platform/v1/installations/:installationId'),
+  request: { params: PluginInstallationPathSchema },
+  responses: {
+    200: { description: 'Safe installation summary', content: { 'application/json': { schema: PluginInstallationSummarySchema } } },
+    404: { description: 'Installation was not found', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/plugin-platform/v1/installations',
+  summary: 'Create a revision-bound plugin installation intent',
+  ...authzExtension('platform.settings.manage', 'POST', '/api/plugin-platform/v1/installations'),
+  request: { body: { content: { 'application/json': { schema: PluginInstallationCreateSchema } } } },
+  responses: {
+    201: { description: 'Installation intent accepted without deployment mutation', content: { 'application/json': { schema: pluginInstallationIntentV1Schema } } },
+    409: { description: 'Platform revision or idempotency conflict', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/plugin-platform/v1/installations/{installationId}/approval',
+  summary: 'Approve or reject an exact plugin plan and review digest',
+  ...authzExtension('platform.settings.manage', 'POST', '/api/plugin-platform/v1/installations/:installationId/approval'),
+  request: { params: PluginInstallationPathSchema, body: { content: { 'application/json': { schema: PluginInstallationApprovalRequestSchema } } } },
+  responses: {
+    200: { description: 'Exact-digest approval recorded', content: { 'application/json': { schema: PluginInstallationApprovalResponseSchema } } },
+    409: { description: 'Review expired, changed, or conflicts with current revision', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+  },
+});
+for (const action of ['cancel', 'retry'] as const) {
+  registry.registerPath({
+    method: 'post',
+    path: `/api/plugin-platform/v1/installations/{installationId}/${action}`,
+    summary: `${action === 'cancel' ? 'Cancel' : 'Retry'} a plugin installation lifecycle`,
+    ...authzExtension('platform.settings.manage', 'POST', `/api/plugin-platform/v1/installations/:installationId/${action}`),
+    request: { params: PluginInstallationPathSchema, body: { content: { 'application/json': { schema: PluginInstallationRecoveryRequestSchema } } } },
+    responses: {
+      200: { description: `Installation ${action} accepted at the expected revision`, content: { 'application/json': { schema: PluginInstallationRevisionResponseSchema } } },
+      409: { description: 'State, lease, or revision conflicts with the recovery request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    },
+  });
+}
 registry.registerPath({
   method: 'get',
   path: '/api/plugin-platform/v1/capabilities',

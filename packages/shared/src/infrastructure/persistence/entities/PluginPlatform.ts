@@ -705,6 +705,223 @@ export class PluginContributionAvailabilityState extends AppBaseEntity {
   updatedAt!: number;
 }
 
+@Index('idx_plugin_manager_intent_identity', ['installationId'], {
+  unique: true,
+})
+@Index('idx_plugin_manager_intent_idempotency', ['idempotencyKeyHash'], {
+  unique: true,
+})
+@Index('idx_plugin_manager_intent_claim', [
+  'state',
+  'leaseExpiresAt',
+  'createdAt',
+])
+@Entity({ name: 'plugin_installation_intents', schema: 'main' })
+export class PluginInstallationIntent extends AppBaseEntity {
+  @Column({ name: 'installation_id', type: 'text' })
+  installationId!: string;
+
+  @Column({ name: 'plugin_id', type: 'text' })
+  pluginId!: string;
+
+  @Column({ name: 'release_digest', type: 'text' })
+  releaseDigest!: string;
+
+  @Column({ type: 'text' })
+  source!: string;
+
+  @Column({ name: 'deployment_mode', type: 'text' })
+  deploymentMode!: string;
+
+  @Column({ name: 'requester_ref', type: 'text' })
+  requesterRef!: string;
+
+  @Column({ name: 'expected_platform_revision', type: 'bigint' })
+  expectedPlatformRevision!: number;
+
+  @Column({ name: 'idempotency_key_hash', type: 'text' })
+  idempotencyKeyHash!: string;
+
+  @Column({ name: 'intent_json', type: 'text' })
+  intentJson!: string;
+
+  @Column({ type: 'text' })
+  state!: string;
+
+  @Column({ name: 'reason_code', type: 'text' })
+  reasonCode!: string;
+
+  @Column({ type: 'bigint', default: 0 })
+  revision!: number;
+
+  @Column({ name: 'lease_owner', type: 'text', nullable: true })
+  leaseOwner!: string | null;
+
+  @Column({ name: 'lease_token_hash', type: 'text', nullable: true })
+  leaseTokenHash!: string | null;
+
+  @Column({ name: 'lease_expires_at', type: 'bigint', nullable: true })
+  leaseExpiresAt!: number | null;
+
+  @Column({ name: 'created_at', type: 'bigint' })
+  createdAt!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}
+
+@Index('idx_plugin_manager_review_identity', ['installationId'], {
+  unique: true,
+})
+@Index('idx_plugin_manager_review_digest', ['reviewSha256'], {
+  unique: true,
+})
+@Entity({ name: 'plugin_installation_reviews', schema: 'main' })
+export class PluginInstallationReview extends AppBaseEntity {
+  @Column({ name: 'installation_id', type: 'text' })
+  installationId!: string;
+
+  @Column({ name: 'plugin_id', type: 'text' })
+  pluginId!: string;
+
+  @Column({ type: 'text' })
+  version!: string;
+
+  @Column({ name: 'release_digest', type: 'text' })
+  releaseDigest!: string;
+
+  @Column({ name: 'plan_sha256', type: 'text' })
+  planSha256!: string;
+
+  @Column({ name: 'review_sha256', type: 'text' })
+  reviewSha256!: string;
+
+  @Column({ name: 'review_json', type: 'text' })
+  reviewJson!: string;
+
+  @Column({ type: 'boolean' })
+  approvable!: boolean;
+
+  @Column({ name: 'expires_at', type: 'bigint' })
+  expiresAt!: number;
+
+  @Column({ name: 'created_at', type: 'bigint' })
+  createdAt!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}
+
+@Index('idx_plugin_manager_approval_identity', ['installationId'], {
+  unique: true,
+})
+@Index('idx_plugin_manager_approval_digest', ['reviewSha256', 'planSha256'])
+@Entity({ name: 'plugin_installation_approvals', schema: 'main' })
+export class PluginInstallationApproval extends AppBaseEntity {
+  @Column({ name: 'installation_id', type: 'text' })
+  installationId!: string;
+
+  @Column({ type: 'text' })
+  decision!: string;
+
+  @Column({ name: 'review_sha256', type: 'text' })
+  reviewSha256!: string;
+
+  @Column({ name: 'plan_sha256', type: 'text' })
+  planSha256!: string;
+
+  @Column({ name: 'approver_ref', type: 'text' })
+  approverRef!: string;
+
+  @Column({ name: 'expected_revision', type: 'bigint' })
+  expectedRevision!: number;
+
+  @Column({ name: 'decided_at', type: 'bigint' })
+  decidedAt!: number;
+
+  @Column({ name: 'expires_at', type: 'bigint' })
+  expiresAt!: number;
+}
+
+@Index('idx_plugin_manager_observation_installation', [
+  'installationId',
+  'revision',
+])
+@Index('idx_plugin_manager_observation_time', ['occurredAt'])
+@Entity({ name: 'plugin_installation_observations', schema: 'main' })
+export class PluginInstallationObservation extends AppBaseEntity {
+  @Column({ name: 'installation_id', type: 'text' })
+  installationId!: string;
+
+  @Column({ name: 'plugin_id', type: 'text' })
+  pluginId!: string;
+
+  @Column({ type: 'bigint' })
+  revision!: number;
+
+  @Column({ type: 'text' })
+  state!: string;
+
+  @Column({ name: 'reason_code', type: 'text' })
+  reasonCode!: string;
+
+  @Column({ name: 'plan_sha256', type: 'text', nullable: true })
+  planSha256!: string | null;
+
+  @Column({ name: 'observation_json', type: 'text' })
+  observationJson!: string;
+
+  @Column({ name: 'occurred_at', type: 'bigint' })
+  occurredAt!: number;
+}
+
+@Index('idx_plugin_manager_capability_identity', ['managerId'], {
+  unique: true,
+})
+@Index('idx_plugin_manager_capability_seen', ['lastSeenAt'])
+@Entity({ name: 'plugin_manager_capabilities', schema: 'main' })
+export class PluginManagerCapability extends AppBaseEntity {
+  @Column({ name: 'manager_id', type: 'text' })
+  managerId!: string;
+
+  @Column({ name: 'manager_version', type: 'text' })
+  managerVersion!: string;
+
+  @Column({ type: 'text' })
+  state!: string;
+
+  @Column({ name: 'capability_json', type: 'text' })
+  capabilityJson!: string;
+
+  @Column({ name: 'last_seen_at', type: 'bigint' })
+  lastSeenAt!: number;
+}
+
+@Index('idx_plugin_manager_admission_scope', ['scope'], { unique: true })
+@Entity({ name: 'plugin_manager_admission', schema: 'main' })
+export class PluginManagerAdmission extends AppBaseEntity {
+  @Column({ type: 'text' })
+  scope!: string;
+
+  @Column({ name: 'installation_id', type: 'text', nullable: true })
+  installationId!: string | null;
+
+  @Column({ name: 'manager_id', type: 'text', nullable: true })
+  managerId!: string | null;
+
+  @Column({ name: 'lease_token_hash', type: 'text', nullable: true })
+  leaseTokenHash!: string | null;
+
+  @Column({ name: 'lease_expires_at', type: 'bigint', nullable: true })
+  leaseExpiresAt!: number | null;
+
+  @Column({ type: 'bigint', default: 0 })
+  revision!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}
+
 export const pluginPlatformEntities = [
   PluginPlatformState,
   PluginEmergencyControlOperation,
@@ -725,4 +942,10 @@ export const pluginPlatformEntities = [
   PluginScheduledJob,
   PluginScheduleCommand,
   PluginContributionAvailabilityState,
+  PluginInstallationIntent,
+  PluginInstallationReview,
+  PluginInstallationApproval,
+  PluginInstallationObservation,
+  PluginManagerCapability,
+  PluginManagerAdmission,
 ] as const;

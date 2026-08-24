@@ -40,6 +40,7 @@ const PUBLISHED_PACKAGES = new Map([
   ['packages/plugin-sdk/', '@enterpriseglue/plugin-sdk'],
   ['packages/plugin-runtime/', '@enterpriseglue/plugin-runtime'],
   ['packages/plugin-installer/', '@enterpriseglue/plugin-installer'],
+  ['packages/plugin-manager/', '@enterpriseglue/plugin-manager'],
 ])
 
 function fail(message) {

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["image", "imagePullPolicy", "imagePullSecrets", "serviceAccount", "configurationSecret", "state", "resources", "podAnnotations", "podLabels", "nodeSelector", "tolerations", "affinity"],
+  "properties": {
+    "image": {
+      "type": "string",
+      "pattern": "^[^\\s/@]+(?:\\.[^\\s/@]+)*(?::[0-9]+)?/[A-Za-z0-9._/-]+@sha256:[a-f0-9]{64}$"
+    },
+    "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+    "imagePullSecrets": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 1, "maxLength": 63 }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": { "name": { "$ref": "#/$defs/dnsLabel" } }
+    },
+    "configurationSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "key"],
+      "properties": {
+        "name": { "$ref": "#/$defs/dnsLabel" },
+        "key": { "type": "string", "minLength": 1, "maxLength": 253 }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "storageClassName"],
+      "properties": {
+        "size": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$" },
+        "storageClassName": { "type": "string", "maxLength": 253 }
+      }
+    },
+    "resources": { "type": "object" },
+    "podAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
+    "podLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" }
+  },
+  "$defs": {
+    "dnsLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    }
+  }
+}

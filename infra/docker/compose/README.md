@@ -31,3 +31,22 @@ Always call Docker Compose from repository root with:
 This keeps path resolution stable for build contexts, env-file references, and volume mounts across local, CI, and release workflows.
 
 Wrapper scripts may pass an absolute project directory (`--project-directory "$ROOT_DIR"`) and quoted compose file paths; that is equivalent and preferred inside scripted automation.
+# Native Plugin Manager
+
+The optional native manager uses the same OSS installer and lifecycle engine as the CLI. Put the
+closed manager configuration, a random workload token, public trust policy, and optional registry
+configuration in a deployment-owned directory, then select exactly one profile:
+
+```bash
+export EG_PLUGIN_MANAGER_CONFIG_DIRECTORY="$PWD/.local/plugin-manager"
+export EG_PLUGIN_MANAGER_ID=enterpriseglue-plugin-manager
+docker compose \
+  -f infra/docker/compose/docker-compose.prod.yml \
+  -f infra/docker/compose/docker-compose.plugin-manager.yml \
+  --profile plugin-manager-planner up -d
+```
+
+`plugin-manager-planner` verifies and renders a reviewable plan but has no Docker socket.
+`plugin-manager-managed` additionally mounts the Docker socket and must be an explicit operator
+choice; set `DOCKER_GID` to the socket group. Never run both profiles together. The manager has no
+published port, and registry credentials are mounted only into the manager workload.

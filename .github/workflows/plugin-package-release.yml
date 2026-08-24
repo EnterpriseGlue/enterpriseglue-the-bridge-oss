@@ -93,6 +93,8 @@ jobs:
           pnpm --filter @enterpriseglue/plugin-runtime run build
           pnpm --filter @enterpriseglue/plugin-installer run test
           pnpm --filter @enterpriseglue/plugin-installer run build
+          pnpm --filter @enterpriseglue/plugin-manager run test
+          pnpm --filter @enterpriseglue/plugin-manager run build
 
       - name: Pack and validate immutable package payloads
         id: pack
@@ -103,6 +105,7 @@ jobs:
           pnpm --dir packages/plugin-sdk pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
           pnpm --dir packages/plugin-runtime pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
           pnpm --dir packages/plugin-installer pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+          pnpm --dir packages/plugin-manager pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
           node scripts/verify-plugin-package-tarballs.mjs "$PACKAGE_DIRECTORY" |
             tee "$PACKAGE_DIRECTORY/release-receipt.json"
 
@@ -138,7 +141,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          for name in plugin-sdk plugin-runtime plugin-installer; do
+          for name in plugin-sdk plugin-runtime plugin-installer plugin-manager; do
             tarball="$(find "$PACKAGE_DIRECTORY" -maxdepth 1 -name "enterpriseglue-${name}-*.tgz" -print -quit)"
             test -n "$tarball"
             npm publish "$tarball" --ignore-scripts --registry=https://npm.pkg.github.com

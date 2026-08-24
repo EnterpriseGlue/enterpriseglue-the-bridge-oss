@@ -759,6 +759,10 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'GET', route: '/api/plugin-platform/v1/metrics/events', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/plugin-platform/v1/events/dead-letters', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/plugin-platform/v1/operations/:operationId', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/plugin-platform/v1/catalog', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/plugin-platform/v1/manager', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/plugin-platform/v1/installations', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/plugin-platform/v1/installations/:installationId', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement', resourceResolver: 'platform.self' },
         {
           method: 'GET',
@@ -805,6 +809,10 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/plugin-platform/v1/plugins/:pluginId/enable', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/plugin-platform/v1/plugins/:pluginId/disable', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/plugin-platform/v1/plugins/:pluginId/events/dead-letters/:deliveryId/requeue', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/plugin-platform/v1/installations', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/plugin-platform/v1/installations/:installationId/approval', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/plugin-platform/v1/installations/:installationId/cancel', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/plugin-platform/v1/installations/:installationId/retry', resourceResolver: 'platform.self' },
         { method: 'PUT', route: '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement', resourceResolver: 'platform.self' },
         {
           method: 'PUT',

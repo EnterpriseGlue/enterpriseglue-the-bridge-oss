@@ -32,12 +32,21 @@ const signatureName = 'toolchain-airgap.sigstore.json';
 const releaseName = 'release.json';
 const utilityName = 'toolchain-airgap.mjs';
 const schemaVersion = 'enterpriseglue-plugin-toolchain-airgap/v1';
-const roles = ['installer', 'runtimeChart', 'installerRbacChart'];
+const roles = [
+  'installer',
+  'manager',
+  'runtimeChart',
+  'installerRbacChart',
+  'managerChart',
+];
 const roleRepositories = {
   installer: 'plugin-installer',
+  manager: 'plugin-manager',
   runtimeChart: 'charts/enterpriseglue-plugin-runtime',
   installerRbacChart: 'charts/enterpriseglue-plugin-installer-rbac',
+  managerChart: 'charts/enterpriseglue-plugin-manager',
 };
+const imageRoles = new Set(['installer', 'manager']);
 
 function fail(message) {
   throw new Error(message);
@@ -178,8 +187,11 @@ function parseRelease(value) {
       'version',
       'sourceRevision',
       'installer',
+      'managerVersion',
+      'manager',
       'runtimeChart',
       'installerRbacChart',
+      'managerChart',
       'customerCiRequired',
       'customerBuildRequired',
     ],
@@ -205,6 +217,12 @@ function parseRelease(value) {
     fail('Release receipt must preserve the no-customer-CI contract');
   }
   if (
+    typeof value.managerVersion !== 'string' ||
+    !semverPattern.test(value.managerVersion)
+  ) {
+    fail('Release receipt managerVersion must be SemVer');
+  }
+  if (
     value.workflowRun !== undefined &&
     (typeof value.workflowRun !== 'string' ||
       !value.workflowRun.startsWith('https://github.com/EnterpriseGlue/'))
@@ -218,11 +236,16 @@ function parseRelease(value) {
       ...parseDigestReference(value.installer, 'Release receipt installer'),
       payloadSha256: undefined,
     },
+    manager: {
+      ...parseDigestReference(value.manager, 'Release receipt manager'),
+      payloadSha256: undefined,
+    },
     runtimeChart: parseChart(value.runtimeChart, 'Release receipt runtimeChart'),
     installerRbacChart: parseChart(
       value.installerRbacChart,
       'Release receipt installerRbacChart',
     ),
+    managerChart: parseChart(value.managerChart, 'Release receipt managerChart'),
   };
 }
 
@@ -532,8 +555,8 @@ function parseAirgapManifest(value) {
     value.utility.sizeBytes,
     'Air-gap manifest utility.sizeBytes',
   );
-  if (!Array.isArray(value.artifacts) || value.artifacts.length !== 3) {
-    fail('Air-gap manifest must contain exactly three artifacts');
+  if (!Array.isArray(value.artifacts) || value.artifacts.length !== roles.length) {
+    fail(`Air-gap manifest must contain exactly ${roles.length} artifacts`);
   }
   const foundRoles = new Set();
   const artifacts = value.artifacts.map((artifact, index) => {
@@ -570,7 +593,7 @@ function parseAirgapManifest(value) {
       artifact.archiveSizeBytes,
       `Air-gap artifact ${index} archiveSizeBytes`,
     );
-    if (artifact.role === 'installer') {
+    if (imageRoles.has(artifact.role)) {
       if (artifact.payloadSha256 !== undefined) {
         fail('Installer air-gap artifact must not declare a chart payload');
       }

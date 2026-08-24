@@ -1,0 +1,56 @@
+x-plugin-manager-common: &plugin-manager-common
+  build:
+    context: ../../..
+    dockerfile: packages/plugin-manager/Dockerfile
+  restart: unless-stopped
+  read_only: true
+  cap_drop: ["ALL"]
+  security_opt:
+    - no-new-privileges:true
+  environment:
+    ENTERPRISEGLUE_PLUGIN_MANAGER_CONFIG_FILE: /etc/enterpriseglue/plugin-manager/manager-config.json
+  depends_on:
+    backend:
+      condition: service_healthy
+  volumes:
+    - ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}:/etc/enterpriseglue/plugin-manager:ro
+    - plugin_manager_state:/var/lib/enterpriseglue/plugin-manager
+    - ../../..:/deployment:ro
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8788/_manager/ready"]
+    interval: 10s
+    timeout: 3s
+    retries: 12
+  networks:
+    - enterpriseglue-network
+
+services:
+  backend:
+    environment:
+      ENTERPRISEGLUE_PLUGIN_MANAGER_ID: ${EG_PLUGIN_MANAGER_ID:-enterpriseglue-plugin-manager}
+      ENTERPRISEGLUE_PLUGIN_MANAGER_WORKLOAD_TOKEN_FILE: /etc/enterpriseglue/plugin-manager/workload-token
+      ENTERPRISEGLUE_PLUGIN_MANAGER_CATALOG_FILE: /etc/enterpriseglue/plugin-manager/catalog-v2.json
+      ENTERPRISEGLUE_PLUGIN_MANAGER_CATALOG_SIGNATURE_FILE: /etc/enterpriseglue/plugin-manager/catalog-v2.signature.json
+      ENTERPRISEGLUE_PLUGIN_MANAGER_TRUST_FILE: /etc/enterpriseglue/plugin-manager/trust.json
+    volumes:
+      - ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}:/etc/enterpriseglue/plugin-manager:ro
+
+  plugin-manager:
+    <<: *plugin-manager-common
+    profiles: ["plugin-manager-planner"]
+
+  plugin-manager-managed:
+    <<: *plugin-manager-common
+    profiles: ["plugin-manager-managed"]
+    group_add:
+      - ${DOCKER_GID:-0}
+    volumes:
+      - ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}:/etc/enterpriseglue/plugin-manager:ro
+      - plugin_manager_state:/var/lib/enterpriseglue/plugin-manager
+      - ../../..:/deployment:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  plugin_manager_state:

@@ -112,6 +112,7 @@ export const pluginInstallationReasonValues = [
   'permission_denied',
   'acquisition_failed',
   'verification_failed',
+  'operator_apply_required',
   'staging_failed',
   'readiness_failed',
   'migration_failed',
@@ -418,6 +419,9 @@ export const pluginInstallationIntentV1Schema = z
     installationId: opaqueReferenceSchema,
     pluginId: pluginIdSchema,
     release: ociDigestReferenceSchema,
+    operation: z.enum(['install', 'upgrade']).default('install'),
+    fromVersion: semVerSchema.optional(),
+    currentEnabled: z.boolean().optional(),
     source: z.enum(['connected_registry', 'offline_delivery', 'static_catalog']),
     deploymentMode: pluginDeploymentModeSchema,
     requesterRef: opaqueReferenceSchema,
@@ -425,7 +429,24 @@ export const pluginInstallationIntentV1Schema = z
     idempotencyKey: opaqueReferenceSchema,
     requestedAt: timestampSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((intent, context) => {
+    if (
+      (intent.operation === 'upgrade' &&
+        (intent.fromVersion === undefined ||
+          intent.currentEnabled === undefined)) ||
+      (intent.operation === 'install' &&
+        (intent.fromVersion !== undefined ||
+          intent.currentEnabled !== undefined))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['fromVersion'],
+        message:
+          'An upgrade requires fromVersion and currentEnabled; an install must omit both',
+      });
+    }
+  });
 
 const reviewFindingSchema = z
   .object({
@@ -516,7 +537,10 @@ export const pluginInstallationObservationV1Schema = z
     kind: z.literal('EnterpriseGluePluginInstallationObservation'),
     installationId: opaqueReferenceSchema,
     pluginId: pluginIdSchema,
-    version: semVerSchema,
+    // Resolution and signature failures can happen before a release document
+    // is trusted. In that case the manager must report a bounded failure
+    // without copying an unverified version into the safe host projection.
+    version: semVerSchema.optional(),
     revision: revisionSchema,
     state: pluginInstallationStateSchema,
     reasonCode: pluginInstallationReasonSchema,
@@ -575,6 +599,92 @@ export const pluginOfflineDeliveryRequestV1Schema = z
     requestedAt: timestampSchema,
   })
   .strict();
+
+const offlineDeliveryPathSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+  .refine(
+    (path) =>
+      !path.startsWith('/') &&
+      !path.endsWith('/') &&
+      !path.split('/').some((segment) => segment === '..' || segment === '.'),
+    'Offline delivery paths must be normalized relative paths',
+  );
+
+export const pluginOfflineDeliveryManifestV1Schema = z
+  .object({
+    apiVersion: z.literal('offline-delivery.plugin.enterpriseglue.io/v1'),
+    kind: z.literal('EnterpriseGluePluginOfflineDelivery'),
+    deliveryId: opaqueReferenceSchema,
+    release: ociDigestReferenceSchema,
+    generatedAt: timestampSchema,
+    expiresAt: timestampSchema,
+    files: z
+      .array(
+        z
+          .object({
+            path: offlineDeliveryPathSchema,
+            role: z.enum([
+              'release_metadata',
+              'release_signature',
+              'airgap_content',
+              'registry_map',
+              'trust_snapshot',
+              'revocation_snapshot',
+              'documentation',
+            ]),
+            sizeBytes: z.number().int().nonnegative().max(20 * 1024 ** 3),
+            sha256: sha256Schema,
+          })
+          .strict(),
+      )
+      .min(4)
+      .max(10_000),
+  })
+  .strict()
+  .superRefine((delivery, context) => {
+    if (Date.parse(delivery.expiresAt) <= Date.parse(delivery.generatedAt)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['expiresAt'],
+        message: 'Delivery expiry must be after generation time',
+      });
+    }
+    const paths = new Set<string>();
+    for (const [index, file] of delivery.files.entries()) {
+      if (paths.has(file.path)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['files', index, 'path'],
+          message: 'Offline delivery paths must be unique',
+        });
+      }
+      paths.add(file.path);
+    }
+    const required = [
+      ['release_metadata', 'release.json'],
+      ['release_signature', 'release.signature.json'],
+      ['registry_map', 'airgap-registry-map.json'],
+    ] as const;
+    for (const [role, path] of required) {
+      if (!delivery.files.some((file) => file.role === role && file.path === path)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['files'],
+          message: `Offline delivery requires ${path} with role ${role}`,
+        });
+      }
+    }
+    if (!delivery.files.some((file) => file.role === 'airgap_content')) {
+      context.addIssue({
+        code: 'custom',
+        path: ['files'],
+        message: 'Offline delivery requires signed air-gap content',
+      });
+    }
+  });
 
 export const pluginOfflineDeliveryReceiptV1Schema = z
   .object({
@@ -691,6 +801,15 @@ export function getPluginOfflineDeliveryRequestV1JsonSchema(): z.core.JSONSchema
   );
 }
 
+export function getPluginOfflineDeliveryManifestV1JsonSchema(): z.core.JSONSchema.JSONSchema {
+  return jsonSchema(
+    pluginOfflineDeliveryManifestV1Schema,
+    'enterpriseglue-plugin-offline-delivery-v1',
+    'EnterpriseGlue Plugin Offline Delivery v1',
+    'Signed outer inventory binding release authority, air-gap content, registry mapping, trust, revocation, and documentation snapshots.',
+  );
+}
+
 export function getPluginOfflineDeliveryReceiptV1JsonSchema(): z.core.JSONSchema.JSONSchema {
   return jsonSchema(
     pluginOfflineDeliveryReceiptV1Schema,
@@ -717,4 +836,5 @@ export type PluginInstallApprovalV1 = z.infer<typeof pluginInstallApprovalV1Sche
 export type PluginInstallationObservationV1 = z.infer<typeof pluginInstallationObservationV1Schema>;
 export type PluginManagerCapabilityV1 = z.infer<typeof pluginManagerCapabilityV1Schema>;
 export type PluginOfflineDeliveryRequestV1 = z.infer<typeof pluginOfflineDeliveryRequestV1Schema>;
+export type PluginOfflineDeliveryManifestV1 = z.infer<typeof pluginOfflineDeliveryManifestV1Schema>;
 export type PluginOfflineDeliveryReceiptV1 = z.infer<typeof pluginOfflineDeliveryReceiptV1Schema>;

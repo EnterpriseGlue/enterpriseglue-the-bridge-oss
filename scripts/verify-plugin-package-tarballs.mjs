@@ -6,9 +6,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 const expected = new Map([
-  ['@enterpriseglue/plugin-sdk', '0.2.0'],
-  ['@enterpriseglue/plugin-runtime', '0.1.0'],
-  ['@enterpriseglue/plugin-installer', '0.1.0'],
+  ['@enterpriseglue/plugin-sdk', '0.3.0'],
+  ['@enterpriseglue/plugin-runtime', '0.1.1'],
+  ['@enterpriseglue/plugin-installer', '0.2.0'],
+  ['@enterpriseglue/plugin-manager', '0.1.0'],
 ]);
 
 const forbiddenReference = /^(?:workspace:|link:|file:|\/|[A-Za-z]:\\)/;

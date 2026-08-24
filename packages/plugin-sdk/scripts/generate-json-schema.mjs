@@ -11,6 +11,7 @@ import {
   getPluginInstallationIntentV1JsonSchema,
   getPluginInstallationObservationV1JsonSchema,
   getPluginManagerCapabilityV1JsonSchema,
+  getPluginOfflineDeliveryManifestV1JsonSchema,
   getPluginOfflineDeliveryReceiptV1JsonSchema,
   getPluginOfflineDeliveryRequestV1JsonSchema,
   getPluginReleaseV1JsonSchema,
@@ -71,6 +72,10 @@ await Promise.all([
     [
       'enterpriseglue-plugin-manager-capability-v1.schema.json',
       getPluginManagerCapabilityV1JsonSchema(),
+    ],
+    [
+      'enterpriseglue-plugin-offline-delivery-v1.schema.json',
+      getPluginOfflineDeliveryManifestV1JsonSchema(),
     ],
     [
       'enterpriseglue-plugin-offline-delivery-request-v1.schema.json',

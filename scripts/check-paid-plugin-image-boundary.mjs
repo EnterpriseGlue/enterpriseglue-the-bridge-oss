@@ -35,7 +35,15 @@ const images = [
       readArgument('--frontend-image') ?? process.env.OSS_FRONTEND_IMAGE_UNDER_TEST,
     contentDirectories: ['/usr/share/nginx/html'],
   },
-];
+  {
+    kind: 'manager',
+    image:
+      readArgument('--manager-image') ?? process.env.OSS_MANAGER_IMAGE_UNDER_TEST,
+    contentDirectories: [
+      '/opt/enterpriseglue/plugin-manager/node_modules/@enterpriseglue',
+    ],
+  },
+].filter(({ kind, image }) => kind !== 'manager' || Boolean(image));
 
 for (const image of images) {
   if (!image.image) {
@@ -97,7 +105,7 @@ async function collectImagePackageMarkers(directory) {
 }
 
 function collectImagePathPackageMarkers(kind, image) {
-  if (kind === 'backend') {
+  if (kind !== 'frontend') {
     const nodePathWalker = String.raw`
       import { readdir } from 'node:fs/promises';
       const matches = new Set();
@@ -123,7 +131,7 @@ function collectImagePathPackageMarkers(kind, image) {
         '--input-type=module',
         '-e',
         nodePathWalker,
-        '/app',
+        kind === 'backend' ? '/app' : '/opt/enterpriseglue/plugin-manager',
       ],
       { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
     );

@@ -1,0 +1,59 @@
+{
+  "apiVersion": "manager-config.plugin.enterpriseglue.io/v1",
+  "kind": "EnterpriseGluePluginManagerConfig",
+  "capability": {
+    "apiVersion": "manager-capability.plugin.enterpriseglue.io/v1",
+    "kind": "EnterpriseGluePluginManagerCapability",
+    "managerId": "enterpriseglue-plugin-manager",
+    "managerVersion": "0.1.0",
+    "protocolVersions": ["v1"],
+    "deploymentModes": ["compose_planner"],
+    "architectures": ["amd64"],
+    "operations": ["plan", "install", "upgrade", "offline_import"],
+    "state": "planner_only",
+    "observedAt": "1970-01-01T00:00:00.000Z"
+  },
+  "host": {
+    "baseUrl": "http://backend:8787",
+    "workloadTokenFile": "/etc/enterpriseglue/plugin-manager/workload-token",
+    "version": "0.15.0",
+    "artifact": "ghcr.io/enterpriseglue/backend@sha256:REPLACE_WITH_64_HEX_DIGEST",
+    "apiVersion": "0.4.0",
+    "sdkVersion": "0.3.0",
+    "platformRevision": 0,
+    "database": "postgres",
+    "entitlementState": "active"
+  },
+  "deployment": {
+    "mode": "compose_planner",
+    "platform": "docker",
+    "architecture": "amd64"
+  },
+  "storage": {
+    "releaseRoot": "/var/lib/enterpriseglue/plugin-manager/releases",
+    "executionRoot": "/var/lib/enterpriseglue/plugin-manager/executions",
+    "installerOutput": "/var/lib/enterpriseglue/plugin-manager/installer"
+  },
+  "connectedRegistry": {
+    "trustFile": "/etc/enterpriseglue/plugin-manager/trust.json",
+    "cosignPolicyFile": "/etc/enterpriseglue/plugin-manager/cosign-policy.json",
+    "registryConfigFile": "/etc/enterpriseglue/plugin-manager/registry-auth.json"
+  },
+  "offlineDelivery": {
+    "intakeRoot": "/var/lib/enterpriseglue/plugin-manager/releases",
+    "registryConfigFile": "/etc/enterpriseglue/plugin-manager/local-registry-auth.json"
+  },
+  "adapter": {
+    "type": "compose",
+    "projectDirectory": "/deployment",
+    "composeFiles": ["/deployment/infra/docker/compose/docker-compose.prod.yml"],
+    "projectName": "enterpriseglue",
+    "utilityImage": "ghcr.io/enterpriseglue/plugin-manager@sha256:REPLACE_WITH_64_HEX_DIGEST",
+    "imageMode": "pull"
+  },
+  "service": {
+    "host": "0.0.0.0",
+    "port": 8788,
+    "pollIntervalMs": 5000
+  }
+}
