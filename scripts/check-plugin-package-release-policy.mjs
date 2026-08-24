@@ -5,6 +5,10 @@ const workflow = await readFile(
   new URL('../.github/workflows/plugin-package-release.yml', import.meta.url),
   'utf8',
 );
+const tarballVerifier = await readFile(
+  new URL('./verify-plugin-package-tarballs.mjs', import.meta.url),
+  'utf8',
+);
 
 assert.match(workflow, /\bon:\n  workflow_dispatch:/);
 assert.doesNotMatch(workflow, /^  (?:push|pull_request|pull_request_target|release|schedule):/m);
@@ -22,5 +26,13 @@ assert.match(workflow, /Reject immutable version reuse/);
 assert.match(workflow, /Publish packages in dependency order/);
 assert.match(workflow, /actions\/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a/);
 assert.doesNotMatch(workflow, /^\s*uses:\s+[^\s@]+@(?:main|master|v?\d+(?:\.\d+){0,2})\s*$/m);
+assert.match(tarballVerifier, /packages\/plugin-sdk\/package\.json/);
+assert.match(tarballVerifier, /packages\/plugin-runtime\/package\.json/);
+assert.match(tarballVerifier, /packages\/plugin-installer\/package\.json/);
+assert.match(tarballVerifier, /packages\/plugin-manager\/package\.json/);
+assert.doesNotMatch(
+  tarballVerifier,
+  /\['@enterpriseglue\/plugin-(?:sdk|runtime|installer|manager)',\s*'\d+\.\d+\.\d+'/,
+);
 
 console.log(JSON.stringify({ status: 'passed', packages: 4, customerCiRequired: false }));

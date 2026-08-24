@@ -5,12 +5,20 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
-const expected = new Map([
-  ['@enterpriseglue/plugin-sdk', '0.3.0'],
-  ['@enterpriseglue/plugin-runtime', '0.1.1'],
-  ['@enterpriseglue/plugin-installer', '0.2.0'],
-  ['@enterpriseglue/plugin-manager', '0.1.0'],
-]);
+const expected = new Map(
+  [
+    ['@enterpriseglue/plugin-sdk', '../packages/plugin-sdk/package.json'],
+    ['@enterpriseglue/plugin-runtime', '../packages/plugin-runtime/package.json'],
+    ['@enterpriseglue/plugin-installer', '../packages/plugin-installer/package.json'],
+    ['@enterpriseglue/plugin-manager', '../packages/plugin-manager/package.json'],
+  ].map(([name, manifestPath]) => {
+    const manifest = JSON.parse(readFileSync(new URL(manifestPath, import.meta.url), 'utf8'));
+    if (manifest.name !== name) {
+      throw new Error(`Expected source package ${name}, found ${manifest.name}.`);
+    }
+    return [name, manifest.version];
+  }),
+);
 
 const forbiddenReference = /^(?:workspace:|link:|file:|\/|[A-Za-z]:\\)/;
 

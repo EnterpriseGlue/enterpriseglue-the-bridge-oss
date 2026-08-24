@@ -97,8 +97,8 @@ jobs:
 
       - name: Set up ORAS
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
-        with:
-          version: 1.3.3
+        # Keep the CLI version coupled to the immutable setup action. The action's
+        # bundled default is guaranteed to exist in its frozen release catalog.
 
       - name: Set up Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
