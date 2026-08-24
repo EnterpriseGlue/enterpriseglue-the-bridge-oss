@@ -6,4 +6,5 @@ export * from './control.js';
 export * from './distribution.js';
 export * from './frontend.js';
 export * from './manifest.js';
+export * from './manager.js';
 export * from './platform.js';

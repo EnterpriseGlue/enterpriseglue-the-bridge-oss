@@ -227,6 +227,33 @@ Add closed, versioned contracts for:
 The full plan, credentials, paths, commands, archive inventory, and infrastructure receipts remain
 manager-owned. The host stores and renders only the safe review and observation.
 
+### Contract versioning and deprecation decision
+
+The v0.14 `catalog.plugin.enterpriseglue.io/v1` contract remains supported for the v0.14 CLI and
+rollback path. It is frozen: no new fields or manager behavior are added to it. The native manager
+uses `catalog.plugin.enterpriseglue.io/v2`, whose entries contain only safe product discovery data
+and immutable references to `release.plugin.enterpriseglue.io/v1`. `PluginReleaseV1` is the sole
+authority for artifacts, compatibility, evidence, support, update edges, and rollback.
+
+All manager contracts are closed documents: unknown fields fail validation. Additive optional
+fields require a new SDK minor release and must be ignored only after an explicitly tested reader
+policy is added. A changed required field, enum removal, semantic reinterpretation, or trust rule
+requires a new API version. The host and manager advertise supported protocol versions and reject
+unknown major versions before creating or claiming an intent.
+
+| Contract | Stability in v0.15 | Deprecation policy |
+| --- | --- | --- |
+| `PluginProductDescriptorV1` | Stable discovery projection | At least two OSS minor releases after a replacement is published |
+| `PluginCatalogV2` | Stable manager catalog | Same; catalog v1 remains read-only for v0.14 rollback |
+| `PluginReleaseV1` | Stable canonical release authority | Replacement must retain release-digest resolution and rollback metadata |
+| Intent, review, approval, observation v1 | Stable host/manager protocol | Host and manager must overlap on at least one protocol version during upgrade |
+| Manager capability v1 | Stable skew handshake | Removal requires host preflight and one full minor-release warning window |
+| Offline request/receipt v1 | Stable customer transfer metadata | Existing signed deliveries remain verifiable for their contractual retention period |
+
+The current SDK fixture, the previous two SDK fixtures, generated JSON Schemas, and negative
+unknown-field cases are CI gates. Deprecation never removes the ability to verify, disable,
+rollback, export, or uninstall an already-installed commercial plugin.
+
 ## Lifecycle state machines
 
 ### Installation lifecycle
@@ -578,15 +605,15 @@ Acceptance:
 
 ## Phase 1: finalize canonical contracts
 
-- [ ] Decide whether to finalize the unpublished catalog v1 or introduce catalog/release v2.
-- [ ] Add canonical `PluginReleaseV1` and eliminate duplicate artifact/compatibility authority.
-- [ ] Add product descriptor, intent, review, approval, observation, capability, and offline
+- [x] Decide whether to finalize the unpublished catalog v1 or introduce catalog/release v2.
+- [x] Add canonical `PluginReleaseV1` and eliminate duplicate artifact/compatibility authority.
+- [x] Add product descriptor, intent, review, approval, observation, capability, and offline
   delivery contracts.
-- [ ] Generate JSON Schemas and frozen compatibility fixtures.
-- [ ] Add current/previous SDK fixtures and negative unknown-field tests.
-- [ ] Add release/update graph, support/EOL, rollback class, platform/architecture, and evidence
+- [x] Generate JSON Schemas and frozen compatibility fixtures.
+- [x] Add current/previous SDK fixtures and negative unknown-field tests.
+- [x] Add release/update graph, support/EOL, rollback class, platform/architecture, and evidence
   references.
-- [ ] Document versioning and deprecation policy for every contract.
+- [x] Document versioning and deprecation policy for every contract.
 
 Acceptance:
 
