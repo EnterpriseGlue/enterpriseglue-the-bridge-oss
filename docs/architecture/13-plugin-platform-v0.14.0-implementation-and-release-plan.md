@@ -23,6 +23,11 @@ OSS release contains only the reusable host, contracts, installer, policy, and r
 ION Support also remains outside every SSO, identity, EE, and unrelated product repository; its
 sole source authority is the private `EnterpriseGlue/ion-support-agent` repository.
 
+The follow-on customer installation architecture is defined in
+[Native Plugin Manager and Customer Installation Plan](18-native-plugin-manager-and-customer-installation-plan.md).
+It keeps `v0.14.0` as the signed platform and CLI foundation and targets the OSS-native isolated
+manager plus integrated Carbon installation experience for `v0.15.0`.
+
 ## Release outcome
 
 ```mermaid
