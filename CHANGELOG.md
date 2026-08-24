@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.14.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.13.1...v0.14.0) (2026-08-24)
+
+
+### Features
+
+* **plugin:** introduce product-neutral plugin platform ([#375](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/375)) ([fbf2727](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fbf2727e00e8116ca4051cf33af569986b9e6a49))
+
+
+### Bug Fixes
+
+* **docker:** enforce source and plugin release contracts ([#379](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/379)) ([1bf8689](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1bf8689c0fd2cdbd0b0eff5fcd0142bcf1b90c40))
+* **plugin:** align installer image archives ([#378](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/378)) ([4069cbb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4069cbb29c467ad653473e870344203d0dff02c4))
+* **plugin:** harden bounded file reads ([#377](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/377)) ([d7ff656](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d7ff65657cb41859473f96fe66bfef6920a424ba))
+
 ## [0.13.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.13.0...v0.13.1) (2026-08-16)
 
 
