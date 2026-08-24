@@ -95,6 +95,7 @@ export const fixtureIntent: PluginInstallationIntentV1 = {
   installationId: 'fixture-installation-001',
   pluginId: 'io.enterpriseglue.fixture',
   release: fixtureRelease.package,
+  operation: 'install',
   source: 'static_catalog',
   deploymentMode: 'compose_planner',
   requesterRef: 'fixture-user-001',
