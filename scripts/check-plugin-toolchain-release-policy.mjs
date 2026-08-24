@@ -39,6 +39,11 @@ for (const dockerfile of [installerDockerfile, managerDockerfile]) {
 }
 assert.match(productionImageGate, /packages\/plugin-installer\/Dockerfile/);
 assert.match(productionImageGate, /packages\/plugin-manager\/Dockerfile/);
+assert.match(productionImageGate, /docker buildx create/);
+assert.match(productionImageGate, /--driver docker-container/);
+assert.match(productionImageGate, /docker buildx inspect "\$MULTIARCH_BUILDER_NAME" --bootstrap/);
+assert.match(productionImageGate, /--builder "\$MULTIARCH_BUILDER_NAME"/);
+assert.match(productionImageGate, /docker buildx rm --force/);
 assert.match(productionImageGate, /--platform linux\/amd64,linux\/arm64/);
 assert.match(productionImageGate, /--target oras/);
 assert.match(productionImageGate, /--output=type=cacheonly/);

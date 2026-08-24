@@ -13,13 +13,28 @@ TRIVY_IMAGE="${PLUGIN_PLATFORM_TRIVY_IMAGE:-aquasec/trivy@sha256:cffe3f5161a47a6
 cd "$ROOT_DIR"
 
 if [[ "${SKIP_PLUGIN_PLATFORM_IMAGE_BUILD:-false}" != "true" ]]; then
+  MULTIARCH_BUILDER_NAME="${PLUGIN_PLATFORM_BUILDX_BUILDER:-enterpriseglue-plugin-platform-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$}"
+  cleanup_multiarch_builder() {
+    docker buildx rm --force "$MULTIARCH_BUILDER_NAME" >/dev/null 2>&1 || true
+  }
+  trap cleanup_multiarch_builder EXIT
+
+  docker buildx create \
+    --name "$MULTIARCH_BUILDER_NAME" \
+    --driver docker-container >/dev/null
+  docker buildx inspect "$MULTIARCH_BUILDER_NAME" --bootstrap >/dev/null
+
   for dockerfile in packages/plugin-installer/Dockerfile packages/plugin-manager/Dockerfile; do
-    docker buildx build --quiet \
+    docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --quiet \
       --platform linux/amd64,linux/arm64 \
       --target oras \
       --output=type=cacheonly \
       -f "$dockerfile" .
   done
+
+  cleanup_multiarch_builder
+  trap - EXIT
+
   docker build --quiet -f backend/Dockerfile.prod -t "$BACKEND_IMAGE" .
   docker build --quiet -f frontend/Dockerfile.prod -t "$FRONTEND_IMAGE" .
   docker build --quiet -f packages/plugin-manager/Dockerfile -t "$MANAGER_IMAGE" .
