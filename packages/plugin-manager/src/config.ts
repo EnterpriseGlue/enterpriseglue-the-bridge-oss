@@ -1,11 +1,10 @@
+import { ociDigestReferenceSchema } from '@enterpriseglue/plugin-sdk';
 import { pluginManagerCapabilityV1Schema } from '@enterpriseglue/plugin-sdk/manager';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
 const pathSchema = z.string().min(1).max(4096);
-const digestReferenceSchema = z
-  .string()
-  .regex(/^[^\s/@]+(?:\.[^\s/@]+)*(?::[0-9]+)?\/[A-Za-z0-9._/-]+@sha256:[a-f0-9]{64}$/);
+const digestReferenceSchema = ociDigestReferenceSchema;
 
 const composeAdapterSchema = z
   .object({

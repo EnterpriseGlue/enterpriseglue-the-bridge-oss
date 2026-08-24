@@ -12,6 +12,7 @@ import {
 } from '@enterpriseglue/plugin-runtime/supply-chain';
 
 import type { PluginReleaseResolverPortV1 } from './manager.js';
+import { readManagerSecureBytesFileV1 } from './secureFile.js';
 
 export interface FilePluginReleaseResolverOptionsV1 {
   root: string;
@@ -131,19 +132,7 @@ async function readRegularJsonFile(
   pathInput: string,
   maximumBytes: number,
 ): Promise<unknown> {
-  const path = resolve(pathInput);
-  const details = await lstat(path);
-  if (
-    !details.isFile() ||
-    details.isSymbolicLink() ||
-    details.size > maximumBytes
-  ) {
-    throw new Error('manager_release_companion_file_invalid');
-  }
-  const bytes = await readFile(path);
-  if (bytes.byteLength > maximumBytes) {
-    throw new Error('manager_release_companion_file_too_large');
-  }
+  const bytes = await readManagerSecureBytesFileV1(pathInput, maximumBytes);
   return JSON.parse(bytes.toString('utf8'));
 }
 
@@ -175,18 +164,10 @@ export class FilePluginReleaseResolverV1
     if (!path.startsWith(`${rootPath}/`)) {
       throw new Error('manager_release_path_invalid');
     }
-    const details = await lstat(path);
-    if (
-      !details.isFile() ||
-      details.isSymbolicLink() ||
-      details.size > this.maximumBytes
-    ) {
-      throw new Error('manager_release_file_invalid');
-    }
-    const payload = await readFile(path);
-    if (payload.byteLength > this.maximumBytes) {
-      throw new Error('manager_release_file_too_large');
-    }
+    const payload = await readManagerSecureBytesFileV1(
+      path,
+      this.maximumBytes,
+    );
     const [signatureBytes, receiptInput, trust] = await Promise.all([
       this.readBytesFile(signaturePath, 64 * 1024),
       this.readJsonFile(receiptPath, 64 * 1024),
@@ -220,15 +201,7 @@ export class FilePluginReleaseResolverV1
     path: string,
     maximumBytes: number,
   ): Promise<Buffer> {
-    const details = await lstat(path);
-    if (!details.isFile() || details.isSymbolicLink() || details.size > maximumBytes) {
-      throw new Error('manager_release_companion_file_invalid');
-    }
-    const payload = await readFile(path);
-    if (payload.byteLength > maximumBytes) {
-      throw new Error('manager_release_companion_file_too_large');
-    }
-    return payload;
+    return readManagerSecureBytesFileV1(path, maximumBytes);
   }
 
 }

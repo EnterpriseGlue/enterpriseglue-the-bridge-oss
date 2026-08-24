@@ -25,6 +25,7 @@ import {
   parseTrustedPluginSignersV1,
   pluginReleaseOciArtifactTypeV1,
 } from './releaseResolver.js';
+import { readManagerSecureBytesFileV1 } from './secureFile.js';
 
 const manifestFile = 'delivery.json';
 const signatureFile = 'delivery.signature.json';
@@ -38,18 +39,9 @@ export interface ImportPluginOfflineDeliveryOptionsV1 {
 }
 
 async function regularBytes(path: string, maximumBytes: number): Promise<Buffer> {
-  const details = await lstat(path);
-  if (
-    !details.isFile() ||
-    details.isSymbolicLink() ||
-    details.size < 1 ||
-    details.size > maximumBytes
-  ) {
+  const bytes = await readManagerSecureBytesFileV1(path, maximumBytes);
+  if (bytes.byteLength < 1) {
     throw new Error('offline_delivery_control_file_invalid');
-  }
-  const bytes = await readFile(path);
-  if (bytes.byteLength > maximumBytes) {
-    throw new Error('offline_delivery_control_file_too_large');
   }
   return bytes;
 }
