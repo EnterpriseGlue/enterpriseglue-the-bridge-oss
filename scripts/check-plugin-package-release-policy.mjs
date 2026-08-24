@@ -22,8 +22,11 @@ assert.match(workflow, /plugin-runtime run test/);
 assert.match(workflow, /plugin-installer run test/);
 assert.match(workflow, /plugin-manager run test/);
 assert.match(workflow, /verify-plugin-package-tarballs\.mjs/);
-assert.match(workflow, /Reject immutable version reuse/);
+assert.match(workflow, /Verify existing versions or plan new immutable publications/);
 assert.match(workflow, /Publish packages in dependency order/);
+assert.match(workflow, /publish-plugin-package-set\.mjs plan/);
+assert.match(workflow, /publish-plugin-package-set\.mjs publish/);
+assert.match(workflow, /publish-plugin-package-set\.mjs verify/);
 assert.match(workflow, /actions\/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a/);
 assert.doesNotMatch(workflow, /^\s*uses:\s+[^\s@]+@(?:main|master|v?\d+(?:\.\d+){0,2})\s*$/m);
 assert.match(tarballVerifier, /packages\/plugin-sdk\/package\.json/);
@@ -34,5 +37,15 @@ assert.doesNotMatch(
   tarballVerifier,
   /\['@enterpriseglue\/plugin-(?:sdk|runtime|installer|manager)',\s*'\d+\.\d+\.\d+'/,
 );
+
+const packageSetPublisher = await readFile(
+  new URL('./publish-plugin-package-set.mjs', import.meta.url),
+  'utf8',
+);
+assert.match(packageSetPublisher, /dist\.integrity/);
+assert.match(packageSetPublisher, /canonicalPackageDigest/);
+assert.match(packageSetPublisher, /npm[\s\S]*pack/);
+assert.match(packageSetPublisher, /different immutable payload/);
+assert.match(packageSetPublisher, /registry payload differs after publication/);
 
 console.log(JSON.stringify({ status: 'passed', packages: 4, customerCiRequired: false }));

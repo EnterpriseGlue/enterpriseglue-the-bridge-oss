@@ -1,0 +1,69 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-security-rebuild",
+  "type": "security",
+  "scope": "plugin-installation-toolchain",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Rebuilds the Plugin Manager toolchain with patched Go components and permits protected package publication to reuse only content-identical immutable dependencies.",
+  "userImpact": [
+    "Plugin installer and manager images contain a patched ORAS build and the current Cosign patch release.",
+    "A manager-only or installer-only package update no longer requires artificial version bumps for unchanged SDK and runtime packages."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Use plugin installer 0.2.1, Plugin Manager 0.1.1, and the matching 0.2.1 and 0.1.1 Helm charts; do not consume artifacts from the aborted 0.2.0/0.1.0 toolchain publication run."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "ORAS 1.3.3 is compiled with the digest-pinned Go 1.26.6 toolchain instead of redistributing its vulnerable upstream binary.",
+    "Cosign 3.1.3 is compiled with patched Go 1.26.6 plus fixed gRPC, x/mod, and x/text dependency floors instead of redistributing the vulnerable upstream binary.",
+    "Existing npm package versions may be reused only when a freshly downloaded registry archive has the same canonical file tree, content, symlink targets, and executable bits as the local package; version collisions with different payloads fail closed.",
+    "Pull requests that change the public installer or manager now build both images and fail on HIGH or CRITICAL vulnerabilities before protected publication."
+  ],
+  "documentation": [
+    "Container third-party notices record the patched ORAS build and Cosign version for both public toolchain images."
+  ],
+  "knownLimitations": [
+    "The aborted toolchain publication subjects remain unqualified and are not referenced by a release receipt or supported catalog entry."
+  ],
+  "rollback": [
+    "Restore the previous image and chart references only in an isolated test environment; the previous publication failed the protected vulnerability gate and is not supported."
+  ],
+  "validation": [
+    "Plugin package publication planner unit tests and protected registry-integrity checks",
+    "Multi-architecture installer and manager builds with architecture-neutral JavaScript dependency enforcement",
+    "Protected Cosign verification, Trivy HIGH/CRITICAL gate, Helm payload verification, provenance attestations, and offline Zot import acceptance"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.0",
+      "newVersion": "0.2.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.0",
+      "newVersion": "0.1.1",
+      "impact": "patch"
+    }
+  ]
+}
