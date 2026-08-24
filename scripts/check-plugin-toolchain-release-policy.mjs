@@ -8,11 +8,38 @@ const workflow = await readFile(
   ),
   'utf8',
 );
+const productionImageGate = await readFile(
+  new URL('./check-plugin-platform-production-images.sh', import.meta.url),
+  'utf8',
+);
+const installerDockerfile = await readFile(
+  new URL('../packages/plugin-installer/Dockerfile', import.meta.url),
+  'utf8',
+);
+const managerDockerfile = await readFile(
+  new URL('../packages/plugin-manager/Dockerfile', import.meta.url),
+  'utf8',
+);
 
 assert.match(workflow, /\bon:\n  workflow_dispatch:/);
 assert.doesNotMatch(
   workflow,
   /^  (?:push|pull_request|pull_request_target|release|schedule):/m,
+);
+for (const dockerfile of [installerDockerfile, managerDockerfile]) {
+  assert.match(dockerfile, /golang:1\.26\.6-alpine3\.23@sha256:[a-f0-9]{64}/);
+  assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.3/);
+  assert.match(dockerfile, /github\.com\/sigstore\/cosign\/v3\/cmd\/cosign@v3\.1\.3/);
+  assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
+  assert.match(dockerfile, /golang\.org\/x\/text@v0\.39\.0/);
+  assert.match(dockerfile, /test -z "\$\(find \/output -type f -name '\*\.node'/);
+}
+assert.match(productionImageGate, /packages\/plugin-installer\/Dockerfile/);
+assert.match(productionImageGate, /packages\/plugin-manager\/Dockerfile/);
+assert.equal(
+  [...productionImageGate.matchAll(/--severity HIGH,CRITICAL/g)].length,
+  1,
+  'The looped PR vulnerability gate must scan both public toolchain images',
 );
 assert.match(workflow, /environment: plugin-toolchain-production/);
 assert.match(
@@ -33,6 +60,7 @@ assert.match(workflow, /file: \.\/packages\/plugin-installer\/Dockerfile/);
 assert.match(workflow, /file: \.\/packages\/plugin-manager\/Dockerfile/);
 assert.match(workflow, /provenance: mode=max/);
 assert.match(workflow, /sbom: true/);
+assert.match(workflow, /cosign-release: v3\.1\.3/);
 assert.match(workflow, /pnpm test:plugin-platform/);
 assert.match(workflow, /pnpm typecheck:plugin-platform/);
 assert.match(workflow, /pnpm test:plugin-platform:helm/);

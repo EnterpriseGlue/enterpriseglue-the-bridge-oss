@@ -109,19 +109,14 @@ jobs:
           node scripts/verify-plugin-package-tarballs.mjs "$PACKAGE_DIRECTORY" |
             tee "$PACKAGE_DIRECTORY/release-receipt.json"
 
-      - name: Reject immutable version reuse
+      - name: Verify existing versions or plan new immutable publications
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          node -e 'const r=require(`./${process.env.PACKAGE_DIRECTORY}/release-receipt.json`); for (const p of r.packages) console.log(`${p.name}@${p.version}`)' |
-          while IFS= read -r subject; do
-            if npm view "$subject" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
-              echo "$subject already exists; immutable package versions cannot be reused" >&2
-              exit 1
-            fi
-          done
+          node scripts/publish-plugin-package-set.mjs plan "$PACKAGE_DIRECTORY" |
+            tee "$PACKAGE_DIRECTORY/registry-plan.json"
 
       - name: Publish dry run
         if: inputs.dry_run == true
@@ -130,9 +125,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          for tarball in "$PACKAGE_DIRECTORY"/*.tgz; do
-            npm publish "$tarball" --dry-run --registry=https://npm.pkg.github.com
-          done
+          node scripts/publish-plugin-package-set.mjs dry-run "$PACKAGE_DIRECTORY" |
+            tee "$PACKAGE_DIRECTORY/publication-receipt.json"
 
       - name: Publish packages in dependency order
         if: inputs.dry_run != true
@@ -141,11 +135,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          for name in plugin-sdk plugin-runtime plugin-installer plugin-manager; do
-            tarball="$(find "$PACKAGE_DIRECTORY" -maxdepth 1 -name "enterpriseglue-${name}-*.tgz" -print -quit)"
-            test -n "$tarball"
-            npm publish "$tarball" --ignore-scripts --registry=https://npm.pkg.github.com
-          done
+          node scripts/publish-plugin-package-set.mjs publish "$PACKAGE_DIRECTORY" |
+            tee "$PACKAGE_DIRECTORY/publication-receipt.json"
 
       - name: Attest published package payloads
         if: inputs.dry_run != true
@@ -160,10 +151,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          node -e 'const r=require(`./${process.env.PACKAGE_DIRECTORY}/release-receipt.json`); for (const p of r.packages) console.log(`${p.name}@${p.version}`)' |
-          while IFS= read -r subject; do
-            test "$(npm view "$subject" version --registry=https://npm.pkg.github.com)" = "${subject##*@}"
-          done
+          node scripts/publish-plugin-package-set.mjs verify "$PACKAGE_DIRECTORY" |
+            tee "$PACKAGE_DIRECTORY/registry-verification.json"
 
       - name: Retain non-secret package receipt and tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
