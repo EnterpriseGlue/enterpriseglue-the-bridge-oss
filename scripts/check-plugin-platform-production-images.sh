@@ -13,6 +13,13 @@ TRIVY_IMAGE="${PLUGIN_PLATFORM_TRIVY_IMAGE:-aquasec/trivy@sha256:cffe3f5161a47a6
 cd "$ROOT_DIR"
 
 if [[ "${SKIP_PLUGIN_PLATFORM_IMAGE_BUILD:-false}" != "true" ]]; then
+  for dockerfile in packages/plugin-installer/Dockerfile packages/plugin-manager/Dockerfile; do
+    docker buildx build --quiet \
+      --platform linux/amd64,linux/arm64 \
+      --target oras \
+      --output=type=cacheonly \
+      -f "$dockerfile" .
+  done
   docker build --quiet -f backend/Dockerfile.prod -t "$BACKEND_IMAGE" .
   docker build --quiet -f frontend/Dockerfile.prod -t "$FRONTEND_IMAGE" .
   docker build --quiet -f packages/plugin-manager/Dockerfile -t "$MANAGER_IMAGE" .

@@ -29,6 +29,8 @@ assert.doesNotMatch(
 for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   assert.match(dockerfile, /golang:1\.26\.6-alpine3\.23@sha256:[a-f0-9]{64}/);
   assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.3/);
+  assert.match(dockerfile, /go build -buildvcs=false -trimpath -o \/out\/oras/);
+  assert.doesNotMatch(dockerfile, /go install oras\.land\/oras\/cmd\/oras/);
   assert.match(dockerfile, /github\.com\/sigstore\/cosign\/v3\/cmd\/cosign@v3\.1\.3/);
   assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
   assert.match(dockerfile, /golang\.org\/x\/text@v0\.39\.0/);
@@ -37,6 +39,9 @@ for (const dockerfile of [installerDockerfile, managerDockerfile]) {
 }
 assert.match(productionImageGate, /packages\/plugin-installer\/Dockerfile/);
 assert.match(productionImageGate, /packages\/plugin-manager\/Dockerfile/);
+assert.match(productionImageGate, /--platform linux\/amd64,linux\/arm64/);
+assert.match(productionImageGate, /--target oras/);
+assert.match(productionImageGate, /--output=type=cacheonly/);
 assert.equal(
   [...productionImageGate.matchAll(/--severity HIGH,CRITICAL/g)].length,
   1,

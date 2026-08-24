@@ -1,0 +1,66 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-multiarch",
+  "type": "fix",
+  "scope": "plugin-installation-toolchain",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Compiles the public Plugin Manager tool binaries explicitly for each target architecture and adds an amd64/arm64 build gate before release.",
+  "userImpact": [
+    "Connected and air-gapped plugin installation images can be published for both amd64 and arm64 without relying on native-only Go installation behavior.",
+    "Pull requests now exercise the same cross-compilation path used by protected multi-architecture publication."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Use plugin installer 0.2.2, Plugin Manager 0.1.2, and the matching 0.2.2 and 0.1.2 Helm charts; the failed v0.15.2 toolchain run did not produce a qualified release receipt."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The target-architecture binaries retain the patched Go, gRPC, x/mod, and x/text dependency floors introduced in v0.15.2.",
+    "Both amd64 and arm64 tool stages must build successfully before the native runtime images are scanned and a protected publication may start."
+  ],
+  "documentation": [
+    "The generated release guide records the replacement toolchain versions and the unqualified v0.15.2 publication attempt."
+  ],
+  "knownLimitations": [
+    "The failed v0.15.2 toolchain workflow stopped before publishing images, charts, signatures, attestations, or an offline receipt."
+  ],
+  "rollback": [
+    "Keep the currently qualified plugin toolchain installed until the 0.2.2/0.1.2 replacement receipt has been verified."
+  ],
+  "validation": [
+    "PR-gated amd64 and arm64 ORAS/Cosign cross-compilation",
+    "Native production image execution and Trivy HIGH/CRITICAL scans",
+    "Protected multi-architecture image, chart, signature, provenance, and offline-bundle qualification"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.1",
+      "newVersion": "0.2.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.1",
+      "newVersion": "0.1.2",
+      "impact": "patch"
+    }
+  ]
+}
