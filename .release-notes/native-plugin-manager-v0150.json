@@ -1,0 +1,108 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "native-plugin-manager-v0150",
+  "type": "feature",
+  "scope": "native-plugin-manager",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Adds an OSS-native, isolated Plugin Manager for safe connected and offline installation, lifecycle recovery, compatibility preflight, and Carbon administration workflows.",
+  "userImpact": [
+    "Administrators can discover, review, install, update, recover, disable, and uninstall compatible plugins without building proprietary plugin source or maintaining customer-side CI.",
+    "Connected and air-gapped installations use the same digest-pinned signed release and lifecycle contracts.",
+    "Registry, entitlement, and deployment credentials remain outside the browser and ordinary EnterpriseGlue backend."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Deploy the optional Plugin Manager workload and configure its workload identity, trust policy, and deployment adapter before using managed plugin installation.",
+      "Run plugin host-upgrade preflight before upgrading installations that already have plugins."
+    ]
+  },
+  "configuration": [
+    "Plugin Manager workload identity and internal control endpoint",
+    "Connected registry trust, private CA, and proxy settings",
+    "Compose planner or managed, Kubernetes, OpenShift, or offline deployment mode"
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds versioned product discovery, installation intent, review, approval, observation, manager capability, and host-upgrade preflight contracts.",
+      "Adds authorized browser-facing Plugin Manager administration endpoints and an internal pull-based manager protocol."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "Adds plugin installation intent, approval, safe review, observation, and manager capability persistence."
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "Plugin-owned data is isolated and is never deleted solely because entitlement expires."
+    ]
+  },
+  "security": [
+    "All executable artifacts are addressed by immutable digest and verified against signed release, provenance, evidence, and revocation state before execution.",
+    "Approvals are bound to exact review and plan digests with expected revision and idempotency controls.",
+    "The manager is an internal-only isolated workload; ordinary backend and browser processes do not receive registry or deployment credentials."
+  ],
+  "documentation": [
+    "Architecture and end-to-end implementation plan: `docs/architecture/18-native-plugin-manager-and-customer-installation-plan.md`"
+  ],
+  "knownLimitations": [
+    "The enterpriseglue.ai commercial marketplace is deferred; v0.15 uses static/imported product descriptors and administrator-provided connected or offline delivery configuration."
+  ],
+  "rollback": [
+    "Disable the Plugin Manager workload to return to the v0.14 CLI/operator-managed lifecycle path.",
+    "Use retained exact prior plugin artifacts and the release rollback classification for plugin-specific rollback.",
+    "Database migrations include down paths and do not remove existing v0.14 plugin platform records."
+  ],
+  "validation": [
+    "Contract schema and frozen compatibility fixtures",
+    "Manager restart, lease expiry, idempotent recovery, approval-digest, and revision-conflict tests",
+    "Connected OCI and physical air-gap installation, update, rollback, and uninstall tests",
+    "Carbon keyboard, accessibility, responsive, and deterministic screenshot coverage",
+    "Current/previous host and plugin compatibility matrix with Compose, Kubernetes, OpenShift, supported database, and multi-architecture qualification"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": null,
+      "newVersion": "0.1.0",
+      "impact": "initial"
+    },
+    {
+      "name": "@enterpriseglue/plugin-sdk",
+      "previousVersion": "0.2.0",
+      "newVersion": "0.3.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.1.2",
+      "newVersion": "0.2.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.5.1",
+      "newVersion": "0.6.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.7.0",
+      "newVersion": "0.8.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.6.0",
+      "newVersion": "0.7.0",
+      "impact": "minor"
+    }
+  ]
+}
