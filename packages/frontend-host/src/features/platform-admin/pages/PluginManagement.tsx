@@ -23,6 +23,7 @@ import type { PluginPlatformCapabilityCatalogV1 } from '@enterpriseglue/plugin-s
 import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import { evaluateActionSnapshot } from '../../../shared/auth/guards';
+import { PluginLifecycleManager } from '../components/PluginLifecycleManager';
 import {
   getPluginDeploymentExecution,
   getPluginPlatformCapabilities,
@@ -107,6 +108,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
   const canReadPlugins = !hasPermissionSnapshot || settingsRead.allowed;
   const canManagePlugins = !hasPermissionSnapshot || settingsManage.allowed;
   const [plugins, setPlugins] = useState<PluginSafeSummaryV1[]>([]);
+  const [platformRevision, setPlatformRevision] = useState(0);
   const [emergency, setEmergency] =
     useState<PluginPlatformEmergencyStateV1 | null>(null);
   const [audits, setAudits] = useState<PluginPlatformAuditEventV1[]>([]);
@@ -135,6 +137,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
         getPluginPlatformCapabilities(),
       ]);
       setPlugins(list.plugins);
+      setPlatformRevision(list.revision);
       setEmergency(emergencyState);
       setAudits(audit.events);
       setDeploymentExecution(execution);
@@ -214,7 +217,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
         <PageHeader
           icon={Power}
           title="Plugin management"
-          subtitle="View installed plugins and control their runtime access. Installation and upgrades remain installer operations."
+          subtitle="Discover, install, update and operate signed plugins through the customer-local Plugin Manager."
           gradient={PAGE_GRADIENTS.red}
           variant="productive"
         />
@@ -238,7 +241,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
         <PageHeader
           icon={Power}
           title="Plugin management"
-          subtitle="View installed plugins and control their runtime access. Installation and upgrades remain installer operations."
+          subtitle="Discover, install, update and operate signed plugins through the customer-local Plugin Manager."
           gradient={PAGE_GRADIENTS.red}
           variant="productive"
         />
@@ -247,7 +250,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
       {embedded && (
         <header className="eg-plugin-management__intro">
           <h2 id="plugins-title">Plugins</h2>
-          <p>Manage installed plugins and their runtime availability.</p>
+          <p>Discover, install, update and operate signed plugins without rebuilding EnterpriseGlue.</p>
         </header>
       )}
 
@@ -271,11 +274,15 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
         />
       )}
 
-      <section className="eg-plugin-management__section" aria-labelledby="installed-plugins-title">
+      <PluginLifecycleManager
+        canManage={canManagePlugins}
+        installedPlugins={plugins}
+        platformRevision={platformRevision}
+        installedContent={<section className="eg-plugin-management__section" aria-labelledby="installed-plugins-title">
         <div className="eg-plugin-management__section-header">
           <div>
             <h3 id="installed-plugins-title">Installed plugins</h3>
-            <p>Runtime controls do not install, upgrade, or remove plugin packages.</p>
+            <p>Control runtime availability independently from installation and commercial entitlement.</p>
           </div>
           <Button
             kind="ghost"
@@ -297,7 +304,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
           <InlineNotification
             kind="info"
             title="No installed plugins"
-            subtitle="Install a verified package with the supported installer."
+            subtitle="Choose a signed release from Available to create a verified installation review."
             hideCloseButton
             lowContrast
           />
@@ -370,7 +377,8 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
             </Table>
           </TableContainer>
         )}
-      </section>
+      </section>}
+      />
 
       <section className="eg-plugin-management__section" aria-labelledby="advanced-plugin-operations-title">
         <div className="eg-plugin-management__section-header">
@@ -520,7 +528,7 @@ export default function PluginManagement({ embedded = false }: { embedded?: bool
           {pending?.kind === 'emergency'
             ? 'This changes one durable platform gate. It does not uninstall plugins or erase their desired state.'
             : pending?.kind === 'plugin'
-              ? 'This changes only the durable runtime gate. Install, upgrade, and removal remain supported-installer actions.'
+              ? 'This changes only the durable runtime gate. Installation, updates and removal remain separate Plugin Manager operations.'
               : 'The host will retry this minimized event through the same declared subscription. No event payload is shown or editable here.'}
         </p>
         {busy && <InlineLoading description="Applying control change" />}

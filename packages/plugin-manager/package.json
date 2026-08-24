@@ -1,0 +1,51 @@
+{
+  "name": "@enterpriseglue/plugin-manager",
+  "version": "0.1.0",
+  "description": "Isolated OSS orchestration service for EnterpriseGlue plugin installation lifecycles",
+  "license": "Apache-2.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "eg-plugin-manager": "./dist/cli.js"
+  },
+  "scripts": {
+    "build:dependencies": "pnpm --filter @enterpriseglue/plugin-sdk run build && pnpm --filter @enterpriseglue/plugin-runtime run build && pnpm --filter @enterpriseglue/plugin-installer run build",
+    "build": "pnpm run build:dependencies && tsc -p tsconfig.json",
+    "typecheck": "pnpm run build:dependencies && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build:dependencies && vitest run"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "CONTAINER_THIRD_PARTY_NOTICES.md"
+  ],
+  "dependencies": {
+    "@enterpriseglue/plugin-installer": "workspace:*",
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss.git",
+    "directory": "packages/plugin-manager"
+  }
+}

@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, randomUUID } from 'node:crypto';
+import { createHash, createPublicKey, randomUUID, timingSafeEqual } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 
@@ -8,6 +8,7 @@ import {
   parseEnterpriseGluePluginManifestV1,
   ociDigestReferenceSchema,
   pluginDeploymentExecutionObservationV1Schema,
+  pluginCatalogV2Schema,
   pluginDeploymentLifecycleOperationSchema,
   pluginIdSchema,
   pluginPermissionGrantSetV1Schema,
@@ -53,6 +54,10 @@ import {
   type CompiledPluginOperationSchemaV1,
   type PluginOperationPayloadDirectionV1,
 } from '@enterpriseglue/plugin-runtime/json-schema';
+import {
+  verifySignedJsonPayloadV1,
+  type TrustedPluginSignerV1,
+} from '@enterpriseglue/plugin-runtime/supply-chain';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -103,6 +108,15 @@ import {
 import { PluginDiagnosticMetricsRegistryV1 } from './pluginDiagnosticMetrics.js';
 import { PluginEventMetricsRegistryV1 } from './pluginEventMetrics.js';
 import { readSecureRegularFileV1 } from './secureFile.js';
+import {
+  registerPluginManagerInternalRoutesV1,
+  type PluginManagerInternalRouteOptionsV1,
+} from './pluginManagerRoutes.js';
+import {
+  DatabasePluginManagerStoreV1,
+  type PluginManagerStoreV1,
+} from './pluginManagerStore.js';
+import { registerPluginManagerBrowserRoutesV1 } from './pluginManagerBrowserRoutes.js';
 
 const MAX_STATE_BYTES = 10 * 1024 * 1024;
 const MAX_EXECUTION_OBSERVATION_BYTES = 64 * 1024;
@@ -282,8 +296,15 @@ export interface PluginPlatformRouteOptionsV1 {
    */
   controlRouteMiddleware?: Pick<
     PluginControlRouteOptionsV1,
-    'deploymentAdminMiddleware' | 'tenantAdminMiddleware'
+    | 'deploymentReadMiddleware'
+    | 'deploymentManageMiddleware'
+    | 'tenantReadMiddleware'
+    | 'tenantManageMiddleware'
+    | 'deploymentAdminMiddleware'
+    | 'tenantAdminMiddleware'
   >;
+  managerStore?: PluginManagerStoreV1;
+  managerInternalRoutes?: PluginManagerInternalRouteOptionsV1 | false;
 }
 
 function csvSet(value: string | undefined, defaults: string[] = []): Set<string> {
@@ -1845,6 +1866,138 @@ export function registerPluginPlatformRoutes(
     eventOperations: eventStore,
     capabilityCatalog: runtime.platformCapabilities(),
   });
+  const managerStore =
+    options.managerStore ?? new DatabasePluginManagerStoreV1();
+  registerPluginManagerBrowserRoutesV1(app, managerStore, {
+    readMiddleware:
+      options.controlRouteMiddleware?.deploymentReadMiddleware ??
+      options.controlRouteMiddleware?.deploymentAdminMiddleware,
+    manageMiddleware:
+      options.controlRouteMiddleware?.deploymentManageMiddleware ??
+      options.controlRouteMiddleware?.deploymentAdminMiddleware,
+    catalog: configuredPluginManagerCatalog(),
+    platformRevision: async () => (await activeControl.list()).revision,
+  });
+  const managerInternalRoutes =
+    options.managerInternalRoutes === false
+      ? undefined
+      : options.managerInternalRoutes ?? configuredPluginManagerInternalRoutes();
+  if (managerInternalRoutes) {
+    registerPluginManagerInternalRoutesV1(
+      app,
+      managerStore,
+      {
+        ...managerInternalRoutes,
+        platformRevision: async () => (await activeControl.list()).revision,
+      },
+    );
+  }
+}
+
+function configuredPluginManagerCatalog():
+  | (() => Promise<import('@enterpriseglue/plugin-sdk').PluginCatalogV2 | null>)
+  | undefined {
+  const catalogFile =
+    process.env.ENTERPRISEGLUE_PLUGIN_MANAGER_CATALOG_FILE?.trim();
+  if (!catalogFile) return undefined;
+  const signatureFile =
+    process.env.ENTERPRISEGLUE_PLUGIN_MANAGER_CATALOG_SIGNATURE_FILE?.trim();
+  const trustFile =
+    process.env.ENTERPRISEGLUE_PLUGIN_MANAGER_TRUST_FILE?.trim();
+  if (!signatureFile || !trustFile) {
+    throw new Error('Signed plugin catalog requires signature and trust files');
+  }
+  return async () => {
+    const [payload, signatureBytes, trustBytes] = await Promise.all([
+      readSecureRegularFileV1(catalogFile, { maxBytes: 2 * 1024 * 1024 }),
+      readSecureRegularFileV1(signatureFile, { maxBytes: 64 * 1024 }),
+      readSecureRegularFileV1(trustFile, { maxBytes: 1024 * 1024 }),
+    ]);
+    const trustInput = JSON.parse(trustBytes.toString('utf8')) as unknown;
+    if (
+      !trustInput ||
+      typeof trustInput !== 'object' ||
+      !Array.isArray((trustInput as { signers?: unknown }).signers)
+    ) {
+      throw new Error('Plugin catalog trust file is invalid');
+    }
+    const trust: TrustedPluginSignerV1[] = (
+      trustInput as { signers: unknown[] }
+    ).signers.map((entry) => {
+      if (
+        !entry ||
+        typeof entry !== 'object' ||
+        typeof (entry as Record<string, unknown>).publisher !== 'string' ||
+        typeof (entry as Record<string, unknown>).keyId !== 'string' ||
+        typeof (entry as Record<string, unknown>).publicKeyPem !== 'string' ||
+        !['active', 'retiring', 'revoked', 'compromised'].includes(
+          String((entry as Record<string, unknown>).status),
+        )
+      ) {
+        throw new Error('Plugin catalog trust signer is invalid');
+      }
+      return {
+        publisher: (entry as Record<string, string>).publisher,
+        keyId: (entry as Record<string, string>).keyId,
+        publicKey: (entry as Record<string, string>).publicKeyPem,
+        status: (entry as Record<string, string>)
+          .status as TrustedPluginSignerV1['status'],
+      };
+    });
+    const { data } = verifySignedJsonPayloadV1(
+      payload,
+      JSON.parse(signatureBytes.toString('utf8')),
+      pluginCatalogV2Schema,
+      trust,
+      2 * 1024 * 1024,
+    );
+    const now = Date.now();
+    if (Date.parse(data.metadata.generatedAt) > now + 300_000) {
+      throw new Error('Plugin catalog generation time is in the future');
+    }
+    if (Date.parse(data.metadata.expiresAt) < now - 300_000) {
+      throw new Error('Plugin catalog has expired');
+    }
+    return data;
+  };
+}
+
+function configuredPluginManagerInternalRoutes():
+  | PluginManagerInternalRouteOptionsV1
+  | undefined {
+  const tokenFile =
+    process.env.ENTERPRISEGLUE_PLUGIN_MANAGER_WORKLOAD_TOKEN_FILE?.trim();
+  const managerId = process.env.ENTERPRISEGLUE_PLUGIN_MANAGER_ID?.trim();
+  if (!tokenFile || !managerId) return undefined;
+  if (!/^[A-Za-z0-9._:-]{1,256}$/.test(managerId)) {
+    throw new Error('ENTERPRISEGLUE_PLUGIN_MANAGER_ID is invalid');
+  }
+  const middleware: RequestHandler = (request, response, next) => {
+    const header = request.header('authorization') ?? '';
+    const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+    readSecureRegularFileV1(tokenFile, { maxBytes: 8 * 1024 })
+      .then((bytes) => {
+        const expected = bytes.toString('utf8').trim();
+        const left = createHash('sha256').update(presented).digest();
+        const right = createHash('sha256').update(expected).digest();
+        if (
+          presented.length < 16 ||
+          expected.length < 16 ||
+          !timingSafeEqual(left, right)
+        ) {
+          response.status(401).json({ code: 'manager_workload_identity_invalid' });
+          return;
+        }
+        next();
+      })
+      .catch(() => {
+        response.status(503).json({ code: 'manager_workload_identity_unavailable' });
+      });
+  };
+  return {
+    middleware: [middleware],
+    managerIdentity: () => managerId,
+  };
 }
 
 function configuredLocalDiagnosticCollector(

@@ -20,7 +20,7 @@
     "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.integration.config.ts --fileParallelism=false",
     "verify": "npm run typecheck && npm run build:skip-generate && npm run test:unit",
     "db:migration:generate": "npx typeorm migration:generate -d dist/packages/shared/src/db/data-source.js",
-    "db:migration:run": "npx typeorm migration:run -d dist/packages/shared/src/db/data-source.js",
+    "db:migration:run": "node -e \"import('./dist/packages/shared/src/db/run-migrations.js').then(async ({ runMigrations }) => runMigrations())\"",
     "db:migration:revert": "npx typeorm migration:revert -d dist/packages/shared/src/db/data-source.js",
     "db:schema:sync": "npx typeorm schema:sync -d dist/packages/shared/src/db/data-source.js",
     "db:cleanup-test-data": "tsx scripts/cleanup-test-data.ts"

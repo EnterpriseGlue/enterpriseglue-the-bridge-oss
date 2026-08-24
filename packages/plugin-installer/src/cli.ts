@@ -134,6 +134,15 @@ function optionalMaximumDownloadBytes(
   return value;
 }
 
+function optionalSha256(values: Arguments, name: string): string | undefined {
+  const input = values[name]?.trim();
+  if (!input) return undefined;
+  if (!/^[a-f0-9]{64}$/.test(input)) {
+    throw new Error(`--${name} must be a lowercase SHA-256 digest`);
+  }
+  return input;
+}
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path, constants.F_OK);
@@ -1021,12 +1030,12 @@ function usage(): string {
     'eg-plugin doctor',
     'eg-plugin catalog --catalog FILE --catalog-signature FILE --trust FILE',
     'eg-plugin verify-compatibility-matrix --catalog FILE --catalog-signature FILE --matrix FILE --matrix-signature FILE --trust FILE',
-    'eg-plugin install|upgrade --catalog FILE --catalog-signature FILE --trust FILE --host-version VERSION --plugin ID --version VERSION --manifest FILE --resources FILE --permission-grants FILE --asset-path ./PATH --output DIR',
-    'eg-plugin install-package|upgrade-package --package DIR --trust FILE --host-version VERSION [--permission-grants FILE] --output DIR',
-    'eg-plugin install-oci|upgrade-oci --subject REGISTRY/REPOSITORY@sha256:DIGEST --trust FILE --cosign-policy FILE --host-version VERSION [--registry-config FILE] [--registry-ca FILE] [--permission-grants FILE] [--max-download-bytes BYTES] --output DIR',
+    'eg-plugin install|upgrade --catalog FILE --catalog-signature FILE --trust FILE --host-version VERSION --plugin ID --version VERSION --manifest FILE --resources FILE --permission-grants FILE --asset-path ./PATH --output DIR [--expected-plan-sha256 SHA256]',
+    'eg-plugin install-package|upgrade-package --package DIR --trust FILE --host-version VERSION [--permission-grants FILE] --output DIR [--expected-plan-sha256 SHA256]',
+    'eg-plugin install-oci|upgrade-oci --subject REGISTRY/REPOSITORY@sha256:DIGEST --trust FILE --cosign-policy FILE --host-version VERSION [--registry-config FILE] [--registry-ca FILE] [--permission-grants FILE] [--max-download-bytes BYTES] --output DIR [--expected-plan-sha256 SHA256]',
     'eg-plugin prepare-airgap --airgap DIR --trust FILE --host-version VERSION --registry-prefix REGISTRY/PATH --output DIR',
     'eg-plugin import-airgap --airgap DIR --trust FILE --host-version VERSION --registry-map FILE [--registry-config FILE] [--registry-ca FILE]',
-    'eg-plugin install-airgap-package|upgrade-airgap-package --airgap DIR --trust FILE --host-version VERSION --registry-map FILE [--permission-grants FILE] --output DIR',
+    'eg-plugin install-airgap-package|upgrade-airgap-package --airgap DIR --trust FILE --host-version VERSION --registry-map FILE [--permission-grants FILE] --output DIR [--expected-plan-sha256 SHA256]',
     'eg-plugin apply-compose --output DIR --project-directory DIR --compose-files FILE[,FILE...] --project-name NAME [--utility-image IMAGE@sha256:DIGEST] [--image-mode pull|local] [--supersede-execution-revision N]',
     'eg-plugin apply-kubernetes --output DIR --project-directory DIR --chart DIR --values FILE --namespace NAME --release-name NAME [--utility-image IMAGE@sha256:DIGEST] [--kube-context NAME] [--platform kubernetes|openshift] [--rollout-timeout-seconds N] [--supersede-execution-revision N]',
     'eg-plugin enable|disable|rollback --plugin ID --output DIR [--supersede-execution-revision N]',
@@ -1246,6 +1255,12 @@ export async function runPluginInstallerCliV1(
             : []),
           '--output',
           output,
+          ...(values['expected-plan-sha256']?.trim()
+            ? [
+                '--expected-plan-sha256',
+                values['expected-plan-sha256'].trim(),
+              ]
+            : []),
         ],
         write,
         options,
@@ -1667,6 +1682,29 @@ export async function runPluginInstallerCliV1(
   }
 
   try {
+    const expectedPlanSha256 = optionalSha256(
+      values,
+      'expected-plan-sha256',
+    );
+    if (expectedPlanSha256 !== undefined) {
+      const plan = structuredClone(state.lifecyclePlan);
+      if (plan?.migrationImage) {
+        plan.migrationImage =
+          state.imageMappings[plan.migrationImage] ?? plan.migrationImage;
+      }
+      const envelope = createPluginLifecyclePlanEnvelopeV1(
+        state.revision,
+        plan ?? null,
+      );
+      if (
+        envelope.planSha256 !== expectedPlanSha256
+      ) {
+        throw new PluginLifecycleExecutionError(
+          'plan_mismatch',
+          'The computed lifecycle plan does not match the approved plan and revision',
+        );
+      }
+    }
     await writeOutputs(output, state, previousState);
   } catch (error) {
     if (stagedDirectory) {

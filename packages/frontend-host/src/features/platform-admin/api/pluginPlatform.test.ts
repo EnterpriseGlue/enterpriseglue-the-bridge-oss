@@ -2,13 +2,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '../../../shared/api/client';
 import {
+  createPluginInstallation,
+  decidePluginInstallation,
+  getPluginCatalog,
   getPluginDeploymentExecution,
+  getPluginManagerStatus,
   getPluginPlatformCapabilities,
   getPluginPlatformEmergencyState,
+  listPluginInstallations,
   listPluginEventDeadLetters,
   listPluginPlatformAudit,
   listPluginPlatformPlugins,
   requeuePluginEventDeadLetter,
+  recoverPluginInstallation,
   setPluginDeploymentEnabled,
   setPluginPlatformEmergencyState,
 } from './pluginPlatform';
@@ -103,6 +109,82 @@ describe('plugin platform admin API', () => {
     expect(post).toHaveBeenCalledWith(
       '/api/plugin-platform/v1/plugins/io.enterpriseglue.reference/events/dead-letters/event-dead-letter-1/requeue',
       { expectedAttempt: 3 },
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('uses safe manager discovery and paged installation endpoints', async () => {
+    const get = vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({ available: true, capability: null })
+      .mockResolvedValueOnce({ catalog: null })
+      .mockResolvedValueOnce({ items: [], total: 0 });
+
+    await getPluginManagerStatus();
+    await getPluginCatalog();
+    await listPluginInstallations({ limit: 25, offset: 50 });
+
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      '/api/plugin-platform/v1/manager',
+      '/api/plugin-platform/v1/catalog',
+      '/api/plugin-platform/v1/installations?limit=25&offset=50',
+    ]);
+  });
+
+  it('creates an intent and approves only exact review and plan digests', async () => {
+    const post = vi.spyOn(apiClient, 'post')
+      .mockResolvedValueOnce({ installationId: 'installation-1' })
+      .mockResolvedValueOnce({ revision: 3 });
+    const release = `registry.example.test/plugins/support@sha256:${'a'.repeat(64)}`;
+
+    await createPluginInstallation({
+      pluginId: 'io.enterpriseglue.ion-support',
+      release,
+      source: 'connected_registry',
+      deploymentMode: 'kubernetes',
+      expectedPlatformRevision: 7,
+      idempotencyKey: 'plugin-install-ui-request-0001',
+    });
+    await decidePluginInstallation({
+      installationId: 'installation-1',
+      decision: 'approve',
+      reviewSha256: `sha256:${'b'.repeat(64)}`,
+      planSha256: `sha256:${'c'.repeat(64)}`,
+      expectedRevision: 2,
+    });
+
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      '/api/plugin-platform/v1/installations',
+      expect.objectContaining({
+        pluginId: 'io.enterpriseglue.ion-support',
+        release,
+        source: 'connected_registry',
+      }),
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      '/api/plugin-platform/v1/installations/installation-1/approval',
+      {
+        decision: 'approve',
+        reviewSha256: `sha256:${'b'.repeat(64)}`,
+        planSha256: `sha256:${'c'.repeat(64)}`,
+        expectedRevision: 2,
+      },
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('uses a fixed recovery action and sends only the expected revision', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ revision: 5 });
+    await recoverPluginInstallation({
+      installationId: 'installation-1',
+      action: 'retry',
+      expectedRevision: 4,
+    });
+    expect(post).toHaveBeenCalledWith(
+      '/api/plugin-platform/v1/installations/installation-1/retry',
+      { expectedRevision: 4 },
       expect.objectContaining({ credentials: 'include' }),
     );
   });

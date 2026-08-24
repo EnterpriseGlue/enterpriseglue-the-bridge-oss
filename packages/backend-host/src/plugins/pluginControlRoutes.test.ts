@@ -239,7 +239,7 @@ describe('plugin control routes', () => {
       const capabilityBody = await capabilities.json();
       expect(capabilityBody).toMatchObject({
         apiVersion: 'platform-capabilities.plugin.enterpriseglue.io/v1',
-        metadata: { catalogRevision: '2026-08-19.1' },
+        metadata: { catalogRevision: '2026-08-24.1' },
         compatibility: {
           hostVersion: '0.4.6',
           sdkVersion: '0.1.0',

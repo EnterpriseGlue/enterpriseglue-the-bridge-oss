@@ -276,7 +276,7 @@ describe('PluginHostRuntimeV1', () => {
     const capabilities = defaultPluginHostCapabilitiesV1();
 
     expect(catalog.compatibility).toMatchObject({
-      hostVersion: '0.14.0',
+      hostVersion: '0.15.0',
       sdkVersion: '0.2.0',
       sharedFrontend: {
         router: '7.18.2',

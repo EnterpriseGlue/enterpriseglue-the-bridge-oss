@@ -5,13 +5,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_DIR="$ROOT_DIR/infra/kubernetes/helm/enterpriseglue-plugin-runtime"
 RBAC_CHART_DIR="$ROOT_DIR/infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac"
+MANAGER_CHART_DIR="$ROOT_DIR/infra/kubernetes/helm/enterpriseglue-plugin-manager"
 VALUES_FILE="$CHART_DIR/ci-values.yaml"
+MANAGER_IMAGE="ghcr.io/enterpriseglue/plugin-manager@sha256:$(printf '9%.0s' {1..64})"
 RENDERED_FILE="$(mktemp)"
 OPENSHIFT_RENDERED_FILE="$(mktemp)"
 RBAC_RENDERED_FILE="$(mktemp)"
+MANAGER_RENDERED_FILE="$(mktemp)"
 
 cleanup() {
-  rm -f "$RENDERED_FILE" "$OPENSHIFT_RENDERED_FILE" "$RBAC_RENDERED_FILE"
+  rm -f "$RENDERED_FILE" "$OPENSHIFT_RENDERED_FILE" "$RBAC_RENDERED_FILE" "$MANAGER_RENDERED_FILE"
 }
 trap cleanup EXIT
 
@@ -22,11 +25,15 @@ fi
 
 helm lint "$CHART_DIR" -f "$VALUES_FILE"
 helm lint "$RBAC_CHART_DIR"
+helm lint "$MANAGER_CHART_DIR" --set-string image="$MANAGER_IMAGE"
 helm template enterpriseglue-plugins "$CHART_DIR" -f "$VALUES_FILE" >"$RENDERED_FILE"
 helm template enterpriseglue-plugins "$CHART_DIR" -f "$VALUES_FILE" \
   --set platform=openshift >"$OPENSHIFT_RENDERED_FILE"
 helm template enterpriseglue-plugin-installer-rbac "$RBAC_CHART_DIR" \
   --namespace enterpriseglue-plugins >"$RBAC_RENDERED_FILE"
+helm template enterpriseglue-plugin-manager "$MANAGER_CHART_DIR" \
+  --namespace enterpriseglue-plugins \
+  --set-string image="$MANAGER_IMAGE" >"$MANAGER_RENDERED_FILE"
 
 require_text() {
   local expected="$1"
@@ -119,4 +126,24 @@ for forbidden in \
   fi
 done
 
-echo "Plugin runtime Helm chart security checks passed"
+for expected in \
+  "image: \"$MANAGER_IMAGE\"" \
+  "automountServiceAccountToken: true" \
+  "readOnlyRootFilesystem: true" \
+  "allowPrivilegeEscalation: false" \
+  'drop: ["ALL"]' \
+  "helm.sh/resource-policy: keep" \
+  "policyTypes: [\"Ingress\"]" \
+  "ingress: []"; do
+  if ! grep -Fq "$expected" "$MANAGER_RENDERED_FILE"; then
+    echo "Plugin Manager chart is missing: $expected" >&2
+    exit 1
+  fi
+done
+
+if grep -Eq '^kind:[[:space:]]*Service$' "$MANAGER_RENDERED_FILE"; then
+  echo "Plugin Manager must not expose a Kubernetes Service" >&2
+  exit 1
+fi
+
+echo "Plugin runtime, manager, and RBAC Helm chart security checks passed"

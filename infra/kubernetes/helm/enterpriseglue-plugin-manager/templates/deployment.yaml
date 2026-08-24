@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enterpriseglue-plugin-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: enterpriseglue-plugin-manager
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: enterpriseglue-plugin-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: enterpriseglue-plugin-manager
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/configuration-secret: {{ printf "%s/%s" .Values.configurationSecret.name .Values.configurationSecret.key | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: manager
+          image: {{ required "image must be an immutable digest reference" .Values.image | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: ENTERPRISEGLUE_PLUGIN_MANAGER_CONFIG_FILE
+              value: /etc/enterpriseglue/plugin-manager/manager-config.json
+          ports:
+            - name: health
+              containerPort: 8788
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /_manager/health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /_manager/ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/enterpriseglue/plugin-manager/manager-config.json
+              subPath: {{ .Values.configurationSecret.key }}
+              readOnly: true
+            - name: configuration
+              mountPath: /etc/enterpriseglue/plugin-manager/material
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/enterpriseglue/plugin-manager
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: configuration
+          secret:
+            secretName: {{ .Values.configurationSecret.name }}
+            defaultMode: 0400
+        - name: state
+          persistentVolumeClaim:
+            claimName: enterpriseglue-plugin-manager
+        - name: temporary
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

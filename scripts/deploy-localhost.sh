@@ -406,7 +406,10 @@ start_backend() {
 
 start_frontend() {
   log "Starting frontend preview on :$PREVIEW_PORT"
-  (cd "$FRONTEND_DIR" && nohup pnpm run preview -- --port "$PREVIEW_PORT" > preview.log 2>&1 &)
+  # Invoke Vite directly so the caller-selected port is authoritative. The
+  # package script carries a development default and forwarding another
+  # `--port` through `pnpm run ... --` leaves Vite bound to that default.
+  (cd "$FRONTEND_DIR" && nohup pnpm exec vite preview --host 0.0.0.0 --port "$PREVIEW_PORT" > preview.log 2>&1 &)
 }
 
 verify_deployment() {

@@ -1,4 +1,12 @@
-import type { PluginPlatformCapabilityCatalogV1 } from '@enterpriseglue/plugin-sdk';
+import type {
+  PluginCatalogV2,
+  PluginInstallApprovalV1,
+  PluginInstallReviewV1,
+  PluginInstallationIntentV1,
+  PluginInstallationObservationV1,
+  PluginManagerCapabilityV1,
+  PluginPlatformCapabilityCatalogV1,
+} from '@enterpriseglue/plugin-sdk';
 
 import { apiClient } from '../../../shared/api/client';
 
@@ -116,6 +124,33 @@ export interface PluginDeploymentExecutionObservationV1 {
   execution: PluginDeploymentExecutionSummaryV1 | null;
 }
 
+export interface PluginManagerStatusV1 {
+  apiVersion: 'manager-status.plugin.enterpriseglue.io/v1';
+  available: boolean;
+  capability: PluginManagerCapabilityV1 | null;
+}
+
+export interface PluginCatalogProjectionV1 {
+  apiVersion: 'catalog-projection.plugin.enterpriseglue.io/v1';
+  catalog: PluginCatalogV2 | null;
+}
+
+export interface PluginInstallationSummaryV1 {
+  intent: PluginInstallationIntentV1;
+  state: string;
+  reasonCode: string;
+  revision: number;
+  review: PluginInstallReviewV1 | null;
+  approval: PluginInstallApprovalV1 | null;
+  latestObservation: PluginInstallationObservationV1 | null;
+  updatedAt: string;
+}
+
+export interface PluginInstallationPageV1 {
+  items: PluginInstallationSummaryV1[];
+  total: number;
+}
+
 export async function listPluginPlatformPlugins(): Promise<PluginSafeListV1> {
   return apiClient.get<PluginSafeListV1>(
     '/api/plugin-platform/v1/plugins',
@@ -163,6 +198,97 @@ export async function getPluginDeploymentExecution(): Promise<PluginDeploymentEx
     '/api/plugin-platform/v1/deployment-execution',
     undefined,
     { credentials: 'include' },
+  );
+}
+
+export async function getPluginManagerStatus(): Promise<PluginManagerStatusV1> {
+  return apiClient.get<PluginManagerStatusV1>(
+    '/api/plugin-platform/v1/manager',
+    undefined,
+    { credentials: 'include' },
+  );
+}
+
+export async function getPluginCatalog(): Promise<PluginCatalogProjectionV1> {
+  return apiClient.get<PluginCatalogProjectionV1>(
+    '/api/plugin-platform/v1/catalog',
+    undefined,
+    { credentials: 'include' },
+  );
+}
+
+export async function listPluginInstallations(input: {
+  limit: number;
+  offset: number;
+}): Promise<PluginInstallationPageV1> {
+  return apiClient.get<PluginInstallationPageV1>(
+    `/api/plugin-platform/v1/installations?limit=${input.limit}&offset=${input.offset}`,
+    undefined,
+    { credentials: 'include' },
+  );
+}
+
+export async function getPluginInstallation(
+  installationId: string,
+): Promise<PluginInstallationSummaryV1> {
+  return apiClient.get<PluginInstallationSummaryV1>(
+    `/api/plugin-platform/v1/installations/${encodeURIComponent(installationId)}`,
+    undefined,
+    { credentials: 'include' },
+  );
+}
+
+export async function createPluginInstallation(input: {
+  pluginId: string;
+  release: string;
+  operation?: 'install' | 'upgrade';
+  fromVersion?: string;
+  currentEnabled?: boolean;
+  source: 'connected_registry' | 'offline_delivery' | 'static_catalog';
+  deploymentMode: 'compose_planner' | 'compose_managed' | 'kubernetes' | 'openshift';
+  expectedPlatformRevision: number;
+  idempotencyKey: string;
+}): Promise<PluginInstallationIntentV1> {
+  return apiClient.post<PluginInstallationIntentV1>(
+    '/api/plugin-platform/v1/installations',
+    input,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
+export async function decidePluginInstallation(input: {
+  installationId: string;
+  decision: 'approve' | 'reject';
+  reviewSha256: string;
+  planSha256: string;
+  expectedRevision: number;
+}): Promise<{ approval: PluginInstallApprovalV1; revision: number }> {
+  const { installationId, ...body } = input;
+  return apiClient.post<{ approval: PluginInstallApprovalV1; revision: number }>(
+    `/api/plugin-platform/v1/installations/${encodeURIComponent(installationId)}/approval`,
+    body,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
+export async function recoverPluginInstallation(input: {
+  installationId: string;
+  action: 'cancel' | 'retry';
+  expectedRevision: number;
+}): Promise<{ revision: number }> {
+  return apiClient.post<{ revision: number }>(
+    `/api/plugin-platform/v1/installations/${encodeURIComponent(input.installationId)}/${input.action}`,
+    { expectedRevision: input.expectedRevision },
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    },
   );
 }
 

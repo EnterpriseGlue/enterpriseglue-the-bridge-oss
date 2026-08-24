@@ -1,0 +1,8 @@
+{
+  "zod@4.4.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/colinhacks/zod.git",
+    "publisher": "Colin McDonnell",
+    "email": "zod@colinhacks.com"
+  }
+}

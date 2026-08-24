@@ -1,0 +1,29 @@
+image: ""
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+
+serviceAccount:
+  name: enterpriseglue-plugin-installer
+
+configurationSecret:
+  name: enterpriseglue-plugin-manager
+  key: manager-config.json
+
+state:
+  size: 10Gi
+  storageClassName: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

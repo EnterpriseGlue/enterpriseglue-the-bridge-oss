@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-08-23T12:05:35.078Z
+Generated at: 2026-08-24T07:21:45.834Z
 
 Generated from:
 - third_party_licenses.json
@@ -12,6 +12,7 @@ Generated from:
 - packages/enterprise-plugin-api/third_party_licenses.json
 - packages/frontend-host/third_party_licenses.json
 - packages/plugin-installer/third_party_licenses.json
+- packages/plugin-manager/third_party_licenses.json
 - packages/plugin-reference/third_party_licenses.json
 - packages/plugin-runtime/third_party_licenses.json
 - packages/plugin-sdk/third_party_licenses.json
@@ -112,7 +113,7 @@ Generated from:
 | undici | 7.29.0 | MIT | git+https://github.com/nodejs/undici.git | backend, frontend, packages/backend-host, packages/shared, root |
 | uuid | 14.0.2 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/shared, root |
 | yaml | 2.9.0 | ISC | github:eemeli/yaml | packages/plugin-installer |
-| zod | 4.4.3 | MIT | git+https://github.com/colinhacks/zod.git | backend, frontend, packages/backend-host, packages/plugin-sdk, packages/shared, root |
+| zod | 4.4.3 | MIT | git+https://github.com/colinhacks/zod.git | backend, frontend, packages/backend-host, packages/plugin-manager, packages/plugin-sdk, packages/shared, root |
 | zustand | 5.0.15 | MIT | git+https://github.com/pmndrs/zustand.git | frontend, packages/frontend-host |
 
 ---

@@ -28,8 +28,10 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       SOURCE_REF: ${{ inputs.source_ref }}
       INSTALLER_REPOSITORY: ghcr.io/enterpriseglue/plugin-installer
+      MANAGER_REPOSITORY: ghcr.io/enterpriseglue/plugin-manager
       RUNTIME_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-runtime
       RBAC_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-installer-rbac
+      MANAGER_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-manager
       TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
       ZOT_IMAGE: ghcr.io/project-zot/zot-minimal@sha256:892f2a5a63dd99bdf85320fee5448506119328a6d5e1a2d14d4db876be595236
       COSIGN_EXPERIMENTAL: '1'
@@ -112,15 +114,21 @@ jobs:
         run: |
           set -euo pipefail
           INSTALLER_VERSION="$(node -p "require('./packages/plugin-installer/package.json').version")"
+          MANAGER_VERSION="$(node -p "require('./packages/plugin-manager/package.json').version")"
           RUNTIME_CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-runtime/Chart.yaml)"
           RBAC_CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac/Chart.yaml)"
+          MANAGER_CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-manager/Chart.yaml)"
           [[ "$INSTALLER_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$MANAGER_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]
           [[ "$INSTALLER_VERSION" == "$RUNTIME_CHART_VERSION" ]]
           [[ "$INSTALLER_VERSION" == "$RBAC_CHART_VERSION" ]]
+          [[ "$MANAGER_VERSION" == "$MANAGER_CHART_VERSION" ]]
           echo "version=$INSTALLER_VERSION" >> "$GITHUB_OUTPUT"
           {
             echo "TOOLCHAIN_VERSION=$INSTALLER_VERSION"
+            echo "MANAGER_VERSION=$MANAGER_VERSION"
             echo "INSTALLER_TAG_REFERENCE=$INSTALLER_REPOSITORY:$INSTALLER_VERSION-$SOURCE_REF"
+            echo "MANAGER_TAG_REFERENCE=$MANAGER_REPOSITORY:$MANAGER_VERSION-$SOURCE_REF"
             echo "CHART_OUTPUT=$RUNNER_TEMP/enterpriseglue-plugin-charts"
             echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$SOURCE_REF")"
           } >> "$GITHUB_ENV"
@@ -158,12 +166,20 @@ jobs:
             echo "Installer release tag already exists" >&2
             exit 1
           fi
+          if docker buildx imagetools inspect "$MANAGER_TAG_REFERENCE" >/dev/null 2>&1; then
+            echo "Manager release tag already exists" >&2
+            exit 1
+          fi
           if oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION" >/dev/null 2>&1; then
             echo "Runtime chart release already exists" >&2
             exit 1
           fi
           if oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION" >/dev/null 2>&1; then
             echo "Installer RBAC chart release already exists" >&2
+            exit 1
+          fi
+          if oras resolve "$MANAGER_CHART_REPOSITORY:$MANAGER_VERSION" >/dev/null 2>&1; then
+            echo "Manager chart release already exists" >&2
             exit 1
           fi
 
@@ -192,6 +208,31 @@ jobs:
           [[ "$INSTALLER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "INSTALLER_REFERENCE=$INSTALLER_REPOSITORY@$INSTALLER_DIGEST" >> "$GITHUB_ENV"
 
+      - name: Build and publish the multi-architecture native manager
+        id: manager
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: ./packages/plugin-manager/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ env.MANAGER_TAG_REFERENCE }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SOURCE_REF }}
+            org.opencontainers.image.version=${{ env.MANAGER_VERSION }}
+
+      - name: Record the immutable manager reference
+        env:
+          MANAGER_DIGEST: ${{ steps.manager.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$MANAGER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "MANAGER_REFERENCE=$MANAGER_REPOSITORY@$MANAGER_DIGEST" >> "$GITHUB_ENV"
+
       - name: Package and publish the fixed Helm charts
         shell: bash
         run: |
@@ -202,29 +243,42 @@ jobs:
             --destination "$CHART_OUTPUT"
           helm package infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac \
             --destination "$CHART_OUTPUT"
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-manager \
+            --destination "$CHART_OUTPUT"
           helm package infra/kubernetes/helm/enterpriseglue-plugin-runtime \
             --destination "$REPRO_OUTPUT" >/dev/null
           helm package infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac \
             --destination "$REPRO_OUTPUT" >/dev/null
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-manager \
+            --destination "$REPRO_OUTPUT" >/dev/null
           RUNTIME_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-runtime-$TOOLCHAIN_VERSION.tgz"
           RBAC_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-installer-rbac-$TOOLCHAIN_VERSION.tgz"
+          MANAGER_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-manager-$MANAGER_VERSION.tgz"
           test -f "$RUNTIME_ARCHIVE"
           test -f "$RBAC_ARCHIVE"
+          test -f "$MANAGER_ARCHIVE"
           test "$(sha256sum "$RUNTIME_ARCHIVE" | cut -d' ' -f1)" = \
             "$(sha256sum "$REPRO_OUTPUT/$(basename "$RUNTIME_ARCHIVE")" | cut -d' ' -f1)"
           test "$(sha256sum "$RBAC_ARCHIVE" | cut -d' ' -f1)" = \
             "$(sha256sum "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")" | cut -d' ' -f1)"
+          test "$(sha256sum "$MANAGER_ARCHIVE" | cut -d' ' -f1)" = \
+            "$(sha256sum "$REPRO_OUTPUT/$(basename "$MANAGER_ARCHIVE")" | cut -d' ' -f1)"
           helm push "$RUNTIME_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
           helm push "$RBAC_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+          helm push "$MANAGER_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
           RUNTIME_DIGEST="$(oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
           RBAC_DIGEST="$(oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
+          MANAGER_CHART_DIGEST="$(oras resolve "$MANAGER_CHART_REPOSITORY:$MANAGER_VERSION")"
           [[ "$RUNTIME_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$RBAC_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$MANAGER_CHART_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           {
             echo "RUNTIME_CHART_REFERENCE=$RUNTIME_CHART_REPOSITORY@$RUNTIME_DIGEST"
             echo "RBAC_CHART_REFERENCE=$RBAC_CHART_REPOSITORY@$RBAC_DIGEST"
+            echo "MANAGER_CHART_REFERENCE=$MANAGER_CHART_REPOSITORY@$MANAGER_CHART_DIGEST"
             echo "RUNTIME_CHART_ARCHIVE=$RUNTIME_ARCHIVE"
             echo "RBAC_CHART_ARCHIVE=$RBAC_ARCHIVE"
+            echo "MANAGER_CHART_ARCHIVE=$MANAGER_ARCHIVE"
           } >> "$GITHUB_ENV"
 
       - name: Sign all immutable toolchain subjects with workload identity
@@ -233,8 +287,10 @@ jobs:
           set -euo pipefail
           for subject in \
             "$INSTALLER_REFERENCE" \
+            "$MANAGER_REFERENCE" \
             "$RUNTIME_CHART_REFERENCE" \
-            "$RBAC_CHART_REFERENCE"; do
+            "$RBAC_CHART_REFERENCE" \
+            "$MANAGER_CHART_REFERENCE"; do
             cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
           done
 
@@ -245,6 +301,13 @@ jobs:
           subject-digest: ${{ steps.installer.outputs.digest }}
           push-to-registry: true
 
+      - name: Attest the manager image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-name: ${{ env.MANAGER_REPOSITORY }}
+          subject-digest: ${{ steps.manager.outputs.digest }}
+          push-to-registry: true
+
       - name: Verify signatures, scans, tools, and exact chart payloads
         shell: bash
         run: |
@@ -252,25 +315,37 @@ jobs:
           CERTIFICATE_IDENTITY="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/plugin-toolchain-release.yml@$GITHUB_REF"
           for subject in \
             "$INSTALLER_REFERENCE" \
+            "$MANAGER_REFERENCE" \
             "$RUNTIME_CHART_REFERENCE" \
-            "$RBAC_CHART_REFERENCE"; do
+            "$RBAC_CHART_REFERENCE" \
+            "$MANAGER_CHART_REFERENCE"; do
             cosign verify \
               --certificate-identity "$CERTIFICATE_IDENTITY" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               "$subject" >/dev/null
           done
           docker buildx imagetools inspect "$INSTALLER_REFERENCE" >/dev/null
+          docker buildx imagetools inspect "$MANAGER_REFERENCE" >/dev/null
           docker pull "$INSTALLER_REFERENCE"
+          docker pull "$MANAGER_REFERENCE"
           docker run --rm --entrypoint oras "$INSTALLER_REFERENCE" version
           docker run --rm --entrypoint cosign "$INSTALLER_REFERENCE" version
           docker run --rm --entrypoint helm "$INSTALLER_REFERENCE" version --short
           docker run --rm --entrypoint kubectl "$INSTALLER_REFERENCE" version --client
+          docker run --rm --entrypoint oras "$MANAGER_REFERENCE" version
+          docker run --rm --entrypoint cosign "$MANAGER_REFERENCE" version
+          docker run --rm --entrypoint helm "$MANAGER_REFERENCE" version --short
+          docker run --rm --entrypoint kubectl "$MANAGER_REFERENCE" version --client
           docker run --rm \
             --volume "$HOME/.docker:/root/.docker:ro" \
             "$TRIVY_IMAGE" image --quiet --exit-code 1 \
             --severity HIGH,CRITICAL "$INSTALLER_REFERENCE"
+          docker run --rm \
+            --volume "$HOME/.docker:/root/.docker:ro" \
+            "$TRIVY_IMAGE" image --quiet --exit-code 1 \
+            --severity HIGH,CRITICAL "$MANAGER_REFERENCE"
 
-          mkdir -p "$RUNNER_TEMP/runtime-chart-pull" "$RUNNER_TEMP/rbac-chart-pull"
+          mkdir -p "$RUNNER_TEMP/runtime-chart-pull" "$RUNNER_TEMP/rbac-chart-pull" "$RUNNER_TEMP/manager-chart-pull"
           RUNTIME_LAYER_DIGEST="$(
             oras manifest fetch "$RUNTIME_CHART_REFERENCE" |
               jq -er '
@@ -289,18 +364,33 @@ jobs:
                 | if length == 1 then .[0] else error("expected exactly one Helm chart layer") end
               '
           )"
+          MANAGER_CHART_LAYER_DIGEST="$(
+            oras manifest fetch "$MANAGER_CHART_REFERENCE" |
+              jq -er '
+                [.layers[]
+                  | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip")
+                  | .digest]
+                | if length == 1 then .[0] else error("expected exactly one Helm chart layer") end
+              '
+          )"
           PULLED_RUNTIME="$RUNNER_TEMP/runtime-chart-pull/$(basename "$RUNTIME_CHART_ARCHIVE")"
           PULLED_RBAC="$RUNNER_TEMP/rbac-chart-pull/$(basename "$RBAC_CHART_ARCHIVE")"
+          PULLED_MANAGER_CHART="$RUNNER_TEMP/manager-chart-pull/$(basename "$MANAGER_CHART_ARCHIVE")"
           oras blob fetch \
             --output "$PULLED_RUNTIME" \
             "${RUNTIME_CHART_REFERENCE%@*}@$RUNTIME_LAYER_DIGEST"
           oras blob fetch \
             --output "$PULLED_RBAC" \
             "${RBAC_CHART_REFERENCE%@*}@$RBAC_LAYER_DIGEST"
+          oras blob fetch \
+            --output "$PULLED_MANAGER_CHART" \
+            "${MANAGER_CHART_REFERENCE%@*}@$MANAGER_CHART_LAYER_DIGEST"
           test "$(sha256sum "$RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" = \
             "$(sha256sum "$PULLED_RUNTIME" | cut -d' ' -f1)"
           test "$(sha256sum "$RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" = \
             "$(sha256sum "$PULLED_RBAC" | cut -d' ' -f1)"
+          test "$(sha256sum "$MANAGER_CHART_ARCHIVE" | cut -d' ' -f1)" = \
+            "$(sha256sum "$PULLED_MANAGER_CHART" | cut -d' ' -f1)"
 
       - name: Write the immutable toolchain release receipt
         shell: bash
@@ -310,20 +400,27 @@ jobs:
           mkdir -p "$RECEIPT"
           cp "$RUNTIME_CHART_ARCHIVE" "$RECEIPT/"
           cp "$RBAC_CHART_ARCHIVE" "$RECEIPT/"
+          cp "$MANAGER_CHART_ARCHIVE" "$RECEIPT/"
           jq -n \
             --arg version "$TOOLCHAIN_VERSION" \
             --arg sourceRevision "$SOURCE_REF" \
             --arg installer "$INSTALLER_REFERENCE" \
+            --arg managerVersion "$MANAGER_VERSION" \
+            --arg manager "$MANAGER_REFERENCE" \
             --arg runtimeChart "$RUNTIME_CHART_REFERENCE" \
             --arg runtimeChartSha256 "$(sha256sum "$RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" \
             --arg rbacChart "$RBAC_CHART_REFERENCE" \
             --arg rbacChartSha256 "$(sha256sum "$RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" \
+            --arg managerChart "$MANAGER_CHART_REFERENCE" \
+            --arg managerChartSha256 "$(sha256sum "$MANAGER_CHART_ARCHIVE" | cut -d' ' -f1)" \
             --arg workflowRun "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             '{
               schemaVersion: "enterpriseglue-plugin-toolchain-release/v1",
               version: $version,
               sourceRevision: $sourceRevision,
               installer: $installer,
+              managerVersion: $managerVersion,
+              manager: $manager,
               runtimeChart: {
                 subject: $runtimeChart,
                 archiveSha256: $runtimeChartSha256
@@ -331,6 +428,10 @@ jobs:
               installerRbacChart: {
                 subject: $rbacChart,
                 archiveSha256: $rbacChartSha256
+              },
+              managerChart: {
+                subject: $managerChart,
+                archiveSha256: $managerChartSha256
               },
               workflowRun: $workflowRun,
               customerCiRequired: false,
@@ -399,7 +500,7 @@ jobs:
               and .sourceRegistryAccessed == false
               and .customerCiRequired == false
               and .customerBuildRequired == false
-              and (.artifacts | length == 3)
+              and (.artifacts | length == 5)
               and all(.artifacts[]; .signatureVerified == true)' \
             "$IMPORT_RECEIPT" >/dev/null
 

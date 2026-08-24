@@ -21,11 +21,18 @@ export async function findPluginRowForUpdateV1<T extends ObjectLiteral>(
     .createQueryBuilder('plugin_locked_row')
     .setFindOptions({ where });
   // A read in Spanner's serializable read-write transaction already acquires
-  // the lock needed to protect a dependent write. TypeORM does not recognize
-  // Spanner in SelectQueryBuilder.setLock(), so adding the SQL lock expression
-  // would fail before the query reaches the database.
+  // the lock needed to protect a dependent write. SQLite-family drivers also
+  // serialize writes at the transaction/database boundary and do not support
+  // TypeORM's pessimistic lock expression. Keep the production row lock for
+  // every driver that supports it and avoid emitting invalid SQL elsewhere.
+  const databaseType = repository.manager.connection.options.type;
+  const transactionProvidesWriteSerialization =
+    databaseType === 'spanner' ||
+    databaseType === 'sqlite' ||
+    databaseType === 'better-sqlite3' ||
+    databaseType === 'sqljs';
   const rows =
-    repository.manager.connection.options.type === 'spanner'
+    transactionProvidesWriteSerialization
       ? await query.getMany()
       : await query.setLock('pessimistic_write').getMany();
   if (rows.length > 1) {

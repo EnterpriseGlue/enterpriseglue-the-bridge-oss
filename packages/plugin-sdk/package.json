@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/plugin-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Public, product-neutral contracts for EnterpriseGlue OSS plugins",
   "license": "Apache-2.0",
   "private": false,
@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/generate-json-schema.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:compat": "pnpm run build && tsc -p fixtures/sdk-0.1.0/tsconfig.json --noEmit && tsc -p fixtures/sdk-0.2.0/tsconfig.json --noEmit",
+    "test:compat": "pnpm run build && tsc -p fixtures/sdk-0.1.0/tsconfig.json --noEmit && tsc -p fixtures/sdk-0.2.0/tsconfig.json --noEmit && tsc -p fixtures/sdk-0.3.0/tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "exports": {
@@ -19,6 +19,10 @@
     "./manifest": {
       "types": "./dist/manifest.d.ts",
       "default": "./dist/manifest.js"
+    },
+    "./manager": {
+      "types": "./dist/manager.d.ts",
+      "default": "./dist/manager.js"
     },
     "./platform": {
       "types": "./dist/platform.d.ts",
@@ -49,6 +53,15 @@
       "default": "./dist/distribution.js"
     },
     "./schema/enterpriseglue-plugin-compatibility-matrix-v1.schema.json": "./dist/schema/enterpriseglue-plugin-compatibility-matrix-v1.schema.json",
+    "./schema/enterpriseglue-plugin-release-v1.schema.json": "./dist/schema/enterpriseglue-plugin-release-v1.schema.json",
+    "./schema/enterpriseglue-plugin-catalog-v2.schema.json": "./dist/schema/enterpriseglue-plugin-catalog-v2.schema.json",
+    "./schema/enterpriseglue-plugin-installation-intent-v1.schema.json": "./dist/schema/enterpriseglue-plugin-installation-intent-v1.schema.json",
+    "./schema/enterpriseglue-plugin-install-review-v1.schema.json": "./dist/schema/enterpriseglue-plugin-install-review-v1.schema.json",
+    "./schema/enterpriseglue-plugin-install-approval-v1.schema.json": "./dist/schema/enterpriseglue-plugin-install-approval-v1.schema.json",
+    "./schema/enterpriseglue-plugin-installation-observation-v1.schema.json": "./dist/schema/enterpriseglue-plugin-installation-observation-v1.schema.json",
+    "./schema/enterpriseglue-plugin-manager-capability-v1.schema.json": "./dist/schema/enterpriseglue-plugin-manager-capability-v1.schema.json",
+    "./schema/enterpriseglue-plugin-offline-delivery-request-v1.schema.json": "./dist/schema/enterpriseglue-plugin-offline-delivery-request-v1.schema.json",
+    "./schema/enterpriseglue-plugin-offline-delivery-receipt-v1.schema.json": "./dist/schema/enterpriseglue-plugin-offline-delivery-receipt-v1.schema.json",
     "./schema/enterpriseglue-plugin-platform-capabilities-v1.schema.json": "./dist/schema/enterpriseglue-plugin-platform-capabilities-v1.schema.json",
     "./schema/enterpriseglue-plugin-manifest-v1.schema.json": "./dist/schema/enterpriseglue-plugin-manifest-v1.schema.json"
   },

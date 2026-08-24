@@ -145,7 +145,7 @@ export class SpawnOciAcquisitionCommandPortV1
   }
 }
 
-interface CosignPolicyV1 {
+export interface CosignPolicyV1 {
   mode: 'public-key' | 'keyless';
   publicKeyFile?: string;
   certificateIdentity?: string;
@@ -244,7 +244,7 @@ async function regularFile(pathInput: string, label: string): Promise<string> {
   return realpath(path);
 }
 
-async function loadCosignPolicy(pathInput: string): Promise<{
+export async function loadCosignPolicyV1(pathInput: string): Promise<{
   policy: CosignPolicyV1;
   policyPath: string;
 }> {
@@ -508,7 +508,7 @@ export async function acquirePluginOciPackageV1(
   );
   const command =
     input.command ?? new SpawnOciAcquisitionCommandPortV1();
-  const { policy } = await loadCosignPolicy(input.cosignPolicyFile);
+  const { policy } = await loadCosignPolicyV1(input.cosignPolicyFile);
   const work = await mkdtemp(resolve(tmpdir(), 'eg-plugin-oci-'));
   await chmod(work, 0o700);
   const packageRoot = resolve(work, 'package');
@@ -880,6 +880,223 @@ export async function acquirePluginOciPackageV1(
         maximumDownloadBytes,
         registryRetryCount,
         maximumRegistryReadAttempts,
+      },
+      cleanup,
+    };
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
+export interface AcquireSignedPluginOciDocumentInputV1 {
+  subject: string;
+  artifactType: string;
+  expectedFiles: readonly string[];
+  cosignPolicyFile: string;
+  registryConfigFile?: string;
+  registryCaFile?: string;
+  allowPlainHttp?: boolean;
+  allowInsecureTls?: boolean;
+  maximumDownloadBytes?: number;
+  command?: OciAcquisitionCommandPortV1;
+}
+
+export interface SignedPluginOciDocumentReceiptV1 {
+  subject: string;
+  subjectDigest: string;
+  artifactType: string;
+  files: Array<{ path: string; sizeBytes: number; sha256: string }>;
+  cosignMode: CosignPolicyV1['mode'];
+}
+
+export interface AcquiredSignedPluginOciDocumentV1 {
+  root: string;
+  receipt: SignedPluginOciDocumentReceiptV1;
+  cleanup(): Promise<void>;
+}
+
+/**
+ * Pulls one closed, Cosign-verified OCI document by immutable manifest digest.
+ * This is intentionally generic so manager release metadata and later signed
+ * control documents use the same bounded registry and workflow-identity gate
+ * as plugin packages without inheriting package-specific referrer rules.
+ */
+export async function acquireSignedPluginOciDocumentV1(
+  input: AcquireSignedPluginOciDocumentInputV1,
+): Promise<AcquiredSignedPluginOciDocumentV1> {
+  const subject = ociDigestReferenceSchema.parse(input.subject);
+  if (
+    !/^application\/vnd\.enterpriseglue\.[a-z0-9.-]+(?:\+json)?$/.test(
+      input.artifactType,
+    )
+  ) {
+    throw new Error('OCI document artifact type is invalid');
+  }
+  if (
+    input.expectedFiles.length < 1 ||
+    input.expectedFiles.length > 16 ||
+    new Set(input.expectedFiles).size !== input.expectedFiles.length ||
+    input.expectedFiles.some(
+      (path) =>
+        !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$/.test(path) ||
+        path.includes('..') ||
+        path.startsWith('/'),
+    )
+  ) {
+    throw new Error('OCI document expected inventory is invalid');
+  }
+  if (input.allowPlainHttp && input.allowInsecureTls) {
+    throw new Error('Plain HTTP and insecure TLS modes are mutually exclusive');
+  }
+  const maximumDownloadBytes = parseMaximumDownloadBytes(
+    input.maximumDownloadBytes,
+  );
+  const command = input.command ?? new SpawnOciAcquisitionCommandPortV1();
+  const { policy } = await loadCosignPolicyV1(input.cosignPolicyFile);
+  const work = await mkdtemp(resolve(tmpdir(), 'eg-plugin-oci-document-'));
+  await chmod(work, 0o700);
+  const root = resolve(work, 'document');
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  let disposed = false;
+  const cleanup = async () => {
+    if (disposed) return;
+    disposed = true;
+    await rm(work, { recursive: true, force: true });
+  };
+  try {
+    let registryConfigFile: string | undefined;
+    if (input.registryConfigFile) {
+      const source = await regularFile(
+        input.registryConfigFile,
+        'OCI registry configuration',
+      );
+      const authRoot = resolve(work, 'registry-auth');
+      registryConfigFile = resolve(authRoot, 'config.json');
+      await mkdir(authRoot, { recursive: true, mode: 0o700 });
+      await copyFile(source, registryConfigFile, constants.COPYFILE_EXCL);
+      await chmod(registryConfigFile, 0o600);
+    }
+    const registryCaFile = input.registryCaFile
+      ? await regularFile(input.registryCaFile, 'OCI registry CA')
+      : undefined;
+    const orasRegistryArgs = [
+      ...(registryConfigFile
+        ? ['--registry-config', registryConfigFile]
+        : []),
+      ...(registryCaFile ? ['--ca-file', registryCaFile] : []),
+      ...(input.allowPlainHttp ? ['--plain-http'] : []),
+      ...(input.allowInsecureTls ? ['--insecure'] : []),
+    ];
+    const cosignRegistryArgs = [
+      ...(registryCaFile ? ['--registry-cacert', registryCaFile] : []),
+      ...(input.allowPlainHttp ? ['--allow-http-registry'] : []),
+      ...(input.allowInsecureTls ? ['--allow-insecure-registry'] : []),
+    ];
+    const env = {
+      COSIGN_EXPERIMENTAL: '1',
+      ...(registryConfigFile
+        ? { DOCKER_CONFIG: dirname(registryConfigFile) }
+        : {}),
+    };
+    const manifest = await command.run(
+      'oras',
+      ['manifest', 'fetch', ...orasRegistryArgs, '--pretty', subject],
+      { env },
+    );
+    const manifestBytes = manifestSize(
+      parseJsonOutput(manifest.stdout, 'OCI document manifest'),
+      input.artifactType,
+      'OCI document',
+    );
+    if (manifestBytes > maximumDownloadBytes) {
+      throw new Error('OCI document exceeds the configured download limit');
+    }
+    const cosign = await command.run(
+      'cosign',
+      [
+        'verify',
+        '--output',
+        'json',
+        ...cosignRegistryArgs,
+        ...(policy.mode === 'public-key'
+          ? [
+              '--key',
+              policy.publicKeyFile!,
+              ...(policy.ignoreTransparencyLog
+                ? ['--insecure-ignore-tlog=true']
+                : []),
+            ]
+          : [
+              '--certificate-identity',
+              policy.certificateIdentity!,
+              '--certificate-oidc-issuer',
+              policy.certificateOidcIssuer!,
+              ...(policy.githubWorkflowRepository
+                ? [
+                    '--certificate-github-workflow-repository',
+                    policy.githubWorkflowRepository,
+                  ]
+                : []),
+              ...(policy.githubWorkflowRef
+                ? [
+                    '--certificate-github-workflow-ref',
+                    policy.githubWorkflowRef,
+                  ]
+                : []),
+              ...(policy.githubWorkflowName
+                ? [
+                    '--certificate-github-workflow-name',
+                    policy.githubWorkflowName,
+                  ]
+                : []),
+            ]),
+        subject,
+      ],
+      { env },
+    );
+    const signatures = parseJsonOutput(cosign.stdout, 'Cosign verification');
+    if (!Array.isArray(signatures) || signatures.length === 0) {
+      throw new Error('Cosign verification returned no verified signatures');
+    }
+    await command.run(
+      'oras',
+      [
+        'pull',
+        ...orasRegistryArgs,
+        '--no-tty',
+        '--keep-old-files',
+        '--output',
+        root,
+        subject,
+      ],
+      { env },
+    );
+    exactInventory(
+      await inventory(root),
+      new Set(input.expectedFiles),
+      'OCI document',
+    );
+    const files = await Promise.all(
+      input.expectedFiles.map(async (path) => ({
+        path,
+        ...(await fileDigest(resolve(root, path))),
+      })),
+    );
+    if (
+      files.reduce((total, file) => total + file.sizeBytes, 0) >
+      maximumDownloadBytes
+    ) {
+      throw new Error('OCI document payload exceeds the download limit');
+    }
+    return {
+      root,
+      receipt: {
+        subject,
+        subjectDigest: subject.slice(subject.lastIndexOf('@') + 1),
+        artifactType: input.artifactType,
+        files,
+        cosignMode: policy.mode,
       },
       cleanup,
     };
