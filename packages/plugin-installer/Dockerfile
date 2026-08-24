@@ -38,10 +38,13 @@ FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine3.23@sha256:e57c41c1d58643410
 
 ARG TARGETOS
 ARG TARGETARCH
-ENV GOBIN=/out \
-    GOTOOLCHAIN=local
-RUN CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
-      go install oras.land/oras/cmd/oras@v1.3.3 \
+ENV GOTOOLCHAIN=local
+RUN mkdir -p /oras-build /out \
+  && cd /oras-build \
+  && go mod init enterpriseglue.local/oras-build \
+  && go get oras.land/oras/cmd/oras@v1.3.3 \
+  && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+      go build -buildvcs=false -trimpath -o /out/oras oras.land/oras/cmd/oras \
   && test -x /out/oras
 RUN mkdir -p /cosign-build \
   && cd /cosign-build \

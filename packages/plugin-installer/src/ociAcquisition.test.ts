@@ -463,7 +463,11 @@ describe('connected OCI plugin acquisition', () => {
     expect(connectedStart).toBeGreaterThanOrEqual(0);
     expect(connectedEnd).toBeGreaterThan(connectedStart);
     expect(dockerfile).toContain('golang:1.26.6-alpine3.23@sha256:');
-    expect(dockerfile).toContain('go install oras.land/oras/cmd/oras@v1.3.3');
+    expect(dockerfile).toContain('go get oras.land/oras/cmd/oras@v1.3.3');
+    expect(dockerfile).toContain(
+      'go build -buildvcs=false -trimpath -o /out/oras oras.land/oras/cmd/oras',
+    );
+    expect(dockerfile).not.toContain('go install oras.land/oras/cmd/oras');
     expect(dockerfile).toContain('GOTOOLCHAIN=local');
     expect(dockerfile).toContain(
       'github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3',
