@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.15.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.15.1...v0.15.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* **plugin:** rebuild toolchain with patched Go components ([#384](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/384)) ([6e279dd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6e279dd732d6be0375b177edb6565629ce173944))
+
 ## [0.15.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.15.0...v0.15.1) (2026-08-24)
 
 
