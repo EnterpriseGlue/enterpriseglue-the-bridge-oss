@@ -1,0 +1,47 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-oras-setup",
+  "type": "internal",
+  "scope": "plugin-release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps protected plugin publication aligned with the immutable ORAS setup action and the versions declared by each source package.",
+  "userImpact": [
+    "Protected installer, Plugin Manager, and Helm chart publication no longer fails before verification because of a setup-action release-catalog mismatch.",
+    "Plugin package publication validates the current source manifests instead of a stale hard-coded version table."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This release-workflow correction does not change application data or migrations."
+    ]
+  },
+  "security": [
+    "The setup action remains pinned by commit and the workflow continues to verify and sign every immutable toolchain subject."
+  ],
+  "documentation": [
+    "Protected release workflow: `.github/workflows/plugin-toolchain-release.yml`."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore an explicit ORAS version only when the pinned setup action's frozen catalog is updated to include it."
+  ],
+  "validation": [
+    "Run release-note and workflow policy checks, pack and validate all four public plugin packages, then execute both protected publication workflows from the exact merged main commit."
+  ],
+  "packages": []
+}
