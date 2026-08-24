@@ -64,6 +64,32 @@ The first version does not allow arbitrary internet-loaded UI, in-process backen
 plugin install scripts, direct host-database access, caller-selected files or URLs, unrestricted
 cron jobs, or arbitrary network egress.
 
+## Host and plugin compatibility across OSS releases
+
+The host version has two authorities with distinct purposes:
+
+| Context | Version authority | Reason |
+| --- | --- | --- |
+| Source and unreleased builds | Checked-in plugin-platform release identity | Gives developers one deterministic candidate version |
+| Published backend image | Immutable `vX.Y.Z` release tag injected by protected image CI | Prevents a later patch image from advertising an older host version |
+
+The published-image workflow validates the injected value from inside the final runtime image.
+Repository contract tests also require the source and production Docker defaults to match the
+checked-in candidate and require both protected image-build attempts to inject the release value.
+
+A plugin manifest may declare a SemVer host range, but that range is not sufficient for
+activation. The signed private catalog must also list the exact host patch in
+`testedHostVersions`, and the signed current/previous compatibility matrix must bind every tested
+host/plugin pair to immutable image digests and retained evidence. Therefore a new OSS patch is
+safe by default: an existing plugin remains unavailable on that exact patch until the private
+plugin pipeline has tested it and published updated signed evidence. No customer-side CI or OSS
+rebuild is required.
+
+For each paid plugin repository, keep its current and previous supported plugin releases in the
+matrix. Test both against the current and previous supported OSS host releases. Older combinations
+remain installable only while their signed catalog entry and entitlement are active; they are not
+silently treated as compatible with newer hosts.
+
 ## System boundary
 
 ```mermaid

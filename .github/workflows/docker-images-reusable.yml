@@ -112,9 +112,17 @@ jobs:
           image_platforms="${INPUT_IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
           image_tag="${INPUT_IMAGE_TAG}"
 
+          default_host_version="$(sed -n "s/^[[:space:]]*hostVersion: '\([^']*\)',/\1/p" packages/plugin-sdk/src/platform.ts | head -n 1)"
+          if [[ ! "${default_host_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Could not resolve the checked-in plugin host release identity." >&2
+            exit 1
+          fi
+          host_version="${default_host_version}"
+
           publish_latest="false"
           if [[ "${image_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             publish_latest="true"
+            host_version="${image_tag#v}"
           fi
 
           publish_dockerhub="false"
@@ -126,6 +134,7 @@ jobs:
             echo "backend_image=${backend_image}"
             echo "frontend_image=${frontend_image}"
             echo "image_tag=${image_tag}"
+            echo "host_version=${host_version}"
             echo "publish_latest=${publish_latest}"
             echo "publish_dockerhub=${publish_dockerhub}"
             echo "image_platforms=${image_platforms}"
@@ -160,6 +169,8 @@ jobs:
           pull: true
           no-cache: ${{ inputs.security_rebuild }}
           push: true
+          build-args: |
+            ENTERPRISEGLUE_HOST_VERSION=${{ steps.meta.outputs.host_version }}
           tags: |
             ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}
           labels: |
@@ -180,6 +191,8 @@ jobs:
           pull: true
           no-cache: ${{ inputs.security_rebuild }}
           push: true
+          build-args: |
+            ENTERPRISEGLUE_HOST_VERSION=${{ steps.meta.outputs.host_version }}
           tags: |
             ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}
           labels: |
@@ -270,7 +283,7 @@ jobs:
           docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const paths=['/usr/bin/npm','/usr/bin/npx','/usr/lib/node_modules/npm']; const found=paths.filter((p)=>fs.existsSync(p)); const db=fs.existsSync('/lib/apk/db/installed') ? fs.readFileSync('/lib/apk/db/installed','utf8') : ''; const npmPackages=[...db.matchAll(/^P:(npm(?:-[0-9]+)?)$/gm)].map((match)=>match[1]); if(found.length || npmPackages.length){console.error('npm must not be present in final backend image', { found, npmPackages }); process.exit(1)} console.log('backend runtime contract ok: npm absent');"
+            node --input-type=module -e "import fs from 'fs'; const paths=['/usr/bin/npm','/usr/bin/npx','/usr/lib/node_modules/npm']; const found=paths.filter((p)=>fs.existsSync(p)); const db=fs.existsSync('/lib/apk/db/installed') ? fs.readFileSync('/lib/apk/db/installed','utf8') : ''; const npmPackages=[...db.matchAll(/^P:(npm(?:-[0-9]+)?)$/gm)].map((match)=>match[1]); if(found.length || npmPackages.length){console.error('npm must not be present in final backend image', { found, npmPackages }); process.exit(1)} if(process.env.ENTERPRISEGLUE_HOST_VERSION !== '${{ steps.meta.outputs.host_version }}'){console.error('plugin host version does not match immutable image version');process.exit(1)} console.log('backend runtime contract ok: npm absent and plugin host version aligned');"
 
       - name: Verify backend temporary image ref
         shell: bash
