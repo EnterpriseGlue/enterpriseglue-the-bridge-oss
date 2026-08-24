@@ -34,7 +34,7 @@
   },
   "security": [
     "ORAS 1.3.3 is compiled with the digest-pinned Go 1.26.6 toolchain instead of redistributing its vulnerable upstream binary.",
-    "Cosign 3.1.3 is compiled with patched Go 1.26.6 plus the fixed x/mod and x/text dependency floors instead of redistributing the vulnerable upstream binary.",
+    "Cosign 3.1.3 is compiled with patched Go 1.26.6 plus fixed gRPC, x/mod, and x/text dependency floors instead of redistributing the vulnerable upstream binary.",
     "Existing npm package versions may be reused only when a freshly downloaded registry archive has the same canonical file tree, content, symlink targets, and executable bits as the local package; version collisions with different payloads fail closed.",
     "Pull requests that change the public installer or manager now build both images and fail on HIGH or CRITICAL vulnerabilities before protected publication."
   ],

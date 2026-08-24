@@ -32,6 +32,7 @@ for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   assert.match(dockerfile, /github\.com\/sigstore\/cosign\/v3\/cmd\/cosign@v3\.1\.3/);
   assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
   assert.match(dockerfile, /golang\.org\/x\/text@v0\.39\.0/);
+  assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.82\.1/);
   assert.match(dockerfile, /test -z "\$\(find \/output -type f -name '\*\.node'/);
 }
 assert.match(productionImageGate, /packages\/plugin-installer\/Dockerfile/);
