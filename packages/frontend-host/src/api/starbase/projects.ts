@@ -1,4 +1,5 @@
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import type { Project } from '../../shared/api/types';
 import type { ProjectEngineAccessResponse } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
 import type { ProjectContents } from '@enterpriseglue/shared/schemas/starbase/folder.js';
@@ -18,7 +19,7 @@ import type {
 const BASE_URL = '/starbase-api/projects';
 
 export const projectsApi = {
-  list: () => apiClient.get<Project[]>(BASE_URL),
+  list: () => fetchList<Project>(BASE_URL),
   
   getById: (id: string) => apiClient.get<Project>(`${BASE_URL}/${id}`),
 
@@ -65,7 +66,7 @@ export const projectsApi = {
     apiClient.post(`${BASE_URL}/${encodeURIComponent(id)}/transfer-ownership`, { newOwnerId }),
 
   searchMemberCandidates: (id: string, query: string) =>
-    apiClient.get<ProjectMemberCandidate[]>(
+    fetchList<ProjectMemberCandidate>(
       `${BASE_URL}/${encodeURIComponent(id)}/members/user-search`,
       { q: query },
     ),

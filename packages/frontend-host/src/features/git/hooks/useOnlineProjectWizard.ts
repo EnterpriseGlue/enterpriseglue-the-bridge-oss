@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, type NavigateOptions } from 'react-router-dom'
 import { gitApi } from '../api/gitApi'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { Repository } from '../types/git'
 import { toSafePathSegment } from '../../../utils/safeNavigation'
@@ -230,7 +231,7 @@ export function useOnlineProjectWizard({
     if (!providerId) return
 
     try {
-      const allCredentials = await apiClient.get<ProviderCredential[]>('/git-api/credentials')
+      const allCredentials = await fetchList<ProviderCredential>('/git-api/credentials')
       const providerCreds = allCredentials.filter((c: ProviderCredential) => c.providerId === providerId)
       setExistingCredentials(providerCreds)
 
@@ -261,7 +262,7 @@ export function useOnlineProjectWizard({
       const fetchNs = async () => {
         setLoadingNamespaces(true)
         try {
-          const data = await apiClient.get<Namespace[]>(
+          const data = await fetchList<Namespace>(
             `/git-api/credentials/${selectedCredentialId}/namespaces`
           )
           setNamespaces(data)

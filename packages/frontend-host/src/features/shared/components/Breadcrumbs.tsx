@@ -6,6 +6,7 @@ import FileMenu from './FileMenu'
 import { useDecisionsFilterStore } from '../../mission-control/shared/stores/decisionsFilterStore'
 import { Copy } from '@carbon/icons-react'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 
 type Project = { id: string; name: string }
 type FileDetail = { id: string; name: string; projectId: string }
@@ -59,7 +60,7 @@ export default function Breadcrumbs() {
 
   const projectsQ = useQuery({
     queryKey: ['starbase', 'projects'],
-    queryFn: () => apiClient.get<Project[]>('/starbase-api/projects'),
+    queryFn: () => fetchList<Project>('/starbase-api/projects'),
     enabled: paths.onProjectPage || paths.onEditorPage,
     staleTime: 60 * 1000,
   })

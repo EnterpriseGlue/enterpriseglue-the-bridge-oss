@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import type {
   AccessibleEngineSummary,
@@ -201,7 +202,7 @@ export async function applyEngineTenancyTransition(
 }
 
 export async function getEngineTenantMappings(engineId: string): Promise<EngineTenantMapping[]> {
-  return apiClient.get<EngineTenantMapping[]>(
+  return fetchList<EngineTenantMapping>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/tenant-mappings`,
     undefined,
     { credentials: 'include' },
@@ -220,11 +221,11 @@ export async function upsertEngineTenantMappings(
 }
 
 export async function getEngineEnvironmentTags(): Promise<EnvironmentTag[]> {
-  return apiClient.get<EnvironmentTag[]>('/engines-api/environment-tags', undefined, { credentials: 'include' })
+  return fetchList<EnvironmentTag>('/engines-api/environment-tags', undefined, { credentials: 'include' })
 }
 
 export async function getEngineProjectTargets(engineId: string): Promise<ProjectEngineTarget[]> {
-  return apiClient.get<ProjectEngineTarget[]>(
+  return fetchList<ProjectEngineTarget>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/project-targets`,
     undefined,
     { credentials: 'include' },
@@ -248,7 +249,7 @@ export async function getEngineMembers(engineId: string): Promise<EngineMembersR
 }
 
 export async function getEngineAccessRequests(engineId: string): Promise<EngineProjectAccessRequest[]> {
-  return apiClient.get<EngineProjectAccessRequest[]>(
+  return fetchList<EngineProjectAccessRequest>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/access-requests`,
     undefined,
     { credentials: 'include' },
@@ -362,7 +363,7 @@ export async function createEngineDeployment(
 }
 
 export async function getEngineDeploymentReceipts(engineId: string): Promise<DeploymentReceiptView[]> {
-  return apiClient.get<DeploymentReceiptView[]>(
+  return fetchList<DeploymentReceiptView>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/deployment-receipts`,
     undefined,
     { credentials: 'include' },
@@ -370,7 +371,7 @@ export async function getEngineDeploymentReceipts(engineId: string): Promise<Dep
 }
 
 export async function getEngineDeploymentHistory(engineId: string): Promise<DeploymentHistoryView[]> {
-  return apiClient.get<DeploymentHistoryView[]>(
+  return fetchList<DeploymentHistoryView>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/deployment-history`,
     undefined,
     { credentials: 'include' },

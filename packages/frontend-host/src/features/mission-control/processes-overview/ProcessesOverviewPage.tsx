@@ -28,6 +28,7 @@ import { createSavedProcessFilter, deleteSavedProcessFilter, listSavedProcessFil
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { RuntimeCollectionEmptyState } from '../shared/components/RuntimeCollectionEmptyState'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { useSelectedEngine } from '../../../components/EngineSelector'
@@ -969,7 +970,7 @@ export default function ProcessesOverviewPage() {
       for (let attempt = 0; attempt < 5; attempt++) {
         await sleep(1000)
         try {
-          const incidents = await apiClient.get<ProcessInstanceIncident[]>(`/mission-control-api/process-instances/${id}/incidents${engineQs}`, undefined, { credentials: 'include' })
+          const incidents = await fetchList<ProcessInstanceIncident>(`/mission-control-api/process-instances/${id}/incidents${engineQs}`, undefined, { credentials: 'include' })
           const stillHas = Array.isArray(incidents) && incidents.length > 0
           if (!stillHas) {
             await instQ.refetch()

@@ -1,7 +1,7 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 
 type Project = { id: string; name: string; createdAt: number }
 type FileRow = { id: string; name: string; type: string; updatedAt: number }
@@ -9,7 +9,7 @@ type FileRow = { id: string; name: string; type: string; updatedAt: number }
 export default function StarbaseHome() {
   const projectsQ = useQuery({
     queryKey: ['starbase', 'projects'],
-    queryFn: () => apiClient.get<Project[]>('/starbase-api/projects'),
+    queryFn: () => fetchList<Project>('/starbase-api/projects'),
   })
 
   const [activeProject, setActiveProject] = React.useState<string | null>(null)
@@ -22,7 +22,7 @@ export default function StarbaseHome() {
 
   const filesQ = useQuery({
     queryKey: ['files', activeProject],
-    queryFn: () => apiClient.get<FileRow[]>(`/starbase-api/projects/${activeProject}/files`),
+    queryFn: () => fetchList<FileRow>(`/starbase-api/projects/${activeProject}/files`),
     enabled: !!activeProject,
   })
 

@@ -36,6 +36,7 @@ import { useModal } from '../../../../shared/hooks/useModal'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
 import { getUiErrorMessage, parseApiError } from '../../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import InvitationFlowModal from '../../../../shared/components/InvitationFlowModal'
 import InvitationRevealPanel from '../../../../shared/components/InvitationRevealPanel'
 import UserLookupEmailField from '../../../../shared/components/UserLookupEmailField'
@@ -380,7 +381,7 @@ export default function EngineMembersModal({
 
   const customRolesQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'assignable-roles'],
-    queryFn: () => apiClient.get<ScopedAssignableRole[]>('/api/authz/roles', {
+    queryFn: () => fetchList<ScopedAssignableRole>('/api/authz/roles', {
       scope: 'engine',
       assignable: 'true',
       resourceType: 'engine',
@@ -391,7 +392,7 @@ export default function EngineMembersModal({
 
   const roleAssignmentsQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'role-assignments'],
-    queryFn: () => apiClient.get<ScopedRoleAssignment[]>('/api/authz/role-assignments', {
+    queryFn: () => fetchList<ScopedRoleAssignment>('/api/authz/role-assignments', {
       resourceType: 'engine',
       resourceId: engine!.id,
     }, { credentials: 'include' }),
@@ -403,7 +404,7 @@ export default function EngineMembersModal({
     queryFn: () => {
       const q = memberUserSearch.trim()
       if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
-      return apiClient.get<UserSearchItem[]>(`/api/admin/users/search?q=${encodeURIComponent(q)}`, undefined, { credentials: 'include' })
+      return fetchList<UserSearchItem>(`/api/admin/users/search?q=${encodeURIComponent(q)}`, undefined, { credentials: 'include' })
     },
     enabled: addMemberModal.isOpen && canLookupMembers && memberUserSearch.trim().length >= 2,
     staleTime: 30 * 1000,
@@ -414,7 +415,7 @@ export default function EngineMembersModal({
     queryFn: () => {
       const q = assignmentUserSearch.trim()
       if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
-      return apiClient.get<UserSearchItem[]>(`/api/admin/users/search?q=${encodeURIComponent(q)}`, undefined, { credentials: 'include' })
+      return fetchList<UserSearchItem>(`/api/admin/users/search?q=${encodeURIComponent(q)}`, undefined, { credentials: 'include' })
     },
     enabled: assignmentModal.isOpen && assignmentPrincipalType === 'user' && canLookupMembers && assignmentUserSearch.trim().length >= 2,
     staleTime: 30 * 1000,

@@ -26,6 +26,7 @@ import {
 import { Email, Edit, View, Reset } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import { useToast } from '../../shared/notifications/ToastProvider';
 import { configurationOwnershipDescription, configurationOwnershipLabel } from '../../features/platform-admin/identityAccessCopy';
@@ -133,7 +134,7 @@ export default function EmailTemplates({
 
   const templatesQuery = useQuery({
     queryKey: ['email-templates'],
-    queryFn: () => apiClient.get<EmailTemplate[]>('/api/admin/email-templates'),
+    queryFn: () => fetchList<EmailTemplate>('/api/admin/email-templates'),
   });
 
   const updateMutation = useMutation({

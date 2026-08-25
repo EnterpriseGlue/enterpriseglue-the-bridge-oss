@@ -1,0 +1,108 @@
+/**
+ * Runtime guard for API responses that are expected to be arrays.
+ *
+ * Many screens consume list endpoints with the defensive `(query.data || [])`
+ * pattern. That guards against `null`/`undefined`, but a truthy non-array
+ * payload — an error envelope such as `{ error: 'Unauthorized' }`, an object
+ * like `{ items: [] }`, or a bare string — still slips through and then throws
+ * an opaque `TypeError: <fn> is not a function` the moment `.filter`/`.map`/
+ * `.reduce` runs, with no clue as to which request produced it.
+ *
+ * `expectArray` moves that failure to the API boundary and turns it into an
+ * actionable diagnostic: it logs the request context and the shape of the
+ * offending payload, then returns an empty array so the UI degrades to an
+ * empty list instead of a runtime crash.
+ */
+
+const PAYLOAD_PREVIEW_MAX_LENGTH = 500;
+const MAX_LOGGED_KEYS = 12;
+
+function isDevEnvironment(): boolean {
+  try {
+    return Boolean(import.meta.env?.DEV);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Describe a value's runtime shape without dumping its (potentially large or
+ * sensitive) contents — safe to log in any environment.
+ */
+function describeShape(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return `array(length ${value.length})`;
+  const type = typeof value;
+  if (type !== 'object') return type;
+  const keys = Object.keys(value as Record<string, unknown>);
+  if (keys.length === 0) return 'object (no keys)';
+  const shown = keys.slice(0, MAX_LOGGED_KEYS);
+  const suffix = keys.length > shown.length ? `, …+${keys.length - shown.length} more` : '';
+  return `object { ${shown.join(', ')}${suffix} }`;
+}
+
+/**
+ * Pull a human-readable message out of a common API error envelope so the log
+ * hints at the underlying cause (auth failure, missing endpoint, etc.).
+ */
+function extractEnvelopeMessage(value: object): string | undefined {
+  const record = value as Record<string, unknown>;
+  if (typeof record.error === 'string' && record.error.trim()) return record.error.trim();
+  if (typeof record.message === 'string' && record.message.trim()) return record.message.trim();
+  const nestedError = record.error;
+  if (nestedError && typeof nestedError === 'object') {
+    const message = (nestedError as Record<string, unknown>).message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  }
+  return undefined;
+}
+
+function previewPayload(value: unknown): string | undefined {
+  try {
+    const json = JSON.stringify(value);
+    if (json === undefined) return undefined;
+    return json.length > PAYLOAD_PREVIEW_MAX_LENGTH
+      ? `${json.slice(0, PAYLOAD_PREVIEW_MAX_LENGTH)}…`
+      : json;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Ensure a value is an array before collection operations run against it.
+ *
+ * - Arrays pass through unchanged.
+ * - `null`/`undefined` (the ordinary "no data" case, already handled safely by
+ *   the `|| []` idiom) return `[]` silently.
+ * - Any other value is a contract violation: it is logged with `context` and a
+ *   description of the payload, and `[]` is returned.
+ *
+ * @param value   The parsed response payload.
+ * @param context A label for the request, e.g. `GET /mission-control-api/batches`.
+ */
+export function expectArray<T>(value: unknown, context: string): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value == null) return [];
+
+  const parts = [
+    `[enterpriseglue] Expected an array from ${context}, but received ${describeShape(value)}.`,
+    'Returning an empty list. This usually means an API contract mismatch,',
+    'a missing endpoint, or an authentication/configuration problem.',
+  ];
+  if (typeof value === 'object') {
+    const envelopeMessage = extractEnvelopeMessage(value);
+    if (envelopeMessage) parts.push(`Payload message: "${envelopeMessage}".`);
+  }
+
+  // The full payload is helpful locally but may carry sensitive data, so only
+  // include it in development builds.
+  const preview = isDevEnvironment() ? previewPayload(value) : undefined;
+  if (preview !== undefined) {
+    console.error(parts.join(' '), 'Payload:', preview);
+  } else {
+    console.error(parts.join(' '));
+  }
+
+  return [];
+}

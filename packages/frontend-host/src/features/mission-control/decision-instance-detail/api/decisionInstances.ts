@@ -1,4 +1,4 @@
-import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import { HistoricDecisionInstanceDetailSchema } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import type {
   HistoricDecisionInstance as SharedHistoricDecisionInstance,
@@ -19,9 +19,9 @@ export async function fetchDecisionInstance(instanceId: string, engineId?: strin
   const endpoint = `/mission-control-api/history/decisions`
   const engineQuery = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
   const [decisions, inputs, outputs] = await Promise.all([
-    apiClient.get<SharedHistoricDecisionInstance[]>(`${endpoint}?${query}`, undefined, { credentials: 'include' }),
-    apiClient.get<DecisionInput[]>(`${endpoint}/${instanceId}/inputs${engineQuery}`, undefined, { credentials: 'include' }),
-    apiClient.get<DecisionOutput[]>(`${endpoint}/${instanceId}/outputs${engineQuery}`, undefined, { credentials: 'include' }),
+    fetchList<SharedHistoricDecisionInstance>(`${endpoint}?${query}`, undefined, { credentials: 'include' }),
+    fetchList<DecisionInput>(`${endpoint}/${instanceId}/inputs${engineQuery}`, undefined, { credentials: 'include' }),
+    fetchList<DecisionOutput>(`${endpoint}/${instanceId}/outputs${engineQuery}`, undefined, { credentials: 'include' }),
   ])
   const decision = decisions[0]
   if (!decision) throw new Error(`Historic decision instance ${instanceId} was not found`)

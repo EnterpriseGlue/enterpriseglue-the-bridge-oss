@@ -21,6 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings';
 import { useAuth } from '../../../shared/hooks/useAuth';
@@ -97,7 +98,7 @@ export default function SyncModal({
   const repoQuery = useQuery({
     queryKey: ['git', 'repository', projectId],
     queryFn: async () => {
-      const repos = await apiClient.get<RepoInfo[]>('/git-api/repositories', { projectId });
+      const repos = await fetchList<RepoInfo>('/git-api/repositories', { projectId });
       return repos.find((r: RepoInfo) => r) || null;
     },
     enabled: open,

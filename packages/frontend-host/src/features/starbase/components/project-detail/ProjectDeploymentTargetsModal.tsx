@@ -22,6 +22,7 @@ import {
 } from '@carbon/react'
 import { TrashCan, Renew } from '@carbon/icons-react'
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import { parseApiError } from '../../../../shared/api/apiErrorUtils'
 import { PlatformPermission, ProjectPermission } from '../../../../shared/auth/permissions'
 import { WhyUnavailableLink } from '../../../../shared/auth/guards'
@@ -166,7 +167,7 @@ export function ProjectDeploymentTargetsModal({
 
   const targetsQ = useQuery({
     queryKey: ['project-engine-targets', projectId, 'settings', apiScope],
-    queryFn: () => apiClient.get<ProjectEngineTarget[]>(listTargetsPath),
+    queryFn: () => fetchList<ProjectEngineTarget>(listTargetsPath),
     enabled: open && Boolean(projectId) && canReadTargets,
   })
 

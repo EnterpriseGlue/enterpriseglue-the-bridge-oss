@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
 import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateStarbaseMissionControlBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice';
@@ -351,7 +352,7 @@ export default function GitVersionsPanel({
     queryFn: async () => {
       if (saveMode === 'local') {
         if (!fileId) return { commits: [] as VcsCommit[] };
-        const versions = await apiClient.get<LocalVersion[]>(`/starbase-api/files/${fileId}/versions`);
+        const versions = await fetchList<LocalVersion>(`/starbase-api/files/${fileId}/versions`);
         const filteredVersions = (Array.isArray(versions) ? versions : []).filter((version) => {
           return !(String(version.author || '') === 'system' && String(version.message || '').trim() === 'Initial import');
         });
@@ -404,7 +405,7 @@ export default function GitVersionsPanel({
 
   const deploymentsQuery = useQuery({
     queryKey: ['engine-deployments', projectId, fileId, 'history'],
-    queryFn: () => apiClient.get<LatestDeploymentByFile[]>(`/starbase-api/projects/${projectId}/files/${fileId}/deployments/history`),
+    queryFn: () => fetchList<LatestDeploymentByFile>(`/starbase-api/projects/${projectId}/files/${fileId}/deployments/history`),
     enabled: !!projectId && !!fileId && hasEngineAccess && canReadProjectDeployments,
     staleTime: 10000,
   });

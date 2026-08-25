@@ -32,6 +32,7 @@ import { useLayoutStore } from '../stores/layoutStore'
 import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
@@ -382,7 +383,7 @@ export default function LayoutWithProSidebar() {
     let cancelled = false
     const loadTenantRole = async () => {
       try {
-        const data = await apiClient.get<any[]>('/api/auth/my-tenants')
+        const data = await fetchList<any>('/api/auth/my-tenants')
         const m = Array.isArray(data)
           ? data.find((t: any) => String(t?.tenantSlug || '') === String(tenantSlug))
           : undefined

@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
   ActivityInstance,
@@ -44,11 +45,11 @@ export async function retryProcessInstance(instanceId: string, body: ProcessInst
 }
 
 export async function getProcessInstanceVariableHistory(instanceId: string, variableInstanceId: string, engineId?: string): Promise<VariableHistoryEntry[]> {
-  return apiClient.get<VariableHistoryEntry[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variable-history?variableInstanceId=${encodeURIComponent(variableInstanceId)}`, engineId), undefined, { credentials: 'include' })
+  return fetchList<VariableHistoryEntry>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variable-history?variableInstanceId=${encodeURIComponent(variableInstanceId)}`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceActivityHistory(instanceId: string, engineId?: string): Promise<ActivityInstance[]> {
-  return apiClient.get<ActivityInstance[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/history/activity-instances`, engineId), undefined, { credentials: 'include' })
+  return fetchList<ActivityInstance>(withEngineId(`/mission-control-api/process-instances/${instanceId}/history/activity-instances`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceActivityTree(instanceId: string, engineId?: string): Promise<RuntimeActivityInstanceTree> {
@@ -73,15 +74,15 @@ export async function getProcessInstanceExecutionDetails(
 }
 
 export async function getProcessInstanceIncidents(instanceId: string, engineId?: string): Promise<Incident[]> {
-  return apiClient.get<Incident[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/incidents`, engineId), undefined, { credentials: 'include' })
+  return fetchList<Incident>(withEngineId(`/mission-control-api/process-instances/${instanceId}/incidents`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceJobs(instanceId: string, engineId?: string): Promise<Job[]> {
-  return apiClient.get<Job[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/jobs`, engineId), undefined, { credentials: 'include' })
+  return fetchList<Job>(withEngineId(`/mission-control-api/process-instances/${instanceId}/jobs`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceExternalTasks(instanceId: string, engineId?: string): Promise<ExternalTask[]> {
-  return apiClient.get<ExternalTask[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/failed-external-tasks`, engineId), undefined, { credentials: 'include' })
+  return fetchList<ExternalTask>(withEngineId(`/mission-control-api/process-instances/${instanceId}/failed-external-tasks`, engineId), undefined, { credentials: 'include' })
 }
 
 // Historical data
@@ -90,11 +91,11 @@ export async function getHistoricalProcessInstance(instanceId: string, engineId?
 }
 
 export async function getHistoricalVariableInstances(instanceId: string, engineId?: string): Promise<HistoricVariableInstance[]> {
-  return apiClient.get<HistoricVariableInstance[]>(withEngineId(`/mission-control-api/history/variable-instances?processInstanceId=${encodeURIComponent(instanceId)}`, engineId), undefined, { credentials: 'include' })
+  return fetchList<HistoricVariableInstance>(withEngineId(`/mission-control-api/history/variable-instances?processInstanceId=${encodeURIComponent(instanceId)}`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function listProcessDefinitions(engineId?: string): Promise<ProcessDefinition[]> {
   const params = new URLSearchParams()
   if (engineId) params.set('engineId', engineId)
-  return apiClient.get<ProcessDefinition[]>(`/mission-control-api/process-definitions?${params}`, undefined, { credentials: 'include' })
+  return fetchList<ProcessDefinition>(`/mission-control-api/process-definitions?${params}`, undefined, { credentials: 'include' })
 }

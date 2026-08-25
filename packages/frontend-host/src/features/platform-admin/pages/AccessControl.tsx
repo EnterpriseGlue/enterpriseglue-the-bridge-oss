@@ -40,7 +40,7 @@ import {
 import { Add, Security, TrashCan } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
-import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import {
   isPermissionCompatibleWithResourceType,
@@ -905,7 +905,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const runtimeResourcesQ = useQuery({
     queryKey: ['authz-runtime-resources', selectedRuntimeEngineId],
     enabled: engineSetsReadDecision.allowed && Boolean(selectedRuntimeEngineId),
-    queryFn: () => apiClient.get<RuntimeResource[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
+    queryFn: () => fetchList<RuntimeResource>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
   });
   const reconcileRuntimeResourcesM = useReconcileRuntimeResources();
   const assignmentsReadUnavailableReason = unavailableReason(assignmentsReadDecision, 'Missing permission platform:authz:roles:view');

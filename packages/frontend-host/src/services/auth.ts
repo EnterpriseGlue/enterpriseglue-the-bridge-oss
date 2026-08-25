@@ -5,6 +5,7 @@
  */
 
 import { apiClient } from '../shared/api/client';
+import { fetchList } from '../shared/api/fetchList';
 import { parseApiError, getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
 import { CurrentUserPermissionsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { LogoutResponse } from '@enterpriseglue/shared/schemas/auth/session.js';
@@ -139,7 +140,7 @@ class AuthService {
    * List all users (admin only)
    */
   async listUsers(): Promise<User[]> {
-    return apiClient.get<User[]>(`${API_BASE_URL}/users`);
+    return fetchList<User>(`${API_BASE_URL}/users`);
   }
 
   /**
