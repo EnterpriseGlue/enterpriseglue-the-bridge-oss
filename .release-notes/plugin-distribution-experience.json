@@ -60,6 +60,12 @@
   ],
   "packages": [
     {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.6.0",
+      "newVersion": "0.6.1",
+      "impact": "patch"
+    },
+    {
       "name": "@enterpriseglue/plugin-sdk",
       "previousVersion": "0.3.0",
       "newVersion": "0.3.1",
