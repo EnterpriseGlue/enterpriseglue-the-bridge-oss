@@ -112,10 +112,34 @@ assert.match(
   workflow,
   /node scripts\/helm-chart-archive\.mjs compare "\$archive" "\$pulled"/,
 );
+for (const [candidate, published] of [
+  ['RUNTIME_CHART_ARCHIVE', 'PULLED_RUNTIME'],
+  ['RBAC_CHART_ARCHIVE', 'PULLED_RBAC'],
+  ['MANAGER_CHART_ARCHIVE', 'PULLED_MANAGER_CHART'],
+]) {
+  assert.match(
+    workflow,
+    new RegExp(
+      `node scripts/helm-chart-archive\\.mjs compare "\\$${candidate}" "\\$${published}"`,
+    ),
+  );
+}
 assert.doesNotMatch(
   workflow,
   /sha256sum "\$archive"[\s\S]{0,120}sha256sum "\$pulled"/,
 );
+assert.doesNotMatch(
+  workflow,
+  /sha256sum "\$(?:RUNTIME|RBAC|MANAGER)_CHART_ARCHIVE"[\s\S]{0,120}sha256sum "\$PULLED_/,
+);
+assert.match(
+  workflow,
+  /PUBLISHED_RUNTIME_CHART_ARCHIVE=\$PULLED_RUNTIME/,
+);
+assert.match(workflow, /cp "\$PUBLISHED_RUNTIME_CHART_ARCHIVE" "\$RECEIPT\/"/);
+assert.match(workflow, /sha256sum "\$PUBLISHED_RUNTIME_CHART_ARCHIVE"/);
+assert.match(workflow, /sha256sum "\$PUBLISHED_RBAC_CHART_ARCHIVE"/);
+assert.match(workflow, /sha256sum "\$PUBLISHED_MANAGER_CHART_ARCHIVE"/);
 assert.match(workflow, /event\.workflow_run\.event == 'release'/);
 assert.match(workflow, /git tag --points-at "\$SOURCE_REF"/);
 assert.match(workflow, /SOURCE_DATE_EPOCH=/);
