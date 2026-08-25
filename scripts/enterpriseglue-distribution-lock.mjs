@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, writeFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 
 const schemaVersion = 'enterpriseglue-distribution-lock/v1';
@@ -9,6 +10,7 @@ const digestReference = /^[a-z0-9.-]+(?::[0-9]+)?\/[A-Za-z0-9._/-]+@sha256:[a-f0
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const revision = /^[a-f0-9]{40}$/;
 const sha256 = /^[a-f0-9]{64}$/;
+const readOnlyNoFollow = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
 
 function fail(message) {
   throw new Error(message);
@@ -39,22 +41,31 @@ function required(values, name) {
   return value;
 }
 
-async function regularFile(input, label) {
+async function readRegularFile(input, label) {
   const path = resolve(input);
-  const details = await lstat(path);
-  if (!details.isFile() || details.isSymbolicLink()) {
-    fail(`${label} must be a regular non-symlink file`);
+  let handle;
+  try {
+    handle = await open(path, readOnlyNoFollow);
+  } catch (error) {
+    if (error?.code === 'ELOOP') fail(`${label} must not be a symbolic link`);
+    throw error;
   }
-  return realpath(path);
+  try {
+    const details = await handle.stat();
+    if (!details.isFile()) fail(`${label} must be a regular non-symlink file`);
+    const bytes = await handle.readFile();
+    return { path, bytes, sizeBytes: bytes.byteLength };
+  } finally {
+    await handle.close();
+  }
 }
 
 async function fileRecord(input, label) {
-  const path = await regularFile(input, label);
-  const bytes = await readFile(path);
+  const { path, bytes, sizeBytes } = await readRegularFile(input, label);
   return {
     path: basename(path),
     sha256: createHash('sha256').update(bytes).digest('hex'),
-    sizeBytes: bytes.byteLength,
+    sizeBytes,
   };
 }
 
@@ -140,12 +151,12 @@ async function create(values) {
   if (!semver.test(version) || !revision.test(sourceRevision)) {
     fail('Version or source revision is invalid');
   }
-  const toolchainPath = await regularFile(
+  const toolchainFile = await readRegularFile(
     required(values, 'toolchain-release'),
     'Toolchain receipt',
   );
   const pluginToolchain = assertToolchain(
-    JSON.parse(await readFile(toolchainPath, 'utf8')),
+    JSON.parse(toolchainFile.bytes.toString('utf8')),
     sourceRevision,
   );
   const generatedAt = new Date(
@@ -191,18 +202,17 @@ async function create(values) {
 }
 
 async function verify(values) {
-  const lockPath = await regularFile(required(values, 'lock'), 'Distribution lock');
+  const lockFile = await readRegularFile(required(values, 'lock'), 'Distribution lock');
   const root = resolve(required(values, 'root'));
-  const lock = validateLock(JSON.parse(await readFile(lockPath, 'utf8')));
+  const lock = validateLock(JSON.parse(lockFile.bytes.toString('utf8')));
   for (const [label, record] of [
     ['Frontend static archive', lock.frontendStatic],
     ['Deployment kit archive', lock.deploymentKit],
   ]) {
-    const path = await regularFile(resolve(root, record.path), label);
-    const details = await stat(path);
-    const bytes = await readFile(path);
+    const file = await readRegularFile(resolve(root, record.path), label);
+    const bytes = file.bytes;
     const digest = createHash('sha256').update(bytes).digest('hex');
-    if (details.size !== record.sizeBytes || digest !== record.sha256) {
+    if (file.sizeBytes !== record.sizeBytes || digest !== record.sha256) {
       fail(`${label} differs from the signed distribution lock`);
     }
   }

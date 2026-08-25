@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -119,6 +119,22 @@ test('verifies every extracted kit component and rejects tampering', async (t) =
   });
   assert.notEqual(failing.status, 0);
   assert.match(failing.stderr, /digest differs/);
+});
+
+test('deployment kit verification rejects symbolic-link components', async (t) => {
+  const { output } = await fixture(t);
+  const verifier = resolve(output, 'scripts/verify-deployment-kit.mjs');
+  const compose = resolve(
+    output,
+    'kit/infra/docker/compose/docker-compose.plugin-manager.yml',
+  );
+  await rm(compose);
+  await symlink(resolve(output, 'README.md'), compose);
+  const result = spawnSync(process.execPath, [verifier, output], {
+    encoding: 'utf8',
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /must not be a symbolic link/);
 });
 
 test('rendered Compose uses digest subjects and has no source build', async (t) => {

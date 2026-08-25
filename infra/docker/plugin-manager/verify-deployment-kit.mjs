@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-const root = resolve(process.argv[2] || '.');
+const root = await realpath(resolve(process.argv[2] || '.'));
 const manifestPath = resolve(root, 'deployment-kit.manifest.json');
+const readOnlyNoFollow = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
 
 function fail(message) {
   throw new Error(`deployment_kit_verification_failed: ${message}`);
@@ -21,11 +23,31 @@ function containedPath(input) {
   return normalized;
 }
 
-const manifestDetails = await lstat(manifestPath);
-if (!manifestDetails.isFile() || manifestDetails.isSymbolicLink()) {
-  fail('manifest is not a regular file');
+async function readRegularFile(path, label) {
+  const resolved = await realpath(path);
+  const relation = relative(root, resolved);
+  if (relation === '..' || relation.startsWith(`..${sep}`)) {
+    fail(`${label} resolves outside the kit`);
+  }
+  let handle;
+  try {
+    handle = await open(path, readOnlyNoFollow);
+  } catch (error) {
+    if (error?.code === 'ELOOP') fail(`${label} must not be a symbolic link`);
+    throw error;
+  }
+  try {
+    const details = await handle.stat();
+    if (!details.isFile()) fail(`${label} is not a regular file`);
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
 }
-const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+
+const manifest = JSON.parse(
+  (await readRegularFile(manifestPath, 'manifest')).toString('utf8'),
+);
 if (
   manifest.apiVersion !== 'plugin-deployment-kit.enterpriseglue.io/v1' ||
   manifest.kind !== 'EnterpriseGluePluginComposeDeploymentKit' ||
@@ -47,17 +69,8 @@ for (const component of manifest.components) {
   }
   seen.add(component.path);
   const path = containedPath(component.path);
-  const details = await lstat(path);
-  if (!details.isFile() || details.isSymbolicLink()) {
-    fail(`${component.path} is not a regular file`);
-  }
-  const resolved = await realpath(path);
-  const relation = relative(await realpath(root), resolved);
-  if (relation === '..' || relation.startsWith(`..${sep}`)) {
-    fail(`${component.path} resolves outside the kit`);
-  }
   const digest = createHash('sha256')
-    .update(await readFile(path))
+    .update(await readRegularFile(path, component.path))
     .digest('hex');
   if (digest !== component.sha256) {
     fail(`${component.path} digest differs`);

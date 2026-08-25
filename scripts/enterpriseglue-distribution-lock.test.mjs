@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -42,6 +42,16 @@ test('creates, verifies, and rejects tampering of a complete distribution lock',
     const value = JSON.parse(await readFile(lock, 'utf8'));
     assert.equal(value.schemaVersion, 'enterpriseglue-distribution-lock/v1');
     assert.deepEqual(value.supportedTopologies, ['compose-backend-cdn-frontend']);
+    await rm(frontend);
+    await symlink(kit, frontend);
+    const linked = spawnSync(
+      process.execPath,
+      [script.pathname, 'verify', '--lock', lock, '--root', root],
+      { encoding: 'utf8' },
+    );
+    assert.notEqual(linked.status, 0);
+    assert.match(linked.stderr, /must not be a symbolic link/);
+    await rm(frontend);
     await writeFile(frontend, 'tampered');
     const result = spawnSync(process.execPath, [script.pathname, 'verify', '--lock', lock, '--root', root], { encoding: 'utf8' });
     assert.notEqual(result.status, 0);
