@@ -451,12 +451,14 @@ jobs:
           oras blob fetch \
             --output "$PULLED_MANAGER_CHART" \
             "${MANAGER_CHART_REFERENCE%@*}@$MANAGER_CHART_LAYER_DIGEST"
-          test "$(sha256sum "$RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" = \
-            "$(sha256sum "$PULLED_RUNTIME" | cut -d' ' -f1)"
-          test "$(sha256sum "$RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" = \
-            "$(sha256sum "$PULLED_RBAC" | cut -d' ' -f1)"
-          test "$(sha256sum "$MANAGER_CHART_ARCHIVE" | cut -d' ' -f1)" = \
-            "$(sha256sum "$PULLED_MANAGER_CHART" | cut -d' ' -f1)"
+          node scripts/helm-chart-archive.mjs compare "$RUNTIME_CHART_ARCHIVE" "$PULLED_RUNTIME"
+          node scripts/helm-chart-archive.mjs compare "$RBAC_CHART_ARCHIVE" "$PULLED_RBAC"
+          node scripts/helm-chart-archive.mjs compare "$MANAGER_CHART_ARCHIVE" "$PULLED_MANAGER_CHART"
+          {
+            echo "PUBLISHED_RUNTIME_CHART_ARCHIVE=$PULLED_RUNTIME"
+            echo "PUBLISHED_RBAC_CHART_ARCHIVE=$PULLED_RBAC"
+            echo "PUBLISHED_MANAGER_CHART_ARCHIVE=$PULLED_MANAGER_CHART"
+          } >> "$GITHUB_ENV"
 
       - name: Write the immutable toolchain release receipt
         shell: bash
@@ -464,9 +466,9 @@ jobs:
           set -euo pipefail
           RECEIPT="$RUNNER_TEMP/enterpriseglue-plugin-toolchain-receipt"
           mkdir -p "$RECEIPT"
-          cp "$RUNTIME_CHART_ARCHIVE" "$RECEIPT/"
-          cp "$RBAC_CHART_ARCHIVE" "$RECEIPT/"
-          cp "$MANAGER_CHART_ARCHIVE" "$RECEIPT/"
+          cp "$PUBLISHED_RUNTIME_CHART_ARCHIVE" "$RECEIPT/"
+          cp "$PUBLISHED_RBAC_CHART_ARCHIVE" "$RECEIPT/"
+          cp "$PUBLISHED_MANAGER_CHART_ARCHIVE" "$RECEIPT/"
           jq -n \
             --arg version "$TOOLCHAIN_VERSION" \
             --arg sourceRevision "$SOURCE_REF" \
@@ -474,11 +476,11 @@ jobs:
             --arg managerVersion "$MANAGER_VERSION" \
             --arg manager "$MANAGER_REFERENCE" \
             --arg runtimeChart "$RUNTIME_CHART_REFERENCE" \
-            --arg runtimeChartSha256 "$(sha256sum "$RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" \
+            --arg runtimeChartSha256 "$(sha256sum "$PUBLISHED_RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" \
             --arg rbacChart "$RBAC_CHART_REFERENCE" \
-            --arg rbacChartSha256 "$(sha256sum "$RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" \
+            --arg rbacChartSha256 "$(sha256sum "$PUBLISHED_RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" \
             --arg managerChart "$MANAGER_CHART_REFERENCE" \
-            --arg managerChartSha256 "$(sha256sum "$MANAGER_CHART_ARCHIVE" | cut -d' ' -f1)" \
+            --arg managerChartSha256 "$(sha256sum "$PUBLISHED_MANAGER_CHART_ARCHIVE" | cut -d' ' -f1)" \
             --arg workflowRun "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             '{
               schemaVersion: "enterpriseglue-plugin-toolchain-release/v1",
