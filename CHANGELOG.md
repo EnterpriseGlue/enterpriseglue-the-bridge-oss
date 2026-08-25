@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.16.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.1...v0.16.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* **release:** bind receipts to registry charts ([#393](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/393)) ([e261e70](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e261e704d259fff9dbc593686d761be3af7ba799))
+
 ## [0.16.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.0...v0.16.1) (2026-08-25)
 
 
