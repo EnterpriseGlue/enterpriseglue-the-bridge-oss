@@ -38,7 +38,7 @@ describe('fetchList', () => {
     const result = await fetchList('/api/things');
     expect(result).toEqual([]);
     expect(consoleError).toHaveBeenCalledTimes(1);
-    const message = String(consoleError.mock.calls[0][0]);
+    const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('/api/things');
     expect(message).toContain('Unauthorized');
   });
@@ -46,7 +46,7 @@ describe('fetchList', () => {
   it('uses an explicit context label when provided', async () => {
     vi.mocked(interceptor.interceptedFetch).mockResolvedValue(jsonResponse('nope'));
     await fetchList('/api/things', undefined, undefined, 'listThings');
-    expect(String(consoleError.mock.calls[0][0])).toContain('listThings');
+    expect(consoleError.mock.calls[0].join(' ')).toContain('listThings');
   });
 
   it('forwards query params and request options to the underlying GET', async () => {

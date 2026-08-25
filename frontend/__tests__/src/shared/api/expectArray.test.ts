@@ -34,26 +34,26 @@ describe('expectArray', () => {
   it('coerces a truthy non-array to an empty array and logs the context', () => {
     expect(expectArray('some string', 'GET /things')).toEqual([]);
     expect(consoleError).toHaveBeenCalledTimes(1);
-    const message = String(consoleError.mock.calls[0][0]);
+    const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('GET /things');
     expect(message).toContain('string');
   });
 
   it('surfaces an error-envelope message to hint at the cause', () => {
     expect(expectArray({ error: 'Unauthorized' }, 'GET /admin/users')).toEqual([]);
-    const message = String(consoleError.mock.calls[0][0]);
+    const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('GET /admin/users');
     expect(message).toContain('Unauthorized');
   });
 
   it('surfaces a nested error.message envelope', () => {
     expectArray({ error: { message: 'Token expired' } }, 'GET /admin/users');
-    expect(String(consoleError.mock.calls[0][0])).toContain('Token expired');
+    expect(consoleError.mock.calls[0].join(' ')).toContain('Token expired');
   });
 
   it('describes the keys of an unexpected object payload', () => {
     expectArray({ items: [], total: 0 }, 'GET /things');
-    const message = String(consoleError.mock.calls[0][0]);
+    const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('items');
     expect(message).toContain('total');
   });

@@ -98,10 +98,14 @@ export function expectArray<T>(value: unknown, context: string): T[] {
   // The full payload is helpful locally but may carry sensitive data, so only
   // include it in development builds.
   const preview = isDevEnvironment() ? previewPayload(value) : undefined;
+  // The message is derived from the (externally-controlled) payload, so it is
+  // passed as a %s argument rather than as the format string itself, which
+  // would otherwise interpret any `%` sequences it happens to contain.
+  const message = parts.join(' ');
   if (preview !== undefined) {
-    console.error(parts.join(' '), 'Payload:', preview);
+    console.error('%s Payload: %s', message, preview);
   } else {
-    console.error(parts.join(' '));
+    console.error('%s', message);
   }
 
   return [];
