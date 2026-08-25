@@ -128,6 +128,7 @@ test('derives published plugin host identity from the immutable release tag', as
     workflow,
     managerExampleSource,
     managerPackageSource,
+    referenceBundleSource,
   ] = await Promise.all([
     readFile(new URL('packages/plugin-sdk/src/platform.ts', rootUrl), 'utf8'),
     readFile(new URL('backend/Dockerfile', rootUrl), 'utf8'),
@@ -135,6 +136,7 @@ test('derives published plugin host identity from the immutable release tag', as
     readFile(new URL('.github/workflows/docker-images-reusable.yml', rootUrl), 'utf8'),
     readFile(new URL('infra/docker/compose/plugin-manager.example.json', rootUrl), 'utf8'),
     readFile(new URL('packages/plugin-manager/package.json', rootUrl), 'utf8'),
+    readFile(new URL('packages/plugin-reference/scripts/build-bundle.mjs', rootUrl), 'utf8'),
   ]);
   const hostVersion = /hostVersion:\s*'(\d+\.\d+\.\d+)'/.exec(platform)?.[1];
   const sdkVersion = /sdkVersion:\s*'(\d+\.\d+\.\d+)'/.exec(platform)?.[1];
@@ -145,6 +147,16 @@ test('derives published plugin host identity from the immutable release tag', as
   assert.equal(managerExample.host.version, hostVersion);
   assert.equal(managerExample.host.sdkVersion, sdkVersion);
   assert.equal(managerExample.capability.managerVersion, managerPackage.version);
+  assert.match(
+    referenceBundleSource,
+    /sdk: pluginMinorCompatibilityRangeV1\(\s*pluginPlatformReleaseIdentityV1\.sdkVersion,?\s*\)/,
+    'the reference plugin SDK range must derive from the canonical release identity',
+  );
+  assert.match(
+    referenceBundleSource,
+    /pluginPlatformReleaseIdentityV1\.sharedFrontend\.pluginSdk/,
+    'the reference plugin shared SDK runtime must derive from the canonical release identity',
+  );
 
   for (const [path, dockerfile] of [
     ['backend/Dockerfile', developmentDockerfile],

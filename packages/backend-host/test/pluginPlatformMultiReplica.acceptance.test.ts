@@ -19,6 +19,7 @@ import { resolve } from 'node:path';
 
 import {
   parseEnterpriseGluePluginManifestV1,
+  pluginMinorCompatibilityRangeV1,
   pluginPlatformReleaseIdentityV1,
   type EnterpriseGluePluginManifestV1,
   type PluginHostEventV1,
@@ -84,14 +85,15 @@ const subjectRef = 'subject-multi-replica';
 const deploymentRef = 'deployment-multi-replica';
 
 function currentHostCompatibilityRange(): string {
-  const version = pluginPlatformReleaseIdentityV1.hostVersion;
-  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version);
-  if (!match) {
-    throw new Error('invalid_plugin_platform_host_version');
-  }
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  return `>=${version} <${major}.${minor + 1}.0`;
+  return pluginMinorCompatibilityRangeV1(
+    pluginPlatformReleaseIdentityV1.hostVersion,
+  );
+}
+
+function currentSdkCompatibilityRange(): string {
+  return pluginMinorCompatibilityRangeV1(
+    pluginPlatformReleaseIdentityV1.sdkVersion,
+  );
 }
 
 type OperationMode = 'success' | 'hold' | 'crash' | 'timeout';
@@ -1352,7 +1354,7 @@ async function createFixture(
     },
     compatibility: {
       host: currentHostCompatibilityRange(),
-      sdk: '^0.1.0',
+      sdk: currentSdkCompatibilityRange(),
       backendProtocol: 1,
       requiredSlots: [],
     },
@@ -1479,7 +1481,7 @@ async function createFixture(
     },
     compatibility: {
       host: currentHostCompatibilityRange(),
-      sdk: '^0.1.0',
+      sdk: currentSdkCompatibilityRange(),
       backendProtocol: 1,
       requiredSlots: [],
     },

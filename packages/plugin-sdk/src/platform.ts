@@ -35,6 +35,17 @@ export const pluginPlatformReleaseIdentityV1 = {
   },
 } as const;
 
+/**
+ * Return the supported semantic-version range for one release minor line.
+ * Plugin manifests and release fixtures use this helper so advancing the
+ * canonical host or SDK identity cannot leave checked-in compatibility
+ * ranges behind.
+ */
+export function pluginMinorCompatibilityRangeV1(version: string): string {
+  const [major, minor] = semVerSchema.parse(version).split('.').map(Number);
+  return `>=${major}.${minor}.0 <${major}.${minor + 1}.0`;
+}
+
 const minorLineSchema = z
   .string()
   .min(3)
