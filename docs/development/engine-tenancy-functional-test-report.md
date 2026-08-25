@@ -429,9 +429,9 @@ branch remains. The first-party UI and JSON/API examples always submit an
 explicit dedicated or shared declaration.
 
 None of these open gates permits null tenant state to authorize an existing
-engine or an unresolved shared resource. Phase 9 of the
-[implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
-is the authoritative executable completion checklist.
+engine or an unresolved shared resource. The machine-readable functional
+coverage manifest and retained release evidence index are the authoritative
+executable completion contract.
 
 `TEN-DOCS-006`: this report, its links, and its documentation-index entry are
 validated by the documentation contract lane.

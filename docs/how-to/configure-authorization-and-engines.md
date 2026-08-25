@@ -16,7 +16,6 @@ operator checklist.
 Related design:
 
 - [Authorization and Access Control](../architecture/09-oss-authorization-access-control-model.md)
-- [JSON-Driven Authorization and Engine Registration](../architecture/11-json-driven-authz-and-engine-registration.md)
 - [Deploy Authorization Configuration](./deploy-authorization-config.md)
 - [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
 
@@ -380,9 +379,8 @@ schedules runtime reconciliation after mapping changes.
 See [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md) for
 the implemented foundation,
 [Provision Engines Externally](./provision-engines-externally.md) for API
-examples, and
-[the implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
-for the gated shared-engine workflow.
+examples, and [Test Engine Tenancy and Fine-Grained Access Control](../development/testing-engine-tenancy-and-access-control.md)
+for the executable shared-engine qualification gates.
 
 For an end-to-end operator workflow, including custom tenant roles and the
 required negative access checks, use

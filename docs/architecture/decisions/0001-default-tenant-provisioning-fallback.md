@@ -64,6 +64,6 @@ local installations.
 
 ## Related Documentation
 
-- [Centralized and Decentralized Engine Tenancy Implementation Plan](../12-engine-tenancy-and-external-provisioning-plan.md)
+- [Engine Tenancy Data Model](../../reference/engine-tenancy-data-model.md)
 - [Configure Dedicated and Shared Engine Tenancy](../../how-to/configure-engine-tenancy.md)
 - [Engine Tenancy Data Model](../../reference/engine-tenancy-data-model.md)

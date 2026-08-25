@@ -33,20 +33,34 @@ This keeps path resolution stable for build contexts, env-file references, and v
 Wrapper scripts may pass an absolute project directory (`--project-directory "$ROOT_DIR"`) and quoted compose file paths; that is equivalent and preferred inside scripted automation.
 # Native Plugin Manager
 
-The optional native manager uses the same OSS installer and lifecycle engine as the CLI. Put the
-closed manager configuration, a random workload token, public trust policy, and optional registry
-configuration in a deployment-owned directory, then select exactly one profile:
+The optional native manager uses the same OSS installer and lifecycle engine as the CLI. Production
+customers use the source-free deployment kit built by
+`scripts/build-plugin-compose-deployment-kit.mjs`; it contains the standalone self-host Compose
+file, this overlay, CDN routing templates, immutable image coordinates, a component checksum
+manifest, and deployment doctors. No Git checkout or local image build is required.
+
+For repository-local development, put the manager configuration, a random workload token, public
+trust policy, and optional registry configuration in a deployment-owned directory. Supply an
+immutable published manager image and select exactly one profile:
 
 ```bash
 export EG_PLUGIN_MANAGER_CONFIG_DIRECTORY="$PWD/.local/plugin-manager"
 export EG_PLUGIN_MANAGER_ID=enterpriseglue-plugin-manager
+export EG_PLUGIN_MANAGER_IMAGE=ghcr.io/enterpriseglue/plugin-manager@sha256:<digest>
 docker compose \
   -f infra/docker/compose/docker-compose.prod.yml \
   -f infra/docker/compose/docker-compose.plugin-manager.yml \
-  --profile plugin-manager-planner up -d
+  --profile plugins-planner up -d
 ```
 
-`plugin-manager-planner` verifies and renders a reviewable plan but has no Docker socket.
-`plugin-manager-managed` additionally mounts the Docker socket and must be an explicit operator
-choice; set `DOCKER_GID` to the socket group. Never run both profiles together. The manager has no
-published port, and registry credentials are mounted only into the manager workload.
+`plugins-planner` verifies and renders a reviewable plan but has no Docker socket.
+`plugins-managed` additionally mounts the Docker socket and must be an explicit operator choice;
+set `DOCKER_GID` to the socket group. The legacy `plugin-manager-planner` and
+`plugin-manager-managed` profile names remain aliases. Never run both modes together.
+
+Managed production Compose must set `EG_PLUGIN_MANAGER_STATE_SOURCE` and
+`EG_PLUGIN_MANAGER_STATE_DIRECTORY` to the same absolute host path. This makes the installer state,
+generated overlay, staged frontend assets, and lifecycle receipts durable and host-visible to the
+Docker daemon. The named `plugin_manager_state` volume remains the compatibility default for older
+planner deployments. The manager has no published port, and registry credentials are mounted only
+into the manager workload.

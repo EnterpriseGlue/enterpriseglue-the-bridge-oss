@@ -176,7 +176,7 @@ incomplete, whose evidence is missing, or whose evidence location is outside
 
 ## Related Documentation
 
-- [Centralized and Decentralized Engine Tenancy Implementation Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+- [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](./testing-engine-tenancy-and-access-control.md)
 - [Engine Tenancy Functional Test Report](./engine-tenancy-functional-test-report.md)
 - [Upgrade to Explicit Engine Tenancy](../how-to/upgrade-engine-tenancy.md)

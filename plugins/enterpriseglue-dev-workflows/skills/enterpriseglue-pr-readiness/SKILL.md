@@ -19,11 +19,15 @@ description: Audit an EnterpriseGlue pull request without merging or changing it
    reconcile its requirements with the collector output.
 4. When `release-notes:preflight` exists, run it and review the generated note;
    do not infer release readiness from commit titles alone.
-5. Run proportionate local gates. Verify public API/OpenAPI, JSON configuration,
+5. Run `pnpm run guard:documentation-boundary -- --base-ref origin/main` when
+   the repository provides it. Treat internal product material,
+   customer-documentation drafts, committed transient UI evidence, or public
+   technical docs that depend on private links as readiness blockers.
+6. Run proportionate local gates. Verify public API/OpenAPI, JSON configuration,
    TypeORM migrations, database portability, UI behavior, security boundaries,
    documentation, rollback, and package impact whenever their paths changed.
-6. Inspect current GitHub checks and their actual error text. Treat pending,
+7. Inspect current GitHub checks and their actual error text. Treat pending,
    advisory, skipped, and externally deferred evidence distinctly.
-7. Report `Ready`, `Conditional`, or `Blocked`, with each conclusion linked to
+8. Report `Ready`, `Conditional`, or `Blocked`, with each conclusion linked to
    concrete evidence. Do not mark a draft ready, enable auto-merge, push, or
    merge from this skill.

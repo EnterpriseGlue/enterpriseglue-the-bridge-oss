@@ -1,6 +1,6 @@
 # Plugin Manager operations
 
-Status: OSS `v0.15.0` operator runbook
+Status: OSS `v0.16.0` operator runbook
 
 Audience: deployment administrators and platform operators
 
@@ -8,7 +8,7 @@ The EnterpriseGlue Plugin Manager is an optional, customer-local OSS workload. I
 registry, signature-verification, offline-delivery, and deployment credentials. The browser and
 ordinary backend store only safe installation intents, reviews, approvals, and observations.
 
-## Supported v0.15 lifecycle
+## Supported v0.16 lifecycle
 
 | Operation | Native manager | Existing fallback |
 | --- | --- | --- |
@@ -43,18 +43,31 @@ not be group/world writable.
 
 ## Compose deployment
 
-1. Copy `infra/docker/compose/plugin-manager.example.json` into the protected material directory.
-2. Replace every placeholder digest and verify the exact OSS host version, digest, database,
-   architecture, and deployment mode.
-3. Set `EG_PLUGIN_MANAGER_CONFIG_DIRECTORY` to the absolute protected directory.
-4. Start planner mode first:
+Released Compose installations use the source-free deployment kit. The release process creates it
+with `scripts/build-plugin-compose-deployment-kit.mjs` only after the backend, frontend, and Plugin
+Manager multi-architecture image digests are known. Its manifest checksums the Compose, config,
+doctor, and CDN routing material.
+
+1. Verify the release lock's Sigstore bundle and confirm the deployment-kit
+   archive SHA-256 recorded in that lock, then extract the kit to its recorded
+   absolute deployment root.
+2. Run `scripts/prepare-compose-runtime.sh <deployment-root>`. This creates the protected manager
+   state, prepares a planner configuration, and creates the external plugin gateway network.
+3. Review `.env`, replace all `change_me` values, and install the workload token, signed catalog,
+   catalog signature, trust policy, Cosign policy, and optional registry material in `config/`.
+4. Confirm the exact OSS host version, image digests, database, architecture, and deployment mode.
+5. Run `scripts/plugin-deployment-doctor.sh <deployment-root>`. It verifies
+   every extracted component against the kit manifest before rendering the
+   selected Compose topology.
+6. Start planner mode first:
 
 ```bash
 docker compose \
-  -f infra/docker/compose/docker-compose.yml \
-  -f infra/docker/compose/docker-compose.prod.yml \
-  -f infra/docker/compose/docker-compose.plugin-manager.yml \
-  --profile plugin-manager-planner up -d
+  --project-directory /opt/enterpriseglue/plugin-deployment \
+  --env-file /opt/enterpriseglue/plugin-deployment/kit/infra/docker/compose/.env \
+  -f /opt/enterpriseglue/plugin-deployment/kit/infra/docker/compose/docker-compose.selfhost.yml \
+  -f /opt/enterpriseglue/plugin-deployment/kit/infra/docker/compose/docker-compose.plugin-manager.yml \
+  --profile plugins-planner up -d
 ```
 
 Planner mode verifies, produces the exact approved lifecycle output, and leaves application of the
@@ -64,18 +77,33 @@ host-equivalent authority:
 ```bash
 DOCKER_GID="$(stat -f '%g' /var/run/docker.sock 2>/dev/null || stat -c '%g' /var/run/docker.sock)" \
 docker compose \
-  -f infra/docker/compose/docker-compose.yml \
-  -f infra/docker/compose/docker-compose.prod.yml \
-  -f infra/docker/compose/docker-compose.plugin-manager.yml \
-  --profile plugin-manager-managed up -d
+  --project-directory /opt/enterpriseglue/plugin-deployment \
+  --env-file /opt/enterpriseglue/plugin-deployment/kit/infra/docker/compose/.env \
+  -f /opt/enterpriseglue/plugin-deployment/kit/infra/docker/compose/docker-compose.selfhost.yml \
+  -f /opt/enterpriseglue/plugin-deployment/kit/infra/docker/compose/docker-compose.plugin-manager.yml \
+  --profile plugins-managed up -d
 ```
 
 Keep the manager read-only, capability-free, `no-new-privileges`, and without a published port.
 Only the local health probe uses port 8788.
 
-## Kubernetes and OpenShift deployment
+The managed adapter requires its project directory, fixed self-host Compose input, generated plugin
+overlay, and installer output to remain below one non-symlink state root. The production kit mounts
+the deployment input read-only below that root and uses the same absolute path for the host state
+bind and container state target. Do not change only one side: generated plugin asset and state paths
+would cease to be visible to the host Docker daemon. Back up this state directory rather than the
+legacy named volume.
 
-Install the namespace-scoped installer RBAC once, then the manager chart with an immutable image:
+## Kubernetes and OpenShift deployment preview
+
+Kubernetes and OpenShift remain a technical preview in v0.16.0. The namespace
+RBAC and manager charts render and pass security checks, but OSS does not yet
+ship the host chart integration and shared read-only plugin-asset mount needed
+by every backend replica. Do not describe this topology as production-ready or
+use the chart-only flow for a customer deployment.
+
+For a controlled development environment, install the namespace-scoped
+installer RBAC once, then render the manager chart with an immutable image:
 
 ```bash
 helm upgrade --install enterpriseglue-plugin-installer-rbac \
@@ -88,11 +116,11 @@ helm upgrade --install enterpriseglue-plugin-manager \
   --set-string image='ghcr.io/enterpriseglue/plugin-manager@sha256:<digest>'
 ```
 
-Create the configuration Secret before the second command. The chart has no browser-facing
-Service, denies inbound pod traffic, runs with a read-only root filesystem, and retains its PVC on
-chart removal. Add customer-owned egress policy for DNS, the OSS backend, the approved registry,
-and Kubernetes API only. OpenShift uses the same controller with the OpenShift adapter and a
-platform-assigned runtime UID.
+Create the configuration Secret before the second command. The chart has no
+browser-facing Service, denies inbound pod traffic, runs with a read-only root
+filesystem, and retains its PVC on chart removal. A production qualification
+still requires the future OSS host integration, a multi-replica shared asset
+volume, end-to-end upgrade/rollback tests, and the published-artifact matrix.
 
 ## Connected installation
 
@@ -109,15 +137,19 @@ The manager rejects mutable subjects, unknown contract fields, missing exact-hos
 revoked releases, inactive entitlement, expired approvals, changed plans, and revision conflicts
 before deployment mutation.
 
-## Offline installation
+## Offline installation preview
 
-The offline path consumes a signed `.egdelivery` directory produced from the same release graph as
-the connected path. It is never uploaded through the browser or backend.
+The manager can consume a signed `.egdelivery` directory produced from the same
+release graph as the connected path. It is never uploaded through the browser
+or backend. The v0.16.0 OSS release permanently publishes the generic
+installation toolchain air-gap archive, but a complete commercial-plugin
+delivery with entitlement and private artifact closure remains preview until
+the customer portal/export service is available.
 
 ```bash
 eg-plugin-manager import-delivery \
   --delivery /media/customer-transfer/example.egdelivery \
-  --intake /var/lib/enterpriseglue/plugin-manager/releases \
+  --intake /opt/enterpriseglue/plugin-manager/state/releases \
   --trust /etc/enterpriseglue/plugin-manager/trust.json
 ```
 
@@ -127,7 +159,7 @@ atomic move into the protected intake. The lifecycle then imports OCI content in
 local registry and verifies destination digests before planning. Air-gapped configuration must
 deny public egress; transfer media is not itself trusted.
 
-Renew trust, revocation, entitlement, and catalog snapshots before their signed expiry. v0.15 does
+Renew trust, revocation, entitlement, and catalog snapshots before their signed expiry. v0.16 does
 not define delta delivery; provide a new complete signed delivery.
 
 ## GitOps reconciliation
@@ -150,7 +182,8 @@ approval, expand manager authority, or place deployment credentials in CI.
 Back up these items together at a consistent point:
 
 - PostgreSQL plugin installation intent/review/approval/observation/capability tables;
-- the manager PVC or Compose `plugin_manager_state` volume;
+- the manager PVC or production Compose manager state bind (or the legacy
+  `plugin_manager_state` volume for an older planner-only deployment);
 - the deployment-owned installer state and rendered deployment files;
 - signed catalogs, releases, trust snapshots, acquisition receipts, and prior artifacts; and
 - deployment-owned secrets through the customer's secret-management backup process.
@@ -188,7 +221,7 @@ Before changing the OSS host:
 4. Confirm rollback artifacts and database backups are available.
 5. Upgrade a non-production topology, verify plugin readiness, then promote.
 
-The v0.15 manager UI does not yet aggregate this fleet check. Do not infer target-host compatibility
+The v0.16 manager UI does not yet aggregate this fleet check. Do not infer target-host compatibility
 from the current green runtime state.
 
 ## Incident checklist

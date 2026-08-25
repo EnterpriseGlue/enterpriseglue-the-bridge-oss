@@ -548,7 +548,7 @@ every unrelated repository line has 100% code coverage.
 
 ## Related Documentation
 
-- [Engine Tenancy and External Provisioning Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+- [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md)
 - [Engine Tenancy and Provisioning API](./engine-tenancy-and-provisioning-api.md)
 - [Provision Engines Externally](../how-to/provision-engines-externally.md)
 - [Database Architecture](./database-architecture.md)

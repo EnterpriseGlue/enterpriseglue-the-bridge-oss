@@ -18,7 +18,6 @@ const DOCUMENTS = [
   'docs/architecture/decisions/0001-default-tenant-provisioning-fallback.md',
   'docs/architecture/decisions/0002-shared-engine-fail-closed-resolution.md',
   'docs/architecture/09-oss-authorization-access-control-model.md',
-  'docs/architecture/11-json-driven-authz-and-engine-registration.md',
   'docs/how-to/configure-authorization-and-engines.md',
   'docs/how-to/configure-engine-tenancy.md',
   'docs/how-to/deploy-authorization-config.md',
@@ -194,12 +193,12 @@ describe('engine tenancy documentation contracts', () => {
   });
 
   it('keeps the executable 100 percent coverage contract aligned across developer and user Markdown', () => {
-    const plan = readFileSync(
-      resolve(repoRoot, 'docs/architecture/12-engine-tenancy-and-external-provisioning-plan.md'),
-      'utf8',
-    );
     const testingGuide = readFileSync(
       resolve(repoRoot, 'docs/development/testing-engine-tenancy-and-access-control.md'),
+      'utf8',
+    );
+    const functionalReport = readFileSync(
+      resolve(repoRoot, 'docs/development/engine-tenancy-functional-test-report.md'),
       'utf8',
     );
     const userGuide = readFileSync(
@@ -212,16 +211,7 @@ describe('engine tenancy documentation contracts', () => {
     );
 
     for (const requiredContract of [
-      'Exhaustive authorization state-space',
-      'applicability registry',
-      'independent expectation model',
-      'unknown, missing, skipped, quarantined',
-      'Documentation tests',
-      'End-to-End Definition of Done',
-    ]) {
-      expect(plan).toContain(requiredContract);
-    }
-    for (const requiredContract of [
+      'test/authz/engine-tenancy-functional-coverage.json',
       'constraint-generated',
       'stable invalidity ID',
       'executed applicable cells / applicable cells = 100%',
@@ -230,6 +220,15 @@ describe('engine tenancy documentation contracts', () => {
       'compatibility-window.json',
     ]) {
       expect(testingGuide).toContain(requiredContract);
+    }
+    for (const requiredContract of [
+      'machine-readable manifest provides 100% traceability',
+      'test/authz/engine-tenancy-functional-coverage.json',
+      'traceability-only',
+      'fourteen of fourteen journeys',
+      'thirty of thirty required channel executions',
+    ]) {
+      expect(functionalReport).toContain(requiredContract);
     }
     expect(userGuide).toContain('### Production Enablement Checklist');
     expect(userGuide).toContain('decentralized installation');

@@ -4,7 +4,7 @@ WORKDIR /repo
 
 # Source builds advertise the in-development host release identity. Published images override
 # this from their immutable vX.Y.Z release tag; the workspace runtime contract guards both paths.
-ARG ENTERPRISEGLUE_HOST_VERSION=0.14.0
+ARG ENTERPRISEGLUE_HOST_VERSION=0.16.0
 ENV ENTERPRISEGLUE_HOST_VERSION=${ENTERPRISEGLUE_HOST_VERSION}
 
 # package.json is the authority for the pnpm version. The workspace runtime

@@ -1,6 +1,6 @@
 {
   "name": "enterpriseglue-dev-workflows",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Versioned EnterpriseGlue development, validation, delivery, and release workflows for Codex.",
   "author": {
     "name": "EnterpriseGlue"
@@ -8,18 +8,19 @@
   "homepage": "https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss",
   "repository": "https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss",
   "license": "Apache-2.0",
-  "keywords": ["enterpriseglue", "development", "ci", "release", "authorization"],
+  "keywords": ["enterpriseglue", "development", "ci", "release", "authorization", "documentation"],
   "skills": "./skills/",
   "interface": {
     "displayName": "EnterpriseGlue Dev Workflows",
     "shortDescription": "Build, validate, ship, and release EnterpriseGlue safely.",
-    "longDescription": "Version-controlled Codex workflows for EnterpriseGlue worktrees, testing, CI diagnosis, release notes, access governance, UI evidence, contract parity, shipping, and releases.",
+    "longDescription": "Version-controlled Codex workflows for EnterpriseGlue worktrees, testing, CI diagnosis, documentation governance, release notes, access governance, UI evidence, contract parity, shipping, and releases.",
     "developerName": "EnterpriseGlue",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Write"],
     "defaultPrompt": [
       "Audit this EnterpriseGlue pull request for readiness.",
       "Select the right EnterpriseGlue tests for this change.",
+      "Route this EnterpriseGlue document to the correct publication boundary.",
       "Validate release notes and contract parity."
     ]
   }

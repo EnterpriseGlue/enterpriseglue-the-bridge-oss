@@ -5,10 +5,10 @@
     "apiVersion": "manager-capability.plugin.enterpriseglue.io/v1",
     "kind": "EnterpriseGluePluginManagerCapability",
     "managerId": "enterpriseglue-plugin-manager",
-    "managerVersion": "0.1.0",
+    "managerVersion": "0.1.2",
     "protocolVersions": ["v1"],
     "deploymentModes": ["compose_planner"],
-    "architectures": ["amd64"],
+    "architectures": ["amd64", "arm64"],
     "operations": ["plan", "install", "upgrade", "offline_import"],
     "state": "planner_only",
     "observedAt": "1970-01-01T00:00:00.000Z"
@@ -16,10 +16,10 @@
   "host": {
     "baseUrl": "http://backend:8787",
     "workloadTokenFile": "/etc/enterpriseglue/plugin-manager/workload-token",
-    "version": "0.15.0",
-    "artifact": "ghcr.io/enterpriseglue/backend@sha256:REPLACE_WITH_64_HEX_DIGEST",
+    "version": "0.16.0",
+    "artifact": "ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:REPLACE_WITH_64_HEX_DIGEST",
     "apiVersion": "0.4.0",
-    "sdkVersion": "0.3.0",
+    "sdkVersion": "0.3.1",
     "platformRevision": 0,
     "database": "postgres",
     "entitlementState": "active"
@@ -30,9 +30,9 @@
     "architecture": "amd64"
   },
   "storage": {
-    "releaseRoot": "/var/lib/enterpriseglue/plugin-manager/releases",
-    "executionRoot": "/var/lib/enterpriseglue/plugin-manager/executions",
-    "installerOutput": "/var/lib/enterpriseglue/plugin-manager/installer"
+    "releaseRoot": "/opt/enterpriseglue/plugin-manager/state/releases",
+    "executionRoot": "/opt/enterpriseglue/plugin-manager/state/executions",
+    "installerOutput": "/opt/enterpriseglue/plugin-manager/state/installer"
   },
   "connectedRegistry": {
     "trustFile": "/etc/enterpriseglue/plugin-manager/trust.json",
@@ -40,13 +40,16 @@
     "registryConfigFile": "/etc/enterpriseglue/plugin-manager/registry-auth.json"
   },
   "offlineDelivery": {
-    "intakeRoot": "/var/lib/enterpriseglue/plugin-manager/releases",
+    "intakeRoot": "/opt/enterpriseglue/plugin-manager/state/releases",
     "registryConfigFile": "/etc/enterpriseglue/plugin-manager/local-registry-auth.json"
   },
   "adapter": {
     "type": "compose",
-    "projectDirectory": "/deployment",
-    "composeFiles": ["/deployment/infra/docker/compose/docker-compose.prod.yml"],
+    "projectDirectory": "/opt/enterpriseglue/plugin-manager/state",
+    "composeFiles": [
+      "/opt/enterpriseglue/plugin-manager/state/deployment/infra/docker/compose/docker-compose.selfhost.yml",
+      "/opt/enterpriseglue/plugin-manager/state/installer/docker-compose.plugins.generated.yaml"
+    ],
     "projectName": "enterpriseglue",
     "utilityImage": "ghcr.io/enterpriseglue/plugin-manager@sha256:REPLACE_WITH_64_HEX_DIGEST",
     "imageMode": "pull"

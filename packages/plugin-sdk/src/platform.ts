@@ -23,17 +23,28 @@ export const pluginPlatformCatalogRevisionV1 = '2026-08-24.1';
  * from being assembled independently in different host entry points.
  */
 export const pluginPlatformReleaseIdentityV1 = {
-  hostVersion: '0.15.0',
-  sdkVersion: '0.2.0',
-  supportedSdkVersions: ['0.2.0', '0.1.0'],
+  hostVersion: '0.16.0',
+  sdkVersion: '0.3.1',
+  supportedSdkVersions: ['0.3.1', '0.3.0', '0.2.0'],
   sharedFrontend: {
     react: '19.2.6',
     reactDom: '19.2.6',
     router: '7.18.2',
     carbonReact: '1.107.0',
-    pluginSdk: '0.2.0',
+    pluginSdk: '0.3.1',
   },
 } as const;
+
+/**
+ * Return the supported semantic-version range for one release minor line.
+ * Plugin manifests and release fixtures use this helper so advancing the
+ * canonical host or SDK identity cannot leave checked-in compatibility
+ * ranges behind.
+ */
+export function pluginMinorCompatibilityRangeV1(version: string): string {
+  const [major, minor] = semVerSchema.parse(version).split('.').map(Number);
+  return `>=${major}.${minor}.0 <${major}.${minor + 1}.0`;
+}
 
 const minorLineSchema = z
   .string()
@@ -147,7 +158,7 @@ export const pluginPlatformCapabilityCatalogV1Schema = z
             ),
             hostMinorLines: z.array(minorLineSchema).min(1).max(2),
             sdkMinorLines: z.array(minorLineSchema).min(1).max(2),
-            sdkVersions: z.array(semVerSchema).min(1).max(2),
+            sdkVersions: z.array(semVerSchema).min(1).max(20),
             exactPrivateCiHostEvidenceRequired: z.literal(true),
           })
           .strict(),
@@ -290,8 +301,6 @@ export const pluginPlatformCapabilityCatalogV1Schema = z
     );
     if (
       supportedSdkMinorLines.length !==
-        catalog.compatibility.supportWindow.sdkVersions.length ||
-      supportedSdkMinorLines.length !==
         catalog.compatibility.supportWindow.sdkMinorLines.length ||
       supportedSdkMinorLines.some(
         (line, index) =>
@@ -302,7 +311,7 @@ export const pluginPlatformCapabilityCatalogV1Schema = z
         code: 'custom',
         path: ['compatibility', 'supportWindow'],
         message:
-          'SDK versions must contain exactly one package version for every supported minor line',
+          'SDK versions must cover exactly the declared supported minor lines',
       });
     }
   });

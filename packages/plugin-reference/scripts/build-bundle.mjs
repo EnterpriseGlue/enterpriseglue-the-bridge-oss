@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import {
   parseEnterpriseGluePluginManifestV1,
+  pluginMinorCompatibilityRangeV1,
   pluginPlatformReleaseIdentityV1,
   pluginResourceDescriptorV1Schema,
 } from '@enterpriseglue/plugin-sdk';
@@ -32,10 +33,6 @@ pluginResourceDescriptorV1Schema.parse(JSON.parse(resourceBytes.toString('utf8')
 const image =
   process.env.REFERENCE_PLUGIN_IMAGE ??
   `ghcr.io/enterpriseglue/reference-health@sha256:${'0'.repeat(64)}`;
-const [hostMajor, hostMinor] = pluginPlatformReleaseIdentityV1.hostVersion
-  .split('.')
-  .map(Number);
-const nextHostMinor = `${hostMajor}.${hostMinor + 1}.0`;
 const manifest = parseEnterpriseGluePluginManifestV1({
   apiVersion: 'plugin.enterpriseglue.io/v1',
   kind: 'EnterpriseGluePlugin',
@@ -46,8 +43,12 @@ const manifest = parseEnterpriseGluePluginManifestV1({
     publisher: 'io.enterpriseglue',
   },
   compatibility: {
-    host: `>=${pluginPlatformReleaseIdentityV1.hostVersion} <${nextHostMinor}`,
-    sdk: '^0.1.0',
+    host: pluginMinorCompatibilityRangeV1(
+      pluginPlatformReleaseIdentityV1.hostVersion,
+    ),
+    sdk: pluginMinorCompatibilityRangeV1(
+      pluginPlatformReleaseIdentityV1.sdkVersion,
+    ),
     frontendProtocol: 1,
     backendProtocol: 1,
     requiredSlots: [],
@@ -61,7 +62,8 @@ const manifest = parseEnterpriseGluePluginManifestV1({
         reactDom: '19.2.6',
         router: '7.18.2',
         carbonReact: '1.107.0',
-        pluginSdk: '0.1.0',
+        pluginSdk:
+          pluginPlatformReleaseIdentityV1.sharedFrontend.pluginSdk,
       },
     },
     backend: {

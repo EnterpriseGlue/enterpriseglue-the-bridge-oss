@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Documentation Governance"
+  short_description: "Route EnterpriseGlue documentation safely"
+  default_prompt: "Use $enterpriseglue-documentation-governance to classify and place this EnterpriseGlue document."

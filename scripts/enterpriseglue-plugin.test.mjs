@@ -18,6 +18,7 @@ const expectedSkills = [
   'enterpriseglue-cleanup',
   'enterpriseglue-contract-parity',
   'enterpriseglue-deps',
+  'enterpriseglue-documentation-governance',
   'enterpriseglue-hotfix',
   'enterpriseglue-license',
   'enterpriseglue-local-deploy',
@@ -53,9 +54,11 @@ test('CI and contributor documentation keep the versioned plugin validated and i
   const contributing = readFileSync(join(root, 'CONTRIBUTING.md'), 'utf8')
   const documentation = readFileSync(join(root, 'docs/development/codex-workflow-plugin.md'), 'utf8')
   assert.match(workflow, /pnpm run test:codex-plugin/)
+  assert.match(workflow, /pnpm run guard:documentation-boundary/)
   assert.match(contributing, /codex-workflow-plugin\.md/)
   assert.match(documentation, /codex plugin marketplace add/)
   assert.match(documentation, /enterpriseglue-dev-workflows@enterpriseglue/)
+  assert.match(documentation, /documentation-governance/)
 })
 
 test('all versioned skills have portable instructions and UI metadata', () => {

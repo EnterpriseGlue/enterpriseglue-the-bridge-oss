@@ -10,6 +10,7 @@ Use only the rows selected by the diff.
 | Security | Authentication, authorization, tenant isolation, secrets, audit behavior, denials, and revocation are tested |
 | UI | Unit/browser/accessibility coverage and current visual evidence at the standard viewport |
 | Operations | Deployment configuration, health/smoke evidence, observability, limitations, and rollback are documented |
+| Documentation boundary | Repository docs are technical and public; internal product material and customer drafts remain outside Git; transient evidence uses CI or release artifacts |
 | Packages | Published-package versions and plugin compatibility are validated |
 | CI | Required checks pass; advisory, skipped, cancelled, and deferred evidence are explicitly classified |
 

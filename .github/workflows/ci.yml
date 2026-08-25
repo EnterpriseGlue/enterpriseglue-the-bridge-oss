@@ -48,6 +48,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
@@ -64,6 +66,9 @@ jobs:
 
       - name: Validate configuration deployment contract
         run: pnpm run guard:config-deployment-contract
+
+      - name: Enforce documentation publication boundary
+        run: pnpm run guard:documentation-boundary -- --base-ref "origin/${{ github.base_ref || 'main' }}"
 
       - name: Validate versioned Codex workflow plugin
         run: pnpm run test:codex-plugin

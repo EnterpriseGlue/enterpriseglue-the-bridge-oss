@@ -8,6 +8,7 @@ import {
 import {
   createPluginPlatformCapabilityCatalogV1,
   getPluginPlatformCapabilityCatalogV1JsonSchema,
+  pluginMinorCompatibilityRangeV1,
   pluginPlatformReleaseIdentityV1,
   safeParsePluginPlatformCapabilityCatalogV1,
 } from './platform.js';
@@ -92,19 +93,29 @@ describe('plugin platform capability catalog', () => {
     expect(serialized).not.toContain('tenantRef');
   });
 
-  it('publishes one exact v0.15 release identity', () => {
+  it('publishes one exact current v0.16 release identity', () => {
     expect(pluginPlatformReleaseIdentityV1).toEqual({
-      hostVersion: '0.15.0',
-      sdkVersion: '0.2.0',
-      supportedSdkVersions: ['0.2.0', '0.1.0'],
+      hostVersion: '0.16.0',
+      sdkVersion: '0.3.1',
+      supportedSdkVersions: ['0.3.1', '0.3.0', '0.2.0'],
       sharedFrontend: {
         react: '19.2.6',
         reactDom: '19.2.6',
         router: '7.18.2',
         carbonReact: '1.107.0',
-        pluginSdk: '0.2.0',
+        pluginSdk: '0.3.1',
       },
     });
+  });
+
+  it('derives compatibility ranges from the selected release minor', () => {
+    expect(pluginMinorCompatibilityRangeV1('0.3.1')).toBe(
+      '>=0.3.0 <0.4.0',
+    );
+    expect(pluginMinorCompatibilityRangeV1('16.12.7')).toBe(
+      '>=16.12.0 <16.13.0',
+    );
+    expect(() => pluginMinorCompatibilityRangeV1('0.3')).toThrow();
   });
 
   it('supports an exact host subset without inventing unavailable capabilities', () => {
@@ -131,7 +142,7 @@ describe('plugin platform capability catalog', () => {
     expect(value.events).toEqual([]);
   });
 
-  it('rejects drifted support windows, duplicate IDs, and unsafe named egress policy semantics', () => {
+  it('validates support windows, duplicate IDs, and named egress policy semantics', () => {
     const missingCurrentMinor = structuredClone(catalog());
     missingCurrentMinor.compatibility.supportWindow.hostMinorLines = ['0.3'];
     expect(
@@ -169,7 +180,7 @@ describe('plugin platform capability catalog', () => {
     expect(
       safeParsePluginPlatformCapabilityCatalogV1(twoPatchesFromOneMinor)
         .success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('exports a closed draft 2020-12 structural schema', () => {
