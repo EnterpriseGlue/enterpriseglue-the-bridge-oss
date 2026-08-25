@@ -1,0 +1,59 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "frontend-host-validate-list-api-responses",
+  "type": "feature",
+  "scope": "frontend-host",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "users"
+  ],
+  "summary": "Validates list API responses at the boundary so an unexpected non-array payload logs an actionable diagnostic and degrades to an empty list instead of throwing an opaque runtime TypeError.",
+  "userImpact": [
+    "A list endpoint returning a non-array payload (an error envelope, an object, or a string) now renders an empty list instead of crashing the view with `TypeError: ... is not a function`.",
+    "Developers get a console diagnostic naming the request and describing the payload shape, so API contract mismatches, missing endpoints, and auth or configuration problems are identifiable without hand-instrumenting the code."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "No configuration or settings changes. The Email Configurations admin page is touched only by the list-response validation refactor (its list fetch now routes through `fetchList`); operators need take no action and no environment variables, settings, or config bundles change."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds `expectArray(value, context)` and `fetchList<T>(url, params?, options?, context?)` to `@enterpriseglue/frontend-host` `shared/api`; the existing `apiClient` surface is unchanged and `fetchList` is a drop-in for `apiClient.get<T[]>(...)`."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Unexpected payloads are described by type and key names in all environments; the full payload body is logged only in development builds, so production logs do not capture unexpected response contents."
+  ],
+  "documentation": [
+    "API-boundary list validation helpers: `packages/frontend-host/src/shared/api/fetchList.ts` and `packages/frontend-host/src/shared/api/expectArray.ts`."
+  ],
+  "knownLimitations": [
+    "Coverage is limited to GET list endpoints routed through `fetchList`; non-array `POST` responses and array data arriving via WebSocket/SSE or plugin bridges are not yet guarded, though `expectArray` is exported for incremental reuse."
+  ],
+  "rollback": [
+    "Redeploy the previous frontend image or `@enterpriseglue/frontend-host` package; no configuration or database rollback is required."
+  ],
+  "validation": [
+    "Full frontend unit suite (`vitest --run`) passes with new tests covering `expectArray` (arrays, null/undefined, error envelopes, string and object payloads) and `fetchList` (array pass-through, non-array coercion with logged context, argument forwarding).",
+    "`@enterpriseglue/frontend-host` typecheck (`tsc -p tsconfig.build.json --noEmit`) and repository ESLint (`--max-warnings=0`) are clean over the changed files."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.8.0",
+      "newVersion": "0.9.0",
+      "impact": "minor"
+    }
+  ]
+}
