@@ -99,6 +99,11 @@ release pull request. The workflow then:
 5. publishes the same document as the GitHub release body after the release
    pull request is merged.
 
+Generated release documents include repository publication front matter. This
+classifies them as technical release documentation for operators, developers,
+and maintainers and allows the same document to pass the documentation boundary
+in both pull-request and protected merge-group checks.
+
 The generated Release Please version must equal the fragment-derived semantic
 version. Before 1.0, breaking changes and features produce a minor release
 under the repository's `bump-minor-pre-major` policy; fixes produce a patch.

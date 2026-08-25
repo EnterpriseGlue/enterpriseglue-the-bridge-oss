@@ -1,0 +1,42 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-doc-metadata",
+  "type": "internal",
+  "scope": "release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps generated technical release documents compliant with the repository publication boundary in pull requests and protected merge groups.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This release-automation correction does not change application data or migrations."
+    ]
+  },
+  "security": [],
+  "documentation": [
+    "Generated release documents now declare their technical classification, repository publication target, lifecycle, and operator/developer/maintainer audience."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the previous renderer only together with an explicit release-document exception in the publication boundary guard."
+  ],
+  "validation": [
+    "Run release-note renderer tests, documentation-boundary tests, release preflight, and the protected merge-group boundary guard."
+  ],
+  "packages": []
+}
