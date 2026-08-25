@@ -276,21 +276,22 @@ describe('PluginHostRuntimeV1', () => {
     const capabilities = defaultPluginHostCapabilitiesV1();
 
     expect(catalog.compatibility).toMatchObject({
-      hostVersion: '0.15.0',
-      sdkVersion: '0.2.0',
+      hostVersion: '0.16.0',
+      sdkVersion: '0.3.1',
       sharedFrontend: {
         router: '7.18.2',
-        pluginSdk: '0.2.0',
+        pluginSdk: '0.3.1',
       },
       supportWindow: {
-        sdkMinorLines: ['0.1', '0.2'],
-        sdkVersions: ['0.1.0', '0.2.0'],
+        sdkMinorLines: ['0.2', '0.3'],
+        sdkVersions: ['0.2.0', '0.3.0', '0.3.1'],
       },
     });
-    expect(capabilities.sdkVersion).toBe('0.2.0');
+    expect(capabilities.sdkVersion).toBe('0.3.1');
     expect([...capabilities.supportedSdkVersions].sort()).toEqual([
-      '0.1.0',
       '0.2.0',
+      '0.3.0',
+      '0.3.1',
     ]);
   });
 

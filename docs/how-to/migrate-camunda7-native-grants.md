@@ -96,5 +96,5 @@ reported, a draft/rollback hash changes, or any expected Effective Access deny
 case is allowed. Native Camunda access can remain in place as a separately
 governed direct-access path during this migration.
 
-For the architecture and supported translation matrix, see
-[Camunda 7 Native Grant Migration Plan](../architecture/13-camunda-7-native-grant-migration-plan.md).
+For the supported translation matrix and verification contract, see
+[Camunda 7 Native Grant Migration](../development/camunda7-native-grant-migration.md).

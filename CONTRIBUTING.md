@@ -154,6 +154,10 @@ Optional API smoke checks (requires a running backend and valid credentials):
   changes and run the release-note validation and preview commands.
 - Use `release-note:none` only for internal changes, with a concrete
   `Release-note exemption:` reason in the PR body.
+- Follow the [documentation publication policy](docs/development/documentation-publication-policy.md):
+  keep repository docs technical, product-development material outside Git,
+  customer docs in the `enterpriseglue.ai` CMS, and transient UI evidence in
+  CI or release artifacts.
 
 See [Release-note and versioning process](docs/development/release-notes-process.md)
 for the schema, path-aware requirements, Release Please integration, and

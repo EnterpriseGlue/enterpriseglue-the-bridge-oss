@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const manifestPath = path.join(root, 'test/authz/engine-tenancy-functional-coverage.json');
-const planPath = path.join(root, 'docs/architecture/12-engine-tenancy-and-external-provisioning-plan.md');
 const openApiPath = path.join(root, 'packages/shared/src/schemas/openapi.ts');
 const engineSchemaPath = path.join(root, 'packages/shared/src/schemas/mission-control/engine.ts');
 const transitionPolicyPath = path.join(root, 'packages/shared/src/engine-tenancy/transition-policy.ts');
@@ -231,23 +230,6 @@ test('validates every version-2 engine tenancy functional coverage entry', () =>
   for (const value of ['allow', 'deny', 'quarantine', 'conflict', 'audit']) {
     assert.ok(represented.outcomes.has(value), `coverage manifest omits outcome: ${value}`);
   }
-});
-
-test('keeps the normative plan registry exactly synchronized with the coverage manifest', () => {
-  const plan = fs.readFileSync(planPath, 'utf8');
-  const start = '<!-- ENGINE_TENANCY_REQUIREMENTS_START -->';
-  const end = '<!-- ENGINE_TENANCY_REQUIREMENTS_END -->';
-  const startIndex = plan.indexOf(start);
-  const endIndex = plan.indexOf(end);
-  assert.ok(startIndex >= 0 && endIndex > startIndex, 'normative requirement registry markers are missing');
-  const registry = plan.slice(startIndex + start.length, endIndex);
-  const registryIds = [...registry.matchAll(/\bTEN-[A-Z]+-\d{3}\b/g)].map((match) => match[0]);
-  assert.equal(new Set(registryIds).size, registryIds.length, 'normative plan registry contains duplicate IDs');
-  assert.deepEqual(
-    [...new Set(registryIds)].sort(),
-    requirements.map((entry) => entry.id).sort(),
-    'normative plan registry and functional coverage manifest differ',
-  );
 });
 
 test('inventories every public tenancy operation, stable error, and topology transition', () => {

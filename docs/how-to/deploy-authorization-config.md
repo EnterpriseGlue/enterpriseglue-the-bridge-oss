@@ -29,7 +29,9 @@ pnpm run test:config-bootstrap:local:apply
 Set `LOCAL_CONFIG_BOOTSTRAP_ENV_FILE` only when the default `.env.docker` is
 not the intended local Docker environment.
 
-For implementation completion and verification status across authorization, identity, and engine registration, use [the architecture tracker](../architecture/11-json-driven-authz-and-engine-registration.md); this runbook intentionally lists only operationally supported deployment paths.
+For the current contracts and verification procedures across authorization,
+identity, and engine registration, use the reference and test guides below.
+This runbook intentionally lists only operationally supported deployment paths.
 
 Related guides:
 
@@ -42,7 +44,7 @@ Related guides:
 - [Docker Compose Deployment](./deploy-docker.md)
 - [OpenShift Deployment](./deploy-openshift.md)
 - [Deployment Runbook](./deployment-runbook.md)
-- [JSON-Driven Authorization and Engine Registration](../architecture/11-json-driven-authz-and-engine-registration.md)
+- [Authorization and Access Control](../architecture/09-oss-authorization-access-control-model.md)
 
 ## Recommended Deployment Contract
 

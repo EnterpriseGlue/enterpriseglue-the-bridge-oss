@@ -26,5 +26,10 @@ description: Capture, audit, and review EnterpriseGlue UI evidence. Use for /ui-
 6. Run affected browser, accessibility, 200% zoom/reflow, and responsive tests.
    Treat duplicate, wrong-size, blank, stale, or semantically incomplete
    screenshots as failed evidence.
-7. Update the canonical evidence report and screenshots together. Report which
-   flow and assertion each image proves.
+7. Keep automated screenshots and transient qualification evidence in CI or
+   release artifacts. Keep UX research, reviews, recommendations, journeys,
+   and mock-ups in the internal product-documentation destination. Commit only
+   small durable assets or technical reports required to explain or operate the
+   shipped software.
+8. Update the applicable evidence report and screenshots together in their
+   approved destination. Report which flow and assertion each image proves.

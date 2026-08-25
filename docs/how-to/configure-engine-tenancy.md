@@ -764,4 +764,4 @@ for the complete evidence and rollback procedure.
 - [Migrate Existing Engines to Explicit Tenancy](./migrate-existing-engines-to-explicit-tenancy.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](../development/testing-engine-tenancy-and-access-control.md)
 - [Configure Authorization, Identity, and Engines](./configure-authorization-and-engines.md)
-- [Engine Tenancy End-to-End Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+- [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md)

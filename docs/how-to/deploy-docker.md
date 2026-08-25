@@ -78,6 +78,11 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 5. Optional: set `API_UPSTREAM` to point the frontend Nginx proxy at a different backend host.
 6. In published-image mode, `API_BASE_URL` is already baked into the published frontend image and is not re-read at container start. Use `API_UPSTREAM` only for runtime proxy changes, or rebuild the frontend image if you need a different browser-visible API origin.
 
+The standalone self-host Compose file also accepts complete immutable references through
+`EG_BACKEND_IMAGE_REF` and `EG_FRONTEND_IMAGE_REF`. These take precedence over the legacy
+`BACKEND_IMAGE`/`FRONTEND_IMAGE` plus `IMAGE_TAG` variables and are used by the source-free Plugin
+Manager deployment kit.
+
 Key defaults:
 - Dev frontend: `http://localhost:5173`
 - Dev backend: `http://localhost:8787` (when `EXPOSE_BACKEND=true`)
@@ -119,6 +124,14 @@ Published backend images use the same mount contract:
 ```bash
 EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod:images:postgres
 ```
+
+For the optional Plugin Manager, use the release deployment kit rather than cloning the source or
+building an image locally. The as-built preparation, immutable image, persistent state, profile,
+and doctor commands are in [Plugin Manager operations](../runbooks/plugin-manager-operations.md).
+
+If the frontend is served from static hosting or a CDN while the backend remains in containers,
+the public origin must route API and plugin asset paths to the backend before applying the SPA
+fallback. See [Deploy a static frontend with a CDN](./deploy-static-frontend-cdn.md).
 
 Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`. The production backend image runs as UID/GID `65532`, owns the empty projection directories, and never copies a customer bundle into an image layer. Repository-local `.local/` and root `config/` directories are excluded from the Docker build context as an additional safeguard.
 

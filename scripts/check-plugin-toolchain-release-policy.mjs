@@ -21,7 +21,10 @@ const managerDockerfile = await readFile(
   'utf8',
 );
 
-assert.match(workflow, /\bon:\n  workflow_dispatch:/);
+assert.match(workflow, /\bon:\n  workflow_run:/);
+assert.match(workflow, /workflows: \[Docker Images\]/);
+assert.match(workflow, /types: \[completed\]/);
+assert.match(workflow, /\n  workflow_dispatch:/);
 assert.doesNotMatch(
   workflow,
   /^  (?:push|pull_request|pull_request_target|release|schedule):/m,
@@ -53,6 +56,7 @@ assert.equal(
   'The looped PR vulnerability gate must scan both public toolchain images',
 );
 assert.match(workflow, /environment: plugin-toolchain-production/);
+assert.match(workflow, /timeout-minutes: 90/);
 assert.match(
   workflow,
   /source_ref must be an immutable 40-character commit/,
@@ -64,6 +68,7 @@ assert.match(
 assert.match(workflow, /\[\[ "\$\(git rev-parse HEAD\)" == "\$SOURCE_REF" \]\]/);
 assert.match(workflow, /test -z "\$\(git status --porcelain\)"/);
 assert.match(workflow, /packages: write/);
+assert.match(workflow, /contents: write/);
 assert.match(workflow, /id-token: write/);
 assert.match(workflow, /attestations: write/);
 assert.match(workflow, /platforms: linux\/amd64,linux\/arm64/);
@@ -84,10 +89,27 @@ assert.match(
   workflow,
   /helm package infra\/kubernetes\/helm\/enterpriseglue-plugin-manager/,
 );
-assert.match(workflow, /helm push "\$RUNTIME_ARCHIVE"/);
-assert.match(workflow, /helm push "\$RBAC_ARCHIVE"/);
-assert.match(workflow, /helm push "\$MANAGER_ARCHIVE"/);
-assert.match(workflow, /Reject immutable version reuse/);
+assert.match(
+  workflow,
+  /publish_or_verify_chart "\$RUNTIME_ARCHIVE" "\$RUNTIME_CHART_REPOSITORY"/,
+);
+assert.match(
+  workflow,
+  /publish_or_verify_chart "\$RBAC_ARCHIVE" "\$RBAC_CHART_REPOSITORY"/,
+);
+assert.match(
+  workflow,
+  /publish_or_verify_chart "\$MANAGER_ARCHIVE" "\$MANAGER_CHART_REPOSITORY"/,
+);
+assert.match(workflow, /Resolve resumable immutable image state/);
+assert.match(workflow, /installer_exists=\$installer_exists/);
+assert.match(workflow, /manager_exists=\$manager_exists/);
+assert.match(workflow, /steps\.existing-images\.outputs\.installer_exists != 'true'/);
+assert.match(workflow, /steps\.existing-images\.outputs\.manager_exists != 'true'/);
+assert.match(workflow, /publish_or_verify_chart/);
+assert.match(workflow, /Published immutable chart version/);
+assert.match(workflow, /event\.workflow_run\.event == 'release'/);
+assert.match(workflow, /git tag --points-at "\$SOURCE_REF"/);
 assert.match(workflow, /SOURCE_DATE_EPOCH=/);
 assert.match(workflow, /RUNTIME_CHART_REFERENCE=.*@\$RUNTIME_DIGEST/);
 assert.match(workflow, /RBAC_CHART_REFERENCE=.*@\$RBAC_DIGEST/);
@@ -146,6 +168,20 @@ assert.match(
   /ZOT_IMAGE: ghcr\.io\/project-zot\/zot-minimal@sha256:[a-f0-9]{64}/,
 );
 assert.match(workflow, /if-no-files-found: error/);
+assert.match(workflow, /Resolve and verify the published OSS application images/);
+assert.match(workflow, /gh run download "\$docker_images_run"/);
+assert.match(workflow, /image-digests-\$RELEASE_TAG/);
+assert.match(workflow, /oras resolve "\$backend_tag"/);
+assert.match(workflow, /oras resolve "\$frontend_tag"/);
+assert.match(workflow, /certificate-identity-regexp "\$image_identity"/);
+assert.match(workflow, /Build and publish the signed OSS distribution assets/);
+assert.match(workflow, /build-plugin-compose-deployment-kit\.mjs/);
+assert.match(workflow, /enterpriseglue-distribution-lock\.mjs create/);
+assert.match(workflow, /enterpriseglue-distribution-lock\.mjs verify/);
+assert.match(workflow, /enterpriseglue-distribution-lock-\$RELEASE_TAG\.sigstore\.json/);
+assert.match(workflow, /gh release upload "\$RELEASE_TAG"/);
+assert.match(workflow, /enterpriseglue-frontend-static-\$RELEASE_TAG\.tar\.gz/);
+assert.match(workflow, /enterpriseglue-plugin-deployment-kit-\$RELEASE_TAG\.tar\.gz/);
 assert.doesNotMatch(
   workflow,
   /^\s*uses:\s+[^\s@]+@(?:main|master|v?\d+(?:\.\d+){0,2})\s*$/m,
@@ -173,6 +209,12 @@ const receiptIndex = workflow.indexOf(
 const airgapIndex = workflow.indexOf(
   'Build, sign, and verify the generic air-gap toolchain',
 );
+const applicationIndex = workflow.indexOf(
+  'Resolve and verify the published OSS application images',
+);
+const distributionIndex = workflow.indexOf(
+  'Build and publish the signed OSS distribution assets',
+);
 const retainIndex = workflow.indexOf(
   'Retain the non-secret toolchain receipt',
 );
@@ -181,7 +223,9 @@ assert.ok(chartIndex >= 0 && chartIndex < signIndex);
 assert.ok(signIndex < verifyIndex);
 assert.ok(verifyIndex < receiptIndex);
 assert.ok(receiptIndex < airgapIndex);
-assert.ok(airgapIndex < retainIndex);
+assert.ok(airgapIndex < applicationIndex);
+assert.ok(applicationIndex < distributionIndex);
+assert.ok(distributionIndex < retainIndex);
 
 console.log(
   JSON.stringify({

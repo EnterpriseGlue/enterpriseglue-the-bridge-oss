@@ -53,6 +53,8 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -77,6 +79,11 @@ jobs:
       - name: Set up Docker Buildx for backend
         id: buildx_backend
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v3.10.1
+        with:
+          cosign-release: v3.1.3
 
       - name: Login to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -169,6 +176,8 @@ jobs:
           pull: true
           no-cache: ${{ inputs.security_rebuild }}
           push: true
+          provenance: mode=max
+          sbom: true
           build-args: |
             ENTERPRISEGLUE_HOST_VERSION=${{ steps.meta.outputs.host_version }}
           tags: |
@@ -191,6 +200,8 @@ jobs:
           pull: true
           no-cache: ${{ inputs.security_rebuild }}
           push: true
+          provenance: mode=max
+          sbom: true
           build-args: |
             ENTERPRISEGLUE_HOST_VERSION=${{ steps.meta.outputs.host_version }}
           tags: |
@@ -312,6 +323,8 @@ jobs:
           pull: true
           no-cache: ${{ inputs.security_rebuild }}
           push: true
+          provenance: mode=max
+          sbom: true
           build-args: |
             API_BASE_URL=
           tags: |
@@ -334,6 +347,8 @@ jobs:
           pull: true
           no-cache: ${{ inputs.security_rebuild }}
           push: true
+          provenance: mode=max
+          sbom: true
           build-args: |
             API_BASE_URL=
           tags: |
@@ -372,6 +387,31 @@ jobs:
           docker buildx imagetools create \
             -t "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}" \
             "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.frontend_temp_tag }}"
+
+      - name: Sign immutable application images
+        shell: bash
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          cosign sign --yes --registry-referrers-mode=oci-1-1 \
+            "${{ steps.meta.outputs.backend_image }}@${{ steps.backend.outputs.digest }}"
+          cosign sign --yes --registry-referrers-mode=oci-1-1 \
+            "${{ steps.meta.outputs.frontend_image }}@${{ steps.frontend.outputs.digest }}"
+
+      - name: Attest backend image provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.2.0
+        with:
+          subject-name: ${{ steps.meta.outputs.backend_image }}
+          subject-digest: ${{ steps.backend.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest frontend image provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.2.0
+        with:
+          subject-name: ${{ steps.meta.outputs.frontend_image }}
+          subject-digest: ${{ steps.frontend.outputs.digest }}
+          push-to-registry: true
 
       - name: Promote backend latest tag
         if: steps.meta.outputs.publish_latest == 'true'

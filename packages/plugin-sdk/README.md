@@ -72,14 +72,15 @@ The package defines:
   current/previous host and plugin versions to immutable OCI artifact digests and retained test
   evidence.
 
-Package `0.3.0` adds the native-manager distribution contracts. The plugin-host
-ABI remains on SDK line `0.2.0`, with `0.1.0` retained as the previous supported
-line. `fixtures/sdk-0.3.0` freezes the new manager contracts, while
-`fixtures/sdk-0.2.0` and `fixtures/sdk-0.1.0` freeze current and previous plugin
-consumers. The host therefore advertises exact plugin ABI packages `0.2.0` and
-`0.1.0`; a plugin manifest's declared SDK range must contain the exact ABI used
-to build that plugin. A future plugin ABI minor must add its own frozen fixture
-and retire only the line outside the documented two-minor window.
+Package `0.3.1` aligns the native-manager distribution contracts with the current
+host and SDK release identity. Package `0.3.0` introduced those contracts. The plugin-host
+ABI is on SDK minor line `0.3`, with both `0.3.1` and `0.3.0` accepted so a
+host patch does not invalidate an already-built plugin. SDK `0.2.0` is the
+previous supported minor line. `fixtures/sdk-0.3.0` freezes the manager
+contracts, while `fixtures/sdk-0.2.0` and `fixtures/sdk-0.1.0` retain historical
+compatibility fixtures. A plugin manifest's declared SDK range must contain the
+exact ABI used to build that plugin. A future SDK minor must add its own frozen
+fixture and retire only the line outside the documented two-minor window.
 
 The host capability schema is published at
 `@enterpriseglue/plugin-sdk/schema/enterpriseglue-plugin-platform-capabilities-v1.schema.json`.

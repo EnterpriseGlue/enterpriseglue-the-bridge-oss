@@ -1,9 +1,8 @@
 # OSS Plugin Platform and Authoring Guide
 
-Status: local implementation foundation; public review, publication, and customer acceptance are
-still required before this is a supported release channel.
+Status: as-built technical architecture for the OSS `v0.16.0` release candidate.
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-25
 
 ## Purpose
 
@@ -15,12 +14,13 @@ The OSS repository owns generic contracts, host runtime, lifecycle controls, ins
 security policy. A plugin publisher owns plugin behavior, entitlement, private product source,
 and its signed release. The platform is intentionally not coupled to any particular paid plugin.
 
-## OSS v0.13.1 integration baseline
+## OSS host integration
 
-The generic platform is being integrated on top of EnterpriseGlue OSS `v0.13.1`, which is the
-first target for the next plugin-platform release (`v0.14.0`). The integration deliberately
-follows the OSS Carbon navigation and grouped settings workspace rather than adding a separate
-administration application.
+The generic platform is native OSS functionality. The optional customer-local Plugin Manager uses
+the same host contracts and Carbon navigation rather than adding a separate administration
+application. Published releases inject the exact host version into the final backend image and
+bind that image to the SDK, manager, deployment kit, and static frontend in one signed
+distribution lock.
 
 | Surface | Host behavior | Why it belongs there |
 | --- | --- | --- |
@@ -332,9 +332,7 @@ stateDiagram-v2
 ```
 
 Customers consume publisher-built artifacts and do not clone plugin source or run publisher CI.
-Before public publication, the exact installer image, charts, trust root, and artifact digests
-must be part of an accepted release receipt. Until then, the following commands are local
-engineering evidence, not customer instructions:
+The following checks exercise the same public contracts used by a protected release:
 
 ```sh
 pnpm test:plugin-installer
@@ -346,26 +344,34 @@ pnpm test:plugin-platform:images
 
 ## Distribution and air-gapped operation
 
-The installer implementation accepts a signed package inventory and digest-pinned OCI subject.
-The intended release format is:
+The installer accepts a signed package inventory and digest-pinned OCI subject. The protected OSS
+release publishes one `enterpriseglue-distribution-lock/v1` document that binds:
 
-1. Publish the payload subject first.
-2. Publish a signed catalog that binds plugin identity/version to that immutable subject digest.
-3. Attach or index SBOM, provenance, vulnerability, license, malware, and secret-scan evidence.
-4. Verify the publisher trust policy, catalog binding, package inventory, and exact host evidence
-   before staging disabled.
-5. For air-gapped deployments, import the same verified digest set into an approved customer
-   registry; do not build source in the customer environment.
+1. the exact OSS release and source revision;
+2. multi-architecture backend, frontend, Plugin Manager, and installer image digests;
+3. the Plugin Manager and installer charts;
+4. the versioned static frontend archive;
+5. the source-free Compose deployment kit; and
+6. the generic connected/offline toolchain receipt and Sigstore verification material.
 
-Release publication, registry interoperability, and customer air-gap acceptance remain required
-gates. A local implementation alone is not evidence of a supported customer distribution.
+The Compose deployment kit contains no repository checkout or source build. Its own manifest
+checksums every extracted component, and the deployment doctor verifies those checksums before it
+renders the digest-pinned topology. A separately hosted static frontend uses the same build from
+the release lock and must route all plugin asset and API prefixes back to the OSS backend before
+its SPA fallback. See the [Plugin Manager runbook](../runbooks/plugin-manager-operations.md) and
+[static frontend/CDN guide](../how-to/deploy-static-frontend-cdn.md).
+
+Connected and offline installations resolve the same immutable release graph. Connected delivery
+pulls entitled OCI subjects; offline delivery transfers a signed OCI closure into a customer-local
+registry. Only transport changes. Complete paid-plugin air-gap export, entitlement issuance, and
+customer-portal delivery remain outside the OSS `v0.16.0` production boundary.
 
 The protected public release workflow is
-[`plugin-toolchain-release.yml`](../../.github/workflows/plugin-toolchain-release.yml). It is
-manual-only, accepts one exact 40-character protected OSS commit, builds a multi-architecture
-installer, packages both charts reproducibly, publishes immutable subjects, signs and verifies
-them with workload identity, scans the final installer image, writes a non-secret receipt, and
-creates a signed air-gap bundle. Its local disposable-registry counterpart is:
+[`plugin-toolchain-release.yml`](../../.github/workflows/plugin-toolchain-release.yml). It starts
+after the release images succeed, can also resume manually for the same protected release commit,
+publishes immutable multi-architecture toolchain subjects, verifies workflow-identity signatures,
+and permanently attaches the signed lock, receipts, deployment kit, static frontend, and offline
+archive to the GitHub release. Its local disposable-registry counterpart is:
 
 ```sh
 pnpm test:plugin-toolchain-release-policy
@@ -373,8 +379,9 @@ pnpm test:plugin-toolchain-release:local
 ```
 
 The local drill proves signed registry publication, digest re-pull, chart determinism, tamper
-rejection, bundled-tool execution, and disconnected import. It does not constitute a protected
-public publication or a customer-registry acceptance.
+rejection, bundled-tool execution, and disconnected import. Protected CI additionally binds the
+published backend and frontend image provenance, SBOMs, signatures, and attestations to the same
+release identity.
 
 ## Public/private boundary
 
@@ -401,42 +408,16 @@ pnpm test:plugin-platform:images
 The lower-level `guard:paid-plugin-image-boundary` remains available when a release workflow has
 already built immutable backend and frontend images and wants to scan those exact references.
 
-## Local verification evidence
+## Technical acceptance boundaries
 
-The current local implementation is covered by focused checks:
+OSS `v0.16.0` supports a single-host Compose backend with either its packaged frontend container or
+the versioned static frontend on a correctly configured CDN. The source-free deployment kit,
+manifest verification, immutable image subjects, SDK compatibility fixtures, manager lifecycle,
+and same-origin asset-route check are required release gates.
 
-- SDK compatibility fixtures and 57 SDK tests;
-- 61 runtime tests;
-- 75 backend host and control-plane tests;
-- 32 Carbon frontend host tests;
-- 58 installer and lifecycle tests;
-- a hardened reference-plugin container that rejects invocation replay after restart;
-- Helm/RBAC security rendering checks;
-- real local Compose lifecycle application; and
-- a disposable PostgreSQL two-replica acceptance.
-
-The checks prove local engineering behavior. They do not replace public code review, protected CI,
-package/image/chart publication, private released-artifact pairing, customer topology testing, or
-contractual acceptance.
-
-## Release checklist
-
-- [x] Generic public SDK, runtime, host, installer, charts, and reference-plugin source exist in
-  a clean local OSS worktree.
-- [x] Interactive plugin operations and contextual plugin slots bridge to OSS FGA without
-  transmitting an authorization bypass to a plugin.
-- [x] Customer-side sanitized full-log collection is bounded and requires explicit confirmation.
-- [x] Local focused tests, container checks, Compose lifecycle, Helm security, and two-replica
-  acceptance pass.
-- [x] OSS source boundary guard rejects private plugin dependencies and imports.
-- [x] Protected generic installer/chart release workflow and a local signed OCI/air-gap drill
-  exist; no protected public execution has occurred.
-- [ ] Review and merge the stacked generic OSS slices.
-- [ ] Run protected public CI, including source and final-image boundary guards.
-- [ ] Publish immutable SDK/runtime, host images, installer image, and charts.
-- [ ] Migrate each private plugin manifest to explicit static FGA operation mappings and run its
-  private CI against released OSS tags and digests.
-- [ ] Publish a signed private plugin artifact and perform customer deployment acceptance.
+Kubernetes/OpenShift host-chart integration, shared multi-replica plugin assets, and a complete
+commercial air-gap delivery are technical previews. They remain fail-closed and must not be
+presented as production-supported until their published-artifact deployment matrix passes.
 ## Mission Control child navigation and readable-engine broker
 
 Navigation contributions may use the existing host vocabulary

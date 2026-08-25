@@ -1,0 +1,64 @@
+# Replace BACKEND_UPSTREAM and FRONTEND_ROOT before installing this file.
+# Keep the plugin and API routes above the SPA fallback.
+server {
+  listen 8080;
+  server_name _;
+
+  root FRONTEND_ROOT;
+  index index.html;
+
+  location ~ ^/t/[^/]+/api/plugins/v1/[^/]+/operations/[^/]+$ {
+    proxy_pass http://BACKEND_UPSTREAM;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 130s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ~ ^/api/plugins/v1/[^/]+/operations/[^/]+$ {
+    proxy_pass http://BACKEND_UPSTREAM;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 130s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ^~ /_enterpriseglue/plugins/ {
+    proxy_pass http://BACKEND_UPSTREAM;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ~ ^/t/[^/]+/(api|engines-api|starbase-api|mission-control-api|git-api|vcs-api|health)(/|$) {
+    proxy_pass http://BACKEND_UPSTREAM;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ~ ^/(api|engines-api|starbase-api|mission-control-api|git-api|vcs-api|health)(/|$) {
+    proxy_pass http://BACKEND_UPSTREAM;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location /assets/ {
+    try_files $uri =404;
+    expires 1y;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+
+  location / {
+    try_files $uri /index.html;
+    add_header Cache-Control "no-cache";
+  }
+}

@@ -44,10 +44,6 @@ const functionalTestReport = readFileSync(
   new URL('../docs/development/engine-tenancy-functional-test-report.md', import.meta.url),
   'utf8',
 );
-const engineTenancyPlan = readFileSync(
-  new URL('../docs/architecture/12-engine-tenancy-and-external-provisioning-plan.md', import.meta.url),
-  'utf8',
-);
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
   const manifestCommand = packageJson.scripts['test:engine-tenancy:manifest'];
@@ -128,10 +124,6 @@ test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(functionalTestReport, /twelve tests in each of Chromium/);
   assert.match(functionalTestReport, /Fine-grained access browser matrix \| \*\*36\*\*/);
   assert.match(functionalTestReport, /Database upgrade-baseline observations \| \*\*25\*\*/);
-  assert.match(
-    engineTenancyPlan,
-    /36 authorization executions plus 27 database-free accessibility executions/,
-  );
   for (const matrixContract of [
     'constraint-derived-authorization-state-space',
     'canonicalInputHash',

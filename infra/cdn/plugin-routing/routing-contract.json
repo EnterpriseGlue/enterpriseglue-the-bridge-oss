@@ -1,0 +1,61 @@
+{
+  "apiVersion": "cdn-routing.enterpriseglue.io/v1",
+  "kind": "EnterpriseGlueStaticFrontendRoutingContract",
+  "sameOriginRequired": true,
+  "orderedRoutes": [
+    {
+      "path": "/_enterpriseglue/plugins/*",
+      "origin": "backend",
+      "cache": "honor-origin-success-never-cache-errors",
+      "methods": ["GET", "HEAD"]
+    },
+    {
+      "path": "/api/plugins/v1/*/operations/*",
+      "origin": "backend",
+      "cache": "disabled",
+      "streaming": true,
+      "methods": ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
+    },
+    {
+      "path": "/t/*/api/plugins/v1/*/operations/*",
+      "origin": "backend",
+      "cache": "disabled",
+      "streaming": true,
+      "methods": ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
+    },
+    {
+      "pathPrefixes": [
+        "/api/",
+        "/engines-api/",
+        "/starbase-api/",
+        "/mission-control-api/",
+        "/git-api/",
+        "/vcs-api/",
+        "/health",
+        "/t/*/api/",
+        "/t/*/engines-api/",
+        "/t/*/starbase-api/",
+        "/t/*/mission-control-api/",
+        "/t/*/git-api/",
+        "/t/*/vcs-api/",
+        "/t/*/health"
+      ],
+      "origin": "backend",
+      "cache": "disabled",
+      "methods": ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]
+    },
+    {
+      "path": "/assets/*",
+      "origin": "static-frontend",
+      "cache": "immutable",
+      "methods": ["GET", "HEAD"]
+    },
+    {
+      "path": "/*",
+      "origin": "static-frontend",
+      "fallback": "/index.html",
+      "cache": "revalidate-index",
+      "methods": ["GET", "HEAD"]
+    }
+  ]
+}

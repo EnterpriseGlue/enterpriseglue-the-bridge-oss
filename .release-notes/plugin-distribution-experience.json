@@ -1,0 +1,69 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-distribution-experience",
+  "type": "feature",
+  "scope": "plugin deployment",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Make the OSS-native Plugin Manager source-free and release-locked for connected container backends with CDN-hosted frontends.",
+  "userImpact": [
+    "Operators can enable the isolated Plugin Manager through standard OSS deployment inputs without rebuilding it from source.",
+    "CDN-fronted installations receive an explicit same-origin plugin asset route and readiness contract."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Existing plugin deployments remain supported; adopt the optional digest-pinned Plugin Manager deployment kit when ready."
+    ]
+  },
+  "configuration": [
+    "Adds optional digest-pinned Plugin Manager deployment, persistent plugin state, and CDN/plugin-asset routing configuration."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds deployment readiness metadata for the native Plugin Manager and same-origin plugin asset route.",
+      "Retains exact compatibility for earlier patch releases within the current supported plugin SDK minor line."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database migration is planned for this deployment-only slice."
+    ]
+  },
+  "security": [
+    "The Plugin Manager remains an isolated customer-local workload with no browser-facing service.",
+    "Registry and deployment credentials remain outside the browser and ordinary OSS backend."
+  ],
+  "documentation": [
+      "Document the supported connected Compose backend and CDN-hosted frontend deployment path and label Kubernetes, OpenShift, and full air-gap delivery as preview.",
+    "Document the separation between internal product planning, repository technical documentation, and customer documentation."
+  ],
+  "knownLimitations": [
+    "The public enterpriseglue.ai marketplace and commercial entitlement service remain outside this OSS change.",
+    "Kubernetes, OpenShift, multi-replica shared plugin assets, and complete commercial-plugin air-gap delivery remain preview until their deployment matrices pass."
+  ],
+  "rollback": [
+    "Disable the optional Plugin Manager workload and continue using the existing installer CLI fallback."
+  ],
+  "validation": [
+    "Validate Compose rendering, CDN route contracts, multi-architecture references, signed distribution metadata, and source-free deployment assets.",
+    "Run release-note, documentation-policy, and focused plugin deployment tests."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-sdk",
+      "previousVersion": "0.3.0",
+      "newVersion": "0.3.1",
+      "impact": "patch"
+    }
+  ]
+}

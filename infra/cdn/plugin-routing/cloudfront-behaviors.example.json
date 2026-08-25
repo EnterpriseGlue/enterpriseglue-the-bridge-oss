@@ -1,0 +1,48 @@
+{
+  "comment": "Merge these ordered behaviors into the distribution that serves the EnterpriseGlue static frontend. Replace the origin and policy IDs.",
+  "cacheBehaviors": [
+    {
+      "PathPattern": "/_enterpriseglue/plugins/*",
+      "TargetOriginId": "ENTERPRISEGLUE_BACKEND_ORIGIN",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD", "OPTIONS"],
+      "CachePolicyId": "HONOR_ORIGIN_HEADERS_WITH_ZERO_ERROR_TTL",
+      "OriginRequestPolicyId": "FORWARD_AUTH_COOKIES_QUERY_AND_REQUIRED_HEADERS"
+    },
+    {
+      "PathPattern": "/api/*",
+      "TargetOriginId": "ENTERPRISEGLUE_BACKEND_ORIGIN",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"],
+      "CachePolicyId": "CACHING_DISABLED",
+      "OriginRequestPolicyId": "FORWARD_AUTH_COOKIES_QUERY_AND_REQUIRED_HEADERS"
+    },
+    {
+      "PathPattern": "/t/*/api/*",
+      "TargetOriginId": "ENTERPRISEGLUE_BACKEND_ORIGIN",
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"],
+      "CachePolicyId": "CACHING_DISABLED",
+      "OriginRequestPolicyId": "FORWARD_AUTH_COOKIES_QUERY_AND_REQUIRED_HEADERS"
+    }
+  ],
+  "defaultBehavior": {
+    "TargetOriginId": "ENTERPRISEGLUE_STATIC_FRONTEND_ORIGIN",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "spaFallback": "/index.html"
+  },
+  "requiredAdditionalBackendPatterns": [
+    "/engines-api/*",
+    "/starbase-api/*",
+    "/mission-control-api/*",
+    "/git-api/*",
+    "/vcs-api/*",
+    "/health*",
+    "/t/*/engines-api/*",
+    "/t/*/starbase-api/*",
+    "/t/*/mission-control-api/*",
+    "/t/*/git-api/*",
+    "/t/*/vcs-api/*",
+    "/t/*/health*"
+  ]
+}

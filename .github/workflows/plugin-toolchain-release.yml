@@ -1,15 +1,22 @@
 name: Publish plugin installation toolchain
 
 on:
+  workflow_run:
+    workflows: [Docker Images]
+    types: [completed]
   workflow_dispatch:
     inputs:
       source_ref:
         description: Exact 40-character OSS commit to build and publish
         required: true
         type: string
+      release_tag:
+        description: Existing OSS release tag that will receive permanent distribution assets
+        required: false
+        type: string
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   id-token: write
   attestations: write
@@ -21,12 +28,16 @@ concurrency:
 jobs:
   publish:
     name: Verify, sign, and publish the reusable plugin toolchain
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     environment: plugin-toolchain-production
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      SOURCE_REF: ${{ inputs.source_ref }}
+      SOURCE_REF: ${{ inputs.source_ref || github.event.workflow_run.head_sha }}
+      REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
       INSTALLER_REPOSITORY: ghcr.io/enterpriseglue/plugin-installer
       MANAGER_REPOSITORY: ghcr.io/enterpriseglue/plugin-manager
       RUNTIME_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-runtime
@@ -53,16 +64,48 @@ jobs:
             echo "The protected release workflow must run from refs/heads/main" >&2
             exit 1
           }
-          [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
-            echo "source_ref must equal the protected workflow commit" >&2
-            exit 1
-          }
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
+              echo "source_ref must equal the protected workflow commit" >&2
+              exit 1
+            }
+          else
+            [[ "${{ github.event.workflow_run.name }}" == "Docker Images" ]]
+            [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]
+            [[ "${{ github.event.workflow_run.event }}" == "release" ]]
+            [[ "$SOURCE_REF" == "${{ github.event.workflow_run.head_sha }}" ]]
+          fi
 
       - name: Checkout the exact public OSS revision
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ inputs.source_ref || github.event.workflow_run.head_sha }}
           fetch-depth: 1
+
+      - name: Resolve the owning OSS release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          release_tag="$REQUESTED_RELEASE_TAG"
+          if [[ -z "$release_tag" ]]; then
+            release_tag="$(
+              git tag --points-at "$SOURCE_REF" --list 'v[0-9]*.[0-9]*.[0-9]*' \
+                --sort=-v:refname | head -n 1
+            )"
+          fi
+          [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "No exact semantic OSS release tag points at $SOURCE_REF" >&2
+            exit 1
+          }
+          [[ "$(git rev-list -n 1 "$release_tag")" == "$SOURCE_REF" ]] || {
+            echo "$release_tag does not point at $SOURCE_REF" >&2
+            exit 1
+          }
+          gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
       - name: Verify checked-out source identity
         shell: bash
@@ -158,33 +201,31 @@ jobs:
           printf '%s' "$REGISTRY_TOKEN" |
             helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
-      - name: Reject immutable version reuse
+      - name: Resolve resumable immutable image state
+        id: existing-images
         shell: bash
         run: |
           set -euo pipefail
+          installer_exists=false
+          manager_exists=false
           if docker buildx imagetools inspect "$INSTALLER_TAG_REFERENCE" >/dev/null 2>&1; then
-            echo "Installer release tag already exists" >&2
-            exit 1
+            installer_exists=true
+            installer_digest="$(oras resolve "$INSTALLER_TAG_REFERENCE")"
+            [[ "$installer_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "installer_digest=$installer_digest" >> "$GITHUB_OUTPUT"
           fi
           if docker buildx imagetools inspect "$MANAGER_TAG_REFERENCE" >/dev/null 2>&1; then
-            echo "Manager release tag already exists" >&2
-            exit 1
+            manager_exists=true
+            manager_digest="$(oras resolve "$MANAGER_TAG_REFERENCE")"
+            [[ "$manager_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "manager_digest=$manager_digest" >> "$GITHUB_OUTPUT"
           fi
-          if oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION" >/dev/null 2>&1; then
-            echo "Runtime chart release already exists" >&2
-            exit 1
-          fi
-          if oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION" >/dev/null 2>&1; then
-            echo "Installer RBAC chart release already exists" >&2
-            exit 1
-          fi
-          if oras resolve "$MANAGER_CHART_REPOSITORY:$MANAGER_VERSION" >/dev/null 2>&1; then
-            echo "Manager chart release already exists" >&2
-            exit 1
-          fi
+          echo "installer_exists=$installer_exists" >> "$GITHUB_OUTPUT"
+          echo "manager_exists=$manager_exists" >> "$GITHUB_OUTPUT"
 
       - name: Build and publish the multi-architecture installer
         id: installer
+        if: steps.existing-images.outputs.installer_exists != 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
@@ -201,7 +242,7 @@ jobs:
 
       - name: Record the immutable installer reference
         env:
-          INSTALLER_DIGEST: ${{ steps.installer.outputs.digest }}
+          INSTALLER_DIGEST: ${{ steps.installer.outputs.digest || steps.existing-images.outputs.installer_digest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -210,6 +251,7 @@ jobs:
 
       - name: Build and publish the multi-architecture native manager
         id: manager
+        if: steps.existing-images.outputs.manager_exists != 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
@@ -226,7 +268,7 @@ jobs:
 
       - name: Record the immutable manager reference
         env:
-          MANAGER_DIGEST: ${{ steps.manager.outputs.digest }}
+          MANAGER_DIGEST: ${{ steps.manager.outputs.digest || steps.existing-images.outputs.manager_digest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -263,9 +305,32 @@ jobs:
             "$(sha256sum "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")" | cut -d' ' -f1)"
           test "$(sha256sum "$MANAGER_ARCHIVE" | cut -d' ' -f1)" = \
             "$(sha256sum "$REPRO_OUTPUT/$(basename "$MANAGER_ARCHIVE")" | cut -d' ' -f1)"
-          helm push "$RUNTIME_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
-          helm push "$RBAC_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
-          helm push "$MANAGER_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+          publish_or_verify_chart() {
+            local archive="$1"
+            local repository="$2"
+            local version="$3"
+            local existing
+            existing="$(oras resolve "$repository:$version" 2>/dev/null || true)"
+            if [[ -z "$existing" ]]; then
+              helm push "$archive" oci://ghcr.io/enterpriseglue/charts
+              return
+            fi
+            local layer pulled
+            layer="$(
+              oras manifest fetch "$repository@$existing" |
+                jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end'
+            )"
+            pulled="$RUNNER_TEMP/existing-$(basename "$archive")"
+            oras blob fetch --output "$pulled" "$repository@$layer"
+            test "$(sha256sum "$archive" | cut -d' ' -f1)" = \
+              "$(sha256sum "$pulled" | cut -d' ' -f1)" || {
+                echo "Published immutable chart version $repository:$version differs from source" >&2
+                exit 1
+              }
+          }
+          publish_or_verify_chart "$RUNTIME_ARCHIVE" "$RUNTIME_CHART_REPOSITORY" "$TOOLCHAIN_VERSION"
+          publish_or_verify_chart "$RBAC_ARCHIVE" "$RBAC_CHART_REPOSITORY" "$TOOLCHAIN_VERSION"
+          publish_or_verify_chart "$MANAGER_ARCHIVE" "$MANAGER_CHART_REPOSITORY" "$MANAGER_VERSION"
           RUNTIME_DIGEST="$(oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
           RBAC_DIGEST="$(oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
           MANAGER_CHART_DIGEST="$(oras resolve "$MANAGER_CHART_REPOSITORY:$MANAGER_VERSION")"
@@ -295,6 +360,7 @@ jobs:
           done
 
       - name: Attest the installer image
+        if: steps.existing-images.outputs.installer_exists != 'true'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
           subject-name: ${{ env.INSTALLER_REPOSITORY }}
@@ -302,6 +368,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest the manager image
+        if: steps.existing-images.outputs.manager_exists != 'true'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
           subject-name: ${{ env.MANAGER_REPOSITORY }}
@@ -503,6 +570,163 @@ jobs:
               and (.artifacts | length == 5)
               and all(.artifacts[]; .signatureVerified == true)' \
             "$IMPORT_RECEIPT" >/dev/null
+
+      - name: Resolve and verify the published OSS application images
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          IMAGE_METADATA="$RUNNER_TEMP/application-image-digests"
+          mkdir -p "$IMAGE_METADATA"
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_run" ]]; then
+            docker_images_run="${{ github.event.workflow_run.id }}"
+          else
+            docker_images_run="$(
+              gh run list \
+                --repo "$GITHUB_REPOSITORY" \
+                --workflow docker-images.yml \
+                --commit "$SOURCE_REF" \
+                --event release \
+                --status success \
+                --limit 1 \
+                --json databaseId \
+                --jq '.[0].databaseId'
+            )"
+          fi
+          [[ "$docker_images_run" =~ ^[0-9]+$ ]] || {
+            echo "No successful Docker Images release run was found for $SOURCE_REF" >&2
+            exit 1
+          }
+          gh run download "$docker_images_run" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "image-digests-$RELEASE_TAG" \
+            --dir "$IMAGE_METADATA"
+          IMAGE_DIGESTS="$IMAGE_METADATA/image-digests.json"
+          jq -e \
+            --arg revision "$SOURCE_REF" \
+            --arg version "$RELEASE_TAG" \
+            '.revision == $revision
+              and .version == $version
+              and .platforms == "linux/amd64,linux/arm64"
+              and (.backend_digest | test("^sha256:[0-9a-f]{64}$"))
+              and (.frontend_digest | test("^sha256:[0-9a-f]{64}$"))' \
+            "$IMAGE_DIGESTS" >/dev/null
+          backend_tag="$(jq -er '.backend_image' "$IMAGE_DIGESTS")"
+          frontend_tag="$(jq -er '.frontend_image' "$IMAGE_DIGESTS")"
+          backend_digest="$(jq -er '.backend_digest' "$IMAGE_DIGESTS")"
+          frontend_digest="$(jq -er '.frontend_digest' "$IMAGE_DIGESTS")"
+          [[ "$backend_tag" == *":$RELEASE_TAG" ]]
+          [[ "$frontend_tag" == *":$RELEASE_TAG" ]]
+          backend_repository="${backend_tag%:*}"
+          frontend_repository="${frontend_tag%:*}"
+          backend_reference="$backend_repository@$backend_digest"
+          frontend_reference="$frontend_repository@$frontend_digest"
+          [[ "$(oras resolve "$backend_tag")" == "$backend_digest" ]]
+          [[ "$(oras resolve "$frontend_tag")" == "$frontend_digest" ]]
+
+          image_identity="^$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/docker-images(-reusable)?\\.yml@refs/tags/$RELEASE_TAG$"
+          for subject in "$backend_reference" "$frontend_reference"; do
+            cosign verify \
+              --certificate-identity-regexp "$image_identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$subject" >/dev/null
+            manifest="$(docker buildx imagetools inspect "$subject")"
+            grep -Fq 'linux/amd64' <<<"$manifest"
+            grep -Fq 'linux/arm64' <<<"$manifest"
+          done
+          {
+            echo "BACKEND_REFERENCE=$backend_reference"
+            echo "FRONTEND_REFERENCE=$frontend_reference"
+            echo "APPLICATION_IMAGE_DIGESTS=$IMAGE_DIGESTS"
+          } >> "$GITHUB_ENV"
+
+      - name: Build and publish the signed OSS distribution assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RECEIPT="$RUNNER_TEMP/enterpriseglue-plugin-toolchain-receipt"
+          DISTRIBUTION="$RUNNER_TEMP/enterpriseglue-distribution"
+          STATIC_ROOT="$RUNNER_TEMP/frontend-static"
+          KIT_ROOT="$RUNNER_TEMP/plugin-compose-deployment-kit"
+          VERSION="${RELEASE_TAG#v}"
+          STATIC_ARCHIVE="$DISTRIBUTION/enterpriseglue-frontend-static-$RELEASE_TAG.tar.gz"
+          KIT_ARCHIVE="$DISTRIBUTION/enterpriseglue-plugin-deployment-kit-$RELEASE_TAG.tar.gz"
+          AIRGAP_ARCHIVE="$DISTRIBUTION/enterpriseglue-plugin-toolchain-airgap-$RELEASE_TAG.tar.gz"
+          LOCK="$DISTRIBUTION/enterpriseglue-distribution-lock-$RELEASE_TAG.json"
+          LOCK_BUNDLE="$DISTRIBUTION/enterpriseglue-distribution-lock-$RELEASE_TAG.sigstore.json"
+          TOOLCHAIN_RECEIPT="$DISTRIBUTION/enterpriseglue-plugin-toolchain-$RELEASE_TAG.json"
+          TRUSTED_ROOT="$RUNNER_TEMP/sigstore-trusted-root.json"
+          CERTIFICATE_IDENTITY="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/plugin-toolchain-release.yml@$GITHUB_REF"
+          mkdir -p "$DISTRIBUTION" "$STATIC_ROOT" "$KIT_ROOT"
+
+          frontend_container="$(docker create --platform linux/amd64 "$FRONTEND_REFERENCE")"
+          cleanup_frontend_container() {
+            docker rm -f "$frontend_container" >/dev/null 2>&1 || true
+          }
+          trap cleanup_frontend_container EXIT INT TERM
+          docker cp "$frontend_container:/usr/share/nginx/html/." "$STATIC_ROOT/"
+          cleanup_frontend_container
+          trap - EXIT INT TERM
+          test -f "$STATIC_ROOT/index.html"
+          tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
+            --owner=0 --group=0 --numeric-owner -cf - -C "$STATIC_ROOT" . |
+            gzip -n > "$STATIC_ARCHIVE"
+
+          node scripts/build-plugin-compose-deployment-kit.mjs \
+            --output "$KIT_ROOT" \
+            --host-version "$VERSION" \
+            --backend-image "$BACKEND_REFERENCE" \
+            --frontend-image "$FRONTEND_REFERENCE" \
+            --manager-image "$MANAGER_REFERENCE"
+          tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
+            --owner=0 --group=0 --numeric-owner -cf - -C "$KIT_ROOT" . |
+            gzip -n > "$KIT_ARCHIVE"
+
+          cp "$RECEIPT/release.json" "$TOOLCHAIN_RECEIPT"
+          tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
+            --owner=0 --group=0 --numeric-owner -cf - \
+            -C "$RECEIPT/toolchain-airgap" . |
+            gzip -n > "$AIRGAP_ARCHIVE"
+
+          EG_DISTRIBUTION_GENERATED_AT="$(
+            date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ'
+          )" node scripts/enterpriseglue-distribution-lock.mjs create \
+            --version "$VERSION" \
+            --source-revision "$SOURCE_REF" \
+            --backend "$BACKEND_REFERENCE" \
+            --frontend "$FRONTEND_REFERENCE" \
+            --toolchain-release "$RECEIPT/release.json" \
+            --frontend-static "$STATIC_ARCHIVE" \
+            --deployment-kit "$KIT_ARCHIVE" \
+            --output "$LOCK"
+          node scripts/enterpriseglue-distribution-lock.mjs verify \
+            --lock "$LOCK" \
+            --root "$DISTRIBUTION"
+          cosign sign-blob --yes \
+            --bundle "$LOCK_BUNDLE" \
+            "$LOCK" >/dev/null
+          cosign trusted-root create \
+            --with-default-services \
+            --out "$TRUSTED_ROOT"
+          cosign verify-blob \
+            --bundle "$LOCK_BUNDLE" \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --trusted-root "$TRUSTED_ROOT" \
+            "$LOCK" >/dev/null
+
+          gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            "$LOCK" \
+            "$LOCK_BUNDLE" \
+            "$STATIC_ARCHIVE" \
+            "$KIT_ARCHIVE" \
+            "$TOOLCHAIN_RECEIPT" \
+            "$AIRGAP_ARCHIVE"
 
       - name: Retain the non-secret toolchain receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

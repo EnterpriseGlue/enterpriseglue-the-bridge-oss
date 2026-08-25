@@ -1,0 +1,41 @@
+{
+  "comment": "Create these routes before the static SPA fallback and replace endpoint/origin group IDs.",
+  "routes": [
+    {
+      "name": "enterpriseglue-plugin-assets",
+      "patternsToMatch": ["/_enterpriseglue/plugins/*"],
+      "originGroup": "ENTERPRISEGLUE_BACKEND_ORIGIN_GROUP",
+      "forwardingProtocol": "HttpsOnly",
+      "cache": "honor-origin-success-zero-negative-cache"
+    },
+    {
+      "name": "enterpriseglue-api",
+      "patternsToMatch": [
+        "/api/*",
+        "/t/*/api/*",
+        "/t/*/engines-api/*",
+        "/t/*/starbase-api/*",
+        "/t/*/mission-control-api/*",
+        "/t/*/git-api/*",
+        "/t/*/vcs-api/*",
+        "/t/*/health*",
+        "/engines-api/*",
+        "/starbase-api/*",
+        "/mission-control-api/*",
+        "/git-api/*",
+        "/vcs-api/*",
+        "/health*"
+      ],
+      "originGroup": "ENTERPRISEGLUE_BACKEND_ORIGIN_GROUP",
+      "forwardingProtocol": "HttpsOnly",
+      "cache": "disabled"
+    },
+    {
+      "name": "enterpriseglue-static-frontend",
+      "patternsToMatch": ["/*"],
+      "originGroup": "ENTERPRISEGLUE_STATIC_FRONTEND_ORIGIN_GROUP",
+      "forwardingProtocol": "HttpsOnly",
+      "spaFallback": "/index.html"
+    }
+  ]
+}

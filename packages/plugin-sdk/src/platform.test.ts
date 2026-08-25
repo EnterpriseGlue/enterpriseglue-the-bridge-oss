@@ -92,17 +92,17 @@ describe('plugin platform capability catalog', () => {
     expect(serialized).not.toContain('tenantRef');
   });
 
-  it('publishes one exact v0.15 release identity', () => {
+  it('publishes one exact current v0.15 release identity', () => {
     expect(pluginPlatformReleaseIdentityV1).toEqual({
-      hostVersion: '0.15.0',
-      sdkVersion: '0.2.0',
-      supportedSdkVersions: ['0.2.0', '0.1.0'],
+      hostVersion: '0.16.0',
+      sdkVersion: '0.3.1',
+      supportedSdkVersions: ['0.3.1', '0.3.0', '0.2.0'],
       sharedFrontend: {
         react: '19.2.6',
         reactDom: '19.2.6',
         router: '7.18.2',
         carbonReact: '1.107.0',
-        pluginSdk: '0.2.0',
+        pluginSdk: '0.3.1',
       },
     });
   });
@@ -131,7 +131,7 @@ describe('plugin platform capability catalog', () => {
     expect(value.events).toEqual([]);
   });
 
-  it('rejects drifted support windows, duplicate IDs, and unsafe named egress policy semantics', () => {
+  it('validates support windows, duplicate IDs, and named egress policy semantics', () => {
     const missingCurrentMinor = structuredClone(catalog());
     missingCurrentMinor.compatibility.supportWindow.hostMinorLines = ['0.3'];
     expect(
@@ -169,7 +169,7 @@ describe('plugin platform capability catalog', () => {
     expect(
       safeParsePluginPlatformCapabilityCatalogV1(twoPatchesFromOneMinor)
         .success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('exports a closed draft 2020-12 structural schema', () => {

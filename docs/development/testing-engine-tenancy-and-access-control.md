@@ -370,9 +370,9 @@ The generator preserves valid same-commit approvals, while the release index
 rejects stale approvals, missing evidence files, incomplete reviewer metadata,
 or hand-authored `approved` flags that do not satisfy the complete contract.
 
-The full release-qualification backlog, execution order, rollback conditions,
-and exit conditions are in phase 9 of
-the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).
+The release-qualification execution order, rollback conditions, and exit
+conditions are defined by the machine-readable functional coverage manifest,
+the test commands in this guide, and the retained release evidence index.
 The complete five-database artifact and every other release artifact must name
 the same clean commit. Independent documentation review remains a separate
 gate.

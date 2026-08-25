@@ -1,7 +1,6 @@
 x-plugin-manager-common: &plugin-manager-common
-  build:
-    context: ../../..
-    dockerfile: packages/plugin-manager/Dockerfile
+  image: ${EG_PLUGIN_MANAGER_IMAGE:?Set EG_PLUGIN_MANAGER_IMAGE to an immutable repository@sha256 digest}
+  pull_policy: always
   restart: unless-stopped
   read_only: true
   cap_drop: ["ALL"]
@@ -9,13 +8,44 @@ x-plugin-manager-common: &plugin-manager-common
     - no-new-privileges:true
   environment:
     ENTERPRISEGLUE_PLUGIN_MANAGER_CONFIG_FILE: /etc/enterpriseglue/plugin-manager/manager-config.json
+    # The managed adapter launches Docker Compose from inside this workload.
+    # Pass only deployment coordinates (not backend secrets) so that invocation
+    # resolves the same immutable images and container-visible env file.
+    EG_BACKEND_IMAGE_REF: ${EG_BACKEND_IMAGE_REF:-}
+    EG_FRONTEND_IMAGE_REF: ${EG_FRONTEND_IMAGE_REF:-}
+    EG_BACKEND_ENV_FILE: ${EG_PLUGIN_MANAGER_STATE_DIRECTORY:-/var/lib/enterpriseglue/plugin-manager}/deployment/infra/docker/compose/.env
+    EG_PLUGIN_MANAGER_STATE_SOURCE: ${EG_PLUGIN_MANAGER_STATE_SOURCE:-plugin_manager_state}
+    EG_PLUGIN_MANAGER_STATE_DIRECTORY: ${EG_PLUGIN_MANAGER_STATE_DIRECTORY:-/var/lib/enterpriseglue/plugin-manager}
+    EG_PLUGIN_DEPLOYMENT_DIRECTORY: ${EG_PLUGIN_DEPLOYMENT_DIRECTORY:-../../..}
   depends_on:
     backend:
       condition: service_healthy
   volumes:
-    - ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}:/etc/enterpriseglue/plugin-manager:ro
-    - plugin_manager_state:/var/lib/enterpriseglue/plugin-manager
-    - ../../..:/deployment:ro
+    - type: bind
+      source: ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}
+      target: /etc/enterpriseglue/plugin-manager
+      read_only: true
+      bind:
+        create_host_path: false
+    # A named volume remains the compatibility default. The production kit
+    # sets both variables to the same absolute host path so generated plugin
+    # asset mounts are also visible to the host Docker daemon.
+    - ${EG_PLUGIN_MANAGER_STATE_SOURCE:-plugin_manager_state}:${EG_PLUGIN_MANAGER_STATE_DIRECTORY:-/var/lib/enterpriseglue/plugin-manager}
+    - type: bind
+      source: ${EG_PLUGIN_DEPLOYMENT_DIRECTORY:-../../..}
+      target: ${EG_PLUGIN_MANAGER_STATE_DIRECTORY:-/var/lib/enterpriseglue/plugin-manager}/deployment
+      read_only: true
+      bind:
+        create_host_path: false
+    # Compatibility mount for v0.15.0-v0.15.3 planner configurations. New
+    # managed configurations use the deployment path below the state root so
+    # the generated overlay remains inside the fixed Compose project.
+    - type: bind
+      source: ${EG_PLUGIN_DEPLOYMENT_DIRECTORY:-../../..}
+      target: /deployment
+      read_only: true
+      bind:
+        create_host_path: false
   tmpfs:
     - /tmp:size=64m,mode=1777
   healthcheck:
@@ -35,21 +65,42 @@ services:
       ENTERPRISEGLUE_PLUGIN_MANAGER_CATALOG_SIGNATURE_FILE: /etc/enterpriseglue/plugin-manager/catalog-v2.signature.json
       ENTERPRISEGLUE_PLUGIN_MANAGER_TRUST_FILE: /etc/enterpriseglue/plugin-manager/trust.json
     volumes:
-      - ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}:/etc/enterpriseglue/plugin-manager:ro
+      - type: bind
+        source: ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}
+        target: /etc/enterpriseglue/plugin-manager
+        read_only: true
+        bind:
+          create_host_path: false
 
   plugin-manager:
     <<: *plugin-manager-common
-    profiles: ["plugin-manager-planner"]
+    profiles: ["plugins-planner", "plugin-manager-planner"]
 
   plugin-manager-managed:
     <<: *plugin-manager-common
-    profiles: ["plugin-manager-managed"]
+    profiles: ["plugins-managed", "plugin-manager-managed"]
     group_add:
       - ${DOCKER_GID:-0}
     volumes:
-      - ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}:/etc/enterpriseglue/plugin-manager:ro
-      - plugin_manager_state:/var/lib/enterpriseglue/plugin-manager
-      - ../../..:/deployment:ro
+      - type: bind
+        source: ${EG_PLUGIN_MANAGER_CONFIG_DIRECTORY:?Set EG_PLUGIN_MANAGER_CONFIG_DIRECTORY}
+        target: /etc/enterpriseglue/plugin-manager
+        read_only: true
+        bind:
+          create_host_path: false
+      - ${EG_PLUGIN_MANAGER_STATE_SOURCE:-plugin_manager_state}:${EG_PLUGIN_MANAGER_STATE_DIRECTORY:-/var/lib/enterpriseglue/plugin-manager}
+      - type: bind
+        source: ${EG_PLUGIN_DEPLOYMENT_DIRECTORY:-../../..}
+        target: ${EG_PLUGIN_MANAGER_STATE_DIRECTORY:-/var/lib/enterpriseglue/plugin-manager}/deployment
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${EG_PLUGIN_DEPLOYMENT_DIRECTORY:-../../..}
+        target: /deployment
+        read_only: true
+        bind:
+          create_host_path: false
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:

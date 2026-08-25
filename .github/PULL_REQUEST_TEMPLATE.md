@@ -36,6 +36,7 @@ Provide steps to validate the change.
 - [ ] PR title follows release format (for example: `feat(scope): summary`, `fix(scope): summary`)
 - [ ] I have added/updated tests where appropriate
 - [ ] I have updated documentation where appropriate
+- [ ] Repository docs contain only developer/architecture/deployment/operations material; internal product docs and customer-documentation drafts remain outside GitHub
 - [ ] I have added a release label (`release:feature`, `release:fix`, `release:breaking`, etc.)
 - [ ] I added and previewed a structured release-note fragment, or documented an allowed `release-note:none` exemption
 - [ ] If this is breaking, I added compatibility + migration notes in this PR

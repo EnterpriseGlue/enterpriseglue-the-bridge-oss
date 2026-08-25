@@ -18,6 +18,10 @@ contract, all skill metadata, portability, and bundled deterministic helpers.
 The local validation script additionally runs Codex's official plugin and skill
 validators.
 
+Documentation changes also run `pnpm run guard:documentation-boundary`. See the
+[documentation publication policy](documentation-publication-policy.md) for
+the repository, Product Hub, customer CMS, and CI-evidence boundaries.
+
 ## Install or update
 
 Install the repository marketplace once, using the repository root that
@@ -35,9 +39,9 @@ plugin cache.
 ## Included workflows
 
 The plugin contains the existing EnterpriseGlue lifecycle skills plus focused
-PR-readiness, UI-evidence, access-governance verification, and contract-parity
-skills. `agents/openai.yaml` metadata is generated and validated for every
-skill.
+documentation-governance, PR-readiness, UI-evidence, access-governance
+verification, and contract-parity skills. `agents/openai.yaml` metadata is
+generated and validated for every skill.
 
 Repository scripts and tests remain the authority for deterministic behavior;
 skills select and orchestrate those commands rather than duplicating product

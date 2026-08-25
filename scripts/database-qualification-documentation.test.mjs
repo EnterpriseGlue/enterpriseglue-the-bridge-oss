@@ -16,7 +16,6 @@ const documentationFiles = [
   '../docs/development/testing-engine-tenancy-and-access-control.md',
   '../docs/releases/engine-tenancy.md',
   '../docs/development/engine-tenancy-functional-test-report.md',
-  '../docs/architecture/12-engine-tenancy-and-external-provisioning-plan.md',
 ];
 
 const documents = documentationFiles.map((file) => ({

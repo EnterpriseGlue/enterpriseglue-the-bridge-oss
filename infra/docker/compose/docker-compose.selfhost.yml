@@ -36,13 +36,13 @@ services:
       - enterpriseglue-network
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend}:${IMAGE_TAG:-latest}
+    image: ${EG_BACKEND_IMAGE_REF:-${BACKEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend}:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     init: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
-      - .env
+      - ${EG_BACKEND_ENV_FILE:-.env}
     depends_on:
       db:
         condition: service_healthy
@@ -59,7 +59,7 @@ services:
       - enterpriseglue-network
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend}:${IMAGE_TAG:-latest}
+    image: ${EG_FRONTEND_IMAGE_REF:-${FRONTEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend}:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     depends_on:
       backend:
