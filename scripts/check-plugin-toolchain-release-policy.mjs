@@ -108,6 +108,14 @@ assert.match(workflow, /steps\.existing-images\.outputs\.installer_exists != 'tr
 assert.match(workflow, /steps\.existing-images\.outputs\.manager_exists != 'true'/);
 assert.match(workflow, /publish_or_verify_chart/);
 assert.match(workflow, /Published immutable chart version/);
+assert.match(
+  workflow,
+  /node scripts\/helm-chart-archive\.mjs compare "\$archive" "\$pulled"/,
+);
+assert.doesNotMatch(
+  workflow,
+  /sha256sum "\$archive"[\s\S]{0,120}sha256sum "\$pulled"/,
+);
 assert.match(workflow, /event\.workflow_run\.event == 'release'/);
 assert.match(workflow, /git tag --points-at "\$SOURCE_REF"/);
 assert.match(workflow, /SOURCE_DATE_EPOCH=/);

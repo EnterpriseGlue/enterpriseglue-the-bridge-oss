@@ -322,8 +322,7 @@ jobs:
             )"
             pulled="$RUNNER_TEMP/existing-$(basename "$archive")"
             oras blob fetch --output "$pulled" "$repository@$layer"
-            test "$(sha256sum "$archive" | cut -d' ' -f1)" = \
-              "$(sha256sum "$pulled" | cut -d' ' -f1)" || {
+            node scripts/helm-chart-archive.mjs compare "$archive" "$pulled" || {
                 echo "Published immutable chart version $repository:$version differs from source" >&2
                 exit 1
               }
