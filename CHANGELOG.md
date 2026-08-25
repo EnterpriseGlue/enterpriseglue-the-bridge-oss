@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.16.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.0...v0.16.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **release:** compare Helm chart payloads canonically ([#391](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/391)) ([17fbcc6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/17fbcc6bea348a2e12c110420fb4083bacae3ed8))
+
 ## [0.16.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.15.3...v0.16.0) (2026-08-25)
 
 
