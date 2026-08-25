@@ -29,6 +29,7 @@ function tarArchive(entries, { mtime = 1 } = {}) {
     writeOctal(header, 136, 12, mtime)
     header.fill(0x20, 148, 156)
     header[156] = (entry.type ?? '0').charCodeAt(0)
+    if (entry.linkTarget) header.write(entry.linkTarget, 157, 100, 'utf8')
     header.write('ustar\0', 257, 6, 'ascii')
     header.write('00', 263, 2, 'ascii')
     header.write('builder', 265, 32, 'utf8')
@@ -52,7 +53,7 @@ const baseEntries = [
 
 test('equates chart archives whose payload is identical but metadata timestamps differ', () => {
   const firstBytes = tarArchive(baseEntries, { mtime: 10 })
-  const secondBytes = tarArchive(baseEntries, { mtime: 20 })
+  const secondBytes = tarArchive(baseEntries.map((entry) => ({ ...entry, uid: 42, gid: 43 })), { mtime: 20 })
   assert.notEqual(createHash('sha256').update(firstBytes).digest('hex'), createHash('sha256').update(secondBytes).digest('hex'))
   const first = canonicalizeHelmChartArchiveBytes(firstBytes, 'first.tgz')
   const second = canonicalizeHelmChartArchiveBytes(secondBytes, 'second.tgz')
@@ -75,6 +76,18 @@ test('rejects an executable-mode change', () => {
   const changed = baseEntries.map((entry) => entry.path.endsWith('deployment.yaml') ? { ...entry, mode: 0o755 } : entry)
   const second = canonicalizeHelmChartArchiveBytes(tarArchive(changed), 'second.tgz')
   assert.equal(compareCanonicalHelmCharts(first, second).equivalent, false)
+})
+
+test('rejects a symbolic-link target change', () => {
+  const first = canonicalizeHelmChartArchiveBytes(tarArchive([
+    ...baseEntries,
+    { path: 'example/current', type: '2', linkTarget: 'Chart.yaml' },
+  ]), 'first.tgz')
+  const second = canonicalizeHelmChartArchiveBytes(tarArchive([
+    ...baseEntries,
+    { path: 'example/current', type: '2', linkTarget: 'values.yaml' },
+  ]), 'second.tgz')
+  assert.deepEqual(compareCanonicalHelmCharts(first, second).differences, ['payload differs: example/current'])
 })
 
 test('rejects an added archive path', () => {
