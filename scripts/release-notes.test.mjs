@@ -144,6 +144,7 @@ test('local release validation includes committed, staged, modified, and untrack
 
 test('renderer produces audience, compatibility, package, rollback, and evidence sections', () => {
   const output = renderReleaseNotes([fragment], { version: '0.11.0', baseRef: 'v0.10.5' })
+  assert.match(output, /^---\ndoc_class: technical\naudience: \[operator, developer, maintainer\]\npublication: github\nlifecycle: release\n---\n/)
   assert.match(output, /# EnterpriseGlue v0\.11\.0 Release Notes/)
   assert.match(output, /\[!IMPORTANT\]/)
   assert.match(output, /## User and administrator impact/)
@@ -155,6 +156,14 @@ test('renderer produces audience, compatibility, package, rollback, and evidence
   assert.match(output, /## Rollback/)
   assert.match(output, /## Validation evidence/)
   assert.match(output, /Audiences: users, administrators, operators, developers, security/)
+})
+
+test('empty generated release documents retain repository publication metadata', () => {
+  const output = renderReleaseNotes([], { version: '0.11.0', baseRef: 'v0.10.5' })
+  assert.match(output, /^---\ndoc_class: technical\n/)
+  assert.match(output, /publication: github/)
+  assert.match(output, /lifecycle: release/)
+  assert.match(output, /No release-note fragments changed since `v0\.10\.5`\./)
 })
 
 test('renderer reports one conservative database rollback verdict across fragments', () => {
