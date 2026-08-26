@@ -16,8 +16,8 @@
  * Behaviour:
  * - `VITE_RUNTIME_CONFIG_URL` unset       -> feature off, build-time defaults only.
  * - fetch + parse + validate OK           -> recognised fields applied over defaults.
- * - failure (network / non-OK / bad JSON / wrong shape / — when required — no
- *   usable `apiBaseUrl`):
+ * - failure (cross-origin URL / network / non-OK / bad JSON / wrong shape /
+ *   — when required — no usable `apiBaseUrl`):
  *     - `VITE_RUNTIME_CONFIG_REQUIRED === 'true'` -> throw {@link RuntimeConfigError}.
  *     - otherwise                                 -> warn and fall back to the
  *       build-time configuration.
@@ -26,8 +26,12 @@
  * allowed request origin from `config.apiBaseUrl`. Because this loader runs
  * before the first API request, a runtime-provided base URL feeds that
  * allow-list. The trust boundary therefore moves from build time to whoever
- * serves the config document — which is the intended, same-origin deployment
- * model, where that document is published next to the app itself.
+ * serves the config document. To keep that boundary on the app itself, the
+ * config URL is confined to the application's own origin: a cross-origin
+ * `VITE_RUNTIME_CONFIG_URL` is rejected *before any request is made* (see
+ * {@link assertSameOriginConfigUrl}), so a foreign host can never dictate the
+ * API base URL. This matches — and now enforces — the intended same-origin
+ * deployment model, where the document is published next to the app itself.
  */
 
 import { applyRuntimeConfig, config } from './config';
@@ -75,6 +79,59 @@ function describeShape(value: unknown): string {
 }
 
 /**
+ * Reject a configured URL that does not resolve same-origin as the application.
+ *
+ * The runtime document dictates `apiBaseUrl`, which in turn seeds the request
+ * allow-list in {@link import('./utils/httpInterceptor').assertSafeRequestUrl}.
+ * A cross-origin config URL would therefore hand that trust boundary to a foreign
+ * host — the exact thing the same-origin deployment model exists to prevent. So
+ * we confine the document to the app's own origin and refuse anything else
+ * *before* a request is issued, rather than fetching first and trusting later.
+ *
+ * The URL is resolved against `document`'s location, so relative pointers such as
+ * `/config.json` (the intended form) pass, an absolute URL naming the app's own
+ * origin passes, and anything else — a foreign host, a protocol-relative
+ * `//host/…`, or an `http:` document under an `https:` app — is rejected.
+ *
+ * Returns normally when `url` is same-origin (the caller then fetches the
+ * original string unchanged, preserving relative-URL semantics); throws
+ * {@link RuntimeConfigError} on a malformed or cross-origin URL.
+ *
+ * Scope: this confines only *where the config document is fetched from* — the
+ * `VITE_RUNTIME_CONFIG_URL` endpoint. It does **not** constrain the `apiBaseUrl`
+ * value the document returns, which may legitimately name a different origin
+ * (e.g. an `https://api.<app-domain>` subdomain serving the API). That is the
+ * whole point of runtime config: a trusted, same-origin document declares which
+ * — possibly foreign — origin the API lives on, and that value then seeds the
+ * request allow-list in {@link import('./utils/httpInterceptor').assertSafeRequestUrl}.
+ * Note the returned `apiBaseUrl` must be an absolute URL *with a scheme*
+ * (`https://api.example`, not `api.example`): the interceptor derives the
+ * allowed origin via `new URL(apiBaseUrl)`, which rejects a scheme-less value.
+ */
+function assertSameOriginConfigUrl(url: string): void {
+  const appOrigin = window.location.origin;
+
+  let resolved: URL;
+  try {
+    resolved = new URL(url, window.location.href);
+  } catch (error) {
+    throw new RuntimeConfigError(
+      `Runtime config URL "${url}" is not a valid URL.`,
+      { cause: error },
+    );
+  }
+
+  if (resolved.origin !== appOrigin) {
+    throw new RuntimeConfigError(
+      `Runtime config URL "${url}" resolves to a cross-origin location ` +
+        `(${resolved.origin}); the configuration document must be served ` +
+        `same-origin as the application (${appOrigin}). It seeds the API ` +
+        `request allow-list, so a foreign origin is refused before any fetch.`,
+    );
+  }
+}
+
+/**
  * Fetch, parse and validate the runtime configuration document.
  *
  * Throws {@link RuntimeConfigError} on any transport, parse or shape problem.
@@ -83,6 +140,11 @@ function describeShape(value: unknown): string {
  * non-string `apiBaseUrl` is rejected here as malformed.
  */
 async function fetchRuntimeConfig(url: string): Promise<RuntimeConfig> {
+  // Fail closed on a cross-origin config URL before issuing any request: the
+  // document it returns dictates the API base URL, so it must come from our own
+  // origin, never a foreign host.
+  assertSameOriginConfigUrl(url);
+
   let response: Response;
   try {
     // `cache: 'no-store'`: a redeploy that changes the config document must take

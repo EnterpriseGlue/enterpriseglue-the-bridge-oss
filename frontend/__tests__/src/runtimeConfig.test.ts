@@ -143,4 +143,61 @@ describe('initRuntimeConfig', () => {
 
     expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE); // unchanged, no error
   });
+
+  // --- Same-origin enforcement of the config URL itself -------------------
+  // The jsdom test environment serves the app from http://localhost:3000.
+
+  it('never fetches a cross-origin config URL and falls back when not required', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', 'https://evil.example/config.json');
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ apiBaseUrl: 'https://evil.example' }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(initRuntimeConfig()).resolves.toBeUndefined();
+
+    expect(fetchSpy).not.toHaveBeenCalled(); // rejected before any request
+    expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE); // foreign origin never applied
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('rejects a protocol-relative config URL as cross-origin', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '//evil.example/config.json');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await initRuntimeConfig();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE);
+  });
+
+  it('throws when required and the config URL is cross-origin', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', 'https://evil.example/config.json');
+    vi.stubEnv('VITE_RUNTIME_CONFIG_REQUIRED', 'true');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(initRuntimeConfig()).rejects.toBeInstanceOf(RuntimeConfigError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts an absolute config URL that names the app’s own origin', async () => {
+    const sameOrigin = `${window.location.origin}/config.json`;
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', sameOrigin);
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ apiBaseUrl: 'https://runtime.example' }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await initRuntimeConfig();
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      sameOrigin,
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(config.apiBaseUrl).toBe('https://runtime.example');
+  });
 });

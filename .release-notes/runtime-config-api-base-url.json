@@ -33,7 +33,9 @@
     "notes": []
   },
   "security": [
-    "The HTTP interceptor derives its allowed request origin from the resolved API base URL, so enabling runtime configuration moves that trust boundary from build time to whoever serves the configuration document; the intended model serves it same-origin alongside the application."
+    "The HTTP interceptor derives its allowed request origin from the resolved API base URL, so enabling runtime configuration moves that trust boundary from build time to whoever serves the configuration document; the intended model serves it same-origin alongside the application.",
+    "VITE_RUNTIME_CONFIG_URL is confined to the application's own origin: a cross-origin (or protocol-relative) config URL is rejected before any request is issued, so a foreign host can never supply the API base URL. A same-origin violation warns and falls back to build-time configuration, or is a fatal boot error when VITE_RUNTIME_CONFIG_REQUIRED is 'true'.",
+    "This same-origin confinement applies only to where the config document is fetched from (VITE_RUNTIME_CONFIG_URL), not to the apiBaseUrl value the document returns: a same-origin document may legitimately point apiBaseUrl at a different origin, such as an https://api.<app-domain> subdomain serving the API. That value seeds the HTTP interceptor's request allow-list, must be an absolute URL including the scheme (https://api.example, not api.example), and requires the API origin to send CORS headers permitting the app origin."
   ],
   "documentation": [
     "Runtime API base URL configuration, variables, and precedence: `frontend/.env.example`"
@@ -46,7 +48,7 @@
     "Unset VITE_RUNTIME_CONFIG_URL (or rebuild without it) to return to build-time configuration; no data or schema changes are involved."
   ],
   "validation": [
-    "New unit tests in frontend/__tests__/src/runtimeConfig.test.ts cover the feature-off path, successful apiBaseUrl application with no-store, tolerated unknown keys, graceful fallback on malformed/non-OK/network failures, and hard failure under VITE_RUNTIME_CONFIG_REQUIRED.",
+    "New unit tests in frontend/__tests__/src/runtimeConfig.test.ts cover the feature-off path, successful apiBaseUrl application with no-store, tolerated unknown keys, graceful fallback on malformed/non-OK/network failures, hard failure under VITE_RUNTIME_CONFIG_REQUIRED, and same-origin enforcement of the config URL (cross-origin and protocol-relative URLs are refused before any fetch; an absolute same-origin URL is accepted).",
     "Frontend host typecheck (tsc -p tsconfig.build.json --noEmit) and the frontend unit suite (vitest --run)."
   ],
   "packages": [
