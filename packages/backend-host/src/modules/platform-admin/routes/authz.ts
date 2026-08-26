@@ -228,6 +228,13 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
       tenantId: req.tenant?.tenantId || null,
       platform: snapshot.platform,
       platformActionAvailability: availability.platformActionAvailability,
+      tenant: snapshot.tenant
+        ? {
+            resourceId: snapshot.tenant.resourceId,
+            permissions: snapshot.tenant.permissions,
+            actionAvailability: availability.tenant?.actionAvailability,
+          }
+        : null,
       projects: snapshot.projects.map(({ resourceId, permissions }) => ({
         resourceId,
         permissions,

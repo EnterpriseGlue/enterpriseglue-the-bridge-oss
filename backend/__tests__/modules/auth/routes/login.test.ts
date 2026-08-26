@@ -80,7 +80,7 @@ describe('auth login routes', () => {
     claimActivePlatformAdministratorMembership.mockResolvedValue(true);
     (verifyPassword as unknown as Mock).mockResolvedValue(false);
     loginMethodService.ordinaryLocalPasswordEnabled.mockResolvedValue(true);
-    authSessionService.issue.mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 900 });
+    authSessionService.issue.mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 900, tenantId: 'tenant-default' });
 
     userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -157,6 +157,10 @@ describe('auth login routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.user).toMatchObject({ id: 'break-glass-1', platformRole: 'admin' });
+    expect(response.body.user.session).toEqual({
+      principal: { type: 'user', id: 'break-glass-1' },
+      tenant: { id: 'tenant-default' },
+    });
     expect(claimActivePlatformAdministratorMembership).toHaveBeenCalledWith('break-glass-1', expect.any(Object));
     expect(getActivePlatformAdministratorUserIds).not.toHaveBeenCalled();
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(expect.any(Object), 'break-glass-1');
@@ -457,7 +461,7 @@ describe('auth login routes', () => {
     expect(response.body.user.email).toBe('user@example.com');
     expect(response.body.user.session).toEqual({
       principal: { type: 'user', id: 'user-1' },
-      tenant: { id: null },
+      tenant: { id: 'tenant-default' },
     });
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([

@@ -110,9 +110,13 @@ engine or Engine Set assignment is not runtime authority for shared resources.
 Unmapped, conflicting, stale, null-tenant, and sibling-tenant resources are
 rejected before an upstream engine call.
 
-OSS exposes tenant-compatible contracts and uses its canonical default tenant
-when an explicit tenant is not required. Null tenant state is not treated as
-authorization for an existing engine or shared runtime resource.
+OSS exposes tenant-compatible contracts in both native tenancy modes. In
+`single` mode, a route whose contract does not require explicit tenant
+resolution may use the canonical default tenant. In `pooled` mode, tenant-owned
+routes require the resolved active tenant and never substitute the default for
+missing or conflicting context. Null tenant state is not treated as
+authorization for an existing engine or shared runtime resource in either
+mode.
 
 ## Identity-provider reconciliation
 
@@ -209,6 +213,7 @@ incomplete, or cross-commit qualification.
 
 Use these maintained technical documents:
 
+- [Native SaaS Tenancy](./11-native-saas-tenancy.md)
 - [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
 - [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md)
 - [Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md)

@@ -3,12 +3,16 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'refresh_tokens', schema: 'main' })
 @Index('idx_refresh_tokens_user', ['userId'])
+@Index('idx_refresh_tokens_tenant', ['tenantId', 'userId', 'revokedAt'])
 @Index('idx_refresh_tokens_identity_provider', ['identityProviderId', 'revokedAt'])
 @Index('idx_refresh_tokens_provider_subject', ['identityProviderId', 'providerSubjectId', 'revokedAt'])
 @Index('idx_refresh_tokens_provider_session', ['identityProviderId', 'providerSessionId', 'revokedAt'])
 export class RefreshToken extends AppBaseEntity {
   @Column({ name: 'user_id', type: 'text' })
   userId!: string;
+
+  @Column({ name: 'tenant_id', type: 'text', nullable: true })
+  tenantId!: string | null;
 
   @Column({ name: 'identity_provider_id', type: 'text', nullable: true })
   identityProviderId!: string | null;

@@ -36,7 +36,9 @@ const IGNORED_DIRS = new Set(['node_modules', 'dist', '.git', 'migrations']);
 const IGNORED_FILES = new Set(['check-no-raw-sql.ts']);
 const ALLOWED_INFRASTRUCTURE_FILES = new Set([
   'packages/shared/src/db/db-pool.ts',
+  'packages/shared/src/db/postgres-tenant-rls.ts',
   'packages/shared/src/db/run-migrations.ts',
+  'packages/shared/src/infrastructure/persistence/subscribers/TenantRlsSubscriber.ts',
 ]);
 
 const RAW_QUERY_PATTERNS: Pattern[] = [

@@ -85,6 +85,8 @@ import vcsRoute from '@modules/versioning/index.js';
 
 import { invitationsRoute } from '@modules/invitations/index.js';
 import { scimRoute } from '@modules/scim/index.js';
+import { tenancyRoute } from '@modules/tenancy/index.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 interface RegisterRoutesOptions {
   notificationTenantResolver?: NotificationTenantResolver;
@@ -160,7 +162,23 @@ function createTenantScopedRouter(options: CreateTenantScopedRouterOptions = {})
   router.use(createNotificationsRouter({ tenantResolver: notificationTenantResolver }));
   router.use(dashboardStatsRoute);
   router.use(dashboardContextRoute);
+  router.use('/api/identity/providers', (_req, res, next) => {
+    res.locals.tenantIdentityProviderScope = true;
+    next();
+  });
+  router.use(identityProvidersRoute);
 
+  return router;
+}
+
+function createTenantIdentityProviderRouter(): Router {
+  const router = Router({ mergeParams: true });
+  router.use(resolveTenantContext({ required: true }));
+  router.use((req, res, next) => {
+    res.locals.tenantIdentityProviderScope = true;
+    req.url = `/api${req.url}`;
+    identityProvidersRoute(req, res, next);
+  });
   return router;
 }
 
@@ -178,6 +196,7 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   // Directory-scoped machine API. The bearer credential, not a caller-supplied
   // tenant header, establishes the directory and tenant boundary.
   app.use(scimRoute);
+  app.use(tenancyRoute);
   
   // Authentication routes
   app.use(loginRoute);
@@ -206,7 +225,8 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   app.use('/api/admin', platformAdminRoute);
 
   // SSO Provider Management API (platform-level)
-  app.use(identityProvidersRoute);
+  if (config.tenancyMode !== 'pooled') app.use(identityProvidersRoute);
+  app.use('/api/t/:tenantSlug', createTenantIdentityProviderRouter());
   app.use(identityMappingsRoute);
   app.use(identityProvisioningRoute);
 
@@ -223,12 +243,18 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   // Backward compatibility for clients that still call the root API paths.
   // The frontend can run on /t/:tenantSlug routes while older API clients still
   // request /starbase-api/*, /git-api/*, /mission-control-api/*, etc.
-  app.use(createTenantScopedRouter({
+  // Root-shaped tenant APIs remain available in pooled mode only when the
+  // request host itself resolves to a verified tenant hostname. The resolver
+  // rejects the platform host, so this does not restore ambiguous root aliases.
+  // Mount the explicit path authority first. In pooled mode, the root-shaped
+  // compatibility router must not attempt hostname resolution for /t/:slug
+  // requests before Express has populated the tenantSlug route parameter.
+  app.use('/t/:tenantSlug', createTenantScopedRouter({
     includeAuditRoute: !enterprisePluginLoaded,
     notificationTenantResolver: options.notificationTenantResolver,
   }));
 
-  app.use('/t/:tenantSlug', createTenantScopedRouter({
+  app.use(createTenantScopedRouter({
     includeAuditRoute: !enterprisePluginLoaded,
     notificationTenantResolver: options.notificationTenantResolver,
   }));

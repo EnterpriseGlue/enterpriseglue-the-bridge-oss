@@ -16,7 +16,7 @@ group access to the engine. For those independent controls, see
 
 These contracts have the same persisted engine-tenancy behavior on
 PostgreSQL, MySQL, SQL Server, Oracle, and Spanner. The supported adapter
-matrix covers clean install, all five upgrade baselines, retry, schema
+matrix covers clean install, all six upgrade baselines, retry, schema
 equivalence, the real mapping transaction, rollback, and cleanup. See the
 [database qualification runbook](../development/engine-tenancy-database-qualification.md)
 for its exact scope and evidence.

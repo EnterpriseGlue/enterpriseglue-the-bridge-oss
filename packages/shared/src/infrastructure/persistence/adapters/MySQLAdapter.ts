@@ -9,7 +9,7 @@ import {
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, PlatformSettingsSectionOwnership, AdminConfigObjectOwnership, EmailTemplate, EmailSendConfig,
-  // Tenant entities removed - multi-tenancy is EE-only
+  Tenant, TenantDiscoveryChallenge, TenantDiscoveryDomain, TenantDomain, TenantLoginPolicy,
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityProvisioningDirectory, IdentityProvisioningCredential, IdentityProvisioningDiagnostic, ScimUserLink, ScimGroupLink, ScimGroupMembership, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
@@ -25,7 +25,7 @@ const entities = [
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, PlatformSettingsSectionOwnership, AdminConfigObjectOwnership, EmailTemplate, EmailSendConfig,
-  // Tenant entities removed - multi-tenancy is EE-only
+  Tenant, TenantDiscoveryChallenge, TenantDiscoveryDomain, TenantDomain, TenantLoginPolicy,
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityProvisioningDirectory, IdentityProvisioningCredential, IdentityProvisioningDiagnostic, ScimUserLink, ScimGroupLink, ScimGroupMembership, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,

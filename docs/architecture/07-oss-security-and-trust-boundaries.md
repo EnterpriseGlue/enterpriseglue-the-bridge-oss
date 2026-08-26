@@ -128,7 +128,12 @@ flowchart TD
   - scope-based redaction applies to process details, history, logs, errors, and audit data when enabled
 
 - **Tenant context attachment**
-  - OSS attaches a default tenant context for compatibility with unified tenant routing
+  - `single` mode attaches the canonical default tenant for compatibility where
+    the route contract permits it
+  - `pooled` mode resolves an active tenant from the canonical path, a verified
+    hostname, or a signed placement assertion before tenant-owned work
+  - missing, ambiguous, inactive, path/host-conflicting, and stale placement
+    context fails closed rather than falling back to the default tenant
 
 - **Rate limiting**
   - global API rate limiting is applied on core route prefixes
@@ -178,8 +183,15 @@ flowchart TD
   - process details, historic data, job/incidents payloads, error content, and audit output may be subject to redaction controls
 
 ## OSS-Specific Boundary Notes
-- **Single-tenant OSS stub behavior**
-  - OSS uses EE-compatible tenant-scoped routing but resolves to a default tenant context in practice.
+- **Explicit native tenancy modes**
+  - `single` is the backward-compatible default and resolves tenant-shaped
+    compatibility routes to the canonical default tenant.
+  - `pooled` is an opt-in PostgreSQL mode that resolves real tenant records,
+    requires tenant-bound sessions and memberships, and verifies forced RLS
+    under a restricted application role.
+  - Root-shaped compatibility APIs are not ambiguous pooled tenant interfaces;
+    they are available only in single mode or when a verified tenant hostname
+    independently establishes the same tenant.
 
 - **Platform admin is powerful but not a universal route bypass**
   - In permission-based checks, platform admin resolves to allow-all.
@@ -190,5 +202,6 @@ flowchart TD
 
 ## Related Documents
 - `06-oss-integration-architecture.md`
+- `11-native-saas-tenancy.md`
 - `09-oss-authorization-access-control-model.md`
 - `05-oss-application-container-architecture.md`

@@ -1,0 +1,471 @@
+import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { Client } from 'pg';
+import { captureManualScreenshot, manualScreenshotDirectory } from './utils/manualScreenshots';
+
+type JsonObject = Record<string, any>;
+
+const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'https://localhost:5443';
+const enabled = process.env.POOLED_TENANCY_E2E === 'true' && isLocalUrl(baseUrl);
+const adminEmail = process.env.POOLED_TENANCY_ADMIN_EMAIL || '';
+const adminPassword = process.env.POOLED_TENANCY_ADMIN_PASSWORD || '';
+const oidcIssuer = process.env.POOLED_TENANCY_OIDC_ISSUER_URL || '';
+const oidcUsername = process.env.POOLED_TENANCY_OIDC_USERNAME || 'oidc-operator';
+const oidcPassword = process.env.POOLED_TENANCY_OIDC_PASSWORD || 'local-oidc-operator';
+const samlUsername = process.env.POOLED_TENANCY_SAML_USERNAME || 'saml-operator';
+const samlPassword = process.env.POOLED_TENANCY_SAML_PASSWORD || 'local-saml-operator';
+const ldapUsername = process.env.POOLED_TENANCY_LDAP_USERNAME || 'browser-login@identity-mock.test';
+const ldapPassword = process.env.EG_LDAP_TEST_BROWSER_USER_PASSWORD || '';
+const postgresHost = process.env.POOLED_TENANCY_POSTGRES_HOST || '';
+const postgresPort = Number(process.env.POOLED_TENANCY_POSTGRES_PORT || 0);
+const postgresUser = process.env.POOLED_TENANCY_POSTGRES_USER || '';
+const postgresPassword = process.env.POOLED_TENANCY_POSTGRES_PASSWORD || '';
+const postgresDatabase = process.env.POOLED_TENANCY_POSTGRES_DATABASE || '';
+
+function isLocalUrl(value: string): boolean {
+  try {
+    return ['localhost', '127.0.0.1', '::1'].includes(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function json(response: APIResponse): Promise<JsonObject> {
+  return response.json().catch(() => ({}));
+}
+
+async function expectStatus(response: APIResponse, status: number): Promise<JsonObject> {
+  const body = await json(response);
+  expect(response.status(), JSON.stringify(body)).toBe(status);
+  return body;
+}
+
+async function csrfToken(page: Page): Promise<string> {
+  const response = await page.request.get('/api/csrf-token');
+  expect(response.status()).toBe(200);
+  const token = response.headers()['x-csrf-token'];
+  expect(token).toBeTruthy();
+  return token;
+}
+
+async function post(page: Page, path: string, data?: JsonObject): Promise<APIResponse> {
+  return page.request.post(path, {
+    headers: { 'X-CSRF-Token': await csrfToken(page) },
+    ...(data === undefined ? {} : { data }),
+  });
+}
+
+async function put(page: Page, path: string, data: JsonObject): Promise<APIResponse> {
+  return page.request.put(path, { headers: { 'X-CSRF-Token': await csrfToken(page) }, data });
+}
+
+async function remove(page: Page, path: string): Promise<APIResponse> {
+  return page.request.delete(path, { headers: { 'X-CSRF-Token': await csrfToken(page) } });
+}
+
+async function newAppContext(browser: Browser): Promise<BrowserContext> {
+  return browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true });
+}
+
+async function assertNoHorizontalOverflow(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth <= document.documentElement.clientWidth
+  )).toBe(true);
+}
+
+async function captureResponsiveScreenshot(page: Page, fileName: string): Promise<void> {
+  if (!manualScreenshotDirectory) return;
+  const directory = resolve(manualScreenshotDirectory, '..', 'responsive');
+  await mkdir(directory, { recursive: true });
+  await page.screenshot({
+    path: resolve(directory, fileName),
+    type: 'jpeg',
+    quality: 90,
+    animations: 'disabled',
+    caret: 'hide',
+  });
+}
+
+async function assertTenantSession(context: BrowserContext, tenant: { id: string; slug: string }, siblingSlug: string) {
+  const meResponse = await context.request.get('/api/auth/me');
+  const me = await expectStatus(meResponse, 200);
+  expect(me.session?.tenant).toEqual({ id: tenant.id });
+
+  const membershipsResponse = await context.request.get('/api/auth/my-tenants');
+  const memberships = await membershipsResponse.json().catch(() => []);
+  expect(membershipsResponse.status(), JSON.stringify(memberships)).toBe(200);
+  expect(memberships).toEqual([
+    expect.objectContaining({ tenantId: tenant.id, tenantSlug: tenant.slug, role: 'member' }),
+  ]);
+
+  await expectStatus(await context.request.get(`/api/t/${tenant.slug}/tenant`), 200);
+  await expectStatus(await context.request.get(`/api/t/${siblingSlug}/tenant`), 403);
+}
+
+async function markDiscoveryDomainVerified(domainId: string): Promise<void> {
+  const client = new Client({
+    host: postgresHost,
+    port: postgresPort,
+    user: postgresUser,
+    password: postgresPassword,
+    database: postgresDatabase,
+  });
+  await client.connect();
+  try {
+    // DNS proof itself is covered by the injected-resolver service test. The disposable browser
+    // lane promotes that completed proof directly so it can exercise verified-email routing
+    // without depending on public DNS.
+    const result = await client.query(
+      'UPDATE main.tenant_discovery_domains SET status = $1, verified_at = $2, verification_token_hash = NULL, updated_at = $2 WHERE id = $3',
+      ['verified', Date.now(), domainId],
+    );
+    expect(result.rowCount).toBe(1);
+  } finally {
+    await client.end();
+  }
+}
+
+async function oidcLoginFromOrganizationFinder(browser: Browser, tenantSlug: string, displayName: string, email: string): Promise<BrowserContext> {
+  const context = await newAppContext(browser);
+  const page = await context.newPage();
+  await page.goto('/login');
+  await expect(page.getByRole('heading', { name: 'Find your organization' })).toBeVisible();
+  await expect(page.getByLabel('Work email')).toBeFocused();
+  await captureManualScreenshot(page, '01-neutral-organization-finder.jpg');
+  await page.getByLabel('Work email').fill(email);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/login(?:$|[?#])`));
+  await page.getByRole('button', { name: new RegExp(`Continue with ${displayName}`) }).click();
+  await page.locator('input[name="username"]').fill(oidcUsername);
+  await page.locator('input[name="password"]').fill(oidcPassword);
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/(?:$|[?#])`));
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  return context;
+}
+
+async function assertWorkspaceFallback(browser: Browser, tenantSlug: string): Promise<void> {
+  const context = await newAppContext(browser);
+  try {
+    const page = await context.newPage();
+    await page.goto('/login');
+    await page.getByRole('button', { name: 'Use an organization name instead' }).click();
+    await page.getByLabel('Organization name').fill(tenantSlug);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/login(?:$|[?#])`));
+  } finally {
+    await context.close();
+  }
+}
+
+async function assertOrganizationFinderResponsive(browser: Browser): Promise<void> {
+  const context = await newAppContext(browser);
+  try {
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/login');
+    await expect(page.getByRole('heading', { name: 'Find your organization' })).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+    await captureResponsiveScreenshot(page, '01-neutral-organization-finder-narrow.jpg');
+  } finally {
+    await context.close();
+  }
+}
+
+async function samlLogin(browser: Browser, tenantSlug: string, providerId: string): Promise<BrowserContext> {
+  const context = await newAppContext(browser);
+  const page = await context.newPage();
+  await page.goto(`/api/t/${tenantSlug}/auth/providers/${encodeURIComponent(providerId)}/start`);
+  await page.locator('input[name="username"]').fill(samlUsername);
+  await page.locator('input[name="password"]').fill(samlPassword);
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/(?:$|[?#])`));
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  return context;
+}
+
+async function ldapLogin(browser: Browser, tenantSlug: string, providerId: string, displayName: string): Promise<BrowserContext> {
+  const context = await newAppContext(browser);
+  const page = await context.newPage();
+  await page.goto(`/t/${tenantSlug}/login`);
+  await page.getByRole('button', { name: new RegExp(`Continue with ${displayName}`) }).click();
+  await page.getByLabel('Username').fill(ldapUsername);
+  await page.getByLabel('Password', { exact: true }).fill(ldapPassword);
+  const loginResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST'
+      && url.pathname === `/api/t/${tenantSlug}/auth/providers/${encodeURIComponent(providerId)}/login`;
+  });
+  await page.getByRole('button', { name: /^Log in$/ }).click();
+  expect((await loginResponse).status()).toBe(200);
+  await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/(?:$|[?#])`));
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  return context;
+}
+
+async function prepareLdapSecrets(): Promise<void> {
+  const secretDir = process.env.LOCAL_IDENTITY_SECRET_DIR || '';
+  const caPath = process.env.EG_LDAP_TEST_CA_CERT_PATH || '';
+  const bindPassword = process.env.EG_LDAP_TEST_ADMIN_PASSWORD || '';
+  if (!secretDir || !caPath || !bindPassword || !ldapPassword) throw new Error('Disposable LDAP fixture inputs are missing');
+  await mkdir(secretDir, { recursive: true, mode: 0o755 });
+  await copyFile(caPath, `${secretDir}/pooled-openldap-ca.crt`);
+  await writeFile(`${secretDir}/pooled-openldap-bind-password`, bindPassword, { mode: 0o644 });
+  await chmod(`${secretDir}/pooled-openldap-ca.crt`, 0o644);
+  await chmod(`${secretDir}/pooled-openldap-bind-password`, 0o644);
+  await chmod(secretDir, 0o711);
+}
+
+test.describe('Native pooled tenancy with segregated SSO', () => {
+  test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !ldapPassword
+    || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase,
+    'Run through test:native-tenancy:pooled-e2e with the disposable identity fixtures.');
+
+  test('isolates tenant providers and completes OIDC, SAML, and LDAP tenant sign-in @pooled-tenancy-live @segregated-sso-live', async ({ browser }) => {
+    test.setTimeout(180_000);
+    await prepareLdapSecrets();
+    const adminContext = await newAppContext(browser);
+    const admin = await adminContext.newPage();
+    const userContexts: BrowserContext[] = [];
+
+    try {
+      const recovery = await expectStatus(await admin.request.post('/api/auth/recovery/login', {
+        data: { email: adminEmail, password: adminPassword },
+      }), 200);
+      const administratorId = recovery.user?.id;
+      expect(administratorId).toBeTruthy();
+
+      const capabilities = await expectStatus(await admin.request.get('/api/tenancy/capabilities'), 200);
+      expect(capabilities).toMatchObject({
+        mode: 'pooled',
+        rootTenantAliasesEnabled: false,
+        tenantScopedLoginRequired: true,
+        databaseIsolation: 'postgres_rls',
+        organizationDiscoveryEnabled: true,
+      });
+
+      const tenants: Record<string, JsonObject> = {};
+      for (const [slug, name] of [['alpha', 'Alpha Industries'], ['bravo', 'Bravo Services'], ['charlie', 'Charlie Operations']]) {
+        tenants[slug] = await expectStatus(await post(admin, '/api/platform/tenants', {
+          name,
+          slug,
+          ownerUserId: administratorId,
+          placementKey: 'pooled-e2e',
+        }), 201);
+      }
+
+      await admin.goto('/admin/tenants');
+      await expect(admin.getByRole('heading', { name: 'Tenants', exact: true })).toBeVisible();
+      for (const name of ['Alpha Industries', 'Bravo Services', 'Charlie Operations']) {
+        await expect(admin.getByRole('heading', { name })).toBeVisible();
+      }
+      await captureManualScreenshot(admin, '02-pooled-tenant-administration.jpg');
+
+      const discoveryDomains: Record<string, JsonObject> = {};
+      for (const slug of ['alpha', 'bravo']) {
+        const created = await expectStatus(await post(admin, `/api/t/${slug}/tenant/discovery-domains`, {
+          domain: `${slug}.example`,
+        }), 201);
+        discoveryDomains[slug] = created.domain;
+        expect(created).toMatchObject({
+          domain: { tenantId: tenants[slug].id, domain: `${slug}.example`, status: 'pending' },
+          dnsRecord: {
+            name: `_enterpriseglue-discovery.${slug}.example`,
+            type: 'TXT',
+          },
+        });
+      }
+      await expectStatus(await post(admin, '/api/t/alpha/tenant/discovery-domains', { domain: 'gmail.com' }), 400);
+
+      for (const slug of ['alpha', 'bravo']) {
+        const listed = await expectStatus(await admin.request.get(`/api/t/${slug}/tenant/discovery-domains`), 200);
+        expect(listed).toEqual([
+          expect.objectContaining({ id: discoveryDomains[slug].id, tenantId: tenants[slug].id, domain: `${slug}.example`, status: 'pending' }),
+        ]);
+      }
+
+      const unknownDiscovery = await expectStatus(await post(admin, '/api/auth/tenant-discovery', {
+        email: 'unknown@unmapped.example',
+      }), 200);
+      const pendingDiscovery = await expectStatus(await post(admin, '/api/auth/tenant-discovery', {
+        email: 'employee@alpha.example',
+      }), 200);
+      expect(unknownDiscovery).toEqual({ status: 'verification_sent', message: expect.any(String) });
+      expect(pendingDiscovery).toEqual(unknownDiscovery);
+      await markDiscoveryDomainVerified(discoveryDomains.alpha.id);
+
+      const callbackUrl = `${baseUrl}/api/auth/identity/callback`;
+      const samlCallbackUrl = `${baseUrl}/api/auth/providers/saml/callback`;
+      const providerPayloads: Record<string, JsonObject> = {
+        alpha: {
+          key: 'tenant-sso',
+          displayName: 'Alpha OIDC',
+          organization: 'Alpha Industries',
+          protocol: 'oidc',
+          isEnabled: true,
+          authenticationMode: 'direct',
+          configuration: {
+            issuerUrl: oidcIssuer,
+            clientId: 'enterpriseglue-local',
+            callbackUrl,
+            scopes: ['openid', 'profile', 'email'],
+            groupClaim: 'groups',
+            expectedAudience: 'enterpriseglue-local',
+            allowVerifiedEmailLinking: true,
+          },
+          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
+        },
+        bravo: {
+          key: 'tenant-sso',
+          displayName: 'Bravo SAML',
+          organization: 'Bravo Services',
+          protocol: 'saml',
+          isEnabled: true,
+          authenticationMode: 'direct',
+          configuration: {
+            entityId: 'enterpriseglue-local-saml',
+            idpEntityId: oidcIssuer,
+            callbackUrl: samlCallbackUrl,
+            ssoUrl: `${oidcIssuer}/protocol/saml`,
+            metadataUrl: `${oidcIssuer}/protocol/saml/descriptor`,
+            signingCertificateRef: 'file:///etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt',
+            signatureAlgorithm: 'sha256',
+            nameIdAttribute: 'nameID',
+            emailAttribute: 'email',
+            groupAttribute: 'groups',
+          },
+          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
+        },
+        charlie: {
+          key: 'tenant-sso',
+          displayName: 'Charlie Directory',
+          organization: 'Charlie Operations',
+          protocol: 'ldap',
+          isEnabled: true,
+          authenticationMode: 'direct',
+          configuration: {
+            url: 'ldaps://openldap:636',
+            bindDn: process.env.EG_LDAP_TEST_BIND_DN,
+            bindPasswordRef: 'file:///etc/enterpriseglue/local-identity-secrets/pooled-openldap-bind-password',
+            userBaseDn: 'ou=people,dc=identity-mock,dc=test',
+            userSearchFilter: '(&(mail={username})(employeeType=active))',
+            userEnumerationFilter: '(&(objectClass=inetOrgPerson)(employeeType=active))',
+            pageSize: 10,
+            groupBaseDn: 'ou=groups,dc=identity-mock,dc=test',
+            groupIdAttribute: 'businessCategory',
+            membershipMode: 'group_search',
+            nestedGroups: true,
+            tlsTrustRef: 'file:///etc/enterpriseglue/local-identity-secrets/pooled-openldap-ca.crt',
+            allowVerifiedEmailLinking: true,
+          },
+          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'ldap_directory', scheduled: false },
+        },
+      };
+
+      const providers: Record<string, JsonObject> = {};
+      for (const slug of ['alpha', 'bravo', 'charlie']) {
+        providers[slug] = await expectStatus(await post(admin, `/api/t/${slug}/identity/providers`, providerPayloads[slug]), 201);
+        await expectStatus(await post(admin, `/api/t/${slug}/identity/providers/tenant-sso/test-connection`), 200);
+        await expectStatus(await put(admin, `/api/t/${slug}/tenant/login-policy`, {
+          localPasswordMode: 'disabled',
+          providerSelectionMode: 'chooser',
+        }), 200);
+      }
+
+      expect(new Set(Object.values(providers).map((provider) => provider.id)).size).toBe(3);
+      expect(Object.values(providers).map((provider) => provider.key)).toEqual(['tenant-sso', 'tenant-sso', 'tenant-sso']);
+
+      for (const slug of ['alpha', 'bravo', 'charlie']) {
+        const listedResponse = await admin.request.get(`/api/t/${slug}/identity/providers`);
+        const listed = await listedResponse.json().catch(() => []);
+        expect(listedResponse.status(), JSON.stringify(listed)).toBe(200);
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatchObject({ id: providers[slug].id, key: 'tenant-sso', protocol: providerPayloads[slug].protocol, tenantId: tenants[slug].id });
+
+        const discovery = await expectStatus(await admin.request.get(`/api/t/${slug}/auth/login-methods`), 200);
+        expect(discovery.localPassword).toEqual({ enabled: false });
+        expect(discovery.providers).toEqual([
+          expect.objectContaining({ id: providers[slug].id, key: 'tenant-sso', protocol: providerPayloads[slug].protocol }),
+        ]);
+      }
+
+      await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
+      await admin.goto('/t/alpha/admin/settings');
+      await expect(admin.getByRole('heading', { name: 'Tenant sign-in and identity' })).toBeVisible();
+      await expect(admin.getByText('alpha.example', { exact: true })).toBeVisible();
+      await captureManualScreenshot(admin, '03-alpha-tenant-sign-in-settings.jpg');
+      const alphaProviderLabel = admin.getByText('Alpha OIDC', { exact: true }).first();
+      await alphaProviderLabel.scrollIntoViewIfNeeded();
+      await expect(alphaProviderLabel).toBeVisible();
+      await captureManualScreenshot(admin, '04-alpha-tenant-segregated-oidc.jpg', { stabilize: false });
+
+      await admin.setViewportSize({ width: 390, height: 844 });
+      await assertNoHorizontalOverflow(admin);
+      await expect(admin.getByRole('heading', { name: 'Tenant sign-in and identity' })).toBeVisible();
+      await captureResponsiveScreenshot(admin, '02-alpha-tenant-settings-narrow.jpg');
+
+      await admin.setViewportSize({ width: 1280, height: 900 });
+      await admin.evaluate(() => { document.documentElement.style.zoom = '2'; });
+      await assertNoHorizontalOverflow(admin);
+      await expect(admin.getByRole('heading', { name: 'Tenant sign-in and identity' })).toBeVisible();
+      await captureResponsiveScreenshot(admin, '03-alpha-tenant-settings-200-percent-zoom.jpg');
+      await admin.evaluate(() => { document.documentElement.style.zoom = '1'; });
+      await admin.setViewportSize({ width: 1440, height: 900 });
+
+      await admin.goto('/t/alpha');
+      await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+      const tenantPicker = admin.locator('.cds--header__menu-title', { hasText: 'Alpha Industries' });
+      await expect(tenantPicker).toBeVisible();
+      await tenantPicker.click();
+      await expect(admin.getByRole('link', { name: 'Bravo Services' })).toBeVisible();
+      await expect(admin.getByRole('link', { name: 'Charlie Operations' })).toBeVisible();
+      await captureManualScreenshot(admin, '05-tenant-picker-with-memberships.jpg', { stabilize: false });
+
+      await expectStatus(await admin.request.get('/api/auth/login-methods'), 404);
+      await expectStatus(await admin.request.get('/api/identity/providers'), 404);
+      await expectStatus(await admin.request.get(`/api/t/bravo/auth/providers/${providers.alpha.id}/start`, { maxRedirects: 0 }), 404);
+
+      await assertOrganizationFinderResponsive(browser);
+      await assertWorkspaceFallback(browser, 'bravo');
+      const alphaContext = await oidcLoginFromOrganizationFinder(browser, 'alpha', 'Alpha OIDC', 'operator@alpha.example');
+      const bravoContext = await samlLogin(browser, 'bravo', providers.bravo.id);
+      const charlieContext = await ldapLogin(browser, 'charlie', providers.charlie.id, 'Charlie Directory');
+      userContexts.push(alphaContext, bravoContext, charlieContext);
+
+      await assertTenantSession(alphaContext, tenants.alpha, 'bravo');
+      await assertTenantSession(bravoContext, tenants.bravo, 'charlie');
+      await assertTenantSession(charlieContext, tenants.charlie, 'alpha');
+
+      const alphaMembersResponse = await admin.request.get('/api/t/alpha/tenant/members');
+      const alphaMembers = await alphaMembersResponse.json().catch(() => []);
+      expect(alphaMembersResponse.status(), JSON.stringify(alphaMembers)).toBe(200);
+      const alphaSsoUser = alphaMembers.find((member: JsonObject) => member.email === 'oidc-operator@localhost.test');
+      expect(alphaSsoUser).toMatchObject({ role: 'member' });
+
+      await expectStatus(await put(admin, `/api/t/alpha/tenant/members/${encodeURIComponent(alphaSsoUser.userId)}`, {
+        role: 'admin',
+      }), 204);
+      const alphaAdmin = await alphaContext.newPage();
+      const alphaProviders = await expectStatus(await alphaAdmin.request.get('/api/t/alpha/identity/providers'), 200);
+      expect(alphaProviders).toEqual([
+        expect.objectContaining({ id: providers.alpha.id, tenantId: tenants.alpha.id, protocol: 'oidc' }),
+      ]);
+      await expectStatus(await post(alphaAdmin, '/api/t/alpha/identity/providers/tenant-sso/test-connection'), 200);
+      await expectStatus(await alphaAdmin.request.get('/api/t/bravo/identity/providers'), 403);
+      await expectStatus(await post(alphaAdmin, '/api/t/bravo/identity/providers/tenant-sso/test-connection'), 403);
+      const alphaDiscoveryDomains = await expectStatus(await alphaAdmin.request.get('/api/t/alpha/tenant/discovery-domains'), 200);
+      expect(alphaDiscoveryDomains).toEqual([
+        expect.objectContaining({ id: discoveryDomains.alpha.id, tenantId: tenants.alpha.id, domain: 'alpha.example', status: 'verified' }),
+      ]);
+      await expectStatus(await alphaAdmin.request.get('/api/t/bravo/tenant/discovery-domains'), 403);
+
+      await expectStatus(await remove(admin, `/api/t/alpha/tenant/members/${encodeURIComponent(alphaSsoUser.userId)}`), 204);
+      await expectStatus(await alphaContext.request.get('/api/auth/me'), 403);
+      await expectStatus(await alphaContext.request.get('/api/auth/my-tenants'), 403);
+    } finally {
+      await Promise.all(userContexts.map((context) => context.close()));
+      await adminContext.close();
+    }
+  });
+});

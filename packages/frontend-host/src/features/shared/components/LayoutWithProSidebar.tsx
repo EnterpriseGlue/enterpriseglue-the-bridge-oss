@@ -32,7 +32,6 @@ import { useLayoutStore } from '../stores/layoutStore'
 import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
-import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
@@ -54,6 +53,7 @@ import {
   getNativePluginNavigationV1,
   NativePluginSlotV1,
 } from '../../../plugins/nativePluginRuntime'
+import NativeTenantPicker from './NativeTenantPicker'
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
@@ -87,9 +87,6 @@ const NOTIFICATION_FILTER_ITEMS: NotificationFilterItem[] = [
   { id: 'error', label: 'Error' },
 ]
 
-// Multi-tenant mode is controlled by EE plugin via extension registry
-// In OSS: always false. In EE: set via registerFeatureOverride('multiTenant', true)
-const isMultiTenant = isMultiTenantEnabled()
 const PLATFORM_ADMIN_NAV_RESOURCE = { type: 'platform' as const }
 
 function formatRelativeTime(ms: number): string {
@@ -178,6 +175,10 @@ function writeCachedBranding(branding: PlatformBranding): void {
 }
 
 export default function LayoutWithProSidebar() {
+  // The EE plugin or the native OSS capability bootstrap may enable pooled
+  // mode before the router renders. Resolve it here instead of caching the
+  // pre-bootstrap module value.
+  const isMultiTenant = isMultiTenantEnabled()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { logout, user, permissions, refreshUser } = useAuth()
@@ -380,29 +381,15 @@ export default function LayoutWithProSidebar() {
       return
     }
 
-    let cancelled = false
-    const loadTenantRole = async () => {
-      try {
-        const data = await fetchList<any>('/api/auth/my-tenants')
-        const m = Array.isArray(data)
-          ? data.find((t: any) => String(t?.tenantSlug || '') === String(tenantSlug))
-          : undefined
-        const ok = Boolean(m?.isTenantAdmin)
-        if (!cancelled) setIsTenantAdmin(ok)
-      } catch {
-        if (!cancelled) setIsTenantAdmin(false)
-      }
-    }
-
-    setTenantAdminChecked(false)
-    loadTenantRole().finally(() => {
-      if (!cancelled) setTenantAdminChecked(true)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [tenantSlug, platformSettingsManager])
+    const tenantResourceId = permissions?.tenant?.resourceId ?? null
+    const tenantAdminDecision = evaluateActionSnapshot(
+      permissions,
+      'tenant.settings.manage',
+      { type: 'tenant', id: tenantResourceId },
+    )
+    setIsTenantAdmin(tenantAdminDecision.allowed)
+    setTenantAdminChecked(true)
+  }, [tenantSlug, platformSettingsManager, permissions])
 
   useEffect(() => {
     if (!isProfileModalOpen) return
@@ -843,7 +830,7 @@ export default function LayoutWithProSidebar() {
                 </span>
               </HeaderName>
               {/* TenantPicker is an extension slot - empty in OSS, filled by EE plugin */}
-              <ExtensionSlot name="tenant-picker" />
+              <ExtensionSlot name="tenant-picker" fallback={<NativeTenantPicker enabled={isMultiTenant} />} />
               <HeaderNavigation aria-label="Main navigation">
                 {showVoyagerMenu && (
                   <HeaderMenu menuLinkName="Voyager">

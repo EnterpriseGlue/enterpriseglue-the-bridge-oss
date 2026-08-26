@@ -11,6 +11,8 @@ import type {
   PublicLoginProvider,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { isOssDefaultTenantId } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { tenantLoginPolicyService } from './TenantLoginPolicyService.js';
 
 function parseLoginDomains(provider: IdentityProvider): string[] {
   try {
@@ -47,10 +49,14 @@ function toPublicProvider(provider: IdentityProvider): PublicLoginProvider {
 
 export class LoginMethodService {
   async get(tenantId?: string | null): Promise<PublicLoginMethodsResponse> {
-    const [settings, providers] = await Promise.all([
+    const tenantScoped = Boolean(tenantId && (config.tenancyMode === 'pooled' || !isOssDefaultTenantId(tenantId)));
+    const [settings, tenantPolicy, providers] = await Promise.all([
       platformSettingsService.get(),
-      tenantId && !isOssDefaultTenantId(tenantId)
-        ? identityProviderService.listEnabledDirectLoginProviders(tenantId)
+      tenantId && config.tenancyMode === 'pooled'
+        ? tenantLoginPolicyService.get(tenantId)
+        : Promise.resolve(null),
+      tenantScoped
+        ? identityProviderService.listEnabledDirectLoginProviders(tenantId!)
         : identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin(),
     ]);
     const sorted = [...providers].sort((left, right) => (
@@ -60,19 +66,21 @@ export class LoginMethodService {
       || left.key.localeCompare(right.key)
     ));
     const publicProviders = sorted.map(toPublicProvider);
-    const localPasswordEnabled = isOrdinaryLocalPasswordEnabled(settings.localPasswordLoginMode, publicProviders.length);
+    const localPasswordMode = tenantPolicy?.localPasswordMode || settings.localPasswordLoginMode;
+    const providerSelectionMode = tenantPolicy?.providerSelectionMode || settings.ssoProviderSelectionMode;
+    const localPasswordEnabled = isOrdinaryLocalPasswordEnabled(localPasswordMode, publicProviders.length);
     const singleRedirectProvider = publicProviders.length === 1 && publicProviders[0].loginMethod === 'redirect'
       ? publicProviders[0]
       : null;
     const autoRedirectProviderId = !localPasswordEnabled
-      && settings.ssoProviderSelectionMode === 'auto_redirect_single'
+      && providerSelectionMode === 'auto_redirect_single'
       && singleRedirectProvider
       ? singleRedirectProvider.id
       : null;
 
     return {
       localPassword: { enabled: localPasswordEnabled },
-      providerSelection: settings.ssoProviderSelectionMode,
+      providerSelection: providerSelectionMode,
       autoRedirectProviderId,
       providers: publicProviders,
       configurationStatus: localPasswordEnabled || publicProviders.length > 0 ? 'ready' : 'no_login_method',

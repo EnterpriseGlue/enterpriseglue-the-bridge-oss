@@ -49,6 +49,7 @@ import {
   TENANT_SAFE_ENGINE_PERMISSION_IDS,
   TENANT_SAFE_PERMISSION_IDS,
   TENANT_SAFE_PROJECT_PERMISSION_IDS,
+  TENANT_SAFE_TENANT_PERMISSION_IDS,
 } from '../../authz/tenant-role-policy.js';
 import {
   adminConfigObjectOwnershipService,
@@ -63,6 +64,7 @@ export {
   TENANT_SAFE_ENGINE_PERMISSION_IDS,
   TENANT_SAFE_PERMISSION_IDS,
   TENANT_SAFE_PROJECT_PERMISSION_IDS,
+  TENANT_SAFE_TENANT_PERMISSION_IDS,
 } from '../../authz/tenant-role-policy.js';
 
 // ============================================================================
@@ -102,6 +104,10 @@ export const PlatformPermissions = {
   // Settings
   SETTINGS_MANAGE: 'platform:settings:manage',
 
+  // Native tenant lifecycle
+  TENANTS_VIEW: 'platform:tenants:view',
+  TENANTS_MANAGE: 'platform:tenants:manage',
+
   // SSO administration
   SSO_PROVIDERS_VIEW: 'platform:sso-providers:view',
   SSO_PROVIDERS_MANAGE: 'platform:sso-providers:manage',
@@ -139,6 +145,14 @@ export const PlatformPermissions = {
   API_CLIENTS_MANAGE: 'platform:api-clients:manage',
   SERVICE_ACCOUNTS_VIEW: 'platform:service-accounts:view',
   SERVICE_ACCOUNTS_MANAGE: 'platform:service-accounts:manage',
+} as const;
+
+export const TenantPermissions = {
+  SETTINGS_VIEW: 'tenant:settings:view',
+  SETTINGS_MANAGE: 'tenant:settings:manage',
+  MEMBERS_MANAGE: 'tenant:members:manage',
+  SSO_PROVIDERS_VIEW: 'tenant:sso-providers:view',
+  SSO_PROVIDERS_MANAGE: 'tenant:sso-providers:manage',
 } as const;
 
 /**
@@ -244,6 +258,7 @@ export const ExternalEngineSystemPermissions = {
 // All permissions combined for validation
 export const AllPermissions = {
   ...PlatformPermissions,
+  ...TenantPermissions,
   ...ProjectPermissions,
   ...EnginePermissions,
   ...ExternalEngineSystemPermissions,
@@ -695,6 +710,7 @@ export interface EffectiveEngineResourcePermissions extends EffectiveResourcePer
 export interface CurrentUserPermissionsSnapshot {
   userId: string;
   platform: Permission[];
+  tenant: EffectiveResourcePermissions | null;
   projects: EffectiveResourcePermissions[];
   engines: EffectiveEngineResourcePermissions[];
   authorizationVersion: string;
@@ -808,6 +824,8 @@ export const PermissionCatalog: PermissionDefinition[] = [
   permissionDefinition(PlatformPermissions.USERS_PERMANENT_DELETE, 'platform', 'User Management', 'Permanently delete eligible platform users.'),
   permissionDefinition(PlatformPermissions.USERS_UNLOCK, 'platform', 'User Management', 'Unlock locked platform users.'),
   permissionDefinition(PlatformPermissions.SETTINGS_MANAGE, 'platform', 'Settings', 'Manage platform settings.'),
+  permissionDefinition(PlatformPermissions.TENANTS_VIEW, 'platform', 'Tenants', 'View native tenant lifecycle and placement metadata.'),
+  permissionDefinition(PlatformPermissions.TENANTS_MANAGE, 'platform', 'Tenants', 'Create tenants and change native tenant lifecycle or placement metadata.'),
   permissionDefinition(PlatformPermissions.SSO_PROVIDERS_VIEW, 'platform', 'SSO', 'View configured SSO identity providers.'),
   permissionDefinition(PlatformPermissions.SSO_PROVIDERS_MANAGE, 'platform', 'SSO', 'Create, update, delete, enable, or disable SSO identity providers.'),
   permissionDefinition(PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW, 'platform', 'SSO', 'View SSO claim mappings that provision platform roles.'),
@@ -838,6 +856,9 @@ export const PermissionCatalog: PermissionDefinition[] = [
   permissionDefinition(PlatformPermissions.API_CLIENTS_MANAGE, 'platform', 'API Clients', 'Create, rotate, revoke, and audit API client machine identities.'),
   permissionDefinition(PlatformPermissions.SERVICE_ACCOUNTS_VIEW, 'platform', 'Service Accounts', 'View service-account machine identities.'),
   permissionDefinition(PlatformPermissions.SERVICE_ACCOUNTS_MANAGE, 'platform', 'Service Accounts', 'Create, rotate, revoke, and audit service-account machine identities.'),
+  ...Object.values(TenantPermissions).map((permission) =>
+    permissionDefinition(permission, 'tenant', 'Tenant Administration', `Grants ${labelFromPermission(permission).toLowerCase()} in one tenant.`)
+  ),
   permissionDefinition(ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE, 'external_engine_system', 'External Engine Systems', 'Register or update engines for a specific external engine source system.'),
   permissionDefinition(ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE, 'external_engine_system', 'External Engine Systems', 'Register or update project-engine deployment targets for a specific external engine source system.'),
   ...Object.values(ProjectPermissions).map((permission) =>
@@ -1227,11 +1248,16 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
 
 export const TenantRolePermissions: Record<'admin' | 'engineOperator' | 'viewer', Permission[]> = {
   admin: [
+    ...TENANT_SAFE_TENANT_PERMISSION_IDS,
     ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
     ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
   ],
-  engineOperator: TENANT_SAFE_ENGINE_PERMISSION_IDS.filter((permission) => permission !== EnginePermissions.VARIABLES_EDIT),
+  engineOperator: [
+    TenantPermissions.SETTINGS_VIEW,
+    ...TENANT_SAFE_ENGINE_PERMISSION_IDS.filter((permission) => permission !== EnginePermissions.VARIABLES_EDIT),
+  ],
   viewer: [
+    TenantPermissions.SETTINGS_VIEW,
     ProjectPermissions.MEMBERS_VIEW,
     ProjectPermissions.FILES_VIEW,
     ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
@@ -2803,7 +2829,7 @@ class PermissionServiceClass {
     return null;
   }
 
-  async removeRoleAssignment(id: string, removedById?: string): Promise<void> {
+  async removeRoleAssignment(id: string, removedById?: string, options: { allowSso?: boolean } = {}): Promise<void> {
     const dataSource = await getDataSource();
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
     const assignment = await assignmentRepo.findOne({ where: { id } });
@@ -2811,7 +2837,7 @@ class PermissionServiceClass {
       throw new Error('Role assignment not found');
     }
     const configWarningAssignment = assignment.source === 'config' && assignment.ownershipMode === 'config_warn';
-    if (assignment.source !== 'manual' && !configWarningAssignment) {
+    if (assignment.source !== 'manual' && !configWarningAssignment && !(options.allowSso && assignment.source === 'sso')) {
       throw new Error('Only manual role assignments can be removed here');
     }
 
@@ -3202,6 +3228,12 @@ class PermissionServiceClass {
     return {
       userId,
       platform: await this.evaluatePermissionSet(userId, 'platform', undefined, tenantId),
+      tenant: tenantId
+        ? {
+            resourceId: tenantId,
+            permissions: await this.evaluatePermissionSet(userId, 'tenant', tenantId, tenantId),
+          }
+        : null,
       projects: await Promise.all(projectIds.map(async (projectId) => ({
         resourceId: projectId,
         permissions: await this.evaluatePermissionSet(userId, 'project', projectId, tenantId),

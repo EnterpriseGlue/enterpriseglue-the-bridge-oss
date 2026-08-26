@@ -22,7 +22,11 @@ function getClientIdentifier(req: any): string {
     ? `${req.rateLimitKeyPrefix.trim()}:`
     : '';
 
-  return `${prefix}${identity}`;
+  const tenantPrefix = typeof req.tenant?.tenantId === 'string' && req.tenant.tenantId.trim()
+    ? `tenant:${req.tenant.tenantId.trim()}:`
+    : '';
+
+  return `${prefix}${tenantPrefix}${identity}`;
 }
 
 /**

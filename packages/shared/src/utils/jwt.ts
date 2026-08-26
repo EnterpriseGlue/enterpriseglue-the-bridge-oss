@@ -28,6 +28,7 @@ export interface JwtPayload {
   mfaVerified?: boolean;
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
+  tenantId?: string;
   tenantSlug?: string;
 }
 
@@ -35,6 +36,8 @@ export interface SessionAssuranceOptions {
   administratorRecovery?: boolean;
   authenticationMethod?: JwtPayload['authenticationMethod'];
   mfaVerified?: boolean;
+  tenantId?: string;
+  tenantSlug?: string;
 }
 
 /** A validated browser-session principal, including a compatibility user id for request consumers. */
@@ -77,6 +80,8 @@ export function generateAccessToken(user: User | any, options: SessionAssuranceO
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
+    ...(options.tenantId ? { tenantId: options.tenantId } : {}),
+    ...(options.tenantSlug ? { tenantSlug: options.tenantSlug } : {}),
     type: 'access',
   };
 
@@ -96,6 +101,8 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
+    ...(options.tenantId ? { tenantId: options.tenantId } : {}),
+    ...(options.tenantSlug ? { tenantSlug: options.tenantSlug } : {}),
     type: 'refresh',
   };
 
@@ -104,13 +111,14 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
   });
 }
 
-export function generateOnboardingToken(payload: { userId: string; invitationId: string; tenantSlug: string; authSessionVersion?: number }): string {
+export function generateOnboardingToken(payload: { userId: string; invitationId: string; tenantId?: string; tenantSlug: string; authSessionVersion?: number }): string {
   const tokenPayload: JwtPayload = {
     principalType: 'user',
     principalId: payload.userId,
     authSessionVersion: Number.isInteger(payload.authSessionVersion) ? payload.authSessionVersion : 0,
     type: 'onboarding',
     invitationId: payload.invitationId,
+    ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     tenantSlug: payload.tenantSlug,
   };
 

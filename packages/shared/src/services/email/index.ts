@@ -5,4 +5,5 @@ export { sendWelcomeEmail, sendVerificationEmail, type WelcomeEmailParams, type 
 export { sendPasswordResetEmail, type PasswordResetEmailParams } from './password.js';
 export { sendInvitationEmail, type InvitationEmailParams } from './invitation.js';
 export { sendContactAdminEmail, type ContactAdminParams } from './contact.js';
+export { sendTenantDiscoveryEmail, type TenantDiscoveryEmailParams } from './tenant-discovery.js';
 export { getEmailConfigForTenant, sendEmailWithConfig } from './config.js';

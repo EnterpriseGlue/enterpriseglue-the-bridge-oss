@@ -5,6 +5,7 @@ import request from 'supertest';
 import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
 import { buildSignedOidcState, parseSignedOidcState } from '../../../../../packages/backend-host/src/modules/auth/routes/sso-state.js';
+import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), getDirectLoginProviderByKey: vi.fn(), getDirectLoginProviderById: vi.fn(), listEnabledDirectLoginProviders: vi.fn(), listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn() }));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), authenticationAssurance: vi.fn(), verifyBackChannelLogoutToken: vi.fn() }));
@@ -18,6 +19,10 @@ const loginMethodService = vi.hoisted(() => ({ get: vi.fn() }));
 const recordLoginExperienceMetric = vi.hoisted(() => vi.fn());
 const identityProviderRepository = vi.hoisted(() => ({ findOne: vi.fn(), find: vi.fn() }));
 const refreshTokenRepository = vi.hoisted(() => ({ update: vi.fn() }));
+const tenantService = vi.hoisted(() => ({
+  getById: vi.fn(),
+  ensureSsoMember: vi.fn(),
+}));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({ loginMethodService }));
@@ -27,6 +32,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayServi
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService }));
 vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/TenantService.js', () => ({ tenantService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
   getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
 }));
@@ -76,10 +82,12 @@ describe('provider-neutral OIDC routes', () => {
     genericSamlService.validatePostLogoutResponse.mockResolvedValue(undefined);
     genericSamlService.validateRedirectLogoutResponse.mockResolvedValue(undefined);
     samlAssertionReplayService.consume.mockResolvedValue(undefined);
-    authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900 });
+    authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, tenantId: 'tenant-default' });
     identityProviderRepository.findOne.mockResolvedValue(provider);
     identityProviderRepository.find.mockResolvedValue([]);
     refreshTokenRepository.update.mockResolvedValue({ affected: 1 });
+    tenantService.getById.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active' });
+    tenantService.ensureSsoMember.mockResolvedValue(undefined);
     app = express();
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
@@ -129,18 +137,22 @@ describe('provider-neutral OIDC routes', () => {
     expect(loginMethodService.get).toHaveBeenCalledWith(null);
   });
 
-  it('resolves tenant-scoped discovery and binds the slug into provider state', async () => {
-    const methods = await request(app).get('/api/t/acme/auth/login-methods');
+  it('resolves default-tenant discovery and binds the canonical slug into provider state', async () => {
+    const methods = await request(app).get('/api/t/default/auth/login-methods');
     expect(methods.status).toBe(200);
     expect(loginMethodService.get).toHaveBeenCalledWith('tenant-default');
 
-    const start = await request(app).get('/api/t/acme/auth/providers/provider-1/start').redirects(0);
+    const start = await request(app).get('/api/t/default/auth/providers/provider-1/start').redirects(0);
     expect(start.status).toBe(302);
     expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith('provider-1', 'tenant-default');
     const authorizationCalls = genericOidcService.createAuthorizationRequest.mock.calls;
     const encodedState = authorizationCalls[authorizationCalls.length - 1]?.[1];
     const state = parseSignedOidcState(encodedState);
-    expect(state).toMatchObject({ tenantSlug: 'acme', providerId: 'provider-1' });
+    expect(state).toMatchObject({ tenantSlug: 'default', providerId: 'provider-1' });
+  });
+
+  it('does not treat an arbitrary slug as the single OSS tenant', async () => {
+    expect((await request(app).get('/api/t/acme/auth/login-methods')).status).toBe(404);
   });
 
   it('starts OIDC login through the exact provider id', async () => {
@@ -164,6 +176,108 @@ describe('provider-neutral OIDC routes', () => {
     expect(identityProviderProvisioningService.reconcileOidcLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1', identityProviderUpdatedAt: 1234 }));
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'oidc', event: 'succeeded' }));
+  });
+
+  it('preserves the legacy single-mode root callback after default-tenant ownership backfill', async () => {
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    identityProviderService.getByKey.mockResolvedValue(tenantProvider);
+    const state = buildSignedOidcState(
+      { params: {}, query: {} } as any,
+      tenantProvider.id,
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+    );
+
+    const response = await request(app)
+      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+
+    expect(response.status).toBe(302);
+    expect(identityProviderService.getByKey).toHaveBeenCalledWith(
+      tenantProvider.key,
+      'tenant-default',
+    );
+    expect(tenantService.ensureSsoMember).toHaveBeenCalledWith(
+      'tenant-default',
+      'user-1',
+      tenantProvider.id,
+    );
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({
+        tenantId: 'tenant-default',
+        tenantSlug: 'default',
+        identityProviderId: tenantProvider.id,
+      }),
+    );
+  });
+
+  it('binds a tenant provider session and records SSO-owned tenant membership', async () => {
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    let providerLookupContext: ReturnType<typeof getTenantDatabaseContext>;
+    identityProviderService.getByKey.mockImplementation(async () => {
+      providerLookupContext = getTenantDatabaseContext();
+      return tenantProvider;
+    });
+    const state = buildSignedOidcState(
+      { params: { tenantSlug: 'default' }, query: {} } as any,
+      'provider-1',
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+    );
+
+    const response = await request(app)
+      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+
+    expect(response.status).toBe(302);
+    expect(providerLookupContext).toEqual({
+      tenantId: 'tenant-default',
+      tenantSlug: 'default',
+    });
+    expect(tenantService.ensureSsoMember).toHaveBeenCalledWith('tenant-default', 'user-1', 'provider-1');
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({ tenantId: 'tenant-default', tenantSlug: 'default', identityProviderId: 'provider-1' }),
+    );
+  });
+
+  it('restores the signed tenant database context before a SAML callback reads its provider', async () => {
+    const samlProvider = {
+      ...provider,
+      tenantId: 'tenant-default',
+      key: 'identity.saml.main',
+      protocol: 'saml',
+      configurationJson: JSON.stringify({
+        entityId: 'enterpriseglue',
+        idpEntityId: 'https://idp.example.test',
+        callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback',
+        ssoUrl: 'https://idp.example.test/sso',
+        signingCertificateRef: 'EG_SAML_CERT',
+      }),
+    };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(samlProvider);
+    let providerLookupContext: ReturnType<typeof getTenantDatabaseContext>;
+    identityProviderService.getByKey.mockImplementation(async () => {
+      providerLookupContext = getTenantDatabaseContext();
+      return samlProvider;
+    });
+    const browser = request.agent(app);
+    await browser.get('/api/t/default/auth/providers/provider-1/start').redirects(0);
+    const relayState = genericSamlService.createAuthorizationRequest.mock.calls[0][1];
+
+    const callback = await browser
+      .post('/api/auth/providers/saml/callback')
+      .type('form')
+      .send({ SAMLResponse: 'signed-response', RelayState: relayState })
+      .redirects(0);
+
+    expect(callback.status).toBe(302);
+    expect(providerLookupContext).toEqual({
+      tenantId: 'tenant-default',
+      tenantSlug: 'default',
+    });
+    expect(tenantService.ensureSsoMember).toHaveBeenCalledWith('tenant-default', 'user-1', 'provider-1');
   });
 
   it('rejects callback state when its provider id resolves to a different same-protocol provider', async () => {
@@ -215,7 +329,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.body.user.email).toBe('person@example.test');
     expect(response.body.user.session).toEqual({
       principal: { type: 'user', id: 'user-1' },
-      tenant: { id: null },
+      tenant: { id: 'tenant-default' },
     });
     expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('accessToken='), expect.stringContaining('refreshToken=')]));
     expect(identityProviderProvisioningService.reconcileLdapLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), expect.objectContaining({
@@ -237,7 +351,7 @@ describe('provider-neutral OIDC routes', () => {
 
   it('authenticates direct LDAP only in the resolved tenant scope', async () => {
     identityProviderService.getDirectLoginProviderById.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
-    const response = await request(app).post('/api/t/acme/auth/providers/provider-1/login').send({ username: 'person@example.test', password: 'directory-password' });
+    const response = await request(app).post('/api/t/default/auth/providers/provider-1/login').send({ username: 'person@example.test', password: 'directory-password' });
     expect(response.status).toBe(200);
     expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith('provider-1', 'tenant-default');
   });

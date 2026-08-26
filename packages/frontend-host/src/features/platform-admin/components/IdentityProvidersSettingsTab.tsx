@@ -55,6 +55,8 @@ type ProviderActionError = { title: string; message: string };
 type ProviderSaveSummary = { title: string; description: string };
 
 interface IdentityProvidersSettingsTabProps {
+  tenantAdminMode?: boolean;
+  tenantId?: string | null;
   loginPolicy?: {
     localPasswordLoginMode: LocalPasswordLoginMode;
     ssoProviderSelectionMode: SsoProviderSelectionMode;
@@ -255,15 +257,28 @@ export function LoginExperiencePreview({
 }
 
 export default function IdentityProvidersSettingsTab({
+  tenantAdminMode = false,
+  tenantId = null,
   loginPolicy,
   canManageLoginPolicy = false,
   loginPolicyUnavailableReason,
   onLoginPolicyChange,
 }: IdentityProvidersSettingsTabProps = {}) {
   const queryClient = useQueryClient();
-  const resource = useMemo(() => ({ type: 'platform' as const }), []);
-  const read = useActionDecision('platform.sso.providers.read', resource);
-  const manage = useActionDecision('platform.sso.providers.manage', resource);
+  const resource = useMemo(
+    () => tenantAdminMode
+      ? ({ type: 'tenant' as const, id: tenantId })
+      : ({ type: 'platform' as const }),
+    [tenantAdminMode, tenantId],
+  );
+  const read = useActionDecision(
+    tenantAdminMode ? 'tenant.sso.providers.read' : 'platform.sso.providers.read',
+    resource,
+  );
+  const manage = useActionDecision(
+    tenantAdminMode ? 'tenant.sso.providers.manage' : 'platform.sso.providers.manage',
+    resource,
+  );
   const providersQuery = useIdentityProviders({ enabled: read.allowed });
   const [open, setOpen] = useState(false);
   const [providerStep, setProviderStep] = useState(1);
@@ -286,6 +301,9 @@ export default function IdentityProvidersSettingsTab({
   const [externalIdentityConflict, setExternalIdentityConflict] = useState<{ provider: IdentityProvider; subjectId: string; userId: string } | null>(null);
   const [externalIdentityUnlinkResult, setExternalIdentityUnlinkResult] = useState<{ providerKey: string; result: IdentityProviderExternalIdentityUnlinkResult } | null>(null);
   const savedSummaryRef = React.useRef<HTMLDivElement | null>(null);
+  const tenantScope = typeof window === 'undefined'
+    ? 'root'
+    : (window.location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)?.[1] || 'root');
   const providerViewOnly = isConfigLockedIdentityProvider(editing);
   const clearActionFeedback = () => {
     setPreviewResult(null);
@@ -293,7 +311,7 @@ export default function IdentityProvidersSettingsTab({
     setConnectionResult(null);
     setExternalIdentityUnlinkResult(null);
   };
-  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => fetchList<SsoSyncRun>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
+  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', tenantScope, historyProvider?.key], queryFn: () => fetchList<SsoSyncRun>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {

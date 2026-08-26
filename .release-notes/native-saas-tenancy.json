@@ -1,0 +1,110 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "native-saas-tenancy",
+  "type": "feature",
+  "scope": "tenancy-and-identity",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds a native single-tenant and pooled-tenancy kernel with tenant-scoped administration, independent tenant SSO providers, PostgreSQL isolation controls, and shard-routing contracts.",
+  "userImpact": [
+    "Existing OSS installations remain in single mode with one canonical tenant and no required multi-tenant navigation.",
+    "The pooled-tenancy kernel can resolve real tenants, administer tenant memberships, and apply tenant context to projects, engines, identity, plugins, notifications, and audit activity while the full production qualification matrix remains gated.",
+    "Each tenant can configure independent OIDC, SAML, or LDAP login providers and login policy without exposing another tenant's providers or identities.",
+    "A pooled platform login provides work-email organization discovery, a workspace-name fallback, and email-verified membership selection while direct tenant URLs remain the authoritative shortest path."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Back up the database and deploy the expand/backfill migrations while retaining the default single tenancy mode.",
+      "Verify the migration, forced-RLS, restricted-database-role, route-inventory, and tenant-isolation readiness checks before enabling pooled mode.",
+      "Enable pooled mode only on PostgreSQL after the application role, row-level security policies, distributed coordination, tenant routing, and two-tenant isolation checks pass."
+    ]
+  },
+  "configuration": [
+    "Adds an explicit tenancy mode with `single` as the backward-compatible default and `pooled` as an opt-in mode that remains unsupported for production until the published readiness gates pass.",
+    "Adds trusted tenant-routing and PostgreSQL pooled-isolation readiness settings; unsupported pooled database combinations fail at startup.",
+    "Existing single-mode configuration remains valid."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds tenant lifecycle, membership, login-policy, domain/alias, verified organization-discovery domain, capability, tenant-switch, and tenant-scoped identity-provider administration contracts.",
+      "Adds rate-limited public organization-discovery request and single-use discovery-token exchange contracts; neither contract creates a session or grants tenant membership.",
+      "Tenant-scoped routes resolve one canonical tenant in pooled mode; backward-compatible root tenant routes remain available only in single mode.",
+      "Adds narrow signed placement and shard-capability contracts for a private SaaS control plane without granting it in-request tenant authorization."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000124-add-native-saas-tenancy",
+      "1700000000125-backfill-native-tenant-ownership",
+      "1700000000126-add-postgres-tenant-rls"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "Adds canonical tenant lifecycle, verified routing and organization-discovery domains, single-use organization-discovery challenges, tenant login policy, placement state, and tenant binding for refresh tokens and invitations.",
+      "Backfills the explicit tenant-owned table allowlist to the canonical default tenant; the ownership backfill is intentionally irreversible.",
+      "PostgreSQL pooled mode adds row-level security policies and requires a non-bypass application role; single mode remains portable across supported databases."
+    ]
+  },
+  "security": [
+    "The host resolves and verifies tenant context before login-method discovery, authentication-provider selection, resource loading, or plugin invocation.",
+    "Work-email discovery uses only DNS-verified non-consumer domains; zero and multiple matches share one fallback shape, account lookup and email delivery remain off the public response path, and membership lists require an opaque short-lived single-use email token carried in a browser-only URL fragment.",
+    "Signed SSO state binds tenant, provider, nonce, and a validated return target; OIDC uses PKCE, and external identities are keyed by tenant, provider, and immutable provider subject rather than email.",
+    "Pooled PostgreSQL isolation combines native FGA authorization, explicit ownership classification, query-scoped tenant context, forced row-level security, and a container-backed cross-tenant RLS mutation test.",
+    "Ordinary native plugins remain unable to replace tenant resolution or authentication, access the host database, or receive raw tenant secrets."
+  ],
+  "documentation": [
+    "Adds the native tenancy architecture and operating contract for modes, organization discovery, resolution, FGA membership, SSO state/session binding, data ownership, PostgreSQL RLS, distributed work, and compatibility routing.",
+    "Updates operator configuration, the configuration matrix, production examples, upgrade guidance, and shard-routing requirements.",
+    "Keeps the product roadmap and private-control-plane plan outside the OSS repository."
+  ],
+  "knownLimitations": [
+    "The first pooled release supports PostgreSQL; other supported databases remain available in single mode.",
+    "The disposable pooled browser lane passes separate OIDC, SAML, and LDAP tenant logins, but customer-specific external identity-provider certification remains a pre-production responsibility.",
+    "Pooled mode is not production-ready until the remaining inherited-data, background-work, plugin, multi-replica, migration, restore, and rollback qualification gates pass.",
+    "Billing, subscription, fleet placement policy, metering, commercial entitlements, certificate automation, and tenant movement orchestration remain private SaaS responsibilities.",
+    "Cross-region active-active tenant writes and automatic identity linking by email are not supported.",
+    "Organization discovery is shard-local in the first OSS slice; fleet-wide cross-shard identity continuity remains a private SaaS control-plane responsibility."
+  ],
+  "rollback": [
+    "Return the deployment to single mode before downgrading and verify that only the canonical default tenant remains active in that deployment.",
+    "Disable pooled tenant routing and tenant-specific login enforcement before rolling back application packages.",
+    "The ownership backfill is irreversible and the foundation down migration removes new pooled-tenancy records; restore the pre-upgrade backup for a complete rollback."
+  ],
+  "validation": [
+    "The native pooled end-to-end lane runs a compiled application with forced PostgreSQL RLS under a restricted role, routes a verified work email through the neutral organization finder, and completes segregated OIDC, SAML, and LDAP browser logins for three tenants in one shard.",
+    "The pooled lane verifies provider discovery and administration isolation, including tenant-admin denial on a sibling tenant, cross-tenant routing denial, tenant-bound sessions, membership visibility, and immediate session rejection after membership removal.",
+    "Change-aware CI runs the pooled lane for native tenancy and tenant SSO changes and retains deterministic tenant administration, organization finder, tenant picker, narrow-screen, and 200% zoom evidence.",
+    "Organization-discovery tests cover verified and unverified domains, consumer-domain rejection, zero/multiple match privacy, single-use membership tokens, the neutral Carbon login finder, workspace fallback, and continued tenant-specific SSO routing.",
+    "Run clean-install and upgrade verification for single mode across every supported OSS database and complete the remaining background-work, plugin, multi-replica, customer-provider, migration, restore, and rollback qualification matrix.",
+    "Run release-note, documentation-boundary, OpenAPI, package, TypeScript, build, and security preflight checks."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.7.0",
+      "newVersion": "0.8.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.6.1",
+      "newVersion": "0.7.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.8.0",
+      "newVersion": "0.9.0",
+      "impact": "minor"
+    }
+  ]
+}

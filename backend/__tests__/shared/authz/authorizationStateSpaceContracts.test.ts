@@ -174,10 +174,10 @@ describe('authorization state-space contract', () => {
       actionCount: AUTHZ_ACTIONS.length,
     });
 
-    // The expanded authorization surface adds four more canonical action
-    // identities; the independent tensor still covers every generated action
-    // combination rather than silently retaining the previous catalog size.
-    expect(summary.rawTupleCount).toBe(153_820_800);
+    // The expanded authorization surface adds tenant-scoped action identities;
+    // the independent tensor still covers every generated action combination
+    // rather than silently retaining the previous catalog size.
+    expect(summary.rawTupleCount).toBe(158_760_000);
     expect(summary.compressedCellCount).toBe(105_840);
     expect(summary.applicableCellCount).toBeGreaterThan(0);
     expect(summary.invalidCompressedCellCount).toBeGreaterThan(0);

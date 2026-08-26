@@ -43,8 +43,12 @@ class AuthService {
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     try {
+      const tenantMatch = window.location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
+      const loginPath = tenantMatch?.[1]
+        ? `${API_BASE_URL}/t/${encodeURIComponent(decodeURIComponent(tenantMatch[1]))}/auth/login`
+        : `${API_BASE_URL}/auth/login`;
       return await apiClient.post<LoginResponse>(
-        `${API_BASE_URL}/auth/login`,
+        loginPath,
         credentials,
         { headers: { Authorization: '' } }
       );

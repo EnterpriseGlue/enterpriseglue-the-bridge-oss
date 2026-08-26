@@ -56,7 +56,9 @@ export function createSamlRequestId(): string {
 }
 
 export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }, samlRequestId?: string): string {
-  const tenantSlug = sanitizeTenantSlug(req.params?.tenantSlug) || sanitizeTenantSlug(req.query.tenantSlug);
+  const tenantSlug = sanitizeTenantSlug(req.params?.tenantSlug)
+    || sanitizeTenantSlug(req.query.tenantSlug)
+    || sanitizeTenantSlug(req.tenant?.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
   const payload: SsoState = {
     timestamp: Date.now(),

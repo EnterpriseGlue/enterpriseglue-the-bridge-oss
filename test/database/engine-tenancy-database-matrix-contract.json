@@ -53,6 +53,10 @@
     {
       "id": "pre_external_identity_and_project_tenancy",
       "description": "Populated external registration and tenantless project authorization rows immediately before ownership migrations 0108 and 0109."
+    },
+    {
+      "id": "v0_16_2_pre_native_saas_tenancy",
+      "description": "A populated v0.16.2-equivalent schema immediately before native SaaS tenancy authority, ownership backfill, and PostgreSQL RLS migrations 0124 through 0126."
     }
   ],
   "requiredStages": [
@@ -154,6 +158,47 @@
       "tenant_id",
       "resource_type",
       "resource_id"
+    ],
+    "tenants": [
+      "id",
+      "name",
+      "slug",
+      "status",
+      "placement_key",
+      "placement_epoch",
+      "created_by_user_id"
+    ],
+    "tenant_domains": [
+      "tenant_id",
+      "hostname",
+      "status",
+      "verification_token_hash",
+      "verified_at"
+    ],
+    "tenant_discovery_domains": [
+      "tenant_id",
+      "domain",
+      "status",
+      "verification_token_hash",
+      "verified_at"
+    ],
+    "tenant_discovery_challenges": [
+      "user_id",
+      "token_hash",
+      "expires_at",
+      "consumed_at"
+    ],
+    "tenant_login_policies": [
+      "tenant_id",
+      "local_password_mode",
+      "provider_selection_mode",
+      "updated_by_user_id"
+    ],
+    "refresh_tokens": [
+      "tenant_id"
+    ],
+    "invitations": [
+      "tenant_id"
     ]
   },
   "requiredIndexes": {
@@ -179,6 +224,30 @@
     "external_engine_registrations": [
       "uq_external_engine_registrations_source_identity",
       "uq_external_engine_registrations_active_external_identity"
+    ],
+    "tenants": [
+      "idx_tenants_status"
+    ],
+    "tenant_domains": [
+      "idx_tenant_domains_tenant"
+    ],
+    "tenant_discovery_domains": [
+      "uq_tenant_discovery_domains_tenant_domain",
+      "idx_tenant_discovery_domains_lookup",
+      "idx_tenant_discovery_domains_tenant"
+    ],
+    "tenant_discovery_challenges": [
+      "idx_tenant_discovery_challenges_token",
+      "uq_tenant_discovery_challenges_user"
+    ],
+    "tenant_login_policies": [
+      "uq_tenant_login_policies_tenant"
+    ],
+    "refresh_tokens": [
+      "idx_refresh_tokens_tenant"
+    ],
+    "invitations": [
+      "idx_invitations_tenant"
     ]
   }
 }

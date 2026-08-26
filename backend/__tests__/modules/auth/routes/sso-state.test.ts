@@ -41,6 +41,25 @@ describe('provider-neutral SSO state', () => {
     expect(parseSignedSamlState(oidc)).toBeNull();
   });
 
+  it('binds verified-hostname SSO starts to the resolved tenant', () => {
+    const hostnameRequest = {
+      params: {},
+      query: {},
+      tenant: { tenantId: 'tenant-1', tenantSlug: 'acme' },
+    } as unknown as Request;
+
+    const parsed = parseSignedOidcState(buildSignedOidcState(
+      hostnameRequest,
+      'provider-1',
+      { key: 'identity.oidc.main', tenantId: 'tenant-1' },
+    ));
+
+    expect(parsed).toMatchObject({
+      tenantSlug: 'acme',
+      identityProviderTenantId: 'tenant-1',
+    });
+  });
+
   it('rejects expired and materially future-dated state', () => {
     expect(parseSsoState(encode(Date.now() - 10 * 60 * 1000 - 1))).toBeNull();
     expect(parseSsoState(encode(Date.now() + 2 * 60 * 1000))).toBeNull();

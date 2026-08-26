@@ -37,7 +37,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
   const user = await userRepo.findOneByOrFail({ id: result.user.id });
   const capabilities = await buildUserCapabilities({
     userId: user.id,
-    tenantId: req.tenant?.tenantId || null,
+    tenantId: result.tenantId || null,
   });
   const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
   const now = Date.now();
@@ -48,6 +48,8 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
   });
 
   const session = await authSessionService.issue(user, {
+    tenantId: result.tenantId,
+    tenantSlug: result.tenantSlug,
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
   });
@@ -85,7 +87,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
       capabilities,
       isEmailVerified: true,
       mustResetPassword: false,
-      session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+      session: createAuthenticatedSessionContext(user.id, result.tenantId || null),
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: false,

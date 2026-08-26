@@ -1,6 +1,6 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
-import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification } from '@carbon/react';
+import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, Tile } from '@carbon/react';
 import { Login as LoginIcon } from '@carbon/icons-react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient } from '../shared/api/client';
@@ -9,6 +9,7 @@ import PublicAuthShell from '../shared/components/PublicAuthShell';
 import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
+import { getTenancyCapabilities } from '../services/tenancy';
 import type {
   PublicLoginMethodsResponse,
   PublicLoginProvider,
@@ -18,14 +19,27 @@ import type { LoginResponse } from '../shared/types/auth';
 const DEFAULT_TENANT_SLUG = 'default';
 
 const SSO_AUTO_REDIRECT_BLOCK_UNTIL_KEY = 'eg.sso.autoRedirect.blockUntil';
+const TENANT_DISCOVERY_EMAIL_KEY = 'eg.tenancy.discoveryEmail';
 const SSO_REDIRECT_TRANSITION_MS = 600;
 
 interface LoginLocationState {
   from?: { pathname?: unknown };
 }
 
-type LoginField = 'email' | 'password' | 'discoveryEmail' | 'ldapUsername' | 'ldapPassword';
+type LoginField = 'email' | 'password' | 'discoveryEmail' | 'workspace' | 'ldapUsername' | 'ldapPassword';
 type LoginErrorFocusTarget = 'notification' | 'email' | 'ldap-username';
+
+interface TenantDiscoveryMembership {
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  tenantStatus: 'active' | 'suspended' | 'deleting';
+  role: 'admin' | 'member';
+}
+
+type TenantDiscoveryResult =
+  | { status: 'resolved'; tenantSlug: string; loginPath: string }
+  | { status: 'verification_sent'; message: string };
 
 function sentence(value: string): string {
   const trimmed = value.trim();
@@ -40,6 +54,11 @@ function emailFieldError(value: string, label: string): string | null {
   const requiredError = requiredFieldError(value, label);
   if (requiredError) return requiredError;
   return /^[^\s@]+@[^\s@]+$/.test(value.trim()) ? null : 'Enter a valid email address';
+}
+
+function workspaceSlug(value: string): string | null {
+  const normalized = value.trim().toLowerCase();
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalized) ? normalized : null;
 }
 
 function providerLoginPath(provider: PublicLoginProvider, slug: string | null): string {
@@ -73,10 +92,21 @@ export default function Login() {
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null;
   const isAdministratorRecovery = /(?:^|\/)admin-recovery\/?$/.test(location.pathname);
+  const tenancyCapabilities = getTenancyCapabilities();
+  const isOrganizationFinder = tenancyCapabilities.mode === 'pooled'
+    && tenancyCapabilities.organizationDiscoveryEnabled
+    && !tenantSlug
+    && !isAdministratorRecovery;
   const forgotPasswordPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/forgot-password` : '/forgot-password';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [workspace, setWorkspace] = useState('');
+  const [organizationStep, setOrganizationStep] = useState<'email' | 'workspace' | 'tenants'>('email');
+  const [organizationChoices, setOrganizationChoices] = useState<TenantDiscoveryMembership[]>([]);
+  const [organizationNotice, setOrganizationNotice] = useState<string | null>(null);
+  const [organizationError, setOrganizationError] = useState<string | null>(null);
+  const [organizationLoading, setOrganizationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loginMethods, setLoginMethods] = useState<PublicLoginMethodsResponse | null>(null);
   const [directLdapProvider, setDirectLdapProvider] = useState<PublicLoginProvider | null>(null);
@@ -94,6 +124,7 @@ export default function Login() {
   const chooserHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
   const hasAppliedFirstFocusableState = useRef(false);
+  const hasExchangedDiscoveryToken = useRef(false);
 
   const touchFields = useCallback((...fields: LoginField[]) => {
     setTouchedFields((current) => {
@@ -116,11 +147,20 @@ export default function Login() {
   const emailError = touchedFields.email ? emailFieldError(email, 'Email') : null;
   const passwordError = touchedFields.password ? requiredFieldError(password, 'Password') : null;
   const discoveryEmailError = touchedFields.discoveryEmail ? emailFieldError(email, 'Work email') : null;
+  const workspaceError = touchedFields.workspace && !workspaceSlug(workspace)
+    ? 'Use 1–63 lowercase letters, numbers, or hyphens'
+    : null;
   const ldapUsernameError = touchedFields.ldapUsername ? requiredFieldError(email, 'Username') : null;
   const ldapPasswordError = touchedFields.ldapPassword ? requiredFieldError(password, 'Password') : null;
   
   // The public contract contains only policy-resolved, sanitized login methods.
   const loadLoginMethods = useCallback(() => {
+    if (isOrganizationFinder) {
+      setSsoLoading(false);
+      setLoginMethodsUnavailable(false);
+      setLoginMethods(null);
+      return;
+    }
     if (isAdministratorRecovery) {
       setSsoLoading(false);
       setLoginMethodsUnavailable(false);
@@ -140,14 +180,25 @@ export default function Login() {
         setLoginMethodsUnavailable(true);
       })
       .finally(() => setSsoLoading(false));
-  }, [isAdministratorRecovery, tenantSlug]);
+  }, [isAdministratorRecovery, isOrganizationFinder, tenantSlug]);
 
   useEffect(() => {
     loadLoginMethods();
   }, [loadLoginMethods]);
 
   useEffect(() => {
-    if (isAuthLoading || !isAuthenticated) return;
+    if (!tenantSlug) return;
+    try {
+      const discoveredEmail = window.sessionStorage.getItem(TENANT_DISCOVERY_EMAIL_KEY);
+      if (!email && discoveredEmail) setEmail(discoveredEmail);
+      window.sessionStorage.removeItem(TENANT_DISCOVERY_EMAIL_KEY);
+    } catch {
+      // Browser storage is an optional convenience and never tenant authority.
+    }
+  }, [email, tenantSlug]);
+
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated || isOrganizationFinder) return;
 
     const params = new URLSearchParams(location.search);
     if (params.get('error')) return;
@@ -155,7 +206,7 @@ export default function Login() {
     const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`;
     const fromRaw = (location.state as LoginLocationState | null)?.from?.pathname;
     navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
-  }, [isAuthLoading, isAuthenticated, location.search, location.state, navigate, tenantSlug]);
+  }, [isAuthLoading, isAuthenticated, isOrganizationFinder, location.search, location.state, navigate, tenantSlug]);
 
   // Handle OAuth error messages (success now redirects directly to root)
   useEffect(() => {
@@ -176,6 +227,81 @@ export default function Login() {
       navigate(toSafeInternalPath(location.pathname, '/login'), { replace: true });
     }
   }, [location, navigate]);
+
+  const openTenantLogin = useCallback((slugValue: string, prefillEmail?: string) => {
+    const slug = workspaceSlug(slugValue);
+    if (!slug) {
+      setOrganizationError('Enter a valid organization name using letters, numbers, or hyphens.');
+      return;
+    }
+    if (prefillEmail) {
+      try { window.sessionStorage.setItem(TENANT_DISCOVERY_EMAIL_KEY, prefillEmail.trim().toLowerCase()); }
+      catch { /* optional convenience only */ }
+    }
+    navigate(`/t/${encodeURIComponent(slug)}/login`, { replace: true });
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!isOrganizationFinder || hasExchangedDiscoveryToken.current) return;
+    const token = new URLSearchParams(location.hash.replace(/^#/, '')).get('discovery_token');
+    if (!token) return;
+    hasExchangedDiscoveryToken.current = true;
+    navigate('/login', { replace: true });
+    setOrganizationLoading(true);
+    setOrganizationError(null);
+    apiClient.post<{ tenants: TenantDiscoveryMembership[] }>('/api/auth/tenant-discovery/exchange', { token })
+      .then(({ tenants }) => {
+        const active = tenants.filter((tenant) => tenant.tenantStatus === 'active');
+        if (active.length === 1) {
+          openTenantLogin(active[0].tenantSlug);
+          return;
+        }
+        if (active.length > 1) {
+          setOrganizationChoices(active);
+          setOrganizationStep('tenants');
+          return;
+        }
+        setOrganizationError('No active organization is available for this link. Try your work email or organization name.');
+      })
+      .catch(() => setOrganizationError('This organization link is invalid or has expired. Request a new link.'))
+      .finally(() => setOrganizationLoading(false));
+  }, [isOrganizationFinder, location.hash, navigate, openTenantLogin]);
+
+  const handleOrganizationEmailSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    touchFields('discoveryEmail');
+    if (emailFieldError(email, 'Work email')) {
+      window.requestAnimationFrame(() => document.getElementById('organization-discovery-email')?.focus({ preventScroll: true }));
+      return;
+    }
+    setOrganizationLoading(true);
+    setOrganizationError(null);
+    setOrganizationNotice(null);
+    try {
+      const result = await apiClient.post<TenantDiscoveryResult>('/api/auth/tenant-discovery', { email: email.trim().toLowerCase() });
+      if (result.status === 'resolved') {
+        openTenantLogin(result.tenantSlug, email);
+        return;
+      }
+      setOrganizationNotice(result.message);
+    } catch (error) {
+      setOrganizationError(parseApiError(error, 'Organization discovery is unavailable').message);
+    } finally {
+      setOrganizationLoading(false);
+    }
+  };
+
+  const handleWorkspaceSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    touchFields('workspace');
+    if (!workspaceSlug(workspace)) {
+      setOrganizationError('Enter a valid organization name using letters, numbers, or hyphens.');
+      window.requestAnimationFrame(() => document.getElementById('organization-slug')?.focus({ preventScroll: true }));
+      return;
+    }
+    setOrganizationError(null);
+    openTenantLogin(workspace);
+  };
 
   const beginProviderRedirect = useCallback((provider: PublicLoginProvider) => {
     if (redirectTimerRef.current !== null) window.clearTimeout(redirectTimerRef.current);
@@ -423,6 +549,104 @@ export default function Login() {
     showProviderChooser,
     ssoLoading,
   ]);
+
+  useEffect(() => {
+    if (!isOrganizationFinder || organizationLoading) return;
+    const id = organizationStep === 'email'
+      ? 'organization-discovery-email'
+      : organizationStep === 'workspace'
+        ? 'organization-slug'
+        : 'organization-picker-heading';
+    window.requestAnimationFrame(() => document.getElementById(id)?.focus({ preventScroll: true }));
+  }, [isOrganizationFinder, organizationLoading, organizationStep]);
+
+  if (isOrganizationFinder) {
+    return (
+      <PublicAuthShell title="Find your organization" homePath="/">
+        {organizationError && <InlineNotification
+          kind="error"
+          lowContrast
+          hideCloseButton
+          title="Organization unavailable"
+          subtitle={organizationError}
+          style={{ marginBottom: 'var(--spacing-5)' }}
+        />}
+        {organizationNotice && <InlineNotification
+          kind="info"
+          lowContrast
+          hideCloseButton
+          title="Check your email"
+          subtitle={organizationNotice}
+          style={{ marginBottom: 'var(--spacing-5)' }}
+        />}
+        {organizationLoading && <div role="status" aria-live="polite" style={{ padding: 'var(--spacing-4) 0' }}>
+          <InlineLoading description="Finding your organization…" />
+        </div>}
+
+        {!organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
+          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Use your work email</h2>
+          <p className="eg-login-intro-copy">We’ll use your verified work-email domain to open the right organization. Your email does not grant access.</p>
+          <div style={{ marginBottom: 'var(--spacing-6)' }}>
+            <TextInput
+              id="organization-discovery-email"
+              labelText="Work email"
+              placeholder="name@example.com"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => { updateEmail(event.target.value); setOrganizationNotice(null); setOrganizationError(null); }}
+              onBlur={() => touchFields('discoveryEmail')}
+              invalid={Boolean(discoveryEmailError)}
+              invalidText={discoveryEmailError || undefined}
+              required
+            />
+          </div>
+          <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
+          <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationNotice(null); setOrganizationStep('workspace'); }}>
+            Use an organization name instead
+          </Button>
+        </form>}
+
+        {!organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
+          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Enter your organization name</h2>
+          <p className="eg-login-intro-copy">Use the name from your EnterpriseGlue URL, for example <strong>acme</strong> from <strong>/t/acme</strong>.</p>
+          <div style={{ marginBottom: 'var(--spacing-6)' }}>
+            <TextInput
+              id="organization-slug"
+              labelText="Organization name"
+              placeholder="acme"
+              autoComplete="organization"
+              value={workspace}
+              onChange={(event) => { setWorkspace(event.target.value.toLowerCase()); setOrganizationError(null); }}
+              onBlur={() => touchFields('workspace')}
+              invalid={Boolean(workspaceError)}
+              invalidText={workspaceError || undefined}
+              required
+            />
+          </div>
+          <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
+          <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationStep('email'); }}>
+            Use work email instead
+          </Button>
+        </form>}
+
+        {!organizationLoading && organizationStep === 'tenants' && <div>
+          <h2 id="organization-picker-heading" tabIndex={-1} className="eg-login-section-heading eg-login-section-heading--with-copy">Choose an organization</h2>
+          <p className="eg-login-intro-copy">You’ll complete that organization’s own login and SSO requirements next.</p>
+          <div style={{ display: 'grid', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}>
+            {organizationChoices.map((tenant) => <Tile key={tenant.tenantId}>
+              <Button kind="ghost" size="lg" onClick={() => openTenantLogin(tenant.tenantSlug)} style={{ width: '100%', justifyContent: 'flex-start' }}>
+                {tenant.tenantName}
+              </Button>
+            </Tile>)}
+          </div>
+          <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationChoices([]); setOrganizationStep('email'); }}>
+            Use a different email
+          </Button>
+        </div>}
+      </PublicAuthShell>
+    );
+  }
 
   return (
     <PublicAuthShell

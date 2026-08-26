@@ -934,8 +934,11 @@ export function useRunSsoSyncDiagnostics() {
 }
 
 export function useIdentityProviders(options: { enabled?: boolean } = {}) {
+  const tenantScope = typeof window === 'undefined'
+    ? 'root'
+    : (window.location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)?.[1] || 'root');
   return useQuery({
-    queryKey: authzQueryKeys.identityProviders,
+    queryKey: [...authzQueryKeys.identityProviders, tenantScope],
     queryFn: () => fetchList<IdentityProvider>('/api/identity/providers'),
     enabled: options.enabled ?? true,
   });
