@@ -23,6 +23,10 @@ const productionImages = await readFile(
   new URL('./check-plugin-platform-production-images.sh', import.meta.url),
   'utf8',
 )
+const toolchainLocal = await readFile(
+  new URL('./check-plugin-toolchain-oci-local.sh', import.meta.url),
+  'utf8',
+)
 
 test('release candidate detection works for pull requests, manual runs, and merge groups', () => {
   assert.match(preflight, /is_release_pull_request:/)
@@ -75,4 +79,13 @@ test('the production image gate scans every release image', () => {
     /for image in "\$BACKEND_IMAGE" "\$FRONTEND_IMAGE" "\$INSTALLER_IMAGE" "\$MANAGER_IMAGE"/,
   )
   assert.match(productionImages, /--severity HIGH,CRITICAL/)
+})
+
+test('the local OCI drill preloads its immutable disposable registry image', () => {
+  assert.match(
+    toolchainLocal,
+    /ZOT_IMAGE="\$\{EG_PLUGIN_TOOLCHAIN_ZOT_IMAGE:-ghcr\.io\/project-zot\/zot-minimal@sha256:[a-f0-9]{64}\}"/,
+  )
+  assert.match(toolchainLocal, /docker pull "\$ZOT_IMAGE"/)
+  assert.equal([...toolchainLocal.matchAll(/--pull=never/g)].length, 2)
 })

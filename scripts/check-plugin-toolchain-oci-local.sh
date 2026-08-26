@@ -52,6 +52,8 @@ for command in docker helm oras cosign curl jq node; do
   fi
 done
 
+docker pull "$ZOT_IMAGE" >/dev/null
+
 RUNTIME_CHART_VERSION="$(
   sed -n 's/^version:[[:space:]]*//p' \
     "$ROOT_DIR/infra/kubernetes/helm/enterpriseglue-plugin-runtime/Chart.yaml"
