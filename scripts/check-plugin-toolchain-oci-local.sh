@@ -13,6 +13,8 @@ TARGET_REGISTRY_NAME="eg-plugin-toolchain-target-${PPID}-$$"
 ZOT_IMAGE="${EG_PLUGIN_TOOLCHAIN_ZOT_IMAGE:-ghcr.io/project-zot/zot-minimal@sha256:892f2a5a63dd99bdf85320fee5448506119328a6d5e1a2d14d4db876be595236}"
 INSTALLER_LOCAL_IMAGE="enterpriseglue/plugin-installer:toolchain-oci-local"
 WORK="$(mktemp -d "$ROOT_DIR/.plugin-toolchain-oci-local.XXXXXX")"
+INSTALLER_OCI_LAYOUT="$WORK/plugin-installer.oci.tar"
+INSTALLER_OCI_LAYOUT_REFERENCE="$INSTALLER_OCI_LAYOUT:${INSTALLER_LOCAL_IMAGE##*:}"
 CHART_OUTPUT="$WORK/charts"
 REPRO_OUTPUT="$WORK/charts-repro"
 PULL_OUTPUT="$WORK/pulled"
@@ -73,14 +75,14 @@ fi
 
 docker buildx build \
   "${BUILDX_BUILDER_ARGS[@]}" \
-  --load \
   --provenance=false \
   --sbom=false \
+  --output "type=oci,dest=$INSTALLER_OCI_LAYOUT" \
   --quiet \
   --file "$ROOT_DIR/packages/plugin-installer/Dockerfile" \
   --tag "$INSTALLER_LOCAL_IMAGE" \
   "$ROOT_DIR"
-docker image inspect "$INSTALLER_LOCAL_IMAGE" >/dev/null
+oras manifest fetch --oci-layout "$INSTALLER_OCI_LAYOUT_REFERENCE" >/dev/null
 
 docker run --detach \
   --name "$REGISTRY_NAME" \
@@ -133,8 +135,11 @@ helm push --plain-http "$RBAC_ARCHIVE" \
   "oci://$REGISTRY/enterpriseglue/charts" >/dev/null
 
 INSTALLER_TAG="$REGISTRY/enterpriseglue/plugin-installer:$VERSION-local"
-docker tag "$INSTALLER_LOCAL_IMAGE" "$INSTALLER_TAG"
-docker push "$INSTALLER_TAG" >/dev/null
+oras cp \
+  --from-oci-layout \
+  --to-plain-http \
+  "$INSTALLER_OCI_LAYOUT_REFERENCE" \
+  "$INSTALLER_TAG" >/dev/null
 
 INSTALLER_DIGEST="$(oras resolve --plain-http "$INSTALLER_TAG")"
 RUNTIME_TAG="$REGISTRY/enterpriseglue/charts/enterpriseglue-plugin-runtime:$VERSION"
