@@ -57,6 +57,7 @@ vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   config: {
     frontendUrl: 'http://frontend.test',
     nodeEnv: 'test',
+    tenancyMode: 'single',
     jwtAccessTokenExpires: 900,
     jwtRefreshTokenExpires: 604800,
   },
@@ -441,6 +442,7 @@ describe('InvitationService', () => {
       }),
     );
     expect(projectMemberService.addMember).toHaveBeenCalledWith('project-1', 'user-1', ['delegate', 'viewer'], 'admin-1');
+    expect(assignRole).not.toHaveBeenCalled();
     expect((projectMemberService.addMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
       managerInvitationRepo.update.mock.invocationCallOrder[0],
     );
@@ -503,6 +505,7 @@ describe('InvitationService', () => {
     await service.completeInvitation('inv-1', 'StrongPass!123');
 
     expect(engineService.addEngineMember).toHaveBeenCalledWith('engine-1', 'user-1', 'deployer', 'admin-1');
+    expect(assignRole).not.toHaveBeenCalled();
     expect((engineService.addEngineMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
       managerInvitationRepo.update.mock.invocationCallOrder[0],
     );

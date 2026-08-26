@@ -56,7 +56,14 @@ describe('TenantService placement assertions', () => {
 });
 
 describe('TenantService SSO membership', () => {
+  const originalMode = config.tenancyMode;
+
+  afterEach(() => {
+    (config as any).tenancyMode = originalMode;
+  });
+
   it('records provider-owned tenant membership in native FGA', async () => {
+    (config as any).tenancyMode = 'pooled';
     getDataSource.mockResolvedValue({
       getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'tenant-1', status: 'active' }) }),
     });
@@ -73,6 +80,18 @@ describe('TenantService SSO membership', () => {
       source: 'sso',
       sourceRef: 'provider-1',
     }));
+  });
+
+  it('does not broaden single-mode SSO access with a tenant-wide viewer role', async () => {
+    (config as any).tenancyMode = 'single';
+    getDataSource.mockResolvedValue({
+      getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'tenant-default', status: 'active' }) }),
+    });
+    const service = new TenantService();
+
+    await service.ensureSsoMember('tenant-default', 'user-1', 'provider-1');
+
+    expect(assignRole).not.toHaveBeenCalled();
   });
 
   it('replaces a manual administrator role when the member is demoted', async () => {

@@ -475,19 +475,25 @@ export class InvitationService {
       }
 
       const tenantId = invitation.tenantId || OSS_DEFAULT_TENANT_ID;
-      await permissionService.assignRole({
-        tenantId,
-        principalType: 'user',
-        principalId: user.id,
-        roleId: invitation.resourceType === 'tenant' && invitation.resourceRole === 'admin'
-          ? NATIVE_TENANT_ROLE_IDS.ADMIN
-          : NATIVE_TENANT_ROLE_IDS.VIEWER,
-        scopeType: 'tenant',
-        scopeId: tenantId,
-        source: 'manual',
-        sourceRef: invitation.id,
-        createdById: invitation.createdByUserId || user.id,
-      }, manager);
+      // In pooled mode the invitation must establish tenant membership before
+      // resource access can be used. A legacy single-mode project or engine
+      // invitation must retain its historical resource-only scope instead of
+      // implicitly granting tenant-wide Viewer access.
+      if (config.tenancyMode === 'pooled' || invitation.resourceType === 'tenant') {
+        await permissionService.assignRole({
+          tenantId,
+          principalType: 'user',
+          principalId: user.id,
+          roleId: invitation.resourceType === 'tenant' && invitation.resourceRole === 'admin'
+            ? NATIVE_TENANT_ROLE_IDS.ADMIN
+            : NATIVE_TENANT_ROLE_IDS.VIEWER,
+          scopeType: 'tenant',
+          scopeId: tenantId,
+          source: 'manual',
+          sourceRef: invitation.id,
+          createdById: invitation.createdByUserId || user.id,
+        }, manager);
+      }
 
       await revokeOutstandingInvitations(manager.getRepository(Invitation), now, {
         userId: invitation.userId,

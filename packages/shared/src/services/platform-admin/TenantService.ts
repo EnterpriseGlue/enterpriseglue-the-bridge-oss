@@ -315,6 +315,11 @@ export class TenantService {
   async ensureSsoMember(tenantId: string, userId: string, providerId: string): Promise<void> {
     const tenant = await this.getById(tenantId);
     if (!tenant || tenant.status !== 'active') throw Errors.notFound('Tenant');
+    // Pooled sessions require an explicit native tenant membership. Single
+    // mode already treats the default tenant as the compatibility boundary;
+    // assigning tenant.viewer there would silently broaden an existing SSO
+    // user's fine-grained project and engine grants to the whole tenant.
+    if (config.tenancyMode !== 'pooled') return;
     await permissionService.assignRole({
       tenantId,
       principalType: 'user',
