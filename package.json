@@ -231,7 +231,7 @@
     "licenses:check": "bash ./scripts/update-third-party-notices.sh --check --strict",
     "plugin-api:pack": "mkdir -p ./.artifacts && cd packages/enterprise-plugin-api && pnpm pack && mv *.tgz ../../.artifacts/",
     "plugin-installer:pack": "mkdir -p ./.artifacts && pnpm --filter @enterpriseglue/plugin-installer run build && cd packages/plugin-installer && pnpm pack && mv *.tgz ../../.artifacts/",
-    "test:plugin-toolchain-release-policy": "node --test ./scripts/publish-plugin-package-set.test.mjs ./scripts/enterpriseglue-distribution-lock.test.mjs ./scripts/helm-chart-archive.test.mjs && node ./scripts/check-plugin-toolchain-release-policy.mjs && node ./scripts/check-plugin-package-release-policy.mjs",
+    "test:plugin-toolchain-release-policy": "node --test ./scripts/publish-plugin-package-set.test.mjs ./scripts/check-workspace-dependency-version-drift.test.mjs ./scripts/enterpriseglue-distribution-lock.test.mjs ./scripts/helm-chart-archive.test.mjs && node ./scripts/check-plugin-toolchain-release-policy.mjs && node ./scripts/check-plugin-package-release-policy.mjs",
     "test:plugin-toolchain-release:local": "bash ./scripts/check-plugin-toolchain-oci-local.sh",
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"

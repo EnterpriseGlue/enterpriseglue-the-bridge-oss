@@ -9,6 +9,10 @@ const tarballVerifier = await readFile(
   new URL('./verify-plugin-package-tarballs.mjs', import.meta.url),
   'utf8',
 );
+const versionDiscipline = await readFile(
+  new URL('./check-published-package-version-discipline.sh', import.meta.url),
+  'utf8',
+);
 
 assert.match(workflow, /\bon:\n  workflow_dispatch:/);
 assert.doesNotMatch(workflow, /^  (?:push|pull_request|pull_request_target|release|schedule):/m);
@@ -36,6 +40,11 @@ assert.match(tarballVerifier, /packages\/plugin-manager\/package\.json/);
 assert.doesNotMatch(
   tarballVerifier,
   /\['@enterpriseglue\/plugin-(?:sdk|runtime|installer|manager)',\s*'\d+\.\d+\.\d+'/,
+);
+assert.match(versionDiscipline, /check-workspace-dependency-version-drift\.mjs/);
+assert.match(
+  versionDiscipline,
+  /check_package "@enterpriseglue\/plugin-manager" "packages\/plugin-manager"/,
 );
 
 const packageSetPublisher = await readFile(

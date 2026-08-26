@@ -1,0 +1,80 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-runtime-immutable-dependency-version",
+  "type": "fix",
+  "scope": "plugin-package-publication",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators",
+    "administrators"
+  ],
+  "summary": "Publishes plugin runtime 0.2.1 for plugin SDK 0.3.1, patches each dependent public package, and detects workspace dependency drift before immutable publication.",
+  "userImpact": [
+    "Plugin package consumers can install a runtime package whose declared plugin SDK dependency matches the current public SDK release."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Use @enterpriseglue/plugin-runtime 0.2.1 with @enterpriseglue/plugin-sdk 0.3.1, installer 0.2.4, Plugin Manager 0.1.4, backend host 0.7.1, frontend host 0.9.1, and the matching 0.2.4 runtime/RBAC and 0.1.4 manager Helm charts."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": [
+      "The runtime, host, installer, and manager APIs are unchanged; only their immutable package versions and resolved workspace dependency metadata change."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [],
+  "documentation": [
+    "Release notes record the corrected package dependency contracts, coupled chart versions, and publication guard."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Continue using the previous package set only as one immutable unit; no database or configuration rollback is required."
+  ],
+  "validation": [
+    "Workspace dependency version-drift regression tests",
+    "Published-package version discipline",
+    "Protected plugin package build, pack, publication, and registry verification"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-runtime",
+      "previousVersion": "0.2.0",
+      "newVersion": "0.2.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.7.0",
+      "newVersion": "0.7.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.9.0",
+      "newVersion": "0.9.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.3",
+      "newVersion": "0.2.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.3",
+      "newVersion": "0.1.4",
+      "impact": "patch"
+    }
+  ]
+}
