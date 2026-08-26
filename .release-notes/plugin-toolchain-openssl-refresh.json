@@ -1,9 +1,9 @@
 {
   "$schema": "./schema.json",
   "schemaVersion": 1,
-  "id": "plugin-installer-openssl-refresh",
+  "id": "plugin-toolchain-openssl-refresh",
   "type": "security",
-  "scope": "plugin-installer-image",
+  "scope": "plugin-toolchain-images",
   "breaking": false,
   "audiences": [
     "administrators",
@@ -11,9 +11,9 @@
     "developers",
     "security"
   ],
-  "summary": "Rebuilds the public plugin-installer image with the patched Alpine OpenSSL runtime packages required by the HIGH/CRITICAL vulnerability gate.",
+  "summary": "Rebuilds the public plugin-installer and Plugin Manager images with patched Alpine OpenSSL runtime packages required by the HIGH/CRITICAL vulnerability gate.",
   "userImpact": [
-    "Plugin-installer deployments receive patched libcrypto3 and libssl3 runtime packages without changes to installer behavior or configuration."
+    "Plugin-installer and Plugin Manager deployments receive patched libcrypto3 and libssl3 runtime packages without changes to toolchain behavior or configuration."
   ],
   "upgrade": {
     "required": true,
@@ -32,15 +32,15 @@
     "notes": []
   },
   "security": [
-    "The Alpine runtime layer upgrades installed packages before adding the installer utilities so libcrypto3 and libssl3 resolve to the repository's patched versions.",
-    "Pull-request qualification rebuilds the production installer image and rejects any remaining HIGH or CRITICAL vulnerability."
+    "Both Alpine runtime layers upgrade installed packages before adding toolchain utilities so libcrypto3 and libssl3 resolve to the repository's patched versions.",
+    "Pull-request qualification rebuilds both production toolchain images and rejects any remaining HIGH or CRITICAL vulnerability."
   ],
   "documentation": [
-    "The release fragment records the patched image, matching package versions, coupled chart versions, and vulnerability-gate validation."
+    "The release fragment records both patched images, matching package versions, coupled chart versions, and vulnerability-gate validation."
   ],
   "knownLimitations": [],
   "rollback": [
-    "Restore the previous installer image only in an isolated test environment because it does not satisfy the current vulnerability gate."
+    "Restore either previous toolchain image only in an isolated test environment because the earlier images do not satisfy the current vulnerability gate."
   ],
   "validation": [
     "Production multi-architecture plugin image build and deployability checks",
