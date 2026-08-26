@@ -61,7 +61,7 @@ package_has_relevant_changes() {
   local manifest="$2"
   local workspace_changes
 
-  if echo "$CHANGED_FILES" | grep -E "^${dir}/" | grep -Ev "^${dir}/(third_party_licenses\.json|README(\.md)?|CHANGELOG\.md|docs/)" >/dev/null; then
+  if echo "$CHANGED_FILES" | grep -E "^${dir}/" | grep -Ev "^${dir}/(Dockerfile(\..*)?|third_party_licenses\.json|README(\.md)?|CHANGELOG\.md|docs/)" >/dev/null; then
     return 0
   fi
 

@@ -42,6 +42,10 @@ assert.doesNotMatch(
   /\['@enterpriseglue\/plugin-(?:sdk|runtime|installer|manager)',\s*'\d+\.\d+\.\d+'/,
 );
 assert.match(versionDiscipline, /check-workspace-dependency-version-drift\.mjs/);
+assert.ok(
+  versionDiscipline.includes('Dockerfile(\\..*)?'),
+  'container-only Dockerfiles must not force an npm package release',
+);
 assert.match(
   versionDiscipline,
   /check_package "@enterpriseglue\/plugin-manager" "packages\/plugin-manager"/,
