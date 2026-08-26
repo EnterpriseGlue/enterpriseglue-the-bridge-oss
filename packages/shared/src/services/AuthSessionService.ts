@@ -41,6 +41,8 @@ export interface IssuedAuthSession {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  /** Effective tenant embedded in the issued browser session. */
+  tenantId: string | null;
 }
 
 /** Issues a renewable user session with optional provider lineage for targeted revocation. */
@@ -118,7 +120,7 @@ class AuthSessionService {
     } else {
       await (input.store || dataSource).getRepository(RefreshToken).insert(token);
     }
-    return { accessToken, refreshToken, expiresIn: config.jwtAccessTokenExpires };
+    return { accessToken, refreshToken, expiresIn: config.jwtAccessTokenExpires, tenantId };
   }
 }
 

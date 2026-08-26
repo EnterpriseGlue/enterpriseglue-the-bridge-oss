@@ -49,7 +49,8 @@ describe('authSessionService', () => {
   });
 
   it('binds local sessions to the native default tenant in single mode', async () => {
-    await authSessionService.issue({ id: 'user-1', email: 'person@example.test' });
+    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }))
+      .resolves.toEqual(expect.objectContaining({ tenantId: 'tenant-default' }));
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ identityProviderId: null, tenantId: 'tenant-default' }));
   });
 

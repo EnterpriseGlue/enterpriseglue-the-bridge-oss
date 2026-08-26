@@ -82,6 +82,7 @@ describe('provider-neutral OIDC browser flow', () => {
       accessToken: `access-${user.id}-${options.identityProviderId}`,
       refreshToken: `refresh-${user.id}-${options.identityProviderId}`,
       expiresIn: 900,
+      tenantId: 'tenant-default',
     }));
     app = express();
     app.use(express.json());

@@ -303,7 +303,10 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
       mustResetPassword: Boolean(user.mustResetPassword),
       capabilities,
       isEmailVerified,
-      session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+      // The response must describe the effective session that was issued. In
+      // single mode the route is intentionally unscoped for compatibility,
+      // while AuthSessionService binds the token to the native default tenant.
+      session: createAuthenticatedSessionContext(user.id, session.tenantId),
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: !isEmailVerified, // Flag for frontend

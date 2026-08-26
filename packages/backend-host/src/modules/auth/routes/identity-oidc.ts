@@ -199,7 +199,7 @@ async function setProviderSession(
     sessionId?: string | null;
     nameIdFormat?: string | null;
   },
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof authSessionService.issue>>> {
   const tenant = provider.tenantId ? await tenantService.getById(provider.tenantId) : null;
   if (config.tenancyMode === 'pooled' && (!tenant || tenant.status !== 'active')) {
     throw Errors.forbidden('Tenant is not active');
@@ -229,6 +229,7 @@ async function setProviderSession(
   const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: session.expiresIn * 1000, path: '/' };
   res.cookie('accessToken', session.accessToken, cookieOptions);
   res.cookie('refreshToken', session.refreshToken, { ...cookieOptions, maxAge: config.jwtRefreshTokenExpires * 1000 });
+  return session;
 }
 
 async function authenticateDirectLdap(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
@@ -237,7 +238,7 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
     const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
     const user = await identityProviderProvisioningService.reconcileLdapLogin(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-    await setProviderSession(req, res, user, provider, {
+    const session = await setProviderSession(req, res, user, provider, {
       mfaVerified: false,
       subjectId: identity.subjectId,
     });
@@ -250,7 +251,7 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
         firstName: user.firstName,
         lastName: user.lastName,
         platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
-        session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+        session: createAuthenticatedSessionContext(user.id, session.tenantId),
       },
       expiresIn: config.jwtAccessTokenExpires,
     }));

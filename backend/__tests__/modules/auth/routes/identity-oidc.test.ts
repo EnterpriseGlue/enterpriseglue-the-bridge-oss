@@ -82,7 +82,7 @@ describe('provider-neutral OIDC routes', () => {
     genericSamlService.validatePostLogoutResponse.mockResolvedValue(undefined);
     genericSamlService.validateRedirectLogoutResponse.mockResolvedValue(undefined);
     samlAssertionReplayService.consume.mockResolvedValue(undefined);
-    authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900 });
+    authSessionService.issue.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, tenantId: 'tenant-default' });
     identityProviderRepository.findOne.mockResolvedValue(provider);
     identityProviderRepository.find.mockResolvedValue([]);
     refreshTokenRepository.update.mockResolvedValue({ affected: 1 });
@@ -329,7 +329,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.body.user.email).toBe('person@example.test');
     expect(response.body.user.session).toEqual({
       principal: { type: 'user', id: 'user-1' },
-      tenant: { id: null },
+      tenant: { id: 'tenant-default' },
     });
     expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('accessToken='), expect.stringContaining('refreshToken=')]));
     expect(identityProviderProvisioningService.reconcileLdapLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), expect.objectContaining({

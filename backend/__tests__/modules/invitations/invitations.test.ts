@@ -159,6 +159,7 @@ describe('invitation and onboarding routes', () => {
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
       expiresIn: 900,
+      tenantId: 'tenant-default',
     });
     authState.user = { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' };
 
