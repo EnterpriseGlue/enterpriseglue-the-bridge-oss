@@ -178,6 +178,40 @@ describe('provider-neutral OIDC routes', () => {
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'oidc', event: 'succeeded' }));
   });
 
+  it('preserves the legacy single-mode root callback after default-tenant ownership backfill', async () => {
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    identityProviderService.getByKey.mockResolvedValue(tenantProvider);
+    const state = buildSignedOidcState(
+      { params: {}, query: {} } as any,
+      tenantProvider.id,
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+    );
+
+    const response = await request(app)
+      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+
+    expect(response.status).toBe(302);
+    expect(identityProviderService.getByKey).toHaveBeenCalledWith(
+      tenantProvider.key,
+      'tenant-default',
+    );
+    expect(tenantService.ensureSsoMember).toHaveBeenCalledWith(
+      'tenant-default',
+      'user-1',
+      tenantProvider.id,
+    );
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({
+        tenantId: 'tenant-default',
+        tenantSlug: 'default',
+        identityProviderId: tenantProvider.id,
+      }),
+    );
+  });
+
   it('binds a tenant provider session and records SSO-owned tenant membership', async () => {
     const tenantProvider = { ...provider, tenantId: 'tenant-default' };
     let providerLookupContext: ReturnType<typeof getTenantDatabaseContext>;

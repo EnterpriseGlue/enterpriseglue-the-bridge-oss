@@ -129,6 +129,11 @@ async function runInSsoCallbackTenantContext<T>(
     if (config.tenancyMode === 'pooled') throw Errors.unauthorized('Identity provider login is not tenant-scoped');
     return callback();
   }
+  // Migration 0125 assigns legacy single-mode providers to the default tenant,
+  // while their supported root login route intentionally carries no tenant
+  // slug. The signed provider tenant ID still scopes the lookup and session;
+  // pooled mode must always retain the explicit slug binding below.
+  if (config.tenancyMode !== 'pooled' && !state.tenantSlug) return callback();
   if (!state.tenantSlug) throw Errors.unauthorized('Identity provider tenant state is incomplete');
   const tenant = await tenantService.getById(state.identityProviderTenantId);
   if (!tenant || tenant.status !== 'active' || tenant.slug !== state.tenantSlug) {
