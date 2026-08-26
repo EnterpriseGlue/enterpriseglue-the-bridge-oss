@@ -49,7 +49,7 @@ The complete functional denominator is explicit:
 | Provisioning journeys | 14/14 |
 | Provisioning channel executions | 30/30 |
 | Database lifecycle stages | 35/35 |
-| Database upgrade-baseline observations | 25/25 |
+| Database upgrade-baseline observations | 30/30 |
 | Database logical-schema equivalence | 1 fingerprint |
 | Functional browser executions | 36/36 |
 | Browser accessibility executions | 27/27 |
@@ -130,7 +130,7 @@ pnpm run test:engine-tenancy:database-matrix
 
 It uses disposable localhost Docker containers and no deployed database or
 customer credentials. PostgreSQL, MySQL, SQL Server, Oracle, and the Spanner
-emulator must each pass clean install, all five supported upgrade baselines,
+emulator must each pass clean install, all six supported upgrade baselines,
 interrupted retry, schema equivalence, the real mapping-service transaction,
 rollback, and cleanup.
 

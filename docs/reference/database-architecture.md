@@ -20,6 +20,12 @@ Configured via `DATABASE_TYPE`:
 - `spanner`
 - `mysql`
 
+All five adapters remain supported for the backward-compatible `single`
+tenancy mode. Native `pooled` mode is PostgreSQL-only because it requires
+forced row-level security and a non-superuser, non-`BYPASSRLS` application
+role. Engine topology portability across five databases does not imply that
+pooled SaaS tenant isolation is portable to those databases.
+
 ## Schema Rules
 
 - `POSTGRES_SCHEMA` must be **non-public**.
@@ -39,6 +45,39 @@ Configured via `DATABASE_TYPE`:
 - Spanner uses explicit migration-history identifiers, native boolean and
   `INT64` types, and staged nullable/backfill/not-null changes for required
   columns.
+
+## Native SaaS Tenancy Persistence
+
+TypeORM remains authoritative for the portable tenancy entities:
+
+- `tenants` stores the immutable tenant id, canonical slug, lifecycle status,
+  placement key, and placement epoch;
+- `tenant_domains` stores verified browser-routing hostname aliases;
+- `tenant_discovery_domains` stores DNS-verified work-email discovery hints;
+- `tenant_discovery_challenges` stores one hashed, expiring, single-use
+  membership-discovery challenge per user;
+- `tenant_login_policies` stores each tenant's local-password and provider
+  selection policy; and
+- tenant-owned records, refresh tokens, and invitations carry explicit tenant
+  bindings after the ordered backfill.
+
+The shared entities are registered with every database adapter so `single`
+mode remains schema-compatible. Migration
+`1700000000124-add-native-saas-tenancy` creates the foundation,
+`1700000000125-backfill-native-tenant-ownership` assigns legacy owned rows to
+the canonical default tenant, and
+`1700000000126-add-postgres-tenant-rls` installs the PostgreSQL pooled
+backstop. The ownership backfill is intentionally irreversible; preserve a
+pre-upgrade backup for a complete rollback.
+
+In PostgreSQL pooled mode, the application establishes query-local tenant
+context and forced RLS protects the explicit tenant-owned table allowlist.
+Directory metadata needed before authentication—verified discovery domains
+and transient discovery challenges—does not use the ordinary tenant-content
+RLS predicate; access is confined to the native services and tenant-scoped
+administration routes. See
+[Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md) for the full
+authority, migration, and qualification contract.
 
 ## Engine Tenancy Persistence
 
@@ -93,7 +132,8 @@ entities, invariants, lifecycle, and current rollout status.
   This prevents a new installation from replaying historical migrations
   against a schema that already contains their final state.
 - Release qualification runs seven engine-tenancy lifecycle stages on all five
-  supported adapters and all five supported upgrade baselines.
+  supported adapters and all six supported upgrade baselines, including a
+  populated v0.16.2-equivalent native SaaS tenancy upgrade.
 
 ## Adapter Layer
 
@@ -104,5 +144,6 @@ Database-specific adapters live under
 
 - [Shared Database README](../../packages/shared/src/db/README.md)
 - [Database Migrations Guide](../../backend/docs/DATABASE-MIGRATIONS.md)
+- [Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md)
 - [Engine Tenancy Data Model](./engine-tenancy-data-model.md)
 - [Five-Database Engine Tenancy Qualification](../development/engine-tenancy-database-qualification.md)

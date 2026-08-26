@@ -10,6 +10,16 @@ const snapshot: CurrentUserPermissions = {
     'platform:settings:manage',
     'platform:authz:roles:manage',
   ],
+  tenant: {
+    resourceId: 'tenant-1',
+    permissions: [
+      'tenant:settings:view',
+      'tenant:settings:manage',
+      'tenant:members:manage',
+      'tenant:sso-providers:view',
+      'tenant:sso-providers:manage',
+    ],
+  },
   projects: [{
     resourceId: 'project-1',
     permissions: [
@@ -43,6 +53,13 @@ describe('calculateCurrentUserActionAvailability', () => {
 
     expect(result.platformActionAvailability.allowedActions).toContain('engine.inventory.create');
     expect(result.platformActionAvailability.allowedActions).toContain('platform.governance.settings.manage');
+    expect(result.tenant?.actionAvailability.allowedActions).toEqual(expect.arrayContaining([
+      'tenant.settings.read',
+      'tenant.settings.manage',
+      'tenant.members.manage',
+      'tenant.sso.providers.read',
+      'tenant.sso.providers.manage',
+    ]));
     expect(result.projects[0].actionAvailability.allowedActions).toContain('project.members.add');
     expect(result.engines[0].actionAvailability.allowedActions).toContain('engine.members.add');
   });

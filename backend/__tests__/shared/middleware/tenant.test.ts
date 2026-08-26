@@ -1,13 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
+const tenantServiceMock = vi.hoisted(() => ({
+  getById: vi.fn(),
+  getBySlug: vi.fn(),
+  getByHostname: vi.fn(),
+  verifyPlacementClaim: vi.fn(),
+  listForUser: vi.fn(),
+}));
+const getActivePlatformAdministratorUserIds = vi.hoisted(() => vi.fn());
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/TenantService.js', () => ({
+  tenantService: tenantServiceMock,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds,
+}));
+
 import {
   resolveTenantContext,
   requireTenantRole,
   checkTenantAdmin,
 } from '@enterpriseglue/shared/middleware/tenant.js';
-import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 describe('tenant middleware', () => {
+  const originalTenancyMode = config.tenancyMode;
   let req: any;
   let res: Partial<Response>;
   let next: NextFunction;
@@ -22,12 +39,24 @@ describe('tenant middleware', () => {
     res = {};
     next = vi.fn();
     vi.clearAllMocks();
+    getActivePlatformAdministratorUserIds.mockImplementation(async (userIds: string[]) => new Set(userIds.filter((id) => id === 'admin-1')));
+    tenantServiceMock.listForUser.mockResolvedValue([{
+      tenantId: 't1', tenantSlug: 'default', tenantName: 'Default', tenantStatus: 'active', role: 'admin',
+    }]);
+    tenantServiceMock.getByHostname.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    (config as any).tenancyMode = originalTenancyMode;
+    vi.restoreAllMocks();
   });
 
   it('resolves tenant context from default when multiTenant disabled', async () => {
     await resolveTenantContext()(req as Request, res as Response, next);
 
-    expect(req.tenant).toEqual({ tenantId: 'tenant-default', tenantSlug: 'default' });
+    expect(req.tenant).toEqual({
+      tenantId: 'tenant-default', tenantSlug: 'default', placementKey: 'local', placementEpoch: 1,
+    });
     expect(next).toHaveBeenCalled();
   });
 
@@ -38,6 +67,19 @@ describe('tenant middleware', () => {
 
     expect(req.tenant).toEqual({ tenantId: 'tenant-1', tenantSlug: 'acme' });
     expect(next).toHaveBeenCalled();
+  });
+
+  it('rejects a tenant route that conflicts with a verified tenant hostname', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.params = { tenantSlug: 'beta' };
+    req.hostname = 'acme.example.test';
+    tenantServiceMock.getBySlug.mockResolvedValue({ id: 'tenant-beta', slug: 'beta', status: 'active' });
+    tenantServiceMock.getByHostname.mockResolvedValue({ id: 'tenant-acme', slug: 'acme', status: 'active' });
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(req.tenant).toBeUndefined();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
   });
 
   it('requires tenant role for members', async () => {
@@ -68,7 +110,10 @@ describe('tenant middleware', () => {
 
   it('checkTenantAdmin rejects non-admin members', async () => {
     req.user = { userId: 'user-1', platformRole: 'user' };
+    tenantServiceMock.listForUser.mockResolvedValue([{
+      tenantId: 't1', tenantSlug: 'default', tenantName: 'Default', tenantStatus: 'active', role: 'member',
+    }]);
 
-    await expect(checkTenantAdmin(req as Request, 't1')).resolves.toBe(true);
+    await expect(checkTenantAdmin(req as Request, 't1')).resolves.toBe(false);
   });
 });

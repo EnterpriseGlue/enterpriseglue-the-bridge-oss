@@ -104,6 +104,15 @@ membership rejects both a concurrent recovery login and the next request or
 refresh from an already-open recovery session. Restore only the designated
 recovery membership after collecting that evidence.
 
+This bundle contract remains scoped to the canonical single/default OSS
+tenant. Native `pooled` tenant creation, membership, placement, discovery
+domains, login policy, and identity providers are managed through the tenant
+administration REST APIs and, where supported, the portal. Supplying a pooled
+tenant id as `tenantKey` or as the expected tenant scope does not route this
+platform API to that tenant. See
+[Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#control-ownership-in-the-first-pooled-oss-slice)
+for the control-ownership matrix.
+
 Database migration `1700000000105` adds the governance-settings source,
 ownership, hash, apply-time, and drift columns non-destructively. Existing
 installations retain their current five mode values and begin with
@@ -139,7 +148,7 @@ is never a bundle field or EnterpriseGlue secret reference.
 | `EG_CONFIG_BUNDLE_PATH` | Absolute JSON or ZIP file path | Read-only bootstrap bundle location; ZIP archives contain `bundle.json` and declared imported JSON files |
 | `EG_CONFIG_BOOTSTRAP_MODE` | `disabled`, `validate`, `apply` | Startup behavior; default `disabled` |
 | `EG_CONFIG_EXPECTED_SHA256` | SHA-256 or empty | Reject an unexpected mounted bundle |
-| `EG_CONFIG_EXPECTED_TENANT_SCOPE` | `platform` or tenant id | Required target scope for bootstrap apply |
+| `EG_CONFIG_EXPECTED_TENANT_SCOPE` | `platform` | Required target scope for OSS bootstrap apply; it is a fail-closed assertion, not a native pooled-tenant selector |
 | `EG_CONFIG_FAIL_CLOSED` | `true`, `false` | Keep readiness false when configured bootstrap validation/apply fails; production default `true` |
 | `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT` | `true`, `false` | Require all bundle secret references to be available before configured startup validation or apply; default `false` |
 | `EG_CONFIG_SECRET_PROVIDER` | `env`, `file`, `docker` | Resolve secret references without placing secret values in bundles |
@@ -282,7 +291,7 @@ export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"
 export ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"
 # Set a stable key for one CI run. Reusing it with different bundle input is rejected.
 export ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY="release-2026-07-13-001"
-# Use `platform` for the OSS default tenant; use the authenticated tenant ID in multi-tenant deployments.
+# Native pooled OSS bundles remain platform/default-scoped in this release.
 export ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="platform"
 # Optional: none skips stored snapshots, preview reports bounded membership
 # changes without replaying snapshots, and apply performs the bounded replay.
@@ -437,7 +446,8 @@ The repository also includes a manually dispatched GitHub Actions workflow at `.
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
 - `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for an API client with `config:bundle:manage` and an RBAC assignment granting `platform:authz:roles:manage`;
-- `ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE` as an Environment variable (`platform` for OSS default tenant, otherwise the target tenant ID);
+- `ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE` as an Environment variable
+  (`platform` for OSS; this assertion does not select a native pooled tenant);
 - `identity_reconciliation_mode` is selected on workflow dispatch: `apply` is backward-compatible default behavior, `preview` records bounded stored-snapshot impact without replaying snapshots, and `none` skips that replay;
 - required reviewers for environments that permit `apply`.
 
@@ -457,7 +467,7 @@ GET  /api/authz/config-bundles/export?bundleKey=<key>
 
 Required behavior:
 
-- [x] ✅ Require an explicit expected tenant scope for CLI applies and protected CI runs; the API rejects a mismatch with the authenticated tenant. GitHub Environment protection binds the target environment and its credentials.
+- [x] ✅ Require an explicit expected tenant scope for CLI applies and protected CI runs; the API rejects a mismatch with the authenticated scope. In this OSS release the bundle route is platform/default-scoped, including when native pooled tenancy is enabled. GitHub Environment protection binds the target environment and its credentials.
 - [x] ✅ Add persisted tenant-scoped idempotency keys. A matching completed apply replays its receipt; a key reused for other bundle input or an unfinished/failed run is rejected.
 - [x] ✅ Require the server-generated canonical preview hash on apply; the apply service rejects an altered or stale bundle.
 - [x] ✅ Allow apply callers to select `none`, `preview`, or bounded `apply` replay for affected stored identity snapshots. Replay starts after the config database transaction commits; normal source-scoped cleanup for changed or disabled config mappings remains part of that transaction.

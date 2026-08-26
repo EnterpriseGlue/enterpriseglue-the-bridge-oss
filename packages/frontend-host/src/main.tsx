@@ -25,9 +25,11 @@ import {
   loadInstalledNativePluginsV1,
 } from './plugins/nativePluginRuntime'
 import { HostContextualFlowProviderV1 } from './plugins/contextualFlowRuntime'
+import { initializeTenancyCapabilities } from './services/tenancy'
 
 export async function startApp() {
   const enterprisePlugin = await getEnterpriseFrontendPlugin()
+  await initializeTenancyCapabilities()
   await loadInstalledNativePluginsV1()
   const enterpriseRootChildren = [
     ...((enterprisePlugin.routes || []) as any[]),

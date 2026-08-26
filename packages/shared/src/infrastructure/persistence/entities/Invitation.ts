@@ -8,12 +8,16 @@ export type InvitationStatus = 'pending' | 'otp_verified' | 'completed' | 'revok
 @Entity({ name: 'invitations', schema: 'main' })
 @Index('idx_invitations_user', ['userId'])
 @Index('idx_invitations_email', ['email'])
+@Index('idx_invitations_tenant', ['tenantId', 'status'])
 export class Invitation extends AppBaseEntity {
   @Column({ name: 'user_id', type: 'text' })
   userId!: string;
 
   @Column({ name: 'email', type: 'text' })
   email!: string;
+
+  @Column({ name: 'tenant_id', type: 'text', nullable: true })
+  tenantId!: string | null;
 
   @Column({ name: 'tenant_slug', type: 'text' })
   tenantSlug!: string;

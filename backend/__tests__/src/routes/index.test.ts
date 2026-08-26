@@ -1,14 +1,24 @@
 import express from 'express';
+import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createNotificationsRouter, identityProvisioningRoute, noopMiddleware } = vi.hoisted(() => ({
+const { createNotificationsRouter, dashboardContextRoute, identityProvisioningRoute, noopMiddleware } = vi.hoisted(() => ({
   createNotificationsRouter: vi.fn(),
+  dashboardContextRoute: (req: any, res: any, next: any) => {
+    if (req.path === '/api/dashboard/context') return res.status(200).json({ healthy: true });
+    next();
+  },
   identityProvisioningRoute: vi.fn((_req: any, _res: any, next: any) => next()),
   noopMiddleware: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/tenant.js', () => ({
-  resolveTenantContext: () => noopMiddleware,
+  resolveTenantContext: () => (req: any, res: any, next: any) => {
+    if (req.get('x-test-require-route-tenant') === 'true' && !req.params?.tenantSlug) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+    next();
+  },
 }));
 
 vi.mock('@modules/starbase/index.js', () => ({
@@ -90,7 +100,7 @@ vi.mock('@modules/admin/index.js', () => ({
 
 vi.mock('@modules/dashboard/index.js', () => ({
   dashboardStatsRoute: noopMiddleware,
-  dashboardContextRoute: noopMiddleware,
+  dashboardContextRoute,
 }));
 
 vi.mock('@modules/users/index.js', () => ({
@@ -131,5 +141,17 @@ describe('backend routes index', () => {
 
     expect(createNotificationsRouter).toHaveBeenCalledWith({ tenantResolver });
     expect(app.router.stack.some((layer: { handle?: unknown }) => layer.handle === identityProvisioningRoute)).toBe(true);
+  });
+
+  it('resolves explicit tenant paths before root-shaped compatibility routes', async () => {
+    const app = express();
+    registerRoutes(app);
+
+    const response = await request(app)
+      .get('/t/alpha/api/dashboard/context')
+      .set('x-test-require-route-tenant', 'true');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ healthy: true });
   });
 });

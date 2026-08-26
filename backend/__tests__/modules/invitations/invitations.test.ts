@@ -98,6 +98,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   permissionService: {
     hasPermission: vi.fn(),
+    assignRole: vi.fn(),
   },
 }));
 
@@ -215,13 +216,16 @@ describe('invitation and onboarding routes', () => {
       invitationId: 'inv-1',
       userId: 'user-1',
       tenantSlug: 'default',
+      tenantId: 'tenant-default',
     });
     (invitationService.redeemEmailInvitation as unknown as Mock).mockResolvedValue({
       invitationId: 'inv-1',
       userId: 'user-1',
       tenantSlug: 'default',
+      tenantId: 'tenant-default',
     });
     (invitationService.completeInvitation as unknown as Mock).mockResolvedValue({
+      tenantId: 'tenant-default',
       tenantSlug: 'default',
       user: {
         id: 'user-1',
@@ -478,7 +482,7 @@ describe('invitation and onboarding routes', () => {
     expect(response.body.user.email).toBe('invitee@example.com');
     expect(response.body.user.session).toEqual({
       principal: { type: 'user', id: 'user-1' },
-      tenant: { id: null },
+      tenant: { id: 'tenant-default' },
     });
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([
@@ -495,6 +499,6 @@ describe('invitation and onboarding routes', () => {
       expect.objectContaining({ id: 'user-1', email: 'invitee@example.com' }),
       expect.objectContaining({ userAgent: null, ipAddress: expect.any(String) }),
     );
-    expect(buildUserCapabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', tenantId: null }));
+    expect(buildUserCapabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', tenantId: 'tenant-default' }));
   });
 });

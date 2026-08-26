@@ -43,6 +43,15 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   
   // Database configuration
   databaseType: z.enum(['postgres', 'oracle', 'mssql', 'spanner', 'mysql']).default('postgres'),
+
+  // Native SaaS tenancy. `single` preserves the OSS one-tenant deployment
+  // contract. `pooled` enables authoritative tenant resolution and requires
+  // PostgreSQL so database row policies can enforce the same boundary.
+  tenancyMode: z.enum(['single', 'pooled']).default('single'),
+  tenantBaseDomain: z.string().min(1).optional(),
+  tenantPlacementKey: z.string().min(32).optional(),
+  tenantPlacementMaxAgeSeconds: z.number().int().positive().max(3600).default(120),
+  tenantRlsEnforced: z.boolean().default(false),
   
   // PostgreSQL configuration (when databaseType=postgres)
   // Either POSTGRES_URL (connection string) or individual POSTGRES_HOST/PORT/USER/PASSWORD/DATABASE vars.
@@ -168,6 +177,13 @@ function loadConfig(): Config {
   const raw = {
     port: process.env.API_PORT ? Number(process.env.API_PORT) : undefined,
     databaseType: process.env.DATABASE_TYPE,
+    tenancyMode: envOrUndefined(process.env.EG_TENANCY_MODE),
+    tenantBaseDomain: envOrUndefined(process.env.EG_TENANT_BASE_DOMAIN)?.toLowerCase(),
+    tenantPlacementKey: envOrUndefined(process.env.EG_TENANT_PLACEMENT_KEY),
+    tenantPlacementMaxAgeSeconds: process.env.EG_TENANT_PLACEMENT_MAX_AGE_SECONDS
+      ? Number(process.env.EG_TENANT_PLACEMENT_MAX_AGE_SECONDS)
+      : undefined,
+    tenantRlsEnforced: process.env.EG_TENANT_RLS_ENFORCED === 'true',
     postgresUrl: process.env.POSTGRES_URL,
     postgresHost: process.env.POSTGRES_HOST || pgUrlParsed?.hostname || undefined,
     postgresPort: process.env.POSTGRES_PORT
@@ -257,6 +273,22 @@ function loadConfig(): Config {
 
 // Singleton config instance
 export const config = loadConfig();
+
+if (config.tenancyMode === 'pooled') {
+  if (config.databaseType !== 'postgres') {
+    throw new Error('EG_TENANCY_MODE=pooled requires DATABASE_TYPE=postgres.');
+  }
+  if (!config.tenantRlsEnforced) {
+    throw new Error(
+      'EG_TENANCY_MODE=pooled requires EG_TENANT_RLS_ENFORCED=true so tenant isolation cannot start without PostgreSQL row policies.'
+    );
+  }
+  if (config.nodeEnv === 'production' && !config.tenantPlacementKey) {
+    throw new Error(
+      'EG_TENANT_PLACEMENT_KEY (at least 32 characters) is required for pooled production deployments.'
+    );
+  }
+}
 
 /**
  * Determine whether auth/CSRF cookies should use the `secure` flag.
@@ -361,6 +393,7 @@ if (config.nodeEnv !== 'test') {
 console.log('✅ Configuration loaded:');
 console.log(`  - Port: ${config.port}`);
 console.log(`  - Database Type: ${config.databaseType}`);
+console.log(`  - Tenancy Mode: ${config.tenancyMode}`);
 if (config.databaseType === 'postgres') {
   if (config.postgresUrl) {
     const masked = config.postgresUrl.replace(/:([^@/]+)@/, ':***@');

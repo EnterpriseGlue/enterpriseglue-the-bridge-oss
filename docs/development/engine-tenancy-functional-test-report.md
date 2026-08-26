@@ -18,12 +18,12 @@ Firefox, and WebKit: 36 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The engine-tenancy database matrix passes PostgreSQL 18.4, MySQL 8.4.10, SQL
+The engine-tenancy database matrix passes PostgreSQL 18.6, MySQL 8.4.11, SQL
 Server 16.0.4265.3, Oracle 21.0.0.0.0, and Spanner emulator 1.5.30. All 35
-adapter/stage cells and 25/25 adapter/upgrade-baseline observations pass.
-Clean install and all five upgrade paths converge on one logical-schema
+adapter/stage cells and 30/30 adapter/upgrade-baseline observations pass.
+Clean install and all six upgrade paths converge on one logical-schema
 fingerprint:
-`95a8dc5b0d4d97026587e2e41b63ef3536cc5abe681a3d944c5111de69ae753e`.
+`557af8218b01e8cc151441bba47182b5ec00b442643e25894195da30f915c969`.
 
 The real-service provisioning suite now passes Journeys 1–14, including all
 three required channels of Journeys 7–14: fourteen of fourteen journeys and
@@ -130,7 +130,7 @@ meaning of 100% functional coverage are documented in
 | Fine-grained access browser matrix | **36** |
 | Real-service provisioning channel executions | **30** |
 | Database lifecycle stage cells | **35** |
-| Database upgrade-baseline observations | **25** |
+| Database upgrade-baseline observations | **30** |
 | Equivalent logical-schema fingerprints | **1** |
 
 The shared package build and backend/frontend type checks also passed. The

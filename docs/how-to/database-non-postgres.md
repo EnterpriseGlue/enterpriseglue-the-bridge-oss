@@ -4,6 +4,13 @@ Summary: Configure EnterpriseGlue with Oracle, SQL Server, Spanner, or MySQL.
 
 Audience: Operators, administrators, developers, and architects.
 
+Oracle, SQL Server, Spanner, and MySQL support the backward-compatible
+`EG_TENANCY_MODE=single` deployment. Do not enable native pooled SaaS tenancy
+on these adapters: `EG_TENANCY_MODE=pooled` requires PostgreSQL, forced RLS,
+and a restricted application role and fails startup on every non-Postgres
+database. Dedicated/shared *engine topology* remains portable and is a
+separate concept from hosting multiple EnterpriseGlue tenants in one database.
+
 ## Recommended: One-click Docker workflow
 
 Use `--db` with the dev launcher:
@@ -30,7 +37,8 @@ pnpm run down -- --db mysql
 ## Host-based backend workflow (without Docker DB overlays)
 
 For direct backend runs against an existing database:
-1. Configure `backend/.env` with `DATABASE_TYPE` + database-specific variables.
+1. Configure `backend/.env` with `DATABASE_TYPE`,
+   `EG_TENANCY_MODE=single`, and the database-specific variables.
 2. Run preflight checks manually:
    ```bash
    bash ./scripts/db-preflight.sh --env-file ./backend/.env --mode localhost --install-drivers true

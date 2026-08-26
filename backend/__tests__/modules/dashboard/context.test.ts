@@ -78,6 +78,7 @@ function emptyPermissions() {
   return {
     userId: 'user-1',
     platform: [],
+    tenant: null,
     projects: [],
     engines: [],
     authorizationVersion: 'authz:1700000000000:test',

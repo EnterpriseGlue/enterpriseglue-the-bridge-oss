@@ -39,7 +39,16 @@ export const TENANT_SAFE_ENGINE_PERMISSION_IDS = [
   'engine:variables:edit',
 ] as const;
 
+export const TENANT_SAFE_TENANT_PERMISSION_IDS = [
+  'tenant:settings:view',
+  'tenant:settings:manage',
+  'tenant:members:manage',
+  'tenant:sso-providers:view',
+  'tenant:sso-providers:manage',
+] as const;
+
 export const TENANT_SAFE_PERMISSION_IDS = new Set<string>([
+  ...TENANT_SAFE_TENANT_PERMISSION_IDS,
   ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
   ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
 ]);

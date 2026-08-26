@@ -413,6 +413,11 @@ async function resolveActionResource(
     return { type: 'platform', id: null };
   }
 
+  if (resolver.id === 'tenant.fromContext') {
+    if (!req.tenant?.tenantId) throw Errors.notFound('Tenant');
+    return { type: 'tenant', id: req.tenant.tenantId };
+  }
+
   const tenantId = req.tenant?.tenantId || null;
   const dataSource = await getDataSource();
 

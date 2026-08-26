@@ -4,7 +4,15 @@ Summary: Configure authentication, admin bootstrap, and SSO providers.
 
 Audience: Developers and architects.
 
-EnterpriseGlue supports provider-neutral OIDC, SAML, and LDAP identity providers. Configure them in **Platform Settings → Identity Providers** or through configuration bundles. For configuration-bundle schemas and entitlement-to-group assignments, see [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
+EnterpriseGlue supports provider-neutral OIDC, SAML, and LDAP identity
+providers. In `single` mode, configure the default scope in **Platform Settings
+→ Identity Providers**, through the root provider API, or through configuration
+bundles. In `pooled` mode, configure each organization in **Tenant sign-in and
+identity** or through `/api/t/{tenantSlug}/identity/providers`; non-default
+pooled tenant providers are not configuration-bundle managed in this slice.
+For the single/default-scope configuration-bundle schemas and
+entitlement-to-group assignments, see
+[Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
 
 Provider enablement and login enforcement are separate from access authority.
 For the exact REST/headless settings contract and the UI behavior of
@@ -171,16 +179,20 @@ machine values:
 
 **Preview membership changes** and **Check saved identities** never change
 identity or access and never contact the provider. **Apply saved membership
-data** calls `POST /api/identity/providers/{key}/replay-memberships`; it uses
+data** calls `POST /api/identity/providers/{key}/replay-memberships` in
+single/default scope or
+`POST /api/t/{tenantSlug}/identity/providers/{key}/replay-memberships` in
+pooled tenant scope; it uses
 the most recently stored provider data, does not contact the provider, and
 applies membership changes immediately. The portal requires a confirmation and
 reports checked, added, removed, failed, and remaining-record counts.
 
-**Disable provider** calls `DELETE /api/identity/providers/{key}`. In the
-current data model this sets `isEnabled` to `false`; there is no separate
-archived state. Sign-in through that provider stops and provider-managed
-memberships are removed, while mappings, refresh history, manual access, and
-API-managed access remain available for diagnosis or recovery.
+**Disable provider** uses the corresponding root or
+`/api/t/{tenantSlug}/identity/providers/{key}` `DELETE` path. In the current
+data model this sets `isEnabled` to `false`; there is no separate archived
+state. Sign-in through that provider stops and provider-managed memberships
+are removed, while mappings, refresh history, manual access, and API-managed
+access remain available for diagnosis or recovery.
 
 In local OSS, the logged-out provider chooser reads the canonical
 `tenant-default` providers first and then legacy platform-scoped provider rows
@@ -192,6 +204,16 @@ OIDC cookie-bound state and signed SAML RelayState record the selected provider
 and tenant, so the callback cannot switch scope. Do not implement multi-tenant
 login by sending `x-tenant-slug` to the global compatibility aliases.
 
+In native pooled mode, the platform `/login` page instead uses the separate
+organization-discovery contract. A tenant administrator can DNS-verify a
+work-email domain under `/api/t/{tenantSlug}/tenant/discovery-domains`.
+`POST /api/auth/tenant-discovery` may then return one canonical tenant login
+path, but it never returns providers, creates membership, or issues a session.
+Zero and multiple matches use the same response. Membership selection requires
+a short-lived single-use link sent to an existing account. This tenant lookup
+must not be confused with provider `loginDomains`, which run only after the
+tenant has already been resolved.
+
 At most one provider can be preferred in each tenant scope. The service changes
 the previous preferred row and the new preferred row in one TypeORM transaction,
 while a database unique identity prevents concurrent writes from creating two
@@ -200,10 +222,13 @@ all providers remain enabled and only the duplicate preferred flags are cleared.
 
 ### Login experience policy
 
-Configure login behavior in **Platform Settings → Identity Providers** or in
-the top-level `login` block of a `v1beta1` configuration bundle. Login policy
-is independent from engine/project access authority and from whether the
-provider row is portal- or configuration-managed.
+In `single` mode, configure login behavior in **Platform Settings → Identity
+Providers** or in the top-level `login` block of a `v1beta1` configuration
+bundle. In `pooled` mode, configure it in **Tenant sign-in and identity** or
+through `GET/PUT /api/t/{tenantSlug}/tenant/login-policy`. The bundle `login`
+block does not manage a non-default pooled tenant's native login-policy row.
+Login policy is independent from engine/project access authority and from
+whether a provider row is portal- or configuration-managed.
 
 | Setting | Value | Logged-out behavior |
 | --- | --- | --- |
@@ -337,6 +362,12 @@ mappings using secret references only. Preview the bundle, verify every mapping
 targets an existing internal group, and use secret preflight before apply. Role
 access comes from that group's canonical assignments; provider-level default
 roles are not the target access model.
+
+This is currently a single/default-scope automation contract in OSS. In pooled
+mode, use the tenant portal or `/api/t/{tenantSlug}/identity/providers` for a
+non-default tenant. A bundle `tenantKey`, tenant assignment, or expected scope
+does not select the request tenant, create a native tenant membership, or
+configure that tenant's login policy.
 
 ### Fully headless SSO example
 
@@ -600,8 +631,9 @@ in; every LDAP sign-in still performs mandatory fresh reconciliation first.
 }
 ```
 
-Every supported provider option is available in the configuration bundle and the direct
-provider API: OIDC supports `groupClaim`, assurance values, RP/back-channel
+Every supported provider option is available in the single/default-scope
+configuration bundle and in both the root compatibility provider API and the
+tenant-scoped provider API: OIDC supports `groupClaim`, assurance values, RP/back-channel
 logout, and an optional `expectedAudience` confirmation that must equal
 `clientId`; SAML supports metadata by URL or secret reference, assurance
 contexts, signed single logout, and certificate/signature settings; LDAP

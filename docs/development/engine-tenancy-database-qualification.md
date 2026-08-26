@@ -12,11 +12,17 @@ on PostgreSQL, MySQL, SQL Server, Oracle, and Google Spanner. It creates
 localhost-only disposable containers, runs the real shared migrations and
 mapping service, retains sanitized evidence, and removes every container.
 
+This denominator qualifies dedicated/shared engine topology in native
+`single` tenancy mode. It does not qualify the native pooled SaaS tenant
+kernel: pooled mode is PostgreSQL-only and has separate restricted-role,
+forced-RLS, and multi-tenant browser lanes documented in
+[Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md).
+
 The complete denominator is:
 
 - five database adapters;
 - seven required stages per adapter, or **35/35 stage cells**;
-- five supported upgrade baselines per adapter, or **25/25 baseline
+- six supported upgrade baselines per adapter, or **30/30 baseline
   observations**; and
 - one equivalent logical-schema fingerprint across all five adapters.
 
@@ -34,7 +40,12 @@ The supported baselines are the schemas immediately before the engine-tenancy
 foundation migration, the portable tenant-reference migration, the access
 governance ownership migrations, login-experience migrations `0106` and
 `0107`, and the external-registration/project-tenancy ownership boundary in
-`0108` and `0109`. The login baseline proves deterministic duplicate-preference cleanup,
+`0108` and `0109`, and a populated v0.16.2-equivalent schema immediately
+before native SaaS tenancy migrations `0124` through `0126`. The native SaaS
+baseline proves portable tenant-table creation, tenant columns on invitations
+and refresh tokens, legacy ownership backfill, PostgreSQL RLS installation,
+idempotent retry, and clean-install schema equivalence. The login baseline
+proves deterministic duplicate-preference cleanup,
 the portable per-scope preferred-provider unique index, removal of the obsolete
 redirect flag, and idempotent interrupted retry on all five adapters. Every
 clean install and supported baseline then runs through `0109`. Migration `0108` backfills
@@ -130,7 +141,7 @@ A release-qualifying result has all of the following:
 - `releaseCommitQualified` is `true`;
 - `verifiedTargets.databases` contains all five canonical adapters;
 - all 35 stage cells pass;
-- both baselines pass on all five adapters;
+- all six baselines pass on all five adapters;
 - `schemaEquivalence.fingerprintCount` is `1`;
 - retries produce no duplicate mappings;
 - rollback retains explanatory metadata while reverting the owned change;
@@ -147,13 +158,13 @@ The worker uses the canonical `runMigrations` path and the real
 `EngineTenantMappingService` transaction. It proves the engine-tenancy schema
 and service lifecycle against each adapter, including a deliberate failed
 transaction and an idempotent retry. It also verifies the native-grant receipt
-schema is equivalent after a clean install, all five applicable upgrade paths, and
+schema is equivalent after a clean install, all six applicable upgrade paths, and
 the `0098`/`0099` add/remove/retry sequence.
 
 The lane intentionally does not run unrelated application seed catalogs.
 Those have their own ownership and qualification scope. Therefore,
 **100% database qualification here means 35/35 engine-tenancy lifecycle stage
-cells, 25/25 supported-baseline observations, and one equivalent schema—not
+cells, 30/30 supported-baseline observations, and one equivalent schema—not
 100% of unrelated monorepo database behavior.**
 
 ## Stop, Roll Back, and Recover

@@ -14,6 +14,9 @@ import type { User as UserContract } from '@enterpriseglue/shared/contracts/auth
 import { getActivePlatformAdministratorUserIds } from './platform-admin/PlatformAdministratorMembershipService.js';
 import type { Repository } from 'typeorm';
 import { loginMethodService } from './platform-admin/LoginMethodService.js';
+import { permissionService } from './platform-admin/permissions.js';
+import { NATIVE_TENANT_ROLE_IDS } from '@enterpriseglue/shared/authz/native-tenant-roles.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const OTP_LOCK_WINDOW_MS = 15 * 60 * 1000;
@@ -60,6 +63,7 @@ export interface VerifiedInvitationResult {
   invitationId: string;
   userId: string;
   tenantSlug: string;
+  tenantId: string;
 }
 
 function hashOpaqueToken(value: string): string {
@@ -101,6 +105,7 @@ async function revokeOutstandingInvitations(
   now: number,
   scope: {
     userId: string;
+    tenantId?: string | null;
     resourceType: InvitationResourceType;
     resourceId?: string | null;
     excludeInvitationId?: string;
@@ -117,6 +122,8 @@ async function revokeOutstandingInvitations(
     .andWhere('resource_type = :resourceType', { resourceType: scope.resourceType })
     .andWhere('revoked_at IS NULL')
     .andWhere('completed_at IS NULL');
+
+  if (scope.tenantId) revokeExistingQb.andWhere('tenant_id = :tenantId', { tenantId: scope.tenantId });
 
   if (scope.excludeInvitationId) {
     revokeExistingQb.andWhere('id <> :excludeInvitationId', { excludeInvitationId: scope.excludeInvitationId });
@@ -183,8 +190,8 @@ export class InvitationService {
     await revokeOutstandingInvitations(dataSource.getRepository(Invitation), Date.now(), scope);
   }
 
-  async isLocalLoginDisabled(): Promise<boolean> {
-    return !await loginMethodService.ordinaryLocalPasswordEnabled(null);
+  async isLocalLoginDisabled(tenantId?: string | null): Promise<boolean> {
+    return !await loginMethodService.ordinaryLocalPasswordEnabled(tenantId || null);
   }
 
   async createInvitation(input: CreateInvitationInput): Promise<CreateInvitationResult> {
@@ -198,6 +205,8 @@ export class InvitationService {
     }
 
     const tenantSlug = normalizeTenantSlug(input.tenantSlug);
+    const tenantId = input.tenantId?.trim() || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
+    if (!tenantId) throw Errors.validation('Tenant context is required for invitations');
     const inviteToken = randomBytes(32).toString('hex');
     const inviteTokenHash = hashOpaqueToken(inviteToken);
     const oneTimePassword = generatePassword();
@@ -207,6 +216,7 @@ export class InvitationService {
 
     await revokeOutstandingInvitations(invitationRepo, now, {
       userId: input.userId,
+      tenantId,
       resourceType: input.resourceType,
       resourceId: input.resourceId || null,
     });
@@ -215,6 +225,7 @@ export class InvitationService {
       id: invitationId,
       userId: input.userId,
       email: input.email.toLowerCase(),
+      tenantId,
       tenantSlug,
       resourceType: input.resourceType,
       resourceId: input.resourceId || null,
@@ -251,7 +262,7 @@ export class InvitationService {
         inviteUrl,
         resourceType: input.resourceType,
         invitedByName: input.invitedByName,
-        tenantId: input.tenantId,
+        tenantId,
         expiresIn: '24 hours',
         resourceName: input.resourceName,
       });
@@ -282,14 +293,13 @@ export class InvitationService {
   async verifyOneTimePassword(token: string, oneTimePassword: string): Promise<VerifiedInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    assertLocalLoginAllowed(!await loginMethodService.ordinaryLocalPasswordEnabled(null));
-
     const invitation = await getInvitationByTokenValue(token);
     const now = Date.now();
 
     if (!invitation || invitation.revokedAt || invitation.completedAt) {
       throw Errors.validation('Invalid or expired invitation');
     }
+    assertLocalLoginAllowed(!await loginMethodService.ordinaryLocalPasswordEnabled(invitation.tenantId));
 
     if (invitation.status !== 'pending') {
       throw Errors.validation('This invitation has already been used');
@@ -338,6 +348,7 @@ export class InvitationService {
       invitationId: invitation.id,
       userId: invitation.userId,
       tenantSlug: invitation.tenantSlug,
+      tenantId: invitation.tenantId || OSS_DEFAULT_TENANT_ID,
     };
   }
 
@@ -388,6 +399,7 @@ export class InvitationService {
       invitationId: invitation.id,
       userId: invitation.userId,
       tenantSlug: invitation.tenantSlug,
+      tenantId: invitation.tenantId || OSS_DEFAULT_TENANT_ID,
     };
   }
 
@@ -395,7 +407,7 @@ export class InvitationService {
     invitationId: string,
     newPassword: string,
     profile?: { firstName?: string; lastName?: string }
-  ): Promise<{ user: UserContract; tenantSlug: string }> {
+  ): Promise<{ user: UserContract; tenantId: string; tenantSlug: string }> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
     const userRepo = dataSource.getRepository(User);
@@ -462,8 +474,24 @@ export class InvitationService {
         );
       }
 
+      const tenantId = invitation.tenantId || OSS_DEFAULT_TENANT_ID;
+      await permissionService.assignRole({
+        tenantId,
+        principalType: 'user',
+        principalId: user.id,
+        roleId: invitation.resourceType === 'tenant' && invitation.resourceRole === 'admin'
+          ? NATIVE_TENANT_ROLE_IDS.ADMIN
+          : NATIVE_TENANT_ROLE_IDS.VIEWER,
+        scopeType: 'tenant',
+        scopeId: tenantId,
+        source: 'manual',
+        sourceRef: invitation.id,
+        createdById: invitation.createdByUserId || user.id,
+      }, manager);
+
       await revokeOutstandingInvitations(manager.getRepository(Invitation), now, {
         userId: invitation.userId,
+        tenantId: invitation.tenantId,
         resourceType: invitation.resourceType,
         resourceId: invitation.resourceId || null,
         excludeInvitationId: invitation.id,
@@ -492,6 +520,7 @@ export class InvitationService {
         createdAt: updatedUser.createdAt,
         lastLoginAt: updatedUser.lastLoginAt || undefined,
       },
+      tenantId: invitation.tenantId || OSS_DEFAULT_TENANT_ID,
       tenantSlug: invitation.tenantSlug,
     };
   }

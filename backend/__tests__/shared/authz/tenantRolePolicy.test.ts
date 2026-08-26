@@ -7,6 +7,7 @@ import {
   TENANT_SAFE_ENGINE_PERMISSION_IDS,
   TENANT_SAFE_PERMISSION_IDS,
   TENANT_SAFE_PROJECT_PERMISSION_IDS,
+  TENANT_SAFE_TENANT_PERMISSION_IDS,
 } from '@enterpriseglue/shared/authz/tenant-role-policy.js';
 import {
   EnginePermissions,
@@ -33,6 +34,7 @@ describe('tenant role permission policy', () => {
       EnginePermissions.VARIABLES_EDIT,
     ]));
     expect(TENANT_SAFE_PERMISSION_IDS).toEqual(new Set([
+      ...TENANT_SAFE_TENANT_PERMISSION_IDS,
       ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
       ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
     ]));

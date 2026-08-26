@@ -42,6 +42,9 @@ db/
 ### Multi-Database Support
 - **Purpose:** All application data in a single database instance
 - **Supported:** PostgreSQL, Oracle, MySQL, SQL Server, Spanner
+- **Native tenancy:** All adapters support `EG_TENANCY_MODE=single`; native
+  `pooled` mode is PostgreSQL-only because it requires forced row-level
+  security and a restricted application role
 - **Schema:** All tables in the configured schema (default: `main`)
 - **Connection:** `getDataSource()` for repositories/query builders;
   `getConnectionPool()` is a deprecated PostgreSQL/Oracle compatibility path
@@ -51,7 +54,9 @@ db/
 - **Auth:** User, RefreshToken
 - **Starbase:** Project, File, Folder, Version, Comment
 - **Versioning:** Branch, Commit, WorkingFile, FileSnapshot
-- **Platform:** EnvironmentTag, PlatformSettings, Tenant, Invitation
+- **Platform:** EnvironmentTag, PlatformSettings, Tenant, TenantDomain,
+  TenantDiscoveryDomain, TenantDiscoveryChallenge, TenantLoginPolicy,
+  Invitation
 - **Mission Control:** Engine, SavedFilter, EngineHealth
 - **Git:** GitRepository, GitCredential, GitDeployment
 - **Deployments:** EngineDeployment, EngineDeploymentArtifact
@@ -175,6 +180,15 @@ TypeORM handles migrations automatically:
 1. **Development:** Migrations run on startup via `run-migrations.ts`
 2. **Production:** Same - migrations run automatically on container start
 3. **New migrations:** Use `pnpm run db:migration:generate` after entity changes
+
+Native SaaS tenancy is introduced by migrations `1700000000124` through
+`1700000000126`. They create the tenant directory and login-policy records,
+backfill existing tenant-owned rows to the canonical default tenant, and add
+the PostgreSQL RLS backstop used by pooled mode. The ownership backfill is not
+reversible. Upgrade and verify the database in `single` mode before enabling
+pooled routing, and retain a pre-upgrade backup. See
+[Database Architecture](../../../../docs/reference/database-architecture.md#native-saas-tenancy-persistence)
+and [Native SaaS Tenancy](../../../../docs/architecture/11-native-saas-tenancy.md).
 
 ### Available Scripts
 

@@ -29,6 +29,7 @@ export interface ActionAvailabilityEngineRecord {
 
 export interface CurrentUserActionAvailability {
   platformActionAvailability: ActionAvailabilitySnapshot;
+  tenant: { resourceId: string; actionAvailability: ActionAvailabilitySnapshot } | null;
   projects: Array<{ resourceId: string; actionAvailability: ActionAvailabilitySnapshot }>;
   engines: Array<{ resourceId: string; actionAvailability: ActionAvailabilitySnapshot }>;
   version: string;
@@ -94,7 +95,7 @@ function ssoRestriction(domain: 'Engine' | 'Project', sourceRef?: string | null)
 }
 
 function buildAvailability(
-  resourceType: 'platform' | 'project' | 'engine',
+  resourceType: 'platform' | 'tenant' | 'project' | 'engine',
   permissions: readonly string[],
   restrictionFor: (action: AuthzActionDefinition) => ActionAvailabilityRestriction | null,
 ): ActionAvailabilitySnapshot {
@@ -218,7 +219,9 @@ function engineRestriction(
 }
 
 export function calculateCurrentUserActionAvailability(
-  snapshot: Pick<CurrentUserPermissions, 'platform' | 'projects' | 'engines'>,
+  snapshot: Pick<CurrentUserPermissions, 'platform' | 'projects' | 'engines'> & {
+    tenant?: CurrentUserPermissions['tenant'];
+  },
   settings: ActionAvailabilityGovernanceSettings,
   engineRecords: readonly ActionAvailabilityEngineRecord[] = [],
 ): CurrentUserActionAvailability {
@@ -228,6 +231,12 @@ export function calculateCurrentUserActionAvailability(
     snapshot.platform,
     (action) => platformRestriction(action, settings),
   );
+  const tenant = snapshot.tenant
+    ? {
+        resourceId: snapshot.tenant.resourceId,
+        actionAvailability: buildAvailability('tenant', snapshot.tenant.permissions, () => null),
+      }
+    : null;
   const projects = snapshot.projects.map((project) => ({
     resourceId: project.resourceId,
     actionAvailability: buildAvailability(
@@ -244,7 +253,7 @@ export function calculateCurrentUserActionAvailability(
       (action) => engineRestriction(action, settings, engineById.get(engine.resourceId)),
     ),
   }));
-  const canonical = JSON.stringify({ platformActionAvailability, projects, engines });
+  const canonical = JSON.stringify({ platformActionAvailability, tenant, projects, engines });
   const version = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
-  return { platformActionAvailability, projects, engines, version };
+  return { platformActionAvailability, tenant, projects, engines, version };
 }

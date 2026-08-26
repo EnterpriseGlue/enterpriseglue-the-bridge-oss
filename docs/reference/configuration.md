@@ -66,6 +66,42 @@ Launcher and validation scripts:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 
+### Native tenancy
+
+`single` is the backward-compatible default and permits exactly the canonical
+`default` tenant. `pooled` is an explicit PostgreSQL-only mode for hosting
+multiple real tenants. See [Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md)
+for the trust, SSO, placement, migration, and RLS contracts.
+
+The pooled mode is a pre-production foundation in this release. Keep it
+disabled for production until the complete two-tenant HTTP, inherited-data,
+background-work, plugin, multi-replica, SSO-protocol, migration, restore, and
+rollback qualification gates pass for the intended deployment.
+
+- `EG_TENANCY_MODE`: `single` or `pooled`; default `single`.
+- `EG_TENANT_BASE_DOMAIN`: Optional managed suffix for tenant hosts such as
+  `<tenant-slug>.saas.example.com`.
+- `EG_TENANT_PLACEMENT_KEY`: HMAC key of at least 32 characters for signed
+  control-plane placement assertions. Required in production pooled mode.
+- `EG_TENANT_PLACEMENT_MAX_AGE_SECONDS`: Maximum accepted placement assertion
+  lifetime; default `120`, maximum `3600`.
+- `EG_TENANT_RLS_ENFORCED`: Must be `true` in pooled mode. Startup fails unless
+  `DATABASE_TYPE=postgres` and the expected forced RLS policies are installed.
+
+Every tenant owns its own login policy and OIDC, SAML, or LDAP provider
+records. Tenant-scoped provider callbacks use the same global callback paths;
+signed OAuth/SAML state restores the tenant after the provider redirect.
+
+These environment variables select deployment behavior; they are not
+configuration-bundle fields. In the first pooled OSS slice, tenant lifecycle,
+placement, membership, login policy, work-email discovery domains, and custom
+routing hostnames are managed through their OpenAPI-backed REST contracts and,
+where available, the tenant or platform portal. The existing `v1beta1` bundle
+`login` block and `identity-providers.json` remain single/default-scope
+compatibility automation and do not manage a non-default pooled tenant. See
+[Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#control-ownership-in-the-first-pooled-oss-slice)
+for the resource-by-resource ownership matrix.
+
 ### Git & Encryption
 - `GIT_REPOS_PATH`
 - `GIT_DEFAULT_BRANCH`
@@ -104,7 +140,9 @@ round-trip, and authoritative-removal procedure.
 - `EG_CONFIG_BUNDLE_PATH`: Absolute path to one JSON payload with `bundle` and `files` properties, or a folder-style ZIP archive containing `bundle.json` and its declared imported JSON files.
 - `EG_CONFIG_BOOTSTRAP_MODE`: `disabled`, `validate`, or `apply`; default `disabled`.
 - `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted payload; rejects unexpected content.
-- `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required expected target scope for an `apply` bootstrap, such as `platform` or a tenant id.
+- `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required `platform` target assertion for
+  an OSS `apply` bootstrap. It does not select or route to a native pooled
+  tenant.
 - `EG_CONFIG_FAIL_CLOSED`: `true` or `false`; defaults to `true` in production and controls whether a configured bootstrap failure stops startup.
 - `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT`: `true` or `false`; default `false`. When enabled, validation and apply bootstrap modes require every referenced `env://`, `file://`, or `docker://` secret to be available, and apply is bound to that availability check.
 - `EG_CONFIG_MAX_BYTES`: Maximum payload size; defaults to `1048576`.

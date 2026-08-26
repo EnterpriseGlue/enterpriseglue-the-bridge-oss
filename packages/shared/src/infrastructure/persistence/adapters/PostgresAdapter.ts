@@ -4,12 +4,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { TenantRlsSubscriber } from '../subscribers/TenantRlsSubscriber.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, PlatformSettingsSectionOwnership, AdminConfigObjectOwnership, EmailTemplate, EmailSendConfig,
-  // Tenant entities removed - multi-tenancy is EE-only
+  Tenant, TenantDiscoveryChallenge, TenantDiscoveryDomain, TenantDomain, TenantLoginPolicy,
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityProvisioningDirectory, IdentityProvisioningCredential, IdentityProvisioningDiagnostic, ScimUserLink, ScimGroupLink, ScimGroupMembership, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
@@ -25,7 +26,7 @@ const entities = [
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, PlatformSettingsSectionOwnership, AdminConfigObjectOwnership, EmailTemplate, EmailSendConfig,
-  // Tenant entities removed - multi-tenancy is EE-only
+  Tenant, TenantDiscoveryChallenge, TenantDiscoveryDomain, TenantDomain, TenantLoginPolicy,
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityProvisioningDirectory, IdentityProvisioningCredential, IdentityProvisioningDiagnostic, ScimUserLink, ScimGroupLink, ScimGroupMembership, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
@@ -78,6 +79,7 @@ export class PostgresAdapter implements DatabaseAdapter {
       synchronize: false,
       logging: this.logging,
       entities,
+      subscribers: config.tenancyMode === 'pooled' ? [TenantRlsSubscriber] : [],
       migrations,
       ssl: config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : undefined,
     };

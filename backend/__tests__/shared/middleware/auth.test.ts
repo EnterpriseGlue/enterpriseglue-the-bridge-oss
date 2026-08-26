@@ -38,6 +38,11 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   PlatformPermissions: {
     AUTHZ_ROLES_MANAGE: 'platform:authz:roles:manage',
   },
+  SYSTEM_ROLE_IDS: {
+    TENANT_ADMIN: 'system.tenant.admin',
+    TENANT_ENGINE_OPERATOR: 'system.tenant.engine_operator',
+    TENANT_VIEWER: 'system.tenant.viewer',
+  },
 }));
 
 // Test fixture tokens — not real secrets (CWE-547)

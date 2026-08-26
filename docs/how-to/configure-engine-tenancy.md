@@ -41,12 +41,13 @@ Topology and runtime access are separate:
 
 ## Prerequisite for a Centralized Two-Tenant Rehearsal
 
-The local OSS deployment has one canonical tenant context,
+An OSS deployment in `single` mode has one canonical tenant context,
 `tenant-default`. It can validate dedicated provisioning and fail-closed shared
 resource behavior, but it cannot prove isolation between two EnterpriseGlue
-tenants. Run the centralized rehearsal only in a tenant-resolver-enabled
-deployment where the tenant platform owner has first established all of the
-following:
+tenants. An OSS deployment in native `pooled` mode can run the centralized
+rehearsal after its PostgreSQL RLS, tenant resolution, and tenant-bound login
+gates pass. In either case, run the rehearsal only where the tenant platform
+owner has first established all of the following:
 
 1. Two separate tenant contexts and two representative test identities or
    principals. Each identity must enter only its own tenant context through the
@@ -122,8 +123,9 @@ In **Mission Control > Engines**, choose **Add engine**, then choose
 database ID.
 
 When `tenancy` is omitted, a new engine is dedicated for compatibility. The
-server persists the authenticated request tenant. Local OSS uses
-`tenant-default` only when no request tenant exists.
+server persists the authenticated request tenant. `single` mode may use
+`tenant-default` only when no request tenant exists; pooled tenant routes
+require resolved context and do not use that fallback.
 
 <!-- enterpriseglue-config-schema: CreateEngineRequestSchema -->
 ```json
@@ -334,10 +336,11 @@ A broad engine permission does not override these shared-engine rules. Use the
 tenancy diagnostics and mapping reconciliation workflow to resolve a
 quarantined resource; do not widen the engine grant.
 
-When local OSS has no explicit tenant middleware context, Access Control
-targets scoped project, engine, tenant, and runtime-resource assignments at
-the canonical `tenant-default`. This is request-context resolution for the
-selected object, not a fallback for shared inventory: the runtime resource
+When `single`-mode OSS has no explicit tenant middleware context, Access
+Control targets scoped project, engine, tenant, and runtime-resource
+assignments at the canonical `tenant-default`. Pooled mode requires the
+resolved active request tenant instead. This is request-context resolution for
+the selected object, not a fallback for shared inventory: the runtime resource
 must already have an active mapping to that tenant. Platform assignments stay
 tenant-neutral. A direct engine assignment on a shared engine is never
 reported as already granting its mapped runtime resources.

@@ -25,6 +25,7 @@ import {
   hasEnginePermission,
   hasPlatformPermission,
   hasProjectPermission,
+  hasTenantPermission,
 } from './permissions';
 import type { CurrentUserPermissions } from '../types/auth';
 
@@ -117,6 +118,8 @@ export function evaluateActionSnapshot(
   let allowed = false;
   const availability = resourceType === 'platform'
     ? snapshot?.platformActionAvailability
+    : resourceType === 'tenant' && resourceId && snapshot?.tenant?.resourceId === resourceId
+      ? snapshot.tenant.actionAvailability
     : resourceType === 'project' && resourceId
       ? snapshot?.projects.find((item) => item.resourceId === resourceId)?.actionAvailability
       : resourceType === 'engine' && resourceId
@@ -160,6 +163,8 @@ export function evaluateActionSnapshot(
 
   if (resourceType === 'platform') {
     allowed = hasPlatformPermission(snapshot, action.permissionId);
+  } else if (resourceType === 'tenant') {
+    allowed = hasTenantPermission(snapshot, resourceId, action.permissionId);
   } else if (resourceType === 'project') {
     allowed = action.actionId === 'project.projects.read' && !resourceId
       ? hasAnyVisibleProjectPermission(snapshot)

@@ -7,6 +7,9 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
+import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 /**
  * Authentication middleware
@@ -87,6 +90,44 @@ async function runEnterprisePostAuthResolver(
   }
 }
 
+async function establishNativeSessionTenant(req: Request, payload: UserJwtPayload): Promise<void> {
+  if (config.tenancyMode !== 'pooled') {
+    if (payload.tenantId && payload.tenantId !== OSS_DEFAULT_TENANT_ID) {
+      throw Errors.unauthorized('Session tenant does not match this deployment');
+    }
+    if (req.tenant && req.tenant.tenantId !== OSS_DEFAULT_TENANT_ID) return;
+    req.tenant = { tenantId: OSS_DEFAULT_TENANT_ID, tenantSlug: OSS_DEFAULT_TENANT_SLUG };
+    return;
+  }
+
+  // Recovery sessions intentionally remain platform-only and are never
+  // treated as an implicit tenant membership.
+  if (payload.recovery === 'platform_administrator' && !payload.tenantId) return;
+  if (!payload.tenantId || !payload.tenantSlug) throw Errors.unauthorized('Tenant-scoped session required');
+  const tenant = await tenantService.getById(payload.tenantId);
+  if (!tenant || tenant.status !== 'active' || tenant.slug !== payload.tenantSlug) {
+    throw Errors.unauthorized('Session tenant is no longer active');
+  }
+  if (req.tenant && req.tenant.tenantId !== tenant.id) {
+    throw Errors.forbidden('Session tenant does not match the requested tenant');
+  }
+  if (!await tenantService.hasMembership(payload.userId, tenant.id)) {
+    throw Errors.forbidden('Tenant membership is no longer active');
+  }
+  req.tenant = {
+    tenantId: tenant.id,
+    tenantSlug: tenant.slug,
+    placementKey: tenant.placementKey,
+    placementEpoch: Number(tenant.placementEpoch),
+  };
+}
+
+function continueWithTenantContext(req: Request, next: NextFunction): void {
+  if (!req.tenant) return next();
+  updateBpmnEngineRequestContext({ tenantId: req.tenant.tenantId, tenantSlug: req.tenant.tenantSlug });
+  runWithTenantDatabaseContext(req.tenant, () => next());
+}
+
 /**
  * Middleware to require authentication
  * Verifies JWT token from Authorization header OR cookies
@@ -138,8 +179,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
+    await establishNativeSessionTenant(req, payload);
 
-    next();
+    continueWithTenantContext(req, next);
   } catch (error) {
     if (error instanceof AppError) {
       return next(error);
@@ -196,7 +238,15 @@ export async function requireOnboarding(req: Request, res: Response, next: NextF
     }
 
     req.onboarding = payload;
-    return next();
+    if (config.tenancyMode === 'pooled') {
+      if (!payload.tenantId || !payload.tenantSlug) return next(Errors.unauthorized('Tenant-scoped onboarding required'));
+      const tenant = await tenantService.getById(payload.tenantId);
+      if (!tenant || tenant.status !== 'active' || tenant.slug !== payload.tenantSlug) {
+        return next(Errors.unauthorized('Invitation tenant is no longer active'));
+      }
+      req.tenant = { tenantId: tenant.id, tenantSlug: tenant.slug, placementKey: tenant.placementKey, placementEpoch: Number(tenant.placementEpoch) };
+    }
+    return continueWithTenantContext(req, next);
   } catch (error) {
     if (error instanceof AppError) {
       return next(error);
@@ -232,6 +282,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
         // anonymous request rather than exposing a partially authenticated user.
         try {
           await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
+          await establishNativeSessionTenant(req, payload);
         } catch {
           delete req.user;
           return next();
@@ -241,7 +292,9 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
     }
   } catch {
     // Ignore errors for optional auth
+    delete req.user;
+    if (config.tenancyMode === 'pooled') delete req.tenant;
   }
 
-  next();
+  continueWithTenantContext(req, next);
 }

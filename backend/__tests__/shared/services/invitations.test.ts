@@ -12,6 +12,7 @@ import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index
 
 const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const ordinaryLocalPasswordEnabled = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+const assignRole = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'tenant-membership-1', warnings: [] }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -45,6 +46,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.j
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({
   loginMethodService: { ordinaryLocalPasswordEnabled },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  permissionService: { assignRole },
 }));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
@@ -334,6 +339,7 @@ describe('InvitationService', () => {
       invitationId: 'inv-1',
       userId: 'user-1',
       tenantSlug: 'default',
+      tenantId: 'tenant-default',
     });
     expect(execute).toHaveBeenCalled();
   });
@@ -358,6 +364,7 @@ describe('InvitationService', () => {
       invitationId: 'inv-1',
       userId: 'user-1',
       tenantSlug: 'default',
+      tenantId: 'tenant-default',
     });
     expect(invitationRepo.createQueryBuilder).not.toHaveBeenCalledWith(expect.anything());
   });

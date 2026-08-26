@@ -243,6 +243,15 @@ export function hasAnyPlatformPermission(snapshot: CurrentUserPermissions | null
   return permissions.some((permission) => hasPlatformPermission(snapshot, permission));
 }
 
+export function hasTenantPermission(
+  snapshot: CurrentUserPermissions | null | undefined,
+  tenantId: string | null | undefined,
+  permission: string
+): boolean {
+  if (!tenantId || snapshot?.tenant?.resourceId !== tenantId) return false;
+  return Boolean(snapshot.tenant.permissions.includes(permission));
+}
+
 export function hasProjectPermission(
   snapshot: CurrentUserPermissions | null | undefined,
   projectId: string | null | undefined,

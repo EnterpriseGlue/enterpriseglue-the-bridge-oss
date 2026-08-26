@@ -14,6 +14,15 @@ deployment targets. It deliberately does not configure users, sessions,
 in-flight invitations, audit history, diagnostics, or one-off operational
 actions.
 
+In OSS this lifecycle targets the canonical single/default scope. Native
+`pooled` tenant creation, membership, placement, discovery domains, login
+policy, and identity providers use the tenant administration portal and REST
+APIs instead. A manifest `tenantKey` is a stable configuration reference; it
+does not resolve or select a native pooled tenant. Likewise,
+`EG_CONFIG_EXPECTED_TENANT_SCOPE` is a fail-closed target assertion rather than
+a tenant-routing input. See
+[Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#control-ownership-in-the-first-pooled-oss-slice).
+
 Operational identity-provisioning credential creation and rotation are
 available headlessly through a separate, least-privilege API client. They are
 not configuration-bundle apply actions because their clear-text result is
@@ -46,7 +55,7 @@ bundle intentionally owns:
     "key": "platform.production",
     "owner": "platform-engineering"
   },
-  "tenantKey": "tenant.platform",
+  "tenantKey": "default",
   "mode": "authoritative",
   "imports": [
     "./environment-tags.json",
