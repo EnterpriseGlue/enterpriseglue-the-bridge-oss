@@ -54,7 +54,7 @@ plan_chart() {
   repro_archive="$REPRO_DIR/$name-$version.tgz"
   test -f "$archive"
   test -f "$repro_archive"
-  test "$(sha256_file "$archive")" = "$(sha256_file "$repro_archive")"
+  node "$ROOT_DIR/scripts/helm-chart-archive.mjs" compare "$archive" "$repro_archive"
   candidate_sha="$(sha256_file "$archive")"
 
   existing="$(oras resolve "$repository:$version" 2>/dev/null || true)"

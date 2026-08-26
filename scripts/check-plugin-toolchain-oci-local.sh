@@ -110,8 +110,12 @@ RUNTIME_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-runtime-$VERSION.tgz"
 RBAC_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-installer-rbac-$VERSION.tgz"
 RUNTIME_SHA="$(sha256_file "$RUNTIME_ARCHIVE")"
 RBAC_SHA="$(sha256_file "$RBAC_ARCHIVE")"
-test "$RUNTIME_SHA" = "$(sha256_file "$REPRO_OUTPUT/$(basename "$RUNTIME_ARCHIVE")")"
-test "$RBAC_SHA" = "$(sha256_file "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")")"
+node "$ROOT_DIR/scripts/helm-chart-archive.mjs" compare \
+  "$RUNTIME_ARCHIVE" \
+  "$REPRO_OUTPUT/$(basename "$RUNTIME_ARCHIVE")"
+node "$ROOT_DIR/scripts/helm-chart-archive.mjs" compare \
+  "$RBAC_ARCHIVE" \
+  "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")"
 
 helm push --plain-http "$RUNTIME_ARCHIVE" \
   "oci://$REGISTRY/enterpriseglue/charts" >/dev/null

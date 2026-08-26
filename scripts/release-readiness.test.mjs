@@ -66,7 +66,8 @@ test('readiness covers immutable package, chart, image, scan, and receipt gates'
 
 test('the real chart registry plan cannot publish', () => {
   assert.match(chartPlan, /oras resolve/)
-  assert.match(chartPlan, /helm-chart-archive\.mjs" compare/)
+  assert.equal([...chartPlan.matchAll(/helm-chart-archive\.mjs" compare/g)].length, 2)
+  assert.doesNotMatch(chartPlan, /sha256_file "\$repro_archive"/)
   assert.doesNotMatch(chartPlan, /helm push/)
   assert.doesNotMatch(chartPlan, /oras push/)
 })
@@ -88,4 +89,6 @@ test('the local OCI drill preloads its immutable disposable registry image', () 
   )
   assert.match(toolchainLocal, /docker pull "\$ZOT_IMAGE"/)
   assert.equal([...toolchainLocal.matchAll(/--pull=never/g)].length, 2)
+  assert.equal([...toolchainLocal.matchAll(/helm-chart-archive\.mjs" compare/g)].length, 2)
+  assert.doesNotMatch(toolchainLocal, /sha256_file "\$REPRO_OUTPUT/)
 })
