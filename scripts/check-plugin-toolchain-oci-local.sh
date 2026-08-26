@@ -25,6 +25,10 @@ AIRGAP_RECEIPT="$WORK/toolchain-airgap-import-receipt.json"
 registry_started=false
 target_registry_started=false
 export COSIGN_EXPERIMENTAL=1
+BUILDX_BUILDER_ARGS=()
+if [ -n "${PLUGIN_PLATFORM_BUILDX_BUILDER:-}" ]; then
+  BUILDX_BUILDER_ARGS=(--builder "$PLUGIN_PLATFORM_BUILDX_BUILDER")
+fi
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -67,10 +71,16 @@ if [ "$VERSION" != "$RUNTIME_CHART_VERSION" ] || [ "$VERSION" != "$RBAC_CHART_VE
   exit 1
 fi
 
-docker build --quiet \
+docker buildx build \
+  "${BUILDX_BUILDER_ARGS[@]}" \
+  --load \
+  --provenance=false \
+  --sbom=false \
+  --quiet \
   --file "$ROOT_DIR/packages/plugin-installer/Dockerfile" \
   --tag "$INSTALLER_LOCAL_IMAGE" \
   "$ROOT_DIR"
+docker image inspect "$INSTALLER_LOCAL_IMAGE" >/dev/null
 
 docker run --detach \
   --name "$REGISTRY_NAME" \
