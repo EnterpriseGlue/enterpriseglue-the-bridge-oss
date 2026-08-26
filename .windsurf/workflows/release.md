@@ -31,7 +31,21 @@ Ask: "Ready to release, or wait for more features?"
 
 If wait, stop here.
 
-## Step 3: Merge the release PR
+## Step 3: Require release-candidate readiness
+
+Inspect all checks on the exact candidate SHA. Require `ci-complete`,
+`Release candidate readiness`, release policy, CodeQL, package, image, and
+security gates to finish successfully. Inspect the complete workflow list as
+well as the required-check summary; a failed, cancelled, timed-out,
+action-required, or still-running workflow is a release blocker.
+
+Download the `release-readiness-{sha}` artifact and verify that
+`release-readiness.json` names the candidate SHA and records
+`publicationPerformed: false`.
+
+Do not merge when readiness is skipped on a Release Please PR.
+
+## Step 4: Merge the release PR
 
 ```bash
 gh pr merge {RELEASE_PR_NUMBER} --repo EnterpriseGlue/enterpriseglue-the-bridge-oss --merge
@@ -39,7 +53,7 @@ gh pr merge {RELEASE_PR_NUMBER} --repo EnterpriseGlue/enterpriseglue-the-bridge-
 
 Note: Release PRs use merge commit (not squash) to preserve the Release Please metadata.
 
-## Step 4: Monitor Docker image build
+## Step 5: Monitor protected publication
 
 The merge creates a GitHub Release, which triggers the Docker Images workflow:
 // turbo
@@ -52,7 +66,13 @@ Watch it:
 gh run watch --repo EnterpriseGlue/enterpriseglue-the-bridge-oss $(gh run list --repo EnterpriseGlue/enterpriseglue-the-bridge-oss --workflow="Docker Images" --limit 1 --json databaseId -q '.[0].databaseId')
 ```
 
-## Step 5: Post-release
+Then verify protected package publication and the downstream signed plugin
+toolchain. Each workflow must use the release commit and complete without a
+partial publication. A skipped toolchain run is acceptable only when its
+upstream Docker workflow did not represent this release; otherwise investigate
+it as incomplete publication.
+
+## Step 6: Post-release
 
 Tell the user:
 > Release complete! Docker images are being published.
@@ -66,5 +86,8 @@ Tell the user:
 ## Notes for Cascade
 
 - Release PRs use `--merge` not `--squash` (Release Please requires this)
-- If the release PR has failing checks, show them and ask the user to fix first
+- Never rely only on the green aggregate summary. Inspect every workflow for
+  the exact release-candidate SHA and stop on failure, cancellation, timeout,
+  action-required, pending, or an unexpectedly skipped readiness job.
+- If the release PR has failing checks, show their actual error and stop.
 - The Docker Images workflow is triggered by the GitHub Release event, not the merge

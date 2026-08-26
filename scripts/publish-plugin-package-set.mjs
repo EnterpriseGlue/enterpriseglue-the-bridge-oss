@@ -26,6 +26,24 @@ export function sha512Integrity(payload) {
   return `sha512-${createHash('sha512').update(payload).digest('base64')}`;
 }
 
+function canonicalJsonValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalJsonValue(value[key])]),
+    );
+  }
+  return value;
+}
+
+function canonicalPackageEntryPayload(path, payload) {
+  if (path !== 'package/package.json') return payload;
+  const manifest = JSON.parse(payload.toString('utf8'));
+  return Buffer.from(JSON.stringify(canonicalJsonValue(manifest)));
+}
+
 async function canonicalTreeEntries(root, relative = '') {
   const directory = join(root, relative);
   const names = await readdir(directory);
@@ -94,7 +112,7 @@ export async function canonicalPackageDigest(tarball) {
       hash.update('\0');
       hash.update(entry.executable ? 'executable' : 'regular');
       hash.update('\0');
-      hash.update(entry.payload);
+      hash.update(canonicalPackageEntryPayload(entry.path, entry.payload));
       hash.update('\0');
     }
     return `sha256:${hash.digest('hex')}`;

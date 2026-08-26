@@ -53,6 +53,8 @@ const packageSetPublisher = await readFile(
 );
 assert.match(packageSetPublisher, /dist\.integrity/);
 assert.match(packageSetPublisher, /canonicalPackageDigest/);
+assert.match(packageSetPublisher, /path !== 'package\/package\.json'/);
+assert.match(packageSetPublisher, /canonicalJsonValue/);
 assert.match(packageSetPublisher, /npm[\s\S]*pack/);
 assert.match(packageSetPublisher, /different immutable payload/);
 assert.match(packageSetPublisher, /registry payload differs after publication/);

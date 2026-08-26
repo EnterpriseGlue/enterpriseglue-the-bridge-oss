@@ -40,6 +40,7 @@
     "guard:published-package-runtime": "pnpm --filter shared run build && pnpm --filter backend-host run build && node scripts/check-published-host-package.mjs",
     "test:ci-change-detection": "node --test scripts/ci-change-detection.test.mjs scripts/pr-release-label-workflows.test.mjs scripts/security-workflow-contract.test.mjs scripts/enforce-security-severity-gate.test.mjs scripts/verify-oci-image-metadata.test.mjs",
     "test:release-notes": "node --test scripts/release-notes.test.mjs scripts/release-notes-preflight.test.mjs",
+    "test:ci-contracts": "node --test scripts/check-ci-aggregate-contract.test.mjs scripts/evaluate-ci-needs.test.mjs scripts/release-readiness.test.mjs && node scripts/check-ci-aggregate-contract.mjs",
     "release-notes:preflight": "node scripts/run-release-notes-preflight.mjs",
     "release-notes:validate": "node scripts/release-notes.mjs validate",
     "release-notes:preview": "node scripts/release-notes.mjs preview",
@@ -233,6 +234,7 @@
     "plugin-installer:pack": "mkdir -p ./.artifacts && pnpm --filter @enterpriseglue/plugin-installer run build && cd packages/plugin-installer && pnpm pack && mv *.tgz ../../.artifacts/",
     "test:plugin-toolchain-release-policy": "node --test ./scripts/publish-plugin-package-set.test.mjs ./scripts/check-workspace-dependency-version-drift.test.mjs ./scripts/enterpriseglue-distribution-lock.test.mjs ./scripts/helm-chart-archive.test.mjs && node ./scripts/check-plugin-toolchain-release-policy.mjs && node ./scripts/check-plugin-package-release-policy.mjs",
     "test:plugin-toolchain-release:local": "bash ./scripts/check-plugin-toolchain-oci-local.sh",
+    "test:release-readiness": "bash ./scripts/check-release-candidate-readiness.sh",
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"
   },

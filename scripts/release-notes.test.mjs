@@ -237,7 +237,13 @@ test('CI blocks change detection and its aggregate gate on release-note prefligh
   assert.match(workflow, /^  release-notes-preflight:$/m)
   assert.match(workflow, /uses: \.\/\.github\/workflows\/release-notes-preflight-reusable\.yml/)
   assert.match(workflow, /^  detect:\n    needs: release-notes-preflight$/m)
-  assert.match(workflow, /release-notes-preflight\*\|"detect \/ detect"\|boundary-guards/)
+  assert.match(workflow, /^  ci-complete:\n    needs:\n(?:      - [a-z0-9-]+\n)+/m)
+  assert.match(workflow, /      - release-notes-preflight/)
+  assert.match(workflow, /      - plugin-platform/)
+  assert.match(workflow, /      - release-readiness/)
+  assert.match(workflow, /node scripts\/check-ci-aggregate-contract\.mjs/)
+  assert.match(workflow, /CI_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/)
+  assert.match(workflow, /node scripts\/evaluate-ci-needs\.mjs/)
 })
 
 test('expensive pull-request workflows cannot start before release-note preflight', () => {

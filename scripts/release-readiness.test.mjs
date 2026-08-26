@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import test from 'node:test'
+
+const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+const preflight = await readFile(
+  new URL('../.github/workflows/release-notes-preflight-reusable.yml', import.meta.url),
+  'utf8',
+)
+const detect = await readFile(
+  new URL('../.github/workflows/ci-detect-reusable.yml', import.meta.url),
+  'utf8',
+)
+const readiness = await readFile(
+  new URL('./check-release-candidate-readiness.sh', import.meta.url),
+  'utf8',
+)
+const chartPlan = await readFile(
+  new URL('./plan-plugin-toolchain-charts.sh', import.meta.url),
+  'utf8',
+)
+const productionImages = await readFile(
+  new URL('./check-plugin-platform-production-images.sh', import.meta.url),
+  'utf8',
+)
+
+test('release candidate detection works for pull requests and merge groups', () => {
+  assert.match(preflight, /is_release_pull_request:/)
+  assert.match(preflight, /startsWith\(steps\.pull_request\.outputs\.head_ref, 'release-please--branches--'\)/)
+  assert.match(preflight, /steps\.pull_request\.outputs\.head_repository == github\.repository/)
+  assert.match(detect, /run_release_readiness/)
+  assert.match(detect, /check-release-candidate-readiness/)
+})
+
+test('the release-readiness CI job is read-only and part of the aggregate', () => {
+  const start = ci.indexOf('  release-readiness:\n')
+  const end = ci.indexOf('\n  ci-complete:\n', start)
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const job = ci.slice(start, end)
+  assert.match(job, /name: Release candidate readiness/)
+  assert.match(job, /packages: read/)
+  assert.doesNotMatch(job, /packages: write/)
+  assert.match(job, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/)
+  assert.match(job, /pnpm run test:release-readiness/)
+  assert.match(job, /PLUGIN_PLATFORM_BUILDX_BUILDER: \$\{\{ steps\.release-buildx\.outputs\.name \}\}/)
+  assert.match(ci, /      - release-readiness/)
+})
+
+test('readiness covers immutable package, chart, image, scan, and receipt gates', () => {
+  assert.match(readiness, /check-published-package-version-discipline/)
+  assert.match(readiness, /publish-plugin-package-set\.mjs plan/)
+  assert.match(readiness, /publish-plugin-package-set\.mjs dry-run/)
+  assert.match(readiness, /plan-plugin-toolchain-charts\.sh/)
+  assert.match(readiness, /check-plugin-platform-production-images\.sh/)
+  assert.match(readiness, /test:plugin-toolchain-release:local/)
+  assert.match(readiness, /publicationPerformed: false/)
+})
+
+test('the real chart registry plan cannot publish', () => {
+  assert.match(chartPlan, /oras resolve/)
+  assert.match(chartPlan, /helm-chart-archive\.mjs" compare/)
+  assert.doesNotMatch(chartPlan, /helm push/)
+  assert.doesNotMatch(chartPlan, /oras push/)
+})
+
+test('the production image gate scans every release image', () => {
+  assert.match(productionImages, /for platform in linux\/amd64 linux\/arm64/)
+  assert.equal([...productionImages.matchAll(/--load --quiet/g)].length, 4)
+  assert.match(
+    productionImages,
+    /for image in "\$BACKEND_IMAGE" "\$FRONTEND_IMAGE" "\$INSTALLER_IMAGE" "\$MANAGER_IMAGE"/,
+  )
+  assert.match(productionImages, /--severity HIGH,CRITICAL/)
+})

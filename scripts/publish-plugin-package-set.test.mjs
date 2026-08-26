@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { processPackageSet, sha512Integrity } from './publish-plugin-package-set.mjs';
+import {
+  canonicalPackageDigest,
+  processPackageSet,
+  sha512Integrity,
+} from './publish-plugin-package-set.mjs';
 
 async function digestFixturePackage(tarball) {
   return sha512Integrity(await readFile(tarball));
@@ -27,6 +32,43 @@ async function fixture() {
   );
   return { directory, packages };
 }
+
+async function packageTarball(name, manifest) {
+  const directory = await mkdtemp(join(tmpdir(), 'eg-plugin-canonical-package-'));
+  const packageDirectory = join(directory, 'package');
+  await mkdir(packageDirectory);
+  await writeFile(join(packageDirectory, 'package.json'), JSON.stringify(manifest, null, 2));
+  await writeFile(join(packageDirectory, 'index.js'), 'export const ready = true;\n');
+  const tarball = join(directory, `${name}.tgz`);
+  execFileSync('tar', ['-czf', tarball, '-C', directory, 'package']);
+  return tarball;
+}
+
+test('canonical package digests ignore JSON object member order in package.json', async () => {
+  const first = await packageTarball('first', {
+    name: '@enterpriseglue/example',
+    version: '1.0.0',
+    dependencies: { zod: '^4.3.6', runtime: '0.2.1', installer: '0.2.4' },
+  });
+  const reordered = await packageTarball('reordered', {
+    dependencies: { installer: '0.2.4', runtime: '0.2.1', zod: '^4.3.6' },
+    version: '1.0.0',
+    name: '@enterpriseglue/example',
+  });
+  assert.equal(await canonicalPackageDigest(first), await canonicalPackageDigest(reordered));
+});
+
+test('canonical package digests still reject a package.json value change', async () => {
+  const first = await packageTarball('first-value', {
+    name: '@enterpriseglue/example',
+    version: '1.0.0',
+  });
+  const changed = await packageTarball('changed-value', {
+    name: '@enterpriseglue/example',
+    version: '1.0.1',
+  });
+  assert.notEqual(await canonicalPackageDigest(first), await canonicalPackageDigest(changed));
+});
 
 test('plans only new payloads and safely reuses content-identical versions', async () => {
   const { directory, packages } = await fixture();

@@ -18,11 +18,21 @@ on:
         required: false
         type: boolean
         default: false
+    outputs:
+      is_release_pull_request:
+        description: Whether the resolved pull request is managed by Release Please
+        value: ${{ jobs.preflight.outputs.is_release_pull_request }}
+      pull_request_head_ref:
+        description: Resolved pull-request head branch
+        value: ${{ jobs.preflight.outputs.pull_request_head_ref }}
 
 jobs:
   preflight:
     name: Release-note preflight
     runs-on: ubuntu-latest
+    outputs:
+      is_release_pull_request: ${{ startsWith(steps.pull_request.outputs.head_ref, 'release-please--branches--') && steps.pull_request.outputs.head_repository == github.repository }}
+      pull_request_head_ref: ${{ steps.pull_request.outputs.head_ref || github.head_ref || '' }}
     permissions:
       contents: read
       pull-requests: read
@@ -81,6 +91,7 @@ jobs:
             core.setOutput('exempt', String(labels.includes('release-note:none')));
             core.setOutput('number', String(pullNumber));
             core.setOutput('head_ref', pullRequest.head?.ref || '');
+            core.setOutput('head_repository', pullRequest.head?.repo?.full_name || '');
 
       - name: Resolve release-note comparison base
         id: release_base
