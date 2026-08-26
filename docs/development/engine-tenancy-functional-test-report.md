@@ -390,7 +390,7 @@ pnpm run test:engine-tenancy:database-matrix
 ```
 
 It writes `database-matrix.json` only as release-qualified when all five
-targets, all 35 stage cells, all 25 baseline observations, and one equivalent
+targets, all 35 stage cells, all 30 baseline observations, and one equivalent
 logical schema pass. See
 [Qualify Engine Tenancy on Every Supported Database](./engine-tenancy-database-qualification.md)
 for prerequisites, focused diagnosis, cleanup, and rollback conditions.

@@ -134,7 +134,7 @@ emulator must each pass clean install, all six supported upgrade baselines,
 interrupted retry, schema equivalence, the real mapping-service transaction,
 rollback, and cleanup.
 
-The database denominator is exactly 35 adapter/stage cells, 25
+The database denominator is exactly 35 adapter/stage cells, 30
 adapter/baseline observations, and one logical-schema equivalence set. A
 focused target or dirty-worktree run is useful for diagnosis but never counts
 as release evidence. Full prerequisites, versions, development commands,

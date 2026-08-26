@@ -40,6 +40,9 @@ test('database qualification documentation contains no stale two-baseline denomi
     /all five supported upgrade baselines/i,
     /five supported upgrade baselines/i,
     /25\/25 (?:supported-)?baseline/i,
+    /all 25 (?:adapter\/)?upgrade-baseline observations/i,
+    /all 25 baseline observations/i,
+    /35 adapter\/stage cells, 25\s+adapter\/baseline observations/i,
   ];
 
   for (const { file, text } of documents) {
