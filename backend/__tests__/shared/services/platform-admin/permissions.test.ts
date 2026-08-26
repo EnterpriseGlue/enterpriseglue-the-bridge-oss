@@ -1667,6 +1667,7 @@ describe('permissionService', () => {
     expect(snapshot.userId).toBe('user-1');
     expect(snapshot.authorizationVersion).toBe('authz:test');
     expect(snapshot.platform).toEqual([]);
+    expect(snapshot.tenant).toBeNull();
     expect(snapshot.projects.map((project) => project.resourceId)).toEqual(['project-rbac']);
     expect(snapshot.engines.map((engine) => engine.resourceId)).toEqual(['engine-rbac']);
     catalogSpy.mockRestore();

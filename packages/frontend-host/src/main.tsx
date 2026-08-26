@@ -26,6 +26,7 @@ import {
 } from './plugins/nativePluginRuntime'
 import { HostContextualFlowProviderV1 } from './plugins/contextualFlowRuntime'
 import { initRuntimeConfig } from './runtimeConfig'
+import { initializeTenancyCapabilities } from './services/tenancy'
 
 /**
  * Render a minimal, dependency-free error into #root when runtime configuration
@@ -82,6 +83,7 @@ export async function startApp() {
   }
 
   const enterprisePlugin = await getEnterpriseFrontendPlugin()
+  await initializeTenancyCapabilities()
   await loadInstalledNativePluginsV1()
   const enterpriseRootChildren = [
     ...((enterprisePlugin.routes || []) as any[]),

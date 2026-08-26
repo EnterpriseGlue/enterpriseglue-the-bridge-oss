@@ -1,5 +1,6 @@
 import React from 'react'
 import { Navigate, RouteObject, useLocation } from 'react-router-dom'
+import { apiClient } from '../shared/api/client'
 
 // Extension registry for EE plugin integration
 import { extensions, isMultiTenantEnabled, type EnterpriseExtensionRoute } from '../enterprise/extensionRegistry'
@@ -31,6 +32,8 @@ const PlatformSettingsPage = React.lazy(() => import('../features/platform-admin
 const AccessControl = React.lazy(() => import('../features/platform-admin/pages/AccessControl'))
 const AuthzPolicies = React.lazy(() => import('../features/platform-admin/pages/AuthzPolicies'))
 const AuthzAuditLog = React.lazy(() => import('../features/platform-admin/pages/AuthzAuditLog'))
+const TenantsPage = React.lazy(() => import('../features/platform-admin/pages/TenantsPage'))
+const TenantSettingsPage = React.lazy(() => import('../features/platform-admin/pages/TenantSettingsPage'))
 
 // EE-only pages (rendered via ExtensionPage)
 import { ExtensionPage } from '../enterprise/ExtensionSlot'
@@ -94,10 +97,38 @@ const DEFAULT_TENANT_SLUG = 'default'
 
 function DefaultTenantRedirect() {
   const location = useLocation()
+  const { user } = useAuth()
+  const multiTenant = isMultiTenantEnabled()
+  const [targetSlug, setTargetSlug] = React.useState<string | null>(multiTenant ? null : DEFAULT_TENANT_SLUG)
+  const [noMembership, setNoMembership] = React.useState(false)
+  React.useEffect(() => {
+    if (!multiTenant) return
+    let cancelled = false
+    apiClient.get<Array<{ tenantId: string; tenantSlug: string; tenantStatus: string }>>('/api/auth/my-tenants')
+      .then(async (memberships) => {
+        if (cancelled) return
+        const currentTenantId = user?.session?.tenant.id || null
+        const membership = memberships.find((candidate) => candidate.tenantStatus === 'active' && candidate.tenantId === currentTenantId)
+          || memberships.find((candidate) => candidate.tenantStatus === 'active')
+        if (membership) {
+          if (membership.tenantId !== currentTenantId) {
+            await apiClient.post('/api/auth/switch-tenant', { tenantSlug: membership.tenantSlug })
+            if (!cancelled) window.location.replace(`/t/${encodeURIComponent(membership.tenantSlug)}${location.pathname === '/' ? '' : location.pathname}${location.search}${location.hash}`)
+            return
+          }
+          setTargetSlug(membership.tenantSlug)
+        }
+        else setNoMembership(true)
+      })
+      .catch(() => { if (!cancelled) setNoMembership(true) })
+    return () => { cancelled = true }
+  }, [multiTenant, user?.session?.tenant.id, location.pathname, location.search, location.hash])
+  if (noMembership) return <Navigate to="/admin/tenants" replace />
+  if (!targetSlug) return <PageLoadingState message="Finding your tenant..." />
   const targetPath = location.pathname === '/' ? '' : location.pathname
   return (
     <Navigate
-      to={`/t/${DEFAULT_TENANT_SLUG}${targetPath}${location.search}${location.hash}`}
+      to={`/t/${encodeURIComponent(targetSlug)}${targetPath}${location.search}${location.hash}`}
       replace
     />
   )
@@ -211,6 +242,10 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
 
   if (isRootLevel && multiTenantEnabled) {
     return [
+      {
+        path: '/admin/tenants',
+        element: <ProtectedRoute requireAdmin><LazyRoute message="Loading tenants..."><TenantsPage /></LazyRoute></ProtectedRoute>,
+      },
       { path: '*', element: <DefaultTenantRedirect /> },
     ]
   }
@@ -223,7 +258,7 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/settings`, 
       element: multiTenantEnabled && !isRootLevel ? (
         <ProtectedRoute requireAdmin={false}>
-          <ExtensionPage name="tenant-settings-page" />
+          <ExtensionPage name="tenant-settings-page" fallback={<LazyRoute message="Loading tenant settings..."><TenantSettingsPage /></LazyRoute>} />
         </ProtectedRoute>
       ) : (
         <ProtectedRoute requireAdmin requiredPlatformPermissions={PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS}>
@@ -729,7 +764,7 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
     ),
     children: [
       // Redirect root to default tenant for unified routing
-      { index: true, element: <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
+      { index: true, element: isMultiTenantEnabled() ? <DefaultTenantRedirect /> : <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
       ...createProtectedChildRoutes(true),
       ...enterpriseChildren,
     ],

@@ -72,6 +72,19 @@ describe('httpInterceptor', () => {
   });
 
   describe('interceptedFetch', () => {
+    it('uses the canonical tenant API route for identity-provider administration', async () => {
+      window.location.pathname = '/t/alpha/admin/settings';
+      const response = new Response(JSON.stringify([]), { status: 200 });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+      await interceptedFetch('/api/identity/providers/tenant-sso/test-connection');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/t/alpha/identity/providers/tenant-sso/test-connection',
+        { credentials: 'include' },
+      );
+    });
+
     it('passes through successful requests', async () => {
       const response = new Response(JSON.stringify({ data: 'test' }), { status: 200 });
       const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);

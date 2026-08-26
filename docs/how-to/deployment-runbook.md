@@ -36,7 +36,8 @@ pnpm run dev
    `apply` for a hash-bound startup apply.
 3. Set `EG_CONFIG_BUNDLE_HOST_PATH` when invoking Compose and configure
    `EG_CONFIG_EXPECTED_SHA256`; `apply` also requires
-   `EG_CONFIG_EXPECTED_TENANT_SCOPE`.
+   `EG_CONFIG_EXPECTED_TENANT_SCOPE=platform`. The expected scope is a
+   fail-closed assertion and does not select a native pooled tenant.
 4. Keep `EG_CONFIG_FAIL_CLOSED=true` in production. Enable
    `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT=true` when the deployment must prove every
    referenced secret is available before validation or apply.

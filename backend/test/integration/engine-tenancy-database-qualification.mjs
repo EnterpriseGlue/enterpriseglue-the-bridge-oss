@@ -44,6 +44,15 @@ import {
 import {
   RequireProjectTenantOwnership1700000000109,
 } from '@enterpriseglue/shared/db/migrations/1700000000109-require-project-tenant-ownership.js';
+import {
+  AddNativeSaasTenancy1700000000124,
+} from '@enterpriseglue/shared/db/migrations/1700000000124-add-native-saas-tenancy.js';
+import {
+  BackfillNativeTenantOwnership1700000000125,
+} from '@enterpriseglue/shared/db/migrations/1700000000125-backfill-native-tenant-ownership.js';
+import {
+  AddPostgresTenantRls1700000000126,
+} from '@enterpriseglue/shared/db/migrations/1700000000126-add-postgres-tenant-rls.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -57,6 +66,13 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { TenantDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDomain.js';
+import { TenantDiscoveryDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryDomain.js';
+import { TenantDiscoveryChallenge } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryChallenge.js';
+import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import {
   engineTenantMappingService,
 } from '@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js';
@@ -170,6 +186,13 @@ async function logicalSchema(queryRunner, dataSource) {
       await tableDetails(queryRunner, dataSource, ProjectEngineTarget, 'project_engine_targets'),
       await tableDetails(queryRunner, dataSource, RbacRoleAssignment, 'role_assignments'),
       await tableDetails(queryRunner, dataSource, PermissionGrant, 'permission_grants'),
+      await tableDetails(queryRunner, dataSource, Tenant, 'tenants'),
+      await tableDetails(queryRunner, dataSource, TenantDomain, 'tenant_domains'),
+      await tableDetails(queryRunner, dataSource, TenantDiscoveryDomain, 'tenant_discovery_domains'),
+      await tableDetails(queryRunner, dataSource, TenantDiscoveryChallenge, 'tenant_discovery_challenges'),
+      await tableDetails(queryRunner, dataSource, TenantLoginPolicy, 'tenant_login_policies'),
+      await tableDetails(queryRunner, dataSource, RefreshToken, 'refresh_tokens'),
+      await tableDetails(queryRunner, dataSource, Invitation, 'invitations'),
     ],
   };
   value.tables.sort((left, right) => left.table.localeCompare(right.table));
@@ -546,6 +569,58 @@ async function qualifyExternalIdentityAndProjectTenantBaseline(queryRunner, data
   );
 }
 
+async function qualifyNativeSaasTenancyBaseline(queryRunner, dataSource, expectedFingerprint) {
+  const nativeTenancy = new AddNativeSaasTenancy1700000000124();
+  const ownershipBackfill = new BackfillNativeTenantOwnership1700000000125();
+  const postgresRls = new AddPostgresTenantRls1700000000126();
+
+  await postgresRls.down(queryRunner);
+  await nativeTenancy.down(queryRunner);
+
+  assert.equal(await queryRunner.hasTable(metadataPath(dataSource, Tenant)), false);
+  assert.equal(await queryRunner.hasTable(metadataPath(dataSource, TenantDomain)), false);
+  assert.equal(await queryRunner.hasTable(metadataPath(dataSource, TenantDiscoveryDomain)), false);
+  assert.equal(await queryRunner.hasTable(metadataPath(dataSource, TenantDiscoveryChallenge)), false);
+  assert.equal(await queryRunner.hasTable(metadataPath(dataSource, TenantLoginPolicy)), false);
+  await assertColumn(queryRunner, dataSource, RefreshToken, 'tenant_id', false);
+  await assertColumn(queryRunner, dataSource, Invitation, 'tenant_id', false);
+
+  // Re-run every migration to prove a partially retried v0.16.2 upgrade is
+  // idempotent on adapters where DDL may have committed before interruption.
+  await nativeTenancy.up(queryRunner);
+  await nativeTenancy.up(queryRunner);
+  await ownershipBackfill.up(queryRunner);
+  await ownershipBackfill.up(queryRunner);
+  await postgresRls.up(queryRunner);
+  await postgresRls.up(queryRunner);
+
+  await assertColumn(queryRunner, dataSource, RefreshToken, 'tenant_id', true);
+  await assertColumn(queryRunner, dataSource, Invitation, 'tenant_id', true);
+  for (const entity of [Tenant, TenantDomain, TenantDiscoveryDomain, TenantDiscoveryChallenge, TenantLoginPolicy]) {
+    assert.equal(
+      await queryRunner.hasTable(metadataPath(dataSource, entity)),
+      true,
+      `${database}: ${dataSource.getMetadata(entity).tableName} was not created by native SaaS tenancy upgrade`,
+    );
+  }
+
+  const provider = await dataSource.getRepository(IdentityProvider).findOneByOrFail({
+    id: ids.migrationProvider,
+  });
+  const group = await dataSource.getRepository(AuthzGroup).findOneByOrFail({ id: ids.migrationGroup });
+  const mapping = await dataSource.getRepository(IdentityEntitlementMapping).findOneByOrFail({
+    id: ids.migrationMapping,
+  });
+  assert.equal(provider.tenantId, 'tenant-default');
+  assert.equal(group.tenantId, 'tenant-default');
+  assert.equal(mapping.tenantId, 'tenant-default');
+  assert.equal(
+    fingerprint(await logicalSchema(queryRunner, dataSource)),
+    expectedFingerprint,
+    `${database}: v0.16.2 native SaaS tenancy upgrade schema differs from clean install`,
+  );
+}
+
 async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerprint) {
   const foundation = new AddEngineTenancyFoundation1700000000096();
   const reference = new AddEngineTenantMappingReference1700000000097();
@@ -555,6 +630,7 @@ async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerpr
   await seedLegacyRows(dataSource);
   await qualifyRecentMigrationBaselines(queryRunner, dataSource, expectedFingerprint);
   await qualifyExternalIdentityAndProjectTenantBaseline(queryRunner, dataSource, expectedFingerprint);
+  await qualifyNativeSaasTenancyBaseline(queryRunner, dataSource, expectedFingerprint);
 
   // Simulate an upgrade from immediately before the native-grant importer,
   // including the idempotent receipt-column follow-up migration.

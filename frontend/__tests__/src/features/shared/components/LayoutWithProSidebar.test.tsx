@@ -28,6 +28,10 @@ const enterprisePluginState = vi.hoisted(() => ({
   navItems: [] as any[],
 }));
 
+const tenancyState = vi.hoisted(() => ({
+  enabled: false,
+}));
+
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({
     logout: vi.fn(),
@@ -67,7 +71,7 @@ vi.mock('@src/features/shared/components/ProSidebar', () => ({
 }));
 
 vi.mock('@src/enterprise/ExtensionSlot', () => ({
-  ExtensionSlot: () => null,
+  ExtensionSlot: ({ fallback }: { fallback?: React.ReactNode }) => fallback || null,
   useFilteredExtensionNavItems: ({ items = [] }: { items?: any[] }) => {
     const platformPermissions = authState.permissions?.platform || [];
 
@@ -95,7 +99,7 @@ vi.mock('@src/enterprise/loadEnterpriseFrontendPlugin', () => ({
 vi.mock('@src/enterprise/extensionRegistry', () => ({
   extensions: {},
   getNavItemsBySection: () => [],
-  isMultiTenantEnabled: () => false,
+  isMultiTenantEnabled: () => tenancyState.enabled,
 }));
 
 vi.mock('@src/shared/api/client', () => ({
@@ -130,6 +134,7 @@ describe('LayoutWithProSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     enterprisePluginState.navItems = [];
+    tenancyState.enabled = false;
     authState.user = {
       id: 'user-1',
       email: 'viewer@example.com',
@@ -184,6 +189,21 @@ describe('LayoutWithProSidebar', () => {
     renderLayout();
 
     await waitFor(() => expect(screen.queryByText('Enterprise')).toBeNull());
+  });
+
+  it('reads pooled tenancy after startup capability initialization', async () => {
+    tenancyState.enabled = true;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/auth/my-tenants') {
+        return [{ tenantId: 'tenant-1', tenantSlug: 'acme', tenantName: 'Acme', tenantStatus: 'active', role: 'admin' }];
+      }
+      if (url === '/api/notifications') return { notifications: [], unreadCount: 0 };
+      return [];
+    });
+
+    renderLayout();
+
+    expect(await screen.findByText('Acme')).toBeInTheDocument();
   });
 
   it('shows the Engines nav item when the user can create engines', async () => {

@@ -12,6 +12,7 @@ import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index
 
 const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const ordinaryLocalPasswordEnabled = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+const assignRole = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'tenant-membership-1', warnings: [] }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -47,11 +48,16 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', 
   loginMethodService: { ordinaryLocalPasswordEnabled },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  permissionService: { assignRole },
+}));
+
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
   config: {
     frontendUrl: 'http://frontend.test',
     nodeEnv: 'test',
+    tenancyMode: 'single',
     jwtAccessTokenExpires: 900,
     jwtRefreshTokenExpires: 604800,
   },
@@ -334,6 +340,7 @@ describe('InvitationService', () => {
       invitationId: 'inv-1',
       userId: 'user-1',
       tenantSlug: 'default',
+      tenantId: 'tenant-default',
     });
     expect(execute).toHaveBeenCalled();
   });
@@ -358,6 +365,7 @@ describe('InvitationService', () => {
       invitationId: 'inv-1',
       userId: 'user-1',
       tenantSlug: 'default',
+      tenantId: 'tenant-default',
     });
     expect(invitationRepo.createQueryBuilder).not.toHaveBeenCalledWith(expect.anything());
   });
@@ -434,6 +442,7 @@ describe('InvitationService', () => {
       }),
     );
     expect(projectMemberService.addMember).toHaveBeenCalledWith('project-1', 'user-1', ['delegate', 'viewer'], 'admin-1');
+    expect(assignRole).not.toHaveBeenCalled();
     expect((projectMemberService.addMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
       managerInvitationRepo.update.mock.invocationCallOrder[0],
     );
@@ -496,6 +505,7 @@ describe('InvitationService', () => {
     await service.completeInvitation('inv-1', 'StrongPass!123');
 
     expect(engineService.addEngineMember).toHaveBeenCalledWith('engine-1', 'user-1', 'deployer', 'admin-1');
+    expect(assignRole).not.toHaveBeenCalled();
     expect((engineService.addEngineMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
       managerInvitationRepo.update.mock.invocationCallOrder[0],
     );

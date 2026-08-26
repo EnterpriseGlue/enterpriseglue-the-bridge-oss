@@ -48,9 +48,10 @@ describe('authSessionService', () => {
     }), { isEnabled: true });
   });
 
-  it('keeps local sessions unscoped when no provider lineage is supplied', async () => {
-    await authSessionService.issue({ id: 'user-1', email: 'person@example.test' });
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ identityProviderId: null }));
+  it('binds local sessions to the native default tenant in single mode', async () => {
+    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }))
+      .resolves.toEqual(expect.objectContaining({ tenantId: 'tenant-default' }));
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ identityProviderId: null, tenantId: 'tenant-default' }));
   });
 
   it('preserves the current session version in newly issued provider sessions', async () => {
@@ -58,8 +59,8 @@ describe('authSessionService', () => {
 
     await authSessionService.issue(user, { identityProviderId: 'provider-1', ...providerTrust });
 
-    expect(generateAccessToken).toHaveBeenCalledWith(user, { administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false });
-    expect(generateRefreshToken).toHaveBeenCalledWith(user, { administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false });
+    expect(generateAccessToken).toHaveBeenCalledWith(user, expect.objectContaining({ administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false, tenantId: 'tenant-default', tenantSlug: 'default' }));
+    expect(generateRefreshToken).toHaveBeenCalledWith(user, expect.objectContaining({ administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false, tenantId: 'tenant-default', tenantSlug: 'default' }));
   });
 
   it('marks administrator-recovery access, refresh, and durable session metadata', async () => {
@@ -67,8 +68,8 @@ describe('authSessionService', () => {
 
     await authSessionService.issue(user, { administratorRecovery: true, authenticationMethod: 'recovery', userAgent: 'recovery-agent' });
 
-    expect(generateAccessToken).toHaveBeenCalledWith(user, { administratorRecovery: true, authenticationMethod: 'recovery', mfaVerified: false });
-    expect(generateRefreshToken).toHaveBeenCalledWith(user, { administratorRecovery: true, authenticationMethod: 'recovery', mfaVerified: false });
+    expect(generateAccessToken).toHaveBeenCalledWith(user, expect.objectContaining({ administratorRecovery: true, authenticationMethod: 'recovery', mfaVerified: false }));
+    expect(generateRefreshToken).toHaveBeenCalledWith(user, expect.objectContaining({ administratorRecovery: true, authenticationMethod: 'recovery', mfaVerified: false }));
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       deviceInfo: JSON.stringify({ userAgent: 'recovery-agent', ip: null, recovery: 'platform_administrator', authenticationMethod: 'recovery' }),
     }));

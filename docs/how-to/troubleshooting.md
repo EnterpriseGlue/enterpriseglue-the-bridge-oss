@@ -45,7 +45,7 @@ Bundles**. These surfaces intentionally show the same safe issue code:
 | `hash_mismatch` | Recompute the reviewed payload SHA-256; do not update the pin until the content is reviewed. |
 | `validation_failed` | Run bundle preview and correct schema or cross-file reference errors. |
 | `secret_preflight_failed` | Restore the referenced environment variable or approved file without putting its value in the bundle. |
-| `tenant_scope_missing` | Set the exact expected platform or tenant scope for apply. |
+| `tenant_scope_missing` | Set `EG_CONFIG_EXPECTED_TENANT_SCOPE=platform` for OSS apply. This assertion does not select a native pooled tenant. |
 | `apply_failed` | Inspect the sanitized preview/apply diagnostics and apply-run receipt. |
 | `identity_reconciliation_failed` | Inspect the receipt's reconciliation tasks and correct the provider or stored-snapshot failure before retrying. |
 

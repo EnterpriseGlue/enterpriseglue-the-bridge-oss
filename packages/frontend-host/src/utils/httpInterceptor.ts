@@ -3,14 +3,15 @@
  * Intercepts fetch requests to handle authentication and token refresh
  *
  * Unified Tenant Routing (Option A):
- * - All tenant-scoped API calls are automatically prefixed with /t/:tenantSlug
- * - OSS uses /t/default/* paths
- * - EE uses /t/:actualTenantSlug/* paths
+ * - Legacy tenant-scoped APIs are automatically prefixed with /t/:tenantSlug
+ * - Native tenant APIs use the canonical /api/t/:tenantSlug shape
+ * - OSS single mode resolves the canonical default tenant
  */
 
 import { USER_KEY } from '../constants/storageKeys.js';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils.js';
 import { config } from '../config.js';
+import { getTenancyCapabilities } from '../services/tenancy.js';
 
 const API_BASE_URL = '/api';
 const DEFAULT_TENANT_SLUG = 'default';
@@ -26,6 +27,7 @@ const TENANT_SCOPED_API_PREFIXES = [
   '/api/audit',
   '/api/notifications',
   '/api/dashboard',
+  '/api/identity/providers',
 ];
 
 // API prefixes that are platform-level (no tenant prefix needed)
@@ -58,6 +60,19 @@ function isTenantScopedUrl(url: string): boolean {
   // Check if it's a platform-level API (no prefix needed)
   if (PLATFORM_API_PREFIXES.some((prefix) => url.startsWith(prefix))) return false;
 
+  // On a verified tenant hostname, pooled APIs deliberately stay root-shaped;
+  // the backend derives the tenant from that hostname. The platform hostname
+  // cannot resolve a tenant and therefore fails closed.
+  if (getTenancyCapabilities().mode === 'pooled' && !window.location.pathname.match(/^\/t\/[^/]+(?:\/|$)/)) {
+    return false;
+  }
+
+  // Provider administration is platform-scoped on the root settings page in
+  // single mode and tenant-scoped only from a canonical tenant route.
+  if (url.startsWith('/api/identity/providers') && !window.location.pathname.match(/^\/t\/[^/]+(?:\/|$)/)) {
+    return false;
+  }
+
   // Check if it's a tenant-scoped API
   return TENANT_SCOPED_API_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
@@ -69,6 +84,11 @@ function addTenantPrefix(url: string): string {
   if (!isTenantScopedUrl(url)) return url;
 
   const tenantSlug = getTenantSlugFromPathname(window.location.pathname);
+  // Native tenant identity-provider administration uses the canonical API
+  // shape. Keep the older /t/:slug prefix only for legacy tenant APIs.
+  if (url.startsWith('/api/identity/providers')) {
+    return `/api/t/${encodeURIComponent(tenantSlug)}${url.slice('/api'.length)}`;
+  }
   return `/t/${encodeURIComponent(tenantSlug)}${url}`;
 }
 

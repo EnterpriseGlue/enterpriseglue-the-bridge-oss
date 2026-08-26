@@ -31,7 +31,7 @@ const stages = [
   'cleanup',
 ];
 
-test('declares the exact five-adapter, five-baseline, seven-stage denominator', () => {
+test('declares the exact five-adapter, six-baseline, seven-stage denominator', () => {
   assert.equal(contract.schemaVersion, 1);
   assert.deepEqual(Object.keys(contract.databases), databases);
   assert.deepEqual(contract.requiredStages, stages);
@@ -43,6 +43,7 @@ test('declares the exact five-adapter, five-baseline, seven-stage denominator', 
       'pre_access_governance_ownership',
       'pre_login_experience',
       'pre_external_identity_and_project_tenancy',
+      'v0_16_2_pre_native_saas_tenancy',
     ],
   );
   assert.ok(contract.requiredTables.engines.includes('tenancy_mode'));

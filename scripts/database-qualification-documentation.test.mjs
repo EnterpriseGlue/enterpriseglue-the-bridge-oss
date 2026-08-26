@@ -25,9 +25,9 @@ const documents = documentationFiles.map((file) => ({
 
 test('database qualification denominator is derived from the matrix contract', () => {
   assert.equal(databaseCount, 5);
-  assert.equal(baselineCount, 5);
+  assert.equal(baselineCount, 6);
   assert.equal(stageCells, 35);
-  assert.equal(baselineObservations, 25);
+  assert.equal(baselineObservations, 30);
 });
 
 test('database qualification documentation contains no stale two-baseline denominator', () => {
@@ -37,6 +37,12 @@ test('database qualification documentation contains no stale two-baseline denomi
     /10\/10 (?:supported-)?baseline/i,
     /all ten (?:adapter\/)?upgrade-baseline/i,
     /two baselines [×x] five adapters/i,
+    /all five supported upgrade baselines/i,
+    /five supported upgrade baselines/i,
+    /25\/25 (?:supported-)?baseline/i,
+    /all 25 (?:adapter\/)?upgrade-baseline observations/i,
+    /all 25 baseline observations/i,
+    /35 adapter\/stage cells, 25\s+adapter\/baseline observations/i,
   ];
 
   for (const { file, text } of documents) {

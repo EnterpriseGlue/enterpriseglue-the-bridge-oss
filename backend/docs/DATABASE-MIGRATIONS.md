@@ -32,6 +32,8 @@ Edit the appropriate entity file in
 - `PlatformSettings.ts`, `Invitation.ts` - Platform
 - `Engine.ts`, `SavedFilter.ts` - Mission Control
 - `EngineTenantMapping.ts`, `RuntimeResource.ts` - engine tenancy resolution
+- `Tenant.ts`, `TenantDomain.ts`, `TenantDiscoveryDomain.ts`,
+  `TenantDiscoveryChallenge.ts`, `TenantLoginPolicy.ts` - native SaaS tenancy
 - `GitRepository.ts`, `GitCredential.ts` - Git integration
 - `EngineDeployment.ts` - Engine deployments
 - `Batch.ts` - Batch operations
@@ -185,6 +187,27 @@ pnpm --dir backend exec vitest run \
   __tests__/shared/db/persistenceMigrationBridge.test.ts \
   --config vitest.config.ts
 ```
+
+### Native SaaS tenancy migrations
+
+The native tenancy upgrade from `v0.16.2` is ordered:
+
+1. `1700000000124-add-native-saas-tenancy` creates canonical tenant,
+   routing/discovery-domain, discovery-challenge, and login-policy storage and
+   adds tenant bindings to authentication records.
+2. `1700000000125-backfill-native-tenant-ownership` assigns the explicit
+   tenant-owned table allowlist to the canonical default tenant. This data
+   classification is intentionally irreversible.
+3. `1700000000126-add-postgres-tenant-rls` installs the PostgreSQL forced-RLS
+   policies used only by native `pooled` mode.
+
+Register the portable entities in every adapter so `single` mode continues to
+work on PostgreSQL, MySQL, SQL Server, Oracle, and Spanner. Do not enable
+`pooled` mode outside PostgreSQL. Upgrade and verify in `single` mode before
+enabling RLS-backed pooled routing; preserve a pre-upgrade backup because down
+migrations cannot reconstruct the legacy ownership classification or retain
+removed pooled records. The complete sequence and restricted-role checks are
+in [Native SaaS Tenancy](../../docs/architecture/11-native-saas-tenancy.md#upgrade-from-0162).
 
 ## Configuration
 

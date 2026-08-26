@@ -114,6 +114,12 @@ Use this mode when you want to run exactly what CI published:
 Admin credentials come from the active env file (`.local/docker/env/docker.env` for dev, `.local/docker/env/production.env` for source-built prod, `.local/docker/env/images.*.env` for published-image mode, or `.env` for the standalone self-host file).
 Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 
+Native tenancy defaults to backward-compatible `single` mode. The opt-in
+`pooled` foundation is PostgreSQL-only and remains pre-production in this
+release; it requires forced RLS, a restricted database role, and the complete
+qualification lane before activation. See
+[Native SaaS Tenancy](docs/architecture/11-native-saas-tenancy.md).
+
 ## OpenShift deployment assets
 - Kustomize base and overlays:
   - `infra/kubernetes/openshift/kustomize/base/`
@@ -151,7 +157,8 @@ pnpm run prod:images:oracle:down
 - [Docker Deployment (Dev + Production)](docs/how-to/deploy-docker.md)
 - [OpenShift Deployment](docs/how-to/deploy-openshift.md)
 - [Configuration Reference](docs/reference/configuration.md)
-- [Platform Modules Overview](docs/explanation/platform-modules.md)
+- [Native SaaS Tenancy](docs/architecture/11-native-saas-tenancy.md)
+- [Architecture Overview](docs/architecture/00-architecture-overview.md)
 
 ## Modules (High-Level)
 - **Voyager**: UI shell and feature modules.

@@ -82,6 +82,15 @@ channel if an intentional manual repair is required.
 
 ## Configuration Channels
 
+The configuration channels below manage the canonical single/default OSS
+scope. In native `pooled` mode, do not use a bundle `tenantKey` or expected
+tenant scope as a routing mechanism. Create tenants and manage their
+memberships, login policy, identity providers, discovery domains, placement,
+and custom hostnames through the tenant administration REST APIs and, where
+the matrix says it is available, the portal.
+The exact channel ownership is documented in
+[Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#control-ownership-in-the-first-pooled-oss-slice).
+
 ### Platform UI
 
 Use Platform Settings and Access Control for interactive administration:
