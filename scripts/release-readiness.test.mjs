@@ -24,10 +24,13 @@ const productionImages = await readFile(
   'utf8',
 )
 
-test('release candidate detection works for pull requests and merge groups', () => {
+test('release candidate detection works for pull requests, manual runs, and merge groups', () => {
   assert.match(preflight, /is_release_pull_request:/)
   assert.match(preflight, /startsWith\(steps\.pull_request\.outputs\.head_ref, 'release-please--branches--'\)/)
   assert.match(preflight, /steps\.pull_request\.outputs\.head_repository == github\.repository/)
+  assert.match(preflight, /context\.eventName === 'workflow_dispatch'/)
+  assert.match(preflight, /github\.rest\.pulls\.list/)
+  assert.match(preflight, /head: `\$\{context\.repo\.owner\}:\$\{branch\}`/)
   assert.match(detect, /run_release_readiness/)
   assert.match(detect, /check-release-candidate-readiness/)
 })
