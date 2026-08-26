@@ -118,6 +118,40 @@ source fragments and rerun the generator. Release pull requests use merge
 commits so the release commit, generated document, manifest, and changelog stay
 together.
 
+## Release-candidate readiness
+
+Release Please pull requests have an additional read-only qualification phase
+before they may merge. The phase runs again on the merge-queue candidate and
+binds its retained receipt to the exact candidate commit. It:
+
+1. verifies that every job in the main CI workflow is covered by the required
+   `ci-complete` aggregate;
+2. checks published-package version discipline from the latest stable tag;
+3. builds, tests, packs, and validates the public plugin package set;
+4. compares existing immutable package and Helm chart versions with the
+   candidate payload, or records that a new version would be published;
+5. builds the backend, frontend, plugin-installer, and Plugin Manager
+   production images and rejects HIGH or CRITICAL vulnerability findings; and
+6. rehearses chart receipts, signatures, immutable repulls, the signed air-gap
+   bundle, and a disconnected registry import.
+
+The readiness job has only `contents: read` and `packages: read`. Package,
+image, chart, signature, attestation, and release publication remain separate
+post-tag operations. A release must not be merged while any candidate workflow
+is failed, cancelled, timed out, still running, or awaiting action, even if an
+individual required status context appears green.
+
+The retained `.artifacts/release-readiness/release-readiness.json` identifies
+the exact source revision and comparison tag and records that no publication
+occurred. Registry plan and dry-run receipts remain CI artifacts rather than
+repository documentation.
+
+Immutable package comparison hashes paths, file modes, links, and file
+contents. Because JSON object member order has no semantic meaning, the
+packaged `package.json` is recursively key-sorted before hashing; arrays and
+all values retain their exact order and content. Other packaged files remain
+byte-sensitive.
+
 ## Baseline and hotfix safety
 
 The latest stable `vX.Y.Z` tag must equal the version in
@@ -139,5 +173,7 @@ After publication, verify:
 - image digests and source revision are recorded;
 - release image smoke tests pass;
 - the vulnerability scan evaluates the newly published digests; and
+- protected package publication completes for the exact release commit;
+- the signed plugin-toolchain workflow completes for the exact release commit;
 - package consumers and EnterpriseGlue EE are updated to the package versions
   listed in the release notes.

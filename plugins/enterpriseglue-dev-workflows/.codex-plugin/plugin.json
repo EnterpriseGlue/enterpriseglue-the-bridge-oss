@@ -1,6 +1,6 @@
 {
   "name": "enterpriseglue-dev-workflows",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Versioned EnterpriseGlue development, validation, delivery, and release workflows for Codex.",
   "author": {
     "name": "EnterpriseGlue"
