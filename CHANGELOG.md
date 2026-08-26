@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.17.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.2...v0.17.0) (2026-08-26)
+
+
+### Features
+
+* **tenancy:** add native pooled SaaS tenancy ([#397](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/397)) ([2e696f6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2e696f6eb7873979724af2deee65b1324becaf22))
+
 ## [0.16.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.1...v0.16.2) (2026-08-25)
 
 
