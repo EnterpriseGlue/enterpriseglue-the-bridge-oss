@@ -82,22 +82,30 @@ test('the production image gate scans every release image', () => {
   assert.match(productionImages, /--severity HIGH,CRITICAL/)
 })
 
-test('the local OCI drill preloads its immutable disposable registry image', () => {
+test('the local OCI drill qualifies the complete five-artifact toolchain', () => {
   assert.match(
     toolchainLocal,
     /ZOT_IMAGE="\$\{EG_PLUGIN_TOOLCHAIN_ZOT_IMAGE:-ghcr\.io\/project-zot\/zot-minimal@sha256:[a-f0-9]{64}\}"/,
   )
   assert.match(toolchainLocal, /docker pull "\$ZOT_IMAGE"/)
   assert.equal([...toolchainLocal.matchAll(/--pull=never/g)].length, 2)
-  assert.match(toolchainLocal, /docker buildx build/)
+  assert.equal([...toolchainLocal.matchAll(/docker buildx build/g)].length, 2)
   assert.match(toolchainLocal, /--provenance=false/)
   assert.match(toolchainLocal, /--sbom=false/)
   assert.match(toolchainLocal, /--output "type=oci,dest=\$INSTALLER_OCI_LAYOUT"/)
+  assert.match(toolchainLocal, /--output "type=oci,dest=\$MANAGER_OCI_LAYOUT"/)
   assert.match(toolchainLocal, /oras manifest fetch --oci-layout "\$INSTALLER_OCI_LAYOUT_REFERENCE"/)
-  assert.match(toolchainLocal, /oras cp/)
+  assert.match(toolchainLocal, /oras manifest fetch --oci-layout "\$MANAGER_OCI_LAYOUT_REFERENCE"/)
+  assert.equal([...toolchainLocal.matchAll(/oras cp/g)].length, 2)
   assert.match(toolchainLocal, /--from-oci-layout/)
   assert.match(toolchainLocal, /--to-plain-http/)
   assert.doesNotMatch(toolchainLocal, /docker push "\$INSTALLER_TAG"/)
-  assert.equal([...toolchainLocal.matchAll(/helm-chart-archive\.mjs" compare/g)].length, 2)
+  assert.doesNotMatch(toolchainLocal, /docker push "\$MANAGER_TAG"/)
+  assert.equal([...toolchainLocal.matchAll(/helm-chart-archive\.mjs" compare/g)].length, 3)
+  assert.match(toolchainLocal, /--arg managerVersion "\$MANAGER_VERSION"/)
+  assert.match(toolchainLocal, /--arg manager "\$MANAGER_REFERENCE"/)
+  assert.match(toolchainLocal, /--arg managerChart "\$MANAGER_CHART_REFERENCE"/)
+  assert.match(toolchainLocal, /and \(\.artifacts \| length == 5\)/)
+  assert.match(toolchainLocal, /for image in "\$TARGET_INSTALLER_REFERENCE" "\$TARGET_MANAGER_REFERENCE"/)
   assert.doesNotMatch(toolchainLocal, /sha256_file "\$REPRO_OUTPUT/)
 })
