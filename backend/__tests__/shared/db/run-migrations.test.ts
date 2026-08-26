@@ -380,7 +380,10 @@ describe('runMigrations bootstrap behavior', () => {
       createSchema: vi.fn().mockResolvedValue(undefined),
       release: vi.fn().mockResolvedValue(undefined),
     };
-    const integrityRunner = createIntegrityRunner();
+    const integrityRunner = {
+      ...createIntegrityRunner(),
+      connection: { options: { type: 'postgres' }, entityMetadatas: [] },
+    };
 
     const dataSource = {
       createQueryRunner: vi

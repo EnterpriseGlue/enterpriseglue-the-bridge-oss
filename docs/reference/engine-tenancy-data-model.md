@@ -525,8 +525,9 @@ collection success `0`, and retains the in-process fallback counters.
 
 A fallback is counted only when dedicated provisioning uses request context,
 no request tenant is present, and resolution actually selects the canonical
-local default tenant. An explicit default reference and a resolver-authorized
-default tenant do not increment the compatibility counter.
+local default tenant in `single` mode. Pooled tenant routes require resolved
+context and do not use this fallback. An explicit default reference and a
+resolver-authorized default tenant do not increment the compatibility counter.
 
 ## Functional Coverage
 

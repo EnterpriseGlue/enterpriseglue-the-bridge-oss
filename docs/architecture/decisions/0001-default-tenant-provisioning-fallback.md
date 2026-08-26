@@ -37,8 +37,9 @@ link-validated, and covered by the engine-tenancy documentation contract lane.
 ## Consequences
 
 - A normal decentralized setup remains simple: the UI selects **Dedicated —
-  current tenant**, and local OSS can persist `tenant-default` when no request
-  tenant exists.
+  current tenant**, and `single`-mode local OSS can persist `tenant-default`
+  when no request tenant exists. Native pooled tenant routes require resolved
+  context and do not invoke this fallback.
 - A centralized installation is safe because default fallback cannot authorize
   a resource on a shared engine.
 - The internal manual-create fallback remains observable through a bounded

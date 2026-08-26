@@ -55,6 +55,28 @@ const {
 } = await import('@enterpriseglue/shared/schemas/auth/session.js');
 
 const {
+  NativeTenantSchema,
+  TenantCreateRequestSchema,
+  TenantUpdateRequestSchema,
+  NativeTenantMembershipSchema,
+  TenantMemberSchema,
+  TenantMemberUpsertRequestSchema,
+  TenantLoginPolicySchema,
+  TenantDiscoveryDomainSchema,
+  TenantDiscoveryDomainCreateRequestSchema,
+  TenantDiscoveryDomainVerifyRequestSchema,
+  TenantDiscoveryRequestSchema,
+  TenantDiscoveryResponseSchema,
+  TenantDiscoveryExchangeRequestSchema,
+  TenantDiscoveryExchangeResponseSchema,
+  TenantDomainSchema,
+  TenantDomainCreateRequestSchema,
+  TenantDomainVerifyRequestSchema,
+  TenantSlugSchema,
+  TenancyCapabilitiesSchema,
+} = await import('@enterpriseglue/shared/schemas/platform-admin/tenant.js');
+
+const {
   EngineSchema,
   EngineSchemaRaw,
   AccessibleEngineSummarySchema,
@@ -2617,6 +2639,148 @@ registry.registerPath({
 
 // Provider-neutral identity providers. Configuration holds only references to
 // secrets; the values behind those references are never returned by this API.
+const TenantPathSchema = z.object({ tenantSlug: TenantSlugSchema });
+const TenantIdPathSchema = z.object({ tenantId: z.string().min(1).max(160) });
+const TenantMemberPathSchema = TenantPathSchema.extend({ userId: z.string().min(1) });
+const TenantDomainPathSchema = TenantPathSchema.extend({ domainId: z.string().min(1) });
+const TenantDiscoveryDomainPathSchema = TenantPathSchema.extend({ domainId: z.string().min(1) });
+const TenantDomainCreateResponseSchema = z.object({
+  domain: TenantDomainSchema,
+  verificationToken: z.string(),
+  dnsRecord: z.object({ name: z.string(), type: z.literal('TXT'), value: z.string() }),
+});
+const TenantDiscoveryDomainCreateResponseSchema = z.object({
+  domain: TenantDiscoveryDomainSchema,
+  verificationToken: z.string(),
+  dnsRecord: z.object({ name: z.string(), type: z.literal('TXT'), value: z.string() }),
+});
+
+registry.register('NativeTenant', NativeTenantSchema);
+registry.register('NativeTenantMembership', NativeTenantMembershipSchema);
+registry.register('TenantLoginPolicy', TenantLoginPolicySchema);
+registry.register('TenantDomain', TenantDomainSchema);
+registry.register('TenantDiscoveryDomain', TenantDiscoveryDomainSchema);
+registry.register('TenantDiscoveryResponse', TenantDiscoveryResponseSchema);
+registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
+registry.registerPath({
+  method: 'get', path: '/api/tenancy/capabilities',
+  ...authzExemption('GET', '/api/tenancy/capabilities'),
+  responses: { 200: { description: 'Non-enumerating native tenancy capabilities', content: { 'application/json': { schema: TenancyCapabilitiesSchema } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/tenant-discovery',
+  ...authzExemption('POST', '/api/auth/tenant-discovery'),
+  request: { body: { content: { 'application/json': { schema: TenantDiscoveryRequestSchema } } } },
+  responses: { 200: { description: 'One verified tenant route or the common email-verification fallback', content: { 'application/json': { schema: TenantDiscoveryResponseSchema } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/tenant-discovery/exchange',
+  ...authzExemption('POST', '/api/auth/tenant-discovery/exchange'),
+  request: { body: { content: { 'application/json': { schema: TenantDiscoveryExchangeRequestSchema } } } },
+  responses: { 200: { description: 'Active memberships after consuming a valid single-use email token', content: { 'application/json': { schema: TenantDiscoveryExchangeResponseSchema } } }, 400: { description: 'Invalid, expired, or already consumed token' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/auth/my-tenants',
+  ...authzExemption('GET', '/api/auth/my-tenants'),
+  responses: { 200: { description: 'Active tenant memberships for the authenticated principal', content: { 'application/json': { schema: z.array(NativeTenantMembershipSchema) } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/switch-tenant',
+  ...authzExemption('POST', '/api/auth/switch-tenant'),
+  request: { body: { content: { 'application/json': { schema: z.object({ tenantSlug: TenantSlugSchema }) } } } },
+  responses: { 200: { description: 'Tenant-bound replacement session issued', content: { 'application/json': { schema: z.object({ tenantId: z.string(), tenantSlug: TenantSlugSchema }) } } }, 403: { description: 'Active target-tenant membership is required' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/platform/tenants',
+  ...authzExtension('platform.tenants.read', 'GET', '/api/platform/tenants'),
+  responses: { 200: { description: 'Native tenant lifecycle records', content: { 'application/json': { schema: z.array(NativeTenantSchema) } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/platform/tenants',
+  ...authzExtension('platform.tenants.manage', 'POST', '/api/platform/tenants'),
+  request: { body: { content: { 'application/json': { schema: TenantCreateRequestSchema } } } },
+  responses: { 201: { description: 'Tenant created with its first administrator', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Slug already exists or deployment is in single mode' } },
+});
+registry.registerPath({
+  method: 'patch', path: '/api/platform/tenants/{tenantId}',
+  ...authzExtension('platform.tenants.manage', 'PATCH', '/api/platform/tenants/{tenantId}'),
+  request: { params: TenantIdPathSchema, body: { content: { 'application/json': { schema: TenantUpdateRequestSchema } } } },
+  responses: { 200: { description: 'Tenant lifecycle or placement state updated', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Placement epoch conflict or protected default-tenant transition' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/tenant',
+  ...authzExtension('tenant.settings.read', 'GET', '/api/t/{tenantSlug}/tenant'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Current tenant profile', content: { 'application/json': { schema: NativeTenantSchema } } } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/tenant/login-policy',
+  ...authzExtension('tenant.settings.manage', 'GET', '/api/t/{tenantSlug}/tenant/login-policy'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Current tenant login policy', content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
+});
+registry.registerPath({
+  method: 'put', path: '/api/t/{tenantSlug}/tenant/login-policy',
+  ...authzExtension('tenant.settings.manage', 'PUT', '/api/t/{tenantSlug}/tenant/login-policy'),
+  request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
+  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/tenant/domains',
+  ...authzExtension('tenant.settings.manage', 'GET', '/api/t/{tenantSlug}/tenant/domains'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Tenant custom domains', content: { 'application/json': { schema: z.array(TenantDomainSchema) } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/domains',
+  ...authzExtension('tenant.settings.manage', 'POST', '/api/t/{tenantSlug}/tenant/domains'),
+  request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: TenantDomainCreateRequestSchema } } } },
+  responses: { 201: { description: 'Pending tenant domain with reveal-once DNS token', content: { 'application/json': { schema: TenantDomainCreateResponseSchema } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/domains/{domainId}/verify',
+  ...authzExtension('tenant.settings.manage', 'POST', '/api/t/{tenantSlug}/tenant/domains/{domainId}/verify'),
+  request: { params: TenantDomainPathSchema, body: { content: { 'application/json': { schema: TenantDomainVerifyRequestSchema } } } },
+  responses: { 200: { description: 'Verified tenant domain', content: { 'application/json': { schema: TenantDomainSchema } } }, 409: { description: 'DNS verification record was not found or did not match' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/tenant/discovery-domains',
+  ...authzExtension('tenant.settings.manage', 'GET', '/api/t/{tenantSlug}/tenant/discovery-domains'),
+  request: { params: TenantPathSchema },
+  responses: { 200: { description: 'Tenant work-email discovery domains', content: { 'application/json': { schema: z.array(TenantDiscoveryDomainSchema) } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/discovery-domains',
+  ...authzExtension('tenant.settings.manage', 'POST', '/api/t/{tenantSlug}/tenant/discovery-domains'),
+  request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: TenantDiscoveryDomainCreateRequestSchema } } } },
+  responses: { 201: { description: 'Pending work-email discovery domain with reveal-once DNS token', content: { 'application/json': { schema: TenantDiscoveryDomainCreateResponseSchema } } } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/discovery-domains/{domainId}/verify',
+  ...authzExtension('tenant.settings.manage', 'POST', '/api/t/{tenantSlug}/tenant/discovery-domains/{domainId}/verify'),
+  request: { params: TenantDiscoveryDomainPathSchema, body: { content: { 'application/json': { schema: TenantDiscoveryDomainVerifyRequestSchema } } } },
+  responses: { 200: { description: 'Verified work-email discovery domain', content: { 'application/json': { schema: TenantDiscoveryDomainSchema } } }, 409: { description: 'DNS verification record was not found or did not match' } },
+});
+registry.registerPath({
+  method: 'delete', path: '/api/t/{tenantSlug}/tenant/discovery-domains/{domainId}',
+  ...authzExtension('tenant.settings.manage', 'DELETE', '/api/t/{tenantSlug}/tenant/discovery-domains/{domainId}'),
+  request: { params: TenantDiscoveryDomainPathSchema },
+  responses: { 204: { description: 'Organization discovery disabled for this domain' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/tenant/members',
+  ...authzExtension('tenant.members.manage', 'GET', '/api/t/{tenantSlug}/tenant/members'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Current tenant members', content: { 'application/json': { schema: z.array(TenantMemberSchema) } } } },
+});
+registry.registerPath({
+  method: 'put', path: '/api/t/{tenantSlug}/tenant/members/{userId}',
+  ...authzExtension('tenant.members.manage', 'PUT', '/api/t/{tenantSlug}/tenant/members/{userId}'),
+  request: { params: TenantMemberPathSchema, body: { content: { 'application/json': { schema: TenantMemberUpsertRequestSchema.omit({ userId: true }) } } } },
+  responses: { 204: { description: 'Tenant member role granted' } },
+});
+registry.registerPath({
+  method: 'delete', path: '/api/t/{tenantSlug}/tenant/members/{userId}',
+  ...authzExtension('tenant.members.manage', 'DELETE', '/api/t/{tenantSlug}/tenant/members/{userId}'),
+  request: { params: TenantMemberPathSchema }, responses: { 204: { description: 'Tenant membership removed' }, 409: { description: 'The tenant must retain at least one administrator' } },
+});
+
 const identityProviderMigrationSchemas = await import('./platform-admin/authz.js');
 registry.register('IdentityProvider', identityProviderMigrationSchemas.IdentityProviderResponseSchema);
 registry.registerPath({
@@ -2722,6 +2886,38 @@ registry.registerPath({
   request: { params: z.object({ key: z.string() }) },
   responses: { 204: { description: 'Identity provider archived' }, 404: { description: 'Identity provider not found' } },
 });
+
+// The tenant aliases expose the same provider-neutral schemas while changing
+// both the FGA action and the durable tenant scope.
+const TenantProviderPathSchema = TenantPathSchema.extend({ key: z.string().min(1).max(128) });
+const TenantProviderRunPathSchema = TenantProviderPathSchema.extend({ runId: z.string().min(1).max(128) });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers'), request: { params: TenantPathSchema }, responses: { 200: { description: 'Identity providers owned by the current tenant', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.IdentityProviderResponseSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Current tenant identity provider', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found in this tenant' } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs'), request: { params: TenantProviderPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncRunsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization runs', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncRunSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs/{runId}/events', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs/{runId}/events'), request: { params: TenantProviderRunPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncEventsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization events', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncEventSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderRequestSchema } } } }, responses: { 201: { description: 'Tenant identity provider created', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/external-identities/unlink', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/external-identities/unlink'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkRequestSchema } } } }, responses: { 200: { description: 'Tenant provider subject unlinked', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/api/t/{tenantSlug}/identity/providers/{key}', ...authzExtension('tenant.sso.providers.manage', 'PUT', '/api/t/{tenantSlug}/identity/providers/{key}'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderUpdateSchema } } } }, responses: { 200: { description: 'Tenant identity provider updated', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/reconcile', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/reconcile'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Tenant LDAP provider reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional(), runId: z.string().nullable().optional() }) } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/reconciliation-preview', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/reconciliation-preview'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } } }, responses: { 200: { description: 'Tenant provider membership preview', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderReconciliationPreviewSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/replay-memberships', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/replay-memberships'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } } }, responses: { 200: { description: 'Tenant provider membership replay', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/test-connection', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/test-connection'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Tenant identity provider connection test', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderConnectionTestResponseSchema } } } } });
+registry.registerPath({ method: 'delete', path: '/api/t/{tenantSlug}/identity/providers/{key}', ...authzExtension('tenant.sso.providers.manage', 'DELETE', '/api/t/{tenantSlug}/identity/providers/{key}'), request: { params: TenantProviderPathSchema }, responses: { 204: { description: 'Tenant identity provider disabled' } } });
+
+// Retain the established tenant-prefixed provider aliases for clients that
+// adopted unified tenant routing before the canonical /api/t contract existed.
+registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers'), request: { params: TenantPathSchema }, responses: { 200: { description: 'Backward-compatible alias for tenant identity providers', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.IdentityProviderResponseSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Current tenant identity provider', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found in this tenant' } } });
+registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs'), request: { params: TenantProviderPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncRunsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization runs', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncRunSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs/{runId}/events', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs/{runId}/events'), request: { params: TenantProviderRunPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncEventsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization events', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncEventSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderRequestSchema } } } }, responses: { 201: { description: 'Tenant identity provider created', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/external-identities/unlink', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/external-identities/unlink'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkRequestSchema } } } }, responses: { 200: { description: 'Tenant provider subject unlinked', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/t/{tenantSlug}/api/identity/providers/{key}', ...authzExtension('tenant.sso.providers.manage', 'PUT', '/t/{tenantSlug}/api/identity/providers/{key}'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderUpdateSchema } } } }, responses: { 200: { description: 'Tenant identity provider updated', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/reconcile', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/reconcile'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Tenant LDAP provider reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional(), runId: z.string().nullable().optional() }) } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/reconciliation-preview', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/reconciliation-preview'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } } }, responses: { 200: { description: 'Tenant provider membership preview', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderReconciliationPreviewSchema } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/replay-memberships', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/replay-memberships'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } } }, responses: { 200: { description: 'Tenant provider membership replay', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/test-connection', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/test-connection'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Tenant identity provider connection test', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderConnectionTestResponseSchema } } } } });
+registry.registerPath({ method: 'delete', path: '/t/{tenantSlug}/api/identity/providers/{key}', ...authzExtension('tenant.sso.providers.manage', 'DELETE', '/t/{tenantSlug}/api/identity/providers/{key}'), request: { params: TenantProviderPathSchema }, responses: { 204: { description: 'Tenant identity provider archived' } } });
 
 // Authoritative provisioning directories are deliberately separate from
 // sign-in providers. Credential responses expose token material only on create

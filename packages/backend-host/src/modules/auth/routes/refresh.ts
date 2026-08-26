@@ -12,6 +12,8 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 const router = Router();
 
@@ -39,6 +41,19 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     throw Errors.unauthorized('Invalid token type');
   }
 
+  const tenantId = payload.tenantId || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
+  const tenantSlug = payload.tenantSlug || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_SLUG : null);
+  if (config.tenancyMode === 'pooled' && payload.recovery !== 'platform_administrator') {
+    if (!tenantId || !tenantSlug) throw Errors.unauthorized('Tenant-scoped refresh token required');
+    const tenant = await tenantService.getById(tenantId);
+    if (!tenant || tenant.status !== 'active' || tenant.slug !== tenantSlug) {
+      throw Errors.unauthorized('Session tenant is no longer active');
+    }
+    if (!await tenantService.hasMembership(payload.userId, tenantId)) {
+      throw Errors.unauthorized('Tenant membership is no longer active');
+    }
+  }
+
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
   const refreshTokenRepo = dataSource.getRepository(RefreshToken);
@@ -59,12 +74,23 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
 
   // Verify refresh token exists and is not revoked
   const tokenResult = await refreshTokenRepo.find({
-    where: {
+    where: config.tenancyMode !== 'pooled' ? [{
       userId: user.id,
       revokedAt: IsNull(),
       expiresAt: MoreThan(Date.now()),
+      tenantId: tenantId || IsNull(),
+    }, {
+      userId: user.id,
+      revokedAt: IsNull(),
+      expiresAt: MoreThan(Date.now()),
+      tenantId: IsNull(),
+    }] : {
+      userId: user.id,
+      revokedAt: IsNull(),
+      expiresAt: MoreThan(Date.now()),
+      tenantId: tenantId!,
     },
-    select: ['tokenHash'],
+    select: ['tokenHash', 'tenantId'],
   });
 
   // Check if any of the stored token hashes match the provided token
@@ -86,6 +112,8 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     administratorRecovery: payload.recovery === 'platform_administrator',
     authenticationMethod: payload.authenticationMethod,
     mfaVerified: payload.mfaVerified === true,
+    ...(tenantId ? { tenantId } : {}),
+    ...(tenantSlug ? { tenantSlug } : {}),
   });
 
   // Set new access token as httpOnly cookie

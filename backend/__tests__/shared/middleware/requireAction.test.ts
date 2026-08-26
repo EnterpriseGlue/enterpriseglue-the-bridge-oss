@@ -4,6 +4,7 @@ import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AUTHZ_RESOURCE_RESOLVERS } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { evaluateResolvedAuthzAction, getRuntimeResourceActionDecision, requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
@@ -516,6 +517,11 @@ describe('requireAction project resource resolvers', () => {
         authorizedProjectIds: req.authorizedProjectIds,
       });
     });
+    app.get('/tenant', apiLimiter, requireAction('tenant.settings.read', {
+      resourceResolver: 'tenant.fromContext',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource });
+    });
     app.get('/saved-filters/:id', requireAction('engine.saved-filters.read', {
       resourceResolver: 'engine.bySavedFilterId',
       resourceIdFrom: 'params',
@@ -701,6 +707,28 @@ describe('requireAction project resource resolvers', () => {
         return {};
       },
     });
+  });
+
+  it('resolves tenant-scoped actions only from the trusted tenant context', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const allowed = await request(app).get('/tenant');
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.resource).toEqual({ type: 'tenant', id: 'tenant-default' });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'tenant:settings:view',
+      expect.objectContaining({
+        tenantId: 'tenant-default',
+        resourceType: 'tenant',
+        resourceId: 'tenant-default',
+      }),
+    );
+    expect(getDataSource).not.toHaveBeenCalled();
+
+    const missingTenant = await request(app)
+      .get('/tenant')
+      .set('x-test-without-tenant', 'true');
+    expect(missingTenant.status).toBe(404);
   });
 
   it('uses the engine definition key and inventory for resource-aware definition access', async () => {

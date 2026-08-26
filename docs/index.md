@@ -49,6 +49,7 @@ Audience: Developers and architects.
 - [Architecture Overview](architecture/00-architecture-overview.md)
 - [Logical Architecture](architecture/02-oss-logical-architecture.md)
 - [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
+- [Native SaaS Tenancy](architecture/11-native-saas-tenancy.md)
 - [ADR 0001: Limit Default Tenant Fallback to Provisioning](architecture/decisions/0001-default-tenant-provisioning-fallback.md)
 - [ADR 0003: Separate Authentication from Authoritative Provisioning](architecture/decisions/0003-separate-authentication-and-authoritative-provisioning.md)
 - [Authentication and Authoritative Provisioning](concepts/authentication-and-authoritative-provisioning.md)

@@ -22,12 +22,24 @@ Implemented config-bundle controls and remaining customer-sidecar controls are d
 - Ensure `IMPERSONATION_ENABLED` is **false** in production.
 - Disable unused feature flags.
 - Keep `EG_CONFIG_FAIL_CLOSED=true`, pin reviewed bundle content with
-  `EG_CONFIG_EXPECTED_SHA256`, and require the expected tenant scope for apply.
+  `EG_CONFIG_EXPECTED_SHA256`, and require
+  `EG_CONFIG_EXPECTED_TENANT_SCOPE=platform` for OSS apply. Do not treat that
+  assertion as a native pooled-tenant selector.
+- Before enabling native `pooled` mode, use PostgreSQL, set
+  `EG_TENANT_RLS_ENFORCED=true`, and verify the application role is neither a
+  superuser nor granted `BYPASSRLS`. Complete the two-tenant segregated-SSO
+  qualification lane documented in
+  [Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#repeatable-pooled-end-to-end-qualification).
 
 ## Database
 - Use strong database credentials.
 - Enable TLS where supported (e.g., `POSTGRES_SSL=true`).
 - Ensure schemas are non-public and distinct.
+- Keep `tenants`, `tenant_discovery_domains`, and
+  `tenant_discovery_challenges` outside tenant RLS; they are deliberately
+  limited to bounded pre-authentication lookup and scoped administration
+  services. Tenant-owned business and identity rows must remain covered by
+  forced RLS in pooled mode.
 
 ## Network & Access
 - Restrict access to backend/admin endpoints.

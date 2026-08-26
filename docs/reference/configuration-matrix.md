@@ -26,6 +26,16 @@ in `engine-tenant-mappings.json`. See
 | ENCRYPTION_KEY | Yes | dev value | 64-char hex key |
 | ENTERPRISE_SCHEMA | No | enterprise | Must be non-public and distinct from active main schema |
 
+## Backend (Native Tenancy)
+
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| EG_TENANCY_MODE | No | single | `single` permits only the canonical default tenant; `pooled` enables the pre-production multi-tenant foundation and requires PostgreSQL RLS plus the complete deployment qualification gates. |
+| EG_TENANT_BASE_DOMAIN | No | unset | Managed tenant hostname suffix; `<tenant-slug>.<base-domain>` resolves the canonical tenant. |
+| EG_TENANT_PLACEMENT_KEY | Required for production pooled mode | unset | Secret of at least 32 characters used to verify short-lived control-plane placement assertions. |
+| EG_TENANT_PLACEMENT_MAX_AGE_SECONDS | No | 120 | Maximum assertion lifetime in seconds; maximum 3600. |
+| EG_TENANT_RLS_ENFORCED | Required for pooled mode | false | Must be `true`; startup verifies forced PostgreSQL row-level security and rejects superuser or `BYPASSRLS` application roles before serving pooled traffic. |
+
 ## Backend (Required by DATABASE_TYPE)
 
 ### Postgres
@@ -119,7 +129,7 @@ in `engine-tenant-mappings.json`. See
 | EG_CONFIG_BUNDLE_PATH | No | unset | Absolute path to a mounted JSON configuration envelope or folder-style ZIP archive |
 | EG_CONFIG_BOOTSTRAP_MODE | No | disabled | `disabled`, `validate`, or `apply`; no bundle is read when disabled |
 | EG_CONFIG_EXPECTED_SHA256 | No | unset | Optional SHA-256 of the mounted payload |
-| EG_CONFIG_EXPECTED_TENANT_SCOPE | No | unset | Expected `platform` or tenant scope; required for bootstrap apply |
+| EG_CONFIG_EXPECTED_TENANT_SCOPE | No | unset | Expected `platform` scope; required for OSS bootstrap apply and used as a fail-closed assertion, not as a native pooled-tenant selector |
 | EG_CONFIG_FAIL_CLOSED | No | true in production | Stop startup after a configured bootstrap failure |
 | EG_CONFIG_REQUIRE_SECRET_PREFLIGHT | No | false | Require referenced `env://`, `file://`, or `docker://` secrets to be available before configured bootstrap validation or apply |
 | EG_CONFIG_MAX_BYTES | No | 1048576 | Maximum mounted payload size in bytes |

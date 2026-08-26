@@ -2,6 +2,33 @@ import type { AuthzActionDefinition } from '../permission-actions.js';
 
 export const PLATFORM_AUTHZ_ACTIONS = [
   {
+      actionId: 'platform.tenants.read',
+      permissionId: 'platform:tenants:view',
+      resourceType: 'platform',
+      operation: 'read',
+      risk: 'high',
+      audit: false,
+      category: 'Tenants',
+      description: 'Read native tenant lifecycle and placement metadata.',
+      ui: [{ surfaceId: 'admin.tenants', behavior: 'hide' }],
+      routes: [{ method: 'GET', route: '/api/platform/tenants', resourceResolver: 'platform.self' }],
+    },
+  {
+      actionId: 'platform.tenants.manage',
+      permissionId: 'platform:tenants:manage',
+      resourceType: 'platform',
+      operation: 'manage',
+      risk: 'critical',
+      audit: true,
+      category: 'Tenants',
+      description: 'Create tenants or change native tenant lifecycle and placement state.',
+      ui: [{ surfaceId: 'admin.tenants.actions', behavior: 'disable' }],
+      routes: [
+        { method: 'POST', route: '/api/platform/tenants', resourceResolver: 'platform.self' },
+        { method: 'PATCH', route: '/api/platform/tenants/{tenantId}', resourceResolver: 'platform.self' },
+      ],
+    },
+  {
       actionId: 'platform.authz.permissions.read',
       permissionId: 'platform:authz:roles:view',
       resourceType: 'platform',

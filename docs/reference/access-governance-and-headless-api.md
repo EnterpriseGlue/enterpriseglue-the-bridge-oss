@@ -43,12 +43,48 @@ Headless login clients should use the tenant-scoped public contract:
 | `GET /api/auth/identity/callback` | Complete OIDC using the tenant and provider already bound into state. |
 | `POST /api/auth/providers/saml/callback` | Complete SAML using signed RelayState. |
 
+Pooled clients that begin on the neutral platform hostname may first use:
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /api/auth/tenant-discovery` | Submit a work email and receive one DNS-verified tenant login route or the common zero/multiple-match email-link response. |
+| `POST /api/auth/tenant-discovery/exchange` | Consume the opaque email token once and list only that account's active tenant memberships; no authenticated session is created. |
+
+An organization slug selected by either response is still only a navigation
+input. The tenant route resolver and tenant-specific login/admission checks
+remain authoritative.
+
 The OpenAPI document includes all of these routes and their public-route risk
 classification. The corresponding global discovery/start/login routes are
 compatibility aliases for the OSS/default scope, not multi-tenant interfaces.
-OSS resolves every tenant URL to its canonical default tenant and retains legacy
-platform-scoped provider rows as a read/start fallback. Enterprise deployments
-must resolve the slug before these route handlers execute.
+In `single` mode, tenant-shaped URLs resolve to the canonical default tenant
+and may retain legacy platform-scoped provider rows as a read/start fallback.
+In `pooled` mode, OSS resolves the slug or verified hostname to a real active
+tenant before these route handlers execute; it never rewrites an unknown,
+ambiguous, or inactive tenant to the default tenant.
+
+### Native tenant administration and automation ownership
+
+The first pooled OSS slice exposes native tenant administration through
+OpenAPI-backed REST and the portal. These contracts are distinct from the
+configuration-bundle object model:
+
+| Capability | Canonical REST contract | Portal support | Configuration-bundle support |
+| --- | --- | --- | --- |
+| Tenant list/create/update | `GET/POST /api/platform/tenants`; `PATCH /api/platform/tenants/{tenantId}` | Create, list, and open; lifecycle/placement mutation is API-only | None |
+| Membership list/grant/remove | `GET /api/t/{tenantSlug}/tenant/members`; `PUT/DELETE /api/t/{tenantSlug}/tenant/members/{userId}` | Yes | None; group/role assignments do not create native tenant membership |
+| Login policy | `GET/PUT /api/t/{tenantSlug}/tenant/login-policy` | Yes | Not for non-default pooled tenants |
+| OIDC, SAML, and LDAP providers | `/api/t/{tenantSlug}/identity/providers` | Yes | Not for non-default pooled tenants in this slice |
+| Work-email discovery domains | `/api/t/{tenantSlug}/tenant/discovery-domains` | Yes | None |
+| Custom routing hostnames | `/api/t/{tenantSlug}/tenant/domains` | API-only | None |
+| Membership-aware navigation | `GET /api/auth/my-tenants`; `POST /api/auth/switch-tenant` | Yes | Not applicable |
+
+The top-level `login` block, `identity-providers.json`, and the existing
+configuration-bundle lifecycle remain valid for single/default-scope
+automation. They do not create tenants, select a pooled request tenant, update
+tenant placement, or manage the non-default tenant resources listed above.
+`tenantKey` and `EG_CONFIG_EXPECTED_TENANT_SCOPE` are validation and portability
+inputs; neither is a tenant-routing credential or an authorization bypass.
 
 ### Portal labels and stable interface values
 
@@ -67,11 +103,14 @@ the enum values:
 | Configuration-linked | `ownershipMode: "config_warn"` |
 
 Provider and mapping previews are read-only. Applying saved membership data is
-the audited `POST /api/identity/providers/{key}/replay-memberships` operation:
+the audited `POST /api/identity/providers/{key}/replay-memberships` operation
+in single/default scope and
+`POST /api/t/{tenantSlug}/identity/providers/{key}/replay-memberships` in
+pooled tenant scope:
 it does not contact the provider and its membership changes take effect
-immediately. `DELETE /api/identity/providers/{key}` disables the provider by
-setting `isEnabled: false`; the current contract does not expose a separate
-provider archive state.
+immediately. The corresponding `DELETE` path disables the provider by setting
+`isEnabled: false`; the current contract does not expose a separate provider
+archive state.
 
 ## Effective UI and API Behavior
 

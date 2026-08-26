@@ -26,18 +26,21 @@ import {
   type CreateInvitationRequest,
   type VerifyInvitationOtpRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
+import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 
 const router = Router();
 
 function setOnboardingCookie(res: ExpressResponse, payload: {
   userId: string;
   invitationId: string;
+  tenantId: string;
   tenantSlug: string;
   authSessionVersion?: number;
 }) {
   const onboardingToken = generateOnboardingToken({
     userId: payload.userId,
     invitationId: payload.invitationId,
+    tenantId: payload.tenantId,
     tenantSlug: payload.tenantSlug,
     authSessionVersion: payload.authSessionVersion,
   });
@@ -74,9 +77,9 @@ async function loadResourceName(resourceType: 'tenant' | 'project' | 'engine', t
   return resourceId || tenantSlug;
 }
 
-router.get('/api/t/:tenantSlug/invitations/capabilities', apiLimiter, requireAuth, asyncHandler(async (req, res) => {
+router.get('/api/t/:tenantSlug/invitations/capabilities', apiLimiter, resolveTenantContext({ required: true }), requireAuth, asyncHandler(async (req, res) => {
   const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
-  const ssoRequired = await invitationService.isLocalLoginDisabled();
+  const ssoRequired = await invitationService.isLocalLoginDisabled(req.tenant?.tenantId);
 
   res.json(InvitationCapabilitiesResponseSchema.parse({
     ssoRequired,
@@ -84,7 +87,7 @@ router.get('/api/t/:tenantSlug/invitations/capabilities', apiLimiter, requireAut
   }));
 }));
 
-router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(CreateInvitationRequestSchema), requireInvitationCreateAction('invitations.create'), asyncHandler(async (req, res) => {
+router.post('/api/t/:tenantSlug/invitations', apiLimiter, resolveTenantContext({ required: true }), requireAuth, createUserLimiter, validateBody(CreateInvitationRequestSchema), requireInvitationCreateAction('invitations.create'), asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
   const { email, resourceType, resourceId, resourceName, role, deliveryMethod } = req.body as CreateInvitationRequest;
   const normalizedEmail = email.toLowerCase();
@@ -117,6 +120,7 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUse
     userId: pendingUser.id,
     email: normalizedEmail,
     tenantSlug,
+    tenantId: req.tenant!.tenantId,
     resourceType,
     resourceId,
     resourceName: resolvedResourceName,
@@ -170,6 +174,7 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
   setOnboardingCookie(res, {
     userId: user.id,
     invitationId: verified.invitationId,
+    tenantId: verified.tenantId,
     tenantSlug: verified.tenantSlug,
     authSessionVersion: user.authSessionVersion,
   });
@@ -207,6 +212,7 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
   setOnboardingCookie(res, {
     userId: user.id,
     invitationId: verified.invitationId,
+    tenantId: verified.tenantId,
     tenantSlug: verified.tenantSlug,
     authSessionVersion: user.authSessionVersion,
   });

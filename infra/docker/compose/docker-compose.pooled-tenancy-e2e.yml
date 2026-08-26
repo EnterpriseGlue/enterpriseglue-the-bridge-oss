@@ -1,0 +1,38 @@
+# Release-qualification overlay for native pooled tenancy. PostgreSQL boots
+# with a short-lived superuser only to create the database; the application
+# itself migrates and runs as a distinct NOSUPERUSER/NOBYPASSRLS owner so
+# FORCE ROW LEVEL SECURITY is exercised by every backend query.
+services:
+  db:
+    volumes:
+      - ${POOLED_TENANCY_POSTGRES_INIT_FILE}:/docker-entrypoint-initdb.d/10-pooled-tenancy-app-role.sql:ro
+
+  backend:
+    build: !reset null
+    image: node:24-bookworm-slim
+    user: node
+    working_dir: /repo/backend
+    command: ["node", "dist/backend/src/server.js"]
+    environment:
+      DATABASE_TYPE: postgres
+      POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_APP_USER}
+      POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_APP_PASSWORD}
+      POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
+      GIT_REPOS_PATH: /tmp/enterpriseglue-repos
+      EG_TENANCY_MODE: pooled
+      EG_TENANT_RLS_ENFORCED: "true"
+      EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+    volumes: !override
+      - .:/repo:ro
+      - ${KEYCLOAK_TLS_DIR}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro
+      - ${LOCAL_IDENTITY_SECRET_DIR}:/etc/enterpriseglue/local-identity-secrets:ro
+
+  # Build the SPA from the already-installed workspace dependencies before
+  # Compose starts. This keeps the pooled browser lane independent of a second
+  # package-registry install inside the normal production frontend image.
+  frontend:
+    build: !reset null
+    image: nginx:1.27-alpine
+    volumes:
+      - ${POOLED_TENANCY_FRONTEND_DIST}:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro

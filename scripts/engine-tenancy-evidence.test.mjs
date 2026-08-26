@@ -123,7 +123,7 @@ test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(browserQualificationGuide, /Functional browser executions \| 36\/36/);
   assert.match(functionalTestReport, /twelve tests in each of Chromium/);
   assert.match(functionalTestReport, /Fine-grained access browser matrix \| \*\*36\*\*/);
-  assert.match(functionalTestReport, /Database upgrade-baseline observations \| \*\*25\*\*/);
+  assert.match(functionalTestReport, /Database upgrade-baseline observations \| \*\*30\*\*/);
   for (const matrixContract of [
     'constraint-derived-authorization-state-space',
     'canonicalInputHash',
@@ -360,7 +360,7 @@ test('requires real five-adapter database qualification evidence', () => {
     'rollback',
     'cleanup',
   ]);
-  assert.equal(databaseMatrixContract.upgradeBaselines.length, 5);
+  assert.equal(databaseMatrixContract.upgradeBaselines.length, 6);
   assert.match(databaseMatrixRunner, /schemaFingerprints\.size === 1/);
   assert.match(databaseMatrixRunner, /releaseCommitQualified: status === 'passed' && sourceState === 'clean'/);
   assert.match(databaseMatrixRunner, /Database-matrix evidence must be run from a clean worktree/);

@@ -121,7 +121,13 @@ describe('POST /api/auth/refresh', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.expiresIn).toBe(3600);
-    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, { administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false });
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, {
+      administratorRecovery: false,
+      authenticationMethod: undefined,
+      mfaVerified: false,
+      tenantId: 'tenant-default',
+      tenantSlug: 'default',
+    });
   });
 
   it('refreshes a canonical-principal refresh token without legacy user fields', async () => {
@@ -138,7 +144,13 @@ describe('POST /api/auth/refresh', () => {
     const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
 
     expect(response.status).toBe(200);
-    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, { administratorRecovery: false, authenticationMethod: undefined, mfaVerified: false });
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, {
+      administratorRecovery: false,
+      authenticationMethod: undefined,
+      mfaVerified: false,
+      tenantId: 'tenant-default',
+      tenantSlug: 'default',
+    });
   });
 
   it('rejects an existing administrator-recovery refresh session after membership expires or is removed', async () => {

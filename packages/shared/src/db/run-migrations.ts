@@ -4,7 +4,8 @@ import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from '../infrastructure/persistence/entities/EnvironmentTag.js';
 import { PlatformSettings } from '../infrastructure/persistence/entities/PlatformSettings.js';
 import { User } from '../infrastructure/persistence/entities/User.js';
-// Tenant entities removed - multi-tenancy is EE-only
+import { Tenant } from '../infrastructure/persistence/entities/Tenant.js';
+import { TenantLoginPolicy } from '../infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { EmailTemplate } from '../infrastructure/persistence/entities/EmailTemplate.js';
 import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 import { permissionService } from '../services/platform-admin/permissions.js';
@@ -18,6 +19,9 @@ import { Invitation } from '../infrastructure/persistence/entities/Invitation.js
 import { AuthzMigrationState } from '../infrastructure/persistence/entities/AuthzMigrationState.js';
 import { generateId } from '../utils/id.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
+import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
+import { verifyPostgresTenantRls, verifyPostgresTenantRlsRole } from './postgres-tenant-rls.js';
+import { config } from '../config/index.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -481,6 +485,8 @@ export async function runMigrations() {
         GitProvider,
         GitCredential,
         Invitation,
+        Tenant,
+        TenantLoginPolicy,
       ];
 
       const missingTables: string[] = [];
@@ -545,6 +551,21 @@ export async function runMigrations() {
 
     const integrityRunner = dataSource.createQueryRunner();
     try {
+      if (dbType === 'postgres') {
+        await new AddPostgresTenantRls1700000000126().up(integrityRunner);
+        if (config.tenancyMode === 'pooled') {
+          const rls = await verifyPostgresTenantRls(integrityRunner);
+          if (rls.expected === 0 || rls.enforced !== rls.expected) {
+            throw new Error(`Pooled tenancy requires enforced PostgreSQL RLS policies (expected ${rls.expected}, found ${rls.enforced}).`);
+          }
+          const role = await verifyPostgresTenantRlsRole(integrityRunner);
+          if (role.superuser || role.bypassRls) {
+            throw new Error(
+              `Pooled tenancy requires a restricted PostgreSQL application role; ${role.role} must not be superuser or have BYPASSRLS.`,
+            );
+          }
+        }
+      }
       await ensureCriticalVersioningSchemaIntegrity(integrityRunner);
     } finally {
       await integrityRunner.release();
@@ -593,9 +614,27 @@ export async function seedInitialData() {
     console.log('  Note: platform_settings:', error.message);
   }
   
-  // Tenant seeding removed - multi-tenancy is EE-only
-  // OSS runs in single-tenant mode without tenant tables
-  console.log('  ℹ️  OSS single-tenant mode (no tenant tables)');
+  try {
+    const tenantRepo = dataSource.getRepository(Tenant);
+    const existingTenant = await tenantRepo.findOneBy({ id: 'tenant-default' });
+    if (!existingTenant) {
+      await tenantRepo.insert({
+        id: 'tenant-default', name: 'Default', slug: 'default', status: 'active',
+        placementKey: 'local', placementEpoch: 1, createdByUserId: null, createdAt: now, updatedAt: now,
+      });
+    }
+    const policyRepo = dataSource.getRepository(TenantLoginPolicy);
+    const existingPolicy = await policyRepo.findOneBy({ tenantId: 'tenant-default' });
+    if (!existingPolicy) {
+      await policyRepo.insert({
+        id: 'tenant-default-login-policy', tenantId: 'tenant-default', localPasswordMode: 'auto',
+        providerSelectionMode: 'chooser', updatedByUserId: null, createdAt: now, updatedAt: now,
+      });
+    }
+    console.log('  ✅ native default tenant and login policy seeded');
+  } catch (error: any) {
+    console.log('  Note: native tenant seed:', error.message);
+  }
   
   // Seed default email templates
   try {

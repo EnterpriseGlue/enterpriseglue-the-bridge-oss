@@ -26,6 +26,7 @@
     ],
     "permissionScopes": [
       "platform",
+      "tenant",
       "external_engine_system",
       "project",
       "engine"

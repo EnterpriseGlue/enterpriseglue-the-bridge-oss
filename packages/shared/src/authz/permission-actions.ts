@@ -1,6 +1,7 @@
 import { ENGINE_AUTHZ_ACTIONS } from './permission-action-definitions/engine.js';
 import { PLATFORM_AUTHZ_ACTIONS } from './permission-action-definitions/platform.js';
 import { PROJECT_AUTHZ_ACTIONS } from './permission-action-definitions/project.js';
+import { TENANT_AUTHZ_ACTIONS } from './permission-action-definitions/tenant.js';
 
 export const AUTHZ_OPENAPI_EXTENSION_KEY = 'x-enterpriseglue-authz' as const;
 
@@ -285,6 +286,7 @@ export const AUTHZ_RESOURCE_RESOLVERS: AuthzResourceResolverDefinition[] = [
 
 export const AUTHZ_ACTIONS = [
   ...PLATFORM_AUTHZ_ACTIONS,
+  ...TENANT_AUTHZ_ACTIONS,
   ...ENGINE_AUTHZ_ACTIONS,
   ...PROJECT_AUTHZ_ACTIONS,
 ] satisfies AuthzActionDefinition[];

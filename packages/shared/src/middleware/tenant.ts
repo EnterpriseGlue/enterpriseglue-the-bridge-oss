@@ -1,12 +1,5 @@
-/**
- * Tenant Middleware for OSS (Single-Tenant Mode)
- * 
- * OSS uses unified tenant-slug routing (/t/:tenantSlug/*) for compatibility with EE.
- * The middleware extracts the tenant slug from URL params but always uses the default tenant.
- * Full multi-tenancy support (real tenant resolution) is available in the Enterprise Edition.
- */
-
-import { Request, Response, NextFunction } from 'express';
+import type { NextFunction, Request, Response } from 'express';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { Errors } from './errorHandler.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import {
@@ -14,15 +7,19 @@ import {
   OSS_DEFAULT_TENANT_SLUG,
   isOssDefaultTenantId,
 } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 
 export type TenantRole = 'tenant_admin' | 'member';
 
 export interface TenantContext {
   tenantId: string;
   tenantSlug: string;
+  placementKey?: string | null;
+  placementEpoch?: number;
 }
 
-// Default tenant for OSS single-tenant mode
 export const DEFAULT_TENANT_ID = OSS_DEFAULT_TENANT_ID;
 export const DEFAULT_TENANT_SLUG = OSS_DEFAULT_TENANT_SLUG;
 
@@ -35,80 +32,128 @@ declare global {
   }
 }
 
-/**
- * Extract tenant slug from request (URL params, header, or path)
- */
-function extractTenantSlug(req: Request): string | null {
-  // From URL params (e.g., /t/:tenantSlug/...)
+function routeTenantSlug(req: Request): string | null {
   const fromParams = (req.params as Record<string, string>)?.tenantSlug;
-  if (typeof fromParams === 'string' && fromParams.trim()) {
-    return fromParams.trim();
-  }
+  return typeof fromParams === 'string' && fromParams.trim() ? fromParams.trim().toLowerCase() : null;
+}
 
-  // From header (for API clients)
-  const header = req.headers['x-tenant-slug'];
-  if (typeof header === 'string' && header.trim()) {
-    return header.trim();
+function placementHeaders(req: Request): { payload: string; signature: string } | null {
+  const payload = req.headers['x-eg-tenant-placement'];
+  const signature = req.headers['x-eg-tenant-placement-signature'];
+  if (payload === undefined && signature === undefined) return null;
+  if (typeof payload !== 'string' || typeof signature !== 'string' || !payload || !signature) {
+    throw Errors.unauthorized('Incomplete tenant placement assertion');
   }
+  return { payload, signature };
+}
 
-  return null;
+function activateTenantContext(req: Request, next: NextFunction, tenant: TenantContext): void {
+  req.tenant = tenant;
+  updateBpmnEngineRequestContext({ tenantId: tenant.tenantId, tenantSlug: tenant.tenantSlug });
+  runWithTenantDatabaseContext(tenant, () => next());
 }
 
 /**
- * OSS stub: Extracts tenant slug from URL but always uses default tenant context.
- * In OSS single-tenant mode, any tenant slug is accepted but ignored.
- * EE plugin overrides this with real tenant resolution.
+ * Resolves the canonical native tenant. In pooled mode, unsigned tenant
+ * headers are deliberately ignored: accepted authorities are a route slug, a
+ * verified custom host, or an HMAC placement assertion from the control plane.
  */
-export function resolveTenantContext(_options?: { required?: boolean }) {
+export function resolveTenantContext(options: { required?: boolean } = {}) {
+  const required = options.required !== false;
   return async (req: Request, _res: Response, next: NextFunction) => {
-    if (req.tenant?.tenantId && !isOssDefaultTenantId(req.tenant.tenantId)) {
-      updateBpmnEngineRequestContext({
-        tenantId: req.tenant.tenantId,
-        tenantSlug: req.tenant.tenantSlug,
+    try {
+      // Retain the established EE bridge contract while OSS and EE migrate to
+      // the native authority. The enterprise resolver owns validation here.
+      if (req.tenant?.tenantId && !isOssDefaultTenantId(req.tenant.tenantId)) {
+        activateTenantContext(req, next, req.tenant);
+        return;
+      }
+
+      const requestedSlug = routeTenantSlug(req);
+      if (config.tenancyMode !== 'pooled') {
+        if (requestedSlug && requestedSlug !== DEFAULT_TENANT_SLUG) {
+          throw Errors.notFound('Tenant');
+        }
+        activateTenantContext(req, next, {
+          tenantId: DEFAULT_TENANT_ID,
+          tenantSlug: DEFAULT_TENANT_SLUG,
+          placementKey: 'local',
+          placementEpoch: 1,
+        });
+        return;
+      }
+
+      const signedPlacement = placementHeaders(req);
+      let tenant = null as Awaited<ReturnType<typeof tenantService.getById>>;
+      if (signedPlacement) {
+        const claim = tenantService.verifyPlacementClaim(signedPlacement.payload, signedPlacement.signature);
+        tenant = await tenantService.getById(claim.tenantId);
+        if (
+          !tenant || tenant.slug !== claim.tenantSlug || tenant.placementKey !== claim.placementKey
+          || Number(tenant.placementEpoch) !== claim.epoch
+          || (requestedSlug && requestedSlug !== tenant.slug)
+        ) {
+          throw Errors.unauthorized('Stale or mismatched tenant placement assertion');
+        }
+      } else if (requestedSlug) {
+        tenant = await tenantService.getBySlug(requestedSlug);
+      } else if (req.hostname) {
+        tenant = await tenantService.getByHostname(req.hostname);
+      }
+
+      if (tenant && req.hostname && (signedPlacement || requestedSlug)) {
+        const hostnameTenant = await tenantService.getByHostname(req.hostname);
+        if (hostnameTenant && hostnameTenant.id !== tenant.id) {
+          throw Errors.unauthorized('Tenant route does not match the verified hostname');
+        }
+      }
+
+      if (!tenant) {
+        if (!required) return next();
+        throw Errors.notFound('Tenant');
+      }
+      if (tenant.status !== 'active') throw Errors.forbidden('Tenant is not active');
+      activateTenantContext(req, next, {
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        placementKey: tenant.placementKey,
+        placementEpoch: Number(tenant.placementEpoch),
       });
-      return next();
+    } catch (error) {
+      next(error);
     }
-
-    // Extract slug from URL (for logging/debugging) but use default tenant
-    const slug = extractTenantSlug(req) || DEFAULT_TENANT_SLUG;
-    
-    // In OSS single-tenant mode, always use default tenant regardless of slug
-    req.tenant = { tenantId: DEFAULT_TENANT_ID, tenantSlug: slug };
-    updateBpmnEngineRequestContext({ tenantId: DEFAULT_TENANT_ID, tenantSlug: slug });
-    next();
   };
 }
 
-/**
- * OSS stub: Platform admins pass through, others get tenant_admin role by default.
- * Multi-tenancy roles are an EE-only feature.
- */
-export function requireTenantRole(..._allowedRoles: TenantRole[]) {
+export function requireTenantRole(...allowedRoles: TenantRole[]) {
   return async (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) {
-      throw Errors.unauthorized('Authentication required');
+    try {
+      if (!req.user) throw Errors.unauthorized('Authentication required');
+      if (!req.tenant) throw Errors.notFound('Tenant');
+      if ((await getActivePlatformAdministratorUserIds([req.user.userId])).has(req.user.userId)) {
+        req.tenantRole = 'tenant_admin';
+        return next();
+      }
+      const membership = (await tenantService.listForUser(req.user.userId))
+        .find((candidate) => candidate.tenantId === req.tenant!.tenantId);
+      if (!membership || membership.tenantStatus !== 'active') throw Errors.forbidden('Tenant membership is required');
+      req.tenantRole = membership.role === 'admin' ? 'tenant_admin' : 'member';
+      if (allowedRoles.length && !allowedRoles.includes(req.tenantRole)) {
+        throw Errors.forbidden('Tenant administrator permission is required');
+      }
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    // In OSS single-tenant mode, all authenticated users have tenant_admin role
-    req.tenantRole = 'tenant_admin';
-    next();
   };
 }
 
-/**
- * Convenience middleware: require tenant admin or platform admin
- */
 export const requireTenantAdmin = requireTenantRole('tenant_admin');
 
-/**
- * OSS stub: All authenticated users are considered tenant admins.
- * Multi-tenancy authorization is an EE-only feature.
- */
-export async function checkTenantAdmin(req: Request, _tenantId: string): Promise<boolean> {
-  if (!req.user) {
-    throw Errors.unauthorized('Authentication required');
-  }
-
-  // In OSS single-tenant mode, all authenticated users are tenant admins
-  return true;
+export async function checkTenantAdmin(req: Request, tenantId: string): Promise<boolean> {
+  if (!req.user) throw Errors.unauthorized('Authentication required');
+  if ((await getActivePlatformAdministratorUserIds([req.user.userId])).has(req.user.userId)) return true;
+  const membership = (await tenantService.listForUser(req.user.userId))
+    .find((candidate) => candidate.tenantId === tenantId);
+  return membership?.role === 'admin' && membership.tenantStatus === 'active';
 }

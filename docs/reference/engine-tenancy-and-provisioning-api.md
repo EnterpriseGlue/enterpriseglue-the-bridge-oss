@@ -21,9 +21,10 @@ External registration requires an explicit `tenancy` object; omission is
 rejected with HTTP 400 before an engine is read or written. Manual portal/API
 create may omit `tenancy` for the documented compatibility behavior: the
 server persists the authenticated request tenant, or `tenant-default` for a
-local OSS request with no tenant context. A normal manual update may omit
-tenancy and cannot change topology; use the acknowledged transition workflow
-for a dedicated/shared topology change.
+`single`-mode OSS request with no tenant context. Native pooled tenant routes
+require resolved context and never replace a missing tenant with the default.
+A normal manual update may omit tenancy and cannot change topology; use the
+acknowledged transition workflow for a dedicated/shared topology change.
 
 Dedicated in the authenticated request tenant:
 

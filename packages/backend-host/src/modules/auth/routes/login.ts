@@ -18,6 +18,8 @@ import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionS
 import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
+import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 
 const router = Router();
 
@@ -49,6 +51,9 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
       details: { email, reason: 'local_login_disabled_by_policy' },
     });
     throw Errors.forbidden('Local login is disabled. Please use your organization sign-in.');
+  }
+  if (!recovery && config.tenancyMode === 'pooled' && !req.tenant) {
+    throw Errors.notFound('Tenant');
   }
 
   const userRepo = dataSource.getRepository(User);
@@ -190,6 +195,10 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
     throw Errors.unauthorized('Invalid email or password');
   }
 
+  if (!recovery && req.tenant && !await tenantService.hasMembership(user.id, req.tenant.tenantId)) {
+    throw Errors.forbidden('This account is not a member of the selected tenant');
+  }
+
   // Password is correct: update login state and ensure the canonical baseline
   // assignment at the same command boundary.
   let session = null as Awaited<ReturnType<typeof authSessionService.issue>> | null;
@@ -206,6 +215,8 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
     await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
     if (recovery) {
       session = await authSessionService.issue(user, {
+        tenantId: req.tenant?.tenantId,
+        tenantSlug: req.tenant?.tenantSlug,
         userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
         ipAddress: req.ip,
         administratorRecovery: true,
@@ -243,6 +254,8 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
   });
 
   session ||= await authSessionService.issue(user, {
+    tenantId: req.tenant?.tenantId,
+    tenantSlug: req.tenant?.tenantSlug,
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
     authenticationMethod: 'local',
@@ -290,7 +303,10 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
       mustResetPassword: Boolean(user.mustResetPassword),
       capabilities,
       isEmailVerified,
-      session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+      // The response must describe the effective session that was issued. In
+      // single mode the route is intentionally unscoped for compatibility,
+      // while AuthSessionService binds the token to the native default tenant.
+      session: createAuthenticatedSessionContext(user.id, session.tenantId),
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: !isEmailVerified, // Flag for frontend
@@ -318,7 +334,11 @@ async function authenticateMeasuredLocal(req: Request, res: Response, recovery: 
  * POST /api/auth/login
  * Authenticate an ordinary local user when the login policy permits it.
  */
-router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
+router.post('/api/t/:tenantSlug/auth/login', apiLimiter, resolveTenantContext({ required: true }), authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
+  await authenticateMeasuredLocal(req, res, false);
+}));
+
+router.post('/api/auth/login', apiLimiter, ...(config.tenancyMode === 'pooled' ? [resolveTenantContext({ required: true })] : []), authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
   await authenticateMeasuredLocal(req, res, false);
 }));
 
