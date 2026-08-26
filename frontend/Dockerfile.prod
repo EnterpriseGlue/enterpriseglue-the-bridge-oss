@@ -6,6 +6,14 @@ WORKDIR /repo
 ARG API_BASE_URL
 ENV VITE_API_BASE_URL=${API_BASE_URL}
 
+# Optional runtime configuration (see frontend/.env.example). RUNTIME_CONFIG_URL
+# is a build-once pointer to a JSON document the deployment serves per
+# environment; RUNTIME_CONFIG_REQUIRED makes a missing/invalid document fatal.
+ARG RUNTIME_CONFIG_URL
+ENV VITE_RUNTIME_CONFIG_URL=${RUNTIME_CONFIG_URL}
+ARG RUNTIME_CONFIG_REQUIRED
+ENV VITE_RUNTIME_CONFIG_REQUIRED=${RUNTIME_CONFIG_REQUIRED}
+
 # Install pnpm globally
 RUN npm install -g pnpm@11.0.8
 

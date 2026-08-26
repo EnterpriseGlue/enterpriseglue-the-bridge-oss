@@ -1,0 +1,60 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "runtime-config-api-base-url",
+  "type": "feature",
+  "scope": "frontend-runtime-config",
+  "breaking": false,
+  "audiences": ["administrators", "operators", "developers"],
+  "summary": "Adds optional runtime configuration of the backend API base URL so a single frontend build can be deployed to multiple environments without a rebuild.",
+  "userImpact": [
+    "Operators can promote one built frontend artifact across environments (e.g. test, acceptance, production) and point it at a different backend by serving a per-environment configuration document, rather than rebuilding for each environment.",
+    "Administrators configure the endpoint after deployment; the built bundle no longer hard-codes the backend origin unless they choose the existing build-time variable."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "No action is required: with VITE_RUNTIME_CONFIG_URL unset the application behaves exactly as before (VITE_API_BASE_URL, then same-origin).",
+      "To opt in, set VITE_RUNTIME_CONFIG_URL to the path of a JSON document your deployment serves (for example /config.json) that returns { \"apiBaseUrl\": \"https://api.example.com\" }."
+    ]
+  },
+  "configuration": [
+    "New optional build-time variable VITE_RUNTIME_CONFIG_URL: a root-relative URL fetched at startup whose JSON `apiBaseUrl` overrides the build-time value; unset disables the feature.",
+    "New optional build-time variable VITE_RUNTIME_CONFIG_REQUIRED: when 'true', a missing, unreachable, malformed, or apiBaseUrl-less document is a fatal boot error instead of a fall back to build-time configuration.",
+    "Precedence when enabled is runtime document, then VITE_API_BASE_URL, then same-origin; the runtime document is fetched with no-store so a redeployed document takes effect immediately."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The HTTP interceptor derives its allowed request origin from the resolved API base URL, so enabling runtime configuration moves that trust boundary from build time to whoever serves the configuration document; the intended model serves it same-origin alongside the application."
+  ],
+  "documentation": [
+    "Runtime API base URL configuration, variables, and precedence: `frontend/.env.example`"
+  ],
+  "knownLimitations": [
+    "Only the API base URL is consumed from the runtime document today; the document shape is intentionally open so further environment-specific values can be added later without reworking the loader.",
+    "The configuration document must be reachable before the application issues its first API request; a slow endpoint delays startup, and when marked required an unreachable endpoint blocks startup by design."
+  ],
+  "rollback": [
+    "Unset VITE_RUNTIME_CONFIG_URL (or rebuild without it) to return to build-time configuration; no data or schema changes are involved."
+  ],
+  "validation": [
+    "New unit tests in frontend/__tests__/src/runtimeConfig.test.ts cover the feature-off path, successful apiBaseUrl application with no-store, tolerated unknown keys, graceful fallback on malformed/non-OK/network failures, and hard failure under VITE_RUNTIME_CONFIG_REQUIRED.",
+    "Frontend host typecheck (tsc -p tsconfig.build.json --noEmit) and the frontend unit suite (vitest --run)."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.8.0",
+      "newVersion": "0.9.0",
+      "impact": "minor"
+    }
+  ]
+}
