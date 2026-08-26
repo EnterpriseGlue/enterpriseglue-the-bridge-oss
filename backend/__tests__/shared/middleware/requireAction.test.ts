@@ -4,6 +4,7 @@ import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AUTHZ_RESOURCE_RESOLVERS } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { evaluateResolvedAuthzAction, getRuntimeResourceActionDecision, requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
@@ -516,7 +517,7 @@ describe('requireAction project resource resolvers', () => {
         authorizedProjectIds: req.authorizedProjectIds,
       });
     });
-    app.get('/tenant', requireAction('tenant.settings.read', {
+    app.get('/tenant', apiLimiter, requireAction('tenant.settings.read', {
       resourceResolver: 'tenant.fromContext',
     }), (req: any, res) => {
       res.json({ resource: req.authzResource });
