@@ -51,6 +51,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 6. Optional: set `API_UPSTREAM` if the frontend Nginx proxy should point at a custom backend host (defaults to `backend:${API_PORT}`).
 7. Optional: set `ADMIN_EMAIL_VERIFICATION_EXEMPT=true` to allow the seeded admin to bypass email verification.
 8. `API_BASE_URL` is consumed at frontend image build time. In Docker dev, `pnpm run dev` rebuilds the frontend image, so changes take effect on restart.
+9. Optional: set `EG_FRONTEND_RUNTIME_API_BASE_URL` to an absolute HTTP(S) API origin when the same built frontend image must be reused with a different browser-visible backend. Set `EG_FRONTEND_RUNTIME_CONFIG_REQUIRED=true` to fail frontend startup if that value is absent or invalid.
 
 ## Configuration (Production)
 1. Prepare local env directory and copy production template:
@@ -61,6 +62,7 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
 4. Keep `API_BASE_URL` empty for default same-origin behavior (Nginx proxy). Set it only if frontend must call a different API origin.
 5. Optional: set `API_UPSTREAM` to point the frontend Nginx proxy at a different backend host.
 6. `API_BASE_URL` is consumed at frontend image build time, so changing it requires rebuilding the frontend image with `pnpm run prod`.
+7. For build-once promotion, leave `API_BASE_URL` unchanged and set `EG_FRONTEND_RUNTIME_API_BASE_URL` per deployed container. Unset preserves existing behavior. Prefer `API_UPSTREAM` when the browser can continue using same-origin API paths.
 
 ## Configuration (Production from published images)
 1. Copy one image env template:
@@ -76,7 +78,9 @@ For non-Postgres Docker dev, `dev.sh` can add a DB-specific overlay file:
    - oracle: `EG_BACKEND_ENV_FILE=./.local/docker/env/images.oracle.env`
 4. Keep `API_BASE_URL` empty for same-origin behavior.
 5. Optional: set `API_UPSTREAM` to point the frontend Nginx proxy at a different backend host.
-6. In published-image mode, `API_BASE_URL` is already baked into the published frontend image and is not re-read at container start. Use `API_UPSTREAM` only for runtime proxy changes, or rebuild the frontend image if you need a different browser-visible API origin.
+6. In published-image mode, `API_BASE_URL` is already baked into the image and is not re-read at container start. Use `API_UPSTREAM` for same-origin runtime proxy changes.
+7. If the browser must use a separate origin, set `EG_FRONTEND_RUNTIME_API_BASE_URL` on the frontend container. The entrypoint generates the same-origin runtime document and CSP allow-list without modifying the image. Set `EG_FRONTEND_RUNTIME_CONFIG_REQUIRED=true` for fail-closed startup.
+8. Cross-origin APIs must allow the frontend origin through CORS and support credentialed cookies; runtime URL validation rejects credentials, query strings, fragments, and non-HTTP(S) protocols.
 
 The standalone self-host Compose file also accepts complete immutable references through
 `EG_BACKEND_IMAGE_REF` and `EG_FRONTEND_IMAGE_REF`. These take precedence over the legacy

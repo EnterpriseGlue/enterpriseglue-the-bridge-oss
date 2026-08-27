@@ -9,9 +9,12 @@ ENV VITE_API_BASE_URL=${API_BASE_URL}
 # Optional runtime configuration (see frontend/.env.example). RUNTIME_CONFIG_URL
 # is a build-once pointer to a JSON document the deployment serves per
 # environment; RUNTIME_CONFIG_REQUIRED makes a missing/invalid document fatal.
-ARG RUNTIME_CONFIG_URL
+# The production image always carries a stable same-origin pointer. Its
+# document is generated at container startup, so the image stays byte-for-byte
+# identical while the API endpoint varies by deployment.
+ARG RUNTIME_CONFIG_URL=/.well-known/enterpriseglue/runtime-config.json
 ENV VITE_RUNTIME_CONFIG_URL=${RUNTIME_CONFIG_URL}
-ARG RUNTIME_CONFIG_REQUIRED
+ARG RUNTIME_CONFIG_REQUIRED=false
 ENV VITE_RUNTIME_CONFIG_REQUIRED=${RUNTIME_CONFIG_REQUIRED}
 
 # Install pnpm globally

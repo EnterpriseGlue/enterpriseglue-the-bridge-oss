@@ -36,6 +36,16 @@ spec:
                 configMapKeyRef:
                   name: enterpriseglue-config
                   key: API_UPSTREAM
+            - name: EG_FRONTEND_RUNTIME_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: enterpriseglue-config
+                  key: EG_FRONTEND_RUNTIME_API_BASE_URL
+            - name: EG_FRONTEND_RUNTIME_CONFIG_REQUIRED
+              valueFrom:
+                configMapKeyRef:
+                  name: enterpriseglue-config
+                  key: EG_FRONTEND_RUNTIME_CONFIG_REQUIRED
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

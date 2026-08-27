@@ -57,6 +57,8 @@ services:
     init: true
     environment:
       API_UPSTREAM: ${API_UPSTREAM:-backend:${API_PORT:-8787}}
+      EG_FRONTEND_RUNTIME_API_BASE_URL: ${EG_FRONTEND_RUNTIME_API_BASE_URL:-}
+      EG_FRONTEND_RUNTIME_CONFIG_REQUIRED: ${EG_FRONTEND_RUNTIME_CONFIG_REQUIRED:-false}
     depends_on:
       backend:
         condition: service_healthy

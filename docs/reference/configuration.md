@@ -308,10 +308,30 @@ Primary sources:
 - `API_BASE_URL`: preferred compose-level env alias for API origin
 - `VITE_API_BASE_URL`: frontend runtime variable consumed by browser code (Vite-exposed)
 - `API_UPSTREAM`: frontend Nginx upstream override (defaults to `backend:${API_PORT}` in Docker)
+- `EG_FRONTEND_RUNTIME_API_BASE_URL`: optional container-start browser API origin override
+- `EG_FRONTEND_RUNTIME_CONFIG_REQUIRED`: fail closed at frontend startup when the runtime API origin is missing or invalid
+- `VITE_RUNTIME_CONFIG_URL`: build-time pointer used by custom static deployments
+- `VITE_RUNTIME_CONFIG_REQUIRED`: build-time fail-closed policy for custom static deployments
 
 In Docker compose, `API_BASE_URL` is mapped to `VITE_API_BASE_URL` for frontend runtime.
 For production same-origin routing through Nginx, leave `API_BASE_URL` empty.
-For source-built Docker images, `API_BASE_URL` is consumed at frontend image build time. In published-image mode, use `API_UPSTREAM` only for runtime proxy changes.
+For source-built Docker images, `API_BASE_URL` is consumed at frontend image build time.
+
+The production image also contains a stable same-origin runtime document at
+`/.well-known/enterpriseglue/runtime-config.json`. Its entrypoint generates the
+document from `EG_FRONTEND_RUNTIME_API_BASE_URL` and
+`EG_FRONTEND_RUNTIME_CONFIG_REQUIRED` every time the container starts. This
+allows the same published image digest to be promoted between environments.
+When the runtime API value is empty, the document applies no override and the
+existing `VITE_API_BASE_URL`, then same-origin, precedence remains unchanged.
+
+`EG_FRONTEND_RUNTIME_API_BASE_URL` must be an absolute `http://` or `https://`
+URL without embedded credentials, a query string, or a fragment. The image adds
+the validated origin to its `connect-src` Content Security Policy. A
+cross-origin API must also permit the frontend origin through CORS and use cookie
+attributes appropriate for credentialed cross-origin requests. Prefer
+same-origin `API_UPSTREAM` unless a browser-visible separate API origin is
+required.
 
 ### Feature Flags
 The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as:

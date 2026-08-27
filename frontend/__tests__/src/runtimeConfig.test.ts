@@ -124,6 +124,16 @@ describe('initRuntimeConfig', () => {
     await expect(initRuntimeConfig()).rejects.toBeInstanceOf(RuntimeConfigError);
   });
 
+  it('honours a required flag supplied by the runtime document', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/config.json');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ required: true })),
+    );
+
+    await expect(initRuntimeConfig()).rejects.toBeInstanceOf(RuntimeConfigError);
+  });
+
   it('rejects a non-string apiBaseUrl as malformed (throws when required)', async () => {
     vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/config.json');
     vi.stubEnv('VITE_RUNTIME_CONFIG_REQUIRED', 'true');
@@ -142,6 +152,49 @@ describe('initRuntimeConfig', () => {
     await initRuntimeConfig();
 
     expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE); // unchanged, no error
+  });
+
+  it('rejects a scheme-less apiBaseUrl and falls back when not required', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/config.json');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ apiBaseUrl: 'api.example.com' })),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(initRuntimeConfig()).resolves.toBeUndefined();
+
+    expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('absolute HTTP(S) URL'));
+  });
+
+  it.each([
+    ['ftp://api.example.com', 'protocol'],
+    ['https://user:secret@api.example.com', 'credentials'],
+    ['https://api.example.com?tenant=a', 'query string or fragment'],
+  ])('rejects unsafe apiBaseUrl %s when runtime config is required', async (apiBaseUrl, reason) => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/config.json');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ apiBaseUrl, required: true })),
+    );
+
+    await expect(initRuntimeConfig()).rejects.toThrow(reason);
+    expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE);
+  });
+
+  it('rejects a non-boolean runtime required flag as malformed', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/config.json');
+    vi.stubEnv('VITE_RUNTIME_CONFIG_REQUIRED', 'true');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ apiBaseUrl: 'https://runtime.example', required: 'yes' }),
+      ),
+    );
+
+    await expect(initRuntimeConfig()).rejects.toThrow('expected a boolean');
+    expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE);
   });
 
   // --- Same-origin enforcement of the config URL itself -------------------

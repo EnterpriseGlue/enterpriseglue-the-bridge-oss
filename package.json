@@ -51,6 +51,7 @@
     "test:codex-plugin": "node --test scripts/enterpriseglue-plugin.test.mjs",
     "guard:documentation-boundary": "node --test scripts/check-documentation-boundary.test.mjs && node scripts/check-documentation-boundary.mjs",
     "test:workspace-runtime-contract": "node --test scripts/workspace-runtime-contract.test.mjs",
+    "test:frontend-runtime-config-contract": "node --test scripts/frontend-runtime-config-deployment.test.mjs",
     "test:unit": "pnpm --filter webmodeler-backend run test:unit && pnpm --filter webmodeler-frontend run test:unit",
     "test:plugin-installer": "pnpm --filter @enterpriseglue/plugin-installer run test",
     "test:plugin-manager": "pnpm --filter @enterpriseglue/plugin-manager run test",

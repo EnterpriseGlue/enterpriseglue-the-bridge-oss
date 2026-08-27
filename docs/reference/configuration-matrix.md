@@ -161,6 +161,10 @@ Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 | API_BASE_URL | No | empty in prod | Preferred compose-level env alias for API origin; consumed at frontend image build time |
 | VITE_API_BASE_URL | No | mapped from `API_BASE_URL` | Frontend runtime variable exposed by Vite |
 | API_UPSTREAM | No | `backend:${API_PORT}` | Frontend Nginx runtime upstream override |
+| EG_FRONTEND_RUNTIME_API_BASE_URL | No | empty | Container-start browser API origin override; absolute HTTP(S), no credentials/query/fragment; generated into the same-origin runtime configuration document |
+| EG_FRONTEND_RUNTIME_CONFIG_REQUIRED | No | `false` | Fail frontend startup when the generated runtime document does not provide a usable API base URL |
+| VITE_RUNTIME_CONFIG_URL | No | Docker default `/.well-known/enterpriseglue/runtime-config.json` | Build-time pointer for custom static deployments; the standard image uses the stable same-origin endpoint |
+| VITE_RUNTIME_CONFIG_REQUIRED | No | `false` | Build-time fail-closed policy; runtime `required: true` can strengthen it but never weaken it |
 | VITE_FEATURE_* | No | true | Feature flags per module |
 
 ## Git & Encryption

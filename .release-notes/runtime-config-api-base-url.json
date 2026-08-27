@@ -6,22 +6,25 @@
   "scope": "frontend-runtime-config",
   "breaking": false,
   "audiences": ["administrators", "operators", "developers"],
-  "summary": "Adds optional runtime configuration of the backend API base URL so a single frontend build can be deployed to multiple environments without a rebuild.",
+  "summary": "Adds backward-compatible container-start configuration of the browser API base URL so one frontend image can be promoted across environments without rebuilding it.",
   "userImpact": [
-    "Operators can promote one built frontend artifact across environments (e.g. test, acceptance, production) and point it at a different backend by serving a per-environment configuration document, rather than rebuilding for each environment.",
-    "Administrators configure the endpoint after deployment; the built bundle no longer hard-codes the backend origin unless they choose the existing build-time variable."
+    "Operators can promote one frontend image digest across test, acceptance, and production and select a browser-visible API origin when each container starts.",
+    "Existing deployments remain unchanged when the new runtime variables are unset: the generated document applies no override and the frontend continues to use VITE_API_BASE_URL, then same-origin API paths.",
+    "The production image generates and serves a same-origin runtime document and adds a validated cross-origin API origin to its Content Security Policy when configured."
   ],
   "upgrade": {
     "required": false,
     "instructions": [
-      "No action is required: with VITE_RUNTIME_CONFIG_URL unset the application behaves exactly as before (VITE_API_BASE_URL, then same-origin).",
-      "To opt in, set VITE_RUNTIME_CONFIG_URL to the path of a JSON document your deployment serves (for example /config.json) that returns { \"apiBaseUrl\": \"https://api.example.com\" }."
+      "No action is required: when EG_FRONTEND_RUNTIME_API_BASE_URL is unset, the standard image behaves as before (VITE_API_BASE_URL, then same-origin).",
+      "To opt in on Docker or OpenShift, set EG_FRONTEND_RUNTIME_API_BASE_URL on the frontend container to an absolute HTTP(S) URL and optionally set EG_FRONTEND_RUNTIME_CONFIG_REQUIRED=true. Prefer API_UPSTREAM when the browser can keep using same-origin API paths.",
+      "Custom static deployments may continue to set VITE_RUNTIME_CONFIG_URL at build time to a same-origin JSON document containing apiBaseUrl and optional required fields."
     ]
   },
   "configuration": [
-    "New optional build-time variable VITE_RUNTIME_CONFIG_URL: a root-relative URL fetched at startup whose JSON `apiBaseUrl` overrides the build-time value; unset disables the feature.",
-    "New optional build-time variable VITE_RUNTIME_CONFIG_REQUIRED: when 'true', a missing, unreachable, malformed, or apiBaseUrl-less document is a fatal boot error instead of a fall back to build-time configuration.",
-    "Precedence when enabled is runtime document, then VITE_API_BASE_URL, then same-origin; the runtime document is fetched with no-store so a redeployed document takes effect immediately."
+    "New optional container variable EG_FRONTEND_RUNTIME_API_BASE_URL: an absolute HTTP(S) browser API base URL written into the standard image's same-origin runtime document when the container starts.",
+    "New optional container variable EG_FRONTEND_RUNTIME_CONFIG_REQUIRED: when true, a missing or unusable runtime API value is a fatal frontend boot error; default false.",
+    "The standard image builds with VITE_RUNTIME_CONFIG_URL=/.well-known/enterpriseglue/runtime-config.json; custom static deployments may override that build-time pointer and VITE_RUNTIME_CONFIG_REQUIRED.",
+    "Precedence is runtime document, then VITE_API_BASE_URL, then same-origin; the runtime document is fetched with no-store so a restarted deployment takes effect immediately."
   ],
   "api": {
     "compatibility": "none",
@@ -33,29 +36,35 @@
     "notes": []
   },
   "security": [
-    "The HTTP interceptor derives its allowed request origin from the resolved API base URL, so enabling runtime configuration moves that trust boundary from build time to whoever serves the configuration document; the intended model serves it same-origin alongside the application.",
-    "VITE_RUNTIME_CONFIG_URL is confined to the application's own origin: a cross-origin (or protocol-relative) config URL is rejected before any request is issued, so a foreign host can never supply the API base URL. A same-origin violation warns and falls back to build-time configuration, or is a fatal boot error when VITE_RUNTIME_CONFIG_REQUIRED is 'true'.",
-    "This same-origin confinement applies only to where the config document is fetched from (VITE_RUNTIME_CONFIG_URL), not to the apiBaseUrl value the document returns: a same-origin document may legitimately point apiBaseUrl at a different origin, such as an https://api.<app-domain> subdomain serving the API. That value seeds the HTTP interceptor's request allow-list, must be an absolute URL including the scheme (https://api.example, not api.example), and requires the API origin to send CORS headers permitting the app origin."
+    "The configuration document is confined to the application's own origin; cross-origin and protocol-relative configuration pointers are rejected before any request is issued.",
+    "Runtime API values are validated as absolute HTTP(S) URLs without credentials, query strings, or fragments before they are applied. The container entrypoint accepts only a restricted injection-safe URL character set.",
+    "The HTTP interceptor derives its request allow-list from the validated API base URL, and the production entrypoint adds only that URL's origin to Content Security Policy connect-src.",
+    "A cross-origin API must still permit the frontend origin through CORS and use cookie attributes appropriate for credentialed cross-origin requests."
   ],
   "documentation": [
-    "Runtime API base URL configuration, variables, and precedence: `frontend/.env.example`"
+    "Runtime API base URL configuration and precedence: `docs/reference/configuration.md` and `docs/reference/configuration-matrix.md`.",
+    "Docker and published-image operation: `docs/how-to/deploy-docker.md` and `docs/how-to/getting-started-docker.md`.",
+    "Troubleshooting: `docs/how-to/troubleshooting.md` and `frontend/.env.example`."
   ],
   "knownLimitations": [
-    "Only the API base URL is consumed from the runtime document today; the document shape is intentionally open so further environment-specific values can be added later without reworking the loader.",
-    "The configuration document must be reachable before the application issues its first API request; a slow endpoint delays startup, and when marked required an unreachable endpoint blocks startup by design."
+    "Only apiBaseUrl and required are consumed from the runtime document today; unknown keys are ignored for forward compatibility.",
+    "Custom static configuration documents must be reachable before the first API request; a slow endpoint delays startup, and a required unreachable endpoint blocks startup by design.",
+    "Cross-origin APIs require coordinated CORS and cookie configuration; same-origin API_UPSTREAM remains the recommended container deployment."
   ],
   "rollback": [
-    "Unset VITE_RUNTIME_CONFIG_URL (or rebuild without it) to return to build-time configuration; no data or schema changes are involved."
+    "Unset EG_FRONTEND_RUNTIME_API_BASE_URL and restart the frontend container to return to build-time or same-origin configuration; no image rebuild, data rollback, or schema rollback is required.",
+    "Custom static deployments can unset VITE_RUNTIME_CONFIG_URL in their next build to disable the loader entirely."
   ],
   "validation": [
-    "New unit tests in frontend/__tests__/src/runtimeConfig.test.ts cover the feature-off path, successful apiBaseUrl application with no-store, tolerated unknown keys, graceful fallback on malformed/non-OK/network failures, hard failure under VITE_RUNTIME_CONFIG_REQUIRED, and same-origin enforcement of the config URL (cross-origin and protocol-relative URLs are refused before any fetch; an absolute same-origin URL is accepted).",
-    "Frontend host typecheck (tsc -p tsconfig.build.json --noEmit) and the frontend unit suite (vitest --run)."
+    "Frontend runtime tests cover feature-off compatibility, successful no-store application, document-level required mode, unknown keys, transport/shape failures, same-origin pointer enforcement, and rejection of scheme-less, non-HTTP(S), credential-bearing, query-bearing, and malformed values.",
+    "A deployment contract test verifies the stable image pointer, generated JSON, CSP substitution, Docker Compose, published-image self-hosting, OpenShift wiring, operator examples, and configuration matrix.",
+    "Frontend host typecheck/build, production frontend build, frontend unit tests, Compose rendering, documentation boundary, release-note preflight, and published-package version discipline."
   ],
   "packages": [
     {
       "name": "@enterpriseglue/frontend-host",
-      "previousVersion": "0.8.0",
-      "newVersion": "0.9.0",
+      "previousVersion": "0.9.1",
+      "newVersion": "0.11.0",
       "impact": "minor"
     }
   ]

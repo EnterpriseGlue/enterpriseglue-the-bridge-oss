@@ -67,6 +67,9 @@ jobs:
       - name: Validate configuration deployment contract
         run: pnpm run guard:config-deployment-contract
 
+      - name: Validate frontend runtime configuration deployment contract
+        run: pnpm run test:frontend-runtime-config-contract
+
       - name: Enforce documentation publication boundary
         run: pnpm run guard:documentation-boundary -- --base-ref "origin/${{ github.base_ref || 'main' }}"
 
