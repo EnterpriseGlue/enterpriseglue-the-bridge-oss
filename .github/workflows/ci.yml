@@ -73,6 +73,11 @@ jobs:
       - name: Enforce documentation publication boundary
         run: pnpm run guard:documentation-boundary -- --base-ref "origin/${{ github.base_ref || 'main' }}"
 
+      - name: Verify pooled tenant ownership and timed execution inventory
+        run: |
+          pnpm run test:tenant-ownership-inventory
+          pnpm run guard:tenant-ownership-inventory
+
       - name: Validate versioned Codex workflow plugin
         run: pnpm run test:codex-plugin
 

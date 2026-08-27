@@ -41,6 +41,8 @@
     "test:ci-change-detection": "node --test scripts/ci-change-detection.test.mjs scripts/pr-release-label-workflows.test.mjs scripts/security-workflow-contract.test.mjs scripts/enforce-security-severity-gate.test.mjs scripts/verify-oci-image-metadata.test.mjs",
     "test:release-notes": "node --test scripts/release-notes.test.mjs scripts/release-notes-preflight.test.mjs",
     "test:ci-contracts": "node --test scripts/check-ci-aggregate-contract.test.mjs scripts/evaluate-ci-needs.test.mjs scripts/release-readiness.test.mjs && node scripts/check-ci-aggregate-contract.mjs",
+    "test:tenant-ownership-inventory": "node --test scripts/cloud-readiness-ownership-inventory.test.mjs",
+    "guard:tenant-ownership-inventory": "node scripts/cloud-readiness-ownership-inventory.mjs --check",
     "release-notes:preflight": "node scripts/run-release-notes-preflight.mjs",
     "release-notes:validate": "node scripts/release-notes.mjs validate",
     "release-notes:preview": "node scripts/release-notes.mjs preview",

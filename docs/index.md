@@ -58,6 +58,7 @@ Audience: Developers and architects.
 
 ## Development and Verification
 - [Documentation Publication Policy](development/documentation-publication-policy.md)
+- [Cloud-Readiness Tenant Ownership Inventory](development/cloud-readiness-ownership-inventory.md)
 - [EnterpriseGlue Codex Workflow Plugin](development/codex-workflow-plugin.md)
 - [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)
 - [Enterprise Backend Plugin Database API](reference/enterprise-backend-plugin-database-api.md)

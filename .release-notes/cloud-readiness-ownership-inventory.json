@@ -1,0 +1,70 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-readiness-ownership-inventory",
+  "type": "feature",
+  "scope": "pooled tenancy",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Add a machine-checked tenant ownership and asynchronous execution inventory that rejects unclassified persistence and plugin execution boundaries.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The shared package adds a versioned tenant persistence and timed plugin execution ownership registry plus a pooled-startup assertion."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This change adds no database migration and does not alter existing PostgreSQL RLS policies."
+    ]
+  },
+  "security": [
+    "CI fails when a TypeORM entity or selected asynchronous plugin execution boundary lacks an explicit tenant ownership classification.",
+    "The generated inventory records direct, inherited, pre-authentication, deployment-global, and plugin tenant-key boundaries without exposing tenant data."
+  ],
+  "documentation": [
+    "docs/development/cloud-readiness-ownership-inventory.md"
+  ],
+  "knownLimitations": [
+    "This inventory makes existing isolation boundaries explicit; later cloud-readiness slices add new RLS policies and runtime enforcement where the inventory identifies remaining application-enforced boundaries."
+  ],
+  "rollback": [
+    "Remove the ownership manifests, generator, CI command, and documentation; no data or schema rollback is required."
+  ],
+  "validation": [
+    "Run the ownership inventory contract tests and generator check.",
+    "Run release-note preflight, documentation-boundary validation, lint, and targeted pooled-tenancy tests."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.8.0",
+      "newVersion": "0.9.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.7.1",
+      "newVersion": "0.7.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.11.0",
+      "newVersion": "0.11.1",
+      "impact": "patch"
+    }
+  ]
+}

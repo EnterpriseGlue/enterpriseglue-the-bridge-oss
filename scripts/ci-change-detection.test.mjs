@@ -24,7 +24,7 @@ test('native tenancy changes select the pooled RLS and segregated SSO lane', () 
   assert.match(workflow, /NativeTenantPicker/);
   assert.match(ciWorkflow, /^  native-tenancy-pooled-e2e:/m);
   assert.match(ciWorkflow, /run: pnpm run test:native-tenancy:pooled-e2e/);
-  assert.match(ciWorkflow, /security-pr-scan\|native-tenancy-pooled-e2e/);
+  assert.match(ciWorkflow, /      - security-pr-scan\n      - native-tenancy-pooled-e2e/);
 });
 
 test('package changes continue to select plugin compatibility and package checks', () => {

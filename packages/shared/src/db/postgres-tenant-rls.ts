@@ -1,23 +1,15 @@
 import type { QueryRunner } from 'typeorm';
 
-export const POSTGRES_TENANT_RLS_TABLES = new Set([
-  // Refresh tokens and invitations deliberately remain outside this content
-  // policy: their opaque pre-authentication lookup is what establishes the
-  // tenant. Both records carry an explicit tenant binding that their auth
-  // services verify before issuing a session.
-  'audit_logs', 'authz_audit_log', 'authz_groups', 'authz_group_memberships', 'authz_policies',
-  'config_bundle_apply_runs', 'config_bundle_identity_replay_tasks', 'config_bundle_runtime_reconciliation_tasks',
-  'deployment_receipts', 'external_engine_systems', 'external_identities', 'git_providers',
-  'identity_entitlement_mappings', 'identity_providers', 'identity_provisioning_diagnostics',
-  'identity_provisioning_directories', 'identity_reconciliation_checkpoints', 'notifications',
-  'projects', 'project_engine_targets', 'runtime_resources', 'runtime_resource_sets',
-  'runtime_resource_set_materializations', 'saml_assertion_replays', 'scim_group_links',
-  'scim_group_memberships', 'scim_user_links', 'sso_normalized_identities', 'sso_sync_events', 'sso_sync_runs',
-  'tenant_login_policies',
-]);
+import {
+  assertTenantPersistenceOwnershipV1,
+  POSTGRES_TENANT_RLS_TABLES,
+} from './tenant-ownership-inventory.js';
+
+export { POSTGRES_TENANT_RLS_TABLES } from './tenant-ownership-inventory.js';
 
 export async function verifyPostgresTenantRls(queryRunner: QueryRunner): Promise<{ expected: number; enforced: number }> {
   if (queryRunner.connection.options.type !== 'postgres') return { expected: 0, enforced: 0 };
+  assertTenantPersistenceOwnershipV1(queryRunner.connection.entityMetadatas);
   let expected = 0;
   let enforced = 0;
   for (const metadata of queryRunner.connection.entityMetadatas) {
