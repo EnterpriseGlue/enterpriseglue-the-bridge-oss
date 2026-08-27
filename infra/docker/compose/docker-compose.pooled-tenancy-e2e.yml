@@ -33,6 +33,11 @@ services:
   frontend:
     build: !reset null
     image: nginx:1.27-alpine
+    environment:
+      # The stock Nginx entrypoint substitutes variables in the shared site
+      # template. Keep the production image's optional CSP source empty in this
+      # build-from-dist qualification path so it cannot remain an Nginx variable.
+      RUNTIME_API_CONNECT_SRC: ""
     volumes:
       - ${POOLED_TENANCY_FRONTEND_DIST}:/usr/share/nginx/html:ro
       - ./frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro

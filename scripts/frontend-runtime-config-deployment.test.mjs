@@ -48,6 +48,15 @@ test('every supported container deployment passes runtime frontend configuration
     assert.match(deployment, new RegExp(`name: ${key}`));
     assert.match(deployment, new RegExp(`key: ${key}`));
   }
+
+  const pooledQualification = read(
+    'infra/docker/compose/docker-compose.pooled-tenancy-e2e.yml',
+  );
+  assert.match(
+    pooledQualification,
+    /^\s+RUNTIME_API_CONNECT_SRC: ""$/m,
+    'the stock Nginx qualification image must resolve the production CSP placeholder',
+  );
 });
 
 test('operator examples and the configuration matrix expose both runtime controls', () => {
