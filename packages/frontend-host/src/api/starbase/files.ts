@@ -1,4 +1,5 @@
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import type { File } from '../../shared/api/types';
 import type {
   CreateFile,
@@ -9,7 +10,7 @@ import type {
 
 export const filesApi = {
   listByProject: (projectId: string) =>
-    apiClient.get<File[]>(`/starbase-api/projects/${projectId}/files`),
+    fetchList<File>(`/starbase-api/projects/${projectId}/files`),
   
   getById: (id: string) => apiClient.get<File>(`/starbase-api/files/${id}`),
   

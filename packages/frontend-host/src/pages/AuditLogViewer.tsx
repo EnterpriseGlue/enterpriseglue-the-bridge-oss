@@ -24,6 +24,7 @@ import { evaluateActionSnapshot } from '../shared/auth/guards';
 import { PlatformPermission } from '../shared/auth/permissions';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../shared/components/PageLayout';
 import { apiClient } from '../shared/api/client';
+import { fetchList } from '../shared/api/fetchList';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 
 interface AuditLog {
@@ -104,7 +105,7 @@ export default function AuditLogViewer() {
     let cancelled = false;
     const loadTenantRole = async () => {
       try {
-        const data = await apiClient.get<any[]>('/api/auth/my-tenants');
+        const data = await fetchList<any>('/api/auth/my-tenants');
         const m = Array.isArray(data)
           ? data.find((t: any) => String(t?.tenantSlug || '') === String(tenantSlug))
           : undefined;

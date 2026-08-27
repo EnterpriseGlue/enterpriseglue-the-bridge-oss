@@ -27,6 +27,7 @@ import FormModal from '../../components/FormModal';
 import ConfirmModal from '../../shared/components/ConfirmModal';
 import { useModal } from '../../shared/hooks/useModal';
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import { useToast } from '../../shared/notifications/ToastProvider';
 import { configurationOwnershipDescription, configurationOwnershipLabel } from '../../features/platform-admin/identityAccessCopy';
@@ -121,7 +122,7 @@ export default function EmailConfigurations({
 
   const configsQuery = useQuery({
     queryKey: ['email-configs'],
-    queryFn: () => apiClient.get<EmailConfig[]>('/api/admin/email-configs'),
+    queryFn: () => fetchList<EmailConfig>('/api/admin/email-configs'),
   });
 
   const createMutation = useMutation({

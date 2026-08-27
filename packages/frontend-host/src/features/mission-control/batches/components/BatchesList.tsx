@@ -5,6 +5,7 @@ import { useParams } from 'react-router-dom'
 import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { Package } from '@carbon/icons-react'
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../../shared/components/PageLayout'
 import BatchDetailModal from './BatchDetailModal'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
@@ -46,7 +47,7 @@ export default function BatchesList() {
       params.set('includeActionDecisions', 'true')
       const query = params.toString()
       const suffix = query ? `?${query}` : ''
-      return apiClient.get<BatchListItem[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
+      return fetchList<BatchListItem>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
     },
     refetchInterval: 5000,
     // The collection route applies the bounded runtime-resource filter. The

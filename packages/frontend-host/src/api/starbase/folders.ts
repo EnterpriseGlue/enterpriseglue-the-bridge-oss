@@ -1,4 +1,5 @@
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import type {
   CreateFolder,
   CreateFolderResponse,
@@ -12,7 +13,7 @@ const BASE_URL = '/starbase-api';
 
 export const foldersApi = {
   listByProject: (projectId: string) =>
-    apiClient.get<FolderSummary[]>(`${BASE_URL}/projects/${encodeURIComponent(projectId)}/folders`),
+    fetchList<FolderSummary>(`${BASE_URL}/projects/${encodeURIComponent(projectId)}/folders`),
 
   create: (projectId: string, data: CreateFolder) =>
     apiClient.post<CreateFolderResponse>(`${BASE_URL}/projects/${encodeURIComponent(projectId)}/folders`, data),

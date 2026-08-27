@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import type { FolderSummary } from './project-detail-utils'
 
 interface LoaderProps {
@@ -21,7 +22,7 @@ export function FolderLoader({ projectId, onLoaded }: LoaderProps) {
     
     async function run() {
       try {
-        const data = await apiClient.get<FolderSummary[]>(`/starbase-api/projects/${projectId}/folders`)
+        const data = await fetchList<FolderSummary>(`/starbase-api/projects/${projectId}/folders`)
         if (active && Array.isArray(data) && data.length > 0) {
           onLoaded(data)
           return

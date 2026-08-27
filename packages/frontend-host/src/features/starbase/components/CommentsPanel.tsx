@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 
 type Comment = {
   id: string
@@ -12,7 +12,7 @@ type Comment = {
 export default function CommentsPanel({ fileId }: { fileId: string }) {
   const q = useQuery({
     queryKey: ['comments', fileId],
-    queryFn: () => apiClient.get<Comment[]>(`/starbase-api/files/${fileId}/comments`),
+    queryFn: () => fetchList<Comment>(`/starbase-api/files/${fileId}/comments`),
     enabled: !!fileId,
   })
   if (q.isLoading) return <div style={{ padding: 'var(--spacing-3) var(--spacing-4)' }}><p>Loading comments…</p></div>

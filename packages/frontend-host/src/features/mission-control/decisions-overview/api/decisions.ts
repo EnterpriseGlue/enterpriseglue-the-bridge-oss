@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import type { DecisionDefinition as SharedDecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 import type {
   HistoricDecisionInstance as SharedHistoricDecisionInstance,
@@ -17,7 +18,7 @@ export type DecisionHistoryEntry = SharedHistoricDecisionInstance
 export async function listDecisionDefinitions(engineId?: string): Promise<DecisionDefinition[]> {
   const params = new URLSearchParams()
   if (engineId) params.set('engineId', engineId)
-  return apiClient.get<DecisionDefinition[]>(`/mission-control-api/decision-definitions?${params}`, undefined, { credentials: 'include' })
+  return fetchList<DecisionDefinition>(`/mission-control-api/decision-definitions?${params}`, undefined, { credentials: 'include' })
 }
 
 export async function fetchDecisionDefinition(definitionId: string): Promise<DecisionDefinition> {
@@ -37,7 +38,7 @@ export async function listDecisionInstances(params: GetDecisionInstancesParams):
   if (params.processInstanceId) searchParams.set('processInstanceId', params.processInstanceId)
   if (params.evaluatedAfter) searchParams.set('evaluatedAfter', params.evaluatedAfter)
   if (params.evaluatedBefore) searchParams.set('evaluatedBefore', params.evaluatedBefore)
-  return apiClient.get<DecisionInstance[]>(`/mission-control-api/history/decisions?${searchParams}`, undefined, { credentials: 'include' })
+  return fetchList<DecisionInstance>(`/mission-control-api/history/decisions?${searchParams}`, undefined, { credentials: 'include' })
 }
 
 export type GetDecisionHistoryParams = { engineId?: string } & Pick<
@@ -75,5 +76,5 @@ export function buildDecisionHistoryQuery(params: GetDecisionHistoryParams): URL
 }
 
 export async function listDecisionHistory(query: URLSearchParams): Promise<DecisionHistoryEntry[]> {
-  return apiClient.get<DecisionHistoryEntry[]>(`/mission-control-api/history/decisions?${query.toString()}`, undefined, { credentials: 'include' })
+  return fetchList<DecisionHistoryEntry>(`/mission-control-api/history/decisions?${query.toString()}`, undefined, { credentials: 'include' })
 }

@@ -20,6 +20,7 @@ import {
 import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, WarningAlt } from '@carbon/icons-react'
 import { useDashboardFilterStore } from '../stores/dashboardFilterStore'
 import { apiClient } from '../shared/api/client'
+import { fetchList } from '../shared/api/fetchList';
 import { EngineSelector, useSelectedEngine } from '../components/EngineSelector'
 import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 import { useAuth } from '../shared/hooks/useAuth'
@@ -250,14 +251,14 @@ export default function Dashboard() {
   // Fetch users
   const usersQuery = useQuery({
     queryKey: ['users'],
-    queryFn: () => apiClient.get<any[]>('/api/users'),
+    queryFn: () => fetchList<any>('/api/users'),
     enabled: canReadDashboard && canViewActiveUsers,
   })
 
   // Fetch process instances
   const instancesQuery = useQuery({
     queryKey: ['dashboard-instances', selectedEngineId, timePeriod],
-    queryFn: () => apiClient.get<ProcessInstance[]>('/mission-control-api/process-instances', {
+    queryFn: () => fetchList<ProcessInstance>('/mission-control-api/process-instances', {
       active: true,
       completed: true,
       canceled: true,
