@@ -12,7 +12,8 @@ Use only the rows selected by the diff.
 | Operations | Deployment configuration, health/smoke evidence, observability, limitations, and rollback are documented |
 | Documentation boundary | Repository docs are technical and public; internal product material and customer drafts remain outside Git; transient evidence uses CI or release artifacts |
 | Packages | Published-package versions and plugin compatibility are validated |
-| CI | Required checks pass; advisory, skipped, cancelled, and deferred evidence are explicitly classified |
+| CI | The aggregate covers every CI job; required checks pass; advisory, skipped, cancelled, and deferred evidence are explicitly classified |
+| Release candidate | Release Please candidates have a read-only receipt for the exact SHA covering packages, charts, production images, vulnerability scans, and toolchain receipt rehearsal |
 
 Readiness rules:
 

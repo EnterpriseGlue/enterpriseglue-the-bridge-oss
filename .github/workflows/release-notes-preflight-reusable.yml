@@ -18,11 +18,21 @@ on:
         required: false
         type: boolean
         default: false
+    outputs:
+      is_release_pull_request:
+        description: Whether the resolved pull request is managed by Release Please
+        value: ${{ jobs.preflight.outputs.is_release_pull_request }}
+      pull_request_head_ref:
+        description: Resolved pull-request head branch
+        value: ${{ jobs.preflight.outputs.pull_request_head_ref }}
 
 jobs:
   preflight:
     name: Release-note preflight
     runs-on: ubuntu-latest
+    outputs:
+      is_release_pull_request: ${{ startsWith(steps.pull_request.outputs.head_ref, 'release-please--branches--') && steps.pull_request.outputs.head_repository == github.repository }}
+      pull_request_head_ref: ${{ steps.pull_request.outputs.head_ref || github.head_ref || '' }}
     permissions:
       contents: read
       pull-requests: read
@@ -39,7 +49,11 @@ jobs:
 
       - name: Fetch current pull-request metadata
         id: pull_request
-        if: inputs.pull_number > 0 || github.event_name == 'merge_group'
+        if: >-
+          inputs.pull_number > 0 ||
+          github.event_name == 'merge_group' ||
+          (github.event_name == 'workflow_dispatch' &&
+          github.ref_name != github.event.repository.default_branch)
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           PULL_NUMBER: ${{ inputs.pull_number }}
@@ -50,6 +64,21 @@ jobs:
               const headRef = context.payload.merge_group?.head_ref || '';
               const match = headRef.match(/(?:^|\/)pr-(\d+)-/);
               pullNumber = match ? Number(match[1]) : 0;
+            }
+            if ((!Number.isInteger(pullNumber) || pullNumber < 1) && context.eventName === 'workflow_dispatch') {
+              const branch = context.ref.replace(/^refs\/heads\//, '');
+              const { data: pullRequests } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: `${context.repo.owner}:${branch}`,
+                per_page: 2,
+              });
+              if (pullRequests.length !== 1) {
+                core.setFailed(`Expected one open pull request for ${branch}; found ${pullRequests.length}.`);
+                return;
+              }
+              pullNumber = pullRequests[0].number;
             }
             if (!Number.isInteger(pullNumber) || pullNumber < 1) {
               core.setFailed(`Invalid pull request number: ${process.env.PULL_NUMBER}`);
@@ -81,6 +110,7 @@ jobs:
             core.setOutput('exempt', String(labels.includes('release-note:none')));
             core.setOutput('number', String(pullNumber));
             core.setOutput('head_ref', pullRequest.head?.ref || '');
+            core.setOutput('head_repository', pullRequest.head?.repo?.full_name || '');
 
       - name: Resolve release-note comparison base
         id: release_base

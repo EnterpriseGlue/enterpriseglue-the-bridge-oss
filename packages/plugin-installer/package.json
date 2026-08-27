@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/plugin-installer",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Verified no-build Compose and Helm renderer for EnterpriseGlue OSS plugins",
   "license": "Apache-2.0",
   "private": false,

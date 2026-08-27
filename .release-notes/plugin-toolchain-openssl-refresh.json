@@ -1,0 +1,64 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-openssl-refresh",
+  "type": "security",
+  "scope": "plugin-toolchain-images",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Rebuilds the public plugin-installer and Plugin Manager images with patched Alpine OpenSSL runtime packages required by the HIGH/CRITICAL vulnerability gate.",
+  "userImpact": [
+    "Plugin-installer and Plugin Manager deployments receive patched libcrypto3 and libssl3 runtime packages without changes to toolchain behavior or configuration."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Use plugin installer 0.2.3, Plugin Manager 0.1.3, and the matching 0.2.3 runtime/RBAC and 0.1.3 manager Helm charts when consuming the refreshed toolchain image."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Both Alpine runtime layers upgrade installed packages before adding toolchain utilities so libcrypto3 and libssl3 resolve to the repository's patched versions.",
+    "Pull-request qualification rebuilds both production toolchain images and rejects any remaining HIGH or CRITICAL vulnerability."
+  ],
+  "documentation": [
+    "The release fragment records both patched images, matching package versions, coupled chart versions, and vulnerability-gate validation."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore either previous toolchain image only in an isolated test environment because the earlier images do not satisfy the current vulnerability gate."
+  ],
+  "validation": [
+    "Production multi-architecture plugin image build and deployability checks",
+    "Trivy image scan with HIGH and CRITICAL findings configured to fail the build",
+    "Published-package version discipline and plugin-toolchain release-policy checks"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.2",
+      "newVersion": "0.2.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.2",
+      "newVersion": "0.1.3",
+      "impact": "patch"
+    }
+  ]
+}

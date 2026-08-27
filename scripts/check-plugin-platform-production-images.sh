@@ -14,31 +14,48 @@ cd "$ROOT_DIR"
 
 if [[ "${SKIP_PLUGIN_PLATFORM_IMAGE_BUILD:-false}" != "true" ]]; then
   MULTIARCH_BUILDER_NAME="${PLUGIN_PLATFORM_BUILDX_BUILDER:-enterpriseglue-plugin-platform-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$}"
+  BUILDX_NETWORK_ARGS=()
+  if [[ -n "${PLUGIN_PLATFORM_BUILDX_NETWORK:-}" ]]; then
+    BUILDX_NETWORK_ARGS=(--network "${PLUGIN_PLATFORM_BUILDX_NETWORK}")
+  fi
+  CREATED_MULTIARCH_BUILDER=false
   cleanup_multiarch_builder() {
-    docker buildx rm --force "$MULTIARCH_BUILDER_NAME" >/dev/null 2>&1 || true
+    if [[ "$CREATED_MULTIARCH_BUILDER" == "true" ]]; then
+      docker buildx rm --force "$MULTIARCH_BUILDER_NAME" >/dev/null 2>&1 || true
+    fi
   }
   trap cleanup_multiarch_builder EXIT
 
-  docker buildx create \
-    --name "$MULTIARCH_BUILDER_NAME" \
-    --driver docker-container >/dev/null
+  if [[ -z "${PLUGIN_PLATFORM_BUILDX_BUILDER:-}" ]]; then
+    docker buildx create \
+      --name "$MULTIARCH_BUILDER_NAME" \
+      --driver docker-container >/dev/null
+    CREATED_MULTIARCH_BUILDER=true
+  fi
   docker buildx inspect "$MULTIARCH_BUILDER_NAME" --bootstrap >/dev/null
 
-  for dockerfile in packages/plugin-installer/Dockerfile packages/plugin-manager/Dockerfile; do
-    docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --quiet \
-      --platform linux/amd64,linux/arm64 \
-      --target oras \
-      --output=type=cacheonly \
-      -f "$dockerfile" .
+  for platform in linux/amd64 linux/arm64; do
+    for dockerfile in packages/plugin-installer/Dockerfile packages/plugin-manager/Dockerfile; do
+      docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --quiet \
+        "${BUILDX_NETWORK_ARGS[@]}" \
+        --platform "$platform" \
+        --target oras \
+        --output=type=cacheonly \
+        -f "$dockerfile" .
+    done
   done
+
+  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
+    "${BUILDX_NETWORK_ARGS[@]}" -f backend/Dockerfile.prod -t "$BACKEND_IMAGE" .
+  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
+    "${BUILDX_NETWORK_ARGS[@]}" -f frontend/Dockerfile.prod -t "$FRONTEND_IMAGE" .
+  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
+    "${BUILDX_NETWORK_ARGS[@]}" -f packages/plugin-manager/Dockerfile -t "$MANAGER_IMAGE" .
+  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
+    "${BUILDX_NETWORK_ARGS[@]}" -f packages/plugin-installer/Dockerfile -t "$INSTALLER_IMAGE" .
 
   cleanup_multiarch_builder
   trap - EXIT
-
-  docker build --quiet -f backend/Dockerfile.prod -t "$BACKEND_IMAGE" .
-  docker build --quiet -f frontend/Dockerfile.prod -t "$FRONTEND_IMAGE" .
-  docker build --quiet -f packages/plugin-manager/Dockerfile -t "$MANAGER_IMAGE" .
-  docker build --quiet -f packages/plugin-installer/Dockerfile -t "$INSTALLER_IMAGE" .
 fi
 
 # Importing the host module executes the real production package-resolution
@@ -70,6 +87,9 @@ docker run --rm --entrypoint node "$MANAGER_IMAGE" \
 for image in "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do
   docker run --rm --entrypoint oras "$image" version
   docker run --rm --entrypoint cosign "$image" version
+done
+
+for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do
   docker run --rm \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     "$TRIVY_IMAGE" image --quiet --exit-code 1 \
