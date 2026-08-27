@@ -32,8 +32,17 @@ in `engine-tenant-mappings.json`. See
 | --- | --- | --- | --- |
 | EG_TENANCY_MODE | No | single | `single` permits only the canonical default tenant; `pooled` enables the pre-production multi-tenant foundation and requires PostgreSQL RLS plus the complete deployment qualification gates. |
 | EG_TENANT_BASE_DOMAIN | No | unset | Managed tenant hostname suffix; `<tenant-slug>.<base-domain>` resolves the canonical tenant. |
-| EG_TENANT_PLACEMENT_KEY | Required for production pooled mode | unset | Secret of at least 32 characters used to verify short-lived control-plane placement assertions. |
+| EG_TENANT_PLACEMENT_KEY | Required for production pooled mode when v2 is unset | unset | Secret of at least 32 characters used to verify legacy placement v1 assertions during the compatibility window. |
 | EG_TENANT_PLACEMENT_MAX_AGE_SECONDS | No | 120 | Maximum assertion lifetime in seconds; maximum 3600. |
+| EG_TENANT_PLACEMENT_V2_JWKS_JSON | Required for cloud-required pooled mode | unset | Public ES256 JWKS. Each accepted key has a unique `kid`; overlapping keys permit rotation. |
+| EG_TENANT_PLACEMENT_V2_ISSUER | Required for cloud-required pooled mode | unset | Exact trusted placement assertion issuer. |
+| EG_TENANT_PLACEMENT_V2_AUDIENCE | Required for cloud-required pooled mode | unset | Exact shard assertion audience and workload receipt audience. |
+| EG_TENANT_PLACEMENT_V2_SHARD_ID | Required for cloud-required pooled mode | unset | Canonical shard identity; must match the durable tenant placement key. |
+| EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS | No | 5 | Clock tolerance for `iat`, `nbf`, and `exp`; maximum 60. |
+| EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2 and signed workload receipt configuration without changing the self-hosted default. |
+| EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY | Required for cloud-required pooled mode | unset | PEM-encoded P-256 private key; may use escaped newlines. Never expose it through APIs or logs. |
+| EG_TENANT_WORKLOAD_RECEIPT_KEY_ID | Required for cloud-required pooled mode | unset | Public identifier for the workload receipt signing key. |
+| EG_TENANT_WORKLOAD_RECEIPT_ISSUER | Required for cloud-required pooled mode | unset | Stable shard receipt issuer verified by the control plane. |
 | EG_TENANT_RLS_ENFORCED | Required for pooled mode | false | Must be `true`; startup verifies forced PostgreSQL row-level security and rejects superuser or `BYPASSRLS` application roles before serving pooled traffic. |
 
 ## Backend (Required by DATABASE_TYPE)

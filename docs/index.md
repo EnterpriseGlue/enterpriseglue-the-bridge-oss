@@ -27,6 +27,7 @@ Audience: Developers and architects.
 ## Configuration
 - [Configuration Reference](reference/configuration.md)
 - [Configuration Matrix](reference/configuration-matrix.md)
+- [Tenant Workload Lifecycle API](reference/tenant-workload-lifecycle-api.md)
 - [Access Governance and Headless Configuration API](reference/access-governance-and-headless-api.md)
 - [Configure The Platform Without An Administrator](how-to/configure-platform-headlessly.md)
 - [Complete Headless Platform Administration Example](reference/headless-platform-administration.example.json)

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { requireAuth, requireAdmin } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireServiceAccountScope } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
@@ -10,6 +11,8 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { tenantDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/TenantDiscoveryService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/platform-admin/TenantWorkloadLifecycleService.js';
+import { ServiceAccountScopes } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -33,22 +36,158 @@ import {
   NativeTenantSchema,
   TenancyCapabilitiesSchema,
   TenantUpdateRequestSchema,
+  TenantWorkloadAliasReconcileRequestSchema,
+  TenantWorkloadCreateRequestSchema,
+  TenantWorkloadEpochRequestSchema,
+  SignedTenantWorkloadReceiptSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
 
 const router = Router();
 const tenantIdSchema = z.string().min(1).max(160);
 
-router.get('/api/tenancy/capabilities', (_req, res) => {
-  res.json(TenancyCapabilitiesSchema.parse({
+function requiredHeader(req: { headers: Record<string, unknown> }, name: string): string {
+  const value = req.headers[name];
+  if (typeof value !== 'string' || !value.trim()) throw Errors.validation(`${name} header is required`);
+  return value.trim();
+}
+
+function tenancyCapabilities(includeShardIdentity: boolean) {
+  const placementAssertionVersions = [
+    ...(config.tenantPlacementKey ? ['v1' as const] : []),
+    ...(config.tenantPlacementV2JwksJson ? ['v2' as const] : []),
+  ];
+  const workloadConfigured = Boolean(
+    config.tenantPlacementV2ShardId
+    && config.tenantWorkloadReceiptPrivateKey
+    && config.tenantWorkloadReceiptKeyId
+    && config.tenantWorkloadReceiptIssuer,
+  );
+  return TenancyCapabilitiesSchema.parse({
     mode: config.tenancyMode,
     rootTenantAliasesEnabled: config.tenancyMode !== 'pooled',
     tenantScopedLoginRequired: config.tenancyMode === 'pooled',
     databaseIsolation: config.tenancyMode === 'pooled' ? 'postgres_rls' : 'application',
     customDomainsEnabled: config.tenancyMode === 'pooled',
     organizationDiscoveryEnabled: config.tenancyMode === 'pooled',
-    signedPlacementAssertionsEnabled: Boolean(config.tenantPlacementKey),
-  }));
+    signedPlacementAssertionsEnabled: placementAssertionVersions.length > 0,
+    placementAssertionVersions,
+    placementV2Required: config.tenancyCloudRequired,
+    workloadTenantLifecycleEnabled: config.tenancyMode === 'pooled' && workloadConfigured,
+    shardId: includeShardIdentity ? config.tenantPlacementV2ShardId || null : null,
+    workloadReceipt: includeShardIdentity && config.tenantWorkloadReceiptKeyId && config.tenantWorkloadReceiptIssuer
+      ? { algorithm: 'ES256', keyId: config.tenantWorkloadReceiptKeyId, issuer: config.tenantWorkloadReceiptIssuer }
+      : null,
+  });
+}
+
+router.get('/api/tenancy/capabilities', (_req, res) => {
+  res.json(tenancyCapabilities(false));
 });
+
+const workloadScope = requireServiceAccountScope(ServiceAccountScopes.TENANT_LIFECYCLE);
+
+router.get('/api/workloads/tenancy/capabilities', workloadScope, (_req, res) => {
+  res.json(tenancyCapabilities(true));
+});
+
+router.post('/api/workloads/tenants', workloadScope, validateBody(TenantWorkloadCreateRequestSchema), asyncHandler(async (req, res) => {
+  const idempotencyKey = requiredHeader(req, 'idempotency-key');
+  const correlationId = requiredHeader(req, 'x-correlation-id');
+  const placementKey = req.body.placementKey || config.tenantPlacementV2ShardId || 'local';
+  if (config.tenantPlacementV2ShardId && placementKey !== config.tenantPlacementV2ShardId) {
+    throw Errors.validation('Tenant placementKey must match this shard identity');
+  }
+  const requestBody = { ...req.body, placementKey };
+  const receipt = await tenantWorkloadLifecycleService.execute({
+    actorId: req.serviceAccount!.id,
+    command: 'create',
+    idempotencyKey,
+    correlationId,
+    request: requestBody,
+    mutate: async (manager) => {
+      const tenant = await tenantService.create(requestBody, manager);
+      return {
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        tenantStatus: tenant.status,
+        placementEpoch: Number(tenant.placementEpoch),
+      };
+    },
+  });
+  res.status(receipt.idempotent ? 200 : 201).json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.post('/api/workloads/tenants/:tenantId/suspend', workloadScope, validateBody(TenantWorkloadEpochRequestSchema), asyncHandler(async (req, res) => {
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  const idempotencyKey = requiredHeader(req, 'idempotency-key');
+  const correlationId = requiredHeader(req, 'x-correlation-id');
+  const receipt = await tenantWorkloadLifecycleService.execute({
+    actorId: req.serviceAccount!.id,
+    command: 'suspend',
+    idempotencyKey,
+    correlationId,
+    request: { tenantId, ...req.body },
+    mutate: async (manager) => {
+      const tenant = await tenantService.update(tenantId, {
+        status: 'suspended', expectedPlacementEpoch: req.body.expectedPlacementEpoch,
+      }, manager);
+      return {
+        tenantId: tenant.id, tenantSlug: tenant.slug, tenantStatus: tenant.status,
+        placementEpoch: Number(tenant.placementEpoch),
+      };
+    },
+  });
+  res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.post('/api/workloads/tenants/:tenantId/resume', workloadScope, validateBody(TenantWorkloadEpochRequestSchema), asyncHandler(async (req, res) => {
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  const idempotencyKey = requiredHeader(req, 'idempotency-key');
+  const correlationId = requiredHeader(req, 'x-correlation-id');
+  const receipt = await tenantWorkloadLifecycleService.execute({
+    actorId: req.serviceAccount!.id,
+    command: 'resume',
+    idempotencyKey,
+    correlationId,
+    request: { tenantId, ...req.body },
+    mutate: async (manager) => {
+      const tenant = await tenantService.update(tenantId, {
+        status: 'active', expectedPlacementEpoch: req.body.expectedPlacementEpoch,
+      }, manager);
+      return {
+        tenantId: tenant.id, tenantSlug: tenant.slug, tenantStatus: tenant.status,
+        placementEpoch: Number(tenant.placementEpoch),
+      };
+    },
+  });
+  res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.put('/api/workloads/tenants/:tenantId/routing-aliases', workloadScope, validateBody(TenantWorkloadAliasReconcileRequestSchema), asyncHandler(async (req, res) => {
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  const idempotencyKey = requiredHeader(req, 'idempotency-key');
+  const correlationId = requiredHeader(req, 'x-correlation-id');
+  const receipt = await tenantWorkloadLifecycleService.execute({
+    actorId: req.serviceAccount!.id,
+    command: 'reconcile_aliases',
+    idempotencyKey,
+    correlationId,
+    request: { tenantId, ...req.body },
+    mutate: async (manager) => {
+      const result = await tenantService.reconcileRoutingAliases(
+        tenantId, req.body.aliases, req.body.expectedPlacementEpoch, manager,
+      );
+      return {
+        tenantId: result.tenant.id,
+        tenantSlug: result.tenant.slug,
+        tenantStatus: result.tenant.status,
+        placementEpoch: Number(result.tenant.placementEpoch),
+        routingAliases: result.aliases.map((alias) => alias.hostname),
+      };
+    },
+  });
+  res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
 
 router.post('/api/auth/tenant-discovery', identityFlowLimiter, validateBody(TenantDiscoveryRequestSchema), asyncHandler(async (req, res) => {
   res.json(TenantDiscoveryResponseSchema.parse(await tenantDiscoveryService.request(req.body.email)));

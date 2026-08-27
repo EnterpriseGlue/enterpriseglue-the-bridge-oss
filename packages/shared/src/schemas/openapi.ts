@@ -74,6 +74,10 @@ const {
   TenantDomainVerifyRequestSchema,
   TenantSlugSchema,
   TenancyCapabilitiesSchema,
+  TenantWorkloadCreateRequestSchema,
+  TenantWorkloadEpochRequestSchema,
+  TenantWorkloadAliasReconcileRequestSchema,
+  SignedTenantWorkloadReceiptSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/tenant.js');
 
 const {
@@ -2662,10 +2666,44 @@ registry.register('TenantDomain', TenantDomainSchema);
 registry.register('TenantDiscoveryDomain', TenantDiscoveryDomainSchema);
 registry.register('TenantDiscoveryResponse', TenantDiscoveryResponseSchema);
 registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
+registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
+const TenantWorkloadHeadersSchema = z.object({
+  'idempotency-key': z.string().min(16).max(200),
+  'x-correlation-id': z.string().min(8).max(160),
+});
 registry.registerPath({
   method: 'get', path: '/api/tenancy/capabilities',
   ...authzExemption('GET', '/api/tenancy/capabilities'),
   responses: { 200: { description: 'Non-enumerating native tenancy capabilities', content: { 'application/json': { schema: TenancyCapabilitiesSchema } } } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/workloads/tenancy/capabilities',
+  ...authzExtension('platform.tenants.workload.capabilities.read', 'GET', '/api/workloads/tenancy/capabilities'),
+  responses: { 200: { description: 'Authenticated shard tenancy and workload receipt capabilities', content: { 'application/json': { schema: TenancyCapabilitiesSchema } } }, 401: { description: 'A tenant-lifecycle service account is required' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants',
+  ...authzExtension('platform.tenants.workload.provision', 'POST', '/api/workloads/tenants'),
+  request: { headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadCreateRequestSchema } } } },
+  responses: { 201: { description: 'Tenant provisioned with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or tenant slug conflict' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/suspend',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/suspend'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadEpochRequestSchema } } } },
+  responses: { 200: { description: 'Tenant suspended with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or placement epoch conflict' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/resume',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/resume'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadEpochRequestSchema } } } },
+  responses: { 200: { description: 'Tenant resumed with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or placement epoch conflict' } },
+});
+registry.registerPath({
+  method: 'put', path: '/api/workloads/tenants/{tenantId}/routing-aliases',
+  ...authzExtension('platform.tenants.workload.aliases.reconcile', 'PUT', '/api/workloads/tenants/{tenantId}/routing-aliases'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadAliasReconcileRequestSchema } } } },
+  responses: { 200: { description: 'Tenant routing aliases reconciled with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency, alias ownership, or placement epoch conflict' } },
 });
 registry.registerPath({
   method: 'post', path: '/api/auth/tenant-discovery',

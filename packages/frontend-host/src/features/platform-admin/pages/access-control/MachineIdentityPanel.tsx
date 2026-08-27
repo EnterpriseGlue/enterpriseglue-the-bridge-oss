@@ -125,6 +125,7 @@ const API_CLIENT_SCOPE_OPTIONS = [
 
 const SERVICE_ACCOUNT_SCOPE_OPTIONS = [
   { id: 'deployment:execute', label: 'Deployment execution' },
+  { id: 'tenant:lifecycle', label: 'Tenant lifecycle' },
 ];
 
 const EXTERNAL_SYSTEM_MODE_OPTIONS: Array<{ id: Exclude<EngineManagementMode, 'manual'>; label: string }> = [

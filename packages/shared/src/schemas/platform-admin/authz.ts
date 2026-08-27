@@ -563,7 +563,7 @@ export const ServiceAccountSchema = z.object({
 export const ServiceAccountCreateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(2000).nullable().optional(),
-  scopes: z.array(z.enum(['deployment:execute'])).min(1).optional(),
+  scopes: z.array(z.enum(['deployment:execute', 'tenant:lifecycle'])).min(1).optional(),
 });
 
 export const ServiceAccountWithTokenSchema = z.object({

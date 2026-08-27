@@ -51,6 +51,15 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantBaseDomain: z.string().min(1).optional(),
   tenantPlacementKey: z.string().min(32).optional(),
   tenantPlacementMaxAgeSeconds: z.number().int().positive().max(3600).default(120),
+  tenantPlacementV2JwksJson: z.string().min(2).max(65536).optional(),
+  tenantPlacementV2Issuer: z.string().min(1).max(255).optional(),
+  tenantPlacementV2Audience: z.string().min(1).max(255).optional(),
+  tenantPlacementV2ShardId: z.string().min(1).max(160).optional(),
+  tenantPlacementV2ClockSkewSeconds: z.number().int().nonnegative().max(60).default(5),
+  tenancyCloudRequired: z.boolean().default(false),
+  tenantWorkloadReceiptPrivateKey: z.string().min(32).optional(),
+  tenantWorkloadReceiptKeyId: z.string().min(1).max(160).optional(),
+  tenantWorkloadReceiptIssuer: z.string().min(1).max(255).optional(),
   tenantRlsEnforced: z.boolean().default(false),
   
   // PostgreSQL configuration (when databaseType=postgres)
@@ -183,6 +192,18 @@ function loadConfig(): Config {
     tenantPlacementMaxAgeSeconds: process.env.EG_TENANT_PLACEMENT_MAX_AGE_SECONDS
       ? Number(process.env.EG_TENANT_PLACEMENT_MAX_AGE_SECONDS)
       : undefined,
+    tenantPlacementV2JwksJson: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_JWKS_JSON),
+    tenantPlacementV2Issuer: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_ISSUER),
+    tenantPlacementV2Audience: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_AUDIENCE),
+    tenantPlacementV2ShardId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_SHARD_ID),
+    tenantPlacementV2ClockSkewSeconds: process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS
+      ? Number(process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS)
+      : undefined,
+    tenancyCloudRequired: process.env.EG_TENANCY_CLOUD_REQUIRED === 'true',
+    tenantWorkloadReceiptPrivateKey: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY)
+      ?.replace(/\\n/g, '\n'),
+    tenantWorkloadReceiptKeyId: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_KEY_ID),
+    tenantWorkloadReceiptIssuer: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_ISSUER),
     tenantRlsEnforced: process.env.EG_TENANT_RLS_ENFORCED === 'true',
     postgresUrl: process.env.POSTGRES_URL,
     postgresHost: process.env.POSTGRES_HOST || pgUrlParsed?.hostname || undefined,
@@ -274,6 +295,42 @@ function loadConfig(): Config {
 // Singleton config instance
 export const config = loadConfig();
 
+if (config.tenantPlacementV2JwksJson) {
+  let keys: Array<Record<string, unknown>>;
+  try {
+    const jwks = JSON.parse(config.tenantPlacementV2JwksJson) as { keys?: unknown };
+    if (!Array.isArray(jwks.keys) || jwks.keys.length === 0) throw new Error('missing keys');
+    keys = jwks.keys as Array<Record<string, unknown>>;
+  } catch {
+    throw new Error('EG_TENANT_PLACEMENT_V2_JWKS_JSON must be a non-empty public ES256 JWKS.');
+  }
+  const keyIds = new Set<string>();
+  for (const key of keys) {
+    const kid = typeof key.kid === 'string' ? key.kid : '';
+    if (!kid || keyIds.has(kid) || key.kty !== 'EC' || key.crv !== 'P-256'
+      || (key.alg !== undefined && key.alg !== 'ES256') || (key.use !== undefined && key.use !== 'sig')
+      || Object.prototype.hasOwnProperty.call(key, 'd')) {
+      throw new Error('EG_TENANT_PLACEMENT_V2_JWKS_JSON must contain unique public ES256 keys with kid.');
+    }
+    try { crypto.createPublicKey({ key: key as JsonWebKey, format: 'jwk' }); }
+    catch { throw new Error(`EG_TENANT_PLACEMENT_V2_JWKS_JSON contains an invalid public key for kid ${kid}.`); }
+    keyIds.add(kid);
+  }
+}
+
+if (config.tenantWorkloadReceiptPrivateKey) {
+  let receiptKey;
+  try { receiptKey = crypto.createPrivateKey(config.tenantWorkloadReceiptPrivateKey); }
+  catch { throw new Error('EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY must be a valid P-256 private key.'); }
+  if (receiptKey.asymmetricKeyType !== 'ec' || receiptKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+    throw new Error('EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY must be a valid P-256 private key.');
+  }
+}
+
+if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
+  throw new Error('EG_TENANCY_CLOUD_REQUIRED=true requires EG_TENANCY_MODE=pooled.');
+}
+
 if (config.tenancyMode === 'pooled') {
   if (config.databaseType !== 'postgres') {
     throw new Error('EG_TENANCY_MODE=pooled requires DATABASE_TYPE=postgres.');
@@ -283,10 +340,24 @@ if (config.tenancyMode === 'pooled') {
       'EG_TENANCY_MODE=pooled requires EG_TENANT_RLS_ENFORCED=true so tenant isolation cannot start without PostgreSQL row policies.'
     );
   }
-  if (config.nodeEnv === 'production' && !config.tenantPlacementKey) {
+  if (config.nodeEnv === 'production' && !config.tenantPlacementKey && !config.tenantPlacementV2JwksJson) {
     throw new Error(
-      'EG_TENANT_PLACEMENT_KEY (at least 32 characters) is required for pooled production deployments.'
+      'EG_TENANT_PLACEMENT_KEY or EG_TENANT_PLACEMENT_V2_JWKS_JSON is required for pooled production deployments.'
     );
+  }
+  if (config.tenancyCloudRequired) {
+    const missing = [
+      ['EG_TENANT_PLACEMENT_V2_JWKS_JSON', config.tenantPlacementV2JwksJson],
+      ['EG_TENANT_PLACEMENT_V2_ISSUER', config.tenantPlacementV2Issuer],
+      ['EG_TENANT_PLACEMENT_V2_AUDIENCE', config.tenantPlacementV2Audience],
+      ['EG_TENANT_PLACEMENT_V2_SHARD_ID', config.tenantPlacementV2ShardId],
+      ['EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY', config.tenantWorkloadReceiptPrivateKey],
+      ['EG_TENANT_WORKLOAD_RECEIPT_KEY_ID', config.tenantWorkloadReceiptKeyId],
+      ['EG_TENANT_WORKLOAD_RECEIPT_ISSUER', config.tenantWorkloadReceiptIssuer],
+    ].filter(([, value]) => !value).map(([name]) => name);
+    if (missing.length) {
+      throw new Error(`EG_TENANCY_CLOUD_REQUIRED=true requires ${missing.join(', ')}.`);
+    }
   }
 }
 

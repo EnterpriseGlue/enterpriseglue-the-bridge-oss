@@ -23,6 +23,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js
   SERVICE_ACCOUNT_TOKEN_PREFIX: 'egsa',
   ServiceAccountScopes: {
     DEPLOYMENT_EXECUTE: 'deployment:execute',
+    TENANT_LIFECYCLE: 'tenant:lifecycle',
   },
   serviceAccountService: {
     authenticateToken: mocks.authenticateServiceAccountToken,
@@ -47,7 +48,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () =>
   },
 }));
 
-import { requireApiClientAction, requireApiClientScope, requireApiDeploymentEligibility } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
+import { requireApiClientAction, requireApiClientScope, requireApiDeploymentEligibility, requireServiceAccountScope } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 
 describe('apiClientAuth middleware', () => {
   beforeEach(() => {
@@ -326,6 +327,27 @@ describe('apiClientAuth middleware', () => {
     expect(req.serviceAccount).toMatchObject({ id: 'service-account-1' });
     expect(req.deploymentEligibility).toMatchObject({ allowed: true, mode: 'api' });
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it('accepts only service accounts on workload-only tenant lifecycle routes', async () => {
+    const next = vi.fn();
+    const workloadRequest: any = { headers: { authorization: 'Bearer egsa_service-account-1_secret' } };
+
+    await requireServiceAccountScope('tenant:lifecycle')(workloadRequest, {} as any, next);
+
+    expect(mocks.authenticateServiceAccountToken).toHaveBeenCalledWith('egsa_service-account-1_secret', 'tenant:lifecycle');
+    expect(mocks.authenticateToken).not.toHaveBeenCalled();
+    expect(workloadRequest.serviceAccount).toMatchObject({ id: 'service-account-1' });
+    expect(next).toHaveBeenCalledWith();
+
+    const interactiveNext = vi.fn();
+    await requireServiceAccountScope('tenant:lifecycle')(
+      { headers: { authorization: 'Bearer interactive-user-token' }, user: { userId: 'user-1' } } as any,
+      {} as any,
+      interactiveNext,
+    );
+    expect(interactiveNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+    expect(mocks.authenticateToken).not.toHaveBeenCalled();
   });
 
   it('returns a 403 app error with eligibility details when API deployment is denied', async () => {

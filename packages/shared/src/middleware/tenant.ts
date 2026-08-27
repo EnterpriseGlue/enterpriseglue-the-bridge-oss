@@ -18,6 +18,8 @@ export interface TenantContext {
   tenantSlug: string;
   placementKey?: string | null;
   placementEpoch?: number;
+  placementAssertionVersion?: 'v1' | 'v2';
+  placementCorrelationId?: string;
 }
 
 export const DEFAULT_TENANT_ID = OSS_DEFAULT_TENANT_ID;
@@ -37,14 +39,28 @@ function routeTenantSlug(req: Request): string | null {
   return typeof fromParams === 'string' && fromParams.trim() ? fromParams.trim().toLowerCase() : null;
 }
 
-function placementHeaders(req: Request): { payload: string; signature: string } | null {
+type PlacementHeaders =
+  | { version: 'v1'; payload: string; signature: string }
+  | { version: 'v2'; compactJws: string };
+
+function placementHeaders(req: Request): PlacementHeaders | null {
   const payload = req.headers['x-eg-tenant-placement'];
   const signature = req.headers['x-eg-tenant-placement-signature'];
-  if (payload === undefined && signature === undefined) return null;
+  const compactJws = req.headers['x-eg-tenant-placement-v2'];
+  const hasV1 = payload !== undefined || signature !== undefined;
+  const hasV2 = compactJws !== undefined;
+  if (hasV1 && hasV2) throw Errors.unauthorized('Mixed tenant placement assertion versions are not allowed');
+  if (!hasV1 && !hasV2) return null;
+  if (hasV2) {
+    if (typeof compactJws !== 'string' || !compactJws) {
+      throw Errors.unauthorized('Invalid tenant placement v2 assertion');
+    }
+    return { version: 'v2', compactJws };
+  }
   if (typeof payload !== 'string' || typeof signature !== 'string' || !payload || !signature) {
     throw Errors.unauthorized('Incomplete tenant placement assertion');
   }
-  return { payload, signature };
+  return { version: 'v1', payload, signature };
 }
 
 function activateTenantContext(req: Request, next: NextFunction, tenant: TenantContext): void {
@@ -56,7 +72,8 @@ function activateTenantContext(req: Request, next: NextFunction, tenant: TenantC
 /**
  * Resolves the canonical native tenant. In pooled mode, unsigned tenant
  * headers are deliberately ignored: accepted authorities are a route slug, a
- * verified custom host, or an HMAC placement assertion from the control plane.
+ * verified custom host, a compatibility HMAC placement v1 assertion, or an
+ * asymmetric, route-bound placement v2 assertion from the control plane.
  */
 export function resolveTenantContext(options: { required?: boolean } = {}) {
   const required = options.required !== false;
@@ -86,14 +103,38 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
       const signedPlacement = placementHeaders(req);
       let tenant = null as Awaited<ReturnType<typeof tenantService.getById>>;
       if (signedPlacement) {
-        const claim = tenantService.verifyPlacementClaim(signedPlacement.payload, signedPlacement.signature);
-        tenant = await tenantService.getById(claim.tenantId);
-        if (
-          !tenant || tenant.slug !== claim.tenantSlug || tenant.placementKey !== claim.placementKey
-          || Number(tenant.placementEpoch) !== claim.epoch
-          || (requestedSlug && requestedSlug !== tenant.slug)
-        ) {
-          throw Errors.unauthorized('Stale or mismatched tenant placement assertion');
+        if (signedPlacement.version === 'v1') {
+          const claim = tenantService.verifyPlacementClaim(signedPlacement.payload, signedPlacement.signature);
+          tenant = await tenantService.getById(claim.tenantId);
+          if (
+            !tenant || tenant.slug !== claim.tenantSlug || tenant.placementKey !== claim.placementKey
+            || Number(tenant.placementEpoch) !== claim.epoch
+            || (requestedSlug && requestedSlug !== tenant.slug)
+          ) {
+            throw Errors.unauthorized('Stale or mismatched tenant placement assertion');
+          }
+        } else {
+          const claim = tenantService.verifyPlacementClaimV2(
+            signedPlacement.compactJws,
+            req.hostname || '',
+            req.originalUrl || req.url || '/',
+          );
+          tenant = await tenantService.getById(claim.tenantId);
+          if (
+            !tenant || tenant.slug !== claim.tenantSlug || tenant.placementKey !== claim.shardId
+            || Number(tenant.placementEpoch) !== claim.placementEpoch
+            || (requestedSlug && requestedSlug !== tenant.slug)
+          ) {
+            throw Errors.unauthorized('Stale or mismatched tenant placement v2 assertion');
+          }
+          req.tenant = {
+            tenantId: tenant.id,
+            tenantSlug: tenant.slug,
+            placementKey: tenant.placementKey,
+            placementEpoch: Number(tenant.placementEpoch),
+            placementAssertionVersion: 'v2',
+            placementCorrelationId: claim.correlationId,
+          };
         }
       } else if (requestedSlug) {
         tenant = await tenantService.getBySlug(requestedSlug);
@@ -118,6 +159,8 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
         tenantSlug: tenant.slug,
         placementKey: tenant.placementKey,
         placementEpoch: Number(tenant.placementEpoch),
+        ...(signedPlacement ? { placementAssertionVersion: signedPlacement.version } : {}),
+        ...(req.tenant?.placementCorrelationId ? { placementCorrelationId: req.tenant.placementCorrelationId } : {}),
       });
     } catch (error) {
       next(error);

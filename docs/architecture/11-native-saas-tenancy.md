@@ -51,7 +51,9 @@ configuration is loaded.
 The resulting request context is also installed in asynchronous local storage
 so persistence and plugin code consume the same canonical tenant.
 
-## Signed placement assertion
+## Signed placement assertions
+
+### Placement v1 compatibility
 
 The private control plane and an OSS shard use this narrow contract:
 
@@ -76,6 +78,25 @@ far in the future, incorrectly signed, or inconsistent with durable placement
 state fail closed. Rotating a tenant's placement key increments its placement
 epoch, invalidating assertions issued for the old placement.
 
+### Placement v2 cloud trust
+
+Placement v2 is additive and uses `X-EG-Tenant-Placement-V2` with a compact
+ES256 JWS. The shard stores public JWKS material only. Its protected header
+contains `alg=ES256`, `typ=JWT`, and a unique `kid`. The payload binds:
+
+- schema `placement-assertion.enterpriseglue.io/v2`, issuer, and audience;
+- subject, tenant ID, tenant slug, shard ID, and durable placement epoch;
+- canonical request hostname and either `/t/<slug>` or `/api/t/<slug>` path
+  prefix;
+- a safe correlation ID; and
+- `iat`, `nbf`, and `exp` in Unix seconds within the configured maximum age.
+
+The verifier rejects unknown or duplicate keys, private JWK material, wrong
+issuer/audience/shard, stale epochs, altered host or path, invalid validity
+windows, and requests that mix v1 and v2 headers. Key rotation publishes the
+new public key before use, retains the previous public key only for the bounded
+overlap, and removes it after all assertions it signed have expired.
+
 The assertion proves that the routing tier sent the request to the expected
 shard. It does not prove tenant membership and does not bypass session or FGA
 authorization.
@@ -84,9 +105,18 @@ authorization.
 
 The `tenants` table is the lifecycle and placement authority. It records the
 tenant slug, active state, placement key, and optimistic placement epoch.
-Routing aliases are recorded separately and become authoritative only after
-DNS verification. Work-email discovery domains are a different,
+Tenant-admin custom domains are recorded separately and become authoritative
+only after DNS verification. Cloud-managed routing aliases have their own
+registry and are reconciled only by a `tenant:lifecycle` service account with
+an optimistic placement epoch. Work-email discovery domains are a different,
 non-authoritative directory hint and cannot route an ordinary tenant request.
+
+Cloud tenant create, suspend, resume, and routing-alias reconciliation use
+workload-only APIs. Every mutation requires a stable `Idempotency-Key` and
+`X-Correlation-ID`. The durable ledger stores only hashes, binds retries to the
+exact canonical request, and returns the original receipt for an identical
+retry. A changed request under the same key fails. Receipts are canonical-JSON
+payloads signed with a shard P-256 key and include no user session or secret.
 
 Membership does not introduce a second authorization model. It uses the
 existing FGA role assignments at tenant scope:
@@ -309,12 +339,22 @@ organization-name fallback.
 | --- | --- | --- |
 | `EG_TENANCY_MODE` | `single` | `single` or `pooled`. |
 | `EG_TENANT_BASE_DOMAIN` | unset | Optional managed suffix for `<slug>.<base-domain>`. |
-| `EG_TENANT_PLACEMENT_KEY` | unset | HMAC key of at least 32 characters; required for placement assertions and required by production pooled mode. |
+| `EG_TENANT_PLACEMENT_KEY` | unset | HMAC key of at least 32 characters for placement v1 compatibility. |
 | `EG_TENANT_PLACEMENT_MAX_AGE_SECONDS` | `120` | Maximum accepted assertion lifetime, up to 3600 seconds. |
+| `EG_TENANT_PLACEMENT_V2_JWKS_JSON` | unset | Public ES256 JWKS with unique `kid` values. |
+| `EG_TENANT_PLACEMENT_V2_ISSUER` | unset | Exact trusted issuer. |
+| `EG_TENANT_PLACEMENT_V2_AUDIENCE` | unset | Exact shard and receipt audience. |
+| `EG_TENANT_PLACEMENT_V2_SHARD_ID` | unset | Canonical shard identity. |
+| `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
+| `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2 and signed receipt settings are complete. |
+| `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY` | unset | Shard-only PEM P-256 receipt signing key. |
+| `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID` | unset | Receipt signing key identifier. |
+| `EG_TENANT_WORKLOAD_RECEIPT_ISSUER` | unset | Stable receipt issuer. |
 | `EG_TENANT_RLS_ENFORCED` | `false` | Must be `true` before pooled mode starts. |
 
-Use a secret manager for the placement key. It is a shard/control-plane
-credential and must never appear in a tenant-facing API or native plugin.
+Use a secret manager for placement v1 and workload receipt private keys. The
+placement v2 JWKS is public verification material. None of these values may
+appear in a tenant-facing API or native plugin.
 
 ## Repeatable pooled end-to-end qualification
 

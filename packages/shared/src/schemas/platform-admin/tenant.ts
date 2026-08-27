@@ -116,6 +116,50 @@ export const TenantUpdateRequestSchema = z.object({
   expectedPlacementEpoch: z.number().int().positive().optional(),
 }).refine((value) => Object.keys(value).length > 0, 'At least one tenant field is required');
 
+export const TenantWorkloadCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  slug: TenantSlugSchema,
+  ownerUserId: z.string().min(1).nullable().optional(),
+  placementKey: z.string().trim().min(1).max(160).optional(),
+}).strict();
+
+export const TenantWorkloadEpochRequestSchema = z.object({
+  expectedPlacementEpoch: z.number().int().positive(),
+}).strict();
+
+export const TenantWorkloadAliasReconcileRequestSchema = z.object({
+  aliases: z.array(z.string().trim().min(1).max(253)).max(100),
+  expectedPlacementEpoch: z.number().int().positive(),
+}).strict();
+
+export const TenantWorkloadReceiptPayloadSchema = z.object({
+  schemaVersion: z.literal('tenant-workload-receipt.enterpriseglue.io/v1'),
+  issuer: z.string().min(1),
+  audience: z.string().min(1),
+  operationId: z.string().min(1),
+  command: z.enum(['create', 'suspend', 'resume', 'reconcile_aliases']),
+  actorId: z.string().min(1),
+  tenantId: z.string().min(1),
+  tenantSlug: TenantSlugSchema,
+  tenantStatus: TenantStatusSchema,
+  placementEpoch: z.number().int().positive(),
+  routingAliases: z.array(z.string().min(1)),
+  correlationId: z.string().min(8).max(160),
+  requestHash: z.string().regex(/^[a-f0-9]{64}$/),
+  idempotencyKeyHash: z.string().regex(/^[a-f0-9]{64}$/),
+  issuedAt: z.number().int().positive(),
+}).strict();
+
+export const SignedTenantWorkloadReceiptSchema = z.object({
+  payload: TenantWorkloadReceiptPayloadSchema,
+  signature: z.object({
+    algorithm: z.literal('ES256'),
+    keyId: z.string().min(1).max(160),
+    value: z.string().min(1),
+  }).strict(),
+  idempotent: z.boolean(),
+}).strict();
+
 export const NativeTenantMembershipSchema = z.object({
   tenantId: z.string().min(1),
   tenantSlug: TenantSlugSchema,
@@ -205,6 +249,15 @@ export const TenancyCapabilitiesSchema = z.object({
   customDomainsEnabled: z.boolean(),
   organizationDiscoveryEnabled: z.boolean().default(false),
   signedPlacementAssertionsEnabled: z.boolean(),
+  placementAssertionVersions: z.array(z.enum(['v1', 'v2'])).default([]),
+  placementV2Required: z.boolean().default(false),
+  workloadTenantLifecycleEnabled: z.boolean().default(false),
+  shardId: z.string().nullable().default(null),
+  workloadReceipt: z.object({
+    algorithm: z.literal('ES256'),
+    keyId: z.string().min(1),
+    issuer: z.string().min(1),
+  }).nullable().default(null),
 });
 
 export type Tenant = z.infer<typeof TenantSchema>;

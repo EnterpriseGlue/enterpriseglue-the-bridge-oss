@@ -15,6 +15,7 @@ export const SERVICE_ACCOUNT_TOKEN_PREFIX = 'egsa';
 
 export const ServiceAccountScopes = {
   DEPLOYMENT_EXECUTE: ApiClientScopes.DEPLOYMENT_EXECUTE,
+  TENANT_LIFECYCLE: 'tenant:lifecycle',
 } as const;
 
 export type ServiceAccountScope = typeof ServiceAccountScopes[keyof typeof ServiceAccountScopes];

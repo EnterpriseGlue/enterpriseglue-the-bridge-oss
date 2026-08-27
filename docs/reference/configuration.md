@@ -81,10 +81,22 @@ rollback qualification gates pass for the intended deployment.
 - `EG_TENANCY_MODE`: `single` or `pooled`; default `single`.
 - `EG_TENANT_BASE_DOMAIN`: Optional managed suffix for tenant hosts such as
   `<tenant-slug>.saas.example.com`.
-- `EG_TENANT_PLACEMENT_KEY`: HMAC key of at least 32 characters for signed
-  control-plane placement assertions. Required in production pooled mode.
+- `EG_TENANT_PLACEMENT_KEY`: HMAC key of at least 32 characters for legacy
+  placement v1 assertions. Retained during the compatibility window.
 - `EG_TENANT_PLACEMENT_MAX_AGE_SECONDS`: Maximum accepted placement assertion
   lifetime; default `120`, maximum `3600`.
+- `EG_TENANT_PLACEMENT_V2_JWKS_JSON`: Public ES256 JWKS used to verify
+  placement v2 assertions. Overlapping `kid` values support safe key rotation.
+- `EG_TENANT_PLACEMENT_V2_ISSUER`, `EG_TENANT_PLACEMENT_V2_AUDIENCE`, and
+  `EG_TENANT_PLACEMENT_V2_SHARD_ID`: Exact placement v2 trust and shard binding.
+- `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
+  default `5`, maximum `60`.
+- `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2 and
+  workload receipt signing configuration. The default is `false`.
+- `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY`,
+  `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID`, and
+  `EG_TENANT_WORKLOAD_RECEIPT_ISSUER`: ES256 signing identity for safe tenant
+  lifecycle operation receipts. The private key is shard-only secret material.
 - `EG_TENANT_RLS_ENFORCED`: Must be `true` in pooled mode. Startup fails unless
   `DATABASE_TYPE=postgres` and the expected forced RLS policies are installed.
 
@@ -101,6 +113,12 @@ where available, the tenant or platform portal. The existing `v1beta1` bundle
 compatibility automation and do not manage a non-default pooled tenant. See
 [Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#control-ownership-in-the-first-pooled-oss-slice)
 for the resource-by-resource ownership matrix.
+
+Cloud automation uses only service accounts with the `tenant:lifecycle` scope
+and the `/api/workloads/tenancy/*` and `/api/workloads/tenants/*` contracts.
+These routes reject interactive users and ordinary API clients, require
+`Idempotency-Key` and `X-Correlation-ID`, and return request-hash-bound ES256
+receipts. They never issue a browser or tenant session.
 
 ### Git & Encryption
 - `GIT_REPOS_PATH`

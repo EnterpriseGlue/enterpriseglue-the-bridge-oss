@@ -156,6 +156,7 @@ const preauthenticationBindings: TenantPersistenceOwnershipV1[] = [
   ['refresh_tokens', ['tenant_id']],
   ['tenant_discovery_domains', ['tenant_id']],
   ['tenant_domains', ['tenant_id']],
+  ['tenant_routing_aliases', ['tenant_id']],
 ].map(([table, keyColumns]) => ({
   table: table as string,
   scope: 'tenant_preauthentication',
@@ -252,6 +253,7 @@ const deploymentGlobalRows = records([
   'plugin_permission_grants',
   'plugin_platform_state',
   'service_accounts',
+  'tenant_lifecycle_operations',
 ], {
   scope: 'deployment_global',
   enforcement: 'deployment_scope',
