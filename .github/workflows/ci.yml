@@ -1106,5 +1106,5 @@ jobs:
       - name: Evaluate required CI results
         env:
           CI_NEEDS_JSON: ${{ toJSON(needs) }}
-          CI_REQUIRED_NON_SKIPPED_JOBS: ${{ (needs.release-notes-preflight.outputs.is_release_pull_request == 'true' || needs.detect.outputs.run_release_readiness == 'true') && 'release-readiness' || '' }}
+          CI_REQUIRED_NON_SKIPPED_JOBS: ${{ (needs.release-notes-preflight.outputs.is_release_pull_request == 'true' || (needs.detect.outputs.run_release_readiness == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository))) && 'release-readiness' || '' }}
         run: node scripts/evaluate-ci-needs.mjs

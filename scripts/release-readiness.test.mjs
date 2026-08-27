@@ -52,6 +52,10 @@ test('the release-readiness CI job is read-only and part of the aggregate', () =
   assert.match(job, /pnpm run test:release-readiness/)
   assert.match(job, /PLUGIN_PLATFORM_BUILDX_BUILDER: \$\{\{ steps\.release-buildx\.outputs\.name \}\}/)
   assert.match(ci, /      - release-readiness/)
+  assert.match(
+    ci,
+    /CI_REQUIRED_NON_SKIPPED_JOBS: \$\{\{ .*needs\.detect\.outputs\.run_release_readiness == 'true' && \(github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\)/,
+  )
 })
 
 test('readiness covers immutable package, chart, image, scan, and receipt gates', () => {
