@@ -80,6 +80,22 @@ pluginResourceDescriptorV1Schema.parse(JSON.parse(resourceBytes.toString('utf8')
 const image =
   process.env.REFERENCE_PLUGIN_IMAGE ??
   `ghcr.io/enterpriseglue/reference-health@sha256:${'0'.repeat(64)}`;
+const currentSdkMinor = pluginPlatformReleaseIdentityV1.sdkVersion
+  .split('.')
+  .slice(0, 2)
+  .join('.');
+const previousSdkVersion =
+  pluginPlatformReleaseIdentityV1.supportedSdkVersions.find(
+    (version) =>
+      version.split('.').slice(0, 2).join('.') !== currentSdkMinor,
+  );
+
+if (!previousSdkVersion) {
+  throw new Error(
+    'The reference plugin requires a previous supported SDK minor for compatibility qualification',
+  );
+}
+
 const manifest = parseEnterpriseGluePluginManifestV1({
   apiVersion: 'plugin.enterpriseglue.io/v1',
   kind: 'EnterpriseGluePlugin',
@@ -93,9 +109,7 @@ const manifest = parseEnterpriseGluePluginManifestV1({
     host: pluginMinorCompatibilityRangeV1(
       pluginPlatformReleaseIdentityV1.hostVersion,
     ),
-    sdk: pluginMinorCompatibilityRangeV1(
-      pluginPlatformReleaseIdentityV1.sdkVersion,
-    ),
+    sdk: pluginMinorCompatibilityRangeV1(previousSdkVersion),
     frontendProtocol: 1,
     backendProtocol: 1,
     requiredSlots: [],
@@ -109,8 +123,7 @@ const manifest = parseEnterpriseGluePluginManifestV1({
         reactDom: '19.2.6',
         router: '7.18.2',
         carbonReact: '1.107.0',
-        pluginSdk:
-          pluginPlatformReleaseIdentityV1.sharedFrontend.pluginSdk,
+        pluginSdk: previousSdkVersion,
       },
     },
     backend: {
