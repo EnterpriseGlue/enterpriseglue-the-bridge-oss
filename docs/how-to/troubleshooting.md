@@ -22,6 +22,7 @@ For the complete bundle deployment workflow, see [Deploy Authorization Configura
 ## Frontend cannot reach API
 - Verify `API_BASE_URL` in the active Docker env file (`.local/docker/env/docker.env` or `.local/docker/env/production.env`) or `VITE_API_BASE_URL` (frontend env).
 - If production uses same-origin mode, keep `API_BASE_URL` empty and confirm Nginx proxy is running.
+- If using build-once runtime configuration, inspect `/.well-known/enterpriseglue/runtime-config.json`, verify `EG_FRONTEND_RUNTIME_API_BASE_URL` is an absolute HTTP(S) URL, and confirm the API's CORS/cookie policy permits the frontend origin.
 - Confirm backend is reachable on the configured backend port (`API_PORT`, default `8787`).
 
 ## Docker compose ports in use

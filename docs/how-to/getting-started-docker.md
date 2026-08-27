@@ -93,7 +93,7 @@ Published images:
    ```
 2. `BACKEND_IMAGE` and `FRONTEND_IMAGE` default to the published GHCR images. Set `IMAGE_TAG` to `latest` or a specific version.
    The published-image overlay always pulls the selected references and stops on registry errors; it never substitutes a local source build.
-3. Keep `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is baked into the frontend image at build time; use `API_UPSTREAM` only when the runtime Nginx proxy must target a different backend host.
+3. Keep `API_BASE_URL` empty for same-origin mode. In published-image mode, use `API_UPSTREAM` when the runtime Nginx proxy must target a different backend host. Use `EG_FRONTEND_RUNTIME_API_BASE_URL` only when the browser itself must call a different absolute HTTP(S) origin without rebuilding the image.
 4. Start from images:
    ```bash
    pnpm run prod:images:postgres

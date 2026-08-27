@@ -12,6 +12,8 @@ data:
   FRONTEND_URL: "https://enterpriseglue.example.com"
   API_BASE_URL: ""
   API_UPSTREAM: "enterpriseglue-backend:8787"
+  EG_FRONTEND_RUNTIME_API_BASE_URL: ""
+  EG_FRONTEND_RUNTIME_CONFIG_REQUIRED: "false"
 
   DATABASE_TYPE: "postgres"
 

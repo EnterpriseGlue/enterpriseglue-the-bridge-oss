@@ -251,7 +251,12 @@ export function validatePathCoverage(changedFiles, fragments, { exempt = false, 
 
   const packageRecords = new Set(fragments.flatMap((fragment) => fragment.packages.map((entry) => entry.name)))
   for (const [prefix, packageName] of PUBLISHED_PACKAGES) {
-    const packageChanged = relevant.some((file) => file.startsWith(prefix) && !/\/(?:__tests__|test|docs)\//.test(file))
+    const packageChanged = relevant.some((file) => {
+      if (!file.startsWith(prefix)) return false
+      const packagePath = file.slice(prefix.length)
+      if (/^Dockerfile(?:\..+)?$/.test(packagePath)) return false
+      return !/(?:^|\/)(?:__tests__|test|docs)(?:\/|$)/.test(packagePath)
+    })
     if (packageChanged) {
       requirements.push(`${packageName} version`)
       if (!packageRecords.has(packageName)) fail(`Changes to ${prefix} require a packages entry for ${packageName}.`)

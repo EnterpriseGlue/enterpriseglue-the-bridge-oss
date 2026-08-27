@@ -3,7 +3,7 @@
  * Validates environment variables and provides type-safe access
  */
 
-interface Config {
+export interface Config {
   apiBaseUrl: string;
   environment: 'development' | 'production' | 'test';
   enableDevTools: boolean;
@@ -39,3 +39,22 @@ function loadConfig(): Config {
 
 // Singleton config instance
 export const config = loadConfig();
+
+/**
+ * Apply runtime-provided configuration on top of the build-time defaults.
+ *
+ * The singleton is mutated in place (rather than replaced) so that modules which
+ * captured `config` by reference at import time — notably the HTTP interceptor,
+ * which reads `config.apiBaseUrl` on every request — observe the override without
+ * needing to re-import. Call this before the first API request is issued.
+ *
+ * Only recognised fields are applied; unknown keys are ignored here. An absent or
+ * empty `apiBaseUrl` is treated as "no override", leaving the build-time value
+ * (which may itself be empty, meaning same-origin) in place.
+ */
+export function applyRuntimeConfig(overrides: { apiBaseUrl?: unknown }): void {
+  if (typeof overrides.apiBaseUrl === 'string') {
+    const trimmed = overrides.apiBaseUrl.trim();
+    if (trimmed) config.apiBaseUrl = trimmed;
+  }
+}

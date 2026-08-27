@@ -66,6 +66,8 @@ services:
         condition: service_healthy
     environment:
       API_UPSTREAM: ${API_UPSTREAM:-backend:${API_PORT:-8787}}
+      EG_FRONTEND_RUNTIME_API_BASE_URL: ${EG_FRONTEND_RUNTIME_API_BASE_URL:-}
+      EG_FRONTEND_RUNTIME_CONFIG_REQUIRED: ${EG_FRONTEND_RUNTIME_CONFIG_REQUIRED:-false}
     ports:
       - "${FRONTEND_HOST_PORT:-8080}:8080"
     networks:

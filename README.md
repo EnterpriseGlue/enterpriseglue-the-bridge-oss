@@ -102,7 +102,7 @@ Use this mode when you want to run exactly what CI published:
    - `BACKEND_IMAGE`
    - `FRONTEND_IMAGE`
    - `IMAGE_TAG` (`sha-<commit>` or `vX.Y.Z`)
-   - Leave `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is already baked into the frontend image build; use `API_UPSTREAM` only to change the runtime proxy target.
+   - Leave `API_BASE_URL` empty for same-origin mode. In published-image mode, use `API_UPSTREAM` for the recommended same-origin proxy path, or set `EG_FRONTEND_RUNTIME_API_BASE_URL` when the browser must call a different absolute HTTP(S) origin without rebuilding the image.
 3. Start stack from images:
    ```bash
    pnpm run prod:images:postgres

@@ -17,6 +17,7 @@ bind_dn="cn=admin,$base_dn"
 ready_timeout_seconds="${EG_LDAP_TEST_READY_TIMEOUT_SECONDS:-90}"
 docker_network="${EG_LDAP_TEST_DOCKER_NETWORK:-}"
 docker_network_alias="${EG_LDAP_TEST_DOCKER_ALIAS:-openldap}"
+ldap_image="${EG_LDAP_TEST_IMAGE:-osixia/openldap:1.5.0}"
 
 if ! [[ "$ready_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
   echo 'EG_LDAP_TEST_READY_TIMEOUT_SECONDS must be a positive whole number.' >&2
@@ -40,6 +41,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 export EG_LDAP_TEST_DOMAIN="$domain"
+export EG_LDAP_TEST_IMAGE="$ldap_image"
 export EG_LDAP_TEST_ADMIN_PASSWORD="$(random_secret)"
 export EG_LDAP_TEST_CONFIG_PASSWORD="$(random_secret)"
 mkdir -p "$container_cert_dir"
@@ -57,6 +59,15 @@ chmod 600 "$container_cert_dir/ldap.key"
 # It is a public CA certificate, but it remains private to this temporary run.
 cp "$container_cert_dir/ldap.crt" "$client_ca_cert"
 chmod 600 "$client_ca_cert"
+
+# The certificate bind mount hides the image's bundled DH parameters. Copy
+# those already-validated parameters into the disposable mount so startup does
+# not depend on generating a fresh 2048-bit safe prime inside the readiness
+# window. The parameters are public and come from the exact image used below.
+docker run --rm --entrypoint cat "$ldap_image" \
+  /container/service/slapd/assets/certs/dhparam.pem > "$container_cert_dir/dhparam.pem"
+openssl dhparam -in "$container_cert_dir/dhparam.pem" -check -noout >/dev/null
+chmod 600 "$container_cert_dir/dhparam.pem"
 
 if ! docker compose -p "$project" -f "$compose_file" up --detach --wait; then
   docker compose -p "$project" -f "$compose_file" logs --no-color >&2 || true
