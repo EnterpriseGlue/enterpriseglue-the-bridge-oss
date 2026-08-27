@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.18.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.17.2...v0.18.0) (2026-08-27)
+
+
+### Features
+
+* **frontend-host:** support runtime configuration of the API base URL ([#396](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/396)) ([0ab8bc2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0ab8bc2a093240aa1027b3a3621fcd6737ed490d))
+* **frontend-host:** validate list API responses at the boundary ([#395](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/395)) ([88c0343](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/88c03439339533cc0e2b0c70bd8b484978c88956))
+
 ## [0.17.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.17.1...v0.17.2) (2026-08-26)
 
 
