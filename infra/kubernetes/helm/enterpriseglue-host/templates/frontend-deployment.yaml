@@ -26,7 +26,7 @@ spec:
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "api") }}
-      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "frontend") | nindent 6 }}
       {{- include "enterpriseglue-host.topologySpread" (dict "root" . "component" "frontend") | nindent 6 }}
       containers:
         - name: frontend
@@ -61,4 +61,3 @@ spec:
         - { name: tmp, emptyDir: {} }
         - { name: nginx-cache, emptyDir: {} }
         - { name: nginx-run, emptyDir: {} }
-

@@ -26,14 +26,15 @@
     "database": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "migration", "preflight"],
+      "required": ["configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "migration", "preflight", "connectionProxy"],
       "properties": {
         "configMapName": { "$ref": "#/$defs/name" },
         "applicationSecretName": { "$ref": "#/$defs/name" },
         "migrationSecretName": { "$ref": "#/$defs/name" },
         "preflightSecretName": { "$ref": "#/$defs/name" },
         "migration": { "$ref": "#/$defs/job" },
-        "preflight": { "$ref": "#/$defs/job" }
+        "preflight": { "$ref": "#/$defs/job" },
+        "connectionProxy": { "$ref": "#/$defs/connectionProxy" }
       }
     },
     "serviceAccounts": {
@@ -135,12 +136,23 @@
         "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 }
       }
     },
+    "connectionProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "image", "args", "port", "resources"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "type": "string", "pattern": "^(|\\S+@sha256:[a-f0-9]{64})$" },
+        "args": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "resources": { "type": "object" }
+      }
+    },
     "serviceAccount": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["create", "name", "annotations"],
-      "properties": { "create": { "type": "boolean" }, "name": { "type": "string" }, "annotations": { "type": "object" } }
+      "required": ["create", "name", "annotations", "automountServiceAccountToken"],
+      "properties": { "create": { "type": "boolean" }, "name": { "type": "string" }, "annotations": { "type": "object" }, "automountServiceAccountToken": { "type": "boolean" } }
     }
   }
 }
-

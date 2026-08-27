@@ -68,12 +68,23 @@ database:
     enabled: true
     backoffLimit: 0
     ttlSecondsAfterFinished: 3600
+  # Optional cloud-neutral local database connection proxy. The deployment
+  # supplies a digest-pinned proxy image and arguments; it is disabled by
+  # default so existing direct database connections are unchanged.
+  connectionProxy:
+    enabled: false
+    image: ""
+    args: []
+    port: 5432
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 256Mi }
 
 serviceAccounts:
-  api: { create: true, name: "", annotations: {} }
-  worker: { create: true, name: "", annotations: {} }
-  migration: { create: true, name: "", annotations: {} }
-  preflight: { create: true, name: "", annotations: {} }
+  api: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  worker: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  migration: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  preflight: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
 
 pluginAssets:
   enabled: false
@@ -129,4 +140,3 @@ tolerations: []
 affinity: {}
 podAnnotations: {}
 podLabels: {}
-

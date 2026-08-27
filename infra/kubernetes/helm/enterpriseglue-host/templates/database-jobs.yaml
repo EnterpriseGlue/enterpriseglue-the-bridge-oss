@@ -21,7 +21,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "migration") }}
-      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "migration") | nindent 6 }}
+      {{- if .Values.database.connectionProxy.enabled }}
+      initContainers:
+        {{- include "enterpriseglue-host.connectionProxy" (dict "root" . "nativeSidecar" true) | nindent 8 }}
+      {{- end }}
       containers:
         - name: migrate
           image: {{ include "enterpriseglue-host.backendImage" . | quote }}
@@ -66,7 +70,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "preflight") }}
-      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "preflight") | nindent 6 }}
+      {{- if .Values.database.connectionProxy.enabled }}
+      initContainers:
+        {{- include "enterpriseglue-host.connectionProxy" (dict "root" . "nativeSidecar" true) | nindent 8 }}
+      {{- end }}
       containers:
         - name: preflight
           image: {{ include "enterpriseglue-host.backendImage" . | quote }}
@@ -87,4 +95,3 @@ spec:
       volumes:
         - { name: tmp, emptyDir: {} }
 {{- end }}
-

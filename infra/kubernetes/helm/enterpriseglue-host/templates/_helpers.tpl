@@ -76,24 +76,53 @@ topologySpreadConstraints:
 {{- end }}
 
 {{- define "enterpriseglue-host.commonPodSpec" -}}
-automountServiceAccountToken: false
+{{- $settings := index .root.Values.serviceAccounts (ternary "api" .component (eq .component "frontend")) -}}
+automountServiceAccountToken: {{ ternary false $settings.automountServiceAccountToken (eq .component "frontend") }}
 securityContext:
-  {{- include "enterpriseglue-host.podSecurityContext" . | nindent 2 }}
-{{- with .Values.imagePullSecrets }}
+  {{- include "enterpriseglue-host.podSecurityContext" .root | nindent 2 }}
+{{- with .root.Values.imagePullSecrets }}
 imagePullSecrets:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.nodeSelector }}
+{{- with .root.Values.nodeSelector }}
 nodeSelector:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.affinity }}
+{{- with .root.Values.affinity }}
 affinity:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.tolerations }}
+{{- with .root.Values.tolerations }}
 tolerations:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end }}
 
+{{- define "enterpriseglue-host.connectionProxy" -}}
+{{- if .root.Values.database.connectionProxy.enabled }}
+{{- $image := required "database.connectionProxy.image is required when enabled" .root.Values.database.connectionProxy.image -}}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $image) -}}
+{{- fail "database.connectionProxy.image must be an immutable OCI digest reference" -}}
+{{- end }}
+- name: database-connection-proxy
+  image: {{ $image | quote }}
+  imagePullPolicy: IfNotPresent
+  {{- if .nativeSidecar }}
+  restartPolicy: Always
+  {{- end }}
+  args:
+    {{- toYaml .root.Values.database.connectionProxy.args | nindent 4 }}
+  ports:
+    - name: db-proxy
+      containerPort: {{ .root.Values.database.connectionProxy.port }}
+      protocol: TCP
+  securityContext:
+    {{- include "enterpriseglue-host.containerSecurityContext" .root | nindent 4 }}
+  resources:
+    {{- toYaml .root.Values.database.connectionProxy.resources | nindent 4 }}
+  startupProbe:
+    tcpSocket: { port: db-proxy }
+    failureThreshold: 30
+    periodSeconds: 2
+{{- end }}
+{{- end }}

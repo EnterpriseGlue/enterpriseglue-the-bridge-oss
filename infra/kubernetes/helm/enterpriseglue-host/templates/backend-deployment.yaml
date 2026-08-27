@@ -27,10 +27,11 @@ spec:
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "api") }}
-      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "api") | nindent 6 }}
       {{- include "enterpriseglue-host.topologySpread" (dict "root" . "component" "api") | nindent 6 }}
       terminationGracePeriodSeconds: 60
       containers:
+        {{- include "enterpriseglue-host.connectionProxy" (dict "root" . "nativeSidecar" false) | nindent 8 }}
         - name: backend
           image: {{ include "enterpriseglue-host.backendImage" . | quote }}
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
@@ -82,4 +83,3 @@ spec:
           persistentVolumeClaim:
             claimName: {{ required "pluginAssets.existingClaim is required when pluginAssets.enabled=true" .Values.pluginAssets.existingClaim }}
         {{- end }}
-

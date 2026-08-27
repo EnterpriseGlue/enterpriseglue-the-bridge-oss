@@ -18,6 +18,14 @@ migration is pending. API and worker pods use `database.applicationSecretName` a
 migrations or install RLS. Give the migration identity DDL privileges and application/preflight
 identities only the least database authority they need.
 
+For private managed databases that require a local authentication proxy, enable the cloud-neutral
+`database.connectionProxy` sidecar with a digest-pinned image and deployment-owned arguments.
+The API, worker, migration and preflight service accounts may then opt into projected workload
+identity tokens with `automountServiceAccountToken: true`; the default remains `false`, and the
+frontend never receives a service-account token. Jobs use Kubernetes native sidecars so the proxy
+does not prevent completion. Provider-specific instances, identities and arguments stay outside
+this chart.
+
 If `database.migration.enabled=false`, application pods use the backward-compatible `apply` startup
 mode. This is intended for existing self-hosted installations, not pooled SaaS.
 
@@ -51,4 +59,3 @@ helm upgrade --install enterpriseglue \
 For rollback, keep database changes forward-compatible with the previous application release,
 then run `helm rollback`. Database down migrations are never run automatically. Preserve Plugin
 Manager state and plugin-owned data during disable, rollback or uninstall.
-
