@@ -38,6 +38,8 @@ on:
         value: ${{ jobs.detect.outputs.run_smoke_exposed }}
       run_native_tenancy:
         value: ${{ jobs.detect.outputs.run_native_tenancy }}
+      run_release_readiness:
+        value: ${{ jobs.detect.outputs.run_release_readiness }}
       changed_files_count:
         value: ${{ jobs.detect.outputs.changed_files_count }}
 
@@ -59,6 +61,7 @@ jobs:
       run_security_scan: ${{ steps.detect.outputs.run_security_scan }}
       run_smoke_exposed: ${{ steps.detect.outputs.run_smoke_exposed }}
       run_native_tenancy: ${{ steps.detect.outputs.run_native_tenancy }}
+      run_release_readiness: ${{ steps.detect.outputs.run_release_readiness }}
       changed_files_count: ${{ steps.detect.outputs.changed_files_count }}
     steps:
       - name: Checkout
@@ -101,6 +104,7 @@ jobs:
             echo "run_security_scan=true" >> "$GITHUB_OUTPUT"
             echo "run_smoke_exposed=true" >> "$GITHUB_OUTPUT"
             echo "run_native_tenancy=true" >> "$GITHUB_OUTPUT"
+            echo "run_release_readiness=true" >> "$GITHUB_OUTPUT"
           }
 
           CURRENT_SHA=$(git rev-parse HEAD)
@@ -146,6 +150,7 @@ jobs:
             run_security_scan=false
             run_smoke_exposed=false
             run_native_tenancy=false
+            run_release_readiness=false
 
             if [ "$ci_only" = false ]; then
               run_tests=true
@@ -182,6 +187,10 @@ jobs:
               if grep -Eq '^(packages/backend-host/src/(routes/index|modules/(tenancy|auth|invitations|platform-admin/routes/(authz|identity-providers)))|packages/frontend-host/src/(pages/Login|routes/index|main|utils/httpInterceptor|services/(auth|tenancy)|features/(platform-admin|shared/components/(NativeTenantPicker|LayoutWithProSidebar)))|packages/shared/src/(config|db|authz|interfaces/middleware|middleware|schemas/(openapi|platform-admin/(authz|tenant))|services/(AuthSessionService|invitations|tenant-database-context|email|platform-admin/(Tenant|LoginMethod|ActionAvailability|permissions))|utils/jwt)|backend/(test/integration/nativeTenantRls|__tests__/.*(tenant|identity|auth|invitation|Tenant|Login))|frontend/__tests__/.*(Tenant|tenant|Login\.organization|LayoutWithProSidebar)|test/(e2e/pooled-tenancy|authz/authorization-state-space-contract)|scripts/run-(native-tenancy-postgres-rls|pooled-tenancy-e2e)|infra/docker/(compose/docker-compose\.pooled-tenancy-e2e|env/examples/.*)|docs/architecture/11-native-saas-tenancy|\.release-notes/native-saas-tenancy|package\.json)' <<< "$CHANGED_FILES"; then
                 run_native_tenancy=true
               fi
+
+              if grep -Eq '^(\.github/workflows/(ci|ci-detect-reusable|release-notes-preflight-reusable|plugin-package-release|plugin-toolchain-release)\.yml|scripts/(check-ci-aggregate-contract|evaluate-ci-needs|check-release-candidate-readiness|plan-plugin-toolchain-charts|check-plugin-platform-production-images|check-plugin-toolchain-oci-local|publish-plugin-package-set|verify-plugin-package-tarballs|check-plugin-toolchain-release-policy|check-plugin-package-release-policy|check-published-package-version-discipline|check-workspace-dependency-version-drift|helm-chart-archive)(\.|$))' <<< "$CHANGED_FILES"; then
+                run_release_readiness=true
+              fi
             fi
 
             if [ "$run_tests" = true ] && [ "$run_postgres" = false ] && [ "$run_oracle" = false ]; then
@@ -206,6 +215,7 @@ jobs:
             echo "run_security_scan=$run_security_scan" >> "$GITHUB_OUTPUT"
             echo "run_smoke_exposed=$run_smoke_exposed" >> "$GITHUB_OUTPUT"
             echo "run_native_tenancy=$run_native_tenancy" >> "$GITHUB_OUTPUT"
+            echo "run_release_readiness=$run_release_readiness" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -225,6 +235,7 @@ jobs:
             echo "run_security_scan=false" >> "$GITHUB_OUTPUT"
             echo "run_smoke_exposed=false" >> "$GITHUB_OUTPUT"
             echo "run_native_tenancy=false" >> "$GITHUB_OUTPUT"
+            echo "run_release_readiness=false" >> "$GITHUB_OUTPUT"
             echo "changed_files_count=merge-queue" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -253,6 +264,7 @@ jobs:
             echo "run_security_scan=false" >> "$GITHUB_OUTPUT"
             echo "run_smoke_exposed=false" >> "$GITHUB_OUTPUT"
             echo "run_native_tenancy=false" >> "$GITHUB_OUTPUT"
+            echo "run_release_readiness=false" >> "$GITHUB_OUTPUT"
             echo "changed_files_count=0" >> "$GITHUB_OUTPUT"
           else
             emit_all_true

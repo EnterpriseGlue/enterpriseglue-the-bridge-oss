@@ -971,85 +971,137 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
+  # Read-only release candidate qualification. Runs for Release Please pull
+  # requests and whenever its own contracts change. All registry operations are
+  # plan, compare, pull, or dry-run operations; publication remains post-tag.
+  # ---------------------------------------------------------------------------
+
+  release-readiness:
+    name: Release candidate readiness
+    needs: [release-notes-preflight, detect]
+    if: >-
+      needs.release-notes-preflight.result == 'success' &&
+      needs.detect.result == 'success' &&
+      (needs.release-notes-preflight.outputs.is_release_pull_request == 'true' ||
+      (needs.detect.outputs.run_release_readiness == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository)))
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout full candidate history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Set up Node.js and GitHub Packages
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          registry-url: https://npm.pkg.github.com
+          scope: "@enterpriseglue"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        id: release-buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.19.5
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate read-only registry access
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Authenticate read-only Helm registry access
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" |
+            helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Qualify the exact release candidate without publishing
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLUGIN_PLATFORM_BUILDX_BUILDER: ${{ steps.release-buildx.outputs.name }}
+        run: pnpm run test:release-readiness
+
+      - name: Retain the release-candidate receipt
+        if: always() && hashFiles('.artifacts/release-readiness/**') != ''
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-readiness-${{ github.sha }}
+          path: .artifacts/release-readiness
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
   # Single aggregate gate: required check target for branch protection.
   # Always runs. Succeeds if all work jobs succeeded or were skipped.
   # Fails if any work job failed or was cancelled.
   # ---------------------------------------------------------------------------
 
   ci-complete:
+    needs:
+      - release-notes-preflight
+      - detect
+      - boundary-guards
+      - plugin-platform
+      - published-package-version-discipline
+      - plugin-api-compat-current
+      - plugin-api-compat-next
+      - plugin-api-package
+      - compose-render
+      - test
+      - build-ci-images
+      - smoke-postgres-image-deploy
+      - smoke-postgres-image-deploy-exposed
+      - security-pr-scan
+      - native-tenancy-pooled-e2e
+      - release-readiness
     runs-on: ubuntu-latest
     if: always()
     permissions:
-      actions: read
       contents: read
     steps:
-      - name: Evaluate CI result
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify aggregate dependency coverage
+        run: node scripts/check-ci-aggregate-contract.mjs
+
+      - name: Evaluate required CI results
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          deadline=$((SECONDS + 3600))
-
-          is_target_job() {
-            case "$1" in
-              release-notes-preflight*|"detect / detect"|boundary-guards|published-package-version-discipline|plugin-api-compat-current|plugin-api-compat-next|plugin-api-package|compose-render|build-ci-images|smoke-postgres-image-deploy|smoke-postgres-image-deploy-exposed|security-pr-scan|native-tenancy-pooled-e2e)
-                return 0
-                ;;
-              test\ \(*)
-                return 0
-                ;;
-              *)
-                return 1
-                ;;
-            esac
-          }
-
-          while :; do
-            jobs_tsv="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" --jq '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv')"
-
-            if [ -z "$jobs_tsv" ]; then
-              echo "No jobs reported yet; waiting for workflow jobs to start..."
-              sleep 10
-              continue
-            fi
-
-            pending=0
-            failed=0
-
-            while IFS=$'\t' read -r name status conclusion; do
-              [ -n "$name" ] || continue
-
-              if ! is_target_job "$name"; then
-                continue
-              fi
-
-              echo "$name: $status ${conclusion:-}"
-
-              if [ "$status" != "completed" ]; then
-                pending=1
-                continue
-              fi
-
-              if [[ "$conclusion" == "failure" || "$conclusion" == "cancelled" || "$conclusion" == "timed_out" || "$conclusion" == "action_required" || "$conclusion" == "startup_failure" ]]; then
-                failed=1
-              fi
-            done <<< "$jobs_tsv"
-
-            if [ "$failed" -eq 1 ]; then
-              echo "CI failed: at least one job reported failure"
-              exit 1
-            fi
-
-            if [ "$pending" -eq 0 ]; then
-              echo "All CI jobs passed or were skipped."
-              exit 0
-            fi
-
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "Timed out waiting for CI jobs to complete."
-              exit 1
-            fi
-
-            sleep 15
-          done
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_REQUIRED_NON_SKIPPED_JOBS: ${{ (needs.release-notes-preflight.outputs.is_release_pull_request == 'true' || needs.detect.outputs.run_release_readiness == 'true') && 'release-readiness' || '' }}
+        run: node scripts/evaluate-ci-needs.mjs

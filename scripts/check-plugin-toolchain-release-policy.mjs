@@ -38,6 +38,21 @@ for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
   assert.match(dockerfile, /golang\.org\/x\/text@v0\.39\.0/);
   assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.82\.1/);
+  assert.equal(
+    [...dockerfile.matchAll(/id=enterpriseglue-plugin-toolchain-go-modules/g)].length,
+    2,
+    'Both Go tool stages must retain downloaded modules across transient retries',
+  );
+  assert.equal(
+    [...dockerfile.matchAll(/id=enterpriseglue-plugin-toolchain-go-build/g)].length,
+    2,
+    'Both Go tool stages must retain compiler output across transient retries',
+  );
+  assert.equal(
+    [...dockerfile.matchAll(/while ! "\$@"/g)].length,
+    2,
+    'Both Go tool stages must retry transient module-resolution failures',
+  );
   assert.match(dockerfile, /test -z "\$\(find \/output -type f -name '\*\.node'/);
 }
 assert.match(productionImageGate, /packages\/plugin-installer\/Dockerfile/);
@@ -47,9 +62,16 @@ assert.match(productionImageGate, /--driver docker-container/);
 assert.match(productionImageGate, /docker buildx inspect "\$MULTIARCH_BUILDER_NAME" --bootstrap/);
 assert.match(productionImageGate, /--builder "\$MULTIARCH_BUILDER_NAME"/);
 assert.match(productionImageGate, /docker buildx rm --force/);
-assert.match(productionImageGate, /--platform linux\/amd64,linux\/arm64/);
+assert.match(productionImageGate, /CREATED_MULTIARCH_BUILDER/);
+assert.match(productionImageGate, /for platform in linux\/amd64 linux\/arm64/);
+assert.match(productionImageGate, /--platform "\$platform"/);
 assert.match(productionImageGate, /--target oras/);
 assert.match(productionImageGate, /--output=type=cacheonly/);
+assert.equal(
+  [...productionImageGate.matchAll(/--load --quiet/g)].length,
+  4,
+  'All production images must reuse the prepared Buildx builder before loading',
+);
 assert.equal(
   [...productionImageGate.matchAll(/--severity HIGH,CRITICAL/g)].length,
   1,

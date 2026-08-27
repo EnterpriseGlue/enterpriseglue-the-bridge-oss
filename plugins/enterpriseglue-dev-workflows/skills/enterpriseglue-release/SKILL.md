@@ -16,14 +16,22 @@ description: Use when the user says /release, release OSS, release EE, merge a R
 4. Confirm every relevant merged change since the previous stable tag has a
    fragment or a permitted documented exemption. Confirm the proposed semantic
    version matches `release-notes:assert-version` for the previous stable tag.
-5. Require green release policy, CI, portability, security, package, and image
-   gates. Treat intentionally deferred external evidence as a recorded release
-   decision, not as silently passing evidence.
-6. Merge Release Please PRs with a merge commit. Do not squash them. Never
+5. Require `Release candidate readiness` and the self-validating `ci-complete`
+   aggregate on the exact candidate SHA. Download the readiness receipt and
+   verify its source revision, comparison tag, package and chart plans,
+   production image scan, toolchain rehearsal, and
+   `publicationPerformed: false` result.
+6. Inspect every workflow for the candidate SHA, not only branch protection's
+   required contexts. Failure, cancellation, timeout, action-required, pending,
+   or an unexpectedly skipped readiness job blocks release. Treat intentionally
+   deferred external evidence as a recorded release decision, not as silently
+   passing evidence.
+7. Merge Release Please PRs with a merge commit. Do not squash them. Never
    create a release by manually tagging around the manifest workflow.
-7. Monitor GitHub release creation and Docker Images. Verify immutable version
-   tags, `latest`, source revision, digests, smoke tests, and vulnerability
-   results.
-8. Verify the published GitHub release body matches
+8. Monitor GitHub release creation, Docker Images, protected package
+   publication, and the downstream signed plugin toolchain. Verify immutable
+   version tags, `latest`, source revision, digests, smoke tests, vulnerability
+   results, registry visibility, signatures, and release receipts.
+9. Verify the published GitHub release body matches
    `docs/releases/vX.Y.Z.md`. Never delete, recreate, or repoint a published
    `v*` tag; repair mistakes with a reviewed forward release.

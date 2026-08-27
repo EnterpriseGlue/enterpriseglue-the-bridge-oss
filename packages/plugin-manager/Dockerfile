@@ -45,18 +45,38 @@ FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine3.23@sha256:e57c41c1d58643410
 ARG TARGETOS
 ARG TARGETARCH
 ENV GOTOOLCHAIN=local
-RUN mkdir -p /oras-build /out \
+RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/pkg/mod,sharing=locked \
+  --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-build,target=/root/.cache/go-build,sharing=locked \
+  retry() { \
+    attempt=1; \
+    while ! "$@"; do \
+      if [ "$attempt" -ge 3 ]; then return 1; fi; \
+      attempt=$((attempt + 1)); \
+      sleep $((attempt * 2)); \
+    done; \
+  } \
+  && mkdir -p /oras-build /out \
   && cd /oras-build \
   && go mod init enterpriseglue.local/oras-build \
-  && go get oras.land/oras/cmd/oras@v1.3.3 \
+  && retry go get oras.land/oras/cmd/oras@v1.3.3 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
       go build -buildvcs=false -trimpath -o /out/oras oras.land/oras/cmd/oras \
   && test -x /out/oras
-RUN mkdir -p /cosign-build \
+RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/pkg/mod,sharing=locked \
+  --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-build,target=/root/.cache/go-build,sharing=locked \
+  retry() { \
+    attempt=1; \
+    while ! "$@"; do \
+      if [ "$attempt" -ge 3 ]; then return 1; fi; \
+      attempt=$((attempt + 1)); \
+      sleep $((attempt * 2)); \
+    done; \
+  } \
+  && mkdir -p /cosign-build \
   && cd /cosign-build \
   && go mod init enterpriseglue.local/cosign-build \
-  && go get github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3 \
-  && go get google.golang.org/grpc@v1.82.1 \
+  && retry go get github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3 \
+      google.golang.org/grpc@v1.82.1 \
       golang.org/x/mod@v0.40.0 \
       golang.org/x/text@v0.39.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
@@ -69,7 +89,8 @@ RUN mkdir -p /cosign-build \
 
 FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
-RUN apk add --no-cache ca-certificates nodejs docker-cli docker-cli-compose helm kubectl tini \
+RUN apk upgrade --no-cache \
+  && apk add --no-cache ca-certificates nodejs docker-cli docker-cli-compose helm kubectl tini \
   && addgroup -S -g 65532 pluginmanager \
   && adduser -S -D -H -u 65532 -G pluginmanager pluginmanager \
   && mkdir -p /usr/share/licenses/enterpriseglue-plugin-manager \

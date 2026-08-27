@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.17.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.17.1...v0.17.2) (2026-08-26)
+
+
+### Bug Fixes
+
+* **release:** version plugin runtime dependency payload ([#401](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/401)) ([9584901](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9584901e00e534510d894b399bcb7e6082149811))
+
+## [0.17.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.17.0...v0.17.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **security:** refresh plugin toolchain OpenSSL runtime ([#399](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/399)) ([507b436](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/507b436d7969836acde2bb1069950846db4993b6))
+
+## [0.17.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.2...v0.17.0) (2026-08-26)
+
+
+### Features
+
+* **tenancy:** add native pooled SaaS tenancy ([#397](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/397)) ([2e696f6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2e696f6eb7873979724af2deee65b1324becaf22))
+
 ## [0.16.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.16.1...v0.16.2) (2026-08-25)
 
 

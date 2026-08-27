@@ -58,7 +58,18 @@ NODE
 
 package_has_relevant_changes() {
   local dir="$1"
-  echo "$CHANGED_FILES" | grep -E "^${dir}/" | grep -Ev "^${dir}/(third_party_licenses\.json|README(\.md)?|CHANGELOG\.md|docs/)" >/dev/null
+  local manifest="$2"
+  local workspace_changes
+
+  if echo "$CHANGED_FILES" | grep -E "^${dir}/" | grep -Ev "^${dir}/(Dockerfile(\..*)?|third_party_licenses\.json|README(\.md)?|CHANGELOG\.md|docs/)" >/dev/null; then
+    return 0
+  fi
+
+  [ -f "$manifest" ] || return 1
+  if ! workspace_changes="$(node ./scripts/check-workspace-dependency-version-drift.mjs "$MERGE_BASE" "$manifest")"; then
+    return 2
+  fi
+  [ -n "$workspace_changes" ]
 }
 
 failures=0
@@ -68,8 +79,15 @@ check_package() {
   local package_name="$1"
   local dir="$2"
   local manifest="$3"
+  local relevance_status=0
 
-  if ! package_has_relevant_changes "$dir"; then
+  package_has_relevant_changes "$dir" "$manifest" || relevance_status=$?
+  if [ "$relevance_status" -eq 1 ]; then
+    return 0
+  fi
+  if [ "$relevance_status" -ne 0 ]; then
+    echo "::error file=${manifest}::Could not evaluate packed workspace dependency versions for ${package_name}."
+    failures=1
     return 0
   fi
 
@@ -126,6 +144,7 @@ check_package "@enterpriseglue/enterprise-plugin-api" "packages/enterprise-plugi
 check_package "@enterpriseglue/plugin-sdk" "packages/plugin-sdk" "packages/plugin-sdk/package.json"
 check_package "@enterpriseglue/plugin-runtime" "packages/plugin-runtime" "packages/plugin-runtime/package.json"
 check_package "@enterpriseglue/plugin-installer" "packages/plugin-installer" "packages/plugin-installer/package.json"
+check_package "@enterpriseglue/plugin-manager" "packages/plugin-manager" "packages/plugin-manager/package.json"
 
 if [ "$changed_count" -eq 0 ]; then
   echo "[package-version-discipline] No relevant published OSS package changes detected."
