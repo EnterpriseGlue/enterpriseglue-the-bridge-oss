@@ -8,10 +8,9 @@ import { expectArray } from './expectArray';
  * A drop-in replacement for `apiClient.get<T[]>(url, params, options)`: it
  * issues the same request, then routes the payload through {@link expectArray}.
  * A non-array payload (an error envelope such as `{ error: 'Unauthorized' }`,
- * an object, a bare string) is logged with the request context and coerced to
- * an empty array, so an API contract mismatch surfaces as an actionable
- * diagnostic and a graceful empty list instead of an opaque
- * `TypeError: ... is not a function` deeper in the UI.
+ * an object, a bare string) is logged with the request context and rejected
+ * with a typed contract error, so query consumers render an actionable error
+ * state instead of an opaque `TypeError` or a misleading empty list.
  *
  * @param context Optional label for the diagnostic; defaults to `GET <url>`.
  */

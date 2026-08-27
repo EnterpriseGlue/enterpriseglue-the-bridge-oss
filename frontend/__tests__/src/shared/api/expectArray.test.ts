@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { expectArray } from '@src/shared/api/expectArray';
+import { expectArray, ListResponseContractError } from '@src/shared/api/expectArray';
 
 describe('expectArray', () => {
   let consoleError: ReturnType<typeof vi.spyOn>;
@@ -31,8 +31,8 @@ describe('expectArray', () => {
     },
   );
 
-  it('coerces a truthy non-array to an empty array and logs the context', () => {
-    expect(expectArray('some string', 'GET /things')).toEqual([]);
+  it('rejects a truthy non-array with a typed error and logs the context', () => {
+    expect(() => expectArray('some string', 'GET /things')).toThrow(ListResponseContractError);
     expect(consoleError).toHaveBeenCalledTimes(1);
     const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('GET /things');
@@ -40,26 +40,32 @@ describe('expectArray', () => {
   });
 
   it('surfaces an error-envelope message to hint at the cause', () => {
-    expect(expectArray({ error: 'Unauthorized' }, 'GET /admin/users')).toEqual([]);
+    expect(() => expectArray({ error: 'Unauthorized' }, 'GET /admin/users')).toThrow(
+      'Unauthorized',
+    );
     const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('GET /admin/users');
     expect(message).toContain('Unauthorized');
   });
 
   it('surfaces a nested error.message envelope', () => {
-    expectArray({ error: { message: 'Token expired' } }, 'GET /admin/users');
+    expect(() =>
+      expectArray({ error: { message: 'Token expired' } }, 'GET /admin/users'),
+    ).toThrow('Token expired');
     expect(consoleError.mock.calls[0].join(' ')).toContain('Token expired');
   });
 
   it('describes the keys of an unexpected object payload', () => {
-    expectArray({ items: [], total: 0 }, 'GET /things');
+    expect(() => expectArray({ items: [], total: 0 }, 'GET /things')).toThrow(
+      ListResponseContractError,
+    );
     const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('items');
     expect(message).toContain('total');
   });
 
-  it('logs once per bad payload without throwing', () => {
-    expect(() => expectArray(42, 'GET /count')).not.toThrow();
+  it('logs once per bad payload before throwing', () => {
+    expect(() => expectArray(42, 'GET /count')).toThrow(ListResponseContractError);
     expect(consoleError).toHaveBeenCalledTimes(1);
   });
 });

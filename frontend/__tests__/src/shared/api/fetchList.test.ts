@@ -33,10 +33,12 @@ describe('fetchList', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('coerces a non-array payload to [] and logs the endpoint as context', async () => {
+  it('rejects a non-array payload and logs the endpoint as context', async () => {
     vi.mocked(interceptor.interceptedFetch).mockResolvedValue(jsonResponse({ error: 'Unauthorized' }));
-    const result = await fetchList('/api/things');
-    expect(result).toEqual([]);
+    await expect(fetchList('/api/things')).rejects.toMatchObject({
+      name: 'ListResponseContractError',
+      context: 'GET /api/things',
+    });
     expect(consoleError).toHaveBeenCalledTimes(1);
     const message = consoleError.mock.calls[0].join(' ');
     expect(message).toContain('/api/things');
@@ -45,7 +47,9 @@ describe('fetchList', () => {
 
   it('uses an explicit context label when provided', async () => {
     vi.mocked(interceptor.interceptedFetch).mockResolvedValue(jsonResponse('nope'));
-    await fetchList('/api/things', undefined, undefined, 'listThings');
+    await expect(
+      fetchList('/api/things', undefined, undefined, 'listThings'),
+    ).rejects.toThrow('listThings');
     expect(consoleError.mock.calls[0].join(' ')).toContain('listThings');
   });
 

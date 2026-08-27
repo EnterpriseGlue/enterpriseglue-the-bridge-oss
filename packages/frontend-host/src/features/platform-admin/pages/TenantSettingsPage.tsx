@@ -3,6 +3,7 @@ import { Button, Form, InlineNotification, Select, SelectItem, Stack, Tag, TextI
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useParams } from 'react-router-dom';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
@@ -62,12 +63,12 @@ export default function TenantSettingsPage() {
   });
   const members = useQuery({
     queryKey: ['tenant-members', tenantSlug],
-    queryFn: () => apiClient.get<TenantMember[]>(membersPath),
+    queryFn: () => fetchList<TenantMember>(membersPath),
     enabled: membersManage.allowed,
   });
   const discoveryDomains = useQuery({
     queryKey: ['tenant-discovery-domains', tenantSlug],
-    queryFn: () => apiClient.get<TenantDiscoveryDomain[]>(discoveryDomainsPath),
+    queryFn: () => fetchList<TenantDiscoveryDomain>(discoveryDomainsPath),
     enabled: settingsManage.allowed,
   });
   const updatePolicy = useMutation({

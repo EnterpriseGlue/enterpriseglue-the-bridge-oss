@@ -10,12 +10,24 @@
  *
  * `expectArray` moves that failure to the API boundary and turns it into an
  * actionable diagnostic: it logs the request context and the shape of the
- * offending payload, then returns an empty array so the UI degrades to an
- * empty list instead of a runtime crash.
+ * offending payload, then throws a typed contract error. Query consumers can
+ * render their existing error state instead of crashing or presenting invalid
+ * data as a legitimate empty list.
  */
 
 const PAYLOAD_PREVIEW_MAX_LENGTH = 500;
 const MAX_LOGGED_KEYS = 12;
+
+/** A successful HTTP response did not satisfy the expected list contract. */
+export class ListResponseContractError extends Error {
+  constructor(
+    public readonly context: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ListResponseContractError';
+  }
+}
 
 function isDevEnvironment(): boolean {
   try {
@@ -76,7 +88,8 @@ function previewPayload(value: unknown): string | undefined {
  * - `null`/`undefined` (the ordinary "no data" case, already handled safely by
  *   the `|| []` idiom) return `[]` silently.
  * - Any other value is a contract violation: it is logged with `context` and a
- *   description of the payload, and `[]` is returned.
+ *   description of the payload, then a typed error is thrown so query error
+ *   handling remains active.
  *
  * @param value   The parsed response payload.
  * @param context A label for the request, e.g. `GET /mission-control-api/batches`.
@@ -87,8 +100,9 @@ export function expectArray<T>(value: unknown, context: string): T[] {
 
   const parts = [
     `[enterpriseglue] Expected an array from ${context}, but received ${describeShape(value)}.`,
-    'Returning an empty list. This usually means an API contract mismatch,',
-    'a missing endpoint, or an authentication/configuration problem.',
+    'The response was rejected instead of being presented as an empty list.',
+    'This usually means an API contract mismatch, a missing endpoint, or an',
+    'authentication/configuration problem.',
   ];
   if (typeof value === 'object') {
     const envelopeMessage = extractEnvelopeMessage(value);
@@ -108,5 +122,5 @@ export function expectArray<T>(value: unknown, context: string): T[] {
     console.error('%s', message);
   }
 
-  return [];
+  throw new ListResponseContractError(context, message);
 }
