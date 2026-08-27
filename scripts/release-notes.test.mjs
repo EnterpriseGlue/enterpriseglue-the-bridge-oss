@@ -70,6 +70,19 @@ test('path-aware validation requires migration, API, security, config, UI, and p
   ])
 })
 
+test('package-local image Dockerfiles do not require npm package version entries', () => {
+  const result = validatePathCoverage([
+    'packages/plugin-installer/Dockerfile',
+    'packages/plugin-manager/Dockerfile.release',
+  ], [fragment])
+  assert.deepEqual(result.requirements, [])
+
+  assert.throws(
+    () => validatePathCoverage(['packages/plugin-installer/src/index.ts'], [fragment]),
+    /Changes to packages\/plugin-installer\/ require a packages entry for @enterpriseglue\/plugin-installer/,
+  )
+})
+
 test('high-risk changes cannot use the release-note exemption', () => {
   assert.throws(
     () => validatePathCoverage(['packages/backend-host/src/modules/auth/routes/login.ts'], [], {
