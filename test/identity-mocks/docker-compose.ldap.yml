@@ -2,7 +2,7 @@
 # has no fixed host port, credential, volume, or project name.
 services:
   openldap:
-    image: osixia/openldap:1.5.0
+    image: ${EG_LDAP_TEST_IMAGE:-osixia/openldap:1.5.0}
     hostname: ldap.identity-mock.test
     environment:
       LDAP_ORGANISATION: EnterpriseGlue protocol test

@@ -8,6 +8,7 @@ const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsa
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
 const ldapProtocolMockRunner = readFileSync(new URL('./run-ldap-protocol-mock.sh', import.meta.url), 'utf8');
+const ldapProtocolMockCompose = readFileSync(new URL('../test/identity-mocks/docker-compose.ldap.yml', import.meta.url), 'utf8');
 const localEntraOidcRehearsalRunner = readFileSync(new URL('./run-local-entra-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const realEntraOidcRehearsalRunner = readFileSync(new URL('./run-entra-id-rehearsal.sh', import.meta.url), 'utf8');
 const localOidcConfigureRunner = readFileSync(new URL('./configure-local-oidc-provider.sh', import.meta.url), 'utf8');
@@ -556,6 +557,9 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(ldapProtocolMockRunner, /container_cert_dir="\$tmp_dir\/server-certs"/);
   assert.match(ldapProtocolMockRunner, /client_ca_cert="\$tmp_dir\/ldap-client-ca\.crt"/);
   assert.match(ldapProtocolMockRunner, /cp "\$container_cert_dir\/ldap\.crt" "\$client_ca_cert"/);
+  assert.match(ldapProtocolMockRunner, /docker run --rm --entrypoint cat "\$ldap_image"/);
+  assert.match(ldapProtocolMockRunner, /openssl dhparam -in "\$container_cert_dir\/dhparam\.pem" -check -noout/);
+  assert.match(ldapProtocolMockCompose, /image: \$\{EG_LDAP_TEST_IMAGE:-osixia\/openldap:1\.5\.0\}/);
   assert.match(ldapProtocolMockRunner, /exec -T --user root openldap/);
   assert.match(ldapProtocolMockRunner, /EG_LDAP_TEST_DOCKER_NETWORK/);
   assert.match(ldapProtocolMockRunner, /docker network connect --alias/);
