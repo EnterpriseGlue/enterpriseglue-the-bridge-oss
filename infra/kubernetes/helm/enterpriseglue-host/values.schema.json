@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["platform", "images", "frontend", "backend", "workers", "database", "serviceAccounts", "pluginAssets", "pluginManager", "ingress", "networkPolicy", "podDisruptionBudget", "topologySpread"],
+  "properties": {
+    "platform": { "enum": ["kubernetes", "openshift"] },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "frontend"],
+      "properties": {
+        "backend": { "$ref": "#/$defs/image" },
+        "frontend": { "$ref": "#/$defs/image" }
+      }
+    },
+    "imagePullSecrets": { "type": "array", "items": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } },
+    "rolloutRevision": { "type": "string", "maxLength": 128 },
+    "frontend": { "$ref": "#/$defs/workload" },
+    "backend": { "$ref": "#/$defs/workload" },
+    "workers": {
+      "allOf": [{ "$ref": "#/$defs/workload" }],
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "migration", "preflight"],
+      "properties": {
+        "configMapName": { "$ref": "#/$defs/name" },
+        "applicationSecretName": { "$ref": "#/$defs/name" },
+        "migrationSecretName": { "$ref": "#/$defs/name" },
+        "preflightSecretName": { "$ref": "#/$defs/name" },
+        "migration": { "$ref": "#/$defs/job" },
+        "preflight": { "$ref": "#/$defs/job" }
+      }
+    },
+    "serviceAccounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api", "worker", "migration", "preflight"],
+      "properties": {
+        "api": { "$ref": "#/$defs/serviceAccount" },
+        "worker": { "$ref": "#/$defs/serviceAccount" },
+        "migration": { "$ref": "#/$defs/serviceAccount" },
+        "preflight": { "$ref": "#/$defs/serviceAccount" }
+      }
+    },
+    "pluginAssets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "existingClaim", "mountPath"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingClaim": { "type": "string" },
+        "mountPath": { "type": "string", "pattern": "^/" }
+      }
+    },
+    "pluginManager": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "image", "imagePullPolicy", "serviceAccountName", "configurationSecret", "state", "resources"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "type": "string" },
+        "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+        "serviceAccountName": { "$ref": "#/$defs/name" },
+        "configurationSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "key"],
+          "properties": { "name": { "$ref": "#/$defs/name" }, "key": { "type": "string", "minLength": 1 } }
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingClaim", "size", "storageClassName"],
+          "properties": { "existingClaim": { "type": "string" }, "size": { "type": "string" }, "storageClassName": { "type": "string" } }
+        },
+        "resources": { "type": "object" }
+      }
+    },
+    "ingress": { "type": "object" },
+    "networkPolicy": { "type": "object" },
+    "podDisruptionBudget": { "type": "object" },
+    "topologySpread": { "type": "object" },
+    "nodeSelector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "podAnnotations": { "type": "object" },
+    "podLabels": { "type": "object" }
+  },
+  "$defs": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 253 },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^(|sha256:[a-f0-9]{64})$" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minReplicas", "maxReplicas", "targetCPUUtilizationPercentage"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["replicas", "resources", "autoscaling"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 1 },
+        "resources": { "type": "object" },
+        "service": { "type": "object", "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } } },
+        "autoscaling": { "$ref": "#/$defs/autoscaling" }
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "backoffLimit", "ttlSecondsAfterFinished"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "name", "annotations"],
+      "properties": { "create": { "type": "boolean" }, "name": { "type": "string" }, "annotations": { "type": "object" } }
+    }
+  }
+}
+

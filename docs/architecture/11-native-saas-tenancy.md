@@ -32,6 +32,12 @@ The OSS host owns the security boundary. A private SaaS control plane may own
 fleet placement, metering, subscriptions, certificates, and tenant movement,
 but it cannot authorize a user or replace in-request tenant resolution.
 
+The production Kubernetes profile separates `api` and `worker` runtime roles.
+Both use verify-only database startup after a dedicated migration and preflight
+sequence, so normal application identities do not need schema authority. The
+default `all` runtime role and `apply` database startup retain the established
+single-process self-hosted contract.
+
 ## Authority flow
 
 The host resolves a tenant before tenant-owned data or authentication

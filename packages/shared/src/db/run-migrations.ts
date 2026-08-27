@@ -226,7 +226,10 @@ async function autoMigratePostgresSchema(queryRunner: QueryRunner, schemaName: s
   }
 }
 
-async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner): Promise<void> {
+async function ensureCriticalVersioningSchemaIntegrity(
+  queryRunner: QueryRunner,
+  repair = true,
+): Promise<void> {
   const integrityActions: string[] = [];
 
   const workingFilesTable = await queryRunner.getTable('working_files');
@@ -237,6 +240,9 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
   }
 
   if (!workingFilesTable.columns.some((column) => column.name === 'main_file_id')) {
+    if (!repair) {
+      throw new Error('Critical versioning schema integrity check failed: working_files.main_file_id missing');
+    }
     integrityActions.push('added working_files.main_file_id');
     await queryRunner.addColumn(workingFilesTable, new TableColumn({
       name: 'main_file_id',
@@ -246,6 +252,9 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
   }
 
   if (!fileSnapshotsTable.columns.some((column) => column.name === 'main_file_id')) {
+    if (!repair) {
+      throw new Error('Critical versioning schema integrity check failed: file_snapshots.main_file_id missing');
+    }
     integrityActions.push('added file_snapshots.main_file_id');
     await queryRunner.addColumn(fileSnapshotsTable, new TableColumn({
       name: 'main_file_id',
@@ -262,6 +271,9 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
   }
 
   if (!refreshedWorkingFilesTable.indices.some((index) => index.name === 'working_files_main_file_idx')) {
+    if (!repair) {
+      throw new Error('Critical versioning schema integrity check failed: working_files_main_file_idx missing');
+    }
     integrityActions.push('created working_files_main_file_idx');
     await queryRunner.createIndex(refreshedWorkingFilesTable, new TableIndex({
       name: 'working_files_main_file_idx',
@@ -270,6 +282,9 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
   }
 
   if (!refreshedFileSnapshotsTable.indices.some((index) => index.name === 'file_snapshots_main_file_idx')) {
+    if (!repair) {
+      throw new Error('Critical versioning schema integrity check failed: file_snapshots_main_file_idx missing');
+    }
     integrityActions.push('created file_snapshots_main_file_idx');
     await queryRunner.createIndex(refreshedFileSnapshotsTable, new TableIndex({
       name: 'file_snapshots_main_file_idx',
@@ -287,7 +302,7 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
     select: ['id', 'projectId', 'folderId', 'name', 'type'],
   });
 
-  if (workingFilesMissingMainFileId.length > 0) {
+  if (repair && workingFilesMissingMainFileId.length > 0) {
     const projectIds = [...new Set(workingFilesMissingMainFileId.map((file) => String(file.projectId)).filter((value) => value.length > 0))];
     const mainFiles = projectIds.length > 0
       ? await fileRepo.find({
@@ -327,7 +342,7 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
     select: ['id', 'workingFileId'],
   });
 
-  if (fileSnapshotsMissingMainFileId.length > 0) {
+  if (repair && fileSnapshotsMissingMainFileId.length > 0) {
     const workingFileIds = [...new Set(fileSnapshotsMissingMainFileId.map((snapshot) => String(snapshot.workingFileId)).filter((value) => value.length > 0))];
     const workingFiles = workingFileIds.length > 0
       ? await workingFileRepo.find({
@@ -437,14 +452,26 @@ async function recordFreshMigrationBaseline(
  * Run database migrations using TypeORM
  * Database-agnostic implementation supporting PostgreSQL, Oracle, MySQL, SQL Server, Spanner
  */
-export async function runMigrations() {
-  console.log('🔄 Running database migrations...');
+export interface RunMigrationsOptions {
+  /**
+   * `apply` retains the historical bootstrap/migration behavior. `verify`
+   * performs the same readiness and integrity checks without DDL so an API or
+   * worker identity can run without migration authority.
+   */
+  mode?: 'apply' | 'verify';
+}
+
+export async function runMigrations(options: RunMigrationsOptions = {}) {
+  const mode = options.mode ?? 'apply';
+  console.log(mode === 'apply'
+    ? '🔄 Running database migrations...'
+    : '🔎 Verifying database migration readiness...');
   
   const dbType = adapter.getDatabaseType();
   const schemaName = adapter.getSchemaName();
   
   // Ensure schema exists BEFORE DataSource init (migrations need the schema)
-  if (schemaName && schemaName !== 'public') {
+  if (mode === 'apply' && schemaName && schemaName !== 'public') {
     try {
       await ensureSchemaExists(schemaName);
       console.log(`  ✅ Schema "${schemaName}" ensured`);
@@ -461,13 +488,13 @@ export async function runMigrations() {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
     let initializedFreshSchema = false;
-    if (dbType === 'spanner') {
+    if (dbType === 'spanner' && mode === 'apply') {
       await ensureSpannerTypeOrmMigrationLedgerV1(dataSource);
     }
 
     const queryRunner = dataSource.createQueryRunner();
     try {
-      if (dbType === 'postgres' && schemaName) {
+      if (mode === 'apply' && dbType === 'postgres' && schemaName) {
         try {
           await autoMigratePostgresSchema(queryRunner, schemaName);
         } catch (error) {
@@ -519,6 +546,11 @@ export async function runMigrations() {
       }
 
       if (missingTables.length > 0) {
+        if (mode === 'verify') {
+          throw new Error(
+            `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
+          );
+        }
         console.log(
           `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
         );
@@ -542,6 +574,9 @@ export async function runMigrations() {
     if (!initializedFreshSchema) {
       const pendingMigrations = await dataSource.showMigrations();
       if (pendingMigrations) {
+        if (mode === 'verify') {
+          throw new Error('Database has pending migrations; run the migration job before application rollout.');
+        }
         console.log('  Running pending migrations...');
         await dataSource.runMigrations({
           transaction: dbType === 'spanner' ? 'none' : 'all',
@@ -552,7 +587,9 @@ export async function runMigrations() {
     const integrityRunner = dataSource.createQueryRunner();
     try {
       if (dbType === 'postgres') {
-        await new AddPostgresTenantRls1700000000126().up(integrityRunner);
+        if (mode === 'apply') {
+          await new AddPostgresTenantRls1700000000126().up(integrityRunner);
+        }
         if (config.tenancyMode === 'pooled') {
           const rls = await verifyPostgresTenantRls(integrityRunner);
           if (rls.expected === 0 || rls.enforced !== rls.expected) {
@@ -566,12 +603,14 @@ export async function runMigrations() {
           }
         }
       }
-      await ensureCriticalVersioningSchemaIntegrity(integrityRunner);
+      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
     } finally {
       await integrityRunner.release();
     }
     
-    console.log('✅ Database migrations complete');
+    console.log(mode === 'apply'
+      ? '✅ Database migrations complete'
+      : '✅ Database migration readiness verified');
   } catch (error: any) {
     console.error('❌ Migration failed:', error.message);
     throw error;
@@ -735,6 +774,6 @@ export async function seedInitialData() {
  * Initialize database - run migrations and seed data
  */
 export async function initializeDatabase() {
-  await runMigrations();
+  await runMigrations({ mode: config.databaseStartupMode });
   await seedInitialData();
 }

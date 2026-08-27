@@ -19,6 +19,8 @@ in `engine-tenant-mappings.json`. See
 | EXPOSE_BACKEND | No | true | Publish backend on host in Docker dev (`true`/`false`) |
 | FRONTEND_HOST_PORT | No | 5173 (dev), 8080 (prod) | Frontend host port |
 | DATABASE_TYPE | Yes | postgres | Database engine type |
+| EG_DATABASE_STARTUP_MODE | No | apply | `apply` retains automatic schema migration/bootstrap. `verify` performs fail-closed readiness and integrity checks without DDL for split Kubernetes API/worker identities. |
+| EG_RUNTIME_ROLE | No | all | `all` preserves the combined server/worker process; `api` serves HTTP without background pollers; `worker` runs pollers without a public listener. |
 | JWT_SECRET | Yes | dev value | Must be strong in production |
 | ADMIN_EMAIL | Yes | admin@enterpriseglue.ai | Bootstrap admin user |
 | ADMIN_PASSWORD | Yes | dev value | Change in production |

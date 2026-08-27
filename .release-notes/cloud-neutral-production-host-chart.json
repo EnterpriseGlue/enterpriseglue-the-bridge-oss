@@ -1,0 +1,65 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-neutral-production-host-chart",
+  "type": "feature",
+  "scope": "deployment",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds a cloud-neutral production Helm chart with split API/worker roles and dedicated database migration authority.",
+  "userImpact": [
+    "Kubernetes and OpenShift operators can run redundant frontend, API, and background-worker replicas from immutable images.",
+    "Existing Compose and self-hosted deployments keep the combined runtime and automatic migration behavior by default.",
+    "The optional Plugin Manager remains internal and plugin assets are shared read-only across host replicas."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Create separate application, migration, and preflight database credentials before enabling verify-only startup.",
+      "Render and validate the chart, then use an atomic Helm upgrade so migration and preflight hooks complete before rollout."
+    ]
+  },
+  "configuration": [
+    "Adds EG_RUNTIME_ROLE=all|api|worker; the default all preserves the previous process model.",
+    "Adds EG_DATABASE_STARTUP_MODE=apply|verify; the default apply preserves automatic self-hosted migration behavior.",
+    "Adds enterpriseglue-host chart values for immutable images, external configuration/secrets, replicas, autoscaling, ingress, NetworkPolicy, plugin assets, and Plugin Manager."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "No HTTP API is removed or renamed; split API replicas serve the same routes.",
+      "Worker-only processes intentionally do not open an HTTP listener."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema migration is introduced by this slice.",
+      "Verify-only startup detects missing or pending schema work without DDL; migration hooks retain apply authority."
+    ]
+  },
+  "security": [
+    "Application and worker identities can be deprived of schema DDL while dedicated hooks apply and verify migrations.",
+    "Only the frontend is an ingress target; API and Plugin Manager traffic remains cluster-internal under NetworkPolicy.",
+    "Pods run non-root with dropped capabilities, read-only root filesystems, bounded resources, immutable images, PDBs, and topology spread."
+  ],
+  "documentation": [
+    "Adds chart values, installation guidance, migration authority, scale/failure behavior, rollback, and qualification runbooks."
+  ],
+  "knownLimitations": [
+    "Cloud provider resources and real-cluster qualification remain owned by the deployment repository and combined qualification lanes."
+  ],
+  "rollback": [
+    "Use Helm rollback only while the database schema remains compatible with the target application image.",
+    "Do not automatically run down migrations or delete Plugin Manager journals, tenant state, eligibility, SSO references, or plugin-owned data."
+  ],
+  "validation": [
+    "Helm lint/render contracts cover Kubernetes, OpenShift, split and combined profiles, immutable images, database hooks, security contexts, ingress isolation, shared assets, and optional Plugin Manager.",
+    "Database tests cover verify-only startup and fail-closed pending migrations."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.13.0", "newVersion": "0.14.0", "impact": "minor" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.11.0", "newVersion": "0.12.0", "impact": "minor" }
+  ]
+}

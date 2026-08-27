@@ -43,6 +43,11 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   
   // Database configuration
   databaseType: z.enum(['postgres', 'oracle', 'mssql', 'spanner', 'mysql']).default('postgres'),
+  databaseStartupMode: z.enum(['apply', 'verify']).default('apply'),
+
+  // `all` preserves the historical single-process behavior. Production
+  // Kubernetes deployments can split request serving from durable pollers.
+  runtimeRole: z.enum(['all', 'api', 'worker']).default('all'),
 
   // Native SaaS tenancy. `single` preserves the OSS one-tenant deployment
   // contract. `pooled` enables authoritative tenant resolution and requires
@@ -199,6 +204,8 @@ function loadConfig(): Config {
   const raw = {
     port: process.env.API_PORT ? Number(process.env.API_PORT) : undefined,
     databaseType: process.env.DATABASE_TYPE,
+    databaseStartupMode: envOrUndefined(process.env.EG_DATABASE_STARTUP_MODE),
+    runtimeRole: envOrUndefined(process.env.EG_RUNTIME_ROLE),
     tenancyMode: envOrUndefined(process.env.EG_TENANCY_MODE),
     tenantBaseDomain: envOrUndefined(process.env.EG_TENANT_BASE_DOMAIN)?.toLowerCase(),
     tenantPlacementKey: envOrUndefined(process.env.EG_TENANT_PLACEMENT_KEY),

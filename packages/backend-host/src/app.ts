@@ -28,13 +28,27 @@ interface CreateAppOptions {
 
 export function registerBaseRoutes(
   app: express.Express,
-  options: { notificationTenantResolver?: NotificationTenantResolver } = {}
+  options: {
+    notificationTenantResolver?: NotificationTenantResolver;
+    /** Keep HTTP registration identical while allowing API-only replicas. */
+    startPluginWorkers?: boolean;
+  } = {}
 ): void {
   // Plugin routes must precede the root-shaped tenant compatibility router.
   // That router intentionally fails closed when a pooled request has neither
   // a tenant path nor a verified tenant host, and would otherwise intercept
   // canonical plugin paths such as /api/t/:tenantSlug/apps first.
-  registerPluginPlatformRoutes(app);
+  registerPluginPlatformRoutes(app, undefined, undefined, {
+    ...(options.startPluginWorkers === undefined
+      ? {}
+      : {
+          startAvailabilityWorker: options.startPluginWorkers,
+          startEventWorker: options.startPluginWorkers,
+          startScheduleWorker: options.startPluginWorkers,
+          startEngineEventPoller: options.startPluginWorkers &&
+            process.env.ENTERPRISEGLUE_PLUGIN_ENGINE_EVENT_POLLING_ENABLED === 'true',
+        }),
+  });
   registerRoutes(app, options);
 }
 

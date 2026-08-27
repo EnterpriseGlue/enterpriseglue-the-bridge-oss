@@ -1,0 +1,201 @@
+name: OSS Host Chart
+
+on:
+  workflow_run:
+    workflows: [Docker Images]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact protected source commit
+        required: true
+        type: string
+      release_tag:
+        description: Exact OSS release tag at source_ref
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+concurrency:
+  group: oss-host-chart-${{ inputs.source_ref || github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: plugin-toolchain-production
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      SOURCE_REF: ${{ inputs.source_ref || github.event.workflow_run.head_sha }}
+      REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
+      CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-host
+      COSIGN_EXPERIMENTAL: '1'
+    steps:
+      - name: Validate protected release authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "source_ref must be an immutable 40-character commit" >&2
+            exit 1
+          }
+          [[ "$GITHUB_REPOSITORY_OWNER" == "EnterpriseGlue" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
+              echo "source_ref must equal the protected workflow commit" >&2
+              exit 1
+            }
+          else
+            [[ "${{ github.event.workflow_run.name }}" == "Docker Images" ]]
+            [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]
+            [[ "${{ github.event.workflow_run.event }}" == "release" ]]
+            [[ "$SOURCE_REF" == "${{ github.event.workflow_run.head_sha }}" ]]
+          fi
+
+      - name: Checkout exact source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ inputs.source_ref || github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Resolve release and chart versions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          release_tag="$REQUESTED_RELEASE_TAG"
+          if [[ -z "$release_tag" ]]; then
+            release_tag="$(git tag --points-at "$SOURCE_REF" --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+          fi
+          [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$(git rev-list -n 1 "$release_tag")" == "$SOURCE_REF" ]]
+          gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+          chart_version="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-host/Chart.yaml)"
+          app_version="$(sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}$/\1/p' infra/kubernetes/helm/enterpriseglue-host/Chart.yaml)"
+          [[ "$chart_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "v$app_version" == "$release_tag" ]] || {
+            echo "Host chart appVersion $app_version must equal OSS release $release_tag" >&2
+            exit 1
+          }
+          test -z "$(git status --porcelain)"
+          {
+            echo "RELEASE_TAG=$release_tag"
+            echo "CHART_VERSION=$chart_version"
+            echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$SOURCE_REF")"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        with:
+          version: v3.19.5
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Validate and package reproducibly
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart=infra/kubernetes/helm/enterpriseglue-host
+          bash scripts/check-enterpriseglue-host-chart.sh
+          output="$RUNNER_TEMP/host-chart"
+          repro="$RUNNER_TEMP/host-chart-repro"
+          mkdir -p "$output" "$repro"
+          helm package "$chart" --destination "$output" >/dev/null
+          helm package "$chart" --destination "$repro" >/dev/null
+          archive="$output/enterpriseglue-host-$CHART_VERSION.tgz"
+          node scripts/helm-chart-archive.mjs compare "$archive" "$repro/$(basename "$archive")"
+          echo "CHART_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Authenticate Helm to GHCR
+        shell: bash
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" |
+            helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish or verify immutable chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION" 2>/dev/null || true)"
+          if [[ -z "$existing" ]]; then
+            helm push "$CHART_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+          else
+            layer="$(oras manifest fetch "$CHART_REPOSITORY@$existing" |
+              jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end')"
+            pulled="$RUNNER_TEMP/existing-enterpriseglue-host.tgz"
+            oras blob fetch --output "$pulled" "$CHART_REPOSITORY@$layer"
+            node scripts/helm-chart-archive.mjs compare "$CHART_ARCHIVE" "$pulled" || {
+              echo "Published immutable chart version differs from source" >&2
+              exit 1
+            }
+          fi
+          digest="$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "CHART_REFERENCE=$CHART_REPOSITORY@$digest" >> "$GITHUB_ENV"
+
+      - name: Sign and verify the exact chart subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          identity="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/host-chart-release.yml@$GITHUB_REF"
+          cosign sign --yes --registry-referrers-mode=oci-1-1 "$CHART_REFERENCE"
+          cosign verify \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$CHART_REFERENCE" >/dev/null
+          layer="$(oras manifest fetch "$CHART_REFERENCE" |
+            jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end')"
+          pulled="$RUNNER_TEMP/published-enterpriseglue-host.tgz"
+          oras blob fetch --output "$pulled" "${CHART_REFERENCE%@*}@$layer"
+          node scripts/helm-chart-archive.mjs compare "$CHART_ARCHIVE" "$pulled"
+          echo "PUBLISHED_CHART=$pulled" >> "$GITHUB_ENV"
+
+      - name: Write release receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/enterpriseglue-host-chart-receipt"
+          mkdir -p "$receipt"
+          cp "$PUBLISHED_CHART" "$receipt/"
+          jq -n \
+            --arg releaseTag "$RELEASE_TAG" \
+            --arg chartVersion "$CHART_VERSION" \
+            --arg sourceRevision "$SOURCE_REF" \
+            --arg subject "$CHART_REFERENCE" \
+            --arg archiveSha256 "$(sha256sum "$PUBLISHED_CHART" | cut -d' ' -f1)" \
+            --arg workflowRun "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{schemaVersion:"enterpriseglue-host-chart-release/v1",releaseTag:$releaseTag,chartVersion:$chartVersion,sourceRevision:$sourceRevision,subject:$subject,archiveSha256:$archiveSha256,workflowRun:$workflowRun}' \
+            > "$receipt/release.json"
+          gh release upload "$RELEASE_TAG" "$PUBLISHED_CHART" "$receipt/release.json" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          echo "RECEIPT=$receipt" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload immutable release receipt
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: enterpriseglue-host-chart-${{ env.RELEASE_TAG }}
+          path: ${{ env.RECEIPT }}
+          if-no-files-found: error
+

@@ -31,6 +31,13 @@ Launcher and validation scripts:
 - `EXPOSE_BACKEND`: publish backend on host in Docker dev (`true`/`false`)
 - `FRONTEND_HOST_PORT`: frontend host port (Docker dev/prod)
 - `DATABASE_TYPE`: `postgres | oracle | mssql | spanner | mysql`
+- `EG_DATABASE_STARTUP_MODE`: `apply` (default) or `verify`. `apply` preserves
+  self-hosted startup migration behavior. `verify` fails when schema work is
+  pending and performs no DDL; use it for Kubernetes API and worker identities
+  after the dedicated migration job.
+- `EG_RUNTIME_ROLE`: `all` (default), `api`, or `worker`. `all` preserves the
+  existing combined process. `api` serves HTTP without pollers; `worker` runs
+  durable/background pollers without opening an HTTP listener.
 - `FRONTEND_URL`: frontend origin for auth links
 
 ### Database Required Variables (by `DATABASE_TYPE`)

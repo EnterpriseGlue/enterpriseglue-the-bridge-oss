@@ -1,0 +1,90 @@
+{{- if .Values.database.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-migrate-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.database.migration.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.database.migration.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "migration") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "migration") }}
+      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ include "enterpriseglue-host.backendImage" . | quote }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          command: ["node", "-e"]
+          args:
+            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
+          envFrom:
+            - configMapRef: { name: {{ .Values.database.configMapName }} }
+            - secretRef: { name: {{ .Values.database.migrationSecretName }} }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}
+{{- if .Values.database.preflight.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-preflight-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: preflight
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.database.preflight.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.database.preflight.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "preflight") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "preflight") }}
+      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      containers:
+        - name: preflight
+          image: {{ include "enterpriseglue-host.backendImage" . | quote }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          command: ["node", "-e"]
+          args:
+            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
+          envFrom:
+            - configMapRef: { name: {{ .Values.database.configMapName }} }
+            - secretRef: { name: {{ .Values.database.preflightSecretName }} }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}
+

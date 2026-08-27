@@ -1,0 +1,30 @@
+{{- range $component := list "frontend" "backend" "workers" }}
+{{- $settings := index $.Values $component }}
+{{- if and $settings.autoscaling.enabled (or (ne $component "workers") $.Values.workers.enabled) }}
+{{- $targetComponent := $component }}
+{{- if eq $component "backend" }}{{- $targetComponent = "api" }}{{- end }}
+{{- if eq $component "workers" }}{{- $targetComponent = "worker" }}{{- end }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" $ }}-{{ $targetComponent }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "enterpriseglue-host.fullname" $ }}-{{ $targetComponent }}
+  minReplicas: {{ $settings.autoscaling.minReplicas }}
+  maxReplicas: {{ $settings.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $settings.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

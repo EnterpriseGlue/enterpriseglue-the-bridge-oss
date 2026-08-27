@@ -1,0 +1,67 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-default-deny-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Ingress"]
+  ingress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-frontend-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "frontend") | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- if .Values.networkPolicy.ingressNamespaceSelector }}
+              {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 14 }}
+              {{- else }}
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+              {{- end }}
+          podSelector:
+            matchLabels:
+              {{- if .Values.networkPolicy.ingressPodSelector }}
+              {{- toYaml .Values.networkPolicy.ingressPodSelector | nindent 14 }}
+              {{- else }}
+              app.kubernetes.io/name: ingress-controller
+              {{- end }}
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-api-from-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "frontend") | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: 8787 }
+{{- end }}
+

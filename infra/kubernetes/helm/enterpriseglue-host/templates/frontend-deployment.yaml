@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "frontend") | nindent 4 }}
+spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicas }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "frontend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "frontend") | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      annotations:
+        enterpriseglue.io/rollout-revision: {{ .Values.rolloutRevision | quote }}
+        {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "api") }}
+      {{- include "enterpriseglue-host.commonPodSpec" . | nindent 6 }}
+      {{- include "enterpriseglue-host.topologySpread" (dict "root" . "component" "frontend") | nindent 6 }}
+      containers:
+        - name: frontend
+          image: {{ include "enterpriseglue-host.frontendImage" . | quote }}
+          imagePullPolicy: {{ .Values.images.frontend.pullPolicy }}
+          ports:
+            - { name: http, containerPort: 8080, protocol: TCP }
+          env:
+            - name: API_UPSTREAM
+              value: {{ printf "%s-api:%v" (include "enterpriseglue-host.fullname" .) .Values.backend.service.port | quote }}
+            - { name: EG_FRONTEND_RUNTIME_API_BASE_URL, value: "" }
+            - { name: EG_FRONTEND_RUNTIME_CONFIG_REQUIRED, value: "true" }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: nginx-cache, mountPath: /var/cache/nginx }
+            - { name: nginx-run, mountPath: /var/run }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - { name: nginx-cache, emptyDir: {} }
+        - { name: nginx-run, emptyDir: {} }
+

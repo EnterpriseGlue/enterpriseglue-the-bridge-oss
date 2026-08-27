@@ -7,6 +7,13 @@ const originalTenantRlsEnforced = process.env.EG_TENANT_RLS_ENFORCED;
 const originalTenantSecretBrokerUrl = process.env.EG_TENANT_SECRET_BROKER_URL;
 const originalTenantSecretBrokerTokenRef = process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF;
 const originalTenantSecretBrokerRequired = process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
+const runtimeEnvironmentNames = [
+  'EG_RUNTIME_ROLE',
+  'EG_DATABASE_STARTUP_MODE',
+] as const;
+const originalRuntimeEnvironment = new Map(
+  runtimeEnvironmentNames.map((name) => [name, process.env[name]]),
+);
 const eligibilityEnvironmentNames = [
   'EG_TENANT_APP_ELIGIBILITY_REQUIRED',
   'EG_TENANT_APP_ELIGIBILITY_JWKS_JSON',
@@ -34,6 +41,7 @@ describe('hermetic test configuration', () => {
     delete process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF;
     delete process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
     for (const name of eligibilityEnvironmentNames) delete process.env[name];
+    for (const name of runtimeEnvironmentNames) delete process.env[name];
   });
 
   afterEach(() => {
@@ -54,6 +62,11 @@ describe('hermetic test configuration', () => {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }
+    for (const name of runtimeEnvironmentNames) {
+      const value = originalRuntimeEnvironment.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
   it('does not read developer environment files in the unit-test lane', async () => {
@@ -65,6 +78,26 @@ describe('hermetic test configuration', () => {
     process.env.EG_LOAD_ENV_IN_TESTS = 'true';
     await import('@enterpriseglue/shared/config/index.js');
     expect(dotenvConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves combined runtime and migration apply defaults', async () => {
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config.runtimeRole).toBe('all');
+    expect(config.databaseStartupMode).toBe('apply');
+  });
+
+  it('accepts split worker runtime with read-only migration verification', async () => {
+    process.env.EG_RUNTIME_ROLE = 'worker';
+    process.env.EG_DATABASE_STARTUP_MODE = 'verify';
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config.runtimeRole).toBe('worker');
+    expect(config.databaseStartupMode).toBe('verify');
+  });
+
+  it('rejects unknown runtime and database startup modes', async () => {
+    process.env.EG_RUNTIME_ROLE = 'frontend';
+    process.env.EG_DATABASE_STARTUP_MODE = 'synchronize';
+    await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow();
   });
 
   it('rejects pooled tenancy on a non-PostgreSQL database', async () => {
