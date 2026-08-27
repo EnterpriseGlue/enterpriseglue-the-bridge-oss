@@ -66,6 +66,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/suspend', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/resume', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/identity-provider-secret-reference', resourceResolver: 'platform.self' },
+        { method: 'PUT', route: '/api/workloads/tenants/{tenantId}/apps/{pluginId}/eligibility', resourceResolver: 'platform.self' },
       ],
     },
   {

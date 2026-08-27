@@ -57,6 +57,12 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantPlacementV2ShardId: z.string().min(1).max(160).optional(),
   tenantPlacementV2ClockSkewSeconds: z.number().int().nonnegative().max(60).default(5),
   tenancyCloudRequired: z.boolean().default(false),
+  tenantAppEligibilityRequired: z.boolean().default(false),
+  tenantAppEligibilityJwksJson: z.string().min(2).max(65536).optional(),
+  tenantAppEligibilityIssuer: z.string().min(1).max(500).optional(),
+  tenantAppEligibilityAudience: z.string().min(1).max(500).optional(),
+  tenantAppEligibilityClockSkewSeconds: z.number().int().nonnegative().max(300).default(60),
+  tenantAppEligibilityMaxLifetimeSeconds: z.number().int().min(60).max(2_592_000).default(604_800),
   tenantWorkloadReceiptPrivateKey: z.string().min(32).optional(),
   tenantWorkloadReceiptKeyId: z.string().min(1).max(160).optional(),
   tenantWorkloadReceiptIssuer: z.string().min(1).max(255).optional(),
@@ -207,6 +213,16 @@ function loadConfig(): Config {
       ? Number(process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS)
       : undefined,
     tenancyCloudRequired: process.env.EG_TENANCY_CLOUD_REQUIRED === 'true',
+    tenantAppEligibilityRequired: process.env.EG_TENANT_APP_ELIGIBILITY_REQUIRED === 'true',
+    tenantAppEligibilityJwksJson: envOrUndefined(process.env.EG_TENANT_APP_ELIGIBILITY_JWKS_JSON),
+    tenantAppEligibilityIssuer: envOrUndefined(process.env.EG_TENANT_APP_ELIGIBILITY_ISSUER),
+    tenantAppEligibilityAudience: envOrUndefined(process.env.EG_TENANT_APP_ELIGIBILITY_AUDIENCE),
+    tenantAppEligibilityClockSkewSeconds: process.env.EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS
+      ? Number(process.env.EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS)
+      : undefined,
+    tenantAppEligibilityMaxLifetimeSeconds: process.env.EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS
+      ? Number(process.env.EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS)
+      : undefined,
     tenantWorkloadReceiptPrivateKey: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY)
       ?.replace(/\\n/g, '\n'),
     tenantWorkloadReceiptKeyId: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_KEY_ID),
@@ -338,6 +354,43 @@ if (config.tenantPlacementV2JwksJson) {
   }
 }
 
+if (config.tenantAppEligibilityJwksJson) {
+  let keys: Array<Record<string, unknown>>;
+  try {
+    const jwks = JSON.parse(config.tenantAppEligibilityJwksJson) as { keys?: unknown };
+    if (!Array.isArray(jwks.keys) || jwks.keys.length === 0) throw new Error('missing keys');
+    keys = jwks.keys as Array<Record<string, unknown>>;
+  } catch {
+    throw new Error('EG_TENANT_APP_ELIGIBILITY_JWKS_JSON must be a non-empty public ES256 JWKS.');
+  }
+  const keyIds = new Set<string>();
+  for (const key of keys) {
+    const kid = typeof key.kid === 'string' ? key.kid : '';
+    if (!kid || keyIds.has(kid) || key.kty !== 'EC' || key.crv !== 'P-256'
+      || key.alg !== 'ES256' || (key.use !== undefined && key.use !== 'sig')
+      || Object.prototype.hasOwnProperty.call(key, 'd')) {
+      throw new Error('EG_TENANT_APP_ELIGIBILITY_JWKS_JSON must contain unique public ES256 keys with kid.');
+    }
+    try { crypto.createPublicKey({ key: key as JsonWebKey, format: 'jwk' }); }
+    catch { throw new Error(`EG_TENANT_APP_ELIGIBILITY_JWKS_JSON contains an invalid public key for kid ${kid}.`); }
+    keyIds.add(kid);
+  }
+}
+
+const tenantAppEligibilityConfigured = Boolean(
+  config.tenantAppEligibilityJwksJson ||
+  config.tenantAppEligibilityIssuer ||
+  config.tenantAppEligibilityAudience,
+);
+if (
+  (config.tenantAppEligibilityRequired || tenantAppEligibilityConfigured) &&
+  (!config.tenantAppEligibilityJwksJson ||
+    !config.tenantAppEligibilityIssuer ||
+    !config.tenantAppEligibilityAudience)
+) {
+  throw new Error('Signed tenant application eligibility requires EG_TENANT_APP_ELIGIBILITY_JWKS_JSON, EG_TENANT_APP_ELIGIBILITY_ISSUER, and EG_TENANT_APP_ELIGIBILITY_AUDIENCE.');
+}
+
 if (config.tenantWorkloadReceiptPrivateKey) {
   let receiptKey;
   try { receiptKey = crypto.createPrivateKey(config.tenantWorkloadReceiptPrivateKey); }
@@ -392,6 +445,10 @@ if (config.tenancyMode === 'pooled') {
       ['EG_TENANT_SECRET_BROKER_REQUIRED=true', config.tenantSecretBrokerRequired ? 'true' : undefined],
       ['EG_TENANT_SECRET_BROKER_URL', config.tenantSecretBrokerUrl],
       ['EG_TENANT_SECRET_BROKER_TOKEN_REF', config.tenantSecretBrokerTokenRef],
+      ['EG_TENANT_APP_ELIGIBILITY_REQUIRED=true', config.tenantAppEligibilityRequired ? 'true' : undefined],
+      ['EG_TENANT_APP_ELIGIBILITY_JWKS_JSON', config.tenantAppEligibilityJwksJson],
+      ['EG_TENANT_APP_ELIGIBILITY_ISSUER', config.tenantAppEligibilityIssuer],
+      ['EG_TENANT_APP_ELIGIBILITY_AUDIENCE', config.tenantAppEligibilityAudience],
     ].filter(([, value]) => !value).map(([name]) => name);
     if (missing.length) {
       throw new Error(`EG_TENANCY_CLOUD_REQUIRED=true requires ${missing.join(', ')}.`);

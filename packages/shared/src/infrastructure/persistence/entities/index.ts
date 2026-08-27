@@ -97,6 +97,7 @@ export {
   PluginPermissionGrant,
   PluginPlatformAudit,
   PluginTenantEnablement,
+  PluginTenantEligibility,
   PluginTenantApplicationOperation,
   pluginPlatformEntities,
 } from './PluginPlatform.js';

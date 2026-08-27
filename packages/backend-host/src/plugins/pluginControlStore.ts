@@ -15,6 +15,9 @@ import {
   type PluginSafeSummaryV1,
   type PluginTenantApplicationV1,
   type PluginTenantEnablementV1,
+  type PluginTenantEligibilityClaimsV1,
+  type PluginTenantEligibilityProjectionV1,
+  type PluginTenantEligibilityStateV1,
 } from '@enterpriseglue/plugin-sdk';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
@@ -25,16 +28,20 @@ import {
   PluginPlatformState,
   PluginPlatformAudit,
   PluginTenantApplicationOperation,
+  PluginTenantEligibility,
   PluginTenantEnablement,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
 import {
   PluginControlErrorV1,
+  eligibilityProjection,
+  eligibilityStateAt,
   type PluginControlMutationV1,
   type PluginControlStoreV1,
   type PluginEmergencyControlMutationV1,
   type PluginTenantApplicationMutationV1,
+  type PluginTenantEligibilityMutationV1,
   type PluginTenantControlMutationV1,
 } from './pluginControlPlane.js';
 import { findPluginRowForUpdateV1 } from './pluginDatabaseLock.js';
@@ -106,6 +113,8 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
           current.bundleDigest !== source.bundleDigest ||
           current.installerEnabled !== source.installerEnabled ||
           current.enablementScope !== source.enablementScope ||
+          current.entitlementProvider !== (source.entitlementProvider ?? 'none') ||
+          current.entitlementFeature !== (source.entitlementFeature ?? null) ||
           current.tenantConfigurationPath !==
             (source.tenantConfiguration?.relativePath ?? null) ||
           current.tenantConfigurationSchemaSha256 !==
@@ -137,6 +146,8 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             compatible: source.compatible,
             healthy: source.healthy,
             entitlementState: source.entitled,
+            entitlementProvider: source.entitlementProvider ?? 'none',
+            entitlementFeature: source.entitlementFeature ?? null,
             revision: 0,
             installerRevision: snapshot.revision,
             createdAt: now,
@@ -168,6 +179,8 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
               compatible: source.compatible,
               healthy: current.desiredEnabled ? source.healthy : false,
               entitlementState: source.entitled,
+              entitlementProvider: source.entitlementProvider ?? 'none',
+              entitlementFeature: source.entitlementFeature ?? null,
               revision: integer(current.revision) + 1,
               installerRevision: snapshot.revision,
               updatedAt: now,
@@ -329,6 +342,17 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             'tenant_enablement_not_supported',
           );
         }
+        if (
+          input.enabled &&
+          !(await databaseTenantEligible(
+            manager,
+            installation,
+            input.tenantRef,
+            input.occurredAt,
+          ))
+        ) {
+          throw new PluginControlErrorV1(409, 'tenant_eligibility_inactive');
+        }
         const tenants = manager.getRepository(PluginTenantEnablement);
         const tenant = await tenants.findOne({
           where: {
@@ -456,21 +480,153 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
     });
   }
 
+  async applyTenantEligibility(
+    input: PluginTenantEligibilityMutationV1,
+  ): Promise<PluginTenantEligibilityProjectionV1> {
+    return runPluginTransactionV1(
+      await this.dataSourceProvider(),
+      async (manager) => {
+        const installation = await findPluginRowForUpdateV1(
+          manager.getRepository(PluginInstallation),
+          { pluginId: input.claims.pluginId },
+        );
+        if (!installation) {
+          throw new PluginControlErrorV1(404, 'plugin_not_found');
+        }
+        if (installation.entitlementProvider !== 'plugin') {
+          throw new PluginControlErrorV1(409, 'tenant_eligibility_not_supported');
+        }
+        const eligibilities = manager.getRepository(PluginTenantEligibility);
+        const current = await eligibilities.findOne({
+          where: {
+            pluginId: input.claims.pluginId,
+            tenantRef: input.claims.tenantRef,
+          },
+        });
+        if (current && integer(current.projectionRevision) === input.claims.revision) {
+          if (current.signatureSha256 !== input.signatureSha256) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
+          return eligibilityProjection(
+            databaseEligibilityClaims(current),
+            input.occurredAt,
+          );
+        }
+        if (current && integer(current.projectionRevision) > input.claims.revision) {
+          throw new PluginControlErrorV1(409, 'revision_conflict');
+        }
+        const now = Date.parse(input.occurredAt);
+        const values = {
+          pluginId: input.claims.pluginId,
+          tenantRef: input.claims.tenantRef,
+          pluginVersion: input.claims.pluginVersion,
+          releaseDigest: input.claims.release,
+          state: input.claims.state,
+          effectiveFrom: input.claims.effectiveFrom
+            ? Date.parse(input.claims.effectiveFrom)
+            : null,
+          effectiveUntil: input.claims.effectiveUntil
+            ? Date.parse(input.claims.effectiveUntil)
+            : null,
+          limitsHash: input.claims.limitsHash,
+          projectionRevision: input.claims.revision,
+          issuer: input.claims.iss,
+          expiresAt: input.claims.exp * 1_000,
+          projectionRef: input.claims.projectionRef,
+          projectionId: input.claims.jti,
+          signatureSha256: input.signatureSha256,
+          updatedAt: now,
+        };
+        if (!current) {
+          await eligibilities.insert({
+            id: randomUUID(),
+            ...values,
+            createdAt: now,
+          });
+        } else {
+          const updated = await eligibilities.update(
+            {
+              id: current.id,
+              projectionRevision: current.projectionRevision,
+            },
+            values,
+          );
+          if (updated.affected !== 1) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
+        }
+        await appendAudit(manager, {
+          eventType: 'tenant_eligibility_updated',
+          pluginId: input.claims.pluginId,
+          tenantRef: input.claims.tenantRef,
+          actorRef: input.actorRef,
+          correlationId: input.correlationId,
+          fromState: current?.state ?? null,
+          toState: input.claims.state,
+          reasonCode: 'none',
+          occurredAt: now,
+        });
+        return eligibilityProjection(input.claims, input.occurredAt);
+      },
+    );
+  }
+
+  async getTenantEligibility(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<PluginTenantEligibilityProjectionV1 | undefined> {
+    const record = await (await this.dataSourceProvider())
+      .getRepository(PluginTenantEligibility)
+      .findOne({ where: { pluginId, tenantRef } });
+    return record
+      ? eligibilityProjection(databaseEligibilityClaims(record), now)
+      : undefined;
+  }
+
+  async isTenantEligible(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<boolean> {
+    const dataSource = await this.dataSourceProvider();
+    const installation = await dataSource.getRepository(PluginInstallation)
+      .findOne({ where: { pluginId } });
+    if (!installation) return false;
+    if (installation.entitlementProvider === 'none') return true;
+    const record = await dataSource.getRepository(PluginTenantEligibility)
+      .findOne({ where: { pluginId, tenantRef } });
+    return Boolean(
+      record && eligibilityStateAt(databaseEligibilityClaims(record), now).permitted,
+    );
+  }
+
   async listTenantApplications(
     tenantRef: string,
     tenantSlug: string,
+    now: string,
   ): Promise<PluginTenantApplicationV1[]> {
     const dataSource = await this.dataSourceProvider();
     const installations = await dataSource.getRepository(PluginInstallation)
       .find({ where: { enablementScope: 'tenant' }, order: { pluginId: 'ASC' } });
     const enablements = await dataSource.getRepository(PluginTenantEnablement)
       .find({ where: { tenantRef } });
+    const eligibilities = await dataSource.getRepository(PluginTenantEligibility)
+      .find({ where: { tenantRef } });
     const byPlugin = new Map(enablements.map((row) => [row.pluginId, row]));
+    const eligibilityByPlugin = new Map(
+      eligibilities.map((row) => [row.pluginId, row]),
+    );
     return installations.map((installation) =>
       databaseTenantApplication(
         installation,
         byPlugin.get(installation.pluginId),
         tenantSlug,
+        databaseTenantApplicationEligibility(
+          installation,
+          eligibilityByPlugin.get(installation.pluginId),
+          now,
+        ),
       ),
     );
   }
@@ -479,6 +635,7 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
     pluginId: PluginId,
     tenantRef: string,
     tenantSlug: string,
+    now: string,
   ): Promise<PluginTenantApplicationV1 | undefined> {
     const dataSource = await this.dataSourceProvider();
     const installation = await dataSource.getRepository(PluginInstallation)
@@ -486,7 +643,14 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
     if (!installation) return undefined;
     const enablement = await dataSource.getRepository(PluginTenantEnablement)
       .findOne({ where: { pluginId, tenantRef } });
-    return databaseTenantApplication(installation, enablement, tenantSlug);
+    const eligibility = await dataSource.getRepository(PluginTenantEligibility)
+      .findOne({ where: { pluginId, tenantRef } });
+    return databaseTenantApplication(
+      installation,
+      enablement,
+      tenantSlug,
+      databaseTenantApplicationEligibility(installation, eligibility, now),
+    );
   }
 
   async mutateTenantActivationRequest(
@@ -527,6 +691,17 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             !['enabled', 'degraded'].includes(installation.state)
           ) {
             throw new PluginControlErrorV1(409, 'invalid_state');
+          }
+          if (
+            input.operation !== 'reject' &&
+            !(await databaseTenantEligible(
+              manager,
+              installation,
+              input.tenantRef,
+              input.occurredAt,
+            ))
+          ) {
+            throw new PluginControlErrorV1(409, 'tenant_eligibility_inactive');
           }
 
           const enablements = manager.getRepository(PluginTenantEnablement);
@@ -596,6 +771,12 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             installation,
             next,
             input.tenantSlug,
+            await databaseTenantApplicationEligibilityForManager(
+              manager,
+              installation,
+              input.tenantRef,
+              input.occurredAt,
+            ),
           );
           await operations.insert({
             id: randomUUID(),
@@ -620,7 +801,16 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             tenantRef: input.tenantRef,
             actorRef: input.actorRef,
             correlationId: input.correlationId,
-            fromState: databaseTenantApplicationStatus(installation, current),
+            fromState: databaseTenantApplicationStatus(
+              installation,
+              current,
+              await databaseTenantApplicationEligibilityForManager(
+                manager,
+                installation,
+                input.tenantRef,
+                input.occurredAt,
+              ),
+            ),
             toState: application.status,
             reasonCode: 'none',
             occurredAt: now,
@@ -1063,11 +1253,12 @@ function toSummary(record: PluginInstallation): PluginSafeSummaryV1 {
 function databaseTenantApplicationStatus(
   installation: PluginInstallation,
   enablement?: PluginTenantEnablement | null,
+  eligibility: PluginTenantEligibilityStateV1 = installation.entitlementState as PluginTenantEligibilityStateV1,
 ): PluginTenantApplicationV1['status'] {
-  if (installation.entitlementState === 'revoked') return 'revoked';
+  if (eligibility === 'revoked') return 'revoked';
   if (
     !installation.compatible ||
-    ['expired', 'unavailable'].includes(installation.entitlementState)
+    ['expired', 'unavailable'].includes(eligibility)
   ) {
     return 'blocked';
   }
@@ -1075,7 +1266,7 @@ function databaseTenantApplicationStatus(
     !installation.desiredEnabled ||
     !['enabled', 'degraded'].includes(installation.state)
   ) {
-    return ['active', 'grace'].includes(installation.entitlementState)
+    return ['trial', 'active', 'grace'].includes(eligibility)
       ? 'entitled'
       : 'install-pending';
   }
@@ -1088,6 +1279,7 @@ function databaseTenantApplication(
   installation: PluginInstallation,
   enablement: PluginTenantEnablement | null | undefined,
   tenantSlug: string,
+  eligibility: PluginTenantEligibilityStateV1,
 ): PluginTenantApplicationV1 {
   return pluginTenantApplicationV1Schema.parse({
     apiVersion: 'tenant-application.plugin.enterpriseglue.io/v1',
@@ -1095,11 +1287,11 @@ function databaseTenantApplication(
     version: installation.version,
     displayName: installation.displayName,
     publisher: installation.publisher,
-    status: databaseTenantApplicationStatus(installation, enablement),
+    status: databaseTenantApplicationStatus(installation, enablement, eligibility),
     active: enablement?.enabled ?? false,
     compatible: installation.compatible,
     healthy: installation.healthy,
-    entitled: installation.entitlementState,
+    entitled: eligibility,
     reasonCode: installation.reasonCode,
     revision: enablement ? integer(enablement.revision) : 0,
     activationRequest: {
@@ -1120,6 +1312,71 @@ function databaseTenantApplication(
       owner: 'plugin',
     },
   });
+}
+
+function databaseEligibilityClaims(
+  record: PluginTenantEligibility,
+): PluginTenantEligibilityClaimsV1 {
+  return {
+    schemaVersion: 'tenant-eligibility.plugin.enterpriseglue.io/v1',
+    iss: record.issuer,
+    aud: 'verified-and-not-persisted',
+    jti: record.projectionId,
+    tenantRef: record.tenantRef,
+    pluginId: record.pluginId as PluginId,
+    pluginVersion: record.pluginVersion,
+    release: record.releaseDigest,
+    state: record.state as PluginTenantEligibilityStateV1,
+    effectiveFrom: record.effectiveFrom === null
+      ? null
+      : new Date(integer(record.effectiveFrom)).toISOString(),
+    effectiveUntil: record.effectiveUntil === null
+      ? null
+      : new Date(integer(record.effectiveUntil)).toISOString(),
+    limitsHash: record.limitsHash,
+    revision: integer(record.projectionRevision),
+    projectionRef: record.projectionRef,
+    iat: Math.max(0, Math.floor(integer(record.createdAt) / 1_000)),
+    exp: Math.floor(integer(record.expiresAt) / 1_000),
+  };
+}
+
+function databaseTenantApplicationEligibility(
+  installation: PluginInstallation,
+  eligibility: PluginTenantEligibility | null | undefined,
+  now: string,
+): PluginTenantEligibilityStateV1 {
+  if (installation.entitlementProvider === 'none') return 'not_required';
+  return eligibility
+    ? eligibilityStateAt(databaseEligibilityClaims(eligibility), now).state
+    : 'unavailable';
+}
+
+async function databaseTenantApplicationEligibilityForManager(
+  manager: EntityManager,
+  installation: PluginInstallation,
+  tenantRef: string,
+  now: string,
+): Promise<PluginTenantEligibilityStateV1> {
+  if (installation.entitlementProvider === 'none') return 'not_required';
+  const eligibility = await manager.getRepository(PluginTenantEligibility)
+    .findOne({ where: { pluginId: installation.pluginId, tenantRef } });
+  return databaseTenantApplicationEligibility(installation, eligibility, now);
+}
+
+async function databaseTenantEligible(
+  manager: EntityManager,
+  installation: PluginInstallation,
+  tenantRef: string,
+  now: string,
+): Promise<boolean> {
+  if (installation.entitlementProvider === 'none') return true;
+  const eligibility = await manager.getRepository(PluginTenantEligibility)
+    .findOne({ where: { pluginId: installation.pluginId, tenantRef } });
+  return Boolean(
+    eligibility &&
+      eligibilityStateAt(databaseEligibilityClaims(eligibility), now).permitted,
+  );
 }
 
 function toAudit(record: PluginPlatformAudit): PluginPlatformAuditEventV1 {

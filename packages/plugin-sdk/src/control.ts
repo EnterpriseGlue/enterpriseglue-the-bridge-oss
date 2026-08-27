@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
 import {
+  ociDigestReferenceSchema,
   opaqueReferenceSchema,
   pluginEventTypeSchema,
   pluginIdSchema,
   pluginPermissionSchema,
   semVerSchema,
+  sha256Schema,
 } from './common.js';
 
 export const pluginLifecycleStateValues = [
@@ -232,6 +234,106 @@ export const pluginTenantActivationPolicySchema = z.enum([
   'approval_required',
 ]);
 
+export const pluginTenantEligibilityStateValues = [
+  'not_required',
+  'unavailable',
+  'trial',
+  'active',
+  'grace',
+  'expired',
+  'revoked',
+] as const;
+
+export const pluginTenantEligibilityStateSchema = z.enum(
+  pluginTenantEligibilityStateValues,
+);
+
+export const pluginTenantEligibilityClaimsV1Schema = z
+  .object({
+    schemaVersion: z.literal('tenant-eligibility.plugin.enterpriseglue.io/v1'),
+    iss: z.string().min(1).max(500),
+    aud: z.string().min(1).max(500),
+    jti: opaqueReferenceSchema,
+    tenantRef: opaqueReferenceSchema,
+    pluginId: pluginIdSchema,
+    pluginVersion: semVerSchema,
+    release: ociDigestReferenceSchema,
+    state: pluginTenantEligibilityStateSchema,
+    effectiveFrom: z.string().datetime().nullable(),
+    effectiveUntil: z.string().datetime().nullable(),
+    limitsHash: sha256Schema,
+    revision: z.number().int().nonnegative(),
+    projectionRef: opaqueReferenceSchema,
+    iat: z.number().int().nonnegative(),
+    exp: z.number().int().positive(),
+  })
+  .strict()
+  .superRefine((claims, context) => {
+    if (claims.exp <= claims.iat) {
+      context.addIssue({
+        code: 'custom',
+        path: ['exp'],
+        message: 'Eligibility expiry must be later than issuance',
+      });
+    }
+    if (
+      claims.effectiveFrom &&
+      claims.effectiveUntil &&
+      Date.parse(claims.effectiveUntil) <= Date.parse(claims.effectiveFrom)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['effectiveUntil'],
+        message: 'Eligibility effectiveUntil must be later than effectiveFrom',
+      });
+    }
+  });
+
+export const pluginTenantEligibilityApplyRequestV1Schema = z
+  .object({
+    signedProjection: z.string().min(32).max(16_384),
+  })
+  .strict();
+
+/** Safe tenant-facing projection. Raw JWS, tenant identity and commercial details stay private. */
+export const pluginTenantEligibilityProjectionV1Schema = z
+  .object({
+    apiVersion: z.literal(
+      'tenant-eligibility-projection.plugin.enterpriseglue.io/v1',
+    ),
+    pluginId: pluginIdSchema,
+    pluginVersion: semVerSchema,
+    state: pluginTenantEligibilityStateSchema,
+    effectiveFrom: z.string().datetime().nullable(),
+    effectiveUntil: z.string().datetime().nullable(),
+    limitsHash: sha256Schema,
+    revision: z.number().int().nonnegative(),
+    issuer: z.string().min(1).max(500),
+    expiresAt: z.string().datetime(),
+    projectionRef: opaqueReferenceSchema,
+  })
+  .strict();
+
+export function getPluginTenantEligibilityClaimsV1JsonSchema(): z.core.JSONSchema.JSONSchema {
+  return {
+    ...z.toJSONSchema(pluginTenantEligibilityClaimsV1Schema, {
+      target: 'draft-2020-12',
+    }),
+    $id: 'https://enterpriseglue.ai/schemas/plugin-tenant-eligibility-claims-v1.schema.json',
+    title: 'EnterpriseGlue Plugin Tenant Eligibility Claims v1',
+  };
+}
+
+export function getPluginTenantEligibilityProjectionV1JsonSchema(): z.core.JSONSchema.JSONSchema {
+  return {
+    ...z.toJSONSchema(pluginTenantEligibilityProjectionV1Schema, {
+      target: 'draft-2020-12',
+    }),
+    $id: 'https://enterpriseglue.ai/schemas/plugin-tenant-eligibility-projection-v1.schema.json',
+    title: 'EnterpriseGlue Plugin Tenant Eligibility Safe Projection v1',
+  };
+}
+
 export const pluginTenantApplicationMutationRequestV1Schema = z
   .object({
     idempotencyKey: idempotencyKeySchema,
@@ -448,6 +550,7 @@ export const pluginPlatformAuditEventTypeValues = [
   'tenant_activation_requested',
   'tenant_activation_approved',
   'tenant_activation_rejected',
+  'tenant_eligibility_updated',
   'platform_emergency_disabled',
   'platform_emergency_enabled',
   'event_dead_letter_requeued',
@@ -550,6 +653,7 @@ export const pluginSafeSummaryV1Schema = z
     compatible: z.boolean(),
     entitled: z.enum([
       'not_required',
+      'trial',
       'active',
       'grace',
       'expired',
@@ -749,6 +853,7 @@ export const pluginTenantApplicationV1Schema = z
     healthy: z.boolean(),
     entitled: z.enum([
       'not_required',
+      'trial',
       'active',
       'grace',
       'expired',
@@ -803,6 +908,18 @@ export type PluginTenantApplicationStatusV1 = z.infer<
 >;
 export type PluginTenantActivationPolicyV1 = z.infer<
   typeof pluginTenantActivationPolicySchema
+>;
+export type PluginTenantEligibilityStateV1 = z.infer<
+  typeof pluginTenantEligibilityStateSchema
+>;
+export type PluginTenantEligibilityClaimsV1 = z.infer<
+  typeof pluginTenantEligibilityClaimsV1Schema
+>;
+export type PluginTenantEligibilityApplyRequestV1 = z.infer<
+  typeof pluginTenantEligibilityApplyRequestV1Schema
+>;
+export type PluginTenantEligibilityProjectionV1 = z.infer<
+  typeof pluginTenantEligibilityProjectionV1Schema
 >;
 export type PluginTenantApplicationV1 = z.infer<
   typeof pluginTenantApplicationV1Schema

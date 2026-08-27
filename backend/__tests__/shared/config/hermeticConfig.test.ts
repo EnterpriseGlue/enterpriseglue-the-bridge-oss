@@ -7,6 +7,17 @@ const originalTenantRlsEnforced = process.env.EG_TENANT_RLS_ENFORCED;
 const originalTenantSecretBrokerUrl = process.env.EG_TENANT_SECRET_BROKER_URL;
 const originalTenantSecretBrokerTokenRef = process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF;
 const originalTenantSecretBrokerRequired = process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
+const eligibilityEnvironmentNames = [
+  'EG_TENANT_APP_ELIGIBILITY_REQUIRED',
+  'EG_TENANT_APP_ELIGIBILITY_JWKS_JSON',
+  'EG_TENANT_APP_ELIGIBILITY_ISSUER',
+  'EG_TENANT_APP_ELIGIBILITY_AUDIENCE',
+  'EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS',
+  'EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS',
+] as const;
+const originalEligibilityEnvironment = new Map(
+  eligibilityEnvironmentNames.map((name) => [name, process.env[name]]),
+);
 
 vi.mock('dotenv', () => ({
   default: { config: dotenvConfig },
@@ -22,6 +33,7 @@ describe('hermetic test configuration', () => {
     delete process.env.EG_TENANT_SECRET_BROKER_URL;
     delete process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF;
     delete process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
+    for (const name of eligibilityEnvironmentNames) delete process.env[name];
   });
 
   afterEach(() => {
@@ -37,6 +49,11 @@ describe('hermetic test configuration', () => {
     else process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF = originalTenantSecretBrokerTokenRef;
     if (originalTenantSecretBrokerRequired === undefined) delete process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
     else process.env.EG_TENANT_SECRET_BROKER_REQUIRED = originalTenantSecretBrokerRequired;
+    for (const name of eligibilityEnvironmentNames) {
+      const value = originalEligibilityEnvironment.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
   it('does not read developer environment files in the unit-test lane', async () => {
@@ -89,5 +106,33 @@ describe('hermetic test configuration', () => {
 
     await expect(import('@enterpriseglue/shared/config/index.js'))
       .rejects.toThrow('EG_TENANT_SECRET_BROKER_TOKEN_REF cannot use a tenant-secret reference');
+  });
+
+  it('fails closed when signed tenant application eligibility is incomplete', async () => {
+    process.env.EG_TENANT_APP_ELIGIBILITY_REQUIRED = 'true';
+    process.env.EG_TENANT_APP_ELIGIBILITY_ISSUER = 'https://control.example';
+
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('Signed tenant application eligibility requires');
+  });
+
+  it('rejects private or non-ES256 eligibility keys', async () => {
+    process.env.EG_TENANT_APP_ELIGIBILITY_JWKS_JSON = JSON.stringify({
+      keys: [{
+        kid: 'private-key',
+        kty: 'EC',
+        crv: 'P-256',
+        alg: 'ES256',
+        use: 'sig',
+        x: 'invalid',
+        y: 'invalid',
+        d: 'must-not-be-configured',
+      }],
+    });
+    process.env.EG_TENANT_APP_ELIGIBILITY_ISSUER = 'https://control.example';
+    process.env.EG_TENANT_APP_ELIGIBILITY_AUDIENCE = 'shard';
+
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('must contain unique public ES256 keys with kid');
   });
 });

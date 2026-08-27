@@ -287,8 +287,11 @@ The available broker families are deliberately scoped:
 - host-rendered notifications; and
 - host-only secret use with opaque references.
 
-An entitlement is a plugin-owned decision. The host may present a safe reason code, but a paid
-plugin backend must check its entitlement on every paid operation.
+Commercial entitlement remains a plugin/control-plane-owned decision. For tenant-enabled plugins,
+the host now verifies and persists only a signed, commercial-data-free eligibility projection and
+rechecks it before every interactive or asynchronous operation. A paid plugin may still enforce
+finer product limits, but it cannot bypass the host's tenant, activation, eligibility, and user or
+resource authorization gates.
 
 ### Customer-side diagnostics and full logs
 

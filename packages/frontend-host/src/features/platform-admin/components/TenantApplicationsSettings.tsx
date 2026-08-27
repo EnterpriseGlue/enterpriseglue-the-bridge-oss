@@ -29,6 +29,13 @@ function statusTag(status: PluginTenantApplicationV1['status']) {
   return 'gray';
 }
 
+function eligibilityTag(state: PluginTenantApplicationV1['entitled']) {
+  if (state === 'active' || state === 'trial') return 'green';
+  if (state === 'grace') return 'warm-gray';
+  if (state === 'expired' || state === 'revoked' || state === 'unavailable') return 'red';
+  return 'gray';
+}
+
 export default function TenantApplicationsSettings(props: {
   tenantId: string | null;
   tenantSlug: string;
@@ -108,7 +115,12 @@ export default function TenantApplicationsSettings(props: {
                   <strong>{application.displayName}</strong>
                   <div style={{ color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>{application.publisher} · {application.version}</div>
                 </div>
-                <Tag type={statusTag(application.status)}>{application.status}</Tag>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <Tag type={statusTag(application.status)}>{application.status}</Tag>
+                  {application.entitled !== 'not_required' && (
+                    <Tag type={eligibilityTag(application.entitled)}>Eligibility {application.entitled}</Tag>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {use.allowed && application.active && application.configuration.href && (

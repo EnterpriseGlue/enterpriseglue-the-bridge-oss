@@ -16,6 +16,7 @@ export const TENANT_AUTHZ_ACTIONS = [
       { method: 'GET', route: '/api/t/{tenantSlug}/apps/{pluginId}', resourceResolver: 'tenant.fromContext' },
       { method: 'GET', route: '/api/t/{tenantSlug}/apps/{pluginId}/configuration', resourceResolver: 'tenant.fromContext' },
       { method: 'GET', route: '/api/t/{tenantSlug}/apps/{pluginId}/audit', resourceResolver: 'tenant.fromContext' },
+      { method: 'GET', route: '/api/t/{tenantSlug}/apps/{pluginId}/eligibility', resourceResolver: 'tenant.fromContext' },
       { method: 'GET', route: '/api/t/{tenantSlug}/plugin-platform/v1/plugins/{pluginId}/enablement', resourceResolver: 'tenant.fromContext' },
       { method: 'GET', route: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement', resourceResolver: 'tenant.fromContext' },
     ],

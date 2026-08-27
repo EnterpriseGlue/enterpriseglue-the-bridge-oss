@@ -20,6 +20,7 @@ export interface PluginSafeSummaryV1 {
   compatible: boolean;
   entitled:
     | 'not_required'
+    | 'trial'
     | 'active'
     | 'grace'
     | 'expired'

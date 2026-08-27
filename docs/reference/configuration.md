@@ -92,8 +92,8 @@ rollback qualification gates pass for the intended deployment.
 - `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
   default `5`, maximum `60`.
 - `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2,
-  workload receipt signing, forced RLS, and the tenant secret broker settings.
-  The default is `false`.
+  workload receipt signing, forced RLS, the tenant secret broker, and signed
+  tenant application eligibility settings. The default is `false`.
 - `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY`,
   `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID`, and
   `EG_TENANT_WORKLOAD_RECEIPT_ISSUER`: ES256 signing identity for safe tenant
@@ -114,6 +114,17 @@ rollback qualification gates pass for the intended deployment.
 - `ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY`: Tenant application activation
   workflow. `direct` is the backward-compatible default; `approval_required`
   requires a member request and tenant-administrator decision.
+- `EG_TENANT_APP_ELIGIBILITY_REQUIRED`: Set `true` on SaaS shards to require a
+  complete signed tenant application eligibility verifier. Default `false`.
+- `EG_TENANT_APP_ELIGIBILITY_JWKS_JSON`: Public P-256 ES256 JWKS for tenant
+  application eligibility; keys require unique `kid` values.
+- `EG_TENANT_APP_ELIGIBILITY_ISSUER` and
+  `EG_TENANT_APP_ELIGIBILITY_AUDIENCE`: Exact trust bindings for signed
+  eligibility projections.
+- `EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
+  default `60`, maximum `300`.
+- `EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS`: Maximum signed projection
+  lifetime; default `604800`, maximum `2592000`.
 - `EG_TENANT_SECRET_BROKER_REQUIRED`: When `true`, startup requires the broker
   URL and token reference. Cloud-required mode requires this to be `true`.
 - `EG_TENANT_SECRET_BREAK_GLASS_ENABLED`: Enables the independently audited,

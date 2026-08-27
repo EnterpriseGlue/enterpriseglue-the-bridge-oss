@@ -17,6 +17,10 @@ import {
   getPluginReleaseV1JsonSchema,
 } from '../dist/manager.js';
 import { getPluginPlatformCapabilityCatalogV1JsonSchema } from '../dist/platform.js';
+import {
+  getPluginTenantEligibilityClaimsV1JsonSchema,
+  getPluginTenantEligibilityProjectionV1JsonSchema,
+} from '../dist/control.js';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const schemaDirectory = resolve(packageRoot, 'dist/schema');
@@ -26,6 +30,22 @@ await Promise.all([
   writeFile(
     resolve(schemaDirectory, 'enterpriseglue-plugin-manifest-v1.schema.json'),
     `${JSON.stringify(getEnterpriseGluePluginManifestV1JsonSchema(), null, 2)}\n`,
+    'utf8',
+  ),
+  writeFile(
+    resolve(
+      schemaDirectory,
+      'enterpriseglue-plugin-tenant-eligibility-claims-v1.schema.json',
+    ),
+    `${JSON.stringify(getPluginTenantEligibilityClaimsV1JsonSchema(), null, 2)}\n`,
+    'utf8',
+  ),
+  writeFile(
+    resolve(
+      schemaDirectory,
+      'enterpriseglue-plugin-tenant-eligibility-projection-v1.schema.json',
+    ),
+    `${JSON.stringify(getPluginTenantEligibilityProjectionV1JsonSchema(), null, 2)}\n`,
     'utf8',
   ),
   writeFile(

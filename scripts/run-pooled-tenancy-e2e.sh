@@ -69,6 +69,9 @@ const appDatabase = 'enterpriseglue_pooled';
 const adminEmail = 'pooled-tenancy-e2e-admin@example.test';
 const adminPassword = randomHex(24);
 const publicOrigin = `https://localhost:${tlsFrontendPort}`;
+const eligibilityKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const eligibilityKeyFile = `${require('node:path').dirname(envFile)}/eligibility-private-key.pem`;
+const eligibilityPublicJwk = eligibilityKeys.publicKey.export({ format: 'jwk' });
 const values = {
   NODE_ENV: 'development',
   EG_BACKEND_ENV_FILE: envFile,
@@ -114,6 +117,16 @@ const values = {
   EG_TENANT_RLS_ENFORCED: 'true',
   EG_TENANT_PLACEMENT_KEY: randomHex(32),
   EG_TENANT_SECRET_BROKER_TOKEN: randomHex(32),
+  EG_TENANT_APP_ELIGIBILITY_REQUIRED: 'true',
+  EG_TENANT_APP_ELIGIBILITY_JWKS_JSON: JSON.stringify({ keys: [{
+    ...eligibilityPublicJwk,
+    kid: 'pooled-e2e-eligibility-1',
+    alg: 'ES256',
+    use: 'sig',
+  }] }),
+  EG_TENANT_APP_ELIGIBILITY_ISSUER: 'https://pooled-e2e-control.enterpriseglue.test',
+  EG_TENANT_APP_ELIGIBILITY_AUDIENCE: 'pooled-e2e-shard',
+  POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE: eligibilityKeyFile,
   POOLED_TENANCY_OIDC_CLIENT_SECRET: randomHex(24),
   EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY: 'true',
   EG_IDENTITY_PROVIDER_ALLOWED_HOSTS: 'localhost,openldap',
@@ -129,6 +142,11 @@ const values = {
   POOLED_TENANCY_ADMIN_PASSWORD: adminPassword,
 };
 fs.writeFileSync(envFile, `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`, { mode: 0o600 });
+fs.writeFileSync(
+  eligibilityKeyFile,
+  eligibilityKeys.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  { mode: 0o600 },
+);
 fs.writeFileSync(postgresInitFile, [
   `CREATE ROLE ${appUser} LOGIN PASSWORD '${appPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;`,
   `CREATE DATABASE ${appDatabase} OWNER ${appUser};`,
@@ -217,6 +235,7 @@ const bundleRoot = resolve(rootDir, 'packages/plugin-reference/dist/plugin-bundl
 const manifest = JSON.parse(readFileSync(resolve(bundleRoot, 'plugin.yaml'), 'utf8'));
 const resources = JSON.parse(readFileSync(resolve(bundleRoot, 'deploy/resources.json'), 'utf8'));
 manifest.scope.enablement = 'tenant';
+manifest.entitlement = { provider: 'plugin', feature: 'pooled_reference' };
 const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const pluginAssetRoot = resolve(assetRoot, pluginId);
@@ -288,6 +307,9 @@ common_env=(
   POOLED_TENANCY_POSTGRES_DATABASE="$(awk -F= '$1 == "POOLED_TENANCY_POSTGRES_APP_DATABASE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_OIDC_ISSUER_URL="https://localhost:${keycloak_port}/realms/enterpriseglue-local"
   POOLED_TENANCY_OIDC_CLIENT_SECRET="$(awk -F= '$1 == "POOLED_TENANCY_OIDC_CLIENT_SECRET" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE="$(awk -F= '$1 == "POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_ELIGIBILITY_ISSUER="$(awk -F= '$1 == "EG_TENANT_APP_ELIGIBILITY_ISSUER" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_ELIGIBILITY_AUDIENCE="$(awk -F= '$1 == "EG_TENANT_APP_ELIGIBILITY_AUDIENCE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   PLAYWRIGHT_BASE_URL="https://localhost:${tls_frontend_port}"
   PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
   PLAYWRIGHT_WORKERS=1
@@ -314,7 +336,7 @@ writeFileSync(process.argv[2], [
   'mode=pooled',
   'database=postgres-restricted-role-force-rls',
   'tenants=alpha-oidc,bravo-saml,charlie-ldap',
-  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,tenant-app-member-request,tenant-app-admin-approval,tenant-app-sibling-isolation,tenant-app-deactivation,tenant-app-frontend-bootstrap,immediate-membership-removal',
+  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,signed-tenant-plugin-eligibility,distinct-tenant-eligibility,eligibility-revocation,tenant-app-member-request,tenant-app-admin-approval,tenant-app-sibling-isolation,tenant-app-deactivation,tenant-app-frontend-bootstrap,immediate-membership-removal',
   'ui_evidence=deterministic-desktop-responsive-and-zoom-screenshots',
   'identity_evidence=disposable-keycloak-openldap-and-private-tenant-secret-broker-emulators',
   'credentials=ephemeral-and-not-retained',

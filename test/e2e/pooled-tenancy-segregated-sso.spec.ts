@@ -1,5 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createPrivateKey, sign } from 'node:crypto';
 import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { captureManualScreenshot, manualScreenshotDirectory } from './utils/manualScreenshots';
@@ -23,6 +24,12 @@ const postgresPort = Number(process.env.POOLED_TENANCY_POSTGRES_PORT || 0);
 const postgresUser = process.env.POOLED_TENANCY_POSTGRES_USER || '';
 const postgresPassword = process.env.POOLED_TENANCY_POSTGRES_PASSWORD || '';
 const postgresDatabase = process.env.POOLED_TENANCY_POSTGRES_DATABASE || '';
+const eligibilityPrivateKeyFile = process.env.POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE || '';
+const eligibilityIssuer = process.env.POOLED_TENANCY_ELIGIBILITY_ISSUER || '';
+const eligibilityAudience = process.env.POOLED_TENANCY_ELIGIBILITY_AUDIENCE || '';
+const referencePluginId = 'io.enterpriseglue.reference-health';
+const referencePluginVersion = '0.1.0';
+const referencePluginRelease = `registry.invalid/pooled-reference@sha256:${'1'.repeat(64)}`;
 
 function isLocalUrl(value: string): boolean {
   try {
@@ -40,6 +47,70 @@ async function expectStatus(response: APIResponse, status: number): Promise<Json
   const body = await json(response);
   expect(response.status(), JSON.stringify(body)).toBe(status);
   return body;
+}
+
+let eligibilityPrivateKeyPromise: Promise<ReturnType<typeof createPrivateKey>> | undefined;
+
+function signedTenantEligibility(input: {
+  tenantRef: string;
+  state: 'trial' | 'active' | 'grace' | 'expired' | 'revoked' | 'unavailable';
+  revision: number;
+}): Promise<string> {
+  eligibilityPrivateKeyPromise ??= readFile(eligibilityPrivateKeyFile, 'utf8')
+    .then((pem) => createPrivateKey(pem));
+  return eligibilityPrivateKeyPromise.then((privateKey) => {
+    const now = Math.floor(Date.now() / 1_000);
+    const header = Buffer.from(JSON.stringify({
+      alg: 'ES256',
+      kid: 'pooled-e2e-eligibility-1',
+      typ: 'JWT',
+    })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      schemaVersion: 'tenant-eligibility.plugin.enterpriseglue.io/v1',
+      iss: eligibilityIssuer,
+      aud: eligibilityAudience,
+      jti: `pooled-e2e-${input.tenantRef}-${input.revision}`,
+      tenantRef: input.tenantRef,
+      pluginId: referencePluginId,
+      pluginVersion: referencePluginVersion,
+      release: referencePluginRelease,
+      state: input.state,
+      effectiveFrom: null,
+      effectiveUntil: new Date((now + 1_800) * 1_000).toISOString(),
+      limitsHash: '0'.repeat(64),
+      revision: input.revision,
+      projectionRef: `pooled-e2e-projection-${input.tenantRef}`,
+      iat: now - 5,
+      exp: now + 3_600,
+    })).toString('base64url');
+    const signature = sign(
+      'sha256',
+      Buffer.from(`${header}.${payload}`, 'ascii'),
+      { key: privateKey, dsaEncoding: 'ieee-p1363' },
+    ).toString('base64url');
+    return `${header}.${payload}.${signature}`;
+  });
+}
+
+async function applyTenantEligibility(input: {
+  page: Page;
+  token: string;
+  tenantRef: string;
+  state: 'trial' | 'active' | 'grace' | 'expired' | 'revoked' | 'unavailable';
+  revision: number;
+}): Promise<JsonObject> {
+  return expectStatus(await input.page.request.put(
+    `/api/workloads/tenants/${encodeURIComponent(input.tenantRef)}/apps/${referencePluginId}/eligibility`,
+    {
+      headers: {
+        authorization: `Bearer ${input.token}`,
+        'x-correlation-id': `pooled-e2e-eligibility-${input.revision}`,
+      },
+      data: {
+        signedProjection: await signedTenantEligibility(input),
+      },
+    },
+  ), 200);
 }
 
 async function csrfToken(page: Page): Promise<string> {
@@ -249,15 +320,58 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         organizationDiscoveryEnabled: true,
       });
 
-      const tenants: Record<string, JsonObject> = {};
+      const tenants: Record<string, JsonObject & { id: string; slug: string }> = {};
       for (const [slug, name] of [['alpha', 'Alpha Industries'], ['bravo', 'Bravo Services'], ['charlie', 'Charlie Operations']]) {
-        tenants[slug] = await expectStatus(await post(admin, '/api/platform/tenants', {
+        const tenant = await expectStatus(await post(admin, '/api/platform/tenants', {
           name,
           slug,
           ownerUserId: administratorId,
           placementKey: 'pooled-e2e',
         }), 201);
+        expect(tenant).toMatchObject({ id: expect.any(String), slug });
+        tenants[slug] = tenant as JsonObject & { id: string; slug: string };
       }
+
+      const eligibilityServiceAccount = await expectStatus(await post(
+        admin,
+        '/api/authz/service-accounts',
+        {
+          name: 'Pooled E2E tenant eligibility controller',
+          description: 'Disposable workload identity for signed eligibility qualification',
+          scopes: ['tenant:lifecycle'],
+        },
+      ), 201);
+      expect(eligibilityServiceAccount.account).toMatchObject({
+        scopes: ['tenant:lifecycle'],
+        isActive: true,
+      });
+      const eligibilityToken = eligibilityServiceAccount.token as string;
+      expect(eligibilityToken).toMatch(/^egsa_/);
+      const alphaEligibility = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.alpha.id,
+        state: 'active',
+        revision: 1,
+      });
+      const bravoEligibility = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.bravo.id,
+        state: 'trial',
+        revision: 1,
+      });
+      const charlieEligibility = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.charlie.id,
+        state: 'revoked',
+        revision: 1,
+      });
+      expect(alphaEligibility).toMatchObject({ state: 'active', revision: 1 });
+      expect(bravoEligibility).toMatchObject({ state: 'trial', revision: 1 });
+      expect(charlieEligibility).toMatchObject({ state: 'revoked', revision: 1 });
+      expect(JSON.stringify(alphaEligibility)).not.toMatch(/tenantRef|signedProjection|price|agreement/i);
 
       const secretInputs = {
         alpha: { purpose: 'oidc.client_secret', value: oidcClientSecret },
@@ -480,7 +594,6 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       await assertTenantSession(bravoContext, tenants.bravo, 'charlie');
       await assertTenantSession(charlieContext, tenants.charlie, 'alpha');
 
-      const referencePluginId = 'io.enterpriseglue.reference-health';
       const alphaMember = await alphaContext.newPage();
       const alphaCatalogue = await expectStatus(
         await alphaMember.request.get('/api/t/alpha/apps'),
@@ -492,6 +605,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           pluginId: referencePluginId,
           status: 'available',
           active: false,
+          entitled: 'active',
           revision: 0,
         }],
       });
@@ -515,6 +629,17 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-alpha-approve-0001' },
       ), 200);
       expect(alphaApproved).toMatchObject({ status: 'active', active: true, revision: 2 });
+      const alphaEligibilityView = await expectStatus(
+        await alphaContext.request.get(`/api/t/alpha/apps/${referencePluginId}/eligibility`),
+        200,
+      );
+      expect(alphaEligibilityView).toMatchObject({ state: 'active', revision: 1 });
+      expect(JSON.stringify(alphaEligibilityView)).not.toMatch(/tenantRef|signedProjection|price|agreement/i);
+      const charlieBlocked = await expectStatus(
+        await charlieContext.request.get(`/api/t/charlie/apps/${referencePluginId}`),
+        200,
+      );
+      expect(charlieBlocked).toMatchObject({ status: 'revoked', active: false, entitled: 'revoked' });
       await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'bravo' }), 200);
       const bravoBefore = await expectStatus(
         await admin.request.get(`/api/t/bravo/apps/${referencePluginId}`),
@@ -531,12 +656,25 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         `/api/t/bravo/apps/${referencePluginId}/activation-request/decision`,
         { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-bravo-approve-0001' },
       ), 200);
+      const bravoRevokedProjection = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.bravo.id,
+        state: 'revoked',
+        revision: 2,
+      });
+      expect(bravoRevokedProjection).toMatchObject({ state: 'revoked', revision: 2 });
+      const bravoRevoked = await expectStatus(
+        await admin.request.get(`/api/t/bravo/apps/${referencePluginId}`),
+        200,
+      );
+      expect(bravoRevoked).toMatchObject({ status: 'revoked', active: true, entitled: 'revoked', revision: 2 });
       const bravoInactive = await expectStatus(await post(
         admin,
         `/api/t/bravo/apps/${referencePluginId}/deactivate`,
         { expectedRevision: 2, idempotencyKey: 'pooled-bravo-deactivate-0001' },
       ), 200);
-      expect(bravoInactive).toMatchObject({ status: 'inactive', active: false, revision: 3 });
+      expect(bravoInactive).toMatchObject({ status: 'revoked', active: false, revision: 3 });
       await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
       await expectStatus(
         await admin.request.get(`/api/t/alpha/apps/${referencePluginId}`),
@@ -562,6 +700,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       expect(alphaApplicationAudit.events.map((event: JsonObject) => event.eventType)).toEqual([
         'tenant_activation_approved',
         'tenant_activation_requested',
+        'tenant_eligibility_updated',
       ]);
       expect(JSON.stringify(alphaApplicationAudit)).not.toContain(tenants.bravo.id);
 

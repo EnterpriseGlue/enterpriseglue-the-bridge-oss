@@ -300,6 +300,8 @@ const {
   pluginTenantApplicationListV1Schema,
   pluginTenantApplicationMutationRequestV1Schema,
   pluginTenantApplicationV1Schema,
+  pluginTenantEligibilityApplyRequestV1Schema,
+  pluginTenantEligibilityProjectionV1Schema,
   pluginTenantEnablementRequestV1Schema,
   pluginTenantEnablementV1Schema,
 } = await import('@enterpriseglue/plugin-sdk/control');
@@ -2647,6 +2649,17 @@ registry.registerPath({
   request: { params: PluginTenantEnablementPathSchema },
   responses: { 200: { description: 'Tenant-scoped application audit', content: { 'application/json': { schema: pluginTenantApplicationAuditListV1Schema } } } },
 });
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/eligibility',
+  summary: 'Read the safe effective eligibility projection for one tenant application',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}/eligibility'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: {
+    200: { description: 'Tenant-safe eligibility state without commercial or signature material', content: { 'application/json': { schema: pluginTenantEligibilityProjectionV1Schema } } },
+    404: { description: 'Eligibility is unavailable' },
+  },
+});
 for (const action of ['activate', 'deactivate'] as const) {
   registry.registerPath({
     method: 'post',
@@ -2801,6 +2814,21 @@ registry.registerPath({
     403: { description: 'Break-glass recovery is disabled' },
     409: { description: 'Idempotency or placement epoch conflict' },
     503: { description: 'The independently mounted recovery reference is unavailable' },
+  },
+});
+registry.registerPath({
+  method: 'put', path: '/api/workloads/tenants/{tenantId}/apps/{pluginId}/eligibility',
+  summary: 'Apply a signed tenant application eligibility projection',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'PUT', '/api/workloads/tenants/{tenantId}/apps/{pluginId}/eligibility'),
+  request: {
+    params: TenantIdPathSchema.extend(PluginIdPathSchema.shape),
+    body: { content: { 'application/json': { schema: pluginTenantEligibilityApplyRequestV1Schema } } },
+  },
+  responses: {
+    200: { description: 'Verified safe eligibility projection applied idempotently', content: { 'application/json': { schema: pluginTenantEligibilityProjectionV1Schema } } },
+    400: { description: 'Projection or signature is invalid' },
+    409: { description: 'Projection scope, revision, or eligibility state conflicts' },
+    503: { description: 'Eligibility verification is not configured' },
   },
 });
 registry.registerPath({

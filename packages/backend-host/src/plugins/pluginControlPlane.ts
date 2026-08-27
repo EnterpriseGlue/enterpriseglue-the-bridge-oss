@@ -11,6 +11,7 @@ import {
   pluginTenantApplicationAuditListV1Schema,
   pluginTenantApplicationListV1Schema,
   pluginTenantApplicationV1Schema,
+  pluginTenantEligibilityProjectionV1Schema,
   pluginTenantEnablementV1Schema,
   type PluginId,
   type PluginDeploymentExecutionObservationV1,
@@ -26,7 +27,15 @@ import {
   type PluginTenantApplicationListV1,
   type PluginTenantApplicationV1,
   type PluginTenantEnablementV1,
+  type PluginTenantEligibilityClaimsV1,
+  type PluginTenantEligibilityProjectionV1,
+  type PluginTenantEligibilityStateV1,
 } from '@enterpriseglue/plugin-sdk';
+
+import {
+  PluginTenantEligibilityVerificationErrorV1,
+  type PluginTenantEligibilityVerifierV1,
+} from './pluginTenantEligibility.js';
 
 import type {
   PluginControlSourceRecordV1,
@@ -42,7 +51,9 @@ export type PluginControlErrorCodeV1 =
   | 'tenant_enablement_not_supported'
   | 'activation_request_not_pending'
   | 'activation_request_not_required'
-  | 'activation_approval_required';
+  | 'activation_approval_required'
+  | 'tenant_eligibility_inactive'
+  | 'tenant_eligibility_not_supported';
 
 export class PluginControlErrorV1 extends Error {
   constructor(
@@ -94,6 +105,14 @@ export interface PluginEmergencyControlMutationV1 {
   occurredAt: string;
 }
 
+export interface PluginTenantEligibilityMutationV1 {
+  claims: PluginTenantEligibilityClaimsV1;
+  signatureSha256: string;
+  actorRef: string;
+  correlationId: string;
+  occurredAt: string;
+}
+
 export interface PluginControlStoreV1 {
   reconcile(
     snapshot: PluginControlSourceSnapshotV1,
@@ -114,14 +133,29 @@ export interface PluginControlStoreV1 {
     pluginId: PluginId,
     tenantRef: string,
   ): Promise<PluginTenantEnablementV1 | undefined>;
+  applyTenantEligibility(
+    input: PluginTenantEligibilityMutationV1,
+  ): Promise<PluginTenantEligibilityProjectionV1>;
+  getTenantEligibility(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<PluginTenantEligibilityProjectionV1 | undefined>;
+  isTenantEligible(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<boolean>;
   listTenantApplications(
     tenantRef: string,
     tenantSlug: string,
+    now: string,
   ): Promise<PluginTenantApplicationV1[]>;
   getTenantApplication(
     pluginId: PluginId,
     tenantRef: string,
     tenantSlug: string,
+    now: string,
   ): Promise<PluginTenantApplicationV1 | undefined>;
   mutateTenantActivationRequest(
     input: PluginTenantApplicationMutationV1,
@@ -146,6 +180,8 @@ interface MemoryInstallation {
   installerRevision: number;
   installerEnabled: boolean;
   enablementScope: 'deployment' | 'tenant';
+  entitlementProvider: 'none' | 'plugin';
+  entitlementFeature?: string;
   tenantConfiguration?: {
     relativePath: string;
     schemaSha256: string | null;
@@ -159,6 +195,11 @@ interface MemoryTenantEnablement {
   activationRequestState: 'none' | 'pending' | 'approved' | 'rejected';
   requestedAt: string | null;
   reviewedAt: string | null;
+}
+
+interface MemoryTenantEligibility {
+  claims: PluginTenantEligibilityClaimsV1;
+  signatureSha256: string;
 }
 
 interface MemoryOperation {
@@ -185,6 +226,10 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
   private readonly tenantEnablements = new Map<
     string,
     MemoryTenantEnablement
+  >();
+  private readonly tenantEligibilities = new Map<
+    string,
+    MemoryTenantEligibility
   >();
   private readonly operations = new Map<string, MemoryOperation>();
   private readonly operationById = new Map<string, PluginLifecycleOperationV1>();
@@ -266,6 +311,10 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
         installerRevision: snapshot.revision,
         installerEnabled: source.installerEnabled,
         enablementScope: source.enablementScope,
+        entitlementProvider: source.entitlementProvider ?? 'none',
+        ...(source.entitlementFeature
+          ? { entitlementFeature: source.entitlementFeature }
+          : {}),
         ...(source.tenantConfiguration
           ? { tenantConfiguration: structuredClone(source.tenantConfiguration) }
           : {}),
@@ -395,6 +444,16 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
     if (!installation.summary.enabled) {
       throw new PluginControlErrorV1(409, 'invalid_state');
     }
+    if (
+      input.enabled &&
+      !(await this.isTenantEligible(
+        input.pluginId,
+        input.tenantRef,
+        input.occurredAt,
+      ))
+    ) {
+      throw new PluginControlErrorV1(409, 'tenant_eligibility_inactive');
+    }
     const key = tenantKey(input.pluginId, input.tenantRef);
     const existing = this.tenantEnablements.get(key) ?? {
       enabled: false,
@@ -464,9 +523,73 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
     });
   }
 
+  async applyTenantEligibility(
+    input: PluginTenantEligibilityMutationV1,
+  ): Promise<PluginTenantEligibilityProjectionV1> {
+    const installation = this.installations.get(input.claims.pluginId);
+    if (!installation) {
+      throw new PluginControlErrorV1(404, 'plugin_not_found');
+    }
+    if (installation.entitlementProvider !== 'plugin') {
+      throw new PluginControlErrorV1(409, 'tenant_eligibility_not_supported');
+    }
+    const key = tenantKey(input.claims.pluginId, input.claims.tenantRef);
+    const current = this.tenantEligibilities.get(key);
+    if (current && current.claims.revision === input.claims.revision) {
+      if (current.signatureSha256 !== input.signatureSha256) {
+        throw new PluginControlErrorV1(409, 'revision_conflict');
+      }
+      return eligibilityProjection(current.claims, input.occurredAt);
+    }
+    if (current && current.claims.revision > input.claims.revision) {
+      throw new PluginControlErrorV1(409, 'revision_conflict');
+    }
+    this.tenantEligibilities.set(key, {
+      claims: structuredClone(input.claims),
+      signatureSha256: input.signatureSha256,
+    });
+    this.appendAudit({
+      eventType: 'tenant_eligibility_updated',
+      pluginId: input.claims.pluginId,
+      tenantScoped: true,
+      actorRef: input.actorRef,
+      correlationId: input.correlationId,
+      fromState: current?.claims.state ?? null,
+      toState: input.claims.state,
+      reasonCode: 'none',
+      occurredAt: input.occurredAt,
+      tenantRef: input.claims.tenantRef,
+    });
+    return eligibilityProjection(input.claims, input.occurredAt);
+  }
+
+  async getTenantEligibility(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<PluginTenantEligibilityProjectionV1 | undefined> {
+    const record = this.tenantEligibilities.get(tenantKey(pluginId, tenantRef));
+    return record ? eligibilityProjection(record.claims, now) : undefined;
+  }
+
+  async isTenantEligible(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<boolean> {
+    const installation = this.installations.get(pluginId);
+    if (!installation) return false;
+    if (installation.entitlementProvider === 'none') return true;
+    const record = this.tenantEligibilities.get(tenantKey(pluginId, tenantRef));
+    return Boolean(
+      record && eligibilityStateAt(record.claims, now).permitted,
+    );
+  }
+
   async listTenantApplications(
     tenantRef: string,
     tenantSlug: string,
+    now: string,
   ): Promise<PluginTenantApplicationV1[]> {
     return [...this.installations.entries()]
       .filter(([, installation]) => installation.enablementScope === 'tenant')
@@ -477,6 +600,11 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
           installation,
           this.tenantEnablements.get(tenantKey(pluginId, tenantRef)),
           tenantSlug,
+          tenantApplicationEligibility(
+            installation,
+            this.tenantEligibilities.get(tenantKey(pluginId, tenantRef))?.claims,
+            now,
+          ),
         ),
       );
   }
@@ -485,6 +613,7 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
     pluginId: PluginId,
     tenantRef: string,
     tenantSlug: string,
+    now: string,
   ): Promise<PluginTenantApplicationV1 | undefined> {
     const installation = this.installations.get(pluginId);
     if (!installation || installation.enablementScope !== 'tenant') {
@@ -495,6 +624,11 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
       installation,
       this.tenantEnablements.get(tenantKey(pluginId, tenantRef)),
       tenantSlug,
+      tenantApplicationEligibility(
+        installation,
+        this.tenantEligibilities.get(tenantKey(pluginId, tenantRef))?.claims,
+        now,
+      ),
     );
   }
 
@@ -516,6 +650,16 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
     }
     if (!installation.summary.enabled) {
       throw new PluginControlErrorV1(409, 'invalid_state');
+    }
+    if (
+      input.operation !== 'reject' &&
+      !(await this.isTenantEligible(
+        input.pluginId,
+        input.tenantRef,
+        input.occurredAt,
+      ))
+    ) {
+      throw new PluginControlErrorV1(409, 'tenant_eligibility_inactive');
     }
     const key = tenantKey(input.pluginId, input.tenantRef);
     const current = this.tenantEnablements.get(key) ?? {
@@ -555,6 +699,11 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
       installation,
       next,
       input.tenantSlug,
+      tenantApplicationEligibility(
+        installation,
+        this.tenantEligibilities.get(key)?.claims,
+        input.occurredAt,
+      ),
     );
     this.tenantApplicationOperations.set(input.idempotencyKeyHash, {
       requestHash: input.requestHash,
@@ -571,7 +720,15 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
       tenantScoped: true,
       actorRef: input.actorRef,
       correlationId: input.correlationId,
-      fromState: tenantApplicationStatus(installation.summary, current),
+      fromState: tenantApplicationStatus(
+        installation.summary,
+        current,
+        tenantApplicationEligibility(
+          installation,
+          this.tenantEligibilities.get(key)?.claims,
+          input.occurredAt,
+        ),
+      ),
       toState: application.status,
       reasonCode: 'none',
       occurredAt: input.occurredAt,
@@ -716,6 +873,7 @@ export interface PluginControlSourceV1 {
 export interface PluginControlPlaneOptionsV1 {
   defaultTenantRef: string;
   tenantActivationPolicy?: PluginTenantActivationPolicyV1;
+  tenantEligibilityVerifier?: PluginTenantEligibilityVerifierV1;
   now?: () => Date;
 }
 
@@ -723,6 +881,7 @@ export class PluginControlPlaneV1 {
   private readonly now: () => Date;
   private readonly defaultTenantRef: string;
   private readonly tenantActivationPolicy: PluginTenantActivationPolicyV1;
+  private readonly tenantEligibilityVerifier?: PluginTenantEligibilityVerifierV1;
 
   constructor(
     private readonly source: PluginControlSourceV1,
@@ -731,6 +890,7 @@ export class PluginControlPlaneV1 {
   ) {
     this.defaultTenantRef = options.defaultTenantRef;
     this.tenantActivationPolicy = options.tenantActivationPolicy ?? 'direct';
+    this.tenantEligibilityVerifier = options.tenantEligibilityVerifier;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -848,6 +1008,7 @@ export class PluginControlPlaneV1 {
       applications: await this.store.listTenantApplications(
         tenantRef,
         tenantSlug,
+        this.now().toISOString(),
       ),
     });
   }
@@ -862,6 +1023,7 @@ export class PluginControlPlaneV1 {
       pluginId,
       tenantRef,
       tenantSlug,
+      this.now().toISOString(),
     );
     if (!application) throw new PluginControlErrorV1(404, 'plugin_not_found');
     return pluginTenantApplicationV1Schema.parse(application);
@@ -939,6 +1101,66 @@ export class PluginControlPlaneV1 {
       apiVersion: 'tenant-application-audit.plugin.enterpriseglue.io/v1',
       events: await this.store.listTenantApplicationAudit(pluginId, tenantRef),
     });
+  }
+
+  async applyTenantEligibility(input: {
+    pluginId: PluginId;
+    tenantRef: string;
+    signedProjection: string;
+    actorRef: string;
+    correlationId: string;
+  }): Promise<PluginTenantEligibilityProjectionV1> {
+    const snapshot = await this.synchronize();
+    const source = snapshot.records.find(
+      (record) => record.pluginId === input.pluginId,
+    );
+    if (!source) throw new PluginControlErrorV1(404, 'plugin_not_found');
+    if ((source.entitlementProvider ?? 'none') !== 'plugin') {
+      throw new PluginControlErrorV1(409, 'tenant_eligibility_not_supported');
+    }
+    if (!this.tenantEligibilityVerifier) {
+      throw new PluginTenantEligibilityVerificationErrorV1(
+        503,
+        'eligibility_verifier_unavailable',
+      );
+    }
+    const now = this.now();
+    const verified = this.tenantEligibilityVerifier.verify({
+      signedProjection: input.signedProjection,
+      tenantRef: input.tenantRef,
+      pluginId: input.pluginId,
+      pluginVersion: source.version,
+      releaseDigest: source.bundleDigest,
+      now,
+    });
+    return pluginTenantEligibilityProjectionV1Schema.parse(
+      await this.store.applyTenantEligibility({
+        claims: verified.claims,
+        signatureSha256: verified.signatureSha256,
+        actorRef: input.actorRef,
+        correlationId: input.correlationId,
+        occurredAt: now.toISOString(),
+      }),
+    );
+  }
+
+  async getTenantEligibility(
+    pluginId: PluginId,
+    tenantRef: string,
+  ): Promise<PluginTenantEligibilityProjectionV1> {
+    const snapshot = await this.synchronize();
+    const source = snapshot.records.find((record) => record.pluginId === pluginId);
+    if (!source) throw new PluginControlErrorV1(404, 'plugin_not_found');
+    if ((source.entitlementProvider ?? 'none') !== 'plugin') {
+      throw new PluginControlErrorV1(409, 'tenant_eligibility_not_supported');
+    }
+    const projection = await this.store.getTenantEligibility(
+      pluginId,
+      tenantRef,
+      this.now().toISOString(),
+    );
+    if (!projection) throw new PluginControlErrorV1(404, 'plugin_not_found');
+    return pluginTenantEligibilityProjectionV1Schema.parse(projection);
   }
 
   private async mutateTenantActivationRequest(input: {
@@ -1038,11 +1260,18 @@ export class PluginControlPlaneV1 {
     ) {
       return false;
     }
+    const effectiveTenantRef = tenantRef ?? this.defaultTenantRef;
+    if (
+      !(await this.store.isTenantEligible(
+        pluginId,
+        effectiveTenantRef,
+        this.now().toISOString(),
+      ))
+    ) {
+      return false;
+    }
     if (source.enablementScope === 'deployment') return true;
-    return Boolean(
-      tenantRef &&
-        (await this.store.isTenantEnabled(pluginId, tenantRef)),
-    );
+    return this.store.isTenantEnabled(pluginId, effectiveTenantRef);
   }
 
   async enabledPluginIds(tenantRef: string): Promise<Set<PluginId>> {
@@ -1096,6 +1325,15 @@ export class PluginControlPlaneV1 {
     ) {
       return false;
     }
+    if (
+      !(await this.store.isTenantEligible(
+        source.pluginId,
+        tenantRef,
+        this.now().toISOString(),
+      ))
+    ) {
+      return false;
+    }
     return source.enablementScope === 'deployment'
       ? true
       : this.store.isTenantEnabled(source.pluginId, tenantRef);
@@ -1119,13 +1357,14 @@ function tenantKey(pluginId: PluginId, tenantRef: string): string {
 function tenantApplicationStatus(
   summary: PluginSafeSummaryV1,
   tenant?: MemoryTenantEnablement,
+  eligibility: PluginTenantEligibilityStateV1 = summary.entitled,
 ): PluginTenantApplicationV1['status'] {
-  if (summary.entitled === 'revoked') return 'revoked';
-  if (!summary.compatible || ['expired', 'unavailable'].includes(summary.entitled)) {
+  if (eligibility === 'revoked') return 'revoked';
+  if (!summary.compatible || ['expired', 'unavailable'].includes(eligibility)) {
     return 'blocked';
   }
   if (!summary.enabled || !['enabled', 'degraded'].includes(summary.state)) {
-    return summary.entitled === 'active' || summary.entitled === 'grace'
+    return ['trial', 'active', 'grace'].includes(eligibility)
       ? 'entitled'
       : 'install-pending';
   }
@@ -1139,6 +1378,7 @@ function memoryTenantApplication(
   installation: MemoryInstallation,
   tenant: MemoryTenantEnablement | undefined,
   tenantSlug: string,
+  eligibility: PluginTenantEligibilityStateV1,
 ): PluginTenantApplicationV1 {
   const configuration = installation.tenantConfiguration;
   return pluginTenantApplicationV1Schema.parse({
@@ -1147,11 +1387,11 @@ function memoryTenantApplication(
     version: installation.summary.version,
     displayName: installation.summary.displayName,
     publisher: installation.publisher,
-    status: tenantApplicationStatus(installation.summary, tenant),
+    status: tenantApplicationStatus(installation.summary, tenant, eligibility),
     active: tenant?.enabled ?? false,
     compatible: installation.summary.compatible,
     healthy: installation.summary.healthy,
-    entitled: installation.summary.entitled,
+    entitled: eligibility,
     reasonCode: installation.summary.reasonCode,
     revision: tenant?.revision ?? 0,
     activationRequest: {
@@ -1167,6 +1407,60 @@ function memoryTenantApplication(
         : null,
       owner: 'plugin',
     },
+  });
+}
+
+function tenantApplicationEligibility(
+  installation: MemoryInstallation,
+  claims: PluginTenantEligibilityClaimsV1 | undefined,
+  now: string,
+): PluginTenantEligibilityStateV1 {
+  if (installation.entitlementProvider === 'none') return 'not_required';
+  return claims ? eligibilityStateAt(claims, now).state : 'unavailable';
+}
+
+export function eligibilityStateAt(
+  claims: PluginTenantEligibilityClaimsV1,
+  now: string,
+): { state: PluginTenantEligibilityStateV1; permitted: boolean } {
+  const timestamp = Date.parse(now);
+  const effectiveFrom = claims.effectiveFrom
+    ? Date.parse(claims.effectiveFrom)
+    : null;
+  const effectiveUntil = claims.effectiveUntil
+    ? Date.parse(claims.effectiveUntil)
+    : null;
+  let state = claims.state;
+  if (
+    claims.exp * 1_000 <= timestamp ||
+    (effectiveFrom !== null && effectiveFrom > timestamp)
+  ) {
+    state = 'unavailable';
+  } else if (effectiveUntil !== null && effectiveUntil <= timestamp) {
+    state = 'expired';
+  }
+  return {
+    state,
+    permitted: ['not_required', 'trial', 'active', 'grace'].includes(state),
+  };
+}
+
+export function eligibilityProjection(
+  claims: PluginTenantEligibilityClaimsV1,
+  now: string,
+): PluginTenantEligibilityProjectionV1 {
+  return pluginTenantEligibilityProjectionV1Schema.parse({
+    apiVersion: 'tenant-eligibility-projection.plugin.enterpriseglue.io/v1',
+    pluginId: claims.pluginId,
+    pluginVersion: claims.pluginVersion,
+    state: eligibilityStateAt(claims, now).state,
+    effectiveFrom: claims.effectiveFrom,
+    effectiveUntil: claims.effectiveUntil,
+    limitsHash: claims.limitsHash,
+    revision: claims.revision,
+    issuer: claims.iss,
+    expiresAt: new Date(claims.exp * 1_000).toISOString(),
+    projectionRef: claims.projectionRef,
   });
 }
 
@@ -1186,6 +1480,8 @@ function sourceFingerprint(source: PluginControlSourceRecordV1): string {
       sourceRecordHash: source.sourceRecordHash,
       installerEnabled: source.installerEnabled,
       enablementScope: source.enablementScope,
+      entitlementProvider: source.entitlementProvider ?? 'none',
+      entitlementFeature: source.entitlementFeature ?? null,
       tenantConfiguration: source.tenantConfiguration ?? null,
       grantedPermissions: [...source.grantedPermissions].sort(),
     }),

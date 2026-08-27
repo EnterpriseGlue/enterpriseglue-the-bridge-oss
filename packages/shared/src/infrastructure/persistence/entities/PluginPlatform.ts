@@ -110,6 +110,12 @@ export class PluginInstallation extends AppBaseEntity {
   @Column({ name: 'entitlement_state', type: 'text', default: 'not_required' })
   entitlementState!: string;
 
+  @Column({ name: 'entitlement_provider', type: 'text', default: 'none' })
+  entitlementProvider!: string;
+
+  @Column({ name: 'entitlement_feature', type: 'text', nullable: true })
+  entitlementFeature!: string | null;
+
   @Column({ type: 'bigint', default: 0 })
   revision!: number;
 
@@ -183,6 +189,62 @@ export class PluginTenantEnablement extends AppBaseEntity {
 
   @Column({ type: 'bigint', default: 0 })
   revision!: number;
+
+  @Column({ name: 'created_at', type: 'bigint' })
+  createdAt!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}
+
+@Index('idx_plugin_tenant_eligibility_identity', ['pluginId', 'tenantRef'], {
+  unique: true,
+})
+@Index('idx_plugin_tenant_eligibility_expiry', ['expiresAt'])
+@Index('idx_plugin_tenant_eligibility_state', ['state', 'effectiveUntil'])
+@Entity({ name: 'plugin_tenant_eligibilities', schema: 'main' })
+export class PluginTenantEligibility extends AppBaseEntity {
+  @Column({ name: 'plugin_id', type: 'text' })
+  pluginId!: string;
+
+  @Column({ name: 'tenant_ref', type: 'text' })
+  tenantRef!: string;
+
+  @Column({ name: 'plugin_version', type: 'text' })
+  pluginVersion!: string;
+
+  @Column({ name: 'release_digest', type: 'text' })
+  releaseDigest!: string;
+
+  @Column({ type: 'text' })
+  state!: string;
+
+  @Column({ name: 'effective_from', type: 'bigint', nullable: true })
+  effectiveFrom!: number | null;
+
+  @Column({ name: 'effective_until', type: 'bigint', nullable: true })
+  effectiveUntil!: number | null;
+
+  @Column({ name: 'limits_hash', type: 'text' })
+  limitsHash!: string;
+
+  @Column({ name: 'projection_revision', type: 'bigint' })
+  projectionRevision!: number;
+
+  @Column({ type: 'text' })
+  issuer!: string;
+
+  @Column({ name: 'expires_at', type: 'bigint' })
+  expiresAt!: number;
+
+  @Column({ name: 'projection_ref', type: 'text' })
+  projectionRef!: string;
+
+  @Column({ name: 'projection_id', type: 'text' })
+  projectionId!: string;
+
+  @Column({ name: 'signature_sha256', type: 'text' })
+  signatureSha256!: string;
 
   @Column({ name: 'created_at', type: 'bigint' })
   createdAt!: number;
@@ -983,6 +1045,7 @@ export const pluginPlatformEntities = [
   PluginInstallation,
   PluginPermissionGrant,
   PluginTenantEnablement,
+  PluginTenantEligibility,
   PluginTenantApplicationOperation,
   PluginLifecycleOperation,
   PluginPlatformAudit,

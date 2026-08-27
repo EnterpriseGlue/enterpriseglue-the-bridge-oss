@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getPluginTenantEligibilityClaimsV1JsonSchema,
+  getPluginTenantEligibilityProjectionV1JsonSchema,
   pluginDeploymentExecutionObservationV1Schema,
   pluginDisableRequestV1Schema,
   pluginEnableRequestV1Schema,
@@ -14,6 +16,9 @@ import {
   pluginPlatformEmergencyStateV1Schema,
   pluginTenantApplicationDecisionRequestV1Schema,
   pluginTenantApplicationListV1Schema,
+  pluginTenantEligibilityApplyRequestV1Schema,
+  pluginTenantEligibilityClaimsV1Schema,
+  pluginTenantEligibilityProjectionV1Schema,
   pluginSafeSummaryV1Schema,
   pluginStageRequestV1Schema,
   pluginUninstallRequestV1Schema,
@@ -209,6 +214,64 @@ describe('plugin control contracts', () => {
       idempotencyKey: 'activation-approve-0001',
       tenantRef: 'attacker-selected-tenant',
     }).success).toBe(false);
+  });
+
+  it('separates signed eligibility claims from the tenant-safe projection', () => {
+    const claims = {
+      schemaVersion: 'tenant-eligibility.plugin.enterpriseglue.io/v1',
+      iss: 'https://control.enterpriseglue.test/eligibility',
+      aud: 'shard-eu-1',
+      jti: 'eligibility-alpha-ion-7',
+      tenantRef: 'tenant-alpha',
+      pluginId: 'io.enterpriseglue.ion-support',
+      pluginVersion: '1.2.3',
+      release: `registry.example/ion-support@sha256:${'a'.repeat(64)}`,
+      state: 'grace',
+      effectiveFrom: '2026-08-28T00:00:00.000Z',
+      effectiveUntil: '2026-09-28T00:00:00.000Z',
+      limitsHash: 'b'.repeat(64),
+      revision: 7,
+      projectionRef: 'eligibility-alpha-ion-7',
+      iat: 1_787_875_200,
+      exp: 1_788_480_000,
+    } as const;
+    expect(pluginTenantEligibilityClaimsV1Schema.safeParse(claims).success).toBe(true);
+    expect(pluginTenantEligibilityApplyRequestV1Schema.safeParse({
+      signedProjection: `${'h'.repeat(16)}.${'p'.repeat(16)}.${'s'.repeat(16)}`,
+    }).success).toBe(true);
+
+    const safe = {
+      apiVersion: 'tenant-eligibility-projection.plugin.enterpriseglue.io/v1',
+      pluginId: claims.pluginId,
+      pluginVersion: claims.pluginVersion,
+      state: claims.state,
+      effectiveFrom: claims.effectiveFrom,
+      effectiveUntil: claims.effectiveUntil,
+      limitsHash: claims.limitsHash,
+      revision: claims.revision,
+      issuer: claims.iss,
+      expiresAt: '2026-09-04T00:00:00.000Z',
+      projectionRef: claims.projectionRef,
+    };
+    expect(pluginTenantEligibilityProjectionV1Schema.safeParse(safe).success).toBe(true);
+    expect(pluginTenantEligibilityProjectionV1Schema.safeParse({
+      ...safe,
+      tenantRef: claims.tenantRef,
+      signedProjection: 'must-not-be-exposed',
+      price: 99,
+    }).success).toBe(false);
+    expect(pluginTenantEligibilityClaimsV1Schema.safeParse({
+      ...claims,
+      effectiveUntil: claims.effectiveFrom,
+    }).success).toBe(false);
+    expect(getPluginTenantEligibilityClaimsV1JsonSchema()).toMatchObject({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      additionalProperties: false,
+    });
+    expect(getPluginTenantEligibilityProjectionV1JsonSchema()).toMatchObject({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      additionalProperties: false,
+    });
   });
 
   it('keeps the platform emergency control strict and revision protected', () => {

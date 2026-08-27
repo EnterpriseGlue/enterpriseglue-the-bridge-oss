@@ -353,7 +353,11 @@ organization-name fallback.
 | `EG_TENANT_PLACEMENT_V2_AUDIENCE` | unset | Exact shard and receipt audience. |
 | `EG_TENANT_PLACEMENT_V2_SHARD_ID` | unset | Canonical shard identity. |
 | `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
-| `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, and tenant secret broker settings are complete. |
+| `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, tenant secret broker, and signed tenant application eligibility settings are complete. |
+| `EG_TENANT_APP_ELIGIBILITY_REQUIRED` | `false` | Require a complete signed tenant application eligibility verifier; cloud-required mode requires `true`. |
+| `EG_TENANT_APP_ELIGIBILITY_JWKS_JSON` | unset | Public P-256 ES256 keys trusted for tenant/plugin eligibility projections. |
+| `EG_TENANT_APP_ELIGIBILITY_ISSUER` | unset | Exact trusted eligibility issuer. |
+| `EG_TENANT_APP_ELIGIBILITY_AUDIENCE` | unset | Exact shard audience for eligibility projections. |
 | `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY` | unset | Shard-only PEM P-256 receipt signing key. |
 | `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID` | unset | Receipt signing key identifier. |
 | `EG_TENANT_WORKLOAD_RECEIPT_ISSUER` | unset | Stable receipt issuer. |

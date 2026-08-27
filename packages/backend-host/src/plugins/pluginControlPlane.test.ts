@@ -55,6 +55,107 @@ function fixture(source = new MutableSource()) {
 }
 
 describe('PluginControlPlaneV1', () => {
+  it('enforces distinct signed eligibility for two tenants and rechecks expiry', async () => {
+    let clock = new Date('2026-08-28T12:00:00.000Z');
+    const source = new MutableSource();
+    source.snapshot.records = [sourceRecord({
+      entitlementProvider: 'plugin',
+      entitlementFeature: 'premium_reference',
+      entitled: 'unavailable',
+    })];
+    const store = new MemoryPluginControlStoreV1();
+    const verifier = {
+      verify(input: { signedProjection: string; tenantRef: string }) {
+        const state: 'active' | 'revoked' =
+          input.signedProjection === 'alpha-active' ? 'active' : 'revoked';
+        return {
+          claims: {
+            schemaVersion: 'tenant-eligibility.plugin.enterpriseglue.io/v1' as const,
+            iss: 'https://control.enterpriseglue.example',
+            aud: 'enterpriseglue-shard',
+            jti: `projection-${input.tenantRef}`,
+            tenantRef: input.tenantRef,
+            pluginId,
+            pluginVersion: '1.0.0',
+            release: `registry.example/reference@sha256:${'a'.repeat(64)}`,
+            state,
+            effectiveFrom: null,
+            effectiveUntil: '2026-08-28T13:00:00.000Z',
+            limitsHash: 'd'.repeat(64),
+            revision: 1,
+            projectionRef: `subscription-${input.tenantRef}`,
+            iat: Math.floor(Date.parse('2026-08-28T11:59:00.000Z') / 1_000),
+            exp: Math.floor(Date.parse('2026-08-28T14:00:00.000Z') / 1_000),
+          },
+          signatureSha256: input.signedProjection === 'alpha-active'
+            ? 'a'.repeat(64)
+            : 'b'.repeat(64),
+        };
+      },
+    };
+    const control = new PluginControlPlaneV1(source, store, {
+      defaultTenantRef: 'default-tenant-id',
+      tenantEligibilityVerifier: verifier,
+      now: () => clock,
+    });
+
+    await control.applyTenantEligibility({
+      pluginId,
+      tenantRef: 'tenant-alpha',
+      signedProjection: 'alpha-active',
+      actorRef: 'cloud-controller',
+      correlationId: 'eligibility-alpha-1',
+    });
+    await expect(control.applyTenantEligibility({
+      pluginId,
+      tenantRef: 'tenant-alpha',
+      signedProjection: 'bravo-revoked',
+      actorRef: 'cloud-controller',
+      correlationId: 'eligibility-alpha-conflict',
+    })).rejects.toMatchObject({ code: 'revision_conflict' });
+    await control.applyTenantEligibility({
+      pluginId,
+      tenantRef: 'tenant-bravo',
+      signedProjection: 'bravo-revoked',
+      actorRef: 'cloud-controller',
+      correlationId: 'eligibility-bravo-1',
+    });
+    await control.setTenantEnabled({
+      pluginId,
+      tenantRef: 'tenant-alpha',
+      enabled: true,
+      expectedRevision: 0,
+      idempotencyKey: 'alpha-activation-idempotency',
+      actorRef: 'alpha-admin',
+      correlationId: 'alpha-activation-1',
+    });
+
+    await expect(control.isExecutionAllowed(pluginId, 'tenant-alpha')).resolves.toBe(true);
+    await expect(control.isExecutionAllowed(pluginId, 'tenant-bravo')).resolves.toBe(false);
+    await expect(control.setTenantEnabled({
+      pluginId,
+      tenantRef: 'tenant-bravo',
+      enabled: true,
+      expectedRevision: 0,
+      idempotencyKey: 'bravo-activation-idempotency',
+      actorRef: 'bravo-admin',
+      correlationId: 'bravo-activation-1',
+    })).rejects.toMatchObject({ code: 'tenant_eligibility_inactive' });
+    await expect(control.getTenantEligibility(pluginId, 'tenant-alpha')).resolves.toMatchObject({
+      state: 'active',
+      issuer: 'https://control.enterpriseglue.example',
+      revision: 1,
+    });
+
+    clock = new Date('2026-08-28T13:00:01.000Z');
+    await expect(control.isExecutionAllowed(pluginId, 'tenant-alpha')).resolves.toBe(false);
+    await expect(control.getTenantApplication(
+      pluginId,
+      'tenant-alpha',
+      'alpha',
+    )).resolves.toMatchObject({ status: 'blocked', entitled: 'expired' });
+  });
+
   it('reconciles only safe summaries and seeds the OSS default tenant', async () => {
     const { control } = fixture();
     await expect(control.list()).resolves.toEqual({

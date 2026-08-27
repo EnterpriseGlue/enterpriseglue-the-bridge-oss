@@ -11,14 +11,17 @@ import {
   pluginPlatformEmergencyRequestV1Schema,
   pluginTenantApplicationDecisionRequestV1Schema,
   pluginTenantApplicationMutationRequestV1Schema,
+  pluginTenantEligibilityApplyRequestV1Schema,
   pluginTenantEnablementRequestV1Schema,
   type PluginSafeReasonCodeV1,
   type PluginPlatformCapabilityCatalogV1,
 } from '@enterpriseglue/plugin-sdk';
+import { requireServiceAccountScope } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import { ServiceAccountScopes } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import type {
   Express,
   NextFunction,
@@ -37,6 +40,7 @@ import {
 } from './pluginEventDeliveryStore.js';
 import type { PluginDiagnosticMetricsRegistryV1 } from './pluginDiagnosticMetrics.js';
 import type { PluginEventMetricsRegistryV1 } from './pluginEventMetrics.js';
+import { PluginTenantEligibilityVerificationErrorV1 } from './pluginTenantEligibility.js';
 
 export interface PluginControlRouteOptionsV1 {
   /** Optional test or deployment override for every deployment read endpoint. */
@@ -49,6 +53,8 @@ export interface PluginControlRouteOptionsV1 {
   tenantManageMiddleware?: RequestHandler[];
   /** Optional test override for tenant activation-request endpoints. */
   tenantRequestMiddleware?: RequestHandler[];
+  /** Optional test or host-composition override for workload eligibility ingestion. */
+  eligibilityWorkloadMiddleware?: RequestHandler[];
   /** @deprecated Use deploymentReadMiddleware or deploymentManageMiddleware. */
   deploymentAdminMiddleware?: RequestHandler[];
   /** @deprecated Use tenantReadMiddleware or tenantManageMiddleware. */
@@ -99,6 +105,10 @@ export function registerPluginControlRoutesV1(
       resolveTenantContext({ required: true }),
       requireAction('tenant.apps.request'),
     ];
+  const eligibilityWorkload = options.eligibilityWorkloadMiddleware ?? [
+    apiLimiter,
+    requireServiceAccountScope(ServiceAccountScopes.TENANT_LIFECYCLE),
+  ];
   const eventOperations =
     options.eventOperations ?? new DatabasePluginEventDeliveryStoreV1();
 
@@ -402,6 +412,36 @@ export function registerPluginControlRoutesV1(
       );
     }),
   );
+  app.get(
+    '/api/t/:tenantSlug/apps/:pluginId/eligibility',
+    ...tenantRead,
+    route(async (request, response) => {
+      noStore(response);
+      response.json(
+        await control.getTenantEligibility(
+          pluginIdFrom(request),
+          tenantRef(request),
+        ),
+      );
+    }),
+  );
+  app.put(
+    '/api/workloads/tenants/:tenantId/apps/:pluginId/eligibility',
+    ...eligibilityWorkload,
+    route(async (request, response) => {
+      const input = pluginTenantEligibilityApplyRequestV1Schema.parse(
+        request.body,
+      );
+      noStore(response);
+      response.json(await control.applyTenantEligibility({
+        pluginId: pluginIdFrom(request),
+        tenantRef: opaqueReferenceSchema.parse(request.params.tenantId),
+        signedProjection: input.signedProjection,
+        actorRef: workloadActorRef(request),
+        correlationId: correlationId(request),
+      }));
+    }),
+  );
   app.post(
     '/api/t/:tenantSlug/apps/:pluginId/activation-request',
     ...tenantRequest,
@@ -480,6 +520,11 @@ function route(
         response.status(error.status).json({ code: error.code });
         return;
       }
+      if (error instanceof PluginTenantEligibilityVerificationErrorV1) {
+        noStore(response);
+        response.status(error.status).json({ code: error.code });
+        return;
+      }
       if (
         error &&
         typeof error === 'object' &&
@@ -523,6 +568,16 @@ function actorRef(request: Request): string {
     throw new PluginControlErrorV1(404, 'plugin_not_found');
   }
   return request.user.userId;
+}
+
+function workloadActorRef(request: Request): string {
+  if (!request.serviceAccount?.id) {
+    throw new PluginTenantEligibilityVerificationErrorV1(
+      503,
+      'eligibility_verifier_unavailable',
+    );
+  }
+  return request.serviceAccount.id;
 }
 
 function tenantRef(request: Request): string {

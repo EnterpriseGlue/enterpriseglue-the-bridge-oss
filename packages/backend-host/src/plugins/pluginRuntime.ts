@@ -86,6 +86,10 @@ import {
   type PluginControlRouteOptionsV1,
 } from './pluginControlRoutes.js';
 import { DatabasePluginControlStoreV1 } from './pluginControlStore.js';
+import {
+  configuredPluginTenantEligibilityVerifierV1,
+  type PluginTenantEligibilityVerifierV1,
+} from './pluginTenantEligibility.js';
 import { PluginEventDispatcherV1 } from './pluginEventDispatcher.js';
 import { DatabasePluginEventDeliveryStoreV1 } from './pluginEventDeliveryStore.js';
 import { PluginEngineEventPollerV1 } from './pluginEngineEventPoller.js';
@@ -196,6 +200,9 @@ export interface PluginControlSourceRecordV1 {
   sourceRecordHash: string;
   installerEnabled: boolean;
   enablementScope: 'deployment' | 'tenant';
+  /** Added in host 0.11; omitted legacy snapshots are treated as provider=none. */
+  entitlementProvider?: 'none' | 'plugin';
+  entitlementFeature?: string;
   tenantConfiguration?: {
     relativePath: string;
     schemaSha256: string | null;
@@ -258,7 +265,7 @@ export interface PluginOperationAuthorizationInputV1 {
   actionId: string;
   subjectRef: string;
   tenantRef?: string;
-  resourceType: 'platform' | 'engine';
+  resourceType: 'platform' | 'engine' | 'tenant';
   resourceRef?: string;
 }
 
@@ -281,6 +288,8 @@ export interface PluginPlatformRouteOptionsV1 {
    * optional additional host policy for resource bindings.
    */
   operationAuthorizer?: PluginOperationAuthorizerV1;
+  /** Trusted verifier for signed tenant eligibility projections. */
+  tenantEligibilityVerifier?: PluginTenantEligibilityVerifierV1;
   hostBroker?: Partial<PluginHostBrokerRouteOptionsV1>;
   eventDispatcher?: PluginEventDispatcherV1;
   startEventWorker?: boolean;
@@ -305,6 +314,7 @@ export interface PluginPlatformRouteOptionsV1 {
     | 'tenantReadMiddleware'
     | 'tenantManageMiddleware'
     | 'tenantRequestMiddleware'
+    | 'eligibilityWorkloadMiddleware'
     | 'deploymentAdminMiddleware'
     | 'tenantAdminMiddleware'
   >;
@@ -980,6 +990,10 @@ export class PluginHostRuntimeV1 {
             ),
             installerEnabled: record.enabled,
             enablementScope: record.manifest.scope.enablement,
+            entitlementProvider: record.manifest.entitlement.provider,
+            ...(record.manifest.entitlement.provider === 'plugin'
+              ? { entitlementFeature: record.manifest.entitlement.feature }
+              : {}),
             ...(tenantConfiguration ? { tenantConfiguration } : {}),
             compatible,
             healthy:
@@ -1270,6 +1284,22 @@ async function handlePluginOperation(
     ))
   ) {
     response.status(404).json({ error: 'Plugin operation not available' });
+    return;
+  }
+  if (
+    record.manifest.scope.enablement === 'tenant' &&
+    (!request.tenant?.tenantId ||
+      !(await operationAuthorizer({
+        pluginId: record.pluginId,
+        operationId,
+        actionId: 'tenant.apps.use',
+        subjectRef: request.user!.userId,
+        tenantRef: request.tenant.tenantId,
+        resourceType: 'tenant',
+        resourceRef: request.tenant.tenantId,
+      })))
+  ) {
+    response.status(403).json({ error: 'Plugin operation is not authorized' });
     return;
   }
   const backend = record.manifest.deployment.backend;
@@ -1656,6 +1686,9 @@ export function registerPluginPlatformRoutes(
           {
             defaultTenantRef: DEFAULT_TENANT_ID,
             tenantActivationPolicy: configuredTenantActivationPolicy(),
+            tenantEligibilityVerifier:
+              options.tenantEligibilityVerifier ??
+              configuredPluginTenantEligibilityVerifierV1(),
           },
         ))
       : new PluginControlPlaneV1(
@@ -1664,6 +1697,9 @@ export function registerPluginPlatformRoutes(
           {
             defaultTenantRef: DEFAULT_TENANT_ID,
             tenantActivationPolicy: configuredTenantActivationPolicy(),
+            tenantEligibilityVerifier:
+              options.tenantEligibilityVerifier ??
+              configuredPluginTenantEligibilityVerifierV1(),
           },
         ));
   const gatewayAdmission =

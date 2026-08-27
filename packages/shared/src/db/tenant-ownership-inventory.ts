@@ -203,6 +203,7 @@ const mixedScopeRows: TenantPersistenceOwnershipV1[] = [
 
 const pluginTenantRows: TenantPersistenceOwnershipV1[] = [
   ['plugin_tenant_enablements', ['tenant_ref']],
+  ['plugin_tenant_eligibilities', ['tenant_ref']],
   ['plugin_tenant_application_operations', ['tenant_ref']],
   ['plugin_platform_audit', ['tenant_ref']],
   ['plugin_storage_entries', ['tenant_ref_key']],

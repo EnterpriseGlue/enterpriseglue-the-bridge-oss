@@ -47,6 +47,8 @@ import { AddProvisioningCredentialIdempotency1700000000113 as DbProvisioningCred
 import { AddProvisioningCredentialIdempotency1700000000113 as PersistenceProvisioningCredentialIdempotencyMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000113-add-provisioning-credential-idempotency.js';
 import { AddTenantApplicationMarketplace1700000000128 as DbTenantApplicationMarketplaceMigration } from '@enterpriseglue/shared/db/migrations/1700000000128-add-tenant-application-marketplace.js';
 import { AddTenantApplicationMarketplace1700000000128 as PersistenceTenantApplicationMarketplaceMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000128-add-tenant-application-marketplace.js';
+import { AddTenantPluginEligibility1700000000129 as DbTenantPluginEligibilityMigration } from '@enterpriseglue/shared/db/migrations/1700000000129-add-tenant-plugin-eligibility.js';
+import { AddTenantPluginEligibility1700000000129 as PersistenceTenantPluginEligibilityMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000129-add-tenant-plugin-eligibility.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
@@ -74,5 +76,6 @@ describe('persistence migration bridges', () => {
     expect(PersistenceFederatedSessionLineageMigration).toBe(DbFederatedSessionLineageMigration);
     expect(PersistenceProvisioningCredentialIdempotencyMigration).toBe(DbProvisioningCredentialIdempotencyMigration);
     expect(PersistenceTenantApplicationMarketplaceMigration).toBe(DbTenantApplicationMarketplaceMigration);
+    expect(PersistenceTenantPluginEligibilityMigration).toBe(DbTenantPluginEligibilityMigration);
   });
 });

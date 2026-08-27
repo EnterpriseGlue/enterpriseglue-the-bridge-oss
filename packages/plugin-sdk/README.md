@@ -9,8 +9,14 @@ published at
 for editors, catalogs, and installer preflight.
 The signed four-cell release-evidence contract also has a portable schema at
 `@enterpriseglue/plugin-sdk/schema/enterpriseglue-plugin-compatibility-matrix-v1.schema.json`.
+
 Its runtime parser remains authoritative for exact Cartesian-product, artifact-consistency, and
 timestamp checks that JSON Schema cannot fully express.
+
+Cloud eligibility issuers can validate the strict signed claims contract with
+`@enterpriseglue/plugin-sdk/schema/enterpriseglue-plugin-tenant-eligibility-claims-v1.schema.json`.
+Tenant-facing integrations can validate the deliberately smaller safe response with
+`@enterpriseglue/plugin-sdk/schema/enterpriseglue-plugin-tenant-eligibility-projection-v1.schema.json`.
 
 The package defines:
 

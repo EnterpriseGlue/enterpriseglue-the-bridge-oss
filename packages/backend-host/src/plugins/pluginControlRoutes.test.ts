@@ -133,6 +133,14 @@ const allowAlpha: RequestHandler = (request, _response, next) => {
   next();
 };
 
+const allowWorkload: RequestHandler = (request, _response, next) => {
+  request.serviceAccount = {
+    id: 'cloud-controller',
+    scopes: ['tenant:lifecycle'],
+  } as NonNullable<typeof request.serviceAccount>;
+  next();
+};
+
 describe('plugin control routes', () => {
   it('runs authorization before reading installer or lifecycle state', async () => {
     const test = fixture();
@@ -219,8 +227,80 @@ describe('plugin control routes', () => {
           { method: 'POST' },
         ),
       ).resolves.toMatchObject({ status: 422 });
+      await expect(
+        fetch(
+          `${baseUrl}/api/workloads/tenants/default-tenant-id/apps/${pluginId}/eligibility`,
+          { method: 'PUT' },
+        ),
+      ).resolves.toMatchObject({ status: 401 });
     });
     expect(test.sourceReads()).toBe(0);
+  });
+
+  it('keeps eligibility ingestion workload-only and returns only the safe projection', async () => {
+    const calls: unknown[] = [];
+    const projection = {
+      apiVersion: 'tenant-eligibility-projection.plugin.enterpriseglue.io/v1' as const,
+      pluginId,
+      pluginVersion: '1.0.0',
+      state: 'active' as const,
+      effectiveFrom: null,
+      effectiveUntil: '2026-08-29T01:00:00.000Z',
+      limitsHash: 'a'.repeat(64),
+      revision: 4,
+      issuer: 'https://control.enterpriseglue.example',
+      expiresAt: '2026-08-29T02:00:00.000Z',
+      projectionRef: 'projection-safe-ref',
+    };
+    const control = {
+      async applyTenantEligibility(input: unknown) {
+        calls.push(input);
+        return projection;
+      },
+      async getTenantEligibility() {
+        return projection;
+      },
+    } as unknown as PluginControlPlaneV1;
+    const app = express();
+    app.use(express.json());
+    registerPluginControlRoutesV1(app, control, {
+      deploymentAdminMiddleware: [deny],
+      tenantReadMiddleware: [allowAlpha],
+      tenantManageMiddleware: [deny],
+      tenantRequestMiddleware: [deny],
+      eligibilityWorkloadMiddleware: [allowWorkload],
+    });
+
+    await withServer(app, async (baseUrl) => {
+      const applied = await fetch(
+        `${baseUrl}/api/workloads/tenants/tenant-alpha/apps/${pluginId}/eligibility`,
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ signedProjection: 'signed.eligibility.projection-value' }),
+        },
+      );
+      expect(applied.status).toBe(200);
+      expect(applied.headers.get('cache-control')).toBe('no-store');
+      expect(await applied.json()).toEqual(projection);
+      expect(calls).toEqual([
+        expect.objectContaining({
+          pluginId,
+          tenantRef: 'tenant-alpha',
+          signedProjection: 'signed.eligibility.projection-value',
+          actorRef: 'cloud-controller',
+        }),
+      ]);
+
+      const read = await fetch(
+        `${baseUrl}/api/t/alpha/apps/${pluginId}/eligibility`,
+      );
+      expect(read.status).toBe(200);
+      const safe = await read.json();
+      expect(safe).toEqual(projection);
+      expect(JSON.stringify(safe)).not.toContain('signedProjection');
+      expect(JSON.stringify(safe)).not.toContain('tenant-alpha');
+    });
   });
 
   it('returns safe state, enforces optimistic mutation, and exposes operation status', async () => {

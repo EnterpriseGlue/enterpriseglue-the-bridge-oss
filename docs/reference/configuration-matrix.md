@@ -39,7 +39,13 @@ in `engine-tenant-mappings.json`. See
 | EG_TENANT_PLACEMENT_V2_AUDIENCE | Required for cloud-required pooled mode | unset | Exact shard assertion audience and workload receipt audience. |
 | EG_TENANT_PLACEMENT_V2_SHARD_ID | Required for cloud-required pooled mode | unset | Canonical shard identity; must match the durable tenant placement key. |
 | EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS | No | 5 | Clock tolerance for `iat`, `nbf`, and `exp`; maximum 60. |
-| EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2, signed workload receipts, forced RLS, and the tenant secret broker without changing the self-hosted default. |
+| EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2, signed workload receipts, forced RLS, the tenant secret broker, and signed tenant application eligibility without changing the self-hosted default. |
+| EG_TENANT_APP_ELIGIBILITY_REQUIRED | No | false | Set true for SaaS shards. Requires the complete tenant application eligibility issuer, audience, and JWKS configuration. |
+| EG_TENANT_APP_ELIGIBILITY_JWKS_JSON | Required when eligibility is required | unset | Public P-256 ES256 JWKS with unique `kid` values; overlapping keys support rotation. |
+| EG_TENANT_APP_ELIGIBILITY_ISSUER | Required when eligibility is required | unset | Exact trusted issuer for signed tenant/plugin eligibility projections. |
+| EG_TENANT_APP_ELIGIBILITY_AUDIENCE | Required when eligibility is required | unset | Exact shard audience for signed tenant/plugin eligibility projections. |
+| EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS | No | 60 | Projection clock tolerance from 0 to 300 seconds. |
+| EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS | No | 604800 | Maximum projection lifetime from 60 to 2592000 seconds. |
 | EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY | Required for cloud-required pooled mode | unset | PEM-encoded P-256 private key; may use escaped newlines. Never expose it through APIs or logs. |
 | EG_TENANT_WORKLOAD_RECEIPT_KEY_ID | Required for cloud-required pooled mode | unset | Public identifier for the workload receipt signing key. |
 | EG_TENANT_WORKLOAD_RECEIPT_ISSUER | Required for cloud-required pooled mode | unset | Stable shard receipt issuer verified by the control plane. |
