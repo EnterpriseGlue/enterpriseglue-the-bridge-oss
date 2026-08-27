@@ -117,9 +117,19 @@ async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
   return { issuer: discoveredIssuer, authorization_endpoint: authorizationEndpoint, token_endpoint: tokenEndpoint, jwks_uri: jwksUri, end_session_endpoint: endSessionEndpoint };
 }
 
-function resolveSecretReference(reference?: string): string | null {
+async function resolveSecretReference(
+  reference?: string,
+  context?: { tenantId?: string | null; correlationId?: string },
+): Promise<string | null> {
   if (!reference?.trim()) return null;
-  return secretResolver.resolveStored(reference.startsWith('ref:') ? reference : `ref:${reference}`);
+  const stored = reference.startsWith('ref:') ? reference : `ref:${reference}`;
+  if (!stored.includes('tenant-secret://')) return secretResolver.resolveStored(stored);
+  if (!context?.tenantId) throw new Error('OIDC tenant secret context is unavailable');
+  return secretResolver.resolveTenantStored(stored, {
+    tenantId: context.tenantId,
+    purpose: 'oidc.client_secret',
+    ...(context.correlationId ? { correlationId: context.correlationId } : {}),
+  });
 }
 
 export class GenericOidcService {
@@ -177,12 +187,16 @@ export class GenericOidcService {
     } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
-  async exchangeCode(rawConfiguration: Record<string, unknown>, input: { code: string; codeVerifier: string; nonce: string }): Promise<OidcIdentityClaims> {
+  async exchangeCode(
+    rawConfiguration: Record<string, unknown>,
+    input: { code: string; codeVerifier: string; nonce: string },
+    secretContext?: { tenantId?: string | null; correlationId?: string },
+  ): Promise<OidcIdentityClaims> {
     try {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);
       const body = new URLSearchParams({ grant_type: 'authorization_code', code: input.code, redirect_uri: provider.callbackUrl, client_id: provider.clientId, code_verifier: input.codeVerifier });
-      const clientSecret = resolveSecretReference(provider.clientSecretRef);
+      const clientSecret = await resolveSecretReference(provider.clientSecretRef, secretContext);
       if (clientSecret) body.set('client_secret', clientSecret);
       const response = await fetch(metadata.token_endpoint, {
         method: 'POST', redirect: 'error', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),

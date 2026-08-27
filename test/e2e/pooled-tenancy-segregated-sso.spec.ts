@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { Client } from 'pg';
@@ -11,6 +11,7 @@ const enabled = process.env.POOLED_TENANCY_E2E === 'true' && isLocalUrl(baseUrl)
 const adminEmail = process.env.POOLED_TENANCY_ADMIN_EMAIL || '';
 const adminPassword = process.env.POOLED_TENANCY_ADMIN_PASSWORD || '';
 const oidcIssuer = process.env.POOLED_TENANCY_OIDC_ISSUER_URL || '';
+const oidcClientSecret = process.env.POOLED_TENANCY_OIDC_CLIENT_SECRET || '';
 const oidcUsername = process.env.POOLED_TENANCY_OIDC_USERNAME || 'oidc-operator';
 const oidcPassword = process.env.POOLED_TENANCY_OIDC_PASSWORD || 'local-oidc-operator';
 const samlUsername = process.env.POOLED_TENANCY_SAML_USERNAME || 'saml-operator';
@@ -204,27 +205,30 @@ async function ldapLogin(browser: Browser, tenantSlug: string, providerId: strin
   return context;
 }
 
-async function prepareLdapSecrets(): Promise<void> {
+async function identityFixtureSecrets(): Promise<{
+  samlSigningCertificate: string;
+  ldapBindPassword: string;
+  ldapTlsTrustCertificate: string;
+}> {
   const secretDir = process.env.LOCAL_IDENTITY_SECRET_DIR || '';
   const caPath = process.env.EG_LDAP_TEST_CA_CERT_PATH || '';
   const bindPassword = process.env.EG_LDAP_TEST_ADMIN_PASSWORD || '';
   if (!secretDir || !caPath || !bindPassword || !ldapPassword) throw new Error('Disposable LDAP fixture inputs are missing');
-  await mkdir(secretDir, { recursive: true, mode: 0o755 });
-  await copyFile(caPath, `${secretDir}/pooled-openldap-ca.crt`);
-  await writeFile(`${secretDir}/pooled-openldap-bind-password`, bindPassword, { mode: 0o644 });
-  await chmod(`${secretDir}/pooled-openldap-ca.crt`, 0o644);
-  await chmod(`${secretDir}/pooled-openldap-bind-password`, 0o644);
-  await chmod(secretDir, 0o711);
+  return {
+    samlSigningCertificate: await readFile(`${secretDir}/keycloak-saml-signing.crt`, 'utf8'),
+    ldapBindPassword: bindPassword,
+    ldapTlsTrustCertificate: await readFile(caPath, 'utf8'),
+  };
 }
 
 test.describe('Native pooled tenancy with segregated SSO', () => {
-  test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !ldapPassword
+  test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !oidcClientSecret || !ldapPassword
     || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase,
     'Run through test:native-tenancy:pooled-e2e with the disposable identity fixtures.');
 
   test('isolates tenant providers and completes OIDC, SAML, and LDAP tenant sign-in @pooled-tenancy-live @segregated-sso-live', async ({ browser }) => {
     test.setTimeout(180_000);
-    await prepareLdapSecrets();
+    const fixtureSecrets = await identityFixtureSecrets();
     const adminContext = await newAppContext(browser);
     const admin = await adminContext.newPage();
     const userContexts: BrowserContext[] = [];
@@ -254,6 +258,31 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           placementKey: 'pooled-e2e',
         }), 201);
       }
+
+      const secretInputs = {
+        alpha: { purpose: 'oidc.client_secret', value: oidcClientSecret },
+        bravo: { purpose: 'saml.idp_signing_certificate', value: fixtureSecrets.samlSigningCertificate },
+        charlieBind: { purpose: 'ldap.bind_password', value: fixtureSecrets.ldapBindPassword },
+        charlieTrust: { purpose: 'ldap.tls_trust_certificate', value: fixtureSecrets.ldapTlsTrustCertificate },
+      } as const;
+      const provisionSecret = async (slug: string, purpose: string, value: string) => {
+        const secret = await expectStatus(await post(admin, `/api/t/${slug}/identity/provider-secrets`, { purpose, value }), 201);
+        expect(secret).toMatchObject({ purpose, previousRetired: false });
+        expect(secret.reference).toMatch(new RegExp(`^ref:tenant-secret://v1/${tenants[slug].id}/${purpose.replace('.', '\\.')}/`));
+        expect(JSON.stringify(secret)).not.toContain(value);
+        return secret.reference as string;
+      };
+      const secretReferences = {
+        alpha: await provisionSecret('alpha', secretInputs.alpha.purpose, secretInputs.alpha.value),
+        bravo: await provisionSecret('bravo', secretInputs.bravo.purpose, secretInputs.bravo.value),
+        charlieBind: await provisionSecret('charlie', secretInputs.charlieBind.purpose, secretInputs.charlieBind.value),
+        charlieTrust: await provisionSecret('charlie', secretInputs.charlieTrust.purpose, secretInputs.charlieTrust.value),
+      };
+      await expectStatus(await post(admin, '/api/t/bravo/identity/provider-secrets/retire', {
+        purpose: 'oidc.client_secret',
+        reference: secretReferences.alpha,
+        confirmation: 'RETIRE_IDENTITY_PROVIDER_SECRET',
+      }), 400);
 
       await admin.goto('/admin/tenants');
       await expect(admin.getByRole('heading', { name: 'Tenants', exact: true })).toBeVisible();
@@ -308,6 +337,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           configuration: {
             issuerUrl: oidcIssuer,
             clientId: 'enterpriseglue-local',
+            clientSecretRef: secretReferences.alpha,
             callbackUrl,
             scopes: ['openid', 'profile', 'email'],
             groupClaim: 'groups',
@@ -329,7 +359,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
             callbackUrl: samlCallbackUrl,
             ssoUrl: `${oidcIssuer}/protocol/saml`,
             metadataUrl: `${oidcIssuer}/protocol/saml/descriptor`,
-            signingCertificateRef: 'file:///etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt',
+            signingCertificateRef: secretReferences.bravo,
             signatureAlgorithm: 'sha256',
             nameIdAttribute: 'nameID',
             emailAttribute: 'email',
@@ -347,7 +377,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           configuration: {
             url: 'ldaps://openldap:636',
             bindDn: process.env.EG_LDAP_TEST_BIND_DN,
-            bindPasswordRef: 'file:///etc/enterpriseglue/local-identity-secrets/pooled-openldap-bind-password',
+            bindPasswordRef: secretReferences.charlieBind,
             userBaseDn: 'ou=people,dc=identity-mock,dc=test',
             userSearchFilter: '(&(mail={username})(employeeType=active))',
             userEnumerationFilter: '(&(objectClass=inetOrgPerson)(employeeType=active))',
@@ -356,7 +386,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
             groupIdAttribute: 'businessCategory',
             membershipMode: 'group_search',
             nestedGroups: true,
-            tlsTrustRef: 'file:///etc/enterpriseglue/local-identity-secrets/pooled-openldap-ca.crt',
+            tlsTrustRef: secretReferences.charlieTrust,
             allowVerifiedEmailLinking: true,
           },
           sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'ldap_directory', scheduled: false },
@@ -372,6 +402,19 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           providerSelectionMode: 'chooser',
         }), 200);
       }
+
+      const rotatedAlphaSecret = await expectStatus(await put(
+        admin,
+        '/api/t/alpha/identity/providers/tenant-sso/secrets/oidc.client_secret',
+        { value: oidcClientSecret },
+      ), 200);
+      expect(rotatedAlphaSecret).toMatchObject({ purpose: 'oidc.client_secret', previousRetired: true });
+      expect(rotatedAlphaSecret.reference).not.toBe(secretReferences.alpha);
+      expect(JSON.stringify(rotatedAlphaSecret)).not.toContain(oidcClientSecret);
+      const alphaSecretAvailability = await expectStatus(await admin.request.get(
+        '/api/t/alpha/identity/providers/tenant-sso/secrets/oidc.client_secret/availability',
+      ), 200);
+      expect(alphaSecretAvailability).toMatchObject({ purpose: 'oidc.client_secret', configured: true, available: true });
 
       expect(new Set(Object.values(providers).map((provider) => provider.id)).size).toBe(3);
       expect(Object.values(providers).map((provider) => provider.key)).toEqual(['tenant-sso', 'tenant-sso', 'tenant-sso']);

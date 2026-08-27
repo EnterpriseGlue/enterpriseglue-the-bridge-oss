@@ -155,6 +155,13 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   configMaxBytes: z.number().int().positive().max(10 * 1024 * 1024).default(1024 * 1024),
   configSecretProvider: z.enum(['env', 'file', 'docker']).default('env'),
   configSecretFileRoot: z.string().min(1).optional(),
+  tenantSecretBrokerUrl: z.string().url().optional(),
+  tenantSecretBrokerTokenRef: z.string().min(1).max(512).optional(),
+  tenantSecretBrokerTimeoutMs: z.number().int().min(100).max(30_000).default(5_000),
+  tenantSecretBrokerCacheTtlMs: z.number().int().nonnegative().max(60_000).default(15_000),
+  tenantSecretBrokerCacheMaxEntries: z.number().int().positive().max(1_024).default(256),
+  tenantSecretBrokerRequired: z.boolean().default(false),
+  tenantSecretBreakGlassEnabled: z.boolean().default(false),
 
   // Environment
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
@@ -275,6 +282,19 @@ function loadConfig(): Config {
     configMaxBytes: process.env.EG_CONFIG_MAX_BYTES ? Number(process.env.EG_CONFIG_MAX_BYTES) : undefined,
     configSecretProvider: envOrUndefined(process.env.EG_CONFIG_SECRET_PROVIDER),
     configSecretFileRoot: envOrUndefined(process.env.EG_CONFIG_SECRET_FILE_ROOT),
+    tenantSecretBrokerUrl: envOrUndefined(process.env.EG_TENANT_SECRET_BROKER_URL),
+    tenantSecretBrokerTokenRef: envOrUndefined(process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF),
+    tenantSecretBrokerTimeoutMs: process.env.EG_TENANT_SECRET_BROKER_TIMEOUT_MS
+      ? Number(process.env.EG_TENANT_SECRET_BROKER_TIMEOUT_MS)
+      : undefined,
+    tenantSecretBrokerCacheTtlMs: process.env.EG_TENANT_SECRET_BROKER_CACHE_TTL_MS
+      ? Number(process.env.EG_TENANT_SECRET_BROKER_CACHE_TTL_MS)
+      : undefined,
+    tenantSecretBrokerCacheMaxEntries: process.env.EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES
+      ? Number(process.env.EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES)
+      : undefined,
+    tenantSecretBrokerRequired: process.env.EG_TENANT_SECRET_BROKER_REQUIRED === 'true',
+    tenantSecretBreakGlassEnabled: process.env.EG_TENANT_SECRET_BREAK_GLASS_ENABLED === 'true',
     nodeEnv: inferredNodeEnv,
   };
 
@@ -327,6 +347,21 @@ if (config.tenantWorkloadReceiptPrivateKey) {
   }
 }
 
+if (config.tenantSecretBrokerUrl) {
+  const endpoint = new URL(config.tenantSecretBrokerUrl);
+  const loopback = ['localhost', '127.0.0.1', '::1'].includes(endpoint.hostname);
+  if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && loopback)) {
+    throw new Error('EG_TENANT_SECRET_BROKER_URL must use HTTPS, except for a loopback HTTP endpoint.');
+  }
+}
+
+if (config.tenantSecretBrokerRequired && (!config.tenantSecretBrokerUrl || !config.tenantSecretBrokerTokenRef)) {
+  throw new Error('EG_TENANT_SECRET_BROKER_REQUIRED=true requires EG_TENANT_SECRET_BROKER_URL and EG_TENANT_SECRET_BROKER_TOKEN_REF.');
+}
+if (config.tenantSecretBrokerTokenRef?.includes('tenant-secret://')) {
+  throw new Error('EG_TENANT_SECRET_BROKER_TOKEN_REF cannot use a tenant-secret reference.');
+}
+
 if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
   throw new Error('EG_TENANCY_CLOUD_REQUIRED=true requires EG_TENANCY_MODE=pooled.');
 }
@@ -354,6 +389,9 @@ if (config.tenancyMode === 'pooled') {
       ['EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY', config.tenantWorkloadReceiptPrivateKey],
       ['EG_TENANT_WORKLOAD_RECEIPT_KEY_ID', config.tenantWorkloadReceiptKeyId],
       ['EG_TENANT_WORKLOAD_RECEIPT_ISSUER', config.tenantWorkloadReceiptIssuer],
+      ['EG_TENANT_SECRET_BROKER_REQUIRED=true', config.tenantSecretBrokerRequired ? 'true' : undefined],
+      ['EG_TENANT_SECRET_BROKER_URL', config.tenantSecretBrokerUrl],
+      ['EG_TENANT_SECRET_BROKER_TOKEN_REF', config.tenantSecretBrokerTokenRef],
     ].filter(([, value]) => !value).map(([name]) => name);
     if (missing.length) {
       throw new Error(`EG_TENANCY_CLOUD_REQUIRED=true requires ${missing.join(', ')}.`);

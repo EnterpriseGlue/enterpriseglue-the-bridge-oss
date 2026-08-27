@@ -17,16 +17,18 @@ import {
   IdentityProviderDisplayNameSchema,
   IdentityProviderLoginDomainSchema,
   IdentityProviderProtocolSchema as SharedIdentityProviderProtocolSchema,
+  IdentityProviderSecretReferenceSchema,
   IdentityProviderSyncConfigurationSchema,
   IdentitySyncEventSchema,
   IdentitySyncRunSchema,
   LdapIdentityProviderConfigurationSchema,
   OidcIdentityProviderConfigurationSchema,
   SamlIdentityProviderConfigurationSchema,
+  TenantIdentitySecretPurposeSchema,
 } from './identity.js';
 import { SsoProviderSelectionModeSchema } from './platform-settings.js';
 
-export { IdentityProviderProtocolSchema } from './identity.js';
+export { IdentityProviderProtocolSchema, TenantIdentitySecretPurposeSchema } from './identity.js';
 
 export const AuthzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
 export const AuthzPrincipalTypeSchema = z.enum(AUTHZ_PRINCIPAL_TYPES);
@@ -1370,6 +1372,47 @@ export const IdentityProviderExternalIdentityUnlinkResponseSchema = z.object({
   providerRefreshSessionsRevoked: z.number().int().nonnegative(),
   recovery: z.literal('verified_sign_in_required'),
 });
+
+/** Write-only broker input. The value is deliberately absent from every response schema. */
+export const TenantIdentitySecretPutRequestSchema = z.object({
+  value: z.string().min(1).max(256 * 1024),
+}).strict();
+
+export const TenantIdentitySecretProvisionRequestSchema = TenantIdentitySecretPutRequestSchema.extend({
+  purpose: TenantIdentitySecretPurposeSchema,
+}).strict();
+
+export const TenantIdentitySecretMetadataResponseSchema = z.object({
+  purpose: TenantIdentitySecretPurposeSchema,
+  reference: IdentityProviderSecretReferenceSchema,
+  version: z.string().nullable(),
+  updatedAt: z.number().int().nonnegative(),
+  previousRetired: z.boolean(),
+}).strict();
+
+export const TenantIdentitySecretAvailabilityResponseSchema = z.object({
+  purpose: TenantIdentitySecretPurposeSchema,
+  configured: z.boolean(),
+  available: z.boolean(),
+  reason: z.string().optional(),
+  version: z.string().nullable().optional(),
+}).strict();
+
+export const TenantIdentitySecretRetireRequestSchema = z.object({
+  confirmation: z.literal('RETIRE_IDENTITY_PROVIDER_SECRET'),
+}).strict();
+
+export const TenantIdentitySecretReferenceRetireRequestSchema = TenantIdentitySecretRetireRequestSchema.extend({
+  purpose: TenantIdentitySecretPurposeSchema,
+  reference: IdentityProviderSecretReferenceSchema,
+}).strict();
+
+export const TenantIdentitySecretRetireResponseSchema = z.object({
+  purpose: TenantIdentitySecretPurposeSchema,
+  retired: z.boolean(),
+  retiredAt: z.number().int().nonnegative(),
+  providerDisabled: z.literal(true).optional(),
+}).strict();
 
 const IdentityProviderRequestFields = {
   key: z.string().min(1).max(128),

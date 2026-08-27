@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActionableNotification, Button, Callout, DataTable, InlineNotification, Modal, NumberInput, Select, SelectItem, SkeletonText, Table, TableBody,
-  ProgressIndicator, ProgressStep, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag, TextInput, Tile, Toggle,
+  PasswordInput, ProgressIndicator, ProgressStep, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag, TextArea, TextInput, Tile, Toggle,
 } from '@carbon/react';
 import { Add } from '@carbon/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -53,6 +53,15 @@ type MembershipPreviewResult = IdentityProviderMembershipPreviewResult;
 type ConnectionTestResult = IdentityProviderConnectionTestResult;
 type ProviderActionError = { title: string; message: string };
 type ProviderSaveSummary = { title: string; description: string };
+type TenantSecretPurpose =
+  | 'oidc.client_secret'
+  | 'saml.metadata_xml'
+  | 'saml.idp_signing_certificate'
+  | 'saml.request_signing_private_key'
+  | 'saml.request_signing_certificate'
+  | 'ldap.bind_password'
+  | 'ldap.tls_trust_certificate';
+type TenantSecretMetadata = { purpose: TenantSecretPurpose; reference: string; version: string | null; updatedAt: number; previousRetired: boolean };
 
 interface IdentityProvidersSettingsTabProps {
   tenantAdminMode?: boolean;
@@ -75,12 +84,15 @@ type FormState = {
   allowVerifiedEmailLinking: boolean;
   authorizationAttributeKeys: string;
   issuerUrl: string; clientId: string; clientSecretRef: string; callbackUrl: string; scopes: string; groupClaim: string; expectedAudience: string; requestedAcrValues: string; mfaAmrValues: string; mfaAcrValues: string; postLogoutRedirectUrl: string;
+  oidcClientSecretValue: string;
   entityId: string; idpEntityId: string; metadataUrl: string; metadataXmlRef: string; ssoUrl: string; signingCertificateRef: string; nameIdAttribute: string; emailAttribute: string; groupAttribute: string; signatureAlgorithm: 'sha256' | 'sha512'; sloUrl: string; logoutCallbackUrl: string; requestSigningPrivateKeyRef: string; requestSigningCertificateRef: string; requestedAuthnContext: string; mfaAuthnContextValues: string; ldapUrl: string;
+  samlMetadataXmlValue: string; samlSigningCertificateValue: string; samlRequestSigningPrivateKeyValue: string; samlRequestSigningCertificateValue: string;
   ldapBindDn: string; ldapBindPasswordRef: string; ldapUserBaseDn: string; ldapUserSearchFilter: string; ldapUserEnumerationFilter: string; ldapPageSize: string; ldapSubjectAttribute: string; ldapEmailAttribute: string; ldapGroupBaseDn: string; ldapGroupIdAttribute: string; ldapMembershipMode: 'memberOf' | 'group_search'; ldapNestedGroups: boolean; ldapTlsTrustRef: string;
+  ldapBindPasswordValue: string; ldapTlsTrustValue: string;
   syncOnManual: boolean; syncScheduled: boolean; syncIntervalSeconds: string; syncConnectorCapability: 'claim_only' | 'ldap_directory';
 };
 
-const emptyForm = (): FormState => ({ key: '', displayName: '', organization: '', displayOrder: '0', isPreferred: false, loginDomains: '', protocol: 'oidc', isEnabled: false, authenticationMode: 'claims_only', directoryTenantId: '', allowVerifiedEmailLinking: false, authorizationAttributeKeys: '', issuerUrl: '', clientId: '', clientSecretRef: '', callbackUrl: '', scopes: 'openid profile email', groupClaim: '', expectedAudience: '', requestedAcrValues: '', mfaAmrValues: 'mfa, otp, hwk, swk, fido', mfaAcrValues: '', postLogoutRedirectUrl: '', entityId: '', idpEntityId: '', metadataUrl: '', metadataXmlRef: '', ssoUrl: '', signingCertificateRef: '', nameIdAttribute: 'nameID', emailAttribute: 'email', groupAttribute: 'groups', signatureAlgorithm: 'sha256', sloUrl: '', logoutCallbackUrl: '', requestSigningPrivateKeyRef: '', requestSigningCertificateRef: '', requestedAuthnContext: '', mfaAuthnContextValues: '', ldapUrl: '', ldapBindDn: '', ldapBindPasswordRef: '', ldapUserBaseDn: '', ldapUserSearchFilter: '(uid={username})', ldapUserEnumerationFilter: '(objectClass=person)', ldapPageSize: '200', ldapSubjectAttribute: 'entryUUID', ldapEmailAttribute: 'mail', ldapGroupBaseDn: '', ldapGroupIdAttribute: 'cn', ldapMembershipMode: 'memberOf', ldapNestedGroups: false, ldapTlsTrustRef: '', syncOnManual: false, syncScheduled: false, syncIntervalSeconds: '300', syncConnectorCapability: 'claim_only' });
+const emptyForm = (): FormState => ({ key: '', displayName: '', organization: '', displayOrder: '0', isPreferred: false, loginDomains: '', protocol: 'oidc', isEnabled: false, authenticationMode: 'claims_only', directoryTenantId: '', allowVerifiedEmailLinking: false, authorizationAttributeKeys: '', issuerUrl: '', clientId: '', clientSecretRef: '', oidcClientSecretValue: '', callbackUrl: '', scopes: 'openid profile email', groupClaim: '', expectedAudience: '', requestedAcrValues: '', mfaAmrValues: 'mfa, otp, hwk, swk, fido', mfaAcrValues: '', postLogoutRedirectUrl: '', entityId: '', idpEntityId: '', metadataUrl: '', metadataXmlRef: '', samlMetadataXmlValue: '', ssoUrl: '', signingCertificateRef: '', samlSigningCertificateValue: '', nameIdAttribute: 'nameID', emailAttribute: 'email', groupAttribute: 'groups', signatureAlgorithm: 'sha256', sloUrl: '', logoutCallbackUrl: '', requestSigningPrivateKeyRef: '', samlRequestSigningPrivateKeyValue: '', requestSigningCertificateRef: '', samlRequestSigningCertificateValue: '', requestedAuthnContext: '', mfaAuthnContextValues: '', ldapUrl: '', ldapBindDn: '', ldapBindPasswordRef: '', ldapBindPasswordValue: '', ldapUserBaseDn: '', ldapUserSearchFilter: '(uid={username})', ldapUserEnumerationFilter: '(objectClass=person)', ldapPageSize: '200', ldapSubjectAttribute: 'entryUUID', ldapEmailAttribute: 'mail', ldapGroupBaseDn: '', ldapGroupIdAttribute: 'cn', ldapMembershipMode: 'memberOf', ldapNestedGroups: false, ldapTlsTrustRef: '', ldapTlsTrustValue: '', syncOnManual: false, syncScheduled: false, syncIntervalSeconds: '300', syncConnectorCapability: 'claim_only' });
 
 function sentence(value: string): string {
   const trimmed = value.trim();
@@ -123,6 +135,25 @@ function configuration(form: FormState): Record<string, unknown> {
   return { ...common, url: form.ldapUrl.trim(), bindDn: form.ldapBindDn.trim(), bindPasswordRef: form.ldapBindPasswordRef.trim(), userBaseDn: form.ldapUserBaseDn.trim(), userSearchFilter: form.ldapUserSearchFilter.trim(), userEnumerationFilter: form.ldapUserEnumerationFilter.trim(), pageSize: Number(form.ldapPageSize), subjectAttribute: form.ldapSubjectAttribute.trim(), emailAttribute: form.ldapEmailAttribute.trim(), groupBaseDn: form.ldapGroupBaseDn.trim(), groupIdAttribute: form.ldapGroupIdAttribute.trim(), membershipMode: form.ldapMembershipMode, nestedGroups: form.ldapNestedGroups, ...(form.ldapTlsTrustRef.trim() ? { tlsTrustRef: form.ldapTlsTrustRef.trim() } : {}) };
 }
 
+type SecretWrite = { purpose: TenantSecretPurpose; value: string; referenceField: keyof FormState };
+
+function tenantSecretWrites(form: FormState): SecretWrite[] {
+  const candidates: SecretWrite[] = form.protocol === 'oidc'
+    ? [{ purpose: 'oidc.client_secret', value: form.oidcClientSecretValue, referenceField: 'clientSecretRef' }]
+    : form.protocol === 'saml'
+      ? [
+        { purpose: 'saml.idp_signing_certificate', value: form.samlSigningCertificateValue, referenceField: 'signingCertificateRef' },
+        { purpose: 'saml.metadata_xml', value: form.samlMetadataXmlValue, referenceField: 'metadataXmlRef' },
+        { purpose: 'saml.request_signing_private_key', value: form.samlRequestSigningPrivateKeyValue, referenceField: 'requestSigningPrivateKeyRef' },
+        { purpose: 'saml.request_signing_certificate', value: form.samlRequestSigningCertificateValue, referenceField: 'requestSigningCertificateRef' },
+      ]
+      : [
+        { purpose: 'ldap.bind_password', value: form.ldapBindPasswordValue, referenceField: 'ldapBindPasswordRef' },
+        { purpose: 'ldap.tls_trust_certificate', value: form.ldapTlsTrustValue, referenceField: 'ldapTlsTrustRef' },
+      ];
+  return candidates.filter((entry) => Boolean(entry.value));
+}
+
 type ProviderFormErrors = Partial<Record<keyof FormState, string>>;
 
 const providerFieldIds: Partial<Record<keyof FormState, string>> = {
@@ -138,12 +169,15 @@ const providerFieldIds: Partial<Record<keyof FormState, string>> = {
   idpEntityId: 'identity-provider-idp-entity-id',
   ssoUrl: 'identity-provider-saml-sso-url',
   signingCertificateRef: 'identity-provider-saml-certificate-ref',
+  samlSigningCertificateValue: 'identity-provider-saml-certificate-value',
   sloUrl: 'identity-provider-saml-slo-url',
   logoutCallbackUrl: 'identity-provider-saml-logout-callback',
   requestSigningPrivateKeyRef: 'identity-provider-saml-request-signing-key-ref',
+  samlRequestSigningPrivateKeyValue: 'identity-provider-saml-request-signing-key-value',
   ldapUrl: 'identity-provider-ldap-url',
   ldapBindDn: 'identity-provider-ldap-bind-dn',
   ldapBindPasswordRef: 'identity-provider-ldap-bind-password-ref',
+  ldapBindPasswordValue: 'identity-provider-ldap-bind-password-value',
   ldapUserBaseDn: 'identity-provider-ldap-user-base',
   ldapUserSearchFilter: 'identity-provider-ldap-user-filter',
   ldapGroupBaseDn: 'identity-provider-ldap-group-base',
@@ -160,7 +194,7 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function validateProviderForm(form: FormState): ProviderFormErrors {
+function validateProviderForm(form: FormState, allowWriteOnlySecrets = false): ProviderFormErrors {
   const errors: ProviderFormErrors = {};
   if (!form.displayName.trim()) errors.displayName = 'Enter the provider name users will recognize on the sign-in screen.';
   else if (form.displayName.trim().length > MAX_LOGIN_LABEL_LENGTH) errors.displayName = `Use ${MAX_LOGIN_LABEL_LENGTH} characters or fewer. This text appears on the sign-in button.`;
@@ -179,17 +213,17 @@ function validateProviderForm(form: FormState): ProviderFormErrors {
     if (!form.idpEntityId.trim()) errors.idpEntityId = 'Expected identity provider entity ID is required.';
     if (!isHttpUrl(form.callbackUrl.trim())) errors.callbackUrl = 'Enter a valid HTTPS assertion consumer URL. HTTP is accepted only for localhost testing.';
     if (!isHttpUrl(form.ssoUrl.trim())) errors.ssoUrl = 'Enter a valid HTTPS identity-provider SSO URL. HTTP is accepted only for localhost testing.';
-    if (!form.signingCertificateRef.trim()) errors.signingCertificateRef = 'A signing certificate reference is required.';
+    if (!form.signingCertificateRef.trim() && !(allowWriteOnlySecrets && form.samlSigningCertificateValue)) errors.signingCertificateRef = 'A signing certificate reference or new certificate value is required.';
     if (form.sloUrl.trim()) {
       if (!isHttpUrl(form.sloUrl.trim())) errors.sloUrl = 'Enter a valid HTTPS identity-provider single logout URL.';
       if (!isHttpUrl(form.logoutCallbackUrl.trim())) errors.logoutCallbackUrl = 'Enter the provider-specific EnterpriseGlue SAML logout callback URL.';
-      if (!form.requestSigningPrivateKeyRef.trim()) errors.requestSigningPrivateKeyRef = 'A request-signing private key reference is required for single logout.';
+      if (!form.requestSigningPrivateKeyRef.trim() && !(allowWriteOnlySecrets && form.samlRequestSigningPrivateKeyValue)) errors.requestSigningPrivateKeyRef = 'A request-signing private key reference or new key value is required for single logout.';
     }
   }
   if (form.protocol === 'ldap') {
     if (!form.ldapUrl.trim().startsWith('ldaps://')) errors.ldapUrl = 'Use an ldaps:// directory endpoint.';
     if (!form.ldapBindDn.trim()) errors.ldapBindDn = 'Service bind DN is required.';
-    if (!form.ldapBindPasswordRef.trim()) errors.ldapBindPasswordRef = 'Service bind password reference is required.';
+    if (!form.ldapBindPasswordRef.trim() && !(allowWriteOnlySecrets && form.ldapBindPasswordValue)) errors.ldapBindPasswordRef = 'A service bind password reference or new password value is required.';
     if (!form.ldapUserBaseDn.trim()) errors.ldapUserBaseDn = 'User base DN is required.';
     if (!form.ldapUserSearchFilter.includes('{username}')) errors.ldapUserSearchFilter = 'User search filter must include {username}.';
     if (!form.ldapGroupBaseDn.trim()) errors.ldapGroupBaseDn = 'Group base DN is required.';
@@ -314,18 +348,40 @@ export default function IdentityProvidersSettingsTab({
   const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', tenantScope, historyProvider?.key], queryFn: () => fetchList<SsoSyncRun>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
-    mutationFn: (payload: FormState) => {
+    mutationFn: async (payload: FormState) => {
       if (isConfigLockedIdentityProvider(editing)) throw new Error('Config-locked identity providers must be changed through their configuration bundle.');
       if (payload.protocol === 'ldap' && (!Number.isInteger(Number(payload.ldapPageSize)) || Number(payload.ldapPageSize) < 1 || Number(payload.ldapPageSize) > 1000)) throw new Error('LDAP directory page size must be between 1 and 1000.');
       if (payload.protocol === 'ldap' && payload.syncScheduled && (!Number.isInteger(Number(payload.syncIntervalSeconds)) || Number(payload.syncIntervalSeconds) < 60)) throw new Error('Scheduled LDAP reconciliation interval must be at least 60 seconds.');
-      const scheduled = payload.protocol === 'ldap' && payload.syncScheduled;
+      let prepared = { ...payload };
+      const newlyProvisioned: TenantSecretMetadata[] = [];
+      if (tenantAdminMode) {
+        for (const secret of tenantSecretWrites(payload)) {
+          const metadata = editing
+            ? await apiClient.put<TenantSecretMetadata>(`/api/identity/providers/${encodeURIComponent(editing.key)}/secrets/${encodeURIComponent(secret.purpose)}`, { value: secret.value })
+            : await apiClient.post<TenantSecretMetadata>('/api/identity/provider-secrets', { purpose: secret.purpose, value: secret.value });
+          prepared = { ...prepared, [secret.referenceField]: metadata.reference };
+          if (!editing) newlyProvisioned.push(metadata);
+        }
+      }
+      const scheduled = prepared.protocol === 'ldap' && prepared.syncScheduled;
       const triggers = [
         'login' as const,
         ...(scheduled ? ['scheduled' as const] : []),
-        ...(payload.syncOnManual ? ['manual' as const] : []),
+        ...(prepared.syncOnManual ? ['manual' as const] : []),
       ];
-      const body = { ...(editing ? {} : { key: payload.key.trim() }), ...(editing ? {} : { protocol: payload.protocol }), displayName: payload.displayName.trim(), organization: payload.organization.trim() || null, displayOrder: Number(payload.displayOrder), isPreferred: payload.isPreferred, loginDomains: Array.from(new Set(payload.loginDomains.split(/[\n,]/).map((domain) => domain.trim().toLowerCase()).filter(Boolean))), isEnabled: payload.isEnabled, authenticationMode: payload.authenticationMode, directoryTenantId: payload.directoryTenantId.trim() || null, configuration: configuration(payload), sync: { triggers, requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: payload.syncConnectorCapability, scheduled, ...(scheduled ? { intervalSeconds: Number(payload.syncIntervalSeconds) } : {}) }, ownershipMode: isConfigWarnIdentityProvider(editing) ? 'config_warn' : 'manual' };
-      return editing ? apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : apiClient.post('/api/identity/providers', body);
+      const body = { ...(editing ? {} : { key: prepared.key.trim() }), ...(editing ? {} : { protocol: prepared.protocol }), displayName: prepared.displayName.trim(), organization: prepared.organization.trim() || null, displayOrder: Number(prepared.displayOrder), isPreferred: prepared.isPreferred, loginDomains: Array.from(new Set(prepared.loginDomains.split(/[\n,]/).map((domain) => domain.trim().toLowerCase()).filter(Boolean))), isEnabled: prepared.isEnabled, authenticationMode: prepared.authenticationMode, directoryTenantId: prepared.directoryTenantId.trim() || null, configuration: configuration(prepared), sync: { triggers, requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: prepared.syncConnectorCapability, scheduled, ...(scheduled ? { intervalSeconds: Number(prepared.syncIntervalSeconds) } : {}) }, ownershipMode: isConfigWarnIdentityProvider(editing) ? 'config_warn' : 'manual' };
+      try {
+        return editing ? await apiClient.put(`/api/identity/providers/${encodeURIComponent(editing.key)}`, body) : await apiClient.post('/api/identity/providers', body);
+      } catch (error) {
+        if (!editing && newlyProvisioned.length > 0) {
+          await Promise.allSettled(newlyProvisioned.map((secret) => apiClient.post('/api/identity/provider-secrets/retire', {
+            purpose: secret.purpose,
+            reference: secret.reference,
+            confirmation: 'RETIRE_IDENTITY_PROVIDER_SECRET',
+          })));
+        }
+        throw error;
+      }
     },
     onSuccess: (_result, payload) => {
       setSavedSummary({
@@ -335,6 +391,8 @@ export default function IdentityProvidersSettingsTab({
       queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityProviders });
       setOpen(false);
       setEditing(null);
+      setForm(emptyForm());
+      setInitialForm(emptyForm());
       setError(null);
       setSaveError(null);
     },
@@ -407,7 +465,7 @@ export default function IdentityProvidersSettingsTab({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [savedSummary]);
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const formErrors = validateProviderForm(form);
+  const formErrors = validateProviderForm(form, tenantAdminMode);
   const formIsValid = Object.keys(formErrors).length === 0;
   const connectionFields: Array<keyof FormState> = form.protocol === 'oidc'
     ? ['issuerUrl', 'clientId', 'callbackUrl', 'postLogoutRedirectUrl']
@@ -574,7 +632,7 @@ export default function IdentityProvidersSettingsTab({
           <h3 style={{ margin: 0, fontSize: '1rem' }}>Identity providers</h3>
           <p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Provider-neutral OIDC, SAML, and LDAP definitions used by identity mappings and sign-in flows.</p>
         </div>
-        {rows.length > 0 && <GuardedAction actionId="platform.sso.providers.manage" resource={resource}><Button kind="primary" size="sm" renderIcon={Add} onClick={startCreate}>Create provider</Button></GuardedAction>}
+        {rows.length > 0 && <GuardedAction actionId={manage.actionId} resource={resource}><Button kind="primary" size="sm" renderIcon={Add} onClick={startCreate}>Create provider</Button></GuardedAction>}
       </div>
       {savedSummary && <div ref={savedSummaryRef} aria-live="polite" tabIndex={-1} className="eg-settings-result-focus"><InlineNotification kind="success" title={savedSummary.title} subtitle={savedSummary.description} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} /></div>}
       {error && <InlineNotification kind="error" title={error.title} subtitle={`${sentence(error.message)} Review the relevant settings, then try again.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
@@ -618,7 +676,7 @@ export default function IdentityProvidersSettingsTab({
       {rows.length === 0 ? <div className="eg-identity-provider-empty-state">
         <h4>No identity providers yet</h4>
         <p>Create an OIDC, SAML, or LDAP provider to enable organization sign-in and identity mappings.</p>
-        <GuardedAction actionId="platform.sso.providers.manage" resource={resource}><Button kind="primary" renderIcon={Add} onClick={startCreate}>Create provider</Button></GuardedAction>
+        <GuardedAction actionId={manage.actionId} resource={resource}><Button kind="primary" renderIcon={Add} onClick={startCreate}>Create provider</Button></GuardedAction>
       </div> : <DataTable rows={rows} headers={[{ key: 'name', header: 'Sign-in name' }, { key: 'key', header: 'Key' }, { key: 'protocol', header: 'Protocol' }, { key: 'mode', header: 'Sign-in use' }, { key: 'sync', header: 'Access refresh' }, { key: 'status', header: 'Sign-in status' }, { key: 'source', header: 'Management source' }, { key: 'actions', header: '' }]} isSortable>
         {({ rows: tableRows, headers, getHeaderProps, getRowProps, getTableProps }) => (
           <TableContainer>
@@ -724,6 +782,7 @@ export default function IdentityProvidersSettingsTab({
               <TextInput id="identity-provider-issuer" labelText="Issuer URL" value={form.issuerUrl} {...fieldValidation('issuerUrl')} onChange={(event) => update('issuerUrl', event.target.value)} />
               <TextInput id="identity-provider-client-id" labelText="Client ID" value={form.clientId} {...fieldValidation('clientId')} onChange={(event) => update('clientId', event.target.value)} />
               <TextInput id="identity-provider-secret-ref" labelText="Client secret reference (optional)" value={form.clientSecretRef} onChange={(event) => update('clientSecretRef', event.target.value)} helperText="Reference name only. Secret values are never stored here." />
+              {tenantAdminMode && <PasswordInput id="identity-provider-client-secret-value" labelText={editing ? 'New client secret (optional)' : 'Client secret value (optional)'} value={form.oidcClientSecretValue} onChange={(event) => update('oidcClientSecretValue', event.target.value)} helperText="Write only. The value is sent directly to your tenant secret store and is never displayed again." />}
               <TextInput id="identity-provider-callback" labelText="Callback URL" value={form.callbackUrl} {...fieldValidation('callbackUrl')} onChange={(event) => update('callbackUrl', event.target.value)} />
               <TextInput id="identity-provider-scopes" labelText="Scopes" value={form.scopes} onChange={(event) => update('scopes', event.target.value)} />
               <TextInput id="identity-provider-group-claim" labelText="Group claim (optional)" value={form.groupClaim} onChange={(event) => update('groupClaim', event.target.value)} helperText="Claim containing stable upstream group identifiers." />
@@ -739,6 +798,7 @@ export default function IdentityProvidersSettingsTab({
               <TextInput id="identity-provider-saml-callback" labelText="Assertion consumer service URL" value={form.callbackUrl} {...fieldValidation('callbackUrl')} onChange={(event) => update('callbackUrl', event.target.value)} />
               <TextInput id="identity-provider-saml-sso-url" labelText="Identity provider SSO URL" value={form.ssoUrl} {...fieldValidation('ssoUrl')} onChange={(event) => update('ssoUrl', event.target.value)} />
               <TextInput id="identity-provider-saml-certificate-ref" labelText="Identity provider signing certificate reference" value={form.signingCertificateRef} {...fieldValidation('signingCertificateRef')} onChange={(event) => update('signingCertificateRef', event.target.value)} helperText="Reference name only. Certificate values are never stored here." />
+              {tenantAdminMode && <TextArea id="identity-provider-saml-certificate-value" labelText={editing ? 'New identity provider signing certificate (optional)' : 'Identity provider signing certificate'} value={form.samlSigningCertificateValue} onChange={(event) => update('samlSigningCertificateValue', event.target.value)} helperText="Write only. Paste the PEM certificate; EnterpriseGlue returns only an opaque tenant-bound reference." />}
               <TextInput id="identity-provider-saml-name-id" labelText="Subject attribute" value={form.nameIdAttribute} onChange={(event) => update('nameIdAttribute', event.target.value)} />
               <TextInput id="identity-provider-saml-email" labelText="Email attribute" value={form.emailAttribute} onChange={(event) => update('emailAttribute', event.target.value)} />
               <TextInput id="identity-provider-saml-groups" labelText="Group attribute" value={form.groupAttribute} onChange={(event) => update('groupAttribute', event.target.value)} />
@@ -749,12 +809,15 @@ export default function IdentityProvidersSettingsTab({
               {form.sloUrl.trim() && <>
                 <TextInput id="identity-provider-saml-logout-callback" labelText="EnterpriseGlue logout callback URL" value={form.logoutCallbackUrl} {...fieldValidation('logoutCallbackUrl')} onChange={(event) => update('logoutCallbackUrl', event.target.value)} helperText="Use /api/auth/identity/{providerKey}/saml/logout, replacing {providerKey} with this provider's stable key." />
                 <TextInput id="identity-provider-saml-request-signing-key-ref" labelText="Request-signing private key reference" value={form.requestSigningPrivateKeyRef} {...fieldValidation('requestSigningPrivateKeyRef')} onChange={(event) => update('requestSigningPrivateKeyRef', event.target.value)} helperText="Required for signed LogoutRequest and LogoutResponse messages." />
+                {tenantAdminMode && <TextArea id="identity-provider-saml-request-signing-key-value" labelText={editing ? 'New request-signing private key (optional)' : 'Request-signing private key'} value={form.samlRequestSigningPrivateKeyValue} onChange={(event) => update('samlRequestSigningPrivateKeyValue', event.target.value)} helperText="Write only. This value is sent directly to your tenant secret store." />}
                 <TextInput id="identity-provider-saml-request-signing-cert-ref" labelText="Request-signing certificate reference (optional)" value={form.requestSigningCertificateRef} onChange={(event) => update('requestSigningCertificateRef', event.target.value)} />
+                {tenantAdminMode && <TextArea id="identity-provider-saml-request-signing-cert-value" labelText="New request-signing certificate (optional)" value={form.samlRequestSigningCertificateValue} onChange={(event) => update('samlRequestSigningCertificateValue', event.target.value)} helperText="Write only. Leave blank to retain the current reference." />}
               </>}
               <TextInput id="identity-provider-metadata" labelText="Metadata URL (optional)" value={form.metadataUrl} onChange={(event) => update('metadataUrl', event.target.value)} helperText="Used for a bounded reachability check." />
               <TextInput id="identity-provider-metadata-xml-ref" labelText="Metadata XML reference (optional)" value={form.metadataXmlRef} onChange={(event) => update('metadataXmlRef', event.target.value)} />
+              {tenantAdminMode && <TextArea id="identity-provider-metadata-xml-value" labelText="New metadata XML (optional)" value={form.samlMetadataXmlValue} onChange={(event) => update('samlMetadataXmlValue', event.target.value)} helperText="Write only. Use this when metadata cannot be loaded from a trusted HTTPS URL." />}
             </>}
-            {form.protocol === 'ldap' && <><TextInput id="identity-provider-ldap-url" labelText="LDAPS URL" value={form.ldapUrl} {...fieldValidation('ldapUrl')} onChange={(event) => update('ldapUrl', event.target.value)} helperText="Certificate validation is required." /><TextInput id="identity-provider-ldap-bind-dn" labelText="Service bind DN" value={form.ldapBindDn} {...fieldValidation('ldapBindDn')} onChange={(event) => update('ldapBindDn', event.target.value)} /><TextInput id="identity-provider-ldap-bind-password-ref" labelText="Service bind password reference" value={form.ldapBindPasswordRef} {...fieldValidation('ldapBindPasswordRef')} onChange={(event) => update('ldapBindPasswordRef', event.target.value)} helperText="Reference name only. Password values are never stored here." /><TextInput id="identity-provider-ldap-user-base" labelText="User base DN" value={form.ldapUserBaseDn} {...fieldValidation('ldapUserBaseDn')} onChange={(event) => update('ldapUserBaseDn', event.target.value)} /><TextInput id="identity-provider-ldap-user-filter" labelText="User search filter" value={form.ldapUserSearchFilter} {...fieldValidation('ldapUserSearchFilter')} onChange={(event) => update('ldapUserSearchFilter', event.target.value)} helperText="Must contain {username}." /><TextInput id="identity-provider-ldap-directory-filter" labelText="Directory reconciliation filter" value={form.ldapUserEnumerationFilter} onChange={(event) => update('ldapUserEnumerationFilter', event.target.value)} /><NumberInput id="identity-provider-ldap-page-size" label="Directory page size" min={1} max={1000} value={form.ldapPageSize} {...fieldValidation('ldapPageSize')} onChange={(event) => update('ldapPageSize', event.currentTarget.value)} /><TextInput id="identity-provider-ldap-subject-attribute" labelText="Subject identifier attribute" value={form.ldapSubjectAttribute} onChange={(event) => update('ldapSubjectAttribute', event.target.value)} /><TextInput id="identity-provider-ldap-email-attribute" labelText="Email attribute" value={form.ldapEmailAttribute} onChange={(event) => update('ldapEmailAttribute', event.target.value)} /><TextInput id="identity-provider-ldap-group-base" labelText="Group base DN" value={form.ldapGroupBaseDn} {...fieldValidation('ldapGroupBaseDn')} onChange={(event) => update('ldapGroupBaseDn', event.target.value)} /><TextInput id="identity-provider-ldap-group-id" labelText="Group identifier attribute" value={form.ldapGroupIdAttribute} onChange={(event) => update('ldapGroupIdAttribute', event.target.value)} /><Select id="identity-provider-ldap-membership-mode" labelText="Group membership lookup" value={form.ldapMembershipMode} onChange={(event) => update('ldapMembershipMode', event.target.value as FormState['ldapMembershipMode'])}><SelectItem value="memberOf" text="Read memberOf from user" /><SelectItem value="group_search" text="Search groups by member DN" /></Select><Toggle id="identity-provider-ldap-nested-groups" labelText="Nested groups" labelA="Disabled" labelB="Enabled" toggled={form.ldapNestedGroups} onToggle={(checked) => update('ldapNestedGroups', checked)} /><TextInput id="identity-provider-ldap-tls-trust-ref" labelText="TLS trust reference (optional)" value={form.ldapTlsTrustRef} onChange={(event) => update('ldapTlsTrustRef', event.target.value)} /></>}
+            {form.protocol === 'ldap' && <><TextInput id="identity-provider-ldap-url" labelText="LDAPS URL" value={form.ldapUrl} {...fieldValidation('ldapUrl')} onChange={(event) => update('ldapUrl', event.target.value)} helperText="Certificate validation is required." /><TextInput id="identity-provider-ldap-bind-dn" labelText="Service bind DN" value={form.ldapBindDn} {...fieldValidation('ldapBindDn')} onChange={(event) => update('ldapBindDn', event.target.value)} /><TextInput id="identity-provider-ldap-bind-password-ref" labelText="Service bind password reference" value={form.ldapBindPasswordRef} {...fieldValidation('ldapBindPasswordRef')} onChange={(event) => update('ldapBindPasswordRef', event.target.value)} helperText="Reference name only. Password values are never stored here." />{tenantAdminMode && <PasswordInput id="identity-provider-ldap-bind-password-value" labelText={editing ? 'New service bind password (optional)' : 'Service bind password'} value={form.ldapBindPasswordValue} onChange={(event) => update('ldapBindPasswordValue', event.target.value)} helperText="Write only. The value is isolated in your tenant secret store and is never displayed again." />}<TextInput id="identity-provider-ldap-user-base" labelText="User base DN" value={form.ldapUserBaseDn} {...fieldValidation('ldapUserBaseDn')} onChange={(event) => update('ldapUserBaseDn', event.target.value)} /><TextInput id="identity-provider-ldap-user-filter" labelText="User search filter" value={form.ldapUserSearchFilter} {...fieldValidation('ldapUserSearchFilter')} onChange={(event) => update('ldapUserSearchFilter', event.target.value)} helperText="Must contain {username}." /><TextInput id="identity-provider-ldap-directory-filter" labelText="Directory reconciliation filter" value={form.ldapUserEnumerationFilter} onChange={(event) => update('ldapUserEnumerationFilter', event.target.value)} /><NumberInput id="identity-provider-ldap-page-size" label="Directory page size" min={1} max={1000} value={form.ldapPageSize} {...fieldValidation('ldapPageSize')} onChange={(event) => update('ldapPageSize', event.currentTarget.value)} /><TextInput id="identity-provider-ldap-subject-attribute" labelText="Subject identifier attribute" value={form.ldapSubjectAttribute} onChange={(event) => update('ldapSubjectAttribute', event.target.value)} /><TextInput id="identity-provider-ldap-email-attribute" labelText="Email attribute" value={form.ldapEmailAttribute} onChange={(event) => update('ldapEmailAttribute', event.target.value)} /><TextInput id="identity-provider-ldap-group-base" labelText="Group base DN" value={form.ldapGroupBaseDn} {...fieldValidation('ldapGroupBaseDn')} onChange={(event) => update('ldapGroupBaseDn', event.target.value)} /><TextInput id="identity-provider-ldap-group-id" labelText="Group identifier attribute" value={form.ldapGroupIdAttribute} onChange={(event) => update('ldapGroupIdAttribute', event.target.value)} /><Select id="identity-provider-ldap-membership-mode" labelText="Group membership lookup" value={form.ldapMembershipMode} onChange={(event) => update('ldapMembershipMode', event.target.value as FormState['ldapMembershipMode'])}><SelectItem value="memberOf" text="Read memberOf from user" /><SelectItem value="group_search" text="Search groups by member DN" /></Select><Toggle id="identity-provider-ldap-nested-groups" labelText="Nested groups" labelA="Disabled" labelB="Enabled" toggled={form.ldapNestedGroups} onToggle={(checked) => update('ldapNestedGroups', checked)} /><TextInput id="identity-provider-ldap-tls-trust-ref" labelText="TLS trust reference (optional)" value={form.ldapTlsTrustRef} onChange={(event) => update('ldapTlsTrustRef', event.target.value)} />{tenantAdminMode && <TextArea id="identity-provider-ldap-tls-trust-value" labelText="New TLS trust certificate (optional)" value={form.ldapTlsTrustValue} onChange={(event) => update('ldapTlsTrustValue', event.target.value)} helperText="Write only. Leave blank to use the current reference or system trust store." />}</>}
           </section>}
           {providerStep === 3 && <section className="eg-settings-form-column" aria-labelledby="identity-provider-step-heading">
             <div className="eg-settings-step-introduction"><h3 id="identity-provider-step-heading" tabIndex={-1}>Membership</h3><p>Choose how identities link to accounts and how provider-managed access is refreshed.</p></div>

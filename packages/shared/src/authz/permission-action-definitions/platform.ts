@@ -65,6 +65,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       routes: [
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/suspend', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/resume', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/workloads/tenants/{tenantId}/identity-provider-secret-reference', resourceResolver: 'platform.self' },
       ],
     },
   {
@@ -1086,7 +1087,12 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       ui: [{ surfaceId: 'admin.sso.providers.actions', behavior: 'disable' }],
       routes: [
         { method: 'POST', route: '/api/identity/providers', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/identity/provider-secrets', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/identity/provider-secrets/retire', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers/{key}/external-identities/unlink', resourceResolver: 'platform.self' },
+        { method: 'PUT', route: '/api/identity/providers/{key}/secrets/{purpose}', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/identity/providers/{key}/secrets/{purpose}/availability', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/identity/providers/{key}/secrets/{purpose}/retire', resourceResolver: 'platform.self' },
         { method: 'PUT', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
         { method: 'DELETE', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers/{key}/reconcile', resourceResolver: 'platform.self' },

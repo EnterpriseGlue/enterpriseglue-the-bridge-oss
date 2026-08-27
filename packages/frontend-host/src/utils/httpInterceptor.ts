@@ -28,6 +28,7 @@ const TENANT_SCOPED_API_PREFIXES = [
   '/api/notifications',
   '/api/dashboard',
   '/api/identity/providers',
+  '/api/identity/provider-secrets',
 ];
 
 // API prefixes that are platform-level (no tenant prefix needed)
@@ -69,12 +70,16 @@ function isTenantScopedUrl(url: string): boolean {
 
   // Provider administration is platform-scoped on the root settings page in
   // single mode and tenant-scoped only from a canonical tenant route.
-  if (url.startsWith('/api/identity/providers') && !window.location.pathname.match(/^\/t\/[^/]+(?:\/|$)/)) {
+  if (isIdentityProviderAdminUrl(url) && !window.location.pathname.match(/^\/t\/[^/]+(?:\/|$)/)) {
     return false;
   }
 
   // Check if it's a tenant-scoped API
   return TENANT_SCOPED_API_PREFIXES.some((prefix) => url.startsWith(prefix));
+}
+
+function isIdentityProviderAdminUrl(url: string): boolean {
+  return url.startsWith('/api/identity/providers') || url.startsWith('/api/identity/provider-secrets');
 }
 
 /**
@@ -86,7 +91,7 @@ function addTenantPrefix(url: string): string {
   const tenantSlug = getTenantSlugFromPathname(window.location.pathname);
   // Native tenant identity-provider administration uses the canonical API
   // shape. Keep the older /t/:slug prefix only for legacy tenant APIs.
-  if (url.startsWith('/api/identity/providers')) {
+  if (isIdentityProviderAdminUrl(url)) {
     return `/api/t/${encodeURIComponent(tenantSlug)}${url.slice('/api'.length)}`;
   }
   return `/t/${encodeURIComponent(tenantSlug)}${url}`;

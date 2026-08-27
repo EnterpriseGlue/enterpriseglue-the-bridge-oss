@@ -523,7 +523,12 @@ describe('authorization route inventory validation', () => {
         surfaceId: 'admin.sso.providers.actions',
         routes: [
           ['POST', '/api/identity/providers', 'platform.self'],
+          ['POST', '/api/identity/provider-secrets', 'platform.self'],
+          ['POST', '/api/identity/provider-secrets/retire', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/external-identities/unlink', 'platform.self'],
+          ['PUT', '/api/identity/providers/{key}/secrets/{purpose}', 'platform.self'],
+          ['GET', '/api/identity/providers/{key}/secrets/{purpose}/availability', 'platform.self'],
+          ['POST', '/api/identity/providers/{key}/secrets/{purpose}/retire', 'platform.self'],
           ['PUT', '/api/identity/providers/{key}', 'platform.self'],
           ['DELETE', '/api/identity/providers/{key}', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/reconcile', 'platform.self'],

@@ -3,14 +3,26 @@ import { readBoundedIdentityProviderResponse, validateIdentityProviderEndpointUr
 
 const MAX_METADATA_BYTES = 1024 * 1024;
 
-function metadataSource(configurationJson: string): { url: URL | null; xml: string | null } {
+async function metadataSource(
+  configurationJson: string,
+  secretContext?: { tenantId?: string | null; correlationId?: string },
+): Promise<{ url: URL | null; xml: string | null }> {
   let configuration: Record<string, unknown>;
   try { configuration = JSON.parse(configurationJson) as Record<string, unknown>; } catch { throw new Error('SAML provider configuration is invalid'); }
   const value = typeof configuration.metadataUrl === 'string' ? configuration.metadataUrl.trim() : '';
   if (!value) {
     const reference = typeof configuration.metadataXmlRef === 'string' ? configuration.metadataXmlRef.trim() : '';
     if (!reference) throw new Error('SAML metadataUrl or metadataXmlRef is required for connection validation');
-    const xml = secretResolver.resolveStored(reference.startsWith('ref:') ? reference : `ref:${reference}`);
+    const stored = reference.startsWith('ref:') ? reference : `ref:${reference}`;
+    const xml = stored.includes('tenant-secret://')
+      ? secretContext?.tenantId
+        ? await secretResolver.resolveTenantStored(stored, {
+          tenantId: secretContext.tenantId,
+          purpose: 'saml.metadata_xml',
+          ...(secretContext.correlationId ? { correlationId: secretContext.correlationId } : {}),
+        })
+        : null
+      : secretResolver.resolveStored(stored);
     if (!xml) throw new Error('SAML metadataXmlRef is unavailable');
     return { url: null, xml };
   }
@@ -19,8 +31,8 @@ function metadataSource(configurationJson: string): { url: URL | null; xml: stri
 }
 
 class SamlMetadataService {
-  async testConnection(configurationJson: string): Promise<{ metadataUrl: string; entityDescriptorCount: number }> {
-    const source = metadataSource(configurationJson);
+  async testConnection(configurationJson: string, secretContext?: { tenantId?: string | null; correlationId?: string }): Promise<{ metadataUrl: string; entityDescriptorCount: number }> {
+    const source = await metadataSource(configurationJson, secretContext);
     const metadata = source.url
       ? await (async () => {
         const response = await fetch(source.url!, { redirect: 'error', headers: { accept: 'application/samlmetadata+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(10_000) });

@@ -12,7 +12,7 @@ services:
     image: node:24-bookworm-slim
     user: node
     working_dir: /repo/backend
-    command: ["node", "dist/backend/src/server.js"]
+    command: ["sh", "-c", "node /repo/test/fixtures/tenant-secret-broker.mjs & exec node dist/backend/src/server.js"]
     environment:
       DATABASE_TYPE: postgres
       POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_APP_USER}
@@ -22,6 +22,10 @@ services:
       EG_TENANCY_MODE: pooled
       EG_TENANT_RLS_ENFORCED: "true"
       EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+      EG_TENANT_SECRET_BROKER_URL: http://127.0.0.1:8791
+      EG_TENANT_SECRET_BROKER_TOKEN_REF: env://EG_TENANT_SECRET_BROKER_TOKEN
+      EG_TENANT_SECRET_BROKER_TOKEN: ${EG_TENANT_SECRET_BROKER_TOKEN}
+      EG_TENANT_SECRET_BROKER_REQUIRED: "true"
     volumes: !override
       - .:/repo:ro
       - ${KEYCLOAK_TLS_DIR}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { directLdapIdentityService, setLdapClientFactoryForTest } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
 import { MockLdapDirectory } from '../../../../test/identity-mocks/index.js';
 
 const serviceBindPassword = randomBytes(24).toString('base64url');
@@ -12,7 +13,24 @@ const provider = {
 } as any;
 
 describe('direct LDAP identity service', () => {
-  afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; delete process.env.LDAP_CA_CERTIFICATE; delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY; delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS; delete process.env.EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS; delete process.env.EG_LDAP_RECONCILIATION_IDENTITY_LIMIT; delete process.env.EG_LDAP_RECONCILIATION_CONCURRENCY; delete process.env.EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT; delete process.env.EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT; delete process.env.EG_LDAP_GROUP_SEARCH_QUERY_LIMIT; delete process.env.EG_LDAP_GROUP_SEARCH_RESULT_LIMIT; });
+  afterEach(() => { vi.restoreAllMocks(); setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; delete process.env.LDAP_CA_CERTIFICATE; delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY; delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS; delete process.env.EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS; delete process.env.EG_LDAP_RECONCILIATION_IDENTITY_LIMIT; delete process.env.EG_LDAP_RECONCILIATION_CONCURRENCY; delete process.env.EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT; delete process.env.EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT; delete process.env.EG_LDAP_GROUP_SEARCH_QUERY_LIMIT; delete process.env.EG_LDAP_GROUP_SEARCH_RESULT_LIMIT; });
+
+  it('resolves the service bind password in the provider tenant scope', async () => {
+    const resolve = vi.spyOn(secretResolver, 'resolveTenantStored').mockResolvedValue(serviceBindPassword);
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'uuid-1', mail: 'person@example.test' }] }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+    const reference = 'ref:tenant-secret://v1/tenant-alpha/ldap.bind_password/version-1';
+    await expect(directLdapIdentityService.authenticate({
+      ...provider,
+      tenantId: 'tenant-alpha',
+      configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), bindPasswordRef: reference }),
+    }, 'person@example.test', testUserPassword)).resolves.toMatchObject({ subjectId: 'uuid-1' });
+    expect(resolve).toHaveBeenCalledWith(reference, { tenantId: 'tenant-alpha', purpose: 'ldap.bind_password' });
+  });
 
   it('blocks an unlisted directory before opening an LDAP client', async () => {
     process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY = 'true';

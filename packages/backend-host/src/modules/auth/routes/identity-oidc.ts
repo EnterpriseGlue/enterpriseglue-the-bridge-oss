@@ -103,6 +103,15 @@ function configuration(provider: { configurationJson: string }): Record<string, 
   }
 }
 
+function providerSecretContext(req: Request, provider: IdentityProvider): { tenantId?: string | null; correlationId?: string } {
+  const candidate = req.headers['x-correlation-id'] || req.headers['x-request-id'];
+  const correlationId = (Array.isArray(candidate) ? candidate[0] : candidate)?.trim();
+  return {
+    tenantId: provider.tenantId,
+    ...(correlationId ? { correlationId } : {}),
+  };
+}
+
 function requireDirectOidc(provider: { protocol: string; isEnabled: boolean; authenticationMode: string }) {
   if (!provider.isEnabled) throw Errors.notFound('Identity provider not found');
   if (provider.protocol !== 'oidc') throw Errors.validation('This identity provider does not use OIDC');
@@ -165,7 +174,7 @@ async function startSamlLogin(req: Request, res: Response, provider: IdentityPro
   requireDirectSaml(provider);
   const requestId = createSamlRequestId();
   const relayState = buildSignedSamlState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, requestId);
-  const request = await genericSamlService.createAuthorizationRequest(configuration(provider), relayState, requestId);
+  const request = await genericSamlService.createAuthorizationRequest(configuration(provider), relayState, requestId, providerSecretContext(req, provider));
   const authorizationUrl = new URL(request.url);
   const entryPoint = new URL(request.entryPoint);
   if (authorizationUrl.protocol !== 'https:' || entryPoint.protocol !== 'https:' || authorizationUrl.hostname !== entryPoint.hostname) {
@@ -365,7 +374,7 @@ router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, async
       selectedProvider.current = provider;
       if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
       const rawConfiguration = configuration(provider);
-      const claims = await genericOidcService.exchangeCode(rawConfiguration, { code: req.query.code as string, codeVerifier: verifier, nonce: parsed.nonce });
+      const claims = await genericOidcService.exchangeCode(rawConfiguration, { code: req.query.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider));
       const user = await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
       if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
       const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
@@ -410,7 +419,7 @@ router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter
       selectedProvider.current = provider;
       if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
       const rawConfiguration = configuration(provider);
-      const profile = await genericSamlService.validatePostResponse(rawConfiguration, samlResponse, parsed.samlRequestId!);
+      const profile = await genericSamlService.validatePostResponse(rawConfiguration, samlResponse, parsed.samlRequestId!, providerSecretContext(req, provider));
       await samlAssertionReplayService.consume({ providerId: provider.id, tenantId: provider.tenantId, requestId: parsed.samlRequestId! });
       const identity = genericSamlService.extractUserClaims(rawConfiguration, profile);
       const user = await identityProviderProvisioningService.reconcileSamlLogin(provider, {
@@ -479,9 +488,9 @@ async function completeSamlLogoutResponse(req: Request, res: Response, provider:
   if (binding === 'redirect') {
     const queryStart = req.originalUrl.indexOf('?');
     const originalQuery = queryStart >= 0 ? req.originalUrl.slice(queryStart + 1) : '';
-    await genericSamlService.validateRedirectLogoutResponse(rawConfiguration, req.query as Record<string, unknown>, originalQuery, state.requestId);
+    await genericSamlService.validateRedirectLogoutResponse(rawConfiguration, req.query as Record<string, unknown>, originalQuery, state.requestId, providerSecretContext(req, provider));
   } else {
-    await genericSamlService.validatePostLogoutResponse(rawConfiguration, samlResponse, state.requestId);
+    await genericSamlService.validatePostLogoutResponse(rawConfiguration, samlResponse, state.requestId, providerSecretContext(req, provider));
   }
   res.redirect(`${config.frontendUrl.replace(/\/$/, '')}/login`);
 }
@@ -508,7 +517,7 @@ router.post('/api/auth/identity/:providerKey/saml/logout', apiLimiter, identityF
   for (const candidate of candidates) {
     try {
       const candidateConfiguration = providerLogoutConfiguration(candidate);
-      const request = await genericSamlService.validatePostLogoutRequest(candidateConfiguration, parsed.data.SAMLRequest!);
+      const request = await genericSamlService.validatePostLogoutRequest(candidateConfiguration, parsed.data.SAMLRequest!, providerSecretContext(req, candidate));
       verified = { provider: candidate, configuration: candidateConfiguration, request };
       break;
     } catch { /* A same-key provider is selected only by successful signature and issuer validation. */ }
@@ -524,7 +533,7 @@ router.post('/api/auth/identity/:providerKey/saml/logout', apiLimiter, identityF
     resourceId: provider.id,
     details: { protocol: 'saml', mode: 'idp_initiated', sessionsRevoked: revoked },
   }));
-  res.redirect(await genericSamlService.createLogoutResponse(rawConfiguration, request, parsed.data.RelayState || ''));
+  res.redirect(await genericSamlService.createLogoutResponse(rawConfiguration, request, parsed.data.RelayState || '', providerSecretContext(req, provider)));
 }));
 
 /** Signed SAML HTTP-Redirect LogoutResponse endpoint for RP-initiated logout. */

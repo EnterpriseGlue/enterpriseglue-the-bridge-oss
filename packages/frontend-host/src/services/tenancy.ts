@@ -16,6 +16,9 @@ let capabilities: TenancyCapabilities = {
   placementAssertionVersions: [],
   placementV2Required: false,
   workloadTenantLifecycleEnabled: false,
+  tenantSecretBrokerEnabled: false,
+  tenantSecretWriteOnlyAdminEnabled: false,
+  tenantSecretBreakGlassEnabled: false,
   shardId: null,
   workloadReceipt: null,
 };

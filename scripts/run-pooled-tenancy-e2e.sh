@@ -111,6 +111,8 @@ const values = {
   EG_TENANCY_MODE: 'pooled',
   EG_TENANT_RLS_ENFORCED: 'true',
   EG_TENANT_PLACEMENT_KEY: randomHex(32),
+  EG_TENANT_SECRET_BROKER_TOKEN: randomHex(32),
+  POOLED_TENANCY_OIDC_CLIENT_SECRET: randomHex(24),
   EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY: 'true',
   EG_IDENTITY_PROVIDER_ALLOWED_HOSTS: 'localhost,openldap',
   EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS: 'true',
@@ -136,6 +138,11 @@ for (const client of sourceRealm.clients || []) {
   if (['enterpriseglue-local', 'enterpriseglue-local-entra'].includes(client.clientId)) {
     client.redirectUris = [...new Set([...(client.redirectUris || []), `${publicOrigin}/*`])];
     client.webOrigins = [...new Set([...(client.webOrigins || []), publicOrigin])];
+  }
+  if (client.clientId === 'enterpriseglue-local') {
+    client.publicClient = false;
+    client.clientAuthenticatorType = 'client-secret';
+    client.secret = values.POOLED_TENANCY_OIDC_CLIENT_SECRET;
   }
   if (client.clientId === 'enterpriseglue-local-saml') {
     client.redirectUris = [...new Set([...(client.redirectUris || []), `${publicOrigin}/api/auth/providers/saml/callback`])];
@@ -243,6 +250,7 @@ common_env=(
   POOLED_TENANCY_POSTGRES_PASSWORD="$(awk -F= '$1 == "POOLED_TENANCY_POSTGRES_APP_PASSWORD" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_POSTGRES_DATABASE="$(awk -F= '$1 == "POOLED_TENANCY_POSTGRES_APP_DATABASE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_OIDC_ISSUER_URL="https://localhost:${keycloak_port}/realms/enterpriseglue-local"
+  POOLED_TENANCY_OIDC_CLIENT_SECRET="$(awk -F= '$1 == "POOLED_TENANCY_OIDC_CLIENT_SECRET" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   PLAYWRIGHT_BASE_URL="https://localhost:${tls_frontend_port}"
   PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
   PLAYWRIGHT_WORKERS=1
@@ -269,9 +277,9 @@ writeFileSync(process.argv[2], [
   'mode=pooled',
   'database=postgres-restricted-role-force-rls',
   'tenants=alpha-oidc,bravo-saml,charlie-ldap',
-  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,real-login,session-tenant-binding,cross-tenant-denial,immediate-membership-removal',
+  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,immediate-membership-removal',
   'ui_evidence=deterministic-desktop-responsive-and-zoom-screenshots',
-  'identity_evidence=disposable-keycloak-and-openldap-emulators',
+  'identity_evidence=disposable-keycloak-openldap-and-private-tenant-secret-broker-emulators',
   'credentials=ephemeral-and-not-retained',
   '',
 ].join('\n'));

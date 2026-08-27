@@ -85,6 +85,19 @@ describe('httpInterceptor', () => {
       );
     });
 
+    it('uses the canonical tenant API route for write-only identity-provider secrets', async () => {
+      window.location.pathname = '/t/alpha/admin/settings';
+      const response = new Response(JSON.stringify({}), { status: 201 });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+      await interceptedFetch('/api/identity/provider-secrets', { method: 'POST' });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/t/alpha/identity/provider-secrets',
+        { method: 'POST', credentials: 'include' },
+      );
+    });
+
     it('passes through successful requests', async () => {
       const response = new Response(JSON.stringify({ data: 'test' }), { status: 200 });
       const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);

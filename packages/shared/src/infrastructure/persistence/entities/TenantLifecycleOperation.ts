@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
-export type TenantLifecycleCommand = 'create' | 'suspend' | 'resume' | 'reconcile_aliases';
+export type TenantLifecycleCommand = 'create' | 'suspend' | 'resume' | 'reconcile_aliases' | 'set_secret_reference_break_glass';
 export type TenantLifecycleOperationStatus = 'pending' | 'completed' | 'failed';
 
 /** Secret-free idempotency and signed receipt ledger for workload tenant commands. */

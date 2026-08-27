@@ -20,6 +20,11 @@ const service = vi.hoisted(() => ({
   testConnection: vi.fn(),
   testSamlMetadata: vi.fn(),
   unlinkExternalIdentity: vi.fn(),
+  provisionSecret: vi.fn(),
+  rotateProviderSecret: vi.fn(),
+  secretAvailability: vi.fn(),
+  retireProviderSecret: vi.fn(),
+  retireSecretReference: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -40,6 +45,13 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsServic
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService: { testConnection: service.testConnection } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService: { listDirectoryPage: vi.fn() } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SamlMetadataService.js', () => ({ samlMetadataService: { testConnection: service.testSamlMetadata } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/TenantIdentityProviderSecretService.js', () => ({ tenantIdentityProviderSecretService: {
+  provision: service.provisionSecret,
+  rotateProvider: service.rotateProviderSecret,
+  availability: service.secretAvailability,
+  retireProvider: service.retireProviderSecret,
+  retireReference: service.retireSecretReference,
+} }));
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 
 const provider = {
@@ -68,6 +80,11 @@ describe('identity provider routes', () => {
     service.testConnection.mockResolvedValue({ issuer: 'https://login.example.test', authorizationEndpoint: 'https://login.example.test/auth', tokenEndpoint: 'https://login.example.test/token', jwksUri: 'https://login.example.test/jwks' });
     service.testSamlMetadata.mockResolvedValue({ metadataUrl: 'https://idp.example.test/metadata.xml', entityDescriptorCount: 2 });
     service.unlinkExternalIdentity.mockResolvedValue({ identityId: 'external-identity-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, providerRefreshSessionsRevoked: 1 });
+    service.provisionSecret.mockResolvedValue({ purpose: 'oidc.client_secret', reference: 'ref:tenant-secret://v1/tenant-1/oidc.client_secret/version-1', version: '1', updatedAt: 10, previousRetired: false });
+    service.rotateProviderSecret.mockResolvedValue({ purpose: 'oidc.client_secret', reference: 'ref:tenant-secret://v1/tenant-1/oidc.client_secret/version-2', version: '2', updatedAt: 20, previousRetired: true });
+    service.secretAvailability.mockResolvedValue({ purpose: 'oidc.client_secret', configured: true, available: true, version: '2' });
+    service.retireProviderSecret.mockResolvedValue({ purpose: 'oidc.client_secret', retired: true, retiredAt: 30, providerDisabled: true });
+    service.retireSecretReference.mockResolvedValue({ purpose: 'oidc.client_secret', retired: true, retiredAt: 30 });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -151,7 +168,58 @@ describe('identity provider routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'metadata_reachable', protocol: 'saml', entityDescriptorCount: 2 });
-    expect(service.testSamlMetadata).toHaveBeenCalledWith(expect.stringContaining('metadata.xml'));
+    expect(service.testSamlMetadata).toHaveBeenCalledWith(expect.stringContaining('metadata.xml'), expect.objectContaining({ tenantId: 'tenant-1' }));
+  });
+
+  it('accepts a tenant secret value only on write and returns metadata without the value', async () => {
+    const secretValue = 'tenant-secret-value-sentinel';
+    const response = await request(app)
+      .post('/api/identity/provider-secrets')
+      .set('x-correlation-id', 'secret-provision-1')
+      .send({ purpose: 'oidc.client_secret', value: secretValue });
+
+    expect(response.status).toBe(201);
+    expect(JSON.stringify(response.body)).not.toContain(secretValue);
+    expect(response.body).toEqual(expect.objectContaining({
+      purpose: 'oidc.client_secret',
+      reference: 'ref:tenant-secret://v1/tenant-1/oidc.client_secret/version-1',
+    }));
+    expect(service.provisionSecret).toHaveBeenCalledWith({
+      tenantId: 'tenant-1', purpose: 'oidc.client_secret', value: secretValue, correlationId: 'secret-provision-1',
+    });
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'identity.provider.secret.provision',
+      details: expect.not.objectContaining({ value: expect.anything() }),
+    }));
+    expect(JSON.stringify(vi.mocked(logAudit).mock.calls)).not.toContain(secretValue);
+  });
+
+  it('rotates and checks only the selected provider secret purpose', async () => {
+    const rotation = await request(app)
+      .put('/api/identity/providers/entra/secrets/oidc.client_secret')
+      .send({ value: 'rotated-secret-sentinel' });
+    const availability = await request(app)
+      .get('/api/identity/providers/entra/secrets/oidc.client_secret/availability');
+
+    expect(rotation.status).toBe(200);
+    expect(JSON.stringify(rotation.body)).not.toContain('rotated-secret-sentinel');
+    expect(service.rotateProviderSecret).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', providerKey: 'entra', purpose: 'oidc.client_secret' }));
+    expect(availability.status).toBe(200);
+    expect(availability.body).toEqual({ purpose: 'oidc.client_secret', configured: true, available: true, version: '2' });
+  });
+
+  it('requires explicit acknowledgement before retiring a broker-managed provider secret', async () => {
+    const missingConfirmation = await request(app)
+      .post('/api/identity/providers/entra/secrets/oidc.client_secret/retire')
+      .send({ confirmation: 'no' });
+    const retired = await request(app)
+      .post('/api/identity/providers/entra/secrets/oidc.client_secret/retire')
+      .send({ confirmation: 'RETIRE_IDENTITY_PROVIDER_SECRET' });
+
+    expect(missingConfirmation.status).toBe(400);
+    expect(retired.status).toBe(200);
+    expect(retired.body).toEqual({ purpose: 'oidc.client_secret', retired: true, retiredAt: 30, providerDisabled: true });
+    expect(service.retireProviderSecret).toHaveBeenCalledTimes(1);
   });
 
   it('creates a provider and audits sanitized definition metadata', async () => {

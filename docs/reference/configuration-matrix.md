@@ -39,11 +39,18 @@ in `engine-tenant-mappings.json`. See
 | EG_TENANT_PLACEMENT_V2_AUDIENCE | Required for cloud-required pooled mode | unset | Exact shard assertion audience and workload receipt audience. |
 | EG_TENANT_PLACEMENT_V2_SHARD_ID | Required for cloud-required pooled mode | unset | Canonical shard identity; must match the durable tenant placement key. |
 | EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS | No | 5 | Clock tolerance for `iat`, `nbf`, and `exp`; maximum 60. |
-| EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2 and signed workload receipt configuration without changing the self-hosted default. |
+| EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2, signed workload receipts, forced RLS, and the tenant secret broker without changing the self-hosted default. |
 | EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY | Required for cloud-required pooled mode | unset | PEM-encoded P-256 private key; may use escaped newlines. Never expose it through APIs or logs. |
 | EG_TENANT_WORKLOAD_RECEIPT_KEY_ID | Required for cloud-required pooled mode | unset | Public identifier for the workload receipt signing key. |
 | EG_TENANT_WORKLOAD_RECEIPT_ISSUER | Required for cloud-required pooled mode | unset | Stable shard receipt issuer verified by the control plane. |
 | EG_TENANT_RLS_ENFORCED | Required for pooled mode | false | Must be `true`; startup verifies forced PostgreSQL row-level security and rejects superuser or `BYPASSRLS` application roles before serving pooled traffic. |
+| EG_TENANT_SECRET_BROKER_URL | Required for cloud-required mode | unset | Private HTTPS broker base URL; loopback HTTP is development-only. |
+| EG_TENANT_SECRET_BROKER_TOKEN_REF | Required for cloud-required mode | unset | Broker bearer-token reference resolved by the existing environment, file, or Docker provider; tenant-secret references are forbidden. |
+| EG_TENANT_SECRET_BROKER_TIMEOUT_MS | No | 5000 | Private broker request timeout in milliseconds; range 100-30000. |
+| EG_TENANT_SECRET_BROKER_CACHE_TTL_MS | No | 15000 | Bounded in-memory resolved-value TTL in milliseconds; 0 disables caching, maximum 60000. |
+| EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES | No | 256 | Maximum resolved tenant-secret values cached per backend process; maximum 1024. |
+| EG_TENANT_SECRET_BROKER_REQUIRED | Required for cloud-required mode | false | Fails startup unless URL and token reference are present. |
+| EG_TENANT_SECRET_BREAK_GLASS_ENABLED | No | false | Enables the `tenant:lifecycle` service-account recovery route for already-available local references; never accepts secret values. |
 
 ## Backend (Required by DATABASE_TYPE)
 

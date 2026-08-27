@@ -93,4 +93,32 @@ describe('TenantWorkloadLifecycleService', () => {
     })).rejects.toThrow('already used for a different');
     expect(base.mutate).toHaveBeenCalledTimes(1);
   });
+
+  it('signs idempotent break-glass receipts without persisting the local reference', async () => {
+    const reference = 'ref:env://EG_ALPHA_OIDC_CLIENT_SECRET';
+    const mutate = vi.fn(async () => ({
+      tenantId: 'tenant-alpha', tenantSlug: 'alpha', tenantStatus: 'active', placementEpoch: 3,
+    }));
+    const input = {
+      actorId: 'service-account-1',
+      command: 'set_secret_reference_break_glass' as const,
+      idempotencyKey: 'tenant-secret-recovery-001',
+      correlationId: 'correlation-recovery-001',
+      request: {
+        tenantId: 'tenant-alpha', providerKey: 'alpha-oidc', purpose: 'oidc.client_secret',
+        reference, expectedPlacementEpoch: 3, enableProvider: false,
+      },
+      mutate,
+    };
+
+    const first = await tenantWorkloadLifecycleService.execute(input);
+    const replay = await tenantWorkloadLifecycleService.execute(input);
+
+    expect(first.payload.command).toBe('set_secret_reference_break_glass');
+    expect(replay).toEqual({ ...first, idempotent: true });
+    expect(mutate).toHaveBeenCalledTimes(1);
+    const stored = await state.dataSource.getRepository(TenantLifecycleOperation).findOneByOrFail({ id: first.payload.operationId });
+    expect(JSON.stringify(stored)).not.toContain(reference);
+    expect(stored.requestHash).toMatch(/^[a-f0-9]{64}$/);
+  });
 });

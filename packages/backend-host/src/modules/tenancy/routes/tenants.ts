@@ -12,11 +12,14 @@ import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimit
 import { tenantDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/TenantDiscoveryService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/platform-admin/TenantWorkloadLifecycleService.js';
+import { tenantIdentityProviderSecretService } from '@enterpriseglue/shared/services/platform-admin/TenantIdentityProviderSecretService.js';
 import { ServiceAccountScopes } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
   TenantCreateRequestSchema,
   TenantDiscoveryDomainCreateRequestSchema,
@@ -39,6 +42,7 @@ import {
   TenantWorkloadAliasReconcileRequestSchema,
   TenantWorkloadCreateRequestSchema,
   TenantWorkloadEpochRequestSchema,
+  TenantWorkloadSecretBreakGlassRequestSchema,
   SignedTenantWorkloadReceiptSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
 
@@ -73,6 +77,9 @@ function tenancyCapabilities(includeShardIdentity: boolean) {
     placementAssertionVersions,
     placementV2Required: config.tenancyCloudRequired,
     workloadTenantLifecycleEnabled: config.tenancyMode === 'pooled' && workloadConfigured,
+    tenantSecretBrokerEnabled: Boolean(config.tenantSecretBrokerUrl && config.tenantSecretBrokerTokenRef),
+    tenantSecretWriteOnlyAdminEnabled: Boolean(config.tenantSecretBrokerUrl && config.tenantSecretBrokerTokenRef),
+    tenantSecretBreakGlassEnabled: includeShardIdentity && workloadConfigured && config.tenantSecretBreakGlassEnabled,
     shardId: includeShardIdentity ? config.tenantPlacementV2ShardId || null : null,
     workloadReceipt: includeShardIdentity && config.tenantWorkloadReceiptKeyId && config.tenantWorkloadReceiptIssuer
       ? { algorithm: 'ES256', keyId: config.tenantWorkloadReceiptKeyId, issuer: config.tenantWorkloadReceiptIssuer }
@@ -184,6 +191,56 @@ router.put('/api/workloads/tenants/:tenantId/routing-aliases', workloadScope, va
         placementEpoch: Number(result.tenant.placementEpoch),
         routingAliases: result.aliases.map((alias) => alias.hostname),
       };
+    },
+  });
+  res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.post('/api/workloads/tenants/:tenantId/identity-provider-secret-reference', workloadScope, validateBody(TenantWorkloadSecretBreakGlassRequestSchema), asyncHandler(async (req, res) => {
+  if (!config.tenantSecretBreakGlassEnabled) throw Errors.forbidden('Tenant secret break-glass recovery is disabled');
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  const idempotencyKey = requiredHeader(req, 'idempotency-key');
+  const correlationId = requiredHeader(req, 'x-correlation-id');
+  const receipt = await tenantWorkloadLifecycleService.execute({
+    actorId: req.serviceAccount!.id,
+    command: 'set_secret_reference_break_glass',
+    idempotencyKey,
+    correlationId,
+    request: { tenantId, ...req.body },
+    mutate: async (manager) => {
+      const tenant = await manager.getRepository(Tenant).findOneBy({ id: tenantId });
+      if (!tenant) throw Errors.notFound('Tenant');
+      if (Number(tenant.placementEpoch) !== req.body.expectedPlacementEpoch) {
+        throw Errors.conflict('Tenant placement epoch changed; refresh the tenant before retrying');
+      }
+      await tenantIdentityProviderSecretService.setBreakGlassReference({
+        tenantId,
+        providerKey: req.body.providerKey,
+        purpose: req.body.purpose,
+        reference: req.body.reference,
+        enableProvider: req.body.enableProvider,
+        store: manager,
+      });
+      return {
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        tenantStatus: tenant.status,
+        placementEpoch: Number(tenant.placementEpoch),
+      };
+    },
+  });
+  await logAudit({
+    tenantId,
+    userId: req.serviceAccount!.id,
+    action: 'identity.provider.secret.break_glass_reference_set',
+    resourceType: 'identity_provider',
+    resourceId: req.body.providerKey,
+    details: {
+      purpose: req.body.purpose,
+      providerEnabled: req.body.enableProvider,
+      correlationId,
+      operationId: receipt.payload.operationId,
+      secretMaterialIncluded: false,
     },
   });
   res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));

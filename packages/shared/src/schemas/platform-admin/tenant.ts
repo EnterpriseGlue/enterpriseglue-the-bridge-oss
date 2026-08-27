@@ -132,12 +132,29 @@ export const TenantWorkloadAliasReconcileRequestSchema = z.object({
   expectedPlacementEpoch: z.number().int().positive(),
 }).strict();
 
+export const TenantWorkloadSecretBreakGlassRequestSchema = z.object({
+  providerKey: z.string().min(1).max(128),
+  purpose: z.enum([
+    'oidc.client_secret',
+    'saml.metadata_xml',
+    'saml.idp_signing_certificate',
+    'saml.request_signing_private_key',
+    'saml.request_signing_certificate',
+    'ldap.bind_password',
+    'ldap.tls_trust_certificate',
+  ]),
+  reference: z.string().min(1).max(512),
+  expectedPlacementEpoch: z.number().int().positive(),
+  enableProvider: z.boolean().default(false),
+  confirmation: z.literal('SET_TENANT_SECRET_BREAK_GLASS_REFERENCE'),
+}).strict();
+
 export const TenantWorkloadReceiptPayloadSchema = z.object({
   schemaVersion: z.literal('tenant-workload-receipt.enterpriseglue.io/v1'),
   issuer: z.string().min(1),
   audience: z.string().min(1),
   operationId: z.string().min(1),
-  command: z.enum(['create', 'suspend', 'resume', 'reconcile_aliases']),
+  command: z.enum(['create', 'suspend', 'resume', 'reconcile_aliases', 'set_secret_reference_break_glass']),
   actorId: z.string().min(1),
   tenantId: z.string().min(1),
   tenantSlug: TenantSlugSchema,
@@ -252,6 +269,9 @@ export const TenancyCapabilitiesSchema = z.object({
   placementAssertionVersions: z.array(z.enum(['v1', 'v2'])).default([]),
   placementV2Required: z.boolean().default(false),
   workloadTenantLifecycleEnabled: z.boolean().default(false),
+  tenantSecretBrokerEnabled: z.boolean().default(false),
+  tenantSecretWriteOnlyAdminEnabled: z.boolean().default(false),
+  tenantSecretBreakGlassEnabled: z.boolean().default(false),
   shardId: z.string().nullable().default(null),
   workloadReceipt: z.object({
     algorithm: z.literal('ES256'),

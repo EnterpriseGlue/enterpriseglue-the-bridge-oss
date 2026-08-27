@@ -91,14 +91,30 @@ rollback qualification gates pass for the intended deployment.
   `EG_TENANT_PLACEMENT_V2_SHARD_ID`: Exact placement v2 trust and shard binding.
 - `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
   default `5`, maximum `60`.
-- `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2 and
-  workload receipt signing configuration. The default is `false`.
+- `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2,
+  workload receipt signing, forced RLS, and the tenant secret broker settings.
+  The default is `false`.
 - `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY`,
   `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID`, and
   `EG_TENANT_WORKLOAD_RECEIPT_ISSUER`: ES256 signing identity for safe tenant
   lifecycle operation receipts. The private key is shard-only secret material.
 - `EG_TENANT_RLS_ENFORCED`: Must be `true` in pooled mode. Startup fails unless
   `DATABASE_TYPE=postgres` and the expected forced RLS policies are installed.
+- `EG_TENANT_SECRET_BROKER_URL`: Private HTTPS base URL for the cloud-neutral
+  broker. Loopback HTTP is accepted only for development.
+- `EG_TENANT_SECRET_BROKER_TOKEN_REF`: Workload bearer-token reference resolved
+  through the existing environment, file, or Docker provider. It cannot use a
+  tenant-secret reference.
+- `EG_TENANT_SECRET_BROKER_TIMEOUT_MS`: Request timeout; default `5000`, range
+  `100` to `30000`.
+- `EG_TENANT_SECRET_BROKER_CACHE_TTL_MS`: In-memory resolved-value cache TTL;
+  default `15000`, maximum `60000`. Set `0` to disable caching.
+- `EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES`: Per-process cache bound; default
+  `256`, maximum `1024`.
+- `EG_TENANT_SECRET_BROKER_REQUIRED`: When `true`, startup requires the broker
+  URL and token reference. Cloud-required mode requires this to be `true`.
+- `EG_TENANT_SECRET_BREAK_GLASS_ENABLED`: Enables the independently audited,
+  workload-only local-reference recovery operation. Default `false`.
 
 Every tenant owns its own login policy and OIDC, SAML, or LDAP provider
 records. Tenant-scoped provider callbacks use the same global callback paths;
@@ -119,6 +135,10 @@ and the `/api/workloads/tenancy/*` and `/api/workloads/tenants/*` contracts.
 These routes reject interactive users and ordinary API clients, require
 `Idempotency-Key` and `X-Correlation-ID`, and return request-hash-bound ES256
 receipts. They never issue a browser or tenant session.
+
+See [Tenant Secret Broker](tenant-secret-broker.md) for its private HTTP
+contract, write-only tenant administration routes, SSO purpose mapping,
+rotation, outage, recovery, and rollback behavior.
 
 ### Git & Encryption
 - `GIT_REPOS_PATH`

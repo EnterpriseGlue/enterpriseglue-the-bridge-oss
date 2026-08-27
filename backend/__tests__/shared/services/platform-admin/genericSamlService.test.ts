@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
 import { MOCK_SAML_REQUEST_ID, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 import { createSamlSigningMaterial } from '../../../../test/identity-mocks/samlSigningMaterial.js';
 
@@ -16,9 +17,26 @@ const configuration = {
 
 describe('GenericSamlService', () => {
   afterEach(async () => {
+    vi.restoreAllMocks();
     delete process.env.EG_SAML_PROTOCOL_CERT;
     delete process.env.EG_SAML_SP_PRIVATE_KEY;
     delete process.env.EG_SAML_SP_CERT;
+  });
+
+  it('resolves an IdP signing certificate with the matching SAML tenant and purpose', async () => {
+    const provider = new MockSamlIdentityProvider();
+    const resolve = vi.spyOn(secretResolver, 'resolveTenantStored').mockResolvedValue(provider.certificate());
+    const tenantReference = 'ref:tenant-secret://v1/tenant-alpha/saml.idp_signing_certificate/version-1';
+
+    await expect(genericSamlService.validatePostResponse({
+      ...configuration,
+      signingCertificateRef: tenantReference,
+    }, provider.signedResponse(), MOCK_SAML_REQUEST_ID, {
+      tenantId: 'tenant-alpha', correlationId: 'saml-tenant-secret-test',
+    })).resolves.toMatchObject({ nameID: 'person@example.test' });
+    expect(resolve).toHaveBeenCalledWith(tenantReference, {
+      tenantId: 'tenant-alpha', purpose: 'saml.idp_signing_certificate', correlationId: 'saml-tenant-secret-test',
+    });
   });
 
   it('normalizes configured SAML attributes for provider-neutral provisioning and mappings', () => {

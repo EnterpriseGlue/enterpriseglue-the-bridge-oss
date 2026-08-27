@@ -53,6 +53,10 @@ commercial data.
 The unauthenticated `GET /api/tenancy/capabilities` remains available for the
 browser, but omits shard and receipt identity.
 
+The authenticated response also reports tenant-secret broker availability and
+whether workload-only secret-reference recovery is enabled. It never exposes a
+broker token, secret-manager identifier, or secret value.
+
 ## Provision a tenant
 
 `POST /api/workloads/tenants`
@@ -110,6 +114,35 @@ work-email discovery records. Every alias must be a valid FQDN and cannot be
 owned by another tenant in either routing registry. A changed alias set
 increments the placement epoch; an unchanged set does not.
 
+## Recover an identity-provider secret reference
+
+`POST /api/workloads/tenants/<tenant-id>/identity-provider-secret-reference`
+
+This route is disabled unless `EG_TENANT_SECRET_BREAK_GLASS_ENABLED=true`. It
+does not accept secret material. It replaces one provider field with an
+already-available environment, file, Docker, or bare environment reference.
+Broker references are rejected so the recovery path stays independent of a
+broker outage.
+
+```json
+{
+  "providerKey": "alpha-oidc",
+  "purpose": "oidc.client_secret",
+  "reference": "ref:env://EG_ALPHA_OIDC_CLIENT_SECRET",
+  "expectedPlacementEpoch": 7,
+  "enableProvider": false,
+  "confirmation": "SET_TENANT_SECRET_BREAK_GLASS_REFERENCE"
+}
+```
+
+The tenant and provider lookup is exact and cannot fall back to platform or
+another tenant. The reference must resolve before the provider is changed.
+Keep `enableProvider` false for a staged recovery; setting it true enables the
+provider in the same database transaction. The signed receipt command is
+`set_secret_reference_break_glass`. An independent audit record contains the
+tenant, provider, purpose, actor, operation, and correlation identifiers but
+not the reference contents or secret material.
+
 ## Signed receipt
 
 The response wraps a `tenant-workload-receipt.enterpriseglue.io/v1` payload and
@@ -157,3 +190,6 @@ before accepting the receipt.
 - Disable `EG_TENANCY_CLOUD_REQUIRED` and stop calling the workload routes
   before rolling the application back. Keep additive tables through the
   application rollback window.
+- Replace broker-backed provider references with verified local references
+  before rolling back tenant-secret support, and keep the broker available
+  until no persisted provider depends on it.

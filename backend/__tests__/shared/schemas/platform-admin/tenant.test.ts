@@ -8,6 +8,7 @@ import {
   TenantSchema,
   TenantSettingsSchema,
   TenancyCapabilitiesSchema,
+  TenantWorkloadSecretBreakGlassRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
 
 describe('native tenant contracts', () => {
@@ -23,7 +24,26 @@ describe('native tenant contracts', () => {
     expect(TenancyCapabilitiesSchema.parse({
       mode: 'pooled', rootTenantAliasesEnabled: false, tenantScopedLoginRequired: true,
       databaseIsolation: 'postgres_rls', customDomainsEnabled: true, signedPlacementAssertionsEnabled: true,
-    }).mode).toBe('pooled');
+    })).toMatchObject({
+      mode: 'pooled',
+      tenantSecretBrokerEnabled: false,
+      tenantSecretWriteOnlyAdminEnabled: false,
+      tenantSecretBreakGlassEnabled: false,
+    });
+  });
+
+  it('requires explicit confirmation and keeps workload recovery disabled by default', () => {
+    expect(TenantWorkloadSecretBreakGlassRequestSchema.parse({
+      providerKey: 'alpha-oidc',
+      purpose: 'oidc.client_secret',
+      reference: 'ref:env://EG_ALPHA_OIDC_CLIENT_SECRET',
+      expectedPlacementEpoch: 7,
+      confirmation: 'SET_TENANT_SECRET_BREAK_GLASS_REFERENCE',
+    })).toMatchObject({ providerKey: 'alpha-oidc', enableProvider: false });
+    expect(() => TenantWorkloadSecretBreakGlassRequestSchema.parse({
+      providerKey: 'alpha-oidc', purpose: 'oidc.client_secret', reference: 'ref:env://EG_ALPHA_OIDC_CLIENT_SECRET',
+      expectedPlacementEpoch: 7, confirmation: 'YES',
+    })).toThrow();
   });
 
   it('keeps work-email discovery separate from tenant authority', () => {

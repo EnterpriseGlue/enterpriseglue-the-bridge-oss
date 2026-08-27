@@ -219,6 +219,13 @@ SSO callbacks use the established global endpoints:
 All provider endpoints are still subject to the production identity-provider
 allowlist and secret-reference controls.
 
+Tenant administrators may submit OIDC, SAML, and LDAP secret material through
+write-only tenant routes. EnterpriseGlue stores only a reference bound to that
+tenant and the specific protocol purpose. Protocol consumers validate the
+binding before resolving the value through the cloud-neutral broker. Existing
+encrypted, environment, file, and Docker references remain supported. See
+[Tenant Secret Broker](../reference/tenant-secret-broker.md).
+
 ## PostgreSQL data isolation
 
 Pooled mode is intentionally limited to PostgreSQL. Startup fails when pooled
@@ -346,15 +353,24 @@ organization-name fallback.
 | `EG_TENANT_PLACEMENT_V2_AUDIENCE` | unset | Exact shard and receipt audience. |
 | `EG_TENANT_PLACEMENT_V2_SHARD_ID` | unset | Canonical shard identity. |
 | `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
-| `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2 and signed receipt settings are complete. |
+| `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, and tenant secret broker settings are complete. |
 | `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY` | unset | Shard-only PEM P-256 receipt signing key. |
 | `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID` | unset | Receipt signing key identifier. |
 | `EG_TENANT_WORKLOAD_RECEIPT_ISSUER` | unset | Stable receipt issuer. |
 | `EG_TENANT_RLS_ENFORCED` | `false` | Must be `true` before pooled mode starts. |
+| `EG_TENANT_SECRET_BROKER_URL` | unset | Private cloud-neutral broker base URL. |
+| `EG_TENANT_SECRET_BROKER_TOKEN_REF` | unset | Local-provider reference for broker workload authentication. |
+| `EG_TENANT_SECRET_BROKER_TIMEOUT_MS` | `5000` | Bounded request timeout in milliseconds. |
+| `EG_TENANT_SECRET_BROKER_CACHE_TTL_MS` | `15000` | Per-process resolved-value TTL; maximum 60000. |
+| `EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES` | `256` | Per-process resolved-value cache bound; maximum 1024. |
+| `EG_TENANT_SECRET_BROKER_REQUIRED` | `false` | Require URL and token reference at startup. |
+| `EG_TENANT_SECRET_BREAK_GLASS_ENABLED` | `false` | Enable audited workload-only recovery to a verified local reference. |
 
 Use a secret manager for placement v1 and workload receipt private keys. The
-placement v2 JWKS is public verification material. None of these values may
-appear in a tenant-facing API or native plugin.
+placement v2 JWKS is public verification material. The broker token stays in
+the shard workload-secret boundary, while tenant SSO values stay behind the
+tenant-bound broker contract. None of these values may appear in a
+tenant-facing response or native plugin.
 
 ## Repeatable pooled end-to-end qualification
 
@@ -395,8 +411,11 @@ route denial, and immediate rejection of an existing session after its tenant
 membership is removed. It records that the application database role cannot
 bypass RLS and counts the forced-policy tables.
 
-Sanitized diagnostics are written to `.artifacts/pooled-tenancy-e2e/`; secrets
-are never copied there. Deterministic desktop screenshots are retained under
+The lane provisions OIDC, SAML, and LDAP material through a disposable private
+implementation of the tenant-secret broker, proves cross-tenant reference
+denial, rotates the OIDC credential, checks availability, and then completes
+all three real protocol sign-ins. Sanitized diagnostics are written to
+`.artifacts/pooled-tenancy-e2e/`; secrets are never copied there. Deterministic desktop screenshots are retained under
 `playwright-results/ui-evidence/standard`, with narrow-screen and zoom evidence
 in the adjacent `responsive` directory. Keycloak and OpenLDAP are high-fidelity
 disposable protocol emulators. This lane proves the EnterpriseGlue protocol and tenant
