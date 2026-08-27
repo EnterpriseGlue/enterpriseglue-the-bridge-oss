@@ -33,6 +33,27 @@ navigation behavior. Plugin frontend code uses the host's React, router, Carbon 
 layout primitives, spacing tokens, and accessible fallback controls; it must not ship a parallel
 design system or a second React runtime.
 
+### Release-image immutability and browser self-containment
+
+Release-producing Dockerfiles pin every external base and declared BuildKit
+syntax image by exact `sha256`. Mission Control also renders without a public
+font host: pinned IBM Plex packages ship with the application, external Carbon
+font faces are removed during bundling, and production keeps
+`font-src 'self' data:`.
+
+Maintainers verify both invariants with:
+
+```text
+pnpm run guard:release-dockerfile-pins
+pnpm run guard:frontend-self-contained
+```
+
+Updating a base image, syntax image, or font package is therefore an explicit
+reviewed source change. Do not widen CSP or restore a mutable tag to repair a
+build. Private-plugin publisher acceptance must still exercise the resulting
+immutable Mission Control image; a source-server browser test is not a
+substitute.
+
 ### Control-plane authorization
 
 The plugin control API uses static OSS FGA actions instead of a broad administrator middleware:

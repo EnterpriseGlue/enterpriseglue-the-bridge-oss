@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-08-24T07:21:45.834Z
+Generated at: 2026-08-27T21:32:09.702Z
 
 Generated from:
 - third_party_licenses.json
@@ -29,6 +29,7 @@ Generated from:
 | ISC | 4 |
 | MIT | 60 |
 | MIT-0 | 1 |
+| OFL-1.1 | 3 |
 | SEE LICENSE IN LICENSE | 2 |
 
 ## Dependency list
@@ -45,6 +46,9 @@ Generated from:
 | @carbon/styles | 1.106.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon.git | frontend, packages/frontend-host |
 | @gitbeaker/rest | 43.8.0 | MIT | https://github.com/jdalrymple/gitbeaker | backend, frontend, packages/shared, root |
 | @google-cloud/spanner | 8.11.0 | Apache-2.0 | https://github.com/googleapis/google-cloud-node.git | backend, frontend, packages/shared, root |
+| @ibm/plex-mono | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | frontend, packages/frontend-host |
+| @ibm/plex-sans-arabic | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | frontend, packages/frontend-host |
+| @ibm/plex-sans | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | frontend, packages/frontend-host |
 | @node-saml/node-saml | 5.1.0 | MIT | https://github.com/node-saml/node-saml.git | backend, frontend, packages/shared, root |
 | @tanstack/react-query | 5.102.0 | MIT | git+https://github.com/TanStack/query.git | frontend, packages/frontend-host |
 | @tanstack/react-table | 8.21.3 | MIT | https://github.com/TanStack/table.git | frontend, packages/frontend-host |
