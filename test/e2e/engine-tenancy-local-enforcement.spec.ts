@@ -78,6 +78,11 @@ async function login(page: Page): Promise<void> {
   expect((await loginResponse).status()).toBe(200);
   await page.waitForURL(/\/t\/default(?:\/|$)/);
   await permissionsResponse;
+  // The dashboard starts several authenticated reads in parallel after login.
+  // Let those responses settle before minting a CSRF token for the API-driven
+  // evidence below, otherwise an older in-flight response can restore the
+  // pre-bootstrap CSRF cookie after the explicit token request completes.
+  await page.waitForLoadState('networkidle');
 }
 
 async function classificationReport(page: Page): Promise<ClassificationReport> {
