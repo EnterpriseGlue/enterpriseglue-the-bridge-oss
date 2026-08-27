@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import type {
   CreateEnvironmentTag,
   EnvironmentTag as SharedEnvironmentTag,
@@ -59,7 +60,7 @@ export const platformAdminApi = {
 
   // Environment Tags
   getEnvironments: () =>
-    apiClient.get<EnvironmentTag[]>('/api/admin/environments'),
+    fetchList<EnvironmentTag>('/api/admin/environments'),
 
   createEnvironment: (data: CreateEnvironmentTag) =>
     apiClient.post<EnvironmentTag>('/api/admin/environments', data),
@@ -75,14 +76,14 @@ export const platformAdminApi = {
 
   // Users
   getUsers: (params?: { limit?: number; offset?: number }) =>
-    apiClient.get<UserListItem[]>('/api/users', params),
+    fetchList<UserListItem>('/api/users', params),
 
   searchUsers: (query: string) =>
-    apiClient.get<UserSearchResult[]>('/api/admin/users/search', { q: query }),
+    fetchList<UserSearchResult>('/api/admin/users/search', { q: query }),
 
   // Governance - Projects
   getProjectsForGovernance: (params?: { search?: string }) =>
-    apiClient.get<ProjectGovernanceItem[]>('/api/admin/projects', params),
+    fetchList<ProjectGovernanceItem>('/api/admin/projects', params),
 
   assignProjectOwner: (projectId: string, data: { userId: string; reason: string }) =>
     apiClient.post<{ success: boolean }>(`/api/admin/projects/${projectId}/assign-owner`, data),
@@ -92,7 +93,7 @@ export const platformAdminApi = {
 
   // Governance - Engines
   getEnginesForGovernance: (params?: { search?: string }) =>
-    apiClient.get<EngineGovernanceItem[]>('/api/admin/engines', params),
+    fetchList<EngineGovernanceItem>('/api/admin/engines', params),
 
   assignEngineOwner: (engineId: string, data: { userId: string; reason: string }) =>
     apiClient.post<{ success: boolean }>(`/api/admin/engines/${engineId}/assign-owner`, data),
@@ -102,7 +103,7 @@ export const platformAdminApi = {
 
   // Git Providers
   getGitProviders: () =>
-    apiClient.get<GitProvider[]>('/git-api/admin/providers'),
+    fetchList<GitProvider>('/git-api/admin/providers'),
 
   updateGitProvider: (id: string, data: UpdateGitProviderRequest) =>
     apiClient.put<GitProviderAdminUpdateResponse>(`/git-api/admin/providers/${id}`, data),

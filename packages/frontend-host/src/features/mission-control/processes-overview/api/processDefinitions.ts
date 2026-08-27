@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import type {
   SavedFilter as SharedSavedFilter,
   SavedFilterCreateRequest as SharedSavedFilterCreateRequest,
@@ -32,7 +33,7 @@ export type CreateSavedProcessFilterRequest = SharedSavedFilterCreateRequest
 export async function listProcessDefinitions(engineId?: string): Promise<ProcessDefinition[]> {
   const params = new URLSearchParams()
   if (engineId) params.set('engineId', engineId)
-  return apiClient.get<ProcessDefinition[]>(`/mission-control-api/process-definitions?${params}`, undefined, { credentials: 'include' })
+  return fetchList<ProcessDefinition>(`/mission-control-api/process-definitions?${params}`, undefined, { credentials: 'include' })
 }
 
 export async function getActiveActivityCounts(definitionId: string, engineId?: string): Promise<ActivityCountByActivityId> {
@@ -79,7 +80,7 @@ export async function listProcessInstances(params: GetProcessInstancesParams): P
   if (params.startedAfter) searchParams.set('startedAfter', params.startedAfter)
   if (params.startedBefore) searchParams.set('startedBefore', params.startedBefore)
   if (params.includeActionDecisions) searchParams.set('includeActionDecisions', 'true')
-  return apiClient.get<ProcessInstance[]>(`/mission-control-api/process-instances?${searchParams.toString()}`, undefined, { credentials: 'include' })
+  return fetchList<ProcessInstance>(`/mission-control-api/process-instances?${searchParams.toString()}`, undefined, { credentials: 'include' })
 }
 
 export async function fetchPreviewCount(body: PreviewCountRequest): Promise<PreviewCountResponse> {
@@ -87,7 +88,7 @@ export async function fetchPreviewCount(body: PreviewCountRequest): Promise<Prev
 }
 
 export async function listSavedProcessFilters(): Promise<SavedProcessFilter[]> {
-  return apiClient.get<SavedProcessFilter[]>('/engines-api/saved-filters', undefined, { credentials: 'include' })
+  return fetchList<SavedProcessFilter>('/engines-api/saved-filters', undefined, { credentials: 'include' })
 }
 
 export async function createSavedProcessFilter(body: CreateSavedProcessFilterRequest): Promise<SavedProcessFilter> {
@@ -106,15 +107,15 @@ export async function fetchInstanceVariables(instanceId: string, engineId?: stri
 
 export async function listInstanceActivityHistory(instanceId: string, engineId?: string): Promise<ActivityInstance[]> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<ActivityInstance[]>(`/mission-control-api/process-instances/${instanceId}/history/activity-instances${params}`, undefined, { credentials: 'include' })
+  return fetchList<ActivityInstance>(`/mission-control-api/process-instances/${instanceId}/history/activity-instances${params}`, undefined, { credentials: 'include' })
 }
 
 export async function listInstanceJobs(instanceId: string, engineId?: string): Promise<ProcessInstanceJob[]> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<ProcessInstanceJob[]>(`/mission-control-api/process-instances/${instanceId}/jobs${params}`, undefined, { credentials: 'include' })
+  return fetchList<ProcessInstanceJob>(`/mission-control-api/process-instances/${instanceId}/jobs${params}`, undefined, { credentials: 'include' })
 }
 
 export async function listInstanceExternalTasks(instanceId: string, engineId?: string): Promise<ProcessInstanceExternalTask[]> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<ProcessInstanceExternalTask[]>(`/mission-control-api/process-instances/${instanceId}/failed-external-tasks${params}`, undefined, { credentials: 'include' })
+  return fetchList<ProcessInstanceExternalTask>(`/mission-control-api/process-instances/${instanceId}/failed-external-tasks${params}`, undefined, { credentials: 'include' })
 }

@@ -113,6 +113,7 @@ import type {
   IdentitySyncRun as SharedIdentitySyncRun,
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 
 export type {
   ConfigBundleApplyReconciliation,
@@ -292,7 +293,7 @@ export function useCurrentUserPermissions() {
 export function usePermissionCatalog(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.permissions,
-    queryFn: () => apiClient.get<PermissionCatalogEntry[]>('/api/authz/permissions'),
+    queryFn: () => fetchList<PermissionCatalogEntry>('/api/authz/permissions'),
     enabled: options.enabled ?? true,
   });
 }
@@ -308,7 +309,7 @@ export function useCreateCustomPermission() {
 export function useRbacRoles(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.roles,
-    queryFn: () => apiClient.get<RoleSummary[]>('/api/authz/roles'),
+    queryFn: () => fetchList<RoleSummary>('/api/authz/roles'),
     enabled: options.enabled ?? true,
   });
 }
@@ -400,7 +401,7 @@ export function useRoleAssignments(params?: {
 
   return useQuery({
     queryKey: authzQueryKeys.roleAssignments(params),
-    queryFn: () => apiClient.get<RoleAssignment[]>(url),
+    queryFn: () => fetchList<RoleAssignment>(url),
     enabled: options?.enabled ?? true,
   });
 }
@@ -429,7 +430,7 @@ export function useAuthzGroups(params?: { includeArchived?: boolean }, options: 
   const url = `/api/authz/groups${queryString ? `?${queryString}` : ''}`;
   return useQuery({
     queryKey: authzQueryKeys.groups(params),
-    queryFn: () => apiClient.get<AuthzGroup[]>(url),
+    queryFn: () => fetchList<AuthzGroup>(url),
     enabled: options.enabled ?? true,
   });
 }
@@ -468,7 +469,7 @@ export function useAuthzGroupMemberships(params?: { groupId?: string; userId?: s
   const url = `/api/authz/group-memberships${queryString ? `?${queryString}` : ''}`;
   return useQuery({
     queryKey: authzQueryKeys.groupMemberships(params),
-    queryFn: () => apiClient.get<AuthzGroupMembership[]>(url),
+    queryFn: () => fetchList<AuthzGroupMembership>(url),
   });
 }
 
@@ -492,7 +493,7 @@ export function useRemoveAuthzGroupMembership() {
 export function useApiClients() {
   return useQuery({
     queryKey: authzQueryKeys.apiClients,
-    queryFn: () => apiClient.get<ApiClient[]>('/api/authz/api-clients'),
+    queryFn: () => fetchList<ApiClient>('/api/authz/api-clients'),
   });
 }
 
@@ -526,7 +527,7 @@ export function useServiceAccounts(params?: { includeInactive?: boolean }) {
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.serviceAccounts(params),
-    queryFn: () => apiClient.get<ServiceAccount[]>(`/api/authz/service-accounts${queryString ? `?${queryString}` : ''}`),
+    queryFn: () => fetchList<ServiceAccount>(`/api/authz/service-accounts${queryString ? `?${queryString}` : ''}`),
   });
 }
 
@@ -558,14 +559,14 @@ export function useRevokeServiceAccount() {
 export function useExternalEngines() {
   return useQuery({
     queryKey: authzQueryKeys.externalEngines,
-    queryFn: () => apiClient.get<ExternalEngineRegistration[]>('/api/authz/external-engines'),
+    queryFn: () => fetchList<ExternalEngineRegistration>('/api/authz/external-engines'),
   });
 }
 
 export function useExternalEngineSystems() {
   return useQuery({
     queryKey: authzQueryKeys.externalEngineSystems,
-    queryFn: () => apiClient.get<ExternalEngineSystem[]>('/api/authz/external-engine-systems'),
+    queryFn: () => fetchList<ExternalEngineSystem>('/api/authz/external-engine-systems'),
   });
 }
 
@@ -608,7 +609,7 @@ export function useExternalEngineAudit(id?: string, params?: ExternalEngineAudit
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.externalEngineAudit(id, params),
-    queryFn: () => apiClient.get<ExternalEngineRegistrationAuditEntry[]>(`/api/authz/external-engines/${id}/audit${queryString ? `?${queryString}` : ''}`),
+    queryFn: () => fetchList<ExternalEngineRegistrationAuditEntry>(`/api/authz/external-engines/${id}/audit${queryString ? `?${queryString}` : ''}`),
     enabled: Boolean(id),
   });
 }
@@ -657,7 +658,7 @@ export function useEngineSets(params?: { includeArchived?: boolean }, options: {
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.engineSets(params),
-    queryFn: () => apiClient.get<EngineSetSummary[]>(`/api/authz/engine-sets${queryString ? `?${queryString}` : ''}`),
+    queryFn: () => fetchList<EngineSetSummary>(`/api/authz/engine-sets${queryString ? `?${queryString}` : ''}`),
     enabled: options.enabled ?? true,
   });
 }
@@ -710,7 +711,7 @@ export function useRuntimeResources(engineId?: string, options: { resourceKind?:
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.runtimeResources(engineId, options),
-    queryFn: () => apiClient.get<RuntimeResource[]>(`/api/authz/runtime-resources?${queryString}`),
+    queryFn: () => fetchList<RuntimeResource>(`/api/authz/runtime-resources?${queryString}`),
     enabled: (options.enabled ?? true) && Boolean(engineId),
   });
 }
@@ -722,7 +723,7 @@ export function useRuntimeResourceSets(engineId?: string, options: { includeArch
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.runtimeResourceSets(engineId, options),
-    queryFn: () => apiClient.get<RuntimeResourceSet[]>(`/api/authz/runtime-resource-sets${queryString ? `?${queryString}` : ''}`),
+    queryFn: () => fetchList<RuntimeResourceSet>(`/api/authz/runtime-resource-sets${queryString ? `?${queryString}` : ''}`),
     enabled: options.enabled ?? true,
   });
 }
@@ -750,7 +751,7 @@ export function useConfigBundleRuns(options: { limit?: number; enabled?: boolean
   const limit = options.limit ?? 25;
   return useQuery({
     queryKey: authzQueryKeys.configBundleRuns(limit),
-    queryFn: () => apiClient.get<ConfigBundleApplyRun[]>(`/api/authz/config-bundles/runs?limit=${limit}`),
+    queryFn: () => fetchList<ConfigBundleApplyRun>(`/api/authz/config-bundles/runs?limit=${limit}`),
     enabled: options.enabled ?? true,
   });
 }
@@ -766,7 +767,7 @@ export function useConfigBundleRun(id?: string, options: { enabled?: boolean } =
 export function useConfigBundleIdentityReplayTasks(runId?: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.configBundleIdentityReplayTasks(runId),
-    queryFn: () => apiClient.get<ConfigBundleIdentityReplayTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/identity-replay-tasks`),
+    queryFn: () => fetchList<ConfigBundleIdentityReplayTask>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/identity-replay-tasks`),
     enabled: (options.enabled ?? true) && Boolean(runId),
   });
 }
@@ -774,7 +775,7 @@ export function useConfigBundleIdentityReplayTasks(runId?: string, options: { en
 export function useConfigBundleRuntimeReconciliationTasks(runId?: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.configBundleRuntimeReconciliationTasks(runId),
-    queryFn: () => apiClient.get<ConfigBundleRuntimeReconciliationTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/runtime-reconciliation-tasks`),
+    queryFn: () => fetchList<ConfigBundleRuntimeReconciliationTask>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/runtime-reconciliation-tasks`),
     enabled: (options.enabled ?? true) && Boolean(runId),
   });
 }
@@ -791,7 +792,7 @@ export function useGovernanceOwnershipReceipts(options: { limit?: number; enable
   const limit = options.limit ?? 10;
   return useQuery({
     queryKey: authzQueryKeys.governanceOwnershipReceipts(limit),
-    queryFn: () => apiClient.get<GovernanceOwnershipReceipt[]>(`/api/authz/config-bundles/governance-ownership/receipts?limit=${limit}`),
+    queryFn: () => fetchList<GovernanceOwnershipReceipt>(`/api/authz/config-bundles/governance-ownership/receipts?limit=${limit}`),
     enabled: options.enabled ?? true,
   });
 }
@@ -828,7 +829,7 @@ export function useProjectEngineTargets(params?: {
   const queryString = searchParams.toString();
   return useQuery({
     queryKey: authzQueryKeys.projectEngineTargets(params),
-    queryFn: () => apiClient.get<ProjectEngineTarget[]>(`/api/authz/project-engine-targets${queryString ? `?${queryString}` : ''}`),
+    queryFn: () => fetchList<ProjectEngineTarget>(`/api/authz/project-engine-targets${queryString ? `?${queryString}` : ''}`),
   });
 }
 
@@ -904,7 +905,7 @@ export function useEvaluateStarbaseMissionControlBridge() {
 export function useSsoSyncRuns(params: SsoSyncRunParams = { limit: 10 }, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.ssoSyncRuns(params),
-    queryFn: () => apiClient.get<SsoSyncRun[]>('/api/authz/sso-sync-runs', params),
+    queryFn: () => fetchList<SsoSyncRun>('/api/authz/sso-sync-runs', params),
     enabled: options.enabled ?? true,
   });
 }
@@ -916,7 +917,7 @@ export function useSsoSyncEvents(
 ) {
   return useQuery({
     queryKey: authzQueryKeys.ssoSyncEvents(runId, params),
-    queryFn: () => apiClient.get<SsoSyncEvent[]>(`/api/authz/sso-sync-runs/${runId}/events`, params),
+    queryFn: () => fetchList<SsoSyncEvent>(`/api/authz/sso-sync-runs/${runId}/events`, params),
     enabled: Boolean(runId) && (options.enabled ?? true),
   });
 }
@@ -938,7 +939,7 @@ export function useIdentityProviders(options: { enabled?: boolean } = {}) {
     : (window.location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)?.[1] || 'root');
   return useQuery({
     queryKey: [...authzQueryKeys.identityProviders, tenantScope],
-    queryFn: () => apiClient.get<IdentityProvider[]>('/api/identity/providers'),
+    queryFn: () => fetchList<IdentityProvider>('/api/identity/providers'),
     enabled: options.enabled ?? true,
   });
 }
@@ -946,7 +947,7 @@ export function useIdentityProviders(options: { enabled?: boolean } = {}) {
 export function useIdentityEntitlementMappings(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.identityEntitlementMappings,
-    queryFn: () => apiClient.get<IdentityEntitlementMapping[]>('/api/identity/mappings'),
+    queryFn: () => fetchList<IdentityEntitlementMapping>('/api/identity/mappings'),
     enabled: options.enabled ?? true,
   });
 }
@@ -957,7 +958,7 @@ export function useIdentityEntitlementMappings(options: { enabled?: boolean } = 
 export function useAuthzPolicies() {
   return useQuery({
     queryKey: authzQueryKeys.policies,
-    queryFn: () => apiClient.get<AuthzPolicy[]>('/api/authz/policies'),
+    queryFn: () => fetchList<AuthzPolicy>('/api/authz/policies'),
   });
 }
 
@@ -1017,7 +1018,7 @@ export function useAuthzAuditLog(params?: SharedAuthzAuditQuery, options?: { ena
 
   return useQuery({
     queryKey: authzQueryKeys.auditLog(params),
-    queryFn: () => apiClient.get<AuthzAuditEntry[]>(url),
+    queryFn: () => fetchList<AuthzAuditEntry>(url),
     enabled: options?.enabled ?? true,
   });
 }

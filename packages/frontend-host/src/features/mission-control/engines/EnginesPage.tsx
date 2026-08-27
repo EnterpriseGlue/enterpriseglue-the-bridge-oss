@@ -33,6 +33,7 @@ import { useToast } from '../../../shared/notifications/ToastProvider'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import EngineMembersModal from './components/EngineMembersModal'
 import EngineTenancyPanel from './components/EngineTenancyPanel'
 import CamundaNativeGrantMigrationPanel from './components/CamundaNativeGrantMigrationPanel'
@@ -1588,7 +1589,7 @@ export default function Engines() {
   const runtimeAssignmentsQ = useQuery({
     queryKey: ['engines', editing?.id, 'runtime-role-assignments'],
     enabled: Boolean(engineModal.isOpen && editing?.id && editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed && assignmentReadDecision.allowed),
-    queryFn: () => apiClient.get<EngineRoleAssignment[]>('/api/authz/role-assignments', { engineId: String(editing?.id) }, { credentials: 'include' }),
+    queryFn: () => fetchList<EngineRoleAssignment>('/api/authz/role-assignments', { engineId: String(editing?.id) }, { credentials: 'include' }),
   })
   const accessMembersQ = useQuery({
     queryKey: ['engines', editing?.id, 'access-members'],
@@ -1598,7 +1599,7 @@ export default function Engines() {
   const accessAssignmentsQ = useQuery({
     queryKey: ['engines', editing?.id, 'access-assignments'],
     enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
-    queryFn: () => apiClient.get<EngineRoleAssignment[]>(
+    queryFn: () => fetchList<EngineRoleAssignment>(
       `/api/authz/role-assignments?resourceType=engine&resourceId=${encodeURIComponent(String(editing?.id))}`,
       undefined,
       { credentials: 'include' }

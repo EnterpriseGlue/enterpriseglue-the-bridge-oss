@@ -3,6 +3,7 @@ import { HeaderMenu, HeaderMenuItem } from '@carbon/react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 
 interface TenantMembership {
   tenantId: string;
@@ -19,7 +20,7 @@ export default function NativeTenantPicker({ enabled }: { enabled: boolean }) {
   const suffix = match?.[2] || '';
   const memberships = useQuery({
     queryKey: ['native-tenant-memberships'],
-    queryFn: () => apiClient.get<TenantMembership[]>('/api/auth/my-tenants'),
+    queryFn: () => fetchList<TenantMembership>('/api/auth/my-tenants'),
     enabled,
   });
   const tenantDestination = (tenant: TenantMembership) =>

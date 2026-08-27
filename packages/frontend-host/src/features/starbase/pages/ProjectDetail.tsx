@@ -39,6 +39,7 @@ import SyncModal from '../../git/components/SyncModal'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { getAccessibleEngines, requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
 import { filesApi } from '../../../api/starbase/files'
 import { foldersApi } from '../../../api/starbase/folders'
@@ -358,7 +359,7 @@ export default function ProjectDetail() {
 
   const projectsQ = useQuery({
     queryKey: ['starbase', 'projects'],
-    queryFn: () => apiClient.get<Project[]>('/starbase-api/projects'),
+    queryFn: () => fetchList<Project>('/starbase-api/projects'),
     enabled: !!projectId,
     staleTime: 60 * 1000,
   })
@@ -396,7 +397,7 @@ export default function ProjectDetail() {
   const gitRepoQ = useQuery({
     queryKey: ['git', 'repository', projectId],
     queryFn: async () => {
-      const repos = await apiClient.get<any[]>('/git-api/repositories', { projectId })
+      const repos = await fetchList<any>('/git-api/repositories', { projectId })
         .catch(() => [])
       if (!Array.isArray(repos) || repos.length === 0) return null
       return repos[0] || null
@@ -928,7 +929,7 @@ export default function ProjectDetail() {
 
   const customProjectRolesQ = useQuery({
     queryKey: ['project-members', projectId, 'custom-roles'],
-    queryFn: () => apiClient.get<SharedRoleSummary[]>('/api/authz/roles', {
+    queryFn: () => fetchList<SharedRoleSummary>('/api/authz/roles', {
       scope: 'project',
       assignable: 'true',
       resourceType: 'project',
@@ -939,7 +940,7 @@ export default function ProjectDetail() {
 
   const projectRoleAssignmentsQ = useQuery({
     queryKey: ['project-members', projectId, 'custom-role-assignments'],
-    queryFn: () => apiClient.get<ScopedProjectRoleAssignment[]>('/api/authz/role-assignments', {
+    queryFn: () => fetchList<ScopedProjectRoleAssignment>('/api/authz/role-assignments', {
       resourceType: 'project',
       resourceId: projectId,
     }),
@@ -948,13 +949,13 @@ export default function ProjectDetail() {
 
   const projectAuthzGroupsQ = useQuery({
     queryKey: ['project-members', projectId, 'authz-groups'],
-    queryFn: () => apiClient.get<ProjectAuthzGroupSummary[]>('/api/authz/groups'),
+    queryFn: () => fetchList<ProjectAuthzGroupSummary>('/api/authz/groups'),
     enabled: !!projectId && collaboratorsOpen && canInspectScopedProjectLineage,
   })
 
   const projectGroupMembershipsQ = useQuery({
     queryKey: ['project-members', projectId, 'authz-group-memberships'],
-    queryFn: () => apiClient.get<ProjectAuthzGroupMembershipSummary[]>('/api/authz/group-memberships'),
+    queryFn: () => fetchList<ProjectAuthzGroupMembershipSummary>('/api/authz/group-memberships'),
     enabled: !!projectId && collaboratorsOpen && canInspectScopedProjectLineage,
   })
 
@@ -1290,7 +1291,7 @@ export default function ProjectDetail() {
     queryFn: () => {
       const q = assignmentUserSearch.trim()
       if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
-      return apiClient.get<UserSearchItem[]>(`/api/admin/users/search?q=${encodeURIComponent(q)}`)
+      return fetchList<UserSearchItem>(`/api/admin/users/search?q=${encodeURIComponent(q)}`)
     },
     enabled: assignmentModal.isOpen && assignmentPrincipalType === 'user' && canSearchMembers && assignmentUserSearch.trim().length >= 2,
     staleTime: 30 * 1000,

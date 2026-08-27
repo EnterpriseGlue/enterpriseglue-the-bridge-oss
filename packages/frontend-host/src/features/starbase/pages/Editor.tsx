@@ -13,6 +13,7 @@ import HistoryPanel from '../components/HistoryPanel'
 import { useXmlHistory } from '../hooks/useXmlHistory'
 import CommitModal from '../components/CommitModal'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { File as StarbaseFile } from '../../../shared/api/types'
 import { buildEditorBreadcrumbBackState, buildEditorNavigationState, getEditorBreadcrumbTrail } from '../utils/editorBreadcrumbs'
@@ -249,7 +250,7 @@ export default function Editor() {
 
   const projectFilesQ = useQuery({
     queryKey: ['starbase', 'project-files', fileQ.data?.projectId],
-    queryFn: () => apiClient.get<StarbaseFile[]>(`/starbase-api/projects/${fileQ.data?.projectId}/files`),
+    queryFn: () => fetchList<StarbaseFile>(`/starbase-api/projects/${fileQ.data?.projectId}/files`),
     enabled: !!fileQ.data?.projectId,
     refetchOnMount: 'always',
     staleTime: 30 * 1000,
@@ -1588,7 +1589,7 @@ export default function Editor() {
 
   const engineDeploymentsLatestQ = useQuery({
     queryKey: ['engine-deployments', fileQ.data?.projectId, 'latest'],
-    queryFn: () => apiClient.get<LatestDeploymentByFile[]>(`/starbase-api/projects/${fileQ.data?.projectId}/engine-deployments/latest`),
+    queryFn: () => fetchList<LatestDeploymentByFile>(`/starbase-api/projects/${fileQ.data?.projectId}/engine-deployments/latest`),
     enabled: !!fileQ.data?.projectId && canReadProjectDeployments,
     staleTime: 30_000,
     retry: false,

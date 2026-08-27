@@ -24,6 +24,7 @@ import { Copy, Launch } from '@carbon/icons-react'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
@@ -69,7 +70,7 @@ export default function DecisionHistoryDetail() {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
       params.set('decisionInstanceId', id)
-      const data = await apiClient.get<HistoricDecisionInstance[]>(
+      const data = await fetchList<HistoricDecisionInstance>(
         `/mission-control-api/history/decisions?${params.toString()}`,
         undefined,
         { credentials: 'include' },
@@ -92,7 +93,7 @@ export default function DecisionHistoryDetail() {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
       params.set('rootDecisionInstanceId', rootDecisionInstanceId)
-      const data = await apiClient.get<HistoricDecisionInstance[]>(
+      const data = await fetchList<HistoricDecisionInstance>(
         `/mission-control-api/history/decisions?${params.toString()}`,
         undefined,
         { credentials: 'include' },
@@ -123,7 +124,7 @@ export default function DecisionHistoryDetail() {
     queryFn: () => {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
-      return apiClient.get<DecisionIo[]>(
+      return fetchList<DecisionIo>(
         `/mission-control-api/history/decisions/${id}/inputs?${params.toString()}`,
         undefined,
         { credentials: 'include' },
@@ -137,7 +138,7 @@ export default function DecisionHistoryDetail() {
     queryFn: () => {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
-      return apiClient.get<DecisionIo[]>(
+      return fetchList<DecisionIo>(
         `/mission-control-api/history/decisions/${id}/outputs?${params.toString()}`,
         undefined,
         { credentials: 'include' },

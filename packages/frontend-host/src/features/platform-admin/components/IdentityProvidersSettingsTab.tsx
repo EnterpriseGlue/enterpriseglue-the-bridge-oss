@@ -6,6 +6,7 @@ import {
 import { Add } from '@carbon/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useSafeDestructiveModalFocus } from '../../../shared/hooks/useSafeDestructiveModalFocus';
 import { useUnsavedChangesGuard } from '../../../shared/hooks/useUnsavedChangesGuard';
@@ -310,7 +311,7 @@ export default function IdentityProvidersSettingsTab({
     setConnectionResult(null);
     setExternalIdentityUnlinkResult(null);
   };
-  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', tenantScope, historyProvider?.key], queryFn: () => apiClient.get<SsoSyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
+  const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', tenantScope, historyProvider?.key], queryFn: () => fetchList<SsoSyncRun>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
     mutationFn: (payload: FormState) => {

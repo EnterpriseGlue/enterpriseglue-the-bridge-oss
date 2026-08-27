@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, Form, InlineNotification, Stack, TextInput, Tile } from '@carbon/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
@@ -26,7 +27,7 @@ export default function TenantsPage() {
   const [error, setError] = useState('');
   const tenants = useQuery({
     queryKey: ['platform-tenants'],
-    queryFn: () => apiClient.get<Tenant[]>('/api/platform/tenants'),
+    queryFn: () => fetchList<Tenant>('/api/platform/tenants'),
     enabled: readDecision.allowed,
   });
   const createTenant = useMutation({

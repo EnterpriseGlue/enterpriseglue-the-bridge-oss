@@ -26,6 +26,7 @@ import { useElementLinkPillOverlay } from './components/hooks/useElementLinkPill
 import { useProcessesFilterStore } from '../shared/stores/processesFilterStore'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { getProcessInstanceVariableHistory, modifyProcessInstanceVariables } from './api/processInstances'
@@ -642,7 +643,7 @@ export default function ProcessInstanceDetailPage() {
       params.set('sortBy', 'evaluationTime')
       params.set('sortOrder', 'desc')
       params.set('maxResults', '50')
-      const all = await apiClient.get<HistoricDecisionInstanceLite[]>(withEngineId(`/mission-control-api/history/decisions?${params.toString()}`), undefined, { credentials: 'include' })
+      const all = await fetchList<HistoricDecisionInstanceLite>(withEngineId(`/mission-control-api/history/decisions?${params.toString()}`), undefined, { credentials: 'include' })
       if (!all || all.length === 0) return null
 
       let candidates: HistoricDecisionInstanceLite[] = []
@@ -670,13 +671,13 @@ export default function ProcessInstanceDetailPage() {
 
   const decisionInputsQ = useQuery<DecisionIo[]>({
     queryKey: ['mission-control', 'selected-decision-inputs', selectedDecisionInstance?.id],
-    queryFn: () => apiClient.get<DecisionIo[]>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`), undefined, { credentials: 'include' }),
+    queryFn: () => fetchList<DecisionIo>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`), undefined, { credentials: 'include' }),
     enabled: !!selectedDecisionInstance?.id,
   })
 
   const decisionOutputsQ = useQuery<DecisionIo[]>({
     queryKey: ['mission-control', 'selected-decision-outputs', selectedDecisionInstance?.id],
-    queryFn: () => apiClient.get<DecisionIo[]>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`), undefined, { credentials: 'include' }),
+    queryFn: () => fetchList<DecisionIo>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`), undefined, { credentials: 'include' }),
     enabled: !!selectedDecisionInstance?.id,
   })
 

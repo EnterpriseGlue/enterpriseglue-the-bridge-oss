@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 
 type Version = {
   id: string
@@ -12,7 +12,7 @@ type Version = {
 export default function VersionsPanel({ fileId }: { fileId: string }) {
   const q = useQuery({
     queryKey: ['versions', fileId],
-    queryFn: () => apiClient.get<Version[]>(`/starbase-api/files/${fileId}/versions`),
+    queryFn: () => fetchList<Version>(`/starbase-api/files/${fileId}/versions`),
     enabled: !!fileId,
   })
   if (q.isLoading) return <p>Loading versions…</p>

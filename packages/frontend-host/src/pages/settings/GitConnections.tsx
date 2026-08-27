@@ -37,6 +37,7 @@ import {
 } from '@carbon/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../shared/api/client';
+import { fetchList } from '../../shared/api/fetchList';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
 import { toSafePathSegment } from '../../utils/safeNavigation';
@@ -101,13 +102,13 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
   // Fetch credentials
   const credentialsQuery = useQuery({
     queryKey: ['git', 'credentials'],
-    queryFn: () => apiClient.get<Credential[]>('/git-api/credentials'),
+    queryFn: () => fetchList<Credential>('/git-api/credentials'),
   });
 
   // Fetch providers
   const providersQuery = useQuery({
     queryKey: ['git', 'providers'],
-    queryFn: () => apiClient.get<Provider[]>('/git-api/providers'),
+    queryFn: () => fetchList<Provider>('/git-api/providers'),
   });
 
   // Delete mutation

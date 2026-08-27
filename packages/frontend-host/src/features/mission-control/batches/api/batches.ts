@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import { fetchList } from '../../../../shared/api/fetchList';
 import type {
   Batch as SharedBatch,
   BatchDeleteOperationRequest,
@@ -20,7 +21,7 @@ export async function getBatches(engineId?: string): Promise<Batch[]> {
   if (engineId) params.set('engineId', engineId)
   const query = params.toString()
   const suffix = query ? `?${query}` : ''
-  return apiClient.get<Batch[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
+  return fetchList<Batch>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
 }
 
 export async function getBatch(batchId: string, engineId?: string): Promise<BatchDetail> {

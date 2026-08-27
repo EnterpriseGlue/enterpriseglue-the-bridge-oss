@@ -16,6 +16,7 @@ import { gitApi } from '../../git/api/gitApi'
 import { projectsApi } from '../../../api/starbase/projects'
 import { StarbaseTableShell } from '../components/StarbaseTableShell'
 import { apiClient } from '../../../shared/api/client'
+import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { ProjectOverviewTable } from './components/ProjectOverviewTable'
@@ -228,7 +229,7 @@ export default function ProjectOverview() {
   const [bulkResult, setBulkResult] = React.useState<BulkSyncResult | null>(null)
   const q = useQuery({
     queryKey: ['starbase', 'projects'],
-    queryFn: () => apiClient.get<Project[]>('/starbase-api/projects'),
+    queryFn: () => fetchList<Project>('/starbase-api/projects'),
     staleTime: 60 * 1000,
   })
 
@@ -268,7 +269,7 @@ export default function ProjectOverview() {
   const credentialsQuery = useQuery({
     queryKey: ['git', 'credentials'],
     queryFn: async () => {
-      const data = await apiClient.get<any[]>('/git-api/credentials').catch(() => [])
+      const data = await fetchList<any>('/git-api/credentials').catch(() => [])
       return Array.isArray(data) ? data : []
     },
     staleTime: 30 * 1000,
