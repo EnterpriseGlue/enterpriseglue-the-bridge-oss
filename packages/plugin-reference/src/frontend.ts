@@ -9,6 +9,14 @@ export const REFERENCE_PLUGIN_ID =
 export const REFERENCE_PLUGIN_VERSION = '0.1.0' as const;
 export const REFERENCE_STATUS_OPERATION =
   `${REFERENCE_PLUGIN_ID}.read-status` as const;
+export const REFERENCE_QUALIFICATION_OPERATION =
+  `${REFERENCE_PLUGIN_ID}.qualify-runtime` as const;
+export const REFERENCE_SCHEDULE_DELIVERY_OPERATION =
+  `${REFERENCE_PLUGIN_ID}.deliver-scheduled-health` as const;
+export const REFERENCE_EVENT_DELIVERY_OPERATION =
+  `${REFERENCE_PLUGIN_ID}.consume-engine-inventory` as const;
+export const REFERENCE_SCHEDULE_JOB_TYPE =
+  `${REFERENCE_PLUGIN_ID}.health-check` as const;
 const STATUS_ROUTE_ID = `${REFERENCE_PLUGIN_ID}.status`;
 
 interface ReferenceStatus {

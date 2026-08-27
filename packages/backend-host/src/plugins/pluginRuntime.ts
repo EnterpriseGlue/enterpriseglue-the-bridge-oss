@@ -1158,6 +1158,21 @@ function operationAuthorizationV1(input: {
   return null;
 }
 
+export function isHostOwnedPluginOperationV1(
+  manifest: EnterpriseGluePluginManifestV1,
+  operationId: string,
+): boolean {
+  return (
+    manifest.events.subscriptions.some(
+      (subscription) => subscription.deliveryOperationId === operationId,
+    ) ||
+    manifest.jobs.fixedSchedules.some(
+      (schedule) => schedule.deliveryOperationId === operationId,
+    ) ||
+    manifest.contributionAvailability?.refreshOperationId === operationId
+  );
+}
+
 async function defaultPluginOperationAuthorizerV1(
   input: PluginOperationAuthorizationInputV1,
 ): Promise<boolean> {
@@ -1311,6 +1326,10 @@ async function handlePluginOperation(
     (candidate) => candidate.operationId === operationId,
   );
   if (!operation) {
+    response.status(404).json({ error: 'Plugin operation not available' });
+    return;
+  }
+  if (isHostOwnedPluginOperationV1(record.manifest, operationId)) {
     response.status(404).json({ error: 'Plugin operation not available' });
     return;
   }

@@ -72,6 +72,9 @@ const publicOrigin = `https://localhost:${tlsFrontendPort}`;
 const eligibilityKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const eligibilityKeyFile = `${require('node:path').dirname(envFile)}/eligibility-private-key.pem`;
 const eligibilityPublicJwk = eligibilityKeys.publicKey.export({ format: 'jwk' });
+const invocationKeys = crypto.generateKeyPairSync('ed25519');
+const invocationPrivateKeyFile = `${require('node:path').dirname(envFile)}/plugin-invocation-private.pem`;
+const invocationPublicKeyFile = `${require('node:path').dirname(envFile)}/plugin-invocation-public.pem`;
 const values = {
   NODE_ENV: 'development',
   EG_BACKEND_ENV_FILE: envFile,
@@ -97,6 +100,9 @@ const values = {
   POOLED_TENANCY_FRONTEND_DIST: `${rootDir}/frontend/dist`,
   POOLED_TENANCY_PLUGIN_STATE_FILE: `${require('node:path').dirname(envFile)}/plugin-state.json`,
   POOLED_TENANCY_PLUGIN_ASSET_ROOT: `${require('node:path').dirname(envFile)}/plugin-assets`,
+  POOLED_TENANCY_PLUGIN_INVOCATION_PRIVATE_KEY_FILE: invocationPrivateKeyFile,
+  POOLED_TENANCY_PLUGIN_INVOCATION_PUBLIC_KEY_FILE: invocationPublicKeyFile,
+  POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR: `${require('node:path').dirname(envFile)}/reference-plugin-data`,
   CAMUNDA_MOCK_HOST_PORT: '0',
   JWT_SECRET: randomHex(32),
   ADMIN_EMAIL: adminEmail,
@@ -147,6 +153,16 @@ fs.writeFileSync(
   eligibilityKeys.privateKey.export({ type: 'pkcs8', format: 'pem' }),
   { mode: 0o600 },
 );
+fs.writeFileSync(
+  invocationPrivateKeyFile,
+  invocationKeys.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  { mode: 0o644 },
+);
+fs.writeFileSync(
+  invocationPublicKeyFile,
+  invocationKeys.publicKey.export({ type: 'spki', format: 'pem' }),
+  { mode: 0o644 },
+);
 fs.writeFileSync(postgresInitFile, [
   `CREATE ROLE ${appUser} LOGIN PASSWORD '${appPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;`,
   `CREATE DATABASE ${appDatabase} OWNER ${appUser};`,
@@ -176,6 +192,8 @@ NODE
 chmod 644 "$postgres_init_file"
 mkdir -p "$identity_secret_dir"
 chmod 755 "$identity_secret_dir"
+mkdir -p "$temp_dir/reference-plugin-data"
+chmod 777 "$temp_dir/reference-plugin-data"
 
 compose=(
   docker compose --progress plain
@@ -198,7 +216,7 @@ run_compose() {
 
 capture_diagnostics() {
   run_compose ps --all > "$artifact_dir/compose-status.txt" 2>&1 || true
-  for service in db backend frontend frontend-tls keycloak camunda-mock; do
+  for service in db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
     run_compose logs --no-color --tail=700 "$service" > "$artifact_dir/${service}.log" 2>&1 || true
   done
   if [[ -d "$playwright_output_dir" ]]; then
@@ -264,7 +282,7 @@ chmod 755 "$tls_dir"
 chmod 644 "$tls_dir/ca.crt" "$tls_dir/server.crt" "$tls_dir/server.key"
 
 echo "[pooled-tenancy-e2e] Starting disposable pooled stack ($project_name)."
-run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock
+run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health
 
 curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" "https://localhost:${tls_frontend_port}/login" >/dev/null
 curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" \
@@ -310,6 +328,7 @@ common_env=(
   POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE="$(awk -F= '$1 == "POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_ELIGIBILITY_ISSUER="$(awk -F= '$1 == "EG_TENANT_APP_ELIGIBILITY_ISSUER" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_ELIGIBILITY_AUDIENCE="$(awk -F= '$1 == "EG_TENANT_APP_ELIGIBILITY_AUDIENCE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR="$(awk -F= '$1 == "POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   PLAYWRIGHT_BASE_URL="https://localhost:${tls_frontend_port}"
   PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
   PLAYWRIGHT_WORKERS=1
@@ -336,7 +355,8 @@ writeFileSync(process.argv[2], [
   'mode=pooled',
   'database=postgres-restricted-role-force-rls',
   'tenants=alpha-oidc,bravo-saml,charlie-ldap',
-  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,signed-tenant-plugin-eligibility,distinct-tenant-eligibility,eligibility-revocation,tenant-app-member-request,tenant-app-admin-approval,tenant-app-sibling-isolation,tenant-app-deactivation,tenant-app-frontend-bootstrap,immediate-membership-removal',
+  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,signed-tenant-plugin-eligibility,distinct-tenant-eligibility,eligibility-revocation,tenant-app-member-request,tenant-app-admin-approval,tenant-app-sibling-isolation,tenant-app-deactivation,tenant-app-frontend-bootstrap,actual-plugin-gateway,plugin-storage,plugin-schedule-delivery,plugin-event-delivery,plugin-event-revocation,plugin-host-owned-route-denial,plugin-data-retention,immediate-membership-removal',
+  'plugin_evidence=real-reference-sidecar-with-exactly-once-schedule-and-event-receipts',
   'ui_evidence=deterministic-desktop-responsive-and-zoom-screenshots',
   'identity_evidence=disposable-keycloak-openldap-and-private-tenant-secret-broker-emulators',
   'credentials=ephemeral-and-not-retained',

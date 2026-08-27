@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enterpriseglue.io/plugins/reference-health/scheduled-health-delivery-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "deliveryId", "jobRef", "jobType", "operationId", "scheduledFor", "attempt"],
+  "properties": {
+    "apiVersion": { "const": "scheduled-job-delivery.plugin.enterpriseglue.io/v1" },
+    "deliveryId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "jobRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "jobType": { "const": "io.enterpriseglue.reference-health.health-check" },
+    "operationId": { "const": "io.enterpriseglue.reference-health.deliver-scheduled-health" },
+    "scheduledFor": { "type": "string", "format": "date-time" },
+    "attempt": { "type": "integer", "minimum": 1, "maximum": 100 }
+  }
+}

@@ -424,7 +424,18 @@ bypass RLS and counts the forced-policy tables.
 The lane provisions OIDC, SAML, and LDAP material through a disposable private
 implementation of the tenant-secret broker, proves cross-tenant reference
 denial, rotates the OIDC credential, checks availability, and then completes
-all three real protocol sign-ins. Sanitized diagnostics are written to
+all three real protocol sign-ins. It also starts the compiled public reference
+plugin as an isolated sidecar. Alpha activates it through member request and
+tenant-admin approval, calls its real gateway operation, writes tenant-owned
+plugin storage, and receives exactly one fixed-schedule delivery and exactly
+one engine-event delivery. Bravo remains independently active until its
+eligibility is revoked and the tenant application is deactivated; queued work
+then fails closed without reaching the sidecar. Charlie remains inactive, and
+the host rejects interactive access. Deactivation removes frontend and gateway
+availability while retaining tenant plugin data. Host-owned schedule and event
+delivery operations cannot be reached through the interactive gateway.
+
+Sanitized diagnostics are written to
 `.artifacts/pooled-tenancy-e2e/`; secrets are never copied there. Deterministic desktop screenshots are retained under
 `playwright-results/ui-evidence/standard`, with narrow-screen and zoom evidence
 in the adjacent `responsive` directory. Keycloak and OpenLDAP are high-fidelity
@@ -437,7 +448,39 @@ organization discovery, pooled routing, or their browser fixtures change. The
 pooled result and sanitized UI evidence are uploaded as a 14-day CI artifact,
 and the aggregate CI check cannot pass when this lane fails.
 
-## Upgrade from 0.16.2
+## Populated upgrade, restore, and application rollback qualification
+
+Run the recovery lane from a checkout containing the `v0.18.0` tag:
+
+```bash
+pnpm run test:saas:upgrade-restore-rollback
+```
+
+The lane creates an authoritative schema from the exact `v0.18.0` source tag,
+verifies the immutable published v0.18.0 backend image by resolved digest,
+seeds three tenants with separate OIDC, SAML, and LDAP providers plus two active
+and one inactive tenant application, and takes a pre-upgrade backup. It then
+applies the current additive migrations using a restricted application role,
+verifies schema readiness, proves that the previous v0.18.0 application can
+still become ready on the expanded schema, takes an upgraded backup, restores
+that backup into a clean database owned by the application role, and verifies
+the preserved tenant, SSO, application, and migration state.
+
+The exact procedure, artifacts, production adaptation, and rollback boundary
+are documented in the
+[SaaS upgrade, restore, and rollback runbook](../runbooks/saas-upgrade-restore-rollback.md).
+CI runs this as a separate aggregate dependency when native tenancy changes.
+
+For a complete local SaaS qualification, run:
+
+```bash
+pnpm run test:saas:combined
+```
+
+This serially combines the pooled browser/reference-plugin journey, the
+multi-replica plugin delivery lane, and the populated recovery rehearsal.
+
+## Historical tenancy migration baseline from 0.16.2
 
 The implementation is based on OSS release `v0.16.2`. It adds these ordered
 migrations:
@@ -459,12 +502,14 @@ migration also creates verified discovery-domain and single-use discovery-token
 storage; these remain inactive in single mode. Verify normal single-mode
 operation before configuring pooled mode.
 
-This release does not declare general production readiness for pooled mode.
-The native kernel, database backstop, and disposable OIDC/SAML/LDAP pooled
-browser qualification are implemented, but an intended SaaS deployment must
-still complete inherited-data, asynchronous-work, plugin, multi-replica,
-customer-provider compatibility, migration, restore, and rollback
-qualification before serving customer traffic.
+The repository now qualifies inherited data, asynchronous plugin work, real
+reference-plugin gateway and broker paths, multi-replica delivery, populated
+v0.18.0 migration, previous-application startup, backup restore, and disposable
+OIDC/SAML/LDAP tenant separation. These are local OSS release gates. They do not
+by themselves certify a particular cloud topology or customer identity
+provider. A SaaS deployment must additionally pass the same immutable artifacts
+on its target GKE topology and certify each supported external identity-provider
+profile before serving customer traffic.
 
 Before pooled activation:
 

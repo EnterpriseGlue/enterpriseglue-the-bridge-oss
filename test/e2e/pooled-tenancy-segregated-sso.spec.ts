@@ -1,6 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { createPrivateKey, sign } from 'node:crypto';
+import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { captureManualScreenshot, manualScreenshotDirectory } from './utils/manualScreenshots';
@@ -27,9 +27,15 @@ const postgresDatabase = process.env.POOLED_TENANCY_POSTGRES_DATABASE || '';
 const eligibilityPrivateKeyFile = process.env.POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE || '';
 const eligibilityIssuer = process.env.POOLED_TENANCY_ELIGIBILITY_ISSUER || '';
 const eligibilityAudience = process.env.POOLED_TENANCY_ELIGIBILITY_AUDIENCE || '';
+const referencePluginDataDir = process.env.POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR || '';
 const referencePluginId = 'io.enterpriseglue.reference-health';
 const referencePluginVersion = '0.1.0';
 const referencePluginRelease = `registry.invalid/pooled-reference@sha256:${'1'.repeat(64)}`;
+const referenceStatusOperation = `${referencePluginId}.read-status`;
+const referenceQualificationOperation = `${referencePluginId}.qualify-runtime`;
+const referenceScheduleDeliveryOperation = `${referencePluginId}.deliver-scheduled-health`;
+const referenceEventDeliveryOperation = `${referencePluginId}.consume-engine-inventory`;
+const referenceEventType = 'io.enterpriseglue.host.engine-inventory.v1';
 
 function isLocalUrl(value: string): boolean {
   try {
@@ -198,6 +204,113 @@ async function markDiscoveryDomainVerified(domainId: string): Promise<void> {
   }
 }
 
+async function databaseRows(sql: string, parameters: unknown[] = []): Promise<JsonObject[]> {
+  const client = new Client({
+    host: postgresHost,
+    port: postgresPort,
+    user: postgresUser,
+    password: postgresPassword,
+    database: postgresDatabase,
+  });
+  await client.connect();
+  try {
+    return (await client.query(sql, parameters)).rows;
+  } finally {
+    await client.end();
+  }
+}
+
+async function forceScheduledJobDue(jobRef: string): Promise<void> {
+  const rows = await databaseRows(
+    `UPDATE main.plugin_scheduled_jobs
+     SET next_run_at = $1, status = 'scheduled', lease_owner = NULL, lease_expires_at = NULL, updated_at = $1
+     WHERE job_ref = $2
+     RETURNING job_ref`,
+    [Date.now() - 1_000, jobRef],
+  );
+  expect(rows).toEqual([{ job_ref: jobRef }]);
+}
+
+async function enqueueEngineInventoryEvent(input: {
+  tenantRef: string;
+  deliveryRef: string;
+  dueAt?: number;
+}): Promise<string> {
+  const now = Date.now();
+  const deliveryId = `pooled-e2e-${input.deliveryRef}`;
+  const event = {
+    specversion: '1.0',
+    id: `event-${input.deliveryRef}`,
+    source: 'enterpriseglue-oss',
+    type: referenceEventType,
+    subject: `engine-${input.deliveryRef}`,
+    time: new Date(now).toISOString(),
+    dataschema: 'https://schemas.enterpriseglue.io/events/engine-inventory-v1.json',
+    tenantRef: input.tenantRef,
+    data: {
+      engineRef: `engine-${input.deliveryRef}`,
+      product: 'operaton',
+      version: '7.24.0',
+      observedAtBucket: new Date(now).toISOString(),
+    },
+  };
+  const eventJson = JSON.stringify(event);
+  await databaseRows(
+    `INSERT INTO main.plugin_event_deliveries (
+       id, delivery_id, plugin_id, deployment_ref, tenant_ref,
+       subscription_type, operation_id, event_id, event_sha256, event_json,
+       status, attempt, max_attempts, next_attempt_at, lease_owner,
+       lease_expires_at, reason_code, delivered_at, created_at, updated_at
+     ) VALUES (
+       $1, $2, $3, 'oss-deployment', $4,
+       $5, $6, $7, $8, $9,
+       'pending', 0, 3, $10, NULL,
+       NULL, 'queued', NULL, $11, $11
+     )`,
+    [
+      randomUUID(),
+      deliveryId,
+      referencePluginId,
+      input.tenantRef,
+      referenceEventType,
+      referenceEventDeliveryOperation,
+      event.id,
+      createHash('sha256').update(eventJson).digest('hex'),
+      eventJson,
+      input.dueAt ?? now,
+      now,
+    ],
+  );
+  return deliveryId;
+}
+
+async function forcePluginEventDue(deliveryId: string): Promise<void> {
+  const rows = await databaseRows(
+    `UPDATE main.plugin_event_deliveries
+     SET next_attempt_at = $1, status = 'pending', lease_owner = NULL, lease_expires_at = NULL, updated_at = $1
+     WHERE delivery_id = $2
+     RETURNING delivery_id`,
+    [Date.now() - 1_000, deliveryId],
+  );
+  expect(rows).toEqual([{ delivery_id: deliveryId }]);
+}
+
+async function pluginDeliveryEvidence(): Promise<JsonObject[]> {
+  try {
+    const text = await readFile(
+      resolve(referencePluginDataDir, 'qualification-deliveries.jsonl'),
+      'utf8',
+    );
+    return text
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
 async function oidcLoginFromOrganizationFinder(browser: Browser, tenantSlug: string, displayName: string, email: string): Promise<BrowserContext> {
   const context = await newAppContext(browser);
   const page = await context.newPage();
@@ -294,11 +407,12 @@ async function identityFixtureSecrets(): Promise<{
 
 test.describe('Native pooled tenancy with segregated SSO', () => {
   test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !oidcClientSecret || !ldapPassword
-    || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase,
+    || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase
+    || !referencePluginDataDir,
     'Run through test:native-tenancy:pooled-e2e with the disposable identity fixtures.');
 
   test('isolates tenant providers and completes OIDC, SAML, and LDAP tenant sign-in @pooled-tenancy-live @segregated-sso-live', async ({ browser }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     const fixtureSecrets = await identityFixtureSecrets();
     const adminContext = await newAppContext(browser);
     const admin = await adminContext.newPage();
@@ -629,6 +743,109 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-alpha-approve-0001' },
       ), 200);
       expect(alphaApproved).toMatchObject({ status: 'active', active: true, revision: 2 });
+
+      const alphaStatus = await expectStatus(
+        await alphaContext.request.get(
+          `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        200,
+      );
+      expect(alphaStatus).toMatchObject({
+        status: 'ready',
+        pluginId: referencePluginId,
+        version: referencePluginVersion,
+      });
+      const alphaQualification = await expectStatus(
+        await post(
+          alphaMember,
+          `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceQualificationOperation}`,
+          { body: { runRef: 'alpha-pooled-runtime-1' } },
+        ),
+        200,
+      );
+      expect(alphaQualification).toMatchObject({
+        status: 'qualified',
+        storage: { action: 'put', revision: 'r1' },
+        schedule: {
+          status: 'scheduled',
+          jobRef: expect.any(String),
+          revision: 1,
+        },
+      });
+      const alphaStorage = await databaseRows(
+        `SELECT tenant_ref_key, storage_key, value_json, revision::text
+         FROM main.plugin_storage_entries
+         WHERE plugin_id = $1 AND scope = 'tenant'`,
+        [referencePluginId],
+      );
+      expect(alphaStorage).toEqual([{
+        tenant_ref_key: tenants.alpha.id,
+        storage_key: 'qualification/alpha-pooled-runtime-1',
+        value_json: JSON.stringify({ runRef: 'alpha-pooled-runtime-1', status: 'qualified' }),
+        revision: '1',
+      }]);
+      expect(alphaStorage).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ tenant_ref_key: tenants.bravo.id }),
+        ]),
+      );
+
+      const scheduledJobRef = alphaQualification.schedule.jobRef as string;
+      await forceScheduledJobDue(scheduledJobRef);
+      await expect.poll(
+        async () => (await databaseRows(
+          `SELECT status, reason_code, revision::text, attempt
+           FROM main.plugin_scheduled_jobs WHERE job_ref = $1`,
+          [scheduledJobRef],
+        ))[0],
+        { timeout: 20_000 },
+      ).toMatchObject({
+        status: 'scheduled',
+        reason_code: 'qualified',
+        revision: '2',
+        attempt: 0,
+      });
+      await expect.poll(
+        async () => (await pluginDeliveryEvidence()).filter(
+          (entry) => entry.kind === 'schedule' && entry.tenantRef === tenants.alpha.id,
+        ),
+        { timeout: 20_000 },
+      ).toHaveLength(1);
+
+      const alphaEventDeliveryId = await enqueueEngineInventoryEvent({
+        tenantRef: tenants.alpha.id,
+        deliveryRef: 'alpha-inventory-1',
+      });
+      await expect.poll(
+        async () => (await databaseRows(
+          `SELECT status, reason_code, attempt, event_json
+           FROM main.plugin_event_deliveries WHERE delivery_id = $1`,
+          [alphaEventDeliveryId],
+        ))[0],
+        { timeout: 20_000 },
+      ).toMatchObject({
+        status: 'delivered',
+        reason_code: 'qualified',
+        attempt: 1,
+        event_json: '{}',
+      });
+      await expect.poll(
+        async () => (await pluginDeliveryEvidence()).filter(
+          (entry) => entry.kind === 'event' && entry.deliveryId === alphaEventDeliveryId,
+        ),
+        { timeout: 20_000 },
+      ).toEqual([expect.objectContaining({ tenantRef: tenants.alpha.id })]);
+
+      await expectStatus(await post(
+        alphaMember,
+        `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceScheduleDeliveryOperation}`,
+        { body: {} },
+      ), 404);
+      await expectStatus(await post(
+        alphaMember,
+        `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceEventDeliveryOperation}`,
+        { body: {} },
+      ), 404);
       const alphaEligibilityView = await expectStatus(
         await alphaContext.request.get(`/api/t/alpha/apps/${referencePluginId}/eligibility`),
         200,
@@ -640,6 +857,12 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         200,
       );
       expect(charlieBlocked).toMatchObject({ status: 'revoked', active: false, entitled: 'revoked' });
+      await expectStatus(
+        await charlieContext.request.get(
+          `/t/charlie/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        404,
+      );
       await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'bravo' }), 200);
       const bravoBefore = await expectStatus(
         await admin.request.get(`/api/t/bravo/apps/${referencePluginId}`),
@@ -656,6 +879,17 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         `/api/t/bravo/apps/${referencePluginId}/activation-request/decision`,
         { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-bravo-approve-0001' },
       ), 200);
+      await expectStatus(
+        await bravoContext.request.get(
+          `/t/bravo/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        200,
+      );
+      const bravoQueuedBeforeRevocation = await enqueueEngineInventoryEvent({
+        tenantRef: tenants.bravo.id,
+        deliveryRef: 'bravo-before-revocation-1',
+        dueAt: Date.now() + 60_000,
+      });
       const bravoRevokedProjection = await applyTenantEligibility({
         page: admin,
         token: eligibilityToken,
@@ -675,6 +909,30 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         { expectedRevision: 2, idempotencyKey: 'pooled-bravo-deactivate-0001' },
       ), 200);
       expect(bravoInactive).toMatchObject({ status: 'revoked', active: false, revision: 3 });
+      await forcePluginEventDue(bravoQueuedBeforeRevocation);
+      await expect.poll(
+        async () => (await databaseRows(
+          `SELECT status, reason_code, attempt
+           FROM main.plugin_event_deliveries WHERE delivery_id = $1`,
+          [bravoQueuedBeforeRevocation],
+        ))[0],
+        { timeout: 20_000 },
+      ).toMatchObject({
+        status: 'dead_letter',
+        reason_code: 'subscription_inactive',
+        attempt: 1,
+      });
+      expect(
+        (await pluginDeliveryEvidence()).filter(
+          (entry) => entry.deliveryId === bravoQueuedBeforeRevocation,
+        ),
+      ).toEqual([]);
+      await expectStatus(
+        await bravoContext.request.get(
+          `/t/bravo/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        404,
+      );
       await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
       await expectStatus(
         await admin.request.get(`/api/t/alpha/apps/${referencePluginId}`),
@@ -726,6 +984,40 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         expect.objectContaining({ id: discoveryDomains.alpha.id, tenantId: tenants.alpha.id, domain: 'alpha.example', status: 'verified' }),
       ]);
       await expectStatus(await alphaAdmin.request.get('/api/t/bravo/tenant/discovery-domains'), 403);
+
+      const alphaDeactivated = await expectStatus(await post(
+        admin,
+        `/api/t/alpha/apps/${referencePluginId}/deactivate`,
+        { expectedRevision: 2, idempotencyKey: 'pooled-alpha-deactivate-0001' },
+      ), 200);
+      expect(alphaDeactivated).toMatchObject({
+        status: 'inactive',
+        active: false,
+        revision: 3,
+      });
+      await expectStatus(
+        await alphaContext.request.get(
+          `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        404,
+      );
+      const alphaBootstrapAfterDeactivation = await expectStatus(
+        await alphaContext.request.get('/t/alpha/api/plugins/v1/frontend'),
+        200,
+      );
+      expect(alphaBootstrapAfterDeactivation.plugins).toEqual([]);
+      const retainedAlphaStorage = await databaseRows(
+        `SELECT tenant_ref_key, storage_key, value_json, revision::text
+         FROM main.plugin_storage_entries
+         WHERE plugin_id = $1 AND tenant_ref_key = $2`,
+        [referencePluginId, tenants.alpha.id],
+      );
+      expect(retainedAlphaStorage).toEqual([{
+        tenant_ref_key: tenants.alpha.id,
+        storage_key: 'qualification/alpha-pooled-runtime-1',
+        value_json: JSON.stringify({ runRef: 'alpha-pooled-runtime-1', status: 'qualified' }),
+        revision: '1',
+      }]);
 
       await expectStatus(await remove(admin, `/api/t/alpha/tenant/members/${encodeURIComponent(alphaSsoUser.userId)}`), 204);
       await expectStatus(await alphaContext.request.get('/api/auth/me'), 403);

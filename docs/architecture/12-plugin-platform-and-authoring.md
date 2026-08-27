@@ -352,6 +352,28 @@ pnpm test:plugin-platform:multi-replica
 pnpm test:plugin-platform:images
 ```
 
+The pooled SaaS gate goes beyond manifest and deployment contracts by running
+the compiled public reference plugin as a real sidecar with three tenants and
+separate OIDC, SAML, and LDAP providers. It proves tenant activation isolation,
+interactive admission, tenant-owned storage, exactly-once schedule and event
+receipts, immediate eligibility revocation, deactivation, retained data, and
+denial of host-owned delivery routes through the interactive gateway:
+
+```sh
+pnpm test:native-tenancy:pooled-e2e
+```
+
+The local combined gate adds the existing multi-replica lease qualification and
+the populated v0.18.0 upgrade, restore, and previous-application rehearsal:
+
+```sh
+pnpm test:saas:combined
+```
+
+Cloud deployment repositories must consume the same digest-pinned host and
+plugin artifacts and repeat the combined assertions on their real cluster;
+local Compose evidence is not a substitute for GKE qualification.
+
 ## Distribution and air-gapped operation
 
 The installer accepts a signed package inventory and digest-pinned OCI subject. The protected OSS

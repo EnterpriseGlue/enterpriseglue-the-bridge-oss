@@ -18,13 +18,16 @@ test('native tenancy changes select the pooled RLS and segregated SSO lane', () 
   assert.match(workflow, /run_native_tenancy:/);
   assert.match(workflow, /run_native_tenancy=true/);
   assert.match(workflow, /pooled-tenancy-e2e/);
+  assert.match(workflow, /saas-upgrade-restore-rollback/);
   assert.match(workflow, /nativeTenantRls/);
   assert.match(workflow, /Login\\\.organization/);
   assert.match(workflow, /pages\/Login/);
   assert.match(workflow, /NativeTenantPicker/);
   assert.match(ciWorkflow, /^  native-tenancy-pooled-e2e:/m);
   assert.match(ciWorkflow, /run: pnpm run test:native-tenancy:pooled-e2e/);
-  assert.match(ciWorkflow, /      - security-pr-scan\n      - native-tenancy-pooled-e2e/);
+  assert.match(ciWorkflow, /^  saas-upgrade-restore-rollback:/m);
+  assert.match(ciWorkflow, /run: pnpm run test:saas:upgrade-restore-rollback/);
+  assert.match(ciWorkflow, /      - native-tenancy-pooled-e2e\n      - saas-upgrade-restore-rollback/);
 });
 
 test('package changes continue to select plugin compatibility and package checks', () => {

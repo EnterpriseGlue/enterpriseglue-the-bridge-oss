@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enterpriseglue.io/plugins/reference-health/engine-inventory-delivery-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "deliveryId", "operationId", "subscriptionType", "attempt", "event"],
+  "properties": {
+    "apiVersion": { "const": "event-delivery.plugin.enterpriseglue.io/v1" },
+    "deliveryId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "operationId": { "const": "io.enterpriseglue.reference-health.consume-engine-inventory" },
+    "subscriptionType": { "const": "io.enterpriseglue.host.engine-inventory.v1" },
+    "attempt": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["specversion", "id", "source", "type", "subject", "time", "dataschema", "tenantRef", "data"],
+      "properties": {
+        "specversion": { "const": "1.0" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "source": { "const": "enterpriseglue-oss" },
+        "type": { "const": "io.enterpriseglue.host.engine-inventory.v1" },
+        "tenantRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "time": { "type": "string", "format": "date-time" },
+        "dataschema": { "const": "https://schemas.enterpriseglue.io/events/engine-inventory-v1.json" },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engineRef", "product", "version", "observedAtBucket"],
+          "properties": {
+            "engineRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "product": { "enum": ["operaton", "camunda7"] },
+            "version": { "type": "string", "pattern": "^[A-Za-z0-9._:-]+$", "maxLength": 200 },
+            "observedAtBucket": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  }
+}

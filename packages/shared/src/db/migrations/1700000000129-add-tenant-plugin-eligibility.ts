@@ -1,10 +1,6 @@
 import { Table, TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import {
-  PluginInstallation,
-  PluginTenantEligibility,
-} from '../../infrastructure/persistence/entities/PluginPlatform.js';
-import {
   addRequiredColumnWithBackfill,
   portableBigint,
   portableStringDefault,
@@ -12,8 +8,13 @@ import {
   sqlStringLiteral,
 } from './support/portable-columns.js';
 
-const pathFor = (queryRunner: QueryRunner, entity: Function): string =>
-  queryRunner.connection.getMetadata(entity).tablePath;
+const pathFor = (queryRunner: QueryRunner, entityName: string, fallback: string): string => {
+  try {
+    return queryRunner.connection.getMetadata(entityName).tablePath;
+  } catch {
+    return fallback;
+  }
+};
 
 export class AddTenantPluginEligibility1700000000129
   implements MigrationInterface
@@ -24,7 +25,7 @@ export class AddTenantPluginEligibility1700000000129
     const key = portableText(queryRunner, 'key');
     const document = portableText(queryRunner, 'document');
     const timestamp = portableBigint(queryRunner);
-    const installations = pathFor(queryRunner, PluginInstallation);
+    const installations = pathFor(queryRunner, 'PluginInstallation', 'plugin_installations');
 
     await addRequiredColumnWithBackfill(
       queryRunner,
@@ -43,7 +44,7 @@ export class AddTenantPluginEligibility1700000000129
       );
     }
 
-    const eligibilities = pathFor(queryRunner, PluginTenantEligibility);
+    const eligibilities = pathFor(queryRunner, 'PluginTenantEligibility', 'plugin_tenant_eligibilities');
     if (!await queryRunner.hasTable(eligibilities)) {
       await queryRunner.createTable(new Table({
         name: eligibilities,
@@ -86,11 +87,11 @@ export class AddTenantPluginEligibility1700000000129
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    const eligibilities = pathFor(queryRunner, PluginTenantEligibility);
+    const eligibilities = pathFor(queryRunner, 'PluginTenantEligibility', 'plugin_tenant_eligibilities');
     if (await queryRunner.hasTable(eligibilities)) {
       await queryRunner.dropTable(eligibilities);
     }
-    const installations = pathFor(queryRunner, PluginInstallation);
+    const installations = pathFor(queryRunner, 'PluginInstallation', 'plugin_installations');
     for (const name of ['entitlement_feature', 'entitlement_provider']) {
       if (await queryRunner.hasColumn(installations, name)) {
         await queryRunner.dropColumn(installations, name);

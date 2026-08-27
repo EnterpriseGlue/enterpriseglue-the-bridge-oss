@@ -1,0 +1,71 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "combined-pooled-saas-qualification",
+  "type": "fix",
+  "scope": "saas-qualification",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds a combined pooled-SaaS qualification gate with a real reference plugin, segregated tenant SSO, and populated v0.18.0 recovery rehearsal.",
+  "userImpact": [
+    "Pooled tenant applications are qualified through a real sidecar for interactive, storage, schedule, and event paths.",
+    "OIDC, SAML, and LDAP tenants retain independent activation and revocation behavior.",
+    "Existing single-tenant and self-hosted defaults remain unchanged."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Run the normal additive migrations and retain a validated pre-upgrade backup.",
+      "Use the SaaS recovery runbook before enabling pooled production traffic."
+    ]
+  },
+  "configuration": [
+    "No production configuration default changes.",
+    "Qualification fixtures generate ephemeral signing, TLS, database, and identity-provider material."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The public reference plugin adds qualification, fixed-schedule delivery, and engine-event delivery operations.",
+      "Host-owned plugin delivery operations return not found when attempted through the interactive tenant gateway."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000127-add-tenant-workload-lifecycle",
+      "1700000000128-add-tenant-application-marketplace",
+      "1700000000129-add-tenant-plugin-eligibility"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "The existing additive migrations now resolve entity metadata by stable names with portable table fallbacks, including split compiled layouts.",
+      "The recovery lane proves populated upgrade, previous-application startup, and restored-database readiness without automatic down migration."
+    ]
+  },
+  "security": [
+    "The real sidecar receives tenant identity only through signed host invocation and broker context.",
+    "Revoked or inactive tenant applications cannot receive interactive, scheduled, event, or contribution work.",
+    "Recovery uses a non-superuser application identity without bypass-RLS authority."
+  ],
+  "documentation": [
+    "Updates the native SaaS tenancy and plugin-platform architecture guides with the combined qualification contract.",
+    "Adds the SaaS upgrade, restore, and application rollback runbook."
+  ],
+  "knownLimitations": [
+    "Real GKE and customer identity-provider certification remain deployment-repository gates."
+  ],
+  "rollback": [
+    "Roll back the application on the additive schema only while forward compatibility is verified.",
+    "Use the validated pre-upgrade backup for database rollback; do not automatically run down migrations or delete tenant plugin data."
+  ],
+  "validation": [
+    "The pooled browser lane passes restricted-role forced RLS, OIDC, SAML, LDAP, real plugin gateway, storage, exactly-once schedule and event delivery, eligibility revocation, and deactivation scenarios.",
+    "The multi-replica lane retains lease and duplicate-delivery coverage.",
+    "The recovery lane passes an exact v0.18.0 source baseline, digest-pinned previous application checks, populated additive migration, clean restore, and preserved tenant state."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.14.0", "newVersion": "0.14.1", "impact": "patch" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.12.0", "newVersion": "0.12.1", "impact": "patch" },
+    { "name": "@enterpriseglue/plugin-reference", "previousVersion": "0.1.0", "newVersion": "0.2.0", "impact": "minor" }
+  ]
+}

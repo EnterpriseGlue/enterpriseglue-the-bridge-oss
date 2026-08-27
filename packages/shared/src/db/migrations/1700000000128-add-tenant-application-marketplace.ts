@@ -1,11 +1,6 @@
 import { Table, TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 import {
-  PluginInstallation,
-  PluginTenantApplicationOperation,
-  PluginTenantEnablement,
-} from '../../infrastructure/persistence/entities/PluginPlatform.js';
-import {
   addRequiredColumnWithBackfill,
   portableBigint,
   portableStringDefault,
@@ -13,8 +8,13 @@ import {
   portableText,
 } from './support/portable-columns.js';
 
-const pathFor = (queryRunner: QueryRunner, entity: Function): string =>
-  queryRunner.connection.getMetadata(entity).tablePath;
+const pathFor = (queryRunner: QueryRunner, entityName: string, fallback: string): string => {
+  try {
+    return queryRunner.connection.getMetadata(entityName).tablePath;
+  } catch {
+    return fallback;
+  }
+};
 
 export class AddTenantApplicationMarketplace1700000000128
   implements MigrationInterface
@@ -26,8 +26,8 @@ export class AddTenantApplicationMarketplace1700000000128
     const document = portableText(queryRunner, 'document');
     const timestamp = portableBigint(queryRunner);
 
-    const installations = pathFor(queryRunner, PluginInstallation);
-    const enablements = pathFor(queryRunner, PluginTenantEnablement);
+    const installations = pathFor(queryRunner, 'PluginInstallation', 'plugin_installations');
+    const enablements = pathFor(queryRunner, 'PluginTenantEnablement', 'plugin_tenant_enablements');
     const installationTable = await queryRunner.getTable(installations);
     const enablementTable = await queryRunner.getTable(enablements);
     if (!installationTable || !enablementTable) {
@@ -64,7 +64,11 @@ export class AddTenantApplicationMarketplace1700000000128
       }
     }
 
-    const operations = pathFor(queryRunner, PluginTenantApplicationOperation);
+    const operations = pathFor(
+      queryRunner,
+      'PluginTenantApplicationOperation',
+      'plugin_tenant_application_operations',
+    );
     if (!await queryRunner.hasTable(operations)) {
       await queryRunner.createTable(new Table({
         name: operations,
@@ -97,10 +101,14 @@ export class AddTenantApplicationMarketplace1700000000128
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    const operations = pathFor(queryRunner, PluginTenantApplicationOperation);
+    const operations = pathFor(
+      queryRunner,
+      'PluginTenantApplicationOperation',
+      'plugin_tenant_application_operations',
+    );
     if (await queryRunner.hasTable(operations)) await queryRunner.dropTable(operations);
 
-    const enablements = pathFor(queryRunner, PluginTenantEnablement);
+    const enablements = pathFor(queryRunner, 'PluginTenantEnablement', 'plugin_tenant_enablements');
     for (const name of [
       'reviewed_at',
       'reviewed_by_ref',
@@ -113,7 +121,7 @@ export class AddTenantApplicationMarketplace1700000000128
       }
     }
 
-    const installations = pathFor(queryRunner, PluginInstallation);
+    const installations = pathFor(queryRunner, 'PluginInstallation', 'plugin_installations');
     for (const name of [
       'tenant_configuration_schema_sha256',
       'tenant_configuration_path',

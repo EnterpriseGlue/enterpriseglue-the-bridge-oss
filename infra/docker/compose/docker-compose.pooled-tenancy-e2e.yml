@@ -33,12 +33,41 @@ services:
       ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY: approval_required
       ENTERPRISEGLUE_PLUGIN_STATE_FILE: /etc/enterpriseglue/pooled-e2e/plugin-state.json
       ENTERPRISEGLUE_PLUGIN_ASSET_ROOT: /var/lib/enterpriseglue/pooled-e2e/plugins
+      ENTERPRISEGLUE_PLUGIN_INVOCATION_PRIVATE_KEY_FILE: /etc/enterpriseglue/pooled-e2e/plugin-invocation-private.pem
     volumes: !override
       - .:/repo:ro
       - ${KEYCLOAK_TLS_DIR}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro
       - ${LOCAL_IDENTITY_SECRET_DIR}:/etc/enterpriseglue/local-identity-secrets:ro
       - ${POOLED_TENANCY_PLUGIN_STATE_FILE}:/etc/enterpriseglue/pooled-e2e/plugin-state.json:ro
       - ${POOLED_TENANCY_PLUGIN_ASSET_ROOT}:/var/lib/enterpriseglue/pooled-e2e/plugins:ro
+      - ${POOLED_TENANCY_PLUGIN_INVOCATION_PRIVATE_KEY_FILE}:/etc/enterpriseglue/pooled-e2e/plugin-invocation-private.pem:ro
+
+  eg-plugin-io-enterpriseglue-reference-health:
+    build:
+      context: .
+      dockerfile: packages/plugin-reference/Dockerfile
+    restart: "no"
+    init: true
+    read_only: true
+    environment:
+      ENTERPRISEGLUE_PLUGIN_INVOCATION_PUBLIC_KEY_FILE: /run/enterpriseglue/plugin-invocation-public.pem
+      REFERENCE_PLUGIN_HOST_BROKER_BASE_URL: http://backend:8787
+      REFERENCE_PLUGIN_DATA_DIR: /var/lib/enterpriseglue/reference-health
+    volumes:
+      - ${POOLED_TENANCY_PLUGIN_INVOCATION_PUBLIC_KEY_FILE}:/run/enterpriseglue/plugin-invocation-public.pem:ro
+      - ${POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR}:/var/lib/enterpriseglue/reference-health
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/plugin-healthcheck"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks:
+      - enterpriseglue-network
 
   # Build the SPA from the already-installed workspace dependencies before
   # Compose starts. This keeps the pooled browser lane independent of a second

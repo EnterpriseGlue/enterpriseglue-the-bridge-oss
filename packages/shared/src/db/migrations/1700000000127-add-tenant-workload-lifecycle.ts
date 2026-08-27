@@ -1,14 +1,18 @@
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { TenantLifecycleOperation } from '../../infrastructure/persistence/entities/TenantLifecycleOperation.js';
-import { TenantRoutingAlias } from '../../infrastructure/persistence/entities/TenantRoutingAlias.js';
 import {
   portableBigint,
   portableStringDefault,
   portableText,
 } from './support/portable-columns.js';
 
-const pathFor = (queryRunner: QueryRunner, entity: Function): string => queryRunner.connection.getMetadata(entity).tablePath;
+const pathFor = (queryRunner: QueryRunner, entityName: string, fallback: string): string => {
+  try {
+    return queryRunner.connection.getMetadata(entityName).tablePath;
+  } catch {
+    return fallback;
+  }
+};
 
 export class AddTenantWorkloadLifecycle1700000000127 implements MigrationInterface {
   name = 'AddTenantWorkloadLifecycle1700000000127';
@@ -19,7 +23,7 @@ export class AddTenantWorkloadLifecycle1700000000127 implements MigrationInterfa
     const timestamp = portableBigint(queryRunner);
     const stringDefault = (value: string) => portableStringDefault(queryRunner, value);
 
-    const aliases = pathFor(queryRunner, TenantRoutingAlias);
+    const aliases = pathFor(queryRunner, 'TenantRoutingAlias', 'tenant_routing_aliases');
     if (!await queryRunner.hasTable(aliases)) {
       await queryRunner.createTable(new Table({
         name: aliases,
@@ -40,7 +44,7 @@ export class AddTenantWorkloadLifecycle1700000000127 implements MigrationInterfa
       }), true);
     }
 
-    const operations = pathFor(queryRunner, TenantLifecycleOperation);
+    const operations = pathFor(queryRunner, 'TenantLifecycleOperation', 'tenant_lifecycle_operations');
     if (!await queryRunner.hasTable(operations)) {
       await queryRunner.createTable(new Table({
         name: operations,
@@ -69,8 +73,11 @@ export class AddTenantWorkloadLifecycle1700000000127 implements MigrationInterfa
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    for (const entity of [TenantLifecycleOperation, TenantRoutingAlias]) {
-      const table = pathFor(queryRunner, entity);
+    for (const [entityName, fallback] of [
+      ['TenantLifecycleOperation', 'tenant_lifecycle_operations'],
+      ['TenantRoutingAlias', 'tenant_routing_aliases'],
+    ] as const) {
+      const table = pathFor(queryRunner, entityName, fallback);
       if (await queryRunner.hasTable(table)) await queryRunner.dropTable(table);
     }
   }
