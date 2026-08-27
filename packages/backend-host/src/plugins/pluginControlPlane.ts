@@ -8,6 +8,9 @@ import {
   pluginPlatformEmergencyStateV1Schema,
   pluginSafeListV1Schema,
   pluginSafeSummaryV1Schema,
+  pluginTenantApplicationAuditListV1Schema,
+  pluginTenantApplicationListV1Schema,
+  pluginTenantApplicationV1Schema,
   pluginTenantEnablementV1Schema,
   type PluginId,
   type PluginDeploymentExecutionObservationV1,
@@ -18,6 +21,10 @@ import {
   type PluginPlatformEmergencyStateV1,
   type PluginSafeReasonCodeV1,
   type PluginSafeSummaryV1,
+  type PluginTenantActivationPolicyV1,
+  type PluginTenantApplicationAuditListV1,
+  type PluginTenantApplicationListV1,
+  type PluginTenantApplicationV1,
   type PluginTenantEnablementV1,
 } from '@enterpriseglue/plugin-sdk';
 
@@ -32,7 +39,10 @@ export type PluginControlErrorCodeV1 =
   | 'revision_conflict'
   | 'idempotency_conflict'
   | 'invalid_state'
-  | 'tenant_enablement_not_supported';
+  | 'tenant_enablement_not_supported'
+  | 'activation_request_not_pending'
+  | 'activation_request_not_required'
+  | 'activation_approval_required';
 
 export class PluginControlErrorV1 extends Error {
   constructor(
@@ -59,6 +69,19 @@ export interface PluginControlMutationV1 {
 export interface PluginTenantControlMutationV1
   extends PluginControlMutationV1 {
   tenantRef: string;
+}
+
+export interface PluginTenantApplicationMutationV1 {
+  pluginId: PluginId;
+  tenantRef: string;
+  tenantSlug: string;
+  operation: 'request' | 'approve' | 'reject';
+  expectedRevision: number;
+  idempotencyKeyHash: string;
+  requestHash: string;
+  actorRef: string;
+  correlationId: string;
+  occurredAt: string;
 }
 
 export interface PluginEmergencyControlMutationV1 {
@@ -91,6 +114,22 @@ export interface PluginControlStoreV1 {
     pluginId: PluginId,
     tenantRef: string,
   ): Promise<PluginTenantEnablementV1 | undefined>;
+  listTenantApplications(
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1[]>;
+  getTenantApplication(
+    pluginId: PluginId,
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1 | undefined>;
+  mutateTenantActivationRequest(
+    input: PluginTenantApplicationMutationV1,
+  ): Promise<PluginTenantApplicationV1>;
+  listTenantApplicationAudit(
+    pluginId: PluginId,
+    tenantRef: string,
+  ): Promise<PluginPlatformAuditEventV1[]>;
   getOperation(
     operationId: string,
   ): Promise<PluginLifecycleOperationV1 | undefined>;
@@ -103,15 +142,23 @@ export interface PluginControlStoreV1 {
 
 interface MemoryInstallation {
   summary: PluginSafeSummaryV1;
+  publisher: PluginId;
   installerRevision: number;
   installerEnabled: boolean;
   enablementScope: 'deployment' | 'tenant';
+  tenantConfiguration?: {
+    relativePath: string;
+    schemaSha256: string | null;
+  };
   sourceFingerprint: string;
 }
 
 interface MemoryTenantEnablement {
   enabled: boolean;
   revision: number;
+  activationRequestState: 'none' | 'pending' | 'approved' | 'rejected';
+  requestedAt: string | null;
+  reviewedAt: string | null;
 }
 
 interface MemoryOperation {
@@ -122,6 +169,11 @@ interface MemoryOperation {
 interface MemoryEmergencyOperation {
   requestHash: string;
   state: PluginPlatformEmergencyStateV1;
+}
+
+interface MemoryTenantApplicationOperation {
+  requestHash: string;
+  application: PluginTenantApplicationV1;
 }
 
 /**
@@ -140,7 +192,12 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
     string,
     MemoryEmergencyOperation
   >();
+  private readonly tenantApplicationOperations = new Map<
+    string,
+    MemoryTenantApplicationOperation
+  >();
   private readonly audits: PluginPlatformAuditEventV1[] = [];
+  private readonly tenantAuditRefs = new Map<string, string>();
   private emergencyState: PluginPlatformEmergencyStateV1 | undefined;
   private installerState:
     | { revision: number; snapshotHash: string }
@@ -205,9 +262,13 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
       });
       this.installations.set(source.pluginId, {
         summary,
+        publisher: source.publisher,
         installerRevision: snapshot.revision,
         installerEnabled: source.installerEnabled,
         enablementScope: source.enablementScope,
+        ...(source.tenantConfiguration
+          ? { tenantConfiguration: structuredClone(source.tenantConfiguration) }
+          : {}),
         sourceFingerprint: fingerprint,
       });
       if (source.enablementScope === 'tenant') {
@@ -216,6 +277,10 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
         this.tenantEnablements.set(key, {
           enabled: summary.enabled,
           revision: tenant ? tenant.revision + 1 : 0,
+          activationRequestState:
+            tenant?.activationRequestState ?? 'none',
+          requestedAt: tenant?.requestedAt ?? null,
+          reviewedAt: tenant?.reviewedAt ?? null,
         });
       }
     }
@@ -334,11 +399,15 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
     const existing = this.tenantEnablements.get(key) ?? {
       enabled: false,
       revision: 0,
+      activationRequestState: 'none' as const,
+      requestedAt: null,
+      reviewedAt: null,
     };
     if (existing.revision !== input.expectedRevision) {
       throw new PluginControlErrorV1(409, 'revision_conflict');
     }
     this.tenantEnablements.set(key, {
+      ...existing,
       enabled: input.enabled,
       revision: existing.revision + 1,
     });
@@ -353,6 +422,7 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
       toState: input.enabled ? 'enabled' : 'installed_disabled',
       reasonCode: input.enabled ? 'none' : input.reasonCode,
       occurredAt: input.occurredAt,
+      tenantRef: input.tenantRef,
     });
     return operation;
   }
@@ -392,6 +462,136 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
       enabled: record?.enabled ?? false,
       revision: record?.revision ?? 0,
     });
+  }
+
+  async listTenantApplications(
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1[]> {
+    return [...this.installations.entries()]
+      .filter(([, installation]) => installation.enablementScope === 'tenant')
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([pluginId, installation]) =>
+        memoryTenantApplication(
+          pluginId,
+          installation,
+          this.tenantEnablements.get(tenantKey(pluginId, tenantRef)),
+          tenantSlug,
+        ),
+      );
+  }
+
+  async getTenantApplication(
+    pluginId: PluginId,
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1 | undefined> {
+    const installation = this.installations.get(pluginId);
+    if (!installation || installation.enablementScope !== 'tenant') {
+      return undefined;
+    }
+    return memoryTenantApplication(
+      pluginId,
+      installation,
+      this.tenantEnablements.get(tenantKey(pluginId, tenantRef)),
+      tenantSlug,
+    );
+  }
+
+  async mutateTenantActivationRequest(
+    input: PluginTenantApplicationMutationV1,
+  ): Promise<PluginTenantApplicationV1> {
+    const repeated = this.tenantApplicationOperations.get(
+      input.idempotencyKeyHash,
+    );
+    if (repeated) {
+      if (repeated.requestHash !== input.requestHash) {
+        throw new PluginControlErrorV1(409, 'idempotency_conflict');
+      }
+      return structuredClone(repeated.application);
+    }
+    const installation = this.installations.get(input.pluginId);
+    if (!installation || installation.enablementScope !== 'tenant') {
+      throw new PluginControlErrorV1(404, 'plugin_not_found');
+    }
+    if (!installation.summary.enabled) {
+      throw new PluginControlErrorV1(409, 'invalid_state');
+    }
+    const key = tenantKey(input.pluginId, input.tenantRef);
+    const current = this.tenantEnablements.get(key) ?? {
+      enabled: false,
+      revision: 0,
+      activationRequestState: 'none' as const,
+      requestedAt: null,
+      reviewedAt: null,
+    };
+    if (current.revision !== input.expectedRevision) {
+      throw new PluginControlErrorV1(409, 'revision_conflict');
+    }
+    if (
+      input.operation !== 'request' &&
+      current.activationRequestState !== 'pending'
+    ) {
+      throw new PluginControlErrorV1(409, 'activation_request_not_pending');
+    }
+    const next: MemoryTenantEnablement = {
+      enabled: input.operation === 'approve' ? true : current.enabled,
+      revision: current.revision + 1,
+      activationRequestState:
+        input.operation === 'request'
+          ? 'pending'
+          : input.operation === 'approve'
+            ? 'approved'
+            : 'rejected',
+      requestedAt:
+        input.operation === 'request' ? input.occurredAt : current.requestedAt,
+      reviewedAt:
+        input.operation === 'request' ? null : input.occurredAt,
+    };
+    if (input.operation === 'reject') next.enabled = false;
+    this.tenantEnablements.set(key, next);
+    const application = memoryTenantApplication(
+      input.pluginId,
+      installation,
+      next,
+      input.tenantSlug,
+    );
+    this.tenantApplicationOperations.set(input.idempotencyKeyHash, {
+      requestHash: input.requestHash,
+      application: structuredClone(application),
+    });
+    this.appendAudit({
+      eventType:
+        input.operation === 'request'
+          ? 'tenant_activation_requested'
+          : input.operation === 'approve'
+            ? 'tenant_activation_approved'
+            : 'tenant_activation_rejected',
+      pluginId: input.pluginId,
+      tenantScoped: true,
+      actorRef: input.actorRef,
+      correlationId: input.correlationId,
+      fromState: tenantApplicationStatus(installation.summary, current),
+      toState: application.status,
+      reasonCode: 'none',
+      occurredAt: input.occurredAt,
+      tenantRef: input.tenantRef,
+    });
+    return structuredClone(application);
+  }
+
+  async listTenantApplicationAudit(
+    pluginId: PluginId,
+    tenantRef: string,
+  ): Promise<PluginPlatformAuditEventV1[]> {
+    return this.audits
+      .filter(
+        (event) =>
+          event.pluginId === pluginId &&
+          event.tenantScoped &&
+          this.tenantAuditRefs.get(event.eventId) === tenantRef,
+      )
+      .map((event) => structuredClone(event));
   }
 
   async getOperation(
@@ -457,14 +657,17 @@ export class MemoryPluginControlStoreV1 implements PluginControlStoreV1 {
   }
 
   private appendAudit(
-    input: Omit<PluginPlatformAuditEventV1, 'eventId'>,
+    input: Omit<PluginPlatformAuditEventV1, 'eventId'> & {
+      tenantRef?: string;
+    },
   ): void {
-    this.audits.unshift(
-      pluginPlatformAuditEventV1Schema.parse({
-        eventId: randomUUID(),
-        ...input,
-      }),
-    );
+    const eventId = randomUUID();
+    const { tenantRef, ...safeInput } = input;
+    this.audits.unshift(pluginPlatformAuditEventV1Schema.parse({
+      eventId,
+      ...safeInput,
+    }));
+    if (tenantRef) this.tenantAuditRefs.set(eventId, tenantRef);
     if (this.audits.length > 100) this.audits.length = 100;
   }
 
@@ -512,12 +715,14 @@ export interface PluginControlSourceV1 {
 
 export interface PluginControlPlaneOptionsV1 {
   defaultTenantRef: string;
+  tenantActivationPolicy?: PluginTenantActivationPolicyV1;
   now?: () => Date;
 }
 
 export class PluginControlPlaneV1 {
   private readonly now: () => Date;
   private readonly defaultTenantRef: string;
+  private readonly tenantActivationPolicy: PluginTenantActivationPolicyV1;
 
   constructor(
     private readonly source: PluginControlSourceV1,
@@ -525,6 +730,7 @@ export class PluginControlPlaneV1 {
     options: PluginControlPlaneOptionsV1,
   ) {
     this.defaultTenantRef = options.defaultTenantRef;
+    this.tenantActivationPolicy = options.tenantActivationPolicy ?? 'direct';
     this.now = options.now ?? (() => new Date());
   }
 
@@ -628,6 +834,138 @@ export class PluginControlPlaneV1 {
     const summary = await this.store.getTenantEnablement(pluginId, tenantRef);
     if (!summary) throw new PluginControlErrorV1(404, 'plugin_not_found');
     return pluginTenantEnablementV1Schema.parse(summary);
+  }
+
+  async listTenantApplications(
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationListV1> {
+    const snapshot = await this.synchronize();
+    return pluginTenantApplicationListV1Schema.parse({
+      apiVersion: 'tenant-application-list.plugin.enterpriseglue.io/v1',
+      revision: snapshot.revision,
+      activationPolicy: this.tenantActivationPolicy,
+      applications: await this.store.listTenantApplications(
+        tenantRef,
+        tenantSlug,
+      ),
+    });
+  }
+
+  async getTenantApplication(
+    pluginId: PluginId,
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1> {
+    await this.synchronize();
+    const application = await this.store.getTenantApplication(
+      pluginId,
+      tenantRef,
+      tenantSlug,
+    );
+    if (!application) throw new PluginControlErrorV1(404, 'plugin_not_found');
+    return pluginTenantApplicationV1Schema.parse(application);
+  }
+
+  async setTenantApplicationActive(input: {
+    pluginId: PluginId;
+    tenantRef: string;
+    tenantSlug: string;
+    active: boolean;
+    expectedRevision: number;
+    idempotencyKey: string;
+    actorRef: string;
+    correlationId: string;
+  }): Promise<PluginTenantApplicationV1> {
+    if (input.active && this.tenantActivationPolicy === 'approval_required') {
+      throw new PluginControlErrorV1(409, 'activation_approval_required');
+    }
+    await this.setTenantEnabled({
+      pluginId: input.pluginId,
+      tenantRef: input.tenantRef,
+      enabled: input.active,
+      expectedRevision: input.expectedRevision,
+      idempotencyKey: input.idempotencyKey,
+      actorRef: input.actorRef,
+      correlationId: input.correlationId,
+    });
+    return this.getTenantApplication(
+      input.pluginId,
+      input.tenantRef,
+      input.tenantSlug,
+    );
+  }
+
+  async requestTenantApplicationActivation(input: {
+    pluginId: PluginId;
+    tenantRef: string;
+    tenantSlug: string;
+    expectedRevision: number;
+    idempotencyKey: string;
+    actorRef: string;
+    correlationId: string;
+  }): Promise<PluginTenantApplicationV1> {
+    if (this.tenantActivationPolicy !== 'approval_required') {
+      throw new PluginControlErrorV1(409, 'activation_request_not_required');
+    }
+    return this.mutateTenantActivationRequest({ ...input, operation: 'request' });
+  }
+
+  async decideTenantApplicationActivation(input: {
+    pluginId: PluginId;
+    tenantRef: string;
+    tenantSlug: string;
+    decision: 'approve' | 'reject';
+    expectedRevision: number;
+    idempotencyKey: string;
+    actorRef: string;
+    correlationId: string;
+  }): Promise<PluginTenantApplicationV1> {
+    if (this.tenantActivationPolicy !== 'approval_required') {
+      throw new PluginControlErrorV1(409, 'activation_request_not_required');
+    }
+    return this.mutateTenantActivationRequest({
+      ...input,
+      operation: input.decision,
+    });
+  }
+
+  async listTenantApplicationAudit(
+    pluginId: PluginId,
+    tenantRef: string,
+  ): Promise<PluginTenantApplicationAuditListV1> {
+    await this.synchronize();
+    return pluginTenantApplicationAuditListV1Schema.parse({
+      apiVersion: 'tenant-application-audit.plugin.enterpriseglue.io/v1',
+      events: await this.store.listTenantApplicationAudit(pluginId, tenantRef),
+    });
+  }
+
+  private async mutateTenantActivationRequest(input: {
+    pluginId: PluginId;
+    tenantRef: string;
+    tenantSlug: string;
+    operation: 'request' | 'approve' | 'reject';
+    expectedRevision: number;
+    idempotencyKey: string;
+    actorRef: string;
+    correlationId: string;
+  }): Promise<PluginTenantApplicationV1> {
+    await this.synchronize();
+    const occurredAt = this.now().toISOString();
+    return this.store.mutateTenantActivationRequest({
+      ...input,
+      idempotencyKeyHash: digest(
+        `${input.actorRef}\0${input.pluginId}\0${input.tenantRef}\0tenant-application\0${input.operation}\0${input.idempotencyKey}`,
+      ),
+      requestHash: digest(JSON.stringify({
+        pluginId: input.pluginId,
+        tenantRef: input.tenantRef,
+        operation: input.operation,
+        expectedRevision: input.expectedRevision,
+      })),
+      occurredAt,
+    });
   }
 
   async getOperation(operationId: string): Promise<PluginLifecycleOperationV1> {
@@ -778,6 +1116,60 @@ function tenantKey(pluginId: PluginId, tenantRef: string): string {
   return `${pluginId}\0${tenantRef}`;
 }
 
+function tenantApplicationStatus(
+  summary: PluginSafeSummaryV1,
+  tenant?: MemoryTenantEnablement,
+): PluginTenantApplicationV1['status'] {
+  if (summary.entitled === 'revoked') return 'revoked';
+  if (!summary.compatible || ['expired', 'unavailable'].includes(summary.entitled)) {
+    return 'blocked';
+  }
+  if (!summary.enabled || !['enabled', 'degraded'].includes(summary.state)) {
+    return summary.entitled === 'active' || summary.entitled === 'grace'
+      ? 'entitled'
+      : 'install-pending';
+  }
+  if (tenant?.activationRequestState === 'pending') return 'requested';
+  if (tenant?.enabled) return 'active';
+  return tenant ? 'inactive' : 'available';
+}
+
+function memoryTenantApplication(
+  pluginId: PluginId,
+  installation: MemoryInstallation,
+  tenant: MemoryTenantEnablement | undefined,
+  tenantSlug: string,
+): PluginTenantApplicationV1 {
+  const configuration = installation.tenantConfiguration;
+  return pluginTenantApplicationV1Schema.parse({
+    apiVersion: 'tenant-application.plugin.enterpriseglue.io/v1',
+    pluginId,
+    version: installation.summary.version,
+    displayName: installation.summary.displayName,
+    publisher: installation.publisher,
+    status: tenantApplicationStatus(installation.summary, tenant),
+    active: tenant?.enabled ?? false,
+    compatible: installation.summary.compatible,
+    healthy: installation.summary.healthy,
+    entitled: installation.summary.entitled,
+    reasonCode: installation.summary.reasonCode,
+    revision: tenant?.revision ?? 0,
+    activationRequest: {
+      state: tenant?.activationRequestState ?? 'none',
+      requestedAt: tenant?.requestedAt ?? null,
+      reviewedAt: tenant?.reviewedAt ?? null,
+    },
+    configuration: {
+      available: Boolean(configuration),
+      schemaSha256: configuration?.schemaSha256 ?? null,
+      href: configuration
+        ? `/t/${encodeURIComponent(tenantSlug)}/${configuration.relativePath}`
+        : null,
+      owner: 'plugin',
+    },
+  });
+}
+
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
@@ -794,6 +1186,7 @@ function sourceFingerprint(source: PluginControlSourceRecordV1): string {
       sourceRecordHash: source.sourceRecordHash,
       installerEnabled: source.installerEnabled,
       enablementScope: source.enablementScope,
+      tenantConfiguration: source.tenantConfiguration ?? null,
       grantedPermissions: [...source.grantedPermissions].sort(),
     }),
   );

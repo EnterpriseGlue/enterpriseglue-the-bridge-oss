@@ -92,6 +92,8 @@ const values = {
   POOLED_TENANCY_POSTGRES_APP_PASSWORD: appPassword,
   POOLED_TENANCY_POSTGRES_APP_DATABASE: appDatabase,
   POOLED_TENANCY_FRONTEND_DIST: `${rootDir}/frontend/dist`,
+  POOLED_TENANCY_PLUGIN_STATE_FILE: `${require('node:path').dirname(envFile)}/plugin-state.json`,
+  POOLED_TENANCY_PLUGIN_ASSET_ROOT: `${require('node:path').dirname(envFile)}/plugin-assets`,
   CAMUNDA_MOCK_HOST_PORT: '0',
   JWT_SECRET: randomHex(32),
   ADMIN_EMAIL: adminEmail,
@@ -203,6 +205,41 @@ echo '[pooled-tenancy-e2e] Compiling the backend and SPA from installed workspac
 pnpm --filter webmodeler-backend run build
 pnpm run build:frontend-host
 pnpm --filter webmodeler-frontend run build
+pnpm --filter @enterpriseglue/plugin-reference run build
+
+node - "$root_dir" "$temp_dir/plugin-state.json" "$temp_dir/plugin-assets" <<'NODE'
+const { createHash } = require('node:crypto');
+const { cpSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { resolve } = require('node:path');
+const [rootDir, stateFile, assetRoot] = process.argv.slice(2);
+const pluginId = 'io.enterpriseglue.reference-health';
+const bundleRoot = resolve(rootDir, 'packages/plugin-reference/dist/plugin-bundle');
+const manifest = JSON.parse(readFileSync(resolve(bundleRoot, 'plugin.yaml'), 'utf8'));
+const resources = JSON.parse(readFileSync(resolve(bundleRoot, 'deploy/resources.json'), 'utf8'));
+manifest.scope.enablement = 'tenant';
+const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const pluginAssetRoot = resolve(assetRoot, pluginId);
+mkdirSync(pluginAssetRoot, { recursive: true });
+cpSync(bundleRoot, pluginAssetRoot, { recursive: true });
+writeFileSync(resolve(pluginAssetRoot, 'plugin.yaml'), manifestBytes, { mode: 0o644 });
+writeFileSync(stateFile, `${JSON.stringify({
+  schemaVersion: 1,
+  revision: 1,
+  plugins: {
+    [pluginId]: {
+      pluginId,
+      version: manifest.metadata.version,
+      bundle: `registry.invalid/pooled-reference@sha256:${'1'.repeat(64)}`,
+      manifestSha256: sha256(manifestBytes),
+      manifest,
+      resources,
+      grantedPermissions: manifest.permissions.required,
+      enabled: true,
+    },
+  },
+}, null, 2)}\n`, { mode: 0o644 });
+NODE
 KEYCLOAK_TLS_DIR="$tls_dir" ./infra/docker/keycloak/generate-local-tls.sh
 chmod 755 "$tls_dir"
 chmod 644 "$tls_dir/ca.crt" "$tls_dir/server.crt" "$tls_dir/server.key"
@@ -277,7 +314,7 @@ writeFileSync(process.argv[2], [
   'mode=pooled',
   'database=postgres-restricted-role-force-rls',
   'tenants=alpha-oidc,bravo-saml,charlie-ldap',
-  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,immediate-membership-removal',
+  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,tenant-app-member-request,tenant-app-admin-approval,tenant-app-sibling-isolation,tenant-app-deactivation,tenant-app-frontend-bootstrap,immediate-membership-removal',
   'ui_evidence=deterministic-desktop-responsive-and-zoom-screenshots',
   'identity_evidence=disposable-keycloak-openldap-and-private-tenant-secret-broker-emulators',
   'credentials=ephemeral-and-not-retained',

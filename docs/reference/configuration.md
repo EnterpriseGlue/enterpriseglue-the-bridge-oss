@@ -111,6 +111,9 @@ rollback qualification gates pass for the intended deployment.
   default `15000`, maximum `60000`. Set `0` to disable caching.
 - `EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES`: Per-process cache bound; default
   `256`, maximum `1024`.
+- `ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY`: Tenant application activation
+  workflow. `direct` is the backward-compatible default; `approval_required`
+  requires a member request and tenant-administrator decision.
 - `EG_TENANT_SECRET_BROKER_REQUIRED`: When `true`, startup requires the broker
   URL and token reference. Cloud-required mode requires this to be `true`.
 - `EG_TENANT_SECRET_BREAK_GLASS_ENABLED`: Enables the independently audited,

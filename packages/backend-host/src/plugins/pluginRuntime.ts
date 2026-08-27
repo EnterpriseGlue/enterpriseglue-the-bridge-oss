@@ -196,6 +196,10 @@ export interface PluginControlSourceRecordV1 {
   sourceRecordHash: string;
   installerEnabled: boolean;
   enablementScope: 'deployment' | 'tenant';
+  tenantConfiguration?: {
+    relativePath: string;
+    schemaSha256: string | null;
+  };
   compatible: boolean;
   healthy: boolean;
   entitled:
@@ -300,6 +304,7 @@ export interface PluginPlatformRouteOptionsV1 {
     | 'deploymentManageMiddleware'
     | 'tenantReadMiddleware'
     | 'tenantManageMiddleware'
+    | 'tenantRequestMiddleware'
     | 'deploymentAdminMiddleware'
     | 'tenantAdminMiddleware'
   >;
@@ -948,6 +953,9 @@ export class PluginHostRuntimeV1 {
         .map((record) => {
           const issue = issueByPlugin.get(record.pluginId);
           const compatible = !issue;
+          const tenantConfiguration = tenantConfigurationFromManifest(
+            record.manifest,
+          );
           return {
             pluginId: record.pluginId,
             version: record.version,
@@ -972,6 +980,7 @@ export class PluginHostRuntimeV1 {
             ),
             installerEnabled: record.enabled,
             enablementScope: record.manifest.scope.enablement,
+            ...(tenantConfiguration ? { tenantConfiguration } : {}),
             compatible,
             healthy:
               compatible &&
@@ -988,6 +997,27 @@ export class PluginHostRuntimeV1 {
     };
   }
 
+}
+
+function tenantConfigurationFromManifest(
+  manifest: EnterpriseGluePluginManifestV1,
+): PluginControlSourceRecordV1['tenantConfiguration'] | undefined {
+  const settings = manifest.contributions.find(
+    (contribution) =>
+      contribution.kind === 'settings' && contribution.scope === 'tenant',
+  );
+  if (!settings || settings.kind !== 'settings') return undefined;
+  const route = manifest.contributions.find(
+    (contribution) =>
+      contribution.kind === 'route' &&
+      contribution.id === settings.routeId &&
+      contribution.scope === 'tenant',
+  );
+  if (!route || route.kind !== 'route') return undefined;
+  return {
+    relativePath: route.relativePath,
+    schemaSha256: settings.configurationSchema?.sha256 ?? null,
+  };
 }
 
 function safeReasonForResolutionIssue(
@@ -1623,12 +1653,18 @@ export function registerPluginPlatformRoutes(
       ? (defaultControlPlane ??= new PluginControlPlaneV1(
           runtime,
           new DatabasePluginControlStoreV1(),
-          { defaultTenantRef: DEFAULT_TENANT_ID },
+          {
+            defaultTenantRef: DEFAULT_TENANT_ID,
+            tenantActivationPolicy: configuredTenantActivationPolicy(),
+          },
         ))
       : new PluginControlPlaneV1(
           runtime,
           new DatabasePluginControlStoreV1(),
-          { defaultTenantRef: DEFAULT_TENANT_ID },
+          {
+            defaultTenantRef: DEFAULT_TENANT_ID,
+            tenantActivationPolicy: configuredTenantActivationPolicy(),
+          },
         ));
   const gatewayAdmission =
     options.gatewayAdmission ?? defaultPluginGatewayAdmissionV1();
@@ -1892,6 +1928,18 @@ export function registerPluginPlatformRoutes(
       },
     );
   }
+}
+
+function configuredTenantActivationPolicy(): 'direct' | 'approval_required' {
+  const value =
+    process.env.ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY?.trim() ||
+    'direct';
+  if (value !== 'direct' && value !== 'approval_required') {
+    throw new Error(
+      'ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY must be direct or approval_required',
+    );
+  }
+  return value;
 }
 
 function configuredPluginManagerCatalog():

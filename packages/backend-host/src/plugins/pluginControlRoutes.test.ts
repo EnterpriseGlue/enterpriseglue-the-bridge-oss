@@ -35,7 +35,9 @@ function capabilityCatalog() {
   });
 }
 
-function fixture() {
+function fixture(
+  tenantActivationPolicy: 'direct' | 'approval_required' = 'direct',
+) {
   let sourceReads = 0;
   const snapshot: PluginControlSourceSnapshotV1 = {
     revision: 1,
@@ -93,6 +95,7 @@ function fixture() {
     new MemoryPluginControlStoreV1(),
     {
       defaultTenantRef: 'default-tenant-id',
+      tenantActivationPolicy,
       now: () => new Date('2026-07-24T01:00:00.000Z'),
     },
   );
@@ -116,6 +119,18 @@ const allowAdmin: RequestHandler = (request, _response, next) => {
 
 const deny: RequestHandler = (_request, response) => {
   response.status(403).json({ code: 'access_denied' });
+};
+
+const allowAlpha: RequestHandler = (request, _response, next) => {
+  request.user = {
+    userId: 'alpha-user',
+    platformRole: 'user',
+  } as NonNullable<typeof request.user>;
+  request.tenant = {
+    tenantId: 'tenant-alpha',
+    tenantSlug: 'alpha',
+  };
+  next();
 };
 
 describe('plugin control routes', () => {
@@ -175,6 +190,7 @@ describe('plugin control routes', () => {
       deploymentManageMiddleware: [denyWith(419, 'deployment-manage')],
       tenantReadMiddleware: [denyWith(420, 'tenant-read')],
       tenantManageMiddleware: [denyWith(421, 'tenant-manage')],
+      tenantRequestMiddleware: [denyWith(422, 'tenant-request')],
     });
 
     await withServer(app, async (baseUrl) => {
@@ -197,6 +213,12 @@ describe('plugin control routes', () => {
           { method: 'PUT' },
         ),
       ).resolves.toMatchObject({ status: 421 });
+      await expect(
+        fetch(
+          `${baseUrl}/api/t/default/apps/${pluginId}/activation-request`,
+          { method: 'POST' },
+        ),
+      ).resolves.toMatchObject({ status: 422 });
     });
     expect(test.sourceReads()).toBe(0);
   });
@@ -529,6 +551,87 @@ describe('plugin control routes', () => {
         pluginId,
         enabled: false,
         revision: 1,
+      });
+    });
+  });
+
+  it('supports a tenant-safe approval marketplace without accepting tenant selectors', async () => {
+    const test = fixture('approval_required');
+    const app = express();
+    app.use(express.json());
+    registerPluginControlRoutesV1(app, test.control, {
+      deploymentAdminMiddleware: [allowAdmin],
+      tenantReadMiddleware: [allowAlpha],
+      tenantRequestMiddleware: [allowAlpha],
+      tenantManageMiddleware: [allowAlpha],
+    });
+    await withServer(app, async (baseUrl) => {
+      const catalogue = await fetch(`${baseUrl}/api/t/alpha/apps`);
+      expect(catalogue.status).toBe(200);
+      expect(catalogue.headers.get('cache-control')).toBe('no-store');
+      expect(await catalogue.json()).toMatchObject({
+        activationPolicy: 'approval_required',
+        applications: [{ pluginId, status: 'available', active: false }],
+      });
+
+      const invalid = await fetch(
+        `${baseUrl}/api/t/alpha/apps/${pluginId}/activation-request`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 0,
+            idempotencyKey: 'alpha-activation-request-0001',
+            tenantRef: 'tenant-bravo',
+          }),
+        },
+      );
+      expect(invalid.status).toBe(400);
+
+      const requested = await fetch(
+        `${baseUrl}/api/t/alpha/apps/${pluginId}/activation-request`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 0,
+            idempotencyKey: 'alpha-activation-request-0002',
+          }),
+        },
+      );
+      expect(requested.status).toBe(200);
+      expect(await requested.json()).toMatchObject({
+        status: 'requested',
+        active: false,
+        revision: 1,
+      });
+
+      const approved = await fetch(
+        `${baseUrl}/api/t/alpha/apps/${pluginId}/activation-request/decision`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            decision: 'approve',
+            expectedRevision: 1,
+            idempotencyKey: 'alpha-activation-approve-0001',
+          }),
+        },
+      );
+      expect(approved.status).toBe(200);
+      expect(await approved.json()).toMatchObject({
+        status: 'active',
+        active: true,
+        revision: 2,
+      });
+      const audit = await fetch(
+        `${baseUrl}/api/t/alpha/apps/${pluginId}/audit`,
+      );
+      expect(await audit.json()).toMatchObject({
+        events: [
+          { eventType: 'tenant_activation_approved' },
+          { eventType: 'tenant_activation_requested' },
+        ],
       });
     });
   });

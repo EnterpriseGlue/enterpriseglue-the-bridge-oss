@@ -1,0 +1,67 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "tenant-marketplace-lifecycle",
+  "type": "feature",
+  "scope": "plugins",
+  "breaking": false,
+  "audiences": ["administrators", "operators", "developers", "security"],
+  "summary": "Adds tenant-owned application catalogue, request, activation, configuration-link, and audit contracts while keeping deployment installation under platform control.",
+  "userImpact": [
+    "Tenant administrators can view compatible installed applications and manage activation only for their current tenant.",
+    "Ordinary tenant members can use active applications but cannot activate, deactivate, approve, or configure them.",
+    "Existing platform plugin installation and settings routes remain available and retain deployment-wide authority."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Run the normal database migrations before enabling tenant marketplace routes.",
+      "Existing deployment-scoped plugins and single-tenant installations continue without tenant marketplace configuration."
+    ]
+  },
+  "configuration": [
+    "Adds an opt-in deployment policy for tenant activation requests; direct tenant-admin activation remains the compatibility default.",
+    "Plugin manifests may expose safe catalogue metadata, a configuration schema reference, and a plugin-owned tenant configuration link without registry or infrastructure data."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds tenant.apps.read, tenant.apps.request, tenant.apps.manage, and tenant.apps.use authorization actions.",
+      "Adds tenant-safe catalogue, application detail, activation/deactivation, activation-request, approval, configuration-link, and activation-audit APIs.",
+      "Retains the existing tenant enablement endpoint as a backward-compatible alias governed by tenant application actions."
+    ]
+  },
+  "database": {
+    "migrations": ["1700000000128-add-tenant-application-marketplace"],
+    "rollbackSupported": true,
+    "notes": [
+      "The migration expands tenant plugin enablement with lifecycle status, optimistic revision, activation request state, and safe configuration projections.",
+      "Rollback removes only tenant marketplace state after affected tenant applications have been deactivated."
+    ]
+  },
+  "security": [
+    "Every tenant marketplace query and mutation derives tenant identity from authenticated request context and never accepts a tenant ID in the body.",
+    "Catalogue responses exclude pricing, registry credentials, infrastructure topology, raw entitlement documents, and sibling-tenant state.",
+    "Activation mutations require optimistic revision, idempotency, tenant application permissions, and tenant-scoped audit."
+  ],
+  "documentation": [
+    "Documents marketplace ownership, tenant actions, lifecycle state transitions, compatibility aliases, safe catalogue projection, and rollback."
+  ],
+  "knownLimitations": [
+    "Signed tenant eligibility projection and runtime/asynchronous reconciliation are delivered by the next dependency-ordered slice."
+  ],
+  "rollback": [
+    "Deactivate tenant applications and wait for lifecycle operations to settle before rolling back the migration.",
+    "Continue using the existing platform plugin routes and deployment-scoped enablement after rollback."
+  ],
+  "validation": [
+    "Tests cover tenant-admin activation, member use-only access, platform installation separation, idempotency, optimistic revision conflicts, sibling-tenant denial, secret-free safe projections, and existing route compatibility.",
+    "The pooled reference-plugin lane activates different tenants independently and proves deactivation does not affect a sibling tenant."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.11.0", "newVersion": "0.12.0", "impact": "minor" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.9.0", "newVersion": "0.10.0", "impact": "minor" },
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.13.0", "newVersion": "0.14.0", "impact": "minor" },
+    { "name": "@enterpriseglue/plugin-sdk", "previousVersion": "0.3.1", "newVersion": "0.4.0", "impact": "minor" }
+  ]
+}

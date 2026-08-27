@@ -37,7 +37,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Tenants',
       description: 'Read the shard tenancy capabilities through a workload-only service-account route.',
-      ui: [{ surfaceId: 'workload.tenants.capabilities', behavior: 'hide' }],
+      ui: [{ surfaceId: 'workload.tenants.capabilities', behavior: 'hide', coverage: 'api-only' }],
       routes: [{ method: 'GET', route: '/api/workloads/tenancy/capabilities', resourceResolver: 'platform.self' }],
     },
   {
@@ -49,7 +49,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Tenants',
       description: 'Provision a tenant through a workload-only, idempotent service-account route.',
-      ui: [{ surfaceId: 'workload.tenants.provision', behavior: 'disable' }],
+      ui: [{ surfaceId: 'workload.tenants.provision', behavior: 'disable', coverage: 'api-only' }],
       routes: [{ method: 'POST', route: '/api/workloads/tenants', resourceResolver: 'platform.self' }],
     },
   {
@@ -61,7 +61,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Tenants',
       description: 'Suspend or resume a tenant through workload-only, idempotent service-account routes.',
-      ui: [{ surfaceId: 'workload.tenants.lifecycle', behavior: 'disable' }],
+      ui: [{ surfaceId: 'workload.tenants.lifecycle', behavior: 'disable', coverage: 'api-only' }],
       routes: [
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/suspend', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/workloads/tenants/{tenantId}/resume', resourceResolver: 'platform.self' },
@@ -77,7 +77,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       audit: true,
       category: 'Tenants',
       description: 'Reconcile cloud-managed tenant routing aliases with optimistic placement checks.',
-      ui: [{ surfaceId: 'workload.tenants.aliases', behavior: 'disable' }],
+      ui: [{ surfaceId: 'workload.tenants.aliases', behavior: 'disable', coverage: 'api-only' }],
       routes: [{ method: 'PUT', route: '/api/workloads/tenants/{tenantId}/routing-aliases', resourceResolver: 'platform.self' }],
     },
   {
@@ -842,7 +842,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'GET', route: '/api/plugin-platform/v1/manager', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/plugin-platform/v1/installations', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/plugin-platform/v1/installations/:installationId', resourceResolver: 'platform.self' },
-        { method: 'GET', route: '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement', resourceResolver: 'platform.self' },
         {
           method: 'GET',
           route: '/',
@@ -892,7 +891,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/plugin-platform/v1/installations/:installationId/approval', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/plugin-platform/v1/installations/:installationId/cancel', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/plugin-platform/v1/installations/:installationId/retry', resourceResolver: 'platform.self' },
-        { method: 'PUT', route: '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement', resourceResolver: 'platform.self' },
         {
           method: 'PUT',
           route: '/',

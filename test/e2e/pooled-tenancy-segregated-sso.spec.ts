@@ -480,6 +480,91 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       await assertTenantSession(bravoContext, tenants.bravo, 'charlie');
       await assertTenantSession(charlieContext, tenants.charlie, 'alpha');
 
+      const referencePluginId = 'io.enterpriseglue.reference-health';
+      const alphaMember = await alphaContext.newPage();
+      const alphaCatalogue = await expectStatus(
+        await alphaMember.request.get('/api/t/alpha/apps'),
+        200,
+      );
+      expect(alphaCatalogue).toMatchObject({
+        activationPolicy: 'approval_required',
+        applications: [{
+          pluginId: referencePluginId,
+          status: 'available',
+          active: false,
+          revision: 0,
+        }],
+      });
+      expect(JSON.stringify(alphaCatalogue)).not.toMatch(/bundle|registry|credential|tenantRef/i);
+      await expectStatus(await post(
+        alphaMember,
+        `/api/t/alpha/apps/${referencePluginId}/activate`,
+        { expectedRevision: 0, idempotencyKey: 'pooled-alpha-member-activate-0001' },
+      ), 403);
+      await expectStatus(await alphaMember.request.get('/api/t/bravo/apps'), 403);
+      const alphaRequested = await expectStatus(await post(
+        alphaMember,
+        `/api/t/alpha/apps/${referencePluginId}/activation-request`,
+        { expectedRevision: 0, idempotencyKey: 'pooled-alpha-request-0001' },
+      ), 200);
+      expect(alphaRequested).toMatchObject({ status: 'requested', active: false, revision: 1 });
+
+      const alphaApproved = await expectStatus(await post(
+        admin,
+        `/api/t/alpha/apps/${referencePluginId}/activation-request/decision`,
+        { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-alpha-approve-0001' },
+      ), 200);
+      expect(alphaApproved).toMatchObject({ status: 'active', active: true, revision: 2 });
+      await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'bravo' }), 200);
+      const bravoBefore = await expectStatus(
+        await admin.request.get(`/api/t/bravo/apps/${referencePluginId}`),
+        200,
+      );
+      expect(bravoBefore).toMatchObject({ status: 'available', active: false, revision: 0 });
+      await expectStatus(await post(
+        admin,
+        `/api/t/bravo/apps/${referencePluginId}/activation-request`,
+        { expectedRevision: 0, idempotencyKey: 'pooled-bravo-request-0001' },
+      ), 200);
+      await expectStatus(await post(
+        admin,
+        `/api/t/bravo/apps/${referencePluginId}/activation-request/decision`,
+        { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-bravo-approve-0001' },
+      ), 200);
+      const bravoInactive = await expectStatus(await post(
+        admin,
+        `/api/t/bravo/apps/${referencePluginId}/deactivate`,
+        { expectedRevision: 2, idempotencyKey: 'pooled-bravo-deactivate-0001' },
+      ), 200);
+      expect(bravoInactive).toMatchObject({ status: 'inactive', active: false, revision: 3 });
+      await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
+      await expectStatus(
+        await admin.request.get(`/api/t/alpha/apps/${referencePluginId}`),
+        200,
+      ).then((application) => expect(application).toMatchObject({ status: 'active', active: true, revision: 2 }));
+
+      const alphaBootstrap = await expectStatus(
+        await alphaContext.request.get('/t/alpha/api/plugins/v1/frontend'),
+        200,
+      );
+      expect(alphaBootstrap.plugins).toEqual([
+        expect.objectContaining({ pluginId: referencePluginId }),
+      ]);
+      const bravoBootstrap = await expectStatus(
+        await bravoContext.request.get('/t/bravo/api/plugins/v1/frontend'),
+        200,
+      );
+      expect(bravoBootstrap.plugins).toEqual([]);
+      const alphaApplicationAudit = await expectStatus(
+        await admin.request.get(`/api/t/alpha/apps/${referencePluginId}/audit`),
+        200,
+      );
+      expect(alphaApplicationAudit.events.map((event: JsonObject) => event.eventType)).toEqual([
+        'tenant_activation_approved',
+        'tenant_activation_requested',
+      ]);
+      expect(JSON.stringify(alphaApplicationAudit)).not.toContain(tenants.bravo.id);
+
       const alphaMembersResponse = await admin.request.get('/api/t/alpha/tenant/members');
       const alphaMembers = await alphaMembersResponse.json().catch(() => []);
       expect(alphaMembersResponse.status(), JSON.stringify(alphaMembers)).toBe(200);

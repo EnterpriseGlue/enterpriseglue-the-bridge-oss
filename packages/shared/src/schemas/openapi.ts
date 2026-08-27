@@ -295,6 +295,11 @@ const {
   pluginPlatformEmergencyStateV1Schema,
   pluginSafeListV1Schema,
   pluginSafeSummaryV1Schema,
+  pluginTenantApplicationAuditListV1Schema,
+  pluginTenantApplicationDecisionRequestV1Schema,
+  pluginTenantApplicationListV1Schema,
+  pluginTenantApplicationMutationRequestV1Schema,
+  pluginTenantApplicationV1Schema,
   pluginTenantEnablementRequestV1Schema,
   pluginTenantEnablementV1Schema,
 } = await import('@enterpriseglue/plugin-sdk/control');
@@ -333,6 +338,9 @@ const PluginControlErrorResponseSchema = z.object({
     'idempotency_conflict',
     'invalid_state',
     'tenant_enablement_not_supported',
+    'activation_request_not_pending',
+    'activation_request_not_required',
+    'activation_approval_required',
     'request_invalid',
     'access_denied',
     'installation_not_found',
@@ -2562,7 +2570,7 @@ registry.registerPath({
   method: 'get',
   path: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement',
   summary: 'Read tenant plugin enablement',
-  ...authzExtension('platform.settings.read', 'GET', '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement'),
+  ...authzExtension('tenant.apps.read', 'GET', '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement'),
   request: { params: PluginTenantEnablementPathSchema },
   responses: {
     200: { description: 'Tenant enablement state', content: { 'application/json': { schema: pluginTenantEnablementV1Schema } } },
@@ -2573,13 +2581,97 @@ registry.registerPath({
   method: 'put',
   path: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement',
   summary: 'Set tenant plugin enablement',
-  ...authzExtension('platform.settings.manage', 'PUT', '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement'),
+  ...authzExtension('tenant.apps.manage', 'PUT', '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement'),
   request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantEnablementRequestV1Schema } } } },
   responses: {
-    200: { description: 'Updated tenant enablement state', content: { 'application/json': { schema: pluginTenantEnablementV1Schema } } },
+    200: { description: 'Tenant enablement lifecycle operation accepted', content: { 'application/json': { schema: pluginLifecycleOperationV1Schema } } },
     404: { description: 'Plugin is not installed or does not support tenant enablement', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
     409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
   },
+});
+for (const method of ['get', 'put'] as const) {
+  registry.registerPath({
+    method,
+    path: '/api/t/{tenantSlug}/plugin-platform/v1/plugins/{pluginId}/enablement',
+    summary: `${method === 'get' ? 'Read' : 'Set'} tenant plugin enablement through the canonical route`,
+    ...authzExtension(
+      method === 'get' ? 'tenant.apps.read' : 'tenant.apps.manage',
+      method.toUpperCase(),
+      '/api/t/{tenantSlug}/plugin-platform/v1/plugins/{pluginId}/enablement',
+    ),
+    request: {
+      params: PluginTenantEnablementPathSchema,
+      ...(method === 'put'
+        ? { body: { content: { 'application/json': { schema: pluginTenantEnablementRequestV1Schema } } } }
+        : {}),
+    },
+    responses: {
+      200: {
+        description: method === 'get' ? 'Tenant enablement state' : 'Tenant enablement lifecycle operation accepted',
+        content: { 'application/json': { schema: method === 'get' ? pluginTenantEnablementV1Schema : pluginLifecycleOperationV1Schema } },
+      },
+      404: { description: 'Plugin is unavailable', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+      409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    },
+  });
+}
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps',
+  summary: 'List the current tenant application catalogue',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps'),
+  request: { params: PluginTenantEnablementPathSchema.omit({ pluginId: true }) },
+  responses: { 200: { description: 'Tenant-safe application catalogue', content: { 'application/json': { schema: pluginTenantApplicationListV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}',
+  summary: 'Read one current-tenant application',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: { 200: { description: 'Tenant-safe application state', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 404: { description: 'Application is unavailable' } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/configuration',
+  summary: 'Read the plugin-owned configuration projection',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}/configuration'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: { 200: { description: 'Safe configuration schema hash and tenant link', content: { 'application/json': { schema: pluginTenantApplicationV1Schema.shape.configuration } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/audit',
+  summary: 'Read application activation audit for the current tenant',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}/audit'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: { 200: { description: 'Tenant-scoped application audit', content: { 'application/json': { schema: pluginTenantApplicationAuditListV1Schema } } } },
+});
+for (const action of ['activate', 'deactivate'] as const) {
+  registry.registerPath({
+    method: 'post',
+    path: `/api/t/{tenantSlug}/apps/{pluginId}/${action}`,
+    summary: `${action === 'activate' ? 'Activate' : 'Deactivate'} an application for the current tenant`,
+    ...authzExtension('tenant.apps.manage', 'POST', `/api/t/{tenantSlug}/apps/{pluginId}/${action}`),
+    request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantApplicationMutationRequestV1Schema } } } },
+    responses: { 200: { description: 'Updated tenant application state', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 409: { description: 'Application state, policy, or revision conflict' } },
+  });
+}
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/activation-request',
+  summary: 'Request current-tenant application activation',
+  ...authzExtension('tenant.apps.request', 'POST', '/api/t/{tenantSlug}/apps/{pluginId}/activation-request'),
+  request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantApplicationMutationRequestV1Schema } } } },
+  responses: { 200: { description: 'Pending activation request', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 409: { description: 'Request policy or revision conflict' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/activation-request/decision',
+  summary: 'Approve or reject a current-tenant activation request',
+  ...authzExtension('tenant.apps.manage', 'POST', '/api/t/{tenantSlug}/apps/{pluginId}/activation-request/decision'),
+  request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantApplicationDecisionRequestV1Schema } } } },
+  responses: { 200: { description: 'Decided tenant application state', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 409: { description: 'Request state, policy, or revision conflict' } },
 });
 
 // Admin Governance

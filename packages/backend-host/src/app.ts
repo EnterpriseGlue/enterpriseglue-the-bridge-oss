@@ -30,8 +30,12 @@ export function registerBaseRoutes(
   app: express.Express,
   options: { notificationTenantResolver?: NotificationTenantResolver } = {}
 ): void {
-  registerRoutes(app, options);
+  // Plugin routes must precede the root-shaped tenant compatibility router.
+  // That router intentionally fails closed when a pooled request has neither
+  // a tenant path nor a verified tenant host, and would otherwise intercept
+  // canonical plugin paths such as /api/t/:tenantSlug/apps first.
   registerPluginPlatformRoutes(app);
+  registerRoutes(app, options);
 }
 
 export function registerFinalMiddleware(

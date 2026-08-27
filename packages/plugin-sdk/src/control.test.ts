@@ -12,6 +12,8 @@ import {
   pluginPlatformAuditListV1Schema,
   pluginPlatformEmergencyRequestV1Schema,
   pluginPlatformEmergencyStateV1Schema,
+  pluginTenantApplicationDecisionRequestV1Schema,
+  pluginTenantApplicationListV1Schema,
   pluginSafeSummaryV1Schema,
   pluginStageRequestV1Schema,
   pluginUninstallRequestV1Schema,
@@ -160,6 +162,53 @@ describe('plugin control contracts', () => {
         reason: 'administrator_request',
       }).success,
     ).toBe(false);
+  });
+
+  it('keeps tenant marketplace projections strict and infrastructure-free', () => {
+    const catalogue = {
+      apiVersion: 'tenant-application-list.plugin.enterpriseglue.io/v1',
+      revision: 4,
+      activationPolicy: 'approval_required',
+      applications: [{
+        apiVersion: 'tenant-application.plugin.enterpriseglue.io/v1',
+        pluginId: 'io.enterpriseglue.ion-support',
+        version: '1.2.3',
+        displayName: 'ION Support',
+        publisher: 'io.enterpriseglue',
+        status: 'requested',
+        active: false,
+        compatible: true,
+        healthy: true,
+        entitled: 'active',
+        reasonCode: 'none',
+        revision: 2,
+        activationRequest: {
+          state: 'pending',
+          requestedAt: '2026-08-28T00:00:00.000Z',
+          reviewedAt: null,
+        },
+        configuration: {
+          available: true,
+          schemaSha256: 'a'.repeat(64),
+          href: '/t/acme/settings/ion-support',
+          owner: 'plugin',
+        },
+      }],
+    };
+    expect(pluginTenantApplicationListV1Schema.safeParse(catalogue).success).toBe(true);
+    expect(pluginTenantApplicationListV1Schema.safeParse({
+      ...catalogue,
+      applications: [{
+        ...catalogue.applications[0],
+        registryCredential: 'must-not-leak',
+      }],
+    }).success).toBe(false);
+    expect(pluginTenantApplicationDecisionRequestV1Schema.safeParse({
+      decision: 'approve',
+      expectedRevision: 2,
+      idempotencyKey: 'activation-approve-0001',
+      tenantRef: 'attacker-selected-tenant',
+    }).success).toBe(false);
   });
 
   it('keeps the platform emergency control strict and revision protected', () => {

@@ -5,6 +5,7 @@ import {
   pluginPlatformAuditEventV1Schema,
   pluginPlatformEmergencyStateV1Schema,
   pluginSafeSummaryV1Schema,
+  pluginTenantApplicationV1Schema,
   pluginTenantEnablementV1Schema,
   type PluginId,
   type PluginLifecycleOperationV1,
@@ -12,6 +13,7 @@ import {
   type PluginPlatformAuditEventV1,
   type PluginPlatformEmergencyStateV1,
   type PluginSafeSummaryV1,
+  type PluginTenantApplicationV1,
   type PluginTenantEnablementV1,
 } from '@enterpriseglue/plugin-sdk';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -22,6 +24,7 @@ import {
   PluginPermissionGrant,
   PluginPlatformState,
   PluginPlatformAudit,
+  PluginTenantApplicationOperation,
   PluginTenantEnablement,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
@@ -31,6 +34,7 @@ import {
   type PluginControlMutationV1,
   type PluginControlStoreV1,
   type PluginEmergencyControlMutationV1,
+  type PluginTenantApplicationMutationV1,
   type PluginTenantControlMutationV1,
 } from './pluginControlPlane.js';
 import { findPluginRowForUpdateV1 } from './pluginDatabaseLock.js';
@@ -102,6 +106,10 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
           current.bundleDigest !== source.bundleDigest ||
           current.installerEnabled !== source.installerEnabled ||
           current.enablementScope !== source.enablementScope ||
+          current.tenantConfigurationPath !==
+            (source.tenantConfiguration?.relativePath ?? null) ||
+          current.tenantConfigurationSchemaSha256 !==
+            (source.tenantConfiguration?.schemaSha256 ?? null) ||
           current.grantSetHash !== grantSetHash;
         if (!current) {
           await installations.insert({
@@ -121,6 +129,10 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
               source.installerEnabled && source.compatible,
             installerEnabled: source.installerEnabled,
             enablementScope: source.enablementScope,
+            tenantConfigurationPath:
+              source.tenantConfiguration?.relativePath ?? null,
+            tenantConfigurationSchemaSha256:
+              source.tenantConfiguration?.schemaSha256 ?? null,
             grantSetHash,
             compatible: source.compatible,
             healthy: source.healthy,
@@ -148,6 +160,10 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
                 source.installerEnabled && source.compatible,
               installerEnabled: source.installerEnabled,
               enablementScope: source.enablementScope,
+              tenantConfigurationPath:
+                source.tenantConfiguration?.relativePath ?? null,
+              tenantConfigurationSchemaSha256:
+                source.tenantConfiguration?.schemaSha256 ?? null,
               grantSetHash,
               compatible: source.compatible,
               healthy: current.desiredEnabled ? source.healthy : false,
@@ -320,23 +336,39 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             tenantRef: input.tenantRef,
           },
         });
+        if ((!tenant && input.expectedRevision !== 0) ||
+          (tenant && integer(tenant.revision) !== input.expectedRevision)) {
+          throw new PluginControlErrorV1(409, 'revision_conflict');
+        }
         if (!tenant) {
-          throw new PluginControlErrorV1(409, 'revision_conflict');
-        }
-        if (integer(tenant.revision) !== input.expectedRevision) {
-          throw new PluginControlErrorV1(409, 'revision_conflict');
-        }
-        const updated = await tenants.update(
-          { id: tenant.id, revision: input.expectedRevision },
-          {
+          await tenants.insert({
+            id: randomUUID(),
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
             enabled: input.enabled,
             reasonCode: input.reasonCode,
-            revision: input.expectedRevision + 1,
+            activationRequestState: 'none',
+            requestedByRef: null,
+            requestedAt: null,
+            reviewedByRef: null,
+            reviewedAt: null,
+            revision: 1,
+            createdAt: Date.parse(input.occurredAt),
             updatedAt: Date.parse(input.occurredAt),
-          },
-        );
-        if (updated.affected !== 1) {
-          throw new PluginControlErrorV1(409, 'revision_conflict');
+          });
+        } else {
+          const updated = await tenants.update(
+            { id: tenant.id, revision: input.expectedRevision },
+            {
+              enabled: input.enabled,
+              reasonCode: input.reasonCode,
+              revision: input.expectedRevision + 1,
+              updatedAt: Date.parse(input.occurredAt),
+            },
+          );
+          if (updated.affected !== 1) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
         }
         const operation = await insertOperation(
           manager,
@@ -351,7 +383,7 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
           tenantRef: input.tenantRef,
           actorRef: input.actorRef,
           correlationId: input.correlationId,
-          fromState: tenant.enabled ? 'enabled' : 'installed_disabled',
+          fromState: tenant?.enabled ? 'enabled' : 'installed_disabled',
           toState: input.enabled ? 'enabled' : 'installed_disabled',
           reasonCode: input.reasonCode,
           occurredAt: Date.parse(input.occurredAt),
@@ -422,6 +454,213 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
       enabled: record.enabled,
       revision: integer(record.revision),
     });
+  }
+
+  async listTenantApplications(
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1[]> {
+    const dataSource = await this.dataSourceProvider();
+    const installations = await dataSource.getRepository(PluginInstallation)
+      .find({ where: { enablementScope: 'tenant' }, order: { pluginId: 'ASC' } });
+    const enablements = await dataSource.getRepository(PluginTenantEnablement)
+      .find({ where: { tenantRef } });
+    const byPlugin = new Map(enablements.map((row) => [row.pluginId, row]));
+    return installations.map((installation) =>
+      databaseTenantApplication(
+        installation,
+        byPlugin.get(installation.pluginId),
+        tenantSlug,
+      ),
+    );
+  }
+
+  async getTenantApplication(
+    pluginId: PluginId,
+    tenantRef: string,
+    tenantSlug: string,
+  ): Promise<PluginTenantApplicationV1 | undefined> {
+    const dataSource = await this.dataSourceProvider();
+    const installation = await dataSource.getRepository(PluginInstallation)
+      .findOne({ where: { pluginId, enablementScope: 'tenant' } });
+    if (!installation) return undefined;
+    const enablement = await dataSource.getRepository(PluginTenantEnablement)
+      .findOne({ where: { pluginId, tenantRef } });
+    return databaseTenantApplication(installation, enablement, tenantSlug);
+  }
+
+  async mutateTenantActivationRequest(
+    input: PluginTenantApplicationMutationV1,
+  ): Promise<PluginTenantApplicationV1> {
+    try {
+      return await runPluginTransactionV1(
+        await this.dataSourceProvider(),
+        async (manager) => {
+          const operations = manager.getRepository(
+            PluginTenantApplicationOperation,
+          );
+          const repeated = await operations.findOne({
+            where: { idempotencyKeyHash: input.idempotencyKeyHash },
+          });
+          if (repeated) {
+            if (
+              repeated.requestHash !== input.requestHash ||
+              repeated.pluginId !== input.pluginId ||
+              repeated.tenantRef !== input.tenantRef ||
+              repeated.type !== input.operation
+            ) {
+              throw new PluginControlErrorV1(409, 'idempotency_conflict');
+            }
+            return pluginTenantApplicationV1Schema.parse(
+              JSON.parse(repeated.receiptJson),
+            );
+          }
+
+          const installation = await manager.getRepository(PluginInstallation)
+            .findOne({ where: { pluginId: input.pluginId, enablementScope: 'tenant' } });
+          if (!installation) {
+            throw new PluginControlErrorV1(404, 'plugin_not_found');
+          }
+          if (
+            !installation.desiredEnabled ||
+            !installation.compatible ||
+            !['enabled', 'degraded'].includes(installation.state)
+          ) {
+            throw new PluginControlErrorV1(409, 'invalid_state');
+          }
+
+          const enablements = manager.getRepository(PluginTenantEnablement);
+          const current = await enablements.findOne({
+            where: { pluginId: input.pluginId, tenantRef: input.tenantRef },
+          });
+          if (
+            (!current && input.expectedRevision !== 0) ||
+            (current && integer(current.revision) !== input.expectedRevision)
+          ) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
+          if (
+            input.operation !== 'request' &&
+            current?.activationRequestState !== 'pending'
+          ) {
+            throw new PluginControlErrorV1(409, 'activation_request_not_pending');
+          }
+
+          const now = Date.parse(input.occurredAt);
+          const next = enablements.create({
+            ...(current ?? {}),
+            id: current?.id ?? randomUUID(),
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
+            enabled:
+              input.operation === 'approve'
+                ? true
+                : input.operation === 'reject'
+                  ? false
+                  : current?.enabled ?? false,
+            reasonCode: 'none',
+            activationRequestState:
+              input.operation === 'request'
+                ? 'pending'
+                : input.operation === 'approve'
+                  ? 'approved'
+                  : 'rejected',
+            requestedByRef:
+              input.operation === 'request'
+                ? input.actorRef
+                : current?.requestedByRef ?? null,
+            requestedAt:
+              input.operation === 'request'
+                ? now
+                : current?.requestedAt ?? null,
+            reviewedByRef:
+              input.operation === 'request' ? null : input.actorRef,
+            reviewedAt: input.operation === 'request' ? null : now,
+            revision: input.expectedRevision + 1,
+            createdAt: current?.createdAt ?? now,
+            updatedAt: now,
+          });
+          if (!current) {
+            await enablements.insert(next);
+          } else {
+            const updated = await enablements.update(
+              { id: current.id, revision: input.expectedRevision },
+              next,
+            );
+            if (updated.affected !== 1) {
+              throw new PluginControlErrorV1(409, 'revision_conflict');
+            }
+          }
+
+          const application = databaseTenantApplication(
+            installation,
+            next,
+            input.tenantSlug,
+          );
+          await operations.insert({
+            id: randomUUID(),
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
+            type: input.operation,
+            idempotencyKeyHash: input.idempotencyKeyHash,
+            requestHash: input.requestHash,
+            receiptJson: JSON.stringify(application),
+            actorRef: input.actorRef,
+            correlationId: input.correlationId,
+            createdAt: now,
+          });
+          await appendAudit(manager, {
+            eventType:
+              input.operation === 'request'
+                ? 'tenant_activation_requested'
+                : input.operation === 'approve'
+                  ? 'tenant_activation_approved'
+                  : 'tenant_activation_rejected',
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
+            actorRef: input.actorRef,
+            correlationId: input.correlationId,
+            fromState: databaseTenantApplicationStatus(installation, current),
+            toState: application.status,
+            reasonCode: 'none',
+            occurredAt: now,
+          });
+          return application;
+        },
+      );
+    } catch (error) {
+      const repeated = await (await this.dataSourceProvider())
+        .getRepository(PluginTenantApplicationOperation)
+        .findOne({ where: { idempotencyKeyHash: input.idempotencyKeyHash } });
+      if (repeated) {
+        if (
+          repeated.requestHash !== input.requestHash ||
+          repeated.pluginId !== input.pluginId ||
+          repeated.tenantRef !== input.tenantRef ||
+          repeated.type !== input.operation
+        ) {
+          throw new PluginControlErrorV1(409, 'idempotency_conflict');
+        }
+        return pluginTenantApplicationV1Schema.parse(
+          JSON.parse(repeated.receiptJson),
+        );
+      }
+      throw error;
+    }
+  }
+
+  async listTenantApplicationAudit(
+    pluginId: PluginId,
+    tenantRef: string,
+  ): Promise<PluginPlatformAuditEventV1[]> {
+    const records = await (await this.dataSourceProvider())
+      .getRepository(PluginPlatformAudit)
+      .find({
+        where: { pluginId, tenantRef },
+        order: { occurredAt: 'DESC' },
+        take: 100,
+      });
+    return records.map(toAudit);
   }
 
   async getOperation(
@@ -539,20 +778,7 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
       order: { occurredAt: 'DESC', id: 'DESC' },
       take: 100,
     });
-    return records.map((record) =>
-      pluginPlatformAuditEventV1Schema.parse({
-        eventId: record.id,
-        eventType: record.eventType,
-        pluginId: record.pluginId,
-        tenantScoped: record.tenantRef !== null,
-        actorRef: record.actorRef,
-        correlationId: record.correlationId,
-        fromState: record.fromState,
-        toState: record.toState,
-        reasonCode: record.reasonCode,
-        occurredAt: new Date(integer(record.occurredAt)).toISOString(),
-      }),
-    );
+    return records.map(toAudit);
   }
 
   private async mutateInstallation(
@@ -679,6 +905,11 @@ async function reconcileDefaultTenant(
       tenantRef,
       enabled,
       reasonCode: enabled ? 'none' : 'administrator_disabled',
+      activationRequestState: 'none',
+      requestedByRef: null,
+      requestedAt: null,
+      reviewedByRef: null,
+      reviewedAt: null,
       revision: 0,
       createdAt: now,
       updatedAt: now,
@@ -829,6 +1060,83 @@ function toSummary(record: PluginInstallation): PluginSafeSummaryV1 {
   });
 }
 
+function databaseTenantApplicationStatus(
+  installation: PluginInstallation,
+  enablement?: PluginTenantEnablement | null,
+): PluginTenantApplicationV1['status'] {
+  if (installation.entitlementState === 'revoked') return 'revoked';
+  if (
+    !installation.compatible ||
+    ['expired', 'unavailable'].includes(installation.entitlementState)
+  ) {
+    return 'blocked';
+  }
+  if (
+    !installation.desiredEnabled ||
+    !['enabled', 'degraded'].includes(installation.state)
+  ) {
+    return ['active', 'grace'].includes(installation.entitlementState)
+      ? 'entitled'
+      : 'install-pending';
+  }
+  if (enablement?.activationRequestState === 'pending') return 'requested';
+  if (enablement?.enabled) return 'active';
+  return enablement ? 'inactive' : 'available';
+}
+
+function databaseTenantApplication(
+  installation: PluginInstallation,
+  enablement: PluginTenantEnablement | null | undefined,
+  tenantSlug: string,
+): PluginTenantApplicationV1 {
+  return pluginTenantApplicationV1Schema.parse({
+    apiVersion: 'tenant-application.plugin.enterpriseglue.io/v1',
+    pluginId: installation.pluginId,
+    version: installation.version,
+    displayName: installation.displayName,
+    publisher: installation.publisher,
+    status: databaseTenantApplicationStatus(installation, enablement),
+    active: enablement?.enabled ?? false,
+    compatible: installation.compatible,
+    healthy: installation.healthy,
+    entitled: installation.entitlementState,
+    reasonCode: installation.reasonCode,
+    revision: enablement ? integer(enablement.revision) : 0,
+    activationRequest: {
+      state: enablement?.activationRequestState ?? 'none',
+      requestedAt: enablement?.requestedAt === null || enablement?.requestedAt === undefined
+        ? null
+        : new Date(integer(enablement.requestedAt)).toISOString(),
+      reviewedAt: enablement?.reviewedAt === null || enablement?.reviewedAt === undefined
+        ? null
+        : new Date(integer(enablement.reviewedAt)).toISOString(),
+    },
+    configuration: {
+      available: Boolean(installation.tenantConfigurationPath),
+      schemaSha256: installation.tenantConfigurationSchemaSha256,
+      href: installation.tenantConfigurationPath
+        ? `/t/${encodeURIComponent(tenantSlug)}/${installation.tenantConfigurationPath}`
+        : null,
+      owner: 'plugin',
+    },
+  });
+}
+
+function toAudit(record: PluginPlatformAudit): PluginPlatformAuditEventV1 {
+  return pluginPlatformAuditEventV1Schema.parse({
+    eventId: record.id,
+    eventType: record.eventType,
+    pluginId: record.pluginId,
+    tenantScoped: record.tenantRef !== null,
+    actorRef: record.actorRef,
+    correlationId: record.correlationId,
+    fromState: record.fromState,
+    toState: record.toState,
+    reasonCode: record.reasonCode,
+    occurredAt: new Date(integer(record.occurredAt)).toISOString(),
+  });
+}
+
 function toOperation(
   record: PluginLifecycleOperationEntity,
 ): PluginLifecycleOperationV1 {
@@ -917,6 +1225,7 @@ function installerSnapshotHash(
             sourceRecordHash: source.sourceRecordHash,
             installerEnabled: source.installerEnabled,
             enablementScope: source.enablementScope,
+            tenantConfiguration: source.tenantConfiguration ?? null,
             grantSetHash: hashGrantSet(source.grantedPermissions),
           }),
           'utf8',

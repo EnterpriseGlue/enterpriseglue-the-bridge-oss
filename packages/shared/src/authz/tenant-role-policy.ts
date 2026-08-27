@@ -45,6 +45,10 @@ export const TENANT_SAFE_TENANT_PERMISSION_IDS = [
   'tenant:members:manage',
   'tenant:sso-providers:view',
   'tenant:sso-providers:manage',
+  'tenant:apps:view',
+  'tenant:apps:request',
+  'tenant:apps:manage',
+  'tenant:apps:use',
 ] as const;
 
 export const TENANT_SAFE_PERMISSION_IDS = new Set<string>([

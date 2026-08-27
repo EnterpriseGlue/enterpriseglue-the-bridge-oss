@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Form, InlineNotification, Select, SelectItem, Stack, Tag, TextInput, Tile } from '@carbon/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
+import TenantApplicationsSettings from '../components/TenantApplicationsSettings';
 import { apiClient } from '../../../shared/api/client';
 import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -141,6 +142,7 @@ export default function TenantSettingsPage() {
           <p>Configure this tenant’s members, local login policy, and its own OIDC, SAML, or LDAP providers.</p>
         </div>
         {error && <InlineNotification kind="error" title="Tenant settings were not changed" subtitle={error} lowContrast />}
+        <TenantApplicationsSettings tenantId={tenantId} tenantSlug={tenantSlug} />
         {membersManage.allowed && <Tile>
           <Stack gap={5}>
             <div><h2 style={{ marginTop: 0 }}>Members</h2><p>Grant an existing EnterpriseGlue account access to this organization.</p></div>

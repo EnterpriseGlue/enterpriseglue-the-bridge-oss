@@ -212,6 +212,41 @@ export const pluginTenantEnablementRequestV1Schema = z
   })
   .strict();
 
+export const pluginTenantApplicationStatusValues = [
+  'requested',
+  'entitled',
+  'install-pending',
+  'available',
+  'active',
+  'inactive',
+  'blocked',
+  'revoked',
+] as const;
+
+export const pluginTenantApplicationStatusSchema = z.enum(
+  pluginTenantApplicationStatusValues,
+);
+
+export const pluginTenantActivationPolicySchema = z.enum([
+  'direct',
+  'approval_required',
+]);
+
+export const pluginTenantApplicationMutationRequestV1Schema = z
+  .object({
+    idempotencyKey: idempotencyKeySchema,
+    expectedRevision: expectedRevisionSchema,
+  })
+  .strict();
+
+export const pluginTenantApplicationDecisionRequestV1Schema = z
+  .object({
+    decision: z.enum(['approve', 'reject']),
+    idempotencyKey: idempotencyKeySchema,
+    expectedRevision: expectedRevisionSchema,
+  })
+  .strict();
+
 export const pluginPlatformEmergencyRequestV1Schema = z
   .object({
     disabled: z.boolean(),
@@ -410,6 +445,9 @@ export const pluginPlatformAuditEventTypeValues = [
   'deployment_disabled',
   'tenant_enabled',
   'tenant_disabled',
+  'tenant_activation_requested',
+  'tenant_activation_approved',
+  'tenant_activation_rejected',
   'platform_emergency_disabled',
   'platform_emergency_enabled',
   'event_dead_letter_requeued',
@@ -692,8 +730,94 @@ export const pluginTenantEnablementV1Schema = z
   })
   .strict();
 
+const tenantApplicationHrefSchema = z
+  .string()
+  .min(1)
+  .max(2_048)
+  .regex(/^\/t\/[A-Za-z0-9_-]+\//);
+
+export const pluginTenantApplicationV1Schema = z
+  .object({
+    apiVersion: z.literal('tenant-application.plugin.enterpriseglue.io/v1'),
+    pluginId: pluginIdSchema,
+    version: semVerSchema,
+    displayName: z.string().min(1).max(100),
+    publisher: pluginIdSchema,
+    status: pluginTenantApplicationStatusSchema,
+    active: z.boolean(),
+    compatible: z.boolean(),
+    healthy: z.boolean(),
+    entitled: z.enum([
+      'not_required',
+      'active',
+      'grace',
+      'expired',
+      'revoked',
+      'unavailable',
+    ]),
+    reasonCode: pluginSafeReasonCodeSchema,
+    revision: z.number().int().nonnegative(),
+    activationRequest: z
+      .object({
+        state: z.enum(['none', 'pending', 'approved', 'rejected']),
+        requestedAt: z.string().datetime().nullable(),
+        reviewedAt: z.string().datetime().nullable(),
+      })
+      .strict(),
+    configuration: z
+      .object({
+        available: z.boolean(),
+        schemaSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+        href: tenantApplicationHrefSchema.nullable(),
+        owner: z.literal('plugin'),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const pluginTenantApplicationListV1Schema = z
+  .object({
+    apiVersion: z.literal(
+      'tenant-application-list.plugin.enterpriseglue.io/v1',
+    ),
+    revision: z.number().int().nonnegative(),
+    activationPolicy: pluginTenantActivationPolicySchema,
+    applications: z.array(pluginTenantApplicationV1Schema).max(1_000),
+  })
+  .strict();
+
+export const pluginTenantApplicationAuditListV1Schema = z
+  .object({
+    apiVersion: z.literal(
+      'tenant-application-audit.plugin.enterpriseglue.io/v1',
+    ),
+    events: z.array(pluginPlatformAuditEventV1Schema).max(100),
+  })
+  .strict();
+
 export type PluginTenantEnablementV1 = z.infer<
   typeof pluginTenantEnablementV1Schema
+>;
+export type PluginTenantApplicationStatusV1 = z.infer<
+  typeof pluginTenantApplicationStatusSchema
+>;
+export type PluginTenantActivationPolicyV1 = z.infer<
+  typeof pluginTenantActivationPolicySchema
+>;
+export type PluginTenantApplicationV1 = z.infer<
+  typeof pluginTenantApplicationV1Schema
+>;
+export type PluginTenantApplicationListV1 = z.infer<
+  typeof pluginTenantApplicationListV1Schema
+>;
+export type PluginTenantApplicationAuditListV1 = z.infer<
+  typeof pluginTenantApplicationAuditListV1Schema
+>;
+export type PluginTenantApplicationMutationRequestV1 = z.infer<
+  typeof pluginTenantApplicationMutationRequestV1Schema
+>;
+export type PluginTenantApplicationDecisionRequestV1 = z.infer<
+  typeof pluginTenantApplicationDecisionRequestV1Schema
 >;
 
 export type PluginLifecycleStateV1 = z.infer<

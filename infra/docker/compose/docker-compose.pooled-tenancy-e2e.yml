@@ -26,10 +26,15 @@ services:
       EG_TENANT_SECRET_BROKER_TOKEN_REF: env://EG_TENANT_SECRET_BROKER_TOKEN
       EG_TENANT_SECRET_BROKER_TOKEN: ${EG_TENANT_SECRET_BROKER_TOKEN}
       EG_TENANT_SECRET_BROKER_REQUIRED: "true"
+      ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY: approval_required
+      ENTERPRISEGLUE_PLUGIN_STATE_FILE: /etc/enterpriseglue/pooled-e2e/plugin-state.json
+      ENTERPRISEGLUE_PLUGIN_ASSET_ROOT: /var/lib/enterpriseglue/pooled-e2e/plugins
     volumes: !override
       - .:/repo:ro
       - ${KEYCLOAK_TLS_DIR}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro
       - ${LOCAL_IDENTITY_SECRET_DIR}:/etc/enterpriseglue/local-identity-secrets:ro
+      - ${POOLED_TENANCY_PLUGIN_STATE_FILE}:/etc/enterpriseglue/pooled-e2e/plugin-state.json:ro
+      - ${POOLED_TENANCY_PLUGIN_ASSET_ROOT}:/var/lib/enterpriseglue/pooled-e2e/plugins:ro
 
   # Build the SPA from the already-installed workspace dependencies before
   # Compose starts. This keeps the pooled browser lane independent of a second

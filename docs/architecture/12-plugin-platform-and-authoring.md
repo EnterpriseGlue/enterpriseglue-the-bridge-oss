@@ -307,6 +307,13 @@ workflow; it must never infer permission to retain raw artifacts from the diagno
 
 ## Installation and lifecycle
 
+Deployment installation and tenant activation are deliberately separate. Platform operators
+install and verify one plugin workload; tenant administrators activate only the current tenant's
+application projection. Members may request activation when deployment policy requires approval.
+The safe statuses, actions, endpoints, configuration projection, compatibility alias, and rollback
+contract are specified in the
+[Tenant Application Marketplace reference](../reference/tenant-application-marketplace.md).
+
 The public `@enterpriseglue/plugin-installer` package and `eg-plugin` command verify a signed
 catalog/package inventory before writing deployment state. They support install, enable, disable,
 upgrade, rollback, uninstall, status, local Compose application, and Kubernetes/OpenShift

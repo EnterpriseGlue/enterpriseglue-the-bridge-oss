@@ -9,6 +9,8 @@ import {
   pluginEventDeadLetterRequeueResultV1Schema,
   pluginIdSchema,
   pluginPlatformEmergencyRequestV1Schema,
+  pluginTenantApplicationDecisionRequestV1Schema,
+  pluginTenantApplicationMutationRequestV1Schema,
   pluginTenantEnablementRequestV1Schema,
   type PluginSafeReasonCodeV1,
   type PluginPlatformCapabilityCatalogV1,
@@ -45,6 +47,8 @@ export interface PluginControlRouteOptionsV1 {
   tenantReadMiddleware?: RequestHandler[];
   /** Optional test or deployment override for every tenant-scoped mutation endpoint. */
   tenantManageMiddleware?: RequestHandler[];
+  /** Optional test override for tenant activation-request endpoints. */
+  tenantRequestMiddleware?: RequestHandler[];
   /** @deprecated Use deploymentReadMiddleware or deploymentManageMiddleware. */
   deploymentAdminMiddleware?: RequestHandler[];
   /** @deprecated Use tenantReadMiddleware or tenantManageMiddleware. */
@@ -77,7 +81,7 @@ export function registerPluginControlRoutesV1(
       apiLimiter,
       requireAuth,
       resolveTenantContext({ required: true }),
-      requireAction('platform.settings.read'),
+      requireAction('tenant.apps.read'),
     ];
   const tenantManage =
     options.tenantManageMiddleware ??
@@ -85,7 +89,15 @@ export function registerPluginControlRoutesV1(
       apiLimiter,
       requireAuth,
       resolveTenantContext({ required: true }),
-      requireAction('platform.settings.manage'),
+      requireAction('tenant.apps.manage'),
+    ];
+  const tenantRequest =
+    options.tenantRequestMiddleware ??
+    options.tenantAdminMiddleware ?? [
+      apiLimiter,
+      requireAuth,
+      resolveTenantContext({ required: true }),
+      requireAction('tenant.apps.request'),
     ];
   const eventOperations =
     options.eventOperations ?? new DatabasePluginEventDeliveryStoreV1();
@@ -292,12 +304,7 @@ export function registerPluginControlRoutesV1(
     }),
   );
 
-  const tenantPath =
-    '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement';
-  app.get(
-    tenantPath,
-    ...tenantRead,
-    route(async (request, response) => {
+  const getTenantEnablement = route(async (request, response) => {
       noStore(response);
       response.json(
         await control.getTenantEnablement(
@@ -305,12 +312,8 @@ export function registerPluginControlRoutesV1(
           tenantRef(request),
         ),
       );
-    }),
-  );
-  app.put(
-    tenantPath,
-    ...tenantManage,
-    route(async (request, response) => {
+    });
+  const putTenantEnablement = route(async (request, response) => {
       const input = pluginTenantEnablementRequestV1Schema.parse(request.body);
       noStore(response);
       response.json(
@@ -324,7 +327,146 @@ export function registerPluginControlRoutesV1(
           correlationId: correlationId(request),
         }),
       );
+    });
+  app.get(
+    '/api/t/:tenantSlug/plugin-platform/v1/plugins/:pluginId/enablement',
+    ...tenantRead,
+    getTenantEnablement,
+  );
+  app.put(
+    '/api/t/:tenantSlug/plugin-platform/v1/plugins/:pluginId/enablement',
+    ...tenantManage,
+    putTenantEnablement,
+  );
+  app.get(
+    '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement',
+    ...tenantRead,
+    getTenantEnablement,
+  );
+  app.put(
+    '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement',
+    ...tenantManage,
+    putTenantEnablement,
+  );
+
+  app.get(
+    '/api/t/:tenantSlug/apps',
+    ...tenantRead,
+    route(async (request, response) => {
+      noStore(response);
+      response.json(
+        await control.listTenantApplications(
+          tenantRef(request),
+          tenantSlug(request),
+        ),
+      );
     }),
+  );
+  app.get(
+    '/api/t/:tenantSlug/apps/:pluginId',
+    ...tenantRead,
+    route(async (request, response) => {
+      noStore(response);
+      response.json(
+        await control.getTenantApplication(
+          pluginIdFrom(request),
+          tenantRef(request),
+          tenantSlug(request),
+        ),
+      );
+    }),
+  );
+  app.get(
+    '/api/t/:tenantSlug/apps/:pluginId/configuration',
+    ...tenantRead,
+    route(async (request, response) => {
+      const application = await control.getTenantApplication(
+        pluginIdFrom(request),
+        tenantRef(request),
+        tenantSlug(request),
+      );
+      noStore(response);
+      response.json(application.configuration);
+    }),
+  );
+  app.get(
+    '/api/t/:tenantSlug/apps/:pluginId/audit',
+    ...tenantRead,
+    route(async (request, response) => {
+      noStore(response);
+      response.json(
+        await control.listTenantApplicationAudit(
+          pluginIdFrom(request),
+          tenantRef(request),
+        ),
+      );
+    }),
+  );
+  app.post(
+    '/api/t/:tenantSlug/apps/:pluginId/activation-request',
+    ...tenantRequest,
+    route(async (request, response) => {
+      const input = pluginTenantApplicationMutationRequestV1Schema.parse(
+        request.body,
+      );
+      noStore(response);
+      response.json(await control.requestTenantApplicationActivation({
+        pluginId: pluginIdFrom(request),
+        tenantRef: tenantRef(request),
+        tenantSlug: tenantSlug(request),
+        expectedRevision: input.expectedRevision,
+        idempotencyKey: input.idempotencyKey,
+        actorRef: actorRef(request),
+        correlationId: correlationId(request),
+      }));
+    }),
+  );
+  app.post(
+    '/api/t/:tenantSlug/apps/:pluginId/activation-request/decision',
+    ...tenantManage,
+    route(async (request, response) => {
+      const input = pluginTenantApplicationDecisionRequestV1Schema.parse(
+        request.body,
+      );
+      noStore(response);
+      response.json(await control.decideTenantApplicationActivation({
+        pluginId: pluginIdFrom(request),
+        tenantRef: tenantRef(request),
+        tenantSlug: tenantSlug(request),
+        decision: input.decision,
+        expectedRevision: input.expectedRevision,
+        idempotencyKey: input.idempotencyKey,
+        actorRef: actorRef(request),
+        correlationId: correlationId(request),
+      }));
+    }),
+  );
+  const setTenantApplicationActive = (active: boolean) =>
+    route(async (request, response) => {
+        const input = pluginTenantApplicationMutationRequestV1Schema.parse(
+          request.body,
+        );
+        noStore(response);
+        response.json(await control.setTenantApplicationActive({
+          pluginId: pluginIdFrom(request),
+          tenantRef: tenantRef(request),
+          tenantSlug: tenantSlug(request),
+          active,
+          expectedRevision: input.expectedRevision,
+          idempotencyKey: input.idempotencyKey,
+          actorRef: actorRef(request),
+          correlationId: correlationId(request),
+        }));
+      });
+  app.post(
+    '/api/t/:tenantSlug/apps/:pluginId/activate',
+    ...tenantManage,
+    setTenantApplicationActive(true),
+  );
+  app.post(
+    '/api/t/:tenantSlug/apps/:pluginId/deactivate',
+    ...tenantManage,
+    setTenantApplicationActive(false),
   );
 }
 
@@ -388,6 +530,13 @@ function tenantRef(request: Request): string {
     throw new PluginControlErrorV1(404, 'plugin_not_found');
   }
   return request.tenant.tenantId;
+}
+
+function tenantSlug(request: Request): string {
+  if (!request.tenant?.tenantSlug) {
+    throw new PluginControlErrorV1(404, 'plugin_not_found');
+  }
+  return request.tenant.tenantSlug;
 }
 
 function correlationId(request: Request): string {

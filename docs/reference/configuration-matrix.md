@@ -51,6 +51,7 @@ in `engine-tenant-mappings.json`. See
 | EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES | No | 256 | Maximum resolved tenant-secret values cached per backend process; maximum 1024. |
 | EG_TENANT_SECRET_BROKER_REQUIRED | Required for cloud-required mode | false | Fails startup unless URL and token reference are present. |
 | EG_TENANT_SECRET_BREAK_GLASS_ENABLED | No | false | Enables the `tenant:lifecycle` service-account recovery route for already-available local references; never accepts secret values. |
+| ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY | No | direct | `direct` lets tenant administrators activate applications; `approval_required` requires a member request and tenant-admin decision. Invalid values fail startup. |
 
 ## Backend (Required by DATABASE_TYPE)
 

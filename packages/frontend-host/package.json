@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/frontend-host",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "OSS frontend host for EnterpriseGlue — routes, enterprise loader, extension registry, and feature components",
   "license": "Apache-2.0",
   "repository": {
@@ -17,7 +17,7 @@
     "typecheck": "pnpm run build:shared && tsc -p tsconfig.build.json --noEmit",
     "build": "pnpm run build:shared && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "clean": "rm -rf dist",
-    "test:plugin-bridge": "pnpm run build:shared && vitest run src/enterprise/extensionRegistry.test.ts src/plugins/contextualFlowRuntime.test.tsx src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/features/platform-admin/components/PluginLifecycleManager.test.tsx src/shared/api/client.test.ts",
+    "test:plugin-bridge": "pnpm run build:shared && vitest run src/enterprise/extensionRegistry.test.ts src/plugins/contextualFlowRuntime.test.tsx src/plugins/frontendFailureCircuit.test.ts src/plugins/nativePluginRuntime.test.tsx src/plugins/pluginUiPrimitives.test.tsx src/plugins/frontendSecurity.test.ts src/features/platform-admin/api/pluginPlatform.test.ts src/features/platform-admin/api/tenantApplications.test.ts src/features/platform-admin/components/PluginLifecycleManager.test.tsx src/shared/api/client.test.ts",
     "prepublishOnly": "pnpm run clean && pnpm run build"
   },
   "files": [

@@ -79,14 +79,23 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
   const required = options.required !== false;
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
+      const requestedSlug = routeTenantSlug(req);
       // Retain the established EE bridge contract while OSS and EE migrate to
-      // the native authority. The enterprise resolver owns validation here.
+      // the native authority. A route-bound request must still agree with the
+      // authenticated context; otherwise an alpha session could address a
+      // beta tenant route while the data layer continued using alpha.
       if (req.tenant?.tenantId && !isOssDefaultTenantId(req.tenant.tenantId)) {
+        if (
+          config.tenancyMode === 'pooled'
+          && requestedSlug
+          && requestedSlug !== req.tenant.tenantSlug.trim().toLowerCase()
+        ) {
+          throw Errors.forbidden('Tenant route does not match authenticated tenant context');
+        }
         activateTenantContext(req, next, req.tenant);
         return;
       }
 
-      const requestedSlug = routeTenantSlug(req);
       if (config.tenancyMode !== 'pooled') {
         if (requestedSlug && requestedSlug !== DEFAULT_TENANT_SLUG) {
           throw Errors.notFound('Tenant');

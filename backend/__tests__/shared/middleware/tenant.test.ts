@@ -70,6 +70,18 @@ describe('tenant middleware', () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it('rejects a pooled route that conflicts with an authenticated tenant context', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.params = { tenantSlug: 'bravo' };
+    req.tenant = { tenantId: 'tenant-alpha', tenantSlug: 'alpha' };
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(req.tenant).toEqual({ tenantId: 'tenant-alpha', tenantSlug: 'alpha' });
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+    expect(tenantServiceMock.getBySlug).not.toHaveBeenCalled();
+  });
+
   it('rejects a tenant route that conflicts with a verified tenant hostname', async () => {
     (config as any).tenancyMode = 'pooled';
     req.params = { tenantSlug: 'beta' };
