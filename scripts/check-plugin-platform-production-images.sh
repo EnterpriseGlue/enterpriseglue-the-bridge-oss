@@ -14,10 +14,13 @@ cd "$ROOT_DIR"
 
 if [[ "${SKIP_PLUGIN_PLATFORM_IMAGE_BUILD:-false}" != "true" ]]; then
   MULTIARCH_BUILDER_NAME="${PLUGIN_PLATFORM_BUILDX_BUILDER:-enterpriseglue-plugin-platform-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$}"
-  BUILDX_NETWORK_ARGS=()
-  if [[ -n "${PLUGIN_PLATFORM_BUILDX_NETWORK:-}" ]]; then
-    BUILDX_NETWORK_ARGS=(--network "${PLUGIN_PLATFORM_BUILDX_NETWORK}")
-  fi
+  build_plugin_image() {
+    local args=(--builder "$MULTIARCH_BUILDER_NAME")
+    if [[ -n "${PLUGIN_PLATFORM_BUILDX_NETWORK:-}" ]]; then
+      args+=(--network "${PLUGIN_PLATFORM_BUILDX_NETWORK}")
+    fi
+    docker buildx build "${args[@]}" "$@"
+  }
   CREATED_MULTIARCH_BUILDER=false
   cleanup_multiarch_builder() {
     if [[ "$CREATED_MULTIARCH_BUILDER" == "true" ]]; then
@@ -36,8 +39,7 @@ if [[ "${SKIP_PLUGIN_PLATFORM_IMAGE_BUILD:-false}" != "true" ]]; then
 
   for platform in linux/amd64 linux/arm64; do
     for dockerfile in packages/plugin-installer/Dockerfile packages/plugin-manager/Dockerfile; do
-      docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --quiet \
-        "${BUILDX_NETWORK_ARGS[@]}" \
+      build_plugin_image --quiet \
         --platform "$platform" \
         --target oras \
         --output=type=cacheonly \
@@ -45,14 +47,14 @@ if [[ "${SKIP_PLUGIN_PLATFORM_IMAGE_BUILD:-false}" != "true" ]]; then
     done
   done
 
-  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
-    "${BUILDX_NETWORK_ARGS[@]}" -f backend/Dockerfile.prod -t "$BACKEND_IMAGE" .
-  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
-    "${BUILDX_NETWORK_ARGS[@]}" -f frontend/Dockerfile.prod -t "$FRONTEND_IMAGE" .
-  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
-    "${BUILDX_NETWORK_ARGS[@]}" -f packages/plugin-manager/Dockerfile -t "$MANAGER_IMAGE" .
-  docker buildx build --builder "$MULTIARCH_BUILDER_NAME" --load --quiet \
-    "${BUILDX_NETWORK_ARGS[@]}" -f packages/plugin-installer/Dockerfile -t "$INSTALLER_IMAGE" .
+  build_plugin_image --load --quiet \
+    -f backend/Dockerfile.prod -t "$BACKEND_IMAGE" .
+  build_plugin_image --load --quiet \
+    -f frontend/Dockerfile.prod -t "$FRONTEND_IMAGE" .
+  build_plugin_image --load --quiet \
+    -f packages/plugin-manager/Dockerfile -t "$MANAGER_IMAGE" .
+  build_plugin_image --load --quiet \
+    -f packages/plugin-installer/Dockerfile -t "$INSTALLER_IMAGE" .
 
   cleanup_multiarch_builder
   trap - EXIT

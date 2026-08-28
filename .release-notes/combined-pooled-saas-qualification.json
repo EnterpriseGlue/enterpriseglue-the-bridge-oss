@@ -61,7 +61,8 @@
   "validation": [
     "The pooled browser lane passes restricted-role forced RLS, OIDC, SAML, LDAP, real plugin gateway, storage, exactly-once schedule and event delivery, eligibility revocation, and deactivation scenarios.",
     "The multi-replica lane retains lease and duplicate-delivery coverage.",
-    "The recovery lane passes an exact v0.18.0 source baseline, digest-pinned previous application checks, populated additive migration, clean restore, and preserved tenant state."
+    "The recovery lane passes an exact v0.18.0 source baseline, digest-pinned previous application checks, populated additive migration, clean restore, and preserved tenant state.",
+    "Plugin installer/runtime charts advance to 0.2.5 and the Plugin Manager chart advances to 0.1.5 so package, chart, and container subjects remain coherent."
   ],
   "packages": [
     { "name": "@enterpriseglue/shared", "previousVersion": "0.14.0", "newVersion": "0.14.1", "impact": "patch" },
