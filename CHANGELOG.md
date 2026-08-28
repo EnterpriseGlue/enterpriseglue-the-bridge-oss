@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.19.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.18.0...v0.19.0) (2026-08-28)
+
+
+### Features
+
+* **saas:** add cloud-ready pooled tenancy and plugin platform ([#405](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/405)) ([b1b2e2f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b1b2e2f90cec6ab555fe07cd80b6ae1f64f4574a))
+
 ## [0.18.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.17.2...v0.18.0) (2026-08-27)
 
 
