@@ -85,7 +85,12 @@ assert.match(
 );
 assert.match(
   workflow,
-  /source_ref must equal the protected workflow commit/,
+  /recovery dispatch requires an exact semantic release_tag/,
+);
+assert.doesNotMatch(workflow, /source_ref must equal the protected workflow commit/);
+assert.match(
+  workflow,
+  /release_tag:[\s\S]*?description: Existing OSS release tag[\s\S]*?required: true/,
 );
 assert.match(workflow, /\[\[ "\$\(git rev-parse HEAD\)" == "\$SOURCE_REF" \]\]/);
 assert.match(workflow, /test -z "\$\(git status --porcelain\)"/);

@@ -51,8 +51,8 @@ jobs:
           [[ "$GITHUB_REPOSITORY_OWNER" == "EnterpriseGlue" ]]
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
-              echo "source_ref must equal the protected workflow commit" >&2
+            [[ "$REQUESTED_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "recovery dispatch requires an exact semantic release_tag" >&2
               exit 1
             }
           else
@@ -108,6 +108,13 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
         with:
           cosign-release: v3.1.3
+
+      - name: Authenticate OCI tools to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate and package reproducibly
         shell: bash
@@ -198,4 +205,3 @@ jobs:
           name: enterpriseglue-host-chart-${{ env.RELEASE_TAG }}
           path: ${{ env.RECEIPT }}
           if-no-files-found: error
-
