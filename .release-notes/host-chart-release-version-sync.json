@@ -1,0 +1,54 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "host-chart-release-version-sync",
+  "type": "fix",
+  "scope": "release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps the immutable OSS host chart version and appVersion synchronized with every managed OSS release so chart publication cannot fail after container promotion.",
+  "userImpact": [
+    "Release operators receive a signed host chart whose default application version matches the corresponding published OSS containers.",
+    "EnterpriseGlue 0.19.2 fixes forward from the 0.19.1 host-chart publication failure without changing application behavior."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use the host chart published with the matching OSS release and keep backend and frontend images pinned to the digests recorded by that release."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This packaging correction does not change database schemas, migrations, or rollback windows."
+    ]
+  },
+  "security": [
+    "Release preparation derives the next chart patch from the previous immutable release tag and binds appVersion to the managed OSS release version.",
+    "The protected workflow continues to require exact source tags, signatures, reproducible archives, immutable OCI subjects, smoke tests, and vulnerability gates."
+  ],
+  "documentation": [
+    "The versioned release notes identify the corrected host-chart publication and the exact compatible OSS application release."
+  ],
+  "knownLimitations": [
+    "The v0.19.1 application containers are valid, signed, scanned, and smoke-tested, but its host-chart workflow did not publish a matching chart; v0.19.2 is the deployable fix-forward release unit."
+  ],
+  "rollback": [
+    "Roll back to a previously published chart together with its matching immutable backend and frontend image digests; do not combine a chart with a different application release unless explicitly qualified."
+  ],
+  "validation": [
+    "Reproduce the v0.19.1 protected host-chart failure caused by appVersion 0.19.0 not matching release v0.19.1.",
+    "Run release-note and chart-version synchronization unit tests, host-chart validation, release-policy contracts, and the release-candidate readiness lane.",
+    "Publish the fix-forward patch through the protected hotfix workflow and verify the signed OCI chart receipt against the exact release commit."
+  ],
+  "packages": []
+}

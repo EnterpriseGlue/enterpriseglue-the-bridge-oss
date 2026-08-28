@@ -32,6 +32,7 @@ if [[ -z "$base_tag" ]]; then
 fi
 
 release_file="docs/releases/v${RELEASE_VERSION}.md"
+chart_file="infra/kubernetes/helm/enterpriseglue-host/Chart.yaml"
 node scripts/release-notes.mjs assert-version \
   --base-ref "$base_tag" \
   --version "$RELEASE_VERSION"
@@ -39,8 +40,16 @@ node scripts/release-notes.mjs render \
   --base-ref "$base_tag" \
   --version "$RELEASE_VERSION" \
   --output "$release_file"
+base_chart_version="$(
+  git show "${base_tag}:${chart_file}" |
+    sed -n 's/^version:[[:space:]]*//p'
+)"
+node scripts/sync-host-chart-release-version.mjs \
+  --file "$chart_file" \
+  --base-chart-version "$base_chart_version" \
+  --app-version "$RELEASE_VERSION"
 
-git add "$release_file"
+git add "$release_file" "$chart_file"
 if ! git diff --cached --quiet; then
   git config user.name "enterpriseglue-release-bot"
   git config user.email "release-bot@enterpriseglue.local"

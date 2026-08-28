@@ -14,6 +14,10 @@ import {
   validatePathCoverage,
   validatePrClassification,
 } from './release-notes.mjs'
+import {
+  nextHostChartPatchVersion,
+  updateHostChartReleaseVersion,
+} from './sync-host-chart-release-version.mjs'
 
 const fragment = JSON.parse(
   readFileSync(new URL('../.release-notes/sso-engine-assignments.json', import.meta.url), 'utf8'),
@@ -309,6 +313,9 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   )
   assert.match(prepare, /enterpriseglue-detailed-release-notes/)
   assert.match(prepare, /issues\/\$\{RELEASE_PR_NUMBER\}\/comments/)
+  assert.match(prepare, /git show "\$\{base_tag\}:\$\{chart_file\}"/)
+  assert.match(prepare, /node scripts\/sync-host-chart-release-version\.mjs/)
+  assert.match(prepare, /git add "\$release_file" "\$chart_file"/)
   assert.doesNotMatch(
     prepare,
     /repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{RELEASE_PR_NUMBER\}/,
@@ -318,6 +325,40 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   assert.match(release, /baseline --allow-pending/)
   assert.equal((release.match(/\^chore\\\(main\\\)!\?: release/g) || []).length, 2)
   assert.match(hotfix, /merge-method: merge/)
+})
+
+test('release preparation advances the host chart once and binds it to the OSS release', () => {
+  assert.equal(nextHostChartPatchVersion('0.1.0'), '0.1.1')
+  assert.equal(nextHostChartPatchVersion('4.19.9'), '4.19.10')
+  assert.throws(() => nextHostChartPatchVersion('0.1'), /major\.minor\.patch/)
+
+  const source = [
+    'apiVersion: v2',
+    'name: enterpriseglue-host',
+    'version: 0.1.0',
+    'appVersion: "0.19.0"',
+    '',
+  ].join('\n')
+  const updated = updateHostChartReleaseVersion(source, {
+    chartVersion: '0.1.1',
+    appVersion: '0.19.2',
+  })
+  assert.match(updated, /^version: 0\.1\.1$/m)
+  assert.match(updated, /^appVersion: "0\.19\.2"$/m)
+  assert.equal(
+    updateHostChartReleaseVersion(updated, {
+      chartVersion: '0.1.1',
+      appVersion: '0.19.2',
+    }),
+    updated,
+  )
+  assert.throws(
+    () => updateHostChartReleaseVersion(`${source}version: 2.0.0\n`, {
+      chartVersion: '0.1.1',
+      appVersion: '0.19.2',
+    }),
+    /exactly one top-level version/,
+  )
 })
 
 test('pull request template requests the release fragment and an explicit exemption reason', () => {
