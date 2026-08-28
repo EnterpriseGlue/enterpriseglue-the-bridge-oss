@@ -104,7 +104,7 @@ export default function TenantApplicationsSettings(props: {
         </div>
         {error && <InlineNotification kind="error" title="Application marketplace" subtitle={error} lowContrast />}
         {catalogue.isError && <InlineNotification kind="error" title="Applications unavailable" subtitle={parseApiError(catalogue.error, 'The application catalogue could not be loaded').message} lowContrast />}
-        {!catalogue.isLoading && (catalogue.data?.applications.length ?? 0) === 0 && (
+        {!catalogue.isLoading && (catalogue.data?.applications?.length ?? 0) === 0 && (
           <InlineNotification kind="info" title="No applications available" subtitle="A platform operator must install a tenant-compatible application before it appears here." lowContrast hideCloseButton />
         )}
         {(catalogue.data?.applications ?? []).map((application) => (
