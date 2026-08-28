@@ -46,7 +46,8 @@
     "The real sidecar receives tenant identity only through signed host invocation and broker context.",
     "Revoked or inactive tenant applications cannot receive interactive, scheduled, event, or contribution work.",
     "Recovery uses a non-superuser application identity without bypass-RLS authority.",
-    "Backend and frontend runtime bases are pinned to refreshed Wolfi digests that pass the release HIGH/CRITICAL vulnerability gate."
+    "Backend and frontend runtime bases are pinned to refreshed Wolfi digests that pass the release HIGH/CRITICAL vulnerability gate.",
+    "Placement-v2 signature length and cryptographic verification fail closed as independent checks, and external font removal compares parsed URL hostnames exactly."
   ],
   "documentation": [
     "Updates the native SaaS tenancy and plugin-platform architecture guides with the combined qualification contract.",
@@ -64,7 +65,8 @@
     "The multi-replica lane retains lease and duplicate-delivery coverage.",
     "The recovery lane passes an exact v0.18.0 source baseline, digest-pinned previous application checks, populated additive migration, clean restore, and preserved tenant state.",
     "Plugin installer/runtime charts advance to 0.2.5 and the Plugin Manager chart advances to 0.1.5 so package, chart, and container subjects remain coherent.",
-    "The local OCI release rehearsal supports both the macOS system shell and CI-provided Buildx builders."
+    "The local OCI release rehearsal supports both the macOS system shell and CI-provided Buildx builders.",
+    "Authorization state-space qualification covers all 233 canonical actions, and the pooled sidecar retains mode-0600 receipts under the invoking non-root Linux test identity."
   ],
   "packages": [
     { "name": "@enterpriseglue/shared", "previousVersion": "0.14.0", "newVersion": "0.14.1", "impact": "patch" },

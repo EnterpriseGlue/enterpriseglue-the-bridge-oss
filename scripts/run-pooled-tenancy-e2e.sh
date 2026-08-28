@@ -62,6 +62,12 @@ const [
   postgresPort,
 ] = process.argv.slice(2);
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
+const hostUid = typeof process.getuid === 'function' && process.getuid() > 0
+  ? process.getuid()
+  : 65532;
+const hostGid = typeof process.getgid === 'function' && process.getgid() > 0
+  ? process.getgid()
+  : 65532;
 const bootstrapPassword = randomHex(24);
 const appPassword = randomHex(24);
 const appUser = 'enterpriseglue_pooled_app';
@@ -103,6 +109,8 @@ const values = {
   POOLED_TENANCY_PLUGIN_INVOCATION_PRIVATE_KEY_FILE: invocationPrivateKeyFile,
   POOLED_TENANCY_PLUGIN_INVOCATION_PUBLIC_KEY_FILE: invocationPublicKeyFile,
   POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR: `${require('node:path').dirname(envFile)}/reference-plugin-data`,
+  POOLED_TENANCY_REFERENCE_PLUGIN_UID: String(hostUid),
+  POOLED_TENANCY_REFERENCE_PLUGIN_GID: String(hostGid),
   CAMUNDA_MOCK_HOST_PORT: '0',
   JWT_SECRET: randomHex(32),
   ADMIN_EMAIL: adminEmail,

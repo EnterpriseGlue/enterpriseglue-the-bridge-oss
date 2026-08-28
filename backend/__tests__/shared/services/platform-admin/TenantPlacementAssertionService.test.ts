@@ -103,6 +103,21 @@ describe('TenantPlacementAssertionService placement v2', () => {
     }).keyId).toBe('kms-retiring');
   });
 
+  it('rejects malformed-length and invalid fixed-length signatures independently', () => {
+    const [header, payload] = assertion(active).split('.');
+    const verify = (signature: string) => service.verifyV2({
+      compactJws: `${header}.${payload}.${signature}`,
+      hostname: 'app.enterpriseglue.test',
+      requestPath: '/api/t/alpha',
+      nowSeconds: now,
+    });
+
+    expect(() => verify(Buffer.alloc(63).toString('base64url')))
+      .toThrow('Invalid tenant placement v2 signature');
+    expect(() => verify(Buffer.alloc(64).toString('base64url')))
+      .toThrow('Invalid tenant placement v2 signature');
+  });
+
   it.each([
     ['unknown key', () => assertion(active, {}, { kid: 'missing' }), 'Unknown tenant placement v2 key'],
     ['wrong issuer', () => assertion(active, { iss: 'https://attacker.test' }), 'issuer'],

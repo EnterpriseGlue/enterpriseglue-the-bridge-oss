@@ -13,9 +13,38 @@ const expectedFontImports = [
   '@ibm/plex-sans/css/ibm-plex-sans-default.css',
   '@ibm/plex-sans-arabic/css/ibm-plex-sans-arabic-default.css',
 ];
-const externalFontHost =
-  /https:\/\/(?:fonts\.(?:googleapis|gstatic)\.com|1\.www\.s81c\.com)/iu;
+const externalFontHostnames = new Set([
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  '1.www.s81c.com',
+]);
 const failures = [];
+
+function containsExternalFontHost(source) {
+  const normalized = source.toLowerCase();
+  for (const marker of ['https://', 'http://']) {
+    let cursor = 0;
+    while (cursor < source.length) {
+      const start = normalized.indexOf(marker, cursor);
+      if (start < 0) break;
+      let end = start + marker.length;
+      while (
+        end < source.length &&
+        ![' ', '\t', '\r', '\n', '"', "'", ')', '(', ',', ';', '<', '>'].includes(source[end])
+      ) {
+        end += 1;
+      }
+      try {
+        const candidate = new URL(source.slice(start, end));
+        if (externalFontHostnames.has(candidate.hostname)) return true;
+      } catch {
+        // Continue scanning malformed source text for the next absolute URL.
+      }
+      cursor = Math.max(end, start + marker.length);
+    }
+  }
+  return false;
+}
 
 const read = (relativePath) =>
   readFile(resolve(repositoryRoot, relativePath), 'utf8');
@@ -50,7 +79,7 @@ for (const [relativePath, source] of [
   ['frontend/index.html', indexHtml],
   ['packages/frontend-host/src/main.tsx', mainSource],
 ]) {
-  if (externalFontHost.test(source)) {
+  if (containsExternalFontHost(source)) {
     failures.push(`${relativePath}: external font host is not permitted`);
   }
 }
@@ -60,7 +89,10 @@ if (
     "postcssPlugin: 'enterpriseglue-strip-external-carbon-font-faces'",
   ) ||
   !viteConfig.includes("atRule.name === 'font-face'") ||
-  !viteConfig.includes("includes('https://1.www.s81c.com/')")
+  !viteConfig.includes("const externalCarbonFontHostname = '1.www.s81c.com'") ||
+  !viteConfig.includes(
+    'urlReferencesHostname(atRule.toString(), externalCarbonFontHostname)',
+  )
 ) {
   failures.push(
     'frontend/vite.config.ts: Carbon external font-face removal is not configured',
@@ -69,7 +101,7 @@ if (
 
 if (
   !nginxConfig.includes("font-src 'self' data:") ||
-  externalFontHost.test(nginxConfig)
+  containsExternalFontHost(nginxConfig)
 ) {
   failures.push(
     "frontend/nginx.conf: production font-src must remain limited to 'self' and data:",

@@ -3,6 +3,35 @@ import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 
+const externalCarbonFontHostname = '1.www.s81c.com'
+
+function urlReferencesHostname(source: string, expectedHostname: string): boolean {
+  const normalized = source.toLowerCase()
+  const marker = 'https://'
+  let cursor = 0
+  while (cursor < source.length) {
+    const start = normalized.indexOf(marker, cursor)
+    if (start < 0) return false
+    let end = start + marker.length
+    while (
+      end < source.length &&
+      ![' ', '\t', '\r', '\n', '"', "'", ')', '(', ',', ';'].includes(source[end]!)
+    ) {
+      end += 1
+    }
+    try {
+      const candidate = new URL(source.slice(start, end))
+      if (candidate.protocol === 'https:' && candidate.hostname === expectedHostname) {
+        return true
+      }
+    } catch {
+      // Continue scanning malformed source text for the next absolute URL.
+    }
+    cursor = Math.max(end, start + marker.length)
+  }
+  return false
+}
+
 function stripExternalCarbonFontFaces() {
   return {
     postcssPlugin: 'enterpriseglue-strip-external-carbon-font-faces',
@@ -13,7 +42,7 @@ function stripExternalCarbonFontFaces() {
     }) {
       if (
         atRule.name === 'font-face' &&
-        atRule.toString().includes('https://1.www.s81c.com/')
+        urlReferencesHostname(atRule.toString(), externalCarbonFontHostname)
       ) {
         atRule.remove()
       }

@@ -4,6 +4,10 @@ import test from 'node:test';
 
 const recovery = readFileSync(new URL('./run-saas-upgrade-restore-rollback.sh', import.meta.url), 'utf8');
 const pooled = readFileSync(new URL('./run-pooled-tenancy-e2e.sh', import.meta.url), 'utf8');
+const pooledCompose = readFileSync(
+  new URL('../infra/docker/compose/docker-compose.pooled-tenancy-e2e.yml', import.meta.url),
+  'utf8',
+);
 
 test('recovery rehearsal binds the published application and authoritative schema to v0.18.0', () => {
   assert.match(recovery, /backend:v0\.18\.0/);
@@ -24,6 +28,12 @@ test('recovery rehearsal preserves segregated SSO and tenant plugin states', () 
 test('pooled qualification uses the real reference sidecar for every plugin delivery path', () => {
   assert.match(pooled, /eg-plugin-io-enterpriseglue-reference-health/);
   assert.match(pooled, /POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR/);
+  assert.match(pooled, /POOLED_TENANCY_REFERENCE_PLUGIN_UID/);
+  assert.match(pooled, /POOLED_TENANCY_REFERENCE_PLUGIN_GID/);
+  assert.match(
+    pooledCompose,
+    /user: "\$\{POOLED_TENANCY_REFERENCE_PLUGIN_UID\}:\$\{POOLED_TENANCY_REFERENCE_PLUGIN_GID\}"/,
+  );
   assert.match(pooled, /actual-plugin-gateway/);
   assert.match(pooled, /plugin-storage/);
   assert.match(pooled, /plugin-schedule-delivery/);

@@ -147,12 +147,16 @@ export class TenantPlacementAssertionService {
     } catch {
       unauthorized('Invalid tenant placement v2 signature');
     }
-    if (signature.length !== 64 || !verifySignature(
+    if (signature.length !== 64) {
+      unauthorized('Invalid tenant placement v2 signature');
+    }
+    const signatureIsValid = verifySignature(
       'sha256',
       Buffer.from(`${encodedHeader}.${encodedPayload}`, 'ascii'),
       { key, dsaEncoding: 'ieee-p1363' },
       signature,
-    )) {
+    );
+    if (!signatureIsValid) {
       unauthorized('Invalid tenant placement v2 signature');
     }
 

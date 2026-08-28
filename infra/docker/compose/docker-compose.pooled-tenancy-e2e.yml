@@ -49,6 +49,10 @@ services:
     restart: "no"
     init: true
     read_only: true
+    # The sidecar retains production mode-0600 evidence while using the
+    # invoking non-root host identity so the Linux browser runner can read its
+    # bind-mounted qualification receipt without broadening file permissions.
+    user: "${POOLED_TENANCY_REFERENCE_PLUGIN_UID}:${POOLED_TENANCY_REFERENCE_PLUGIN_GID}"
     environment:
       ENTERPRISEGLUE_PLUGIN_INVOCATION_PUBLIC_KEY_FILE: /run/enterpriseglue/plugin-invocation-public.pem
       REFERENCE_PLUGIN_HOST_BROKER_BASE_URL: http://backend:8787
