@@ -134,6 +134,24 @@ assert.match(
   workflow,
   /node scripts\/helm-chart-archive\.mjs compare "\$archive" "\$pulled"/,
 );
+for (const archive of [
+  'RUNTIME_ARCHIVE',
+  'RBAC_ARCHIVE',
+  'MANAGER_ARCHIVE',
+]) {
+  const reproducibilityComparison = [
+    'node scripts/helm-chart-archive.mjs compare \\',
+    `            "$${archive}" "$REPRO_OUTPUT/$(basename "$${archive}")"`,
+  ].join('\n');
+  assert.ok(
+    workflow.includes(reproducibilityComparison),
+    `The release workflow must compare ${archive} canonically`,
+  );
+}
+assert.doesNotMatch(
+  workflow,
+  /sha256sum "\$(?:RUNTIME|RBAC|MANAGER)_ARCHIVE"[\s\S]{0,160}REPRO_OUTPUT/,
+);
 for (const [candidate, published] of [
   ['RUNTIME_CHART_ARCHIVE', 'PULLED_RUNTIME'],
   ['RBAC_CHART_ARCHIVE', 'PULLED_RBAC'],

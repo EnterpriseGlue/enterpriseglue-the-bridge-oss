@@ -299,12 +299,12 @@ jobs:
           test -f "$RUNTIME_ARCHIVE"
           test -f "$RBAC_ARCHIVE"
           test -f "$MANAGER_ARCHIVE"
-          test "$(sha256sum "$RUNTIME_ARCHIVE" | cut -d' ' -f1)" = \
-            "$(sha256sum "$REPRO_OUTPUT/$(basename "$RUNTIME_ARCHIVE")" | cut -d' ' -f1)"
-          test "$(sha256sum "$RBAC_ARCHIVE" | cut -d' ' -f1)" = \
-            "$(sha256sum "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")" | cut -d' ' -f1)"
-          test "$(sha256sum "$MANAGER_ARCHIVE" | cut -d' ' -f1)" = \
-            "$(sha256sum "$REPRO_OUTPUT/$(basename "$MANAGER_ARCHIVE")" | cut -d' ' -f1)"
+          node scripts/helm-chart-archive.mjs compare \
+            "$RUNTIME_ARCHIVE" "$REPRO_OUTPUT/$(basename "$RUNTIME_ARCHIVE")"
+          node scripts/helm-chart-archive.mjs compare \
+            "$RBAC_ARCHIVE" "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")"
+          node scripts/helm-chart-archive.mjs compare \
+            "$MANAGER_ARCHIVE" "$REPRO_OUTPUT/$(basename "$MANAGER_ARCHIVE")"
           publish_or_verify_chart() {
             local archive="$1"
             local repository="$2"
