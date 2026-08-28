@@ -65,6 +65,16 @@ test('image publishing labels and verifies source, revision, and version', () =>
   assert.match(imagePublish, /verify-oci-image-metadata\.mjs "\$prefix"/);
 });
 
+test('multi-architecture image publishing allows healthy emulated builds to finish', () => {
+  assert.match(imagePublish, /publish:\n    runs-on: ubuntu-latest\n    timeout-minutes: 150/);
+  assert.equal(
+    imagePublish.match(/timeout-minutes: 60/g)?.length,
+    4,
+    'both attempts for both images must have the extended build window',
+  );
+  assert.doesNotMatch(imagePublish, /timeout-minutes: (?:30|90)/);
+});
+
 test('published Postgres image smoke compiles test dependencies and preserves fail-closed engine policy', () => {
   const install = dockerImages.indexOf('- name: Install dependencies');
   const buildShared = dockerImages.indexOf('- name: Build shared test dependencies');
