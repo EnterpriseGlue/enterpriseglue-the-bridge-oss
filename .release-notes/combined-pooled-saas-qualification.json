@@ -45,7 +45,8 @@
   "security": [
     "The real sidecar receives tenant identity only through signed host invocation and broker context.",
     "Revoked or inactive tenant applications cannot receive interactive, scheduled, event, or contribution work.",
-    "Recovery uses a non-superuser application identity without bypass-RLS authority."
+    "Recovery uses a non-superuser application identity without bypass-RLS authority.",
+    "Backend and frontend runtime bases are pinned to refreshed Wolfi digests that pass the release HIGH/CRITICAL vulnerability gate."
   ],
   "documentation": [
     "Updates the native SaaS tenancy and plugin-platform architecture guides with the combined qualification contract.",

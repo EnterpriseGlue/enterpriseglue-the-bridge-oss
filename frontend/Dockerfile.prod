@@ -50,7 +50,7 @@ RUN pnpm --filter plugin-sdk run build \
     && ln -s busybox /tmp/busybox-bin/sh \
     && ln -s busybox /tmp/busybox-bin/sed
 
-FROM cgr.dev/chainguard/nginx:latest-dev@sha256:bc1ed6dd9e4e8b0a37285dc42fe9260abe5394a1b6be0714fd8c70f1e719b41c
+FROM cgr.dev/chainguard/nginx:latest-dev@sha256:8ee1f40c0147c3006f2621de1ca1bd9867851e83d17930e21060d2dddaf617ff
 
 USER root
 RUN apk upgrade --no-cache

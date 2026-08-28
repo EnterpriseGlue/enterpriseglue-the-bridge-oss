@@ -55,7 +55,7 @@ COPY frontend/package.json frontend/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile --filter webmodeler-backend...
 
-FROM cgr.dev/chainguard/node:latest-dev@sha256:e5c561501b1cd1f83471e932d3cd49d8fbbba998031273e04380b1f3e4199381 AS runtime-base
+FROM cgr.dev/chainguard/node:latest-dev@sha256:87c646948c4ee39b8b2abcb6e6e77008bedc1cbfec41a0c75ddca1a74ec3b691 AS runtime-base
 USER root
 RUN set -eux; \
     apk upgrade --no-cache; \
