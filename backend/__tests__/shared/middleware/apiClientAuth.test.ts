@@ -350,6 +350,36 @@ describe('apiClientAuth middleware', () => {
     expect(mocks.authenticateToken).not.toHaveBeenCalled();
   });
 
+  it('normalizes service-account authentication errors without exposing non-error values', async () => {
+    const errorNext = vi.fn();
+    mocks.authenticateServiceAccountToken.mockRejectedValueOnce(new Error('workload token rejected'));
+
+    await requireServiceAccountScope('tenant:lifecycle')(
+      { headers: { authorization: 'Bearer egsa_service-account-1_secret' } } as any,
+      {} as any,
+      errorNext,
+    );
+
+    expect(errorNext).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 401,
+      message: 'workload token rejected',
+    }));
+
+    const unknownNext = vi.fn();
+    mocks.authenticateServiceAccountToken.mockRejectedValueOnce({ reason: 'opaque provider rejection' });
+
+    await requireServiceAccountScope('tenant:lifecycle')(
+      { headers: { authorization: 'Bearer egsa_service-account-1_secret' } } as any,
+      {} as any,
+      unknownNext,
+    );
+
+    expect(unknownNext).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 401,
+      message: 'Service account authentication failed',
+    }));
+  });
+
   it('returns a 403 app error with eligibility details when API deployment is denied', async () => {
     mocks.evaluateDeploymentEligibility.mockResolvedValueOnce({
       allowed: false,
