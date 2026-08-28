@@ -13,13 +13,16 @@ function runner(database: string) {
   return {
     connection: {
       options: { type: database },
-      getMetadata: vi.fn((entity: { name?: string }) => ({
-        tablePath: entity.name === 'PluginInstallation'
-          ? 'main.plugin_installations'
-          : entity.name === 'PluginTenantEnablement'
-            ? 'main.plugin_tenant_enablements'
-            : 'main.plugin_tenant_application_operations',
-      })),
+      getMetadata: vi.fn((entity: string | { name?: string }) => {
+        const entityName = typeof entity === 'string' ? entity : entity.name;
+        return {
+          tablePath: entityName === 'PluginInstallation'
+            ? 'main.plugin_installations'
+            : entityName === 'PluginTenantEnablement'
+              ? 'main.plugin_tenant_enablements'
+              : 'main.plugin_tenant_application_operations',
+        };
+      }),
       driver: {
         escape,
         createFullType: (column: TableColumn) => column.length

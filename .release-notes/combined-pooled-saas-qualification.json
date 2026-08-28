@@ -66,6 +66,9 @@
   "packages": [
     { "name": "@enterpriseglue/shared", "previousVersion": "0.14.0", "newVersion": "0.14.1", "impact": "patch" },
     { "name": "@enterpriseglue/backend-host", "previousVersion": "0.12.0", "newVersion": "0.12.1", "impact": "patch" },
-    { "name": "@enterpriseglue/plugin-reference", "previousVersion": "0.1.0", "newVersion": "0.2.0", "impact": "minor" }
+    { "name": "@enterpriseglue/plugin-reference", "previousVersion": "0.1.0", "newVersion": "0.2.0", "impact": "minor" },
+    { "name": "@enterpriseglue/plugin-runtime", "previousVersion": "0.2.1", "newVersion": "0.2.2", "impact": "patch" },
+    { "name": "@enterpriseglue/plugin-installer", "previousVersion": "0.2.4", "newVersion": "0.2.5", "impact": "patch" },
+    { "name": "@enterpriseglue/plugin-manager", "previousVersion": "0.1.4", "newVersion": "0.1.5", "impact": "patch" }
   ]
 }
