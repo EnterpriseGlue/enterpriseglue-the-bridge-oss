@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.19.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.19.0...v0.19.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **release:** allow multi-arch image builds to finish ([#407](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/407)) ([fdfcfe6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fdfcfe6ec4e15dc9cf6410381d93662e2e96c1b7))
+
 ## [0.19.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.18.0...v0.19.0) (2026-08-28)
 
 
