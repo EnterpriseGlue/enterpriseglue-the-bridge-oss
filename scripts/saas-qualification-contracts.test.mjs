@@ -25,6 +25,13 @@ test('recovery rehearsal preserves segregated SSO and tenant plugin states', () 
   assert.match(recovery, /application_rollback=previous-v0\.18\.0-ready-on-expanded-schema/);
 });
 
+test('recovery rehearsal waits through the PostgreSQL initialization restart', () => {
+  assert.match(recovery, /postgres_ready_streak=0/);
+  assert.match(recovery, /postgres_ready_streak=\$\(\(postgres_ready_streak \+ 1\)\)/);
+  assert.match(recovery, /postgres_ready_streak" -ge 3/);
+  assert.match(recovery, /PostgreSQL did not remain ready after initialization/);
+});
+
 test('pooled qualification uses the real reference sidecar for every plugin delivery path', () => {
   assert.match(pooled, /eg-plugin-io-enterpriseglue-reference-health/);
   assert.match(pooled, /POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR/);

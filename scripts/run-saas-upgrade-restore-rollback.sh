@@ -70,13 +70,23 @@ docker run --name "$postgres_name" \
   -p "127.0.0.1:${database_port}:5432" \
   -d postgres:18-alpine >/dev/null
 
+postgres_ready_streak=0
 for _ in $(seq 1 60); do
   if docker exec "$postgres_name" pg_isready -U postgres -d postgres >/dev/null 2>&1; then
-    break
+    postgres_ready_streak=$((postgres_ready_streak + 1))
+    if [[ "$postgres_ready_streak" -ge 3 ]]; then
+      break
+    fi
+  else
+    postgres_ready_streak=0
   fi
   sleep 1
 done
-docker exec "$postgres_name" pg_isready -U postgres -d postgres >/dev/null
+if [[ "$postgres_ready_streak" -lt 3 ]]; then
+  docker logs "$postgres_name" >&2 || true
+  echo '[saas-recovery] PostgreSQL did not remain ready after initialization.' >&2
+  exit 1
+fi
 docker exec "$postgres_name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE ROLE ${app_user} LOGIN PASSWORD '${app_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS" >/dev/null
 docker exec "$postgres_name" createdb -U postgres -O "$app_user" "$database_name"
