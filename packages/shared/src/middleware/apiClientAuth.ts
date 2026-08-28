@@ -120,6 +120,24 @@ export function requireApiClientScope(scope: string) {
   };
 }
 
+/** Workload-only authentication. Interactive users and API clients are never accepted. */
+export function requireServiceAccountScope(scope: string) {
+  return async function requireScopedServiceAccount(req: Request, _res: Response, next: NextFunction) {
+    try {
+      const token = readBearerToken(req);
+      if (!token.startsWith(`${SERVICE_ACCOUNT_TOKEN_PREFIX}_`)) {
+        throw Errors.unauthorized('Service account bearer token required');
+      }
+      req.serviceAccount = await serviceAccountService.authenticateToken(token, scope);
+      return next();
+    } catch (error) {
+      if (error instanceof AppError) return next(error);
+      if (error instanceof Error) return next(Errors.unauthorized(error.message));
+      return next(Errors.unauthorized('Service account authentication failed'));
+    }
+  };
+}
+
 export function requireApiClientAction(scope: string, actionId: string, options: RequireApiClientActionOptions = {}) {
   const action = assertKnownAuthzAction(actionId);
 

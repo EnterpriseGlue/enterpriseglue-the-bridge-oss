@@ -13,6 +13,14 @@ let capabilities: TenancyCapabilities = {
   customDomainsEnabled: false,
   organizationDiscoveryEnabled: false,
   signedPlacementAssertionsEnabled: false,
+  placementAssertionVersions: [],
+  placementV2Required: false,
+  workloadTenantLifecycleEnabled: false,
+  tenantSecretBrokerEnabled: false,
+  tenantSecretWriteOnlyAdminEnabled: false,
+  tenantSecretBreakGlassEnabled: false,
+  shardId: null,
+  workloadReceipt: null,
 };
 
 export async function initializeTenancyCapabilities(): Promise<TenancyCapabilities> {

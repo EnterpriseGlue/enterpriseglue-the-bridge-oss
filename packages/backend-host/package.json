@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/backend-host",
-  "version": "0.7.1",
+  "version": "0.12.1",
   "description": "OSS backend host for EnterpriseGlue — Express app, route modules, enterprise loader, and server bootstrap",
   "license": "Apache-2.0",
   "repository": {
@@ -17,7 +17,7 @@
     "build": "pnpm run build:plugin-dependencies && tsc && node scripts/rewrite-modules.mjs",
     "clean": "rm -rf dist",
     "typecheck:plugin-acceptance": "pnpm run build:plugin-dependencies && tsc -p test/tsconfig.json",
-    "test:plugin-runtime": "pnpm run build:plugin-dependencies && vitest run src/plugins/secureFile.test.ts src/plugins/pluginRuntime.test.ts src/plugins/pluginControlPlane.test.ts src/plugins/pluginControlRoutes.test.ts src/plugins/pluginDatabaseLock.test.ts src/plugins/pluginDatabaseTransaction.test.ts src/plugins/pluginEventDeliveryStore.test.ts src/plugins/pluginEventDispatcher.test.ts src/plugins/pluginEngineEventPoller.test.ts src/plugins/pluginScheduleDispatcher.test.ts src/plugins/localDiagnosticCollector.test.ts src/plugins/pluginDiagnosticMetrics.test.ts src/plugins/pluginEventMetrics.test.ts src/plugins/pluginSseProxy.test.ts src/plugins/pluginContributionAvailabilityStore.test.ts src/plugins/pluginContributionAvailabilityDispatcher.test.ts src/plugins/pluginManagerStore.test.ts src/plugins/pluginManagerRoutes.test.ts src/plugins/pluginManagerBrowserRoutes.test.ts"
+    "test:plugin-runtime": "pnpm run build:plugin-dependencies && vitest run src/plugins/secureFile.test.ts src/plugins/pluginRuntime.test.ts src/plugins/pluginControlPlane.test.ts src/plugins/pluginControlRoutes.test.ts src/plugins/pluginTenantEligibility.test.ts src/plugins/pluginDatabaseLock.test.ts src/plugins/pluginDatabaseTransaction.test.ts src/plugins/pluginEventDeliveryStore.test.ts src/plugins/pluginEventDispatcher.test.ts src/plugins/pluginEngineEventPoller.test.ts src/plugins/pluginScheduleDispatcher.test.ts src/plugins/localDiagnosticCollector.test.ts src/plugins/pluginDiagnosticMetrics.test.ts src/plugins/pluginEventMetrics.test.ts src/plugins/pluginSseProxy.test.ts src/plugins/pluginContributionAvailabilityStore.test.ts src/plugins/pluginContributionAvailabilityDispatcher.test.ts src/plugins/pluginManagerStore.test.ts src/plugins/pluginManagerRoutes.test.ts src/plugins/pluginManagerBrowserRoutes.test.ts"
   },
   "files": [
     "dist/**/*.js",

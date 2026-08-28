@@ -32,6 +32,12 @@ The OSS host owns the security boundary. A private SaaS control plane may own
 fleet placement, metering, subscriptions, certificates, and tenant movement,
 but it cannot authorize a user or replace in-request tenant resolution.
 
+The production Kubernetes profile separates `api` and `worker` runtime roles.
+Both use verify-only database startup after a dedicated migration and preflight
+sequence, so normal application identities do not need schema authority. The
+default `all` runtime role and `apply` database startup retain the established
+single-process self-hosted contract.
+
 ## Authority flow
 
 The host resolves a tenant before tenant-owned data or authentication
@@ -51,7 +57,9 @@ configuration is loaded.
 The resulting request context is also installed in asynchronous local storage
 so persistence and plugin code consume the same canonical tenant.
 
-## Signed placement assertion
+## Signed placement assertions
+
+### Placement v1 compatibility
 
 The private control plane and an OSS shard use this narrow contract:
 
@@ -76,6 +84,25 @@ far in the future, incorrectly signed, or inconsistent with durable placement
 state fail closed. Rotating a tenant's placement key increments its placement
 epoch, invalidating assertions issued for the old placement.
 
+### Placement v2 cloud trust
+
+Placement v2 is additive and uses `X-EG-Tenant-Placement-V2` with a compact
+ES256 JWS. The shard stores public JWKS material only. Its protected header
+contains `alg=ES256`, `typ=JWT`, and a unique `kid`. The payload binds:
+
+- schema `placement-assertion.enterpriseglue.io/v2`, issuer, and audience;
+- subject, tenant ID, tenant slug, shard ID, and durable placement epoch;
+- canonical request hostname and either `/t/<slug>` or `/api/t/<slug>` path
+  prefix;
+- a safe correlation ID; and
+- `iat`, `nbf`, and `exp` in Unix seconds within the configured maximum age.
+
+The verifier rejects unknown or duplicate keys, private JWK material, wrong
+issuer/audience/shard, stale epochs, altered host or path, invalid validity
+windows, and requests that mix v1 and v2 headers. Key rotation publishes the
+new public key before use, retains the previous public key only for the bounded
+overlap, and removes it after all assertions it signed have expired.
+
 The assertion proves that the routing tier sent the request to the expected
 shard. It does not prove tenant membership and does not bypass session or FGA
 authorization.
@@ -84,9 +111,18 @@ authorization.
 
 The `tenants` table is the lifecycle and placement authority. It records the
 tenant slug, active state, placement key, and optimistic placement epoch.
-Routing aliases are recorded separately and become authoritative only after
-DNS verification. Work-email discovery domains are a different,
+Tenant-admin custom domains are recorded separately and become authoritative
+only after DNS verification. Cloud-managed routing aliases have their own
+registry and are reconciled only by a `tenant:lifecycle` service account with
+an optimistic placement epoch. Work-email discovery domains are a different,
 non-authoritative directory hint and cannot route an ordinary tenant request.
+
+Cloud tenant create, suspend, resume, and routing-alias reconciliation use
+workload-only APIs. Every mutation requires a stable `Idempotency-Key` and
+`X-Correlation-ID`. The durable ledger stores only hashes, binds retries to the
+exact canonical request, and returns the original receipt for an identical
+retry. A changed request under the same key fails. Receipts are canonical-JSON
+payloads signed with a shard P-256 key and include no user session or secret.
 
 Membership does not introduce a second authorization model. It uses the
 existing FGA role assignments at tenant scope:
@@ -188,6 +224,13 @@ SSO callbacks use the established global endpoints:
 
 All provider endpoints are still subject to the production identity-provider
 allowlist and secret-reference controls.
+
+Tenant administrators may submit OIDC, SAML, and LDAP secret material through
+write-only tenant routes. EnterpriseGlue stores only a reference bound to that
+tenant and the specific protocol purpose. Protocol consumers validate the
+binding before resolving the value through the cloud-neutral broker. Existing
+encrypted, environment, file, and Docker references remain supported. See
+[Tenant Secret Broker](../reference/tenant-secret-broker.md).
 
 ## PostgreSQL data isolation
 
@@ -309,12 +352,35 @@ organization-name fallback.
 | --- | --- | --- |
 | `EG_TENANCY_MODE` | `single` | `single` or `pooled`. |
 | `EG_TENANT_BASE_DOMAIN` | unset | Optional managed suffix for `<slug>.<base-domain>`. |
-| `EG_TENANT_PLACEMENT_KEY` | unset | HMAC key of at least 32 characters; required for placement assertions and required by production pooled mode. |
+| `EG_TENANT_PLACEMENT_KEY` | unset | HMAC key of at least 32 characters for placement v1 compatibility. |
 | `EG_TENANT_PLACEMENT_MAX_AGE_SECONDS` | `120` | Maximum accepted assertion lifetime, up to 3600 seconds. |
+| `EG_TENANT_PLACEMENT_V2_JWKS_JSON` | unset | Public ES256 JWKS with unique `kid` values. |
+| `EG_TENANT_PLACEMENT_V2_ISSUER` | unset | Exact trusted issuer. |
+| `EG_TENANT_PLACEMENT_V2_AUDIENCE` | unset | Exact shard and receipt audience. |
+| `EG_TENANT_PLACEMENT_V2_SHARD_ID` | unset | Canonical shard identity. |
+| `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
+| `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, tenant secret broker, and signed tenant application eligibility settings are complete. |
+| `EG_TENANT_APP_ELIGIBILITY_REQUIRED` | `false` | Require a complete signed tenant application eligibility verifier; cloud-required mode requires `true`. |
+| `EG_TENANT_APP_ELIGIBILITY_JWKS_JSON` | unset | Public P-256 ES256 keys trusted for tenant/plugin eligibility projections. |
+| `EG_TENANT_APP_ELIGIBILITY_ISSUER` | unset | Exact trusted eligibility issuer. |
+| `EG_TENANT_APP_ELIGIBILITY_AUDIENCE` | unset | Exact shard audience for eligibility projections. |
+| `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY` | unset | Shard-only PEM P-256 receipt signing key. |
+| `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID` | unset | Receipt signing key identifier. |
+| `EG_TENANT_WORKLOAD_RECEIPT_ISSUER` | unset | Stable receipt issuer. |
 | `EG_TENANT_RLS_ENFORCED` | `false` | Must be `true` before pooled mode starts. |
+| `EG_TENANT_SECRET_BROKER_URL` | unset | Private cloud-neutral broker base URL. |
+| `EG_TENANT_SECRET_BROKER_TOKEN_REF` | unset | Local-provider reference for broker workload authentication. |
+| `EG_TENANT_SECRET_BROKER_TIMEOUT_MS` | `5000` | Bounded request timeout in milliseconds. |
+| `EG_TENANT_SECRET_BROKER_CACHE_TTL_MS` | `15000` | Per-process resolved-value TTL; maximum 60000. |
+| `EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES` | `256` | Per-process resolved-value cache bound; maximum 1024. |
+| `EG_TENANT_SECRET_BROKER_REQUIRED` | `false` | Require URL and token reference at startup. |
+| `EG_TENANT_SECRET_BREAK_GLASS_ENABLED` | `false` | Enable audited workload-only recovery to a verified local reference. |
 
-Use a secret manager for the placement key. It is a shard/control-plane
-credential and must never appear in a tenant-facing API or native plugin.
+Use a secret manager for placement v1 and workload receipt private keys. The
+placement v2 JWKS is public verification material. The broker token stays in
+the shard workload-secret boundary, while tenant SSO values stay behind the
+tenant-bound broker contract. None of these values may appear in a
+tenant-facing response or native plugin.
 
 ## Repeatable pooled end-to-end qualification
 
@@ -355,8 +421,22 @@ route denial, and immediate rejection of an existing session after its tenant
 membership is removed. It records that the application database role cannot
 bypass RLS and counts the forced-policy tables.
 
-Sanitized diagnostics are written to `.artifacts/pooled-tenancy-e2e/`; secrets
-are never copied there. Deterministic desktop screenshots are retained under
+The lane provisions OIDC, SAML, and LDAP material through a disposable private
+implementation of the tenant-secret broker, proves cross-tenant reference
+denial, rotates the OIDC credential, checks availability, and then completes
+all three real protocol sign-ins. It also starts the compiled public reference
+plugin as an isolated sidecar. Alpha activates it through member request and
+tenant-admin approval, calls its real gateway operation, writes tenant-owned
+plugin storage, and receives exactly one fixed-schedule delivery and exactly
+one engine-event delivery. Bravo remains independently active until its
+eligibility is revoked and the tenant application is deactivated; queued work
+then fails closed without reaching the sidecar. Charlie remains inactive, and
+the host rejects interactive access. Deactivation removes frontend and gateway
+availability while retaining tenant plugin data. Host-owned schedule and event
+delivery operations cannot be reached through the interactive gateway.
+
+Sanitized diagnostics are written to
+`.artifacts/pooled-tenancy-e2e/`; secrets are never copied there. Deterministic desktop screenshots are retained under
 `playwright-results/ui-evidence/standard`, with narrow-screen and zoom evidence
 in the adjacent `responsive` directory. Keycloak and OpenLDAP are high-fidelity
 disposable protocol emulators. This lane proves the EnterpriseGlue protocol and tenant
@@ -368,7 +448,39 @@ organization discovery, pooled routing, or their browser fixtures change. The
 pooled result and sanitized UI evidence are uploaded as a 14-day CI artifact,
 and the aggregate CI check cannot pass when this lane fails.
 
-## Upgrade from 0.16.2
+## Populated upgrade, restore, and application rollback qualification
+
+Run the recovery lane from a checkout containing the `v0.18.0` tag:
+
+```bash
+pnpm run test:saas:upgrade-restore-rollback
+```
+
+The lane creates an authoritative schema from the exact `v0.18.0` source tag,
+verifies the immutable published v0.18.0 backend image by resolved digest,
+seeds three tenants with separate OIDC, SAML, and LDAP providers plus two active
+and one inactive tenant application, and takes a pre-upgrade backup. It then
+applies the current additive migrations using a restricted application role,
+verifies schema readiness, proves that the previous v0.18.0 application can
+still become ready on the expanded schema, takes an upgraded backup, restores
+that backup into a clean database owned by the application role, and verifies
+the preserved tenant, SSO, application, and migration state.
+
+The exact procedure, artifacts, production adaptation, and rollback boundary
+are documented in the
+[SaaS upgrade, restore, and rollback runbook](../runbooks/saas-upgrade-restore-rollback.md).
+CI runs this as a separate aggregate dependency when native tenancy changes.
+
+For a complete local SaaS qualification, run:
+
+```bash
+pnpm run test:saas:combined
+```
+
+This serially combines the pooled browser/reference-plugin journey, the
+multi-replica plugin delivery lane, and the populated recovery rehearsal.
+
+## Historical tenancy migration baseline from 0.16.2
 
 The implementation is based on OSS release `v0.16.2`. It adds these ordered
 migrations:
@@ -390,12 +502,14 @@ migration also creates verified discovery-domain and single-use discovery-token
 storage; these remain inactive in single mode. Verify normal single-mode
 operation before configuring pooled mode.
 
-This release does not declare general production readiness for pooled mode.
-The native kernel, database backstop, and disposable OIDC/SAML/LDAP pooled
-browser qualification are implemented, but an intended SaaS deployment must
-still complete inherited-data, asynchronous-work, plugin, multi-replica,
-customer-provider compatibility, migration, restore, and rollback
-qualification before serving customer traffic.
+The repository now qualifies inherited data, asynchronous plugin work, real
+reference-plugin gateway and broker paths, multi-replica delivery, populated
+v0.18.0 migration, previous-application startup, backup restore, and disposable
+OIDC/SAML/LDAP tenant separation. These are local OSS release gates. They do not
+by themselves certify a particular cloud topology or customer identity
+provider. A SaaS deployment must additionally pass the same immutable artifacts
+on its target GKE topology and certify each supported external identity-provider
+profile before serving customer traffic.
 
 Before pooled activation:
 

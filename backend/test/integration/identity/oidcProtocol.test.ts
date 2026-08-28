@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
+import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
 import { MockOidcHttpsServer } from '../../identity-mocks/index.js';
 
 describe('loopback OIDC protocol mock', () => {
@@ -7,8 +8,27 @@ describe('loopback OIDC protocol mock', () => {
 
   afterEach(async () => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     await server?.stop();
     server = null;
+  });
+
+  it('resolves a tenant-bound client secret only with the matching OIDC tenant context', async () => {
+    server = new MockOidcHttpsServer();
+    await server.start();
+    vi.stubGlobal('fetch', server.fetch.bind(server));
+    const resolve = vi.spyOn(secretResolver, 'resolveTenantStored').mockResolvedValue('tenant-oidc-secret');
+    const configuration = {
+      ...server.configuration(),
+      clientSecretRef: 'ref:tenant-secret://v1/tenant-alpha/oidc.client_secret/version-1',
+    };
+
+    await expect(genericOidcService.exchangeCode(configuration, {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    }, { tenantId: 'tenant-alpha', correlationId: 'oidc-tenant-secret-test' })).resolves.toMatchObject({ sub: 'user-1' });
+    expect(resolve).toHaveBeenCalledWith(configuration.clientSecretRef, {
+      tenantId: 'tenant-alpha', purpose: 'oidc.client_secret', correlationId: 'oidc-tenant-secret-test',
+    });
   });
 
   it('serves discovery, authorization, token, JWKS, userinfo, and groups on an ephemeral loopback port', async () => {

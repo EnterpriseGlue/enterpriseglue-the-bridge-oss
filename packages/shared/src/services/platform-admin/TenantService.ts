@@ -1,18 +1,23 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { resolveTxt } from 'node:dns/promises';
-import { In, IsNull, MoreThan } from 'typeorm';
+import { In, IsNull, MoreThan, type EntityManager } from 'typeorm';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { TenantDiscoveryDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryDomain.js';
 import { TenantDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDomain.js';
+import { TenantRoutingAlias } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantRoutingAlias.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { permissionService } from './permissions.js';
 import { NATIVE_TENANT_ROLE_IDS } from '@enterpriseglue/shared/authz/native-tenant-roles.js';
+import {
+  tenantPlacementAssertionService,
+  type TenantPlacementClaimV2,
+} from './TenantPlacementAssertionService.js';
 
 const TENANT_ROLE_IDS = [
   NATIVE_TENANT_ROLE_IDS.ADMIN,
@@ -114,7 +119,9 @@ export class TenantService {
     }
     const dataSource = await getDataSource();
     const domain = await dataSource.getRepository(TenantDomain).findOneBy({ hostname, status: 'verified' });
-    return domain ? dataSource.getRepository(Tenant).findOneBy({ id: domain.tenantId }) : null;
+    if (domain) return dataSource.getRepository(Tenant).findOneBy({ id: domain.tenantId });
+    const alias = await dataSource.getRepository(TenantRoutingAlias).findOneBy({ hostname, status: 'active' });
+    return alias ? dataSource.getRepository(Tenant).findOneBy({ id: alias.tenantId }) : null;
   }
 
   async list(): Promise<Tenant[]> {
@@ -124,9 +131,9 @@ export class TenantService {
   async create(input: {
     name: string;
     slug: string;
-    ownerUserId: string;
+    ownerUserId?: string | null;
     placementKey?: string | null;
-  }): Promise<Tenant> {
+  }, entityManager?: EntityManager): Promise<Tenant> {
     if (config.tenancyMode !== 'pooled') {
       throw Errors.conflict('Single-tenant mode permits only the default tenant');
     }
@@ -134,12 +141,16 @@ export class TenantService {
     if (!name) throw Errors.validation('Tenant name is required');
     const slug = normalizeSlug(input.slug);
     const dataSource = await getDataSource();
-    const owner = await dataSource.getRepository(User).findOneBy({ id: input.ownerUserId, isActive: true });
-    if (!owner) throw Errors.notFound('Tenant owner account');
+    const store = entityManager || dataSource.manager;
+    const ownerUserId = input.ownerUserId || null;
+    if (ownerUserId) {
+      const owner = await store.getRepository(User).findOneBy({ id: ownerUserId, isActive: true });
+      if (!owner) throw Errors.notFound('Tenant owner account');
+    }
     const tenantId = generateId();
     const now = Date.now();
     try {
-      await dataSource.transaction(async (manager) => {
+      const createWithManager = async (manager: EntityManager) => {
         await manager.getRepository(Tenant).insert({
           id: tenantId,
           name,
@@ -147,29 +158,33 @@ export class TenantService {
           status: 'active',
           placementKey: input.placementKey?.trim() || 'local',
           placementEpoch: 1,
-          createdByUserId: input.ownerUserId,
+          createdByUserId: ownerUserId,
           createdAt: now,
           updatedAt: now,
         });
-        await permissionService.assignRole({
-          tenantId,
-          principalType: 'user',
-          principalId: input.ownerUserId,
-          roleId: NATIVE_TENANT_ROLE_IDS.ADMIN,
-          scopeType: 'tenant',
-          scopeId: tenantId,
-          source: 'manual',
-          sourceRef: null,
-          createdById: input.ownerUserId,
-        }, manager);
-      });
+        if (ownerUserId) {
+          await permissionService.assignRole({
+            tenantId,
+            principalType: 'user',
+            principalId: ownerUserId,
+            roleId: NATIVE_TENANT_ROLE_IDS.ADMIN,
+            scopeType: 'tenant',
+            scopeId: tenantId,
+            source: 'manual',
+            sourceRef: null,
+            createdById: ownerUserId,
+          }, manager);
+        }
+      };
+      if (entityManager) await createWithManager(entityManager);
+      else await dataSource.transaction(createWithManager);
     } catch (error) {
       if (error instanceof Error && /unique|duplicate/i.test(error.message)) {
         throw Errors.conflict('Tenant slug already exists');
       }
       throw error;
     }
-    return dataSource.getRepository(Tenant).findOneByOrFail({ id: tenantId });
+    return store.getRepository(Tenant).findOneByOrFail({ id: tenantId });
   }
 
   async update(tenantId: string, input: {
@@ -177,8 +192,10 @@ export class TenantService {
     status?: Tenant['status'];
     placementKey?: string;
     expectedPlacementEpoch?: number;
-  }): Promise<Tenant> {
-    const repo = (await getDataSource()).getRepository(Tenant);
+  }, entityManager?: EntityManager): Promise<Tenant> {
+    const repo = entityManager
+      ? entityManager.getRepository(Tenant)
+      : (await getDataSource()).getRepository(Tenant);
     const tenant = await repo.findOneBy({ id: tenantId });
     if (!tenant) throw Errors.notFound('Tenant');
     if (tenant.id === OSS_DEFAULT_TENANT_ID && input.status && input.status !== 'active') {
@@ -187,15 +204,94 @@ export class TenantService {
     if (input.expectedPlacementEpoch !== undefined && Number(tenant.placementEpoch) !== input.expectedPlacementEpoch) {
       throw Errors.conflict('Tenant placement changed; reload before retrying');
     }
-    const placementChanged = input.placementKey !== undefined && input.placementKey.trim() !== tenant.placementKey;
-    await repo.update({ id: tenantId }, {
+    const placementChanged = (input.placementKey !== undefined && input.placementKey.trim() !== tenant.placementKey)
+      || (input.status !== undefined && input.status !== tenant.status);
+    const update = await repo.update(
+      input.expectedPlacementEpoch !== undefined
+        ? { id: tenantId, placementEpoch: input.expectedPlacementEpoch }
+        : { id: tenantId },
+      {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.placementKey !== undefined ? { placementKey: input.placementKey.trim() } : {}),
       ...(placementChanged ? { placementEpoch: Number(tenant.placementEpoch) + 1 } : {}),
       updatedAt: Date.now(),
-    });
+      },
+    );
+    if (input.expectedPlacementEpoch !== undefined && update.affected !== 1) {
+      throw Errors.conflict('Tenant placement changed; reload before retrying');
+    }
     return repo.findOneByOrFail({ id: tenantId });
+  }
+
+  async reconcileRoutingAliases(
+    tenantId: string,
+    aliases: string[],
+    expectedPlacementEpoch: number,
+    entityManager?: EntityManager,
+  ): Promise<{ tenant: Tenant; aliases: TenantRoutingAlias[] }> {
+    if (config.tenancyMode !== 'pooled') throw Errors.conflict('Tenant routing aliases require pooled mode');
+    const normalizedAliases = Array.from(new Set(aliases.map((alias) => normalizeHostname(alias)))).sort();
+    if (normalizedAliases.length > 100) throw Errors.validation('At most 100 tenant routing aliases are allowed');
+    for (const alias of normalizedAliases) {
+      if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(alias)) {
+        throw Errors.validation('Every tenant routing alias must be a valid fully-qualified domain name');
+      }
+    }
+
+    const dataSource = await getDataSource();
+    const reconcileWithManager = async (manager: EntityManager) => {
+      const tenantRepo = manager.getRepository(Tenant);
+      const aliasRepo = manager.getRepository(TenantRoutingAlias);
+      const domainRepo = manager.getRepository(TenantDomain);
+      const tenant = await tenantRepo.findOneBy({ id: tenantId });
+      if (!tenant) throw Errors.notFound('Tenant');
+      if (Number(tenant.placementEpoch) !== expectedPlacementEpoch) {
+        throw Errors.conflict('Tenant placement changed; reload before retrying');
+      }
+
+      const existing = await aliasRepo.find({ where: { tenantId } });
+      if (normalizedAliases.length) {
+        const [foreignAliases, foreignDomains] = await Promise.all([
+          aliasRepo.find({ where: { hostname: In(normalizedAliases) } }),
+          domainRepo.find({ where: { hostname: In(normalizedAliases) } }),
+        ]);
+        if (foreignAliases.some((row) => row.tenantId !== tenantId)
+          || foreignDomains.some((row) => row.tenantId !== tenantId)) {
+          throw Errors.conflict('A tenant routing alias is already assigned to another tenant');
+        }
+      }
+
+      const desired = new Set(normalizedAliases);
+      const now = Date.now();
+      const currentActive = new Set(existing.filter((row) => row.status === 'active').map((row) => row.hostname));
+      const changed = currentActive.size !== desired.size || Array.from(desired).some((hostname) => !currentActive.has(hostname));
+
+      for (const row of existing) {
+        const status = desired.has(row.hostname) ? 'active' : 'disabled';
+        if (row.status !== status) await aliasRepo.update({ id: row.id, tenantId }, { status, updatedAt: now });
+      }
+      const existingByHostname = new Map(existing.map((row) => [row.hostname, row]));
+      for (const hostname of normalizedAliases) {
+        if (existingByHostname.has(hostname)) continue;
+        await aliasRepo.insert({
+          id: generateId(), tenantId, hostname, status: 'active', source: 'cloud_workload', createdAt: now, updatedAt: now,
+        });
+      }
+
+      if (changed) {
+        const update = await tenantRepo.update(
+          { id: tenantId, placementEpoch: expectedPlacementEpoch },
+          { placementEpoch: expectedPlacementEpoch + 1, updatedAt: now },
+        );
+        if (update.affected !== 1) throw Errors.conflict('Tenant placement changed; reload before retrying');
+      }
+      return {
+        tenant: await tenantRepo.findOneByOrFail({ id: tenantId }),
+        aliases: await aliasRepo.find({ where: { tenantId, status: 'active' }, order: { hostname: 'ASC' } }),
+      };
+    };
+    return entityManager ? reconcileWithManager(entityManager) : dataSource.transaction(reconcileWithManager);
   }
 
   async listForUser(userId: string): Promise<TenantMembershipView[]> {
@@ -507,6 +603,10 @@ export class TenantService {
       throw Errors.unauthorized('Expired tenant placement assertion');
     }
     return claim;
+  }
+
+  verifyPlacementClaimV2(compactJws: string, hostname: string, requestPath: string): TenantPlacementClaimV2 {
+    return tenantPlacementAssertionService.verifyV2({ compactJws, hostname, requestPath });
   }
 }
 

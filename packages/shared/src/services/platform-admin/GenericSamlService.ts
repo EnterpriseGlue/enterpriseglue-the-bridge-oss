@@ -160,16 +160,36 @@ function requestCorrelationCache(expectedRequestId: string) {
   };
 }
 
-function client(raw: Record<string, unknown>, expectedRequestId: string): { config: GenericSamlProviderConfiguration; saml: any } {
+async function resolveSamlSecret(
+  reference: string | undefined,
+  purpose: 'saml.idp_signing_certificate' | 'saml.request_signing_private_key' | 'saml.request_signing_certificate',
+  context?: { tenantId?: string | null; correlationId?: string },
+): Promise<string | null> {
+  if (!reference) return null;
+  const stored = reference.startsWith('ref:') ? reference : `ref:${reference}`;
+  if (!stored.includes('tenant-secret://')) return secretResolver.resolveStored(stored);
+  if (!context?.tenantId) throw new Error('SAML tenant secret context is unavailable');
+  return secretResolver.resolveTenantStored(stored, {
+    tenantId: context.tenantId,
+    purpose,
+    ...(context.correlationId ? { correlationId: context.correlationId } : {}),
+  });
+}
+
+async function client(
+  raw: Record<string, unknown>,
+  expectedRequestId: string,
+  secretContext?: { tenantId?: string | null; correlationId?: string },
+): Promise<{ config: GenericSamlProviderConfiguration; saml: any }> {
   if (!/^_[A-Za-z0-9_-]{32,160}$/.test(expectedRequestId)) throw new Error('SAML authentication request id is invalid');
   const config = configuration(raw);
-  const certificate = secretResolver.resolveStored(config.signingCertificateRef.startsWith('ref:') ? config.signingCertificateRef : `ref:${config.signingCertificateRef}`);
+  const certificate = await resolveSamlSecret(config.signingCertificateRef, 'saml.idp_signing_certificate', secretContext);
   if (!certificate) throw new Error('SAML signing certificate reference is unavailable');
   const requestSigningPrivateKey = config.requestSigningPrivateKeyRef
-    ? secretResolver.resolveStored(config.requestSigningPrivateKeyRef.startsWith('ref:') ? config.requestSigningPrivateKeyRef : `ref:${config.requestSigningPrivateKeyRef}`)
+    ? await resolveSamlSecret(config.requestSigningPrivateKeyRef, 'saml.request_signing_private_key', secretContext)
     : null;
   const requestSigningCertificate = config.requestSigningCertificateRef
-    ? secretResolver.resolveStored(config.requestSigningCertificateRef.startsWith('ref:') ? config.requestSigningCertificateRef : `ref:${config.requestSigningCertificateRef}`)
+    ? await resolveSamlSecret(config.requestSigningCertificateRef, 'saml.request_signing_certificate', secretContext)
     : null;
   if (config.sloUrl && !requestSigningPrivateKey) throw new Error('SAML request-signing private key reference is unavailable');
   return {
@@ -198,16 +218,16 @@ function client(raw: Record<string, unknown>, expectedRequestId: string): { conf
 }
 
 export class GenericSamlService {
-  async createAuthorizationRequest(raw: Record<string, unknown>, relayState: string, requestId: string): Promise<{ url: string; entryPoint: string }> {
+  async createAuthorizationRequest(raw: Record<string, unknown>, relayState: string, requestId: string, secretContext?: { tenantId?: string | null; correlationId?: string }): Promise<{ url: string; entryPoint: string }> {
     try {
-      const { config, saml } = client(raw, requestId);
+      const { config, saml } = await client(raw, requestId, secretContext);
       return { url: await saml.getAuthorizeUrlAsync(relayState, undefined, {}), entryPoint: config.ssoUrl };
     } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
-  async validatePostResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string): Promise<SamlProfile> {
+  async validatePostResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string, secretContext?: { tenantId?: string | null; correlationId?: string }): Promise<SamlProfile> {
     try {
-      const { config, saml } = client(raw, expectedRequestId);
+      const { config, saml } = await client(raw, expectedRequestId, secretContext);
       const { profile, loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
       if (loggedOut) throw new Error('Unexpected SAML logout response');
       if (!profile) throw new Error('SAML assertion did not contain a profile');
@@ -262,20 +282,21 @@ export class GenericSamlService {
     relayState: string,
     profile: { nameID: string; nameIDFormat: string; sessionIndex?: string },
     correlatedRequestId?: string,
+    secretContext?: { tenantId?: string | null; correlationId?: string },
   ): Promise<{ url: string; requestId: string } | null> {
     const requestId = correlatedRequestId || `_${randomBytes(32).toString('base64url')}`;
     try {
-      const { config, saml } = client(raw, requestId);
+      const { config, saml } = await client(raw, requestId, secretContext);
       if (!config.sloUrl) return null;
       return { url: await saml.getLogoutUrlAsync(profile, relayState, {}), requestId };
     } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
   /** Accepts only XML-signed HTTP-POST LogoutRequest messages from the configured IdP. */
-  async validatePostLogoutRequest(raw: Record<string, unknown>, samlRequest: string): Promise<SamlProfile> {
+  async validatePostLogoutRequest(raw: Record<string, unknown>, samlRequest: string, secretContext?: { tenantId?: string | null; correlationId?: string }): Promise<SamlProfile> {
     const requestId = `_${randomBytes(32).toString('base64url')}`;
     try {
-      const { config, saml } = client(raw, requestId);
+      const { config, saml } = await client(raw, requestId, secretContext);
       if (!config.sloUrl) throw new Error('SAML single logout is not configured');
       const { profile, loggedOut } = await saml.validatePostRequestAsync({ SAMLRequest: samlRequest });
       if (!loggedOut || !profile || profile.issuer !== config.idpEntityId) throw new Error('Invalid SAML LogoutRequest');
@@ -283,10 +304,10 @@ export class GenericSamlService {
     } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
   }
 
-  async createLogoutResponse(raw: Record<string, unknown>, request: SamlProfile, relayState: string): Promise<string> {
+  async createLogoutResponse(raw: Record<string, unknown>, request: SamlProfile, relayState: string, secretContext?: { tenantId?: string | null; correlationId?: string }): Promise<string> {
     const requestId = `_${randomBytes(32).toString('base64url')}`;
     try {
-      const { config, saml } = client(raw, requestId);
+      const { config, saml } = await client(raw, requestId, secretContext);
       if (!config.sloUrl) throw new Error('SAML single logout is not configured');
       return await saml.getLogoutResponseUrlAsync(request, relayState, {}, true);
     } catch (error) { throw classifyIdentityProviderFailure(error); }
@@ -297,18 +318,19 @@ export class GenericSamlService {
     query: Record<string, unknown>,
     originalQuery: string,
     expectedRequestId: string,
+    secretContext?: { tenantId?: string | null; correlationId?: string },
   ): Promise<void> {
     try {
       if (typeof query.Signature !== 'string' || typeof query.SigAlg !== 'string') throw new Error('SAML Redirect LogoutResponse must be signed');
-      const { saml } = client(raw, expectedRequestId);
+      const { saml } = await client(raw, expectedRequestId, secretContext);
       const { loggedOut } = await saml.validateRedirectAsync(query, originalQuery);
       if (!loggedOut) throw new Error('Invalid SAML LogoutResponse');
     } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
   }
 
-  async validatePostLogoutResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string): Promise<void> {
+  async validatePostLogoutResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string, secretContext?: { tenantId?: string | null; correlationId?: string }): Promise<void> {
     try {
-      const { saml } = client(raw, expectedRequestId);
+      const { saml } = await client(raw, expectedRequestId, secretContext);
       const { loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
       if (!loggedOut) throw new Error('Invalid SAML LogoutResponse');
     } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }

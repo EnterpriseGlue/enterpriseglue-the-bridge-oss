@@ -153,6 +153,10 @@ export const TenantPermissions = {
   MEMBERS_MANAGE: 'tenant:members:manage',
   SSO_PROVIDERS_VIEW: 'tenant:sso-providers:view',
   SSO_PROVIDERS_MANAGE: 'tenant:sso-providers:manage',
+  APPS_VIEW: 'tenant:apps:view',
+  APPS_REQUEST: 'tenant:apps:request',
+  APPS_MANAGE: 'tenant:apps:manage',
+  APPS_USE: 'tenant:apps:use',
 } as const;
 
 /**
@@ -1254,10 +1258,16 @@ export const TenantRolePermissions: Record<'admin' | 'engineOperator' | 'viewer'
   ],
   engineOperator: [
     TenantPermissions.SETTINGS_VIEW,
+    TenantPermissions.APPS_VIEW,
+    TenantPermissions.APPS_REQUEST,
+    TenantPermissions.APPS_USE,
     ...TENANT_SAFE_ENGINE_PERMISSION_IDS.filter((permission) => permission !== EnginePermissions.VARIABLES_EDIT),
   ],
   viewer: [
     TenantPermissions.SETTINGS_VIEW,
+    TenantPermissions.APPS_VIEW,
+    TenantPermissions.APPS_REQUEST,
+    TenantPermissions.APPS_USE,
     ProjectPermissions.MEMBERS_VIEW,
     ProjectPermissions.FILES_VIEW,
     ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,

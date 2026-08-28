@@ -86,6 +86,10 @@ import {
   type PluginControlRouteOptionsV1,
 } from './pluginControlRoutes.js';
 import { DatabasePluginControlStoreV1 } from './pluginControlStore.js';
+import {
+  configuredPluginTenantEligibilityVerifierV1,
+  type PluginTenantEligibilityVerifierV1,
+} from './pluginTenantEligibility.js';
 import { PluginEventDispatcherV1 } from './pluginEventDispatcher.js';
 import { DatabasePluginEventDeliveryStoreV1 } from './pluginEventDeliveryStore.js';
 import { PluginEngineEventPollerV1 } from './pluginEngineEventPoller.js';
@@ -196,6 +200,13 @@ export interface PluginControlSourceRecordV1 {
   sourceRecordHash: string;
   installerEnabled: boolean;
   enablementScope: 'deployment' | 'tenant';
+  /** Added in host 0.11; omitted legacy snapshots are treated as provider=none. */
+  entitlementProvider?: 'none' | 'plugin';
+  entitlementFeature?: string;
+  tenantConfiguration?: {
+    relativePath: string;
+    schemaSha256: string | null;
+  };
   compatible: boolean;
   healthy: boolean;
   entitled:
@@ -254,7 +265,7 @@ export interface PluginOperationAuthorizationInputV1 {
   actionId: string;
   subjectRef: string;
   tenantRef?: string;
-  resourceType: 'platform' | 'engine';
+  resourceType: 'platform' | 'engine' | 'tenant';
   resourceRef?: string;
 }
 
@@ -277,6 +288,8 @@ export interface PluginPlatformRouteOptionsV1 {
    * optional additional host policy for resource bindings.
    */
   operationAuthorizer?: PluginOperationAuthorizerV1;
+  /** Trusted verifier for signed tenant eligibility projections. */
+  tenantEligibilityVerifier?: PluginTenantEligibilityVerifierV1;
   hostBroker?: Partial<PluginHostBrokerRouteOptionsV1>;
   eventDispatcher?: PluginEventDispatcherV1;
   startEventWorker?: boolean;
@@ -300,6 +313,8 @@ export interface PluginPlatformRouteOptionsV1 {
     | 'deploymentManageMiddleware'
     | 'tenantReadMiddleware'
     | 'tenantManageMiddleware'
+    | 'tenantRequestMiddleware'
+    | 'eligibilityWorkloadMiddleware'
     | 'deploymentAdminMiddleware'
     | 'tenantAdminMiddleware'
   >;
@@ -948,6 +963,9 @@ export class PluginHostRuntimeV1 {
         .map((record) => {
           const issue = issueByPlugin.get(record.pluginId);
           const compatible = !issue;
+          const tenantConfiguration = tenantConfigurationFromManifest(
+            record.manifest,
+          );
           return {
             pluginId: record.pluginId,
             version: record.version,
@@ -972,6 +990,11 @@ export class PluginHostRuntimeV1 {
             ),
             installerEnabled: record.enabled,
             enablementScope: record.manifest.scope.enablement,
+            entitlementProvider: record.manifest.entitlement.provider,
+            ...(record.manifest.entitlement.provider === 'plugin'
+              ? { entitlementFeature: record.manifest.entitlement.feature }
+              : {}),
+            ...(tenantConfiguration ? { tenantConfiguration } : {}),
             compatible,
             healthy:
               compatible &&
@@ -988,6 +1011,27 @@ export class PluginHostRuntimeV1 {
     };
   }
 
+}
+
+function tenantConfigurationFromManifest(
+  manifest: EnterpriseGluePluginManifestV1,
+): PluginControlSourceRecordV1['tenantConfiguration'] | undefined {
+  const settings = manifest.contributions.find(
+    (contribution) =>
+      contribution.kind === 'settings' && contribution.scope === 'tenant',
+  );
+  if (!settings || settings.kind !== 'settings') return undefined;
+  const route = manifest.contributions.find(
+    (contribution) =>
+      contribution.kind === 'route' &&
+      contribution.id === settings.routeId &&
+      contribution.scope === 'tenant',
+  );
+  if (!route || route.kind !== 'route') return undefined;
+  return {
+    relativePath: route.relativePath,
+    schemaSha256: settings.configurationSchema?.sha256 ?? null,
+  };
 }
 
 function safeReasonForResolutionIssue(
@@ -1112,6 +1156,21 @@ function operationAuthorizationV1(input: {
     };
   }
   return null;
+}
+
+export function isHostOwnedPluginOperationV1(
+  manifest: EnterpriseGluePluginManifestV1,
+  operationId: string,
+): boolean {
+  return (
+    manifest.events.subscriptions.some(
+      (subscription) => subscription.deliveryOperationId === operationId,
+    ) ||
+    manifest.jobs.fixedSchedules.some(
+      (schedule) => schedule.deliveryOperationId === operationId,
+    ) ||
+    manifest.contributionAvailability?.refreshOperationId === operationId
+  );
 }
 
 async function defaultPluginOperationAuthorizerV1(
@@ -1242,6 +1301,22 @@ async function handlePluginOperation(
     response.status(404).json({ error: 'Plugin operation not available' });
     return;
   }
+  if (
+    record.manifest.scope.enablement === 'tenant' &&
+    (!request.tenant?.tenantId ||
+      !(await operationAuthorizer({
+        pluginId: record.pluginId,
+        operationId,
+        actionId: 'tenant.apps.use',
+        subjectRef: request.user!.userId,
+        tenantRef: request.tenant.tenantId,
+        resourceType: 'tenant',
+        resourceRef: request.tenant.tenantId,
+      })))
+  ) {
+    response.status(403).json({ error: 'Plugin operation is not authorized' });
+    return;
+  }
   const backend = record.manifest.deployment.backend;
   if (!backend) {
     response.status(404).json({ error: 'Plugin operation not available' });
@@ -1251,6 +1326,10 @@ async function handlePluginOperation(
     (candidate) => candidate.operationId === operationId,
   );
   if (!operation) {
+    response.status(404).json({ error: 'Plugin operation not available' });
+    return;
+  }
+  if (isHostOwnedPluginOperationV1(record.manifest, operationId)) {
     response.status(404).json({ error: 'Plugin operation not available' });
     return;
   }
@@ -1623,12 +1702,24 @@ export function registerPluginPlatformRoutes(
       ? (defaultControlPlane ??= new PluginControlPlaneV1(
           runtime,
           new DatabasePluginControlStoreV1(),
-          { defaultTenantRef: DEFAULT_TENANT_ID },
+          {
+            defaultTenantRef: DEFAULT_TENANT_ID,
+            tenantActivationPolicy: configuredTenantActivationPolicy(),
+            tenantEligibilityVerifier:
+              options.tenantEligibilityVerifier ??
+              configuredPluginTenantEligibilityVerifierV1(),
+          },
         ))
       : new PluginControlPlaneV1(
           runtime,
           new DatabasePluginControlStoreV1(),
-          { defaultTenantRef: DEFAULT_TENANT_ID },
+          {
+            defaultTenantRef: DEFAULT_TENANT_ID,
+            tenantActivationPolicy: configuredTenantActivationPolicy(),
+            tenantEligibilityVerifier:
+              options.tenantEligibilityVerifier ??
+              configuredPluginTenantEligibilityVerifierV1(),
+          },
         ));
   const gatewayAdmission =
     options.gatewayAdmission ?? defaultPluginGatewayAdmissionV1();
@@ -1892,6 +1983,18 @@ export function registerPluginPlatformRoutes(
       },
     );
   }
+}
+
+function configuredTenantActivationPolicy(): 'direct' | 'approval_required' {
+  const value =
+    process.env.ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY?.trim() ||
+    'direct';
+  if (value !== 'direct' && value !== 'approval_required') {
+    throw new Error(
+      'ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY must be direct or approval_required',
+    );
+  }
+  return value;
 }
 
 function configuredPluginManagerCatalog():

@@ -19,6 +19,8 @@ in `engine-tenant-mappings.json`. See
 | EXPOSE_BACKEND | No | true | Publish backend on host in Docker dev (`true`/`false`) |
 | FRONTEND_HOST_PORT | No | 5173 (dev), 8080 (prod) | Frontend host port |
 | DATABASE_TYPE | Yes | postgres | Database engine type |
+| EG_DATABASE_STARTUP_MODE | No | apply | `apply` retains automatic schema migration/bootstrap. `verify` performs fail-closed readiness and integrity checks without DDL for split Kubernetes API/worker identities. |
+| EG_RUNTIME_ROLE | No | all | `all` preserves the combined server/worker process; `api` serves HTTP without background pollers; `worker` runs pollers without a public listener. |
 | JWT_SECRET | Yes | dev value | Must be strong in production |
 | ADMIN_EMAIL | Yes | admin@enterpriseglue.ai | Bootstrap admin user |
 | ADMIN_PASSWORD | Yes | dev value | Change in production |
@@ -32,9 +34,32 @@ in `engine-tenant-mappings.json`. See
 | --- | --- | --- | --- |
 | EG_TENANCY_MODE | No | single | `single` permits only the canonical default tenant; `pooled` enables the pre-production multi-tenant foundation and requires PostgreSQL RLS plus the complete deployment qualification gates. |
 | EG_TENANT_BASE_DOMAIN | No | unset | Managed tenant hostname suffix; `<tenant-slug>.<base-domain>` resolves the canonical tenant. |
-| EG_TENANT_PLACEMENT_KEY | Required for production pooled mode | unset | Secret of at least 32 characters used to verify short-lived control-plane placement assertions. |
+| EG_TENANT_PLACEMENT_KEY | Required for production pooled mode when v2 is unset | unset | Secret of at least 32 characters used to verify legacy placement v1 assertions during the compatibility window. |
 | EG_TENANT_PLACEMENT_MAX_AGE_SECONDS | No | 120 | Maximum assertion lifetime in seconds; maximum 3600. |
+| EG_TENANT_PLACEMENT_V2_JWKS_JSON | Required for cloud-required pooled mode | unset | Public ES256 JWKS. Each accepted key has a unique `kid`; overlapping keys permit rotation. |
+| EG_TENANT_PLACEMENT_V2_ISSUER | Required for cloud-required pooled mode | unset | Exact trusted placement assertion issuer. |
+| EG_TENANT_PLACEMENT_V2_AUDIENCE | Required for cloud-required pooled mode | unset | Exact shard assertion audience and workload receipt audience. |
+| EG_TENANT_PLACEMENT_V2_SHARD_ID | Required for cloud-required pooled mode | unset | Canonical shard identity; must match the durable tenant placement key. |
+| EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS | No | 5 | Clock tolerance for `iat`, `nbf`, and `exp`; maximum 60. |
+| EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2, signed workload receipts, forced RLS, the tenant secret broker, and signed tenant application eligibility without changing the self-hosted default. |
+| EG_TENANT_APP_ELIGIBILITY_REQUIRED | No | false | Set true for SaaS shards. Requires the complete tenant application eligibility issuer, audience, and JWKS configuration. |
+| EG_TENANT_APP_ELIGIBILITY_JWKS_JSON | Required when eligibility is required | unset | Public P-256 ES256 JWKS with unique `kid` values; overlapping keys support rotation. |
+| EG_TENANT_APP_ELIGIBILITY_ISSUER | Required when eligibility is required | unset | Exact trusted issuer for signed tenant/plugin eligibility projections. |
+| EG_TENANT_APP_ELIGIBILITY_AUDIENCE | Required when eligibility is required | unset | Exact shard audience for signed tenant/plugin eligibility projections. |
+| EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS | No | 60 | Projection clock tolerance from 0 to 300 seconds. |
+| EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS | No | 604800 | Maximum projection lifetime from 60 to 2592000 seconds. |
+| EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY | Required for cloud-required pooled mode | unset | PEM-encoded P-256 private key; may use escaped newlines. Never expose it through APIs or logs. |
+| EG_TENANT_WORKLOAD_RECEIPT_KEY_ID | Required for cloud-required pooled mode | unset | Public identifier for the workload receipt signing key. |
+| EG_TENANT_WORKLOAD_RECEIPT_ISSUER | Required for cloud-required pooled mode | unset | Stable shard receipt issuer verified by the control plane. |
 | EG_TENANT_RLS_ENFORCED | Required for pooled mode | false | Must be `true`; startup verifies forced PostgreSQL row-level security and rejects superuser or `BYPASSRLS` application roles before serving pooled traffic. |
+| EG_TENANT_SECRET_BROKER_URL | Required for cloud-required mode | unset | Private HTTPS broker base URL; loopback HTTP is development-only. |
+| EG_TENANT_SECRET_BROKER_TOKEN_REF | Required for cloud-required mode | unset | Broker bearer-token reference resolved by the existing environment, file, or Docker provider; tenant-secret references are forbidden. |
+| EG_TENANT_SECRET_BROKER_TIMEOUT_MS | No | 5000 | Private broker request timeout in milliseconds; range 100-30000. |
+| EG_TENANT_SECRET_BROKER_CACHE_TTL_MS | No | 15000 | Bounded in-memory resolved-value TTL in milliseconds; 0 disables caching, maximum 60000. |
+| EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES | No | 256 | Maximum resolved tenant-secret values cached per backend process; maximum 1024. |
+| EG_TENANT_SECRET_BROKER_REQUIRED | Required for cloud-required mode | false | Fails startup unless URL and token reference are present. |
+| EG_TENANT_SECRET_BREAK_GLASS_ENABLED | No | false | Enables the `tenant:lifecycle` service-account recovery route for already-available local references; never accepts secret values. |
+| ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY | No | direct | `direct` lets tenant administrators activate applications; `approval_required` requires a member request and tenant-admin decision. Invalid values fail startup. |
 
 ## Backend (Required by DATABASE_TYPE)
 

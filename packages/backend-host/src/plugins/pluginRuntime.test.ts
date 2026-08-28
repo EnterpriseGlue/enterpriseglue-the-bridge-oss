@@ -38,6 +38,7 @@ import {
 import {
   defaultPluginHostCapabilitiesV1,
   defaultPluginPlatformCapabilityCatalogV1,
+  isHostOwnedPluginOperationV1,
   PluginHostRuntimeV1,
   registerPluginPlatformRoutes,
   type PluginHostRuntimeOptions,
@@ -271,6 +272,46 @@ async function fixture() {
 }
 
 describe('PluginHostRuntimeV1', () => {
+  it('keeps host-owned delivery operations off the interactive gateway', () => {
+    const value = manifest(
+      Buffer.from('frontend'),
+      Buffer.from('{}'),
+      Buffer.from('{}'),
+    );
+    value.events.subscriptions = [
+      {
+        type: 'io.enterpriseglue.host.engine-inventory.v1',
+        deliveryOperationId: operationId,
+        schema: { path: 'schemas/event.json', sha256: 'a'.repeat(64) },
+        permission: 'host.events.subscribe.engine_inventory',
+        maxAttempts: 3,
+      },
+    ];
+    expect(isHostOwnedPluginOperationV1(value, operationId)).toBe(true);
+    value.events.subscriptions = [];
+    value.jobs.fixedSchedules = [
+      {
+        jobType: `${pluginId}.refresh`,
+        deliveryOperationId: operationId,
+        allowedIntervalsSeconds: [60],
+        permission: 'host.jobs.schedule_fixed',
+        maxAttempts: 3,
+      },
+    ];
+    expect(isHostOwnedPluginOperationV1(value, operationId)).toBe(true);
+    value.jobs.fixedSchedules = [];
+    value.contributionAvailability = {
+      refreshOperationId: operationId,
+      refreshIntervalSeconds: 60,
+      maximumStalenessSeconds: 120,
+      gatedContributionIds: [`${pluginId}.route`],
+    };
+    expect(isHostOwnedPluginOperationV1(value, operationId)).toBe(true);
+    expect(
+      isHostOwnedPluginOperationV1(value, `${pluginId}.interactive`),
+    ).toBe(false);
+  });
+
   it('advertises and enforces the current and previous SDK package lines', () => {
     const catalog = defaultPluginPlatformCapabilityCatalogV1();
     const capabilities = defaultPluginHostCapabilitiesV1();

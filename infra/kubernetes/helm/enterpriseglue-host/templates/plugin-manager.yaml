@@ -1,0 +1,94 @@
+{{- if .Values.pluginManager.enabled }}
+{{- if not (regexMatch "@sha256:[a-f0-9]{64}$" .Values.pluginManager.image) }}
+{{- fail "pluginManager.image must be an immutable digest reference" }}
+{{- end }}
+{{- if not .Values.pluginManager.state.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-plugin-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: plugin-manager
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.pluginManager.state.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.pluginManager.state.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-plugin-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: plugin-manager
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels:
+      {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "plugin-manager") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "plugin-manager") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.pluginManager.serviceAccountName }}
+      automountServiceAccountToken: true
+      securityContext:
+        {{- include "enterpriseglue-host.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: manager
+          image: {{ .Values.pluginManager.image | quote }}
+          imagePullPolicy: {{ .Values.pluginManager.imagePullPolicy }}
+          env:
+            - { name: ENTERPRISEGLUE_PLUGIN_MANAGER_CONFIG_FILE, value: /etc/enterpriseglue/plugin-manager/manager-config.json }
+          ports:
+            - { name: health, containerPort: 8788 }
+          readinessProbe:
+            httpGet: { path: /_manager/ready, port: health }
+          livenessProbe:
+            httpGet: { path: /_manager/health, port: health }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.pluginManager.resources | nindent 12 }}
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/enterpriseglue/plugin-manager/manager-config.json
+              subPath: {{ .Values.pluginManager.configurationSecret.key }}
+              readOnly: true
+            - { name: state, mountPath: /var/lib/enterpriseglue/plugin-manager }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: configuration
+          secret:
+            secretName: {{ .Values.pluginManager.configurationSecret.name }}
+            defaultMode: 0400
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-plugin-manager" (include "enterpriseglue-host.fullname" .)) .Values.pluginManager.state.existingClaim }}
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-plugin-manager-deny-ingress
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "plugin-manager") | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress: []
+{{- end }}
+

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enterpriseglue.io/plugins/reference-health/qualification-response-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "storage", "schedule"],
+  "properties": {
+    "status": { "const": "qualified" },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "revision"],
+      "properties": {
+        "action": { "const": "put" },
+        "revision": { "type": "string", "pattern": "^r[1-9][0-9]*$" }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "jobRef", "revision"],
+      "properties": {
+        "status": { "enum": ["scheduled", "duplicate"] },
+        "jobRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "revision": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

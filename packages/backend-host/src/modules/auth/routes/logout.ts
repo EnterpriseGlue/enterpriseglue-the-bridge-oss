@@ -99,7 +99,10 @@ router.post('/api/auth/logout', apiLimiter, requireAuth, validateBody(logoutSche
             nameID: providerSession.providerSubjectId,
             nameIDFormat: providerSession.providerNameIdFormat || 'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified',
             ...(providerSession.providerSessionId ? { sessionIndex: providerSession.providerSessionId } : {}),
-          }, requestId);
+          }, requestId, {
+            tenantId: provider.tenantId,
+            ...(typeof req.headers['x-correlation-id'] === 'string' ? { correlationId: req.headers['x-correlation-id'] } : {}),
+          });
           federatedLogoutUrl = request?.url || null;
         }
       }

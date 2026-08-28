@@ -35,6 +35,8 @@ import { AddPluginEvents1700000000117 } from '@enterpriseglue/shared/db/migratio
 import { AddPluginEmergencyControl1700000000119 } from '@enterpriseglue/shared/db/migrations/1700000000119-add-plugin-emergency-control.js';
 import { AddPluginGatewayAdmission1700000000120 } from '@enterpriseglue/shared/db/migrations/1700000000120-add-plugin-gateway-admission.js';
 import { AddPluginEventCircuit1700000000121 } from '@enterpriseglue/shared/db/migrations/1700000000121-add-plugin-event-circuit.js';
+import { AddTenantApplicationMarketplace1700000000128 } from '@enterpriseglue/shared/db/migrations/1700000000128-add-tenant-application-marketplace.js';
+import { AddTenantPluginEligibility1700000000129 } from '@enterpriseglue/shared/db/migrations/1700000000129-add-tenant-plugin-eligibility.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from '@enterpriseglue/shared/db/spanner-migration-ledger.js';
 import { MySQLAdapter } from '@enterpriseglue/shared/db/adapters/MySQLAdapter.js';
 import { OracleAdapter } from '@enterpriseglue/shared/db/adapters/OracleAdapter.js';
@@ -159,6 +161,8 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
         AddPluginEmergencyControl1700000000119,
         AddPluginGatewayAdmission1700000000120,
         AddPluginEventCircuit1700000000121,
+        AddTenantApplicationMarketplace1700000000128,
+        AddTenantPluginEligibility1700000000129,
     ]);
     const replicaSourceA = acceptanceDataSource(databaseUrl);
     const replicaSourceB = acceptanceDataSource(databaseUrl);
@@ -246,6 +250,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
       let secondaryExpectedRevision: string | undefined;
       let brokerBaseUrl = '';
       let brokerCallSequence = 0;
+      let primaryBrokerFailure = '';
       const verifiedClaims: Array<{
         operationId: string;
         subject: string;
@@ -322,8 +327,13 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
             }),
           },
         );
-        expect(brokerResponse.status).toBe(200);
-        const result = (await brokerResponse.json()) as {
+        const brokerBody = await brokerResponse.text();
+        if (brokerResponse.status !== 200) {
+          primaryBrokerFailure = `${brokerResponse.status}: ${brokerBody}`;
+          response.status(500).json({ error: 'broker_rejected' });
+          return;
+        }
+        const result = JSON.parse(brokerBody) as {
           revision: string;
         };
         response.status(200).json({ revision: result.revision });
@@ -417,8 +427,12 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
               }),
             },
           );
-          expect(brokerResponse.status).toBe(200);
-          const result = (await brokerResponse.json()) as {
+          const brokerBody = await brokerResponse.text();
+          expect(
+            brokerResponse.status,
+            `secondary storage broker rejected the sidecar call: ${brokerBody}`,
+          ).toBe(200);
+          const result = JSON.parse(brokerBody) as {
             revision: string;
           };
           secondaryExpectedRevision = result.revision;
@@ -482,8 +496,12 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
         pluginId,
         storageOperationId,
       );
-      expect(storedCursor.status).toBe(200);
-      await expect(storedCursor.json()).resolves.toEqual({ revision: 'r1' });
+      expect(primaryBrokerFailure).toBe('');
+      const storedCursorBody = await storedCursor.text();
+      expect({ status: storedCursor.status, body: storedCursorBody }).toEqual({
+        status: 200,
+        body: JSON.stringify({ revision: 'r1' }),
+      });
 
       brokerBaseUrl = hostB.baseUrl;
       const secondaryStoredCursor = await invokeOperation(
@@ -982,7 +1000,7 @@ function createReplica(
       openMs: 200,
     }),
     operationAuthorizer: async (input) =>
-      input.actionId === 'platform.dashboard.read' &&
+      ['platform.dashboard.read', 'tenant.apps.use'].includes(input.actionId) &&
       input.subjectRef === subjectRef &&
       input.tenantRef === tenantRef,
     eventDispatcher,

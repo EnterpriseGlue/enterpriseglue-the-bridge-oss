@@ -1,0 +1,66 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "tenant-eligibility-runtime-reconciliation",
+  "type": "feature",
+  "scope": "plugins",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds signed tenant application eligibility projections and fail-closed runtime admission across interactive and asynchronous plugin work.",
+  "userImpact": [
+    "Tenant application activation remains independent per tenant, while paid plugin execution additionally requires a current eligible state.",
+    "Self-hosted plugins declaring no entitlement provider continue to use the existing activation behavior.",
+    "Expiry and revocation stop new work without deleting retained plugin data."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Run the normal database migrations before enabling signed tenant eligibility.",
+      "Keep eligibility enforcement disabled unless a workload issuer and verification keys are configured."
+    ]
+  },
+  "configuration": [
+    "Adds opt-in signed tenant eligibility verification settings; existing self-hosted deployments remain unchanged by default.",
+    "Cloud-required deployments must configure the exact issuer, audience, and ES256 JWKS used by the eligibility authority."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds a workload-only endpoint for applying a signed tenant/plugin eligibility projection.",
+      "Adds safe eligibility state to tenant application responses without exposing price, agreement, or raw signature material.",
+      "Requires tenant.apps.use in addition to the manifest-declared action for interactive tenant plugin operations."
+    ]
+  },
+  "database": {
+    "migrations": ["1700000000129-add-tenant-plugin-eligibility"],
+    "rollbackSupported": true,
+    "notes": [
+      "The migration adds tenant/plugin eligibility projections without changing tenant activation or plugin-owned data.",
+      "Rollback removes only host eligibility projections after SaaS-required enforcement has been disabled."
+    ]
+  },
+  "security": [
+    "Eligibility JWS values are verified as ES256 against configured issuer, audience, tenant, plugin, release, revision, and time bounds before persistence.",
+    "Interactive gateway calls, frontend bootstrap, schedules, events, and contribution refresh all recheck effective availability.",
+    "Revocation and stale or invalid eligibility fail closed without deleting tenant plugin data."
+  ],
+  "documentation": [
+    "Documents the signed eligibility contract, effective availability equation, workload ingestion, runtime enforcement, configuration, compatibility, and rollback."
+  ],
+  "knownLimitations": [
+    "Real GKE and published-artifact qualification is delivered by the Kubernetes and combined cloud slices."
+  ],
+  "rollback": [
+    "Disable SaaS-required eligibility enforcement before rolling back the migration.",
+    "Do not delete plugin-owned tenant data when removing or expiring an eligibility projection."
+  ],
+  "validation": [
+    "Tests cover valid, stale, expired, wrong-tenant, wrong-plugin, wrong-release, wrong-issuer, wrong-audience, and unknown-key projections.",
+    "Tests cover different tenant eligibility states for one release and immediate denial of interactive, scheduled, event, and contribution work after deactivation or revocation."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.12.0", "newVersion": "0.13.0", "impact": "minor" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.10.0", "newVersion": "0.11.0", "impact": "minor" },
+    { "name": "@enterpriseglue/plugin-sdk", "previousVersion": "0.4.0", "newVersion": "0.5.0", "impact": "minor" }
+  ]
+}

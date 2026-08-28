@@ -22,10 +22,13 @@ vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 
 function renderTab(props: ComponentProps<typeof IdentityProvidersSettingsTab> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const initialPath = props.tenantAdminMode && props.tenantId
+    ? `/t/${props.tenantId}/admin/settings/identity-providers`
+    : '/admin/settings/identity-providers';
   const router = createMemoryRouter([{
     path: '*',
     element: <QueryClientProvider client={queryClient}><IdentityProvidersSettingsTab {...props} /><Link to="/admin/settings/identity-mappings">Other settings</Link></QueryClientProvider>,
-  }], { initialEntries: ['/admin/settings/identity-providers'] });
+  }], { initialEntries: [initialPath] });
   return render(<RouterProvider router={router} />);
 }
 
@@ -53,6 +56,7 @@ async function startProviderCreation(protocol: 'oidc' | 'saml' | 'ldap' = 'oidc'
 
 describe('IdentityProvidersSettingsTab', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/admin/settings/identity-providers');
     authState.permissions = {
       userId: 'admin-1',
       platform: ['platform:sso-providers:view', 'platform:sso-providers:manage'],
@@ -335,6 +339,48 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(await screen.findByText('Identity provider created')).toBeInTheDocument();
     expect(screen.getByText('Advanced OIDC is saved in a disabled state.')).toBeInTheDocument();
     await waitFor(() => expect(document.querySelector('.eg-settings-result-focus')).toHaveFocus());
+  });
+
+  it('submits tenant SSO secrets write-only and persists only the returned tenant-bound reference', async () => {
+    authState.permissions = {
+      userId: 'tenant-admin-1', tenantId: 'tenant-alpha', platform: [],
+      tenant: { resourceId: 'tenant-alpha', permissions: ['tenant:sso-providers:view', 'tenant:sso-providers:manage'] },
+      projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
+    };
+    const provision = vi.fn();
+    const create = vi.fn();
+    server.use(
+      http.get('/api/t/tenant-alpha/identity/providers', () => HttpResponse.json([identityProviderFixture])),
+      http.post('/api/t/tenant-alpha/identity/provider-secrets', async ({ request }) => {
+        provision(await request.json());
+        return HttpResponse.json({
+          purpose: 'oidc.client_secret',
+          reference: 'ref:tenant-secret://v1/tenant-alpha/oidc.client_secret/version-1',
+          version: '1', updatedAt: 10, previousRetired: false,
+        }, { status: 201 });
+      }),
+      http.post('/api/t/tenant-alpha/identity/providers', async ({ request }) => {
+        create(await request.json());
+        return HttpResponse.json(identityProviderFixture, { status: 201 });
+      }),
+    );
+    window.history.replaceState({}, '', '/t/tenant-alpha/admin/settings/identity-providers');
+    renderTab({ tenantAdminMode: true, tenantId: 'tenant-alpha' });
+    await screen.findByText('demo-oidc');
+    const workflow = await startProviderCreation('oidc', 'Tenant OIDC', 'tenant-oidc');
+    fireEvent.change(within(workflow).getByLabelText('Issuer URL'), { target: { value: 'https://login.tenant-alpha.example.test' } });
+    fireEvent.change(within(workflow).getByLabelText('Client ID'), { target: { value: 'tenant-alpha-client' } });
+    fireEvent.change(within(workflow).getByLabelText('Client secret value (optional)'), { target: { value: 'tenant-secret-value-sentinel' } });
+    fireEvent.change(within(workflow).getByLabelText('Callback URL'), { target: { value: 'https://app.example.test/api/auth/identity/callback' } });
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Create provider' }));
+
+    await waitFor(() => expect(provision).toHaveBeenCalledWith({ purpose: 'oidc.client_secret', value: 'tenant-secret-value-sentinel' }));
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    const providerBody = create.mock.calls[0][0];
+    expect(providerBody.configuration.clientSecretRef).toBe('ref:tenant-secret://v1/tenant-alpha/oidc.client_secret/version-1');
+    expect(JSON.stringify(providerBody)).not.toContain('tenant-secret-value-sentinel');
   });
 
   it('exposes LDAP identity and TLS trust fields that are available to headless configuration', async () => {

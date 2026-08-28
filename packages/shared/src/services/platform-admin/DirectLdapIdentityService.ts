@@ -169,11 +169,22 @@ function configuration(provider: IdentityProvider): LdapConfiguration {
   return { url, bindDn: required(raw.bindDn, 'bindDn'), bindPasswordRef: required(raw.bindPasswordRef, 'bindPasswordRef'), userBaseDn: required(raw.userBaseDn, 'userBaseDn'), userSearchFilter: required(raw.userSearchFilter, 'userSearchFilter'), userEnumerationFilter: typeof raw.userEnumerationFilter === 'string' && raw.userEnumerationFilter.trim() ? raw.userEnumerationFilter.trim() : '(objectClass=person)', pageSize: Number.isInteger(raw.pageSize) && Number(raw.pageSize) > 0 ? Math.min(Number(raw.pageSize), 1000) : 200, subjectAttribute: typeof raw.subjectAttribute === 'string' && raw.subjectAttribute.trim() ? raw.subjectAttribute.trim() : 'entryUUID', emailAttribute: typeof raw.emailAttribute === 'string' && raw.emailAttribute.trim() ? raw.emailAttribute.trim() : 'mail', groupBaseDn: required(raw.groupBaseDn, 'groupBaseDn'), groupIdAttribute: required(raw.groupIdAttribute, 'groupIdAttribute'), membershipMode, nestedGroups: raw.nestedGroups === true, tlsTrustRef };
 }
 
-function tlsTrust(config: LdapConfiguration): string | undefined {
+async function resolveLdapSecret(
+  provider: IdentityProvider,
+  reference: string,
+  purpose: 'ldap.bind_password' | 'ldap.tls_trust_certificate',
+): Promise<string | null> {
+  const stored = reference.startsWith('ref:') ? reference : `ref:${reference}`;
+  if (!stored.includes('tenant-secret://')) return secretResolver.resolveStored(stored);
+  if (!provider.tenantId) throw new Error('LDAP tenant secret context is unavailable');
+  return secretResolver.resolveTenantStored(stored, { tenantId: provider.tenantId, purpose });
+}
+
+async function tlsTrust(provider: IdentityProvider, config: LdapConfiguration): Promise<string | undefined> {
   if (!config.tlsTrustRef) return undefined;
   let certificate: string | null;
   try {
-    certificate = secretResolver.resolveStored(config.tlsTrustRef.startsWith('ref:') ? config.tlsTrustRef : `ref:${config.tlsTrustRef}`);
+    certificate = await resolveLdapSecret(provider, config.tlsTrustRef, 'ldap.tls_trust_certificate');
   } catch {
     throw new Error('LDAP TLS trust reference is unavailable');
   }
@@ -200,9 +211,9 @@ class DirectLdapIdentityService {
     const config = configuration(provider);
     let client: LdapClientLike | null = null;
     try {
-      const connectedClient = clientFactory(config.url, tlsTrust(config));
+      const connectedClient = clientFactory(config.url, await tlsTrust(provider, config));
       client = connectedClient;
-      const password = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
+      const password = await resolveLdapSecret(provider, config.bindPasswordRef, 'ldap.bind_password');
       if (!password) throw new Error('LDAP bind password reference is unavailable');
       try { await connectedClient.bind(config.bindDn, password); } catch (error) { throw ldapBindError(error, 'service'); }
       const entries = await this.enumerateUsers(connectedClient, config);
@@ -245,9 +256,9 @@ class DirectLdapIdentityService {
     const filter = userFilter(config.userSearchFilter, username.trim());
     let client: LdapClientLike | null = null;
     try {
-      const connectedClient = clientFactory(config.url, tlsTrust(config));
+      const connectedClient = clientFactory(config.url, await tlsTrust(provider, config));
       client = connectedClient;
-      const bindPassword = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
+      const bindPassword = await resolveLdapSecret(provider, config.bindPasswordRef, 'ldap.bind_password');
       if (!bindPassword) throw new Error('LDAP bind password reference is unavailable');
       try { await connectedClient.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
       const result = await connectedClient.search(config.userBaseDn, { scope: 'sub', filter, attributes: ['entryUUID', 'objectGUID', 'uid', 'mail', 'cn', 'givenName', 'sn', 'memberOf'], sizeLimit: 2, timeLimit: 5 });

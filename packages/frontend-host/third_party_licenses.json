@@ -18,6 +18,18 @@
     "licenses": "Apache-2.0",
     "repository": "https://github.com/carbon-design-system/carbon.git"
   },
+  "@ibm/plex-mono@1.1.0": {
+    "licenses": "OFL-1.1",
+    "repository": "https://github.com/ibm/plex.git"
+  },
+  "@ibm/plex-sans-arabic@1.1.0": {
+    "licenses": "OFL-1.1",
+    "repository": "https://github.com/ibm/plex.git"
+  },
+  "@ibm/plex-sans@1.1.0": {
+    "licenses": "OFL-1.1",
+    "repository": "https://github.com/ibm/plex.git"
+  },
   "@tanstack/react-query@5.102.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/TanStack/query.git",

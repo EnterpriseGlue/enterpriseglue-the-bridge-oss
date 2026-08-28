@@ -1,5 +1,5 @@
-# syntax=docker/dockerfile:1.7
-FROM node:24.10.0-alpine3.22 AS build
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+FROM node:24.10.0-alpine3.22@sha256:775ba24d35a13e74dedce1d2af4ad510337b68d8e22be89e0ce2ccc299329083 AS build
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -37,7 +37,7 @@ RUN pnpm --filter @enterpriseglue/plugin-sdk build \
       /output/node_modules/@enterpriseglue/plugin-sdk/dist \
   && cp -RL packages/plugin-sdk/node_modules/zod /output/node_modules/zod
 
-FROM node:24.10.0-alpine3.22
+FROM node:24.10.0-alpine3.22@sha256:775ba24d35a13e74dedce1d2af4ad510337b68d8e22be89e0ce2ccc299329083
 RUN addgroup -S -g 65532 reference \
   && adduser -S -D -H -u 65532 -G reference reference \
   && mkdir -p /var/lib/enterpriseglue/reference-health \

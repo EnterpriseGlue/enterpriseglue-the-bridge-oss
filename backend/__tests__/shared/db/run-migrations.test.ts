@@ -104,6 +104,50 @@ describe('runMigrations bootstrap behavior', () => {
     (adapter.getDatabaseType as unknown as Mock).mockReturnValue('oracle');
   });
 
+  it('verifies a ready schema without synchronizing or applying migrations', async () => {
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const integrityRunner = createIntegrityRunner();
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: `main.${String(entity.name).toLowerCase()}`,
+      })),
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(false),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations({ mode: 'verify' });
+
+    expect(dataSource.synchronize).not.toHaveBeenCalled();
+    expect(dataSource.runMigrations).not.toHaveBeenCalled();
+    expect(bootstrapRunner.release).toHaveBeenCalledOnce();
+    expect(integrityRunner.release).toHaveBeenCalledOnce();
+  });
+
+  it('fails verification before application startup when migrations are pending', async () => {
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const dataSource = {
+      createQueryRunner: vi.fn().mockReturnValueOnce(bootstrapRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: `main.${String(entity.name).toLowerCase()}`,
+      })),
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await expect(runMigrations({ mode: 'verify' })).rejects.toThrow(
+      'Database has pending migrations',
+    );
+    expect(dataSource.synchronize).not.toHaveBeenCalled();
+    expect(dataSource.runMigrations).not.toHaveBeenCalled();
+  });
+
   it('runs synchronize when any core bootstrap table is missing', async () => {
     const bootstrapRunner = createBootstrapRunner(
       vi.fn(async (tablePath: string) => tablePath !== 'main.refresh_tokens')

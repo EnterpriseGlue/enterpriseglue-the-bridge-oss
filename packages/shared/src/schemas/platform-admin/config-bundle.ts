@@ -822,7 +822,7 @@ const ConfigServiceAccountSchema = z.object({
   name: z.string().trim().min(1).max(255),
   description: z.string().trim().max(2000).nullable().default(null),
   tokenRef: ConfigExternalSecretReferenceSchema,
-  scopes: z.array(z.literal('deployment:execute')).min(1),
+  scopes: z.array(z.enum(['deployment:execute', 'tenant:lifecycle'])).min(1),
   active: z.boolean().default(true),
   ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
 }).strict();

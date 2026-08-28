@@ -27,6 +27,8 @@ Audience: Developers and architects.
 ## Configuration
 - [Configuration Reference](reference/configuration.md)
 - [Configuration Matrix](reference/configuration-matrix.md)
+- [Tenant Workload Lifecycle API](reference/tenant-workload-lifecycle-api.md)
+- [Tenant Secret Broker](reference/tenant-secret-broker.md)
 - [Access Governance and Headless Configuration API](reference/access-governance-and-headless-api.md)
 - [Configure The Platform Without An Administrator](how-to/configure-platform-headlessly.md)
 - [Complete Headless Platform Administration Example](reference/headless-platform-administration.example.json)
@@ -58,6 +60,7 @@ Audience: Developers and architects.
 
 ## Development and Verification
 - [Documentation Publication Policy](development/documentation-publication-policy.md)
+- [Cloud-Readiness Tenant Ownership Inventory](development/cloud-readiness-ownership-inventory.md)
 - [EnterpriseGlue Codex Workflow Plugin](development/codex-workflow-plugin.md)
 - [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)
 - [Enterprise Backend Plugin Database API](reference/enterprise-backend-plugin-database-api.md)

@@ -26,6 +26,9 @@ export { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js
 export { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
 
 export async function startServer() {
+  const runtimeRole = config.runtimeRole;
+  const servesHttp = runtimeRole !== 'worker';
+  const runsWorkers = runtimeRole !== 'api';
   const app = createApp({ registerBaseRoutes: false, registerFinalMiddleware: false });
 
   // Expose middleware to enterprise plugin via app.locals
@@ -76,7 +79,12 @@ export async function startServer() {
     throw error;
   }
 
-  registerBaseRoutes(app, { notificationTenantResolver });
+  registerBaseRoutes(app, {
+    notificationTenantResolver,
+    // Route composition exposes the worker instances through app.locals. Start
+    // them only after migration readiness and bootstrap have completed.
+    startPluginWorkers: false,
+  });
   registerFinalMiddleware(app);
 
   // Initialize database schema before starting server
@@ -113,6 +121,15 @@ export async function startServer() {
     if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');
   }
 
+  if (runsWorkers) {
+    app.locals.enterpriseGluePluginContributionAvailabilityDispatcher?.start();
+    app.locals.enterpriseGluePluginEventDispatcher?.start();
+    app.locals.enterpriseGluePluginScheduleDispatcher?.start();
+    if (process.env.ENTERPRISEGLUE_PLUGIN_ENGINE_EVENT_POLLING_ENABLED === 'true') {
+      app.locals.enterpriseGluePluginEngineEventPoller?.start();
+    }
+  }
+
   // Seed Git providers on first run
   try {
     const { seedGitProviders } = await import('@enterpriseglue/shared/db/seed/gitProviders.js');
@@ -129,19 +146,24 @@ export async function startServer() {
     console.error('Failed to seed environment tags:', error);
   }
 
-  app.listen(config.port, () => {
-    console.log(`Voyager API listening on http://localhost:${config.port}`);
-    console.log(`API docs: http://localhost:${config.port}/api/docs`);
-
-  });
+  if (servesHttp) {
+    app.listen(config.port, () => {
+      console.log(`Voyager API listening on http://localhost:${config.port}`);
+      console.log(`API docs: http://localhost:${config.port}/api/docs`);
+    });
+  } else {
+    console.log('EnterpriseGlue worker runtime started without a public HTTP listener');
+  }
 
   // Start background pollers
-  void startBatchPollerIfActive();
-  void startSsoDiagnosticsPollerIfEnabled();
-  void startRuntimeInventoryPollerIfEnabled();
-  void startConfigBundleIdentityReplayPollerIfEnabled();
-  void startConfigBundleRuntimeReconciliationPollerIfEnabled();
-  void startCamundaNativeGrantSnapshotRetentionPoller();
+  if (runsWorkers) {
+    void startBatchPollerIfActive();
+    void startSsoDiagnosticsPollerIfEnabled();
+    void startRuntimeInventoryPollerIfEnabled();
+    void startConfigBundleIdentityReplayPollerIfEnabled();
+    void startConfigBundleRuntimeReconciliationPollerIfEnabled();
+    void startCamundaNativeGrantSnapshotRetentionPoller();
+  }
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));

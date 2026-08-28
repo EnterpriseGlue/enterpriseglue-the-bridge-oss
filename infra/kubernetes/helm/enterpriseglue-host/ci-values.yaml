@@ -1,0 +1,24 @@
+images:
+  backend:
+    repository: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend
+    digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  frontend:
+    repository: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend
+    digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+frontend:
+  autoscaling:
+    enabled: true
+backend:
+  autoscaling:
+    enabled: true
+workers:
+  autoscaling:
+    enabled: true
+pluginAssets:
+  enabled: true
+  existingClaim: enterpriseglue-plugin-assets
+pluginManager:
+  enabled: true
+  image: ghcr.io/enterpriseglue/plugin-manager@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+ingress:
+  enabled: true

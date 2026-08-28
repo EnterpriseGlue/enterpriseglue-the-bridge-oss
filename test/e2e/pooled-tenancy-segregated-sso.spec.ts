@@ -1,5 +1,6 @@
-import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { captureManualScreenshot, manualScreenshotDirectory } from './utils/manualScreenshots';
@@ -11,6 +12,7 @@ const enabled = process.env.POOLED_TENANCY_E2E === 'true' && isLocalUrl(baseUrl)
 const adminEmail = process.env.POOLED_TENANCY_ADMIN_EMAIL || '';
 const adminPassword = process.env.POOLED_TENANCY_ADMIN_PASSWORD || '';
 const oidcIssuer = process.env.POOLED_TENANCY_OIDC_ISSUER_URL || '';
+const oidcClientSecret = process.env.POOLED_TENANCY_OIDC_CLIENT_SECRET || '';
 const oidcUsername = process.env.POOLED_TENANCY_OIDC_USERNAME || 'oidc-operator';
 const oidcPassword = process.env.POOLED_TENANCY_OIDC_PASSWORD || 'local-oidc-operator';
 const samlUsername = process.env.POOLED_TENANCY_SAML_USERNAME || 'saml-operator';
@@ -22,6 +24,18 @@ const postgresPort = Number(process.env.POOLED_TENANCY_POSTGRES_PORT || 0);
 const postgresUser = process.env.POOLED_TENANCY_POSTGRES_USER || '';
 const postgresPassword = process.env.POOLED_TENANCY_POSTGRES_PASSWORD || '';
 const postgresDatabase = process.env.POOLED_TENANCY_POSTGRES_DATABASE || '';
+const eligibilityPrivateKeyFile = process.env.POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE || '';
+const eligibilityIssuer = process.env.POOLED_TENANCY_ELIGIBILITY_ISSUER || '';
+const eligibilityAudience = process.env.POOLED_TENANCY_ELIGIBILITY_AUDIENCE || '';
+const referencePluginDataDir = process.env.POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR || '';
+const referencePluginId = 'io.enterpriseglue.reference-health';
+const referencePluginVersion = '0.1.0';
+const referencePluginRelease = `registry.invalid/pooled-reference@sha256:${'1'.repeat(64)}`;
+const referenceStatusOperation = `${referencePluginId}.read-status`;
+const referenceQualificationOperation = `${referencePluginId}.qualify-runtime`;
+const referenceScheduleDeliveryOperation = `${referencePluginId}.deliver-scheduled-health`;
+const referenceEventDeliveryOperation = `${referencePluginId}.consume-engine-inventory`;
+const referenceEventType = 'io.enterpriseglue.host.engine-inventory.v1';
 
 function isLocalUrl(value: string): boolean {
   try {
@@ -39,6 +53,70 @@ async function expectStatus(response: APIResponse, status: number): Promise<Json
   const body = await json(response);
   expect(response.status(), JSON.stringify(body)).toBe(status);
   return body;
+}
+
+let eligibilityPrivateKeyPromise: Promise<ReturnType<typeof createPrivateKey>> | undefined;
+
+function signedTenantEligibility(input: {
+  tenantRef: string;
+  state: 'trial' | 'active' | 'grace' | 'expired' | 'revoked' | 'unavailable';
+  revision: number;
+}): Promise<string> {
+  eligibilityPrivateKeyPromise ??= readFile(eligibilityPrivateKeyFile, 'utf8')
+    .then((pem) => createPrivateKey(pem));
+  return eligibilityPrivateKeyPromise.then((privateKey) => {
+    const now = Math.floor(Date.now() / 1_000);
+    const header = Buffer.from(JSON.stringify({
+      alg: 'ES256',
+      kid: 'pooled-e2e-eligibility-1',
+      typ: 'JWT',
+    })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      schemaVersion: 'tenant-eligibility.plugin.enterpriseglue.io/v1',
+      iss: eligibilityIssuer,
+      aud: eligibilityAudience,
+      jti: `pooled-e2e-${input.tenantRef}-${input.revision}`,
+      tenantRef: input.tenantRef,
+      pluginId: referencePluginId,
+      pluginVersion: referencePluginVersion,
+      release: referencePluginRelease,
+      state: input.state,
+      effectiveFrom: null,
+      effectiveUntil: new Date((now + 1_800) * 1_000).toISOString(),
+      limitsHash: '0'.repeat(64),
+      revision: input.revision,
+      projectionRef: `pooled-e2e-projection-${input.tenantRef}`,
+      iat: now - 5,
+      exp: now + 3_600,
+    })).toString('base64url');
+    const signature = sign(
+      'sha256',
+      Buffer.from(`${header}.${payload}`, 'ascii'),
+      { key: privateKey, dsaEncoding: 'ieee-p1363' },
+    ).toString('base64url');
+    return `${header}.${payload}.${signature}`;
+  });
+}
+
+async function applyTenantEligibility(input: {
+  page: Page;
+  token: string;
+  tenantRef: string;
+  state: 'trial' | 'active' | 'grace' | 'expired' | 'revoked' | 'unavailable';
+  revision: number;
+}): Promise<JsonObject> {
+  return expectStatus(await input.page.request.put(
+    `/api/workloads/tenants/${encodeURIComponent(input.tenantRef)}/apps/${referencePluginId}/eligibility`,
+    {
+      headers: {
+        authorization: `Bearer ${input.token}`,
+        'x-correlation-id': `pooled-e2e-eligibility-${input.revision}`,
+      },
+      data: {
+        signedProjection: await signedTenantEligibility(input),
+      },
+    },
+  ), 200);
 }
 
 async function csrfToken(page: Page): Promise<string> {
@@ -126,6 +204,113 @@ async function markDiscoveryDomainVerified(domainId: string): Promise<void> {
   }
 }
 
+async function databaseRows(sql: string, parameters: unknown[] = []): Promise<JsonObject[]> {
+  const client = new Client({
+    host: postgresHost,
+    port: postgresPort,
+    user: postgresUser,
+    password: postgresPassword,
+    database: postgresDatabase,
+  });
+  await client.connect();
+  try {
+    return (await client.query(sql, parameters)).rows;
+  } finally {
+    await client.end();
+  }
+}
+
+async function forceScheduledJobDue(jobRef: string): Promise<void> {
+  const rows = await databaseRows(
+    `UPDATE main.plugin_scheduled_jobs
+     SET next_run_at = $1, status = 'scheduled', lease_owner = NULL, lease_expires_at = NULL, updated_at = $1
+     WHERE job_ref = $2
+     RETURNING job_ref`,
+    [Date.now() - 1_000, jobRef],
+  );
+  expect(rows).toEqual([{ job_ref: jobRef }]);
+}
+
+async function enqueueEngineInventoryEvent(input: {
+  tenantRef: string;
+  deliveryRef: string;
+  dueAt?: number;
+}): Promise<string> {
+  const now = Date.now();
+  const deliveryId = `pooled-e2e-${input.deliveryRef}`;
+  const event = {
+    specversion: '1.0',
+    id: `event-${input.deliveryRef}`,
+    source: 'enterpriseglue-oss',
+    type: referenceEventType,
+    subject: `engine-${input.deliveryRef}`,
+    time: new Date(now).toISOString(),
+    dataschema: 'https://schemas.enterpriseglue.io/events/engine-inventory-v1.json',
+    tenantRef: input.tenantRef,
+    data: {
+      engineRef: `engine-${input.deliveryRef}`,
+      product: 'operaton',
+      version: '7.24.0',
+      observedAtBucket: new Date(now).toISOString(),
+    },
+  };
+  const eventJson = JSON.stringify(event);
+  await databaseRows(
+    `INSERT INTO main.plugin_event_deliveries (
+       id, delivery_id, plugin_id, deployment_ref, tenant_ref,
+       subscription_type, operation_id, event_id, event_sha256, event_json,
+       status, attempt, max_attempts, next_attempt_at, lease_owner,
+       lease_expires_at, reason_code, delivered_at, created_at, updated_at
+     ) VALUES (
+       $1, $2, $3, 'oss-deployment', $4,
+       $5, $6, $7, $8, $9,
+       'pending', 0, 3, $10, NULL,
+       NULL, 'queued', NULL, $11, $11
+     )`,
+    [
+      randomUUID(),
+      deliveryId,
+      referencePluginId,
+      input.tenantRef,
+      referenceEventType,
+      referenceEventDeliveryOperation,
+      event.id,
+      createHash('sha256').update(eventJson).digest('hex'),
+      eventJson,
+      input.dueAt ?? now,
+      now,
+    ],
+  );
+  return deliveryId;
+}
+
+async function forcePluginEventDue(deliveryId: string): Promise<void> {
+  const rows = await databaseRows(
+    `UPDATE main.plugin_event_deliveries
+     SET next_attempt_at = $1, status = 'pending', lease_owner = NULL, lease_expires_at = NULL, updated_at = $1
+     WHERE delivery_id = $2
+     RETURNING delivery_id`,
+    [Date.now() - 1_000, deliveryId],
+  );
+  expect(rows).toEqual([{ delivery_id: deliveryId }]);
+}
+
+async function pluginDeliveryEvidence(): Promise<JsonObject[]> {
+  try {
+    const text = await readFile(
+      resolve(referencePluginDataDir, 'qualification-deliveries.jsonl'),
+      'utf8',
+    );
+    return text
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
 async function oidcLoginFromOrganizationFinder(browser: Browser, tenantSlug: string, displayName: string, email: string): Promise<BrowserContext> {
   const context = await newAppContext(browser);
   const page = await context.newPage();
@@ -204,27 +389,31 @@ async function ldapLogin(browser: Browser, tenantSlug: string, providerId: strin
   return context;
 }
 
-async function prepareLdapSecrets(): Promise<void> {
+async function identityFixtureSecrets(): Promise<{
+  samlSigningCertificate: string;
+  ldapBindPassword: string;
+  ldapTlsTrustCertificate: string;
+}> {
   const secretDir = process.env.LOCAL_IDENTITY_SECRET_DIR || '';
   const caPath = process.env.EG_LDAP_TEST_CA_CERT_PATH || '';
   const bindPassword = process.env.EG_LDAP_TEST_ADMIN_PASSWORD || '';
   if (!secretDir || !caPath || !bindPassword || !ldapPassword) throw new Error('Disposable LDAP fixture inputs are missing');
-  await mkdir(secretDir, { recursive: true, mode: 0o755 });
-  await copyFile(caPath, `${secretDir}/pooled-openldap-ca.crt`);
-  await writeFile(`${secretDir}/pooled-openldap-bind-password`, bindPassword, { mode: 0o644 });
-  await chmod(`${secretDir}/pooled-openldap-ca.crt`, 0o644);
-  await chmod(`${secretDir}/pooled-openldap-bind-password`, 0o644);
-  await chmod(secretDir, 0o711);
+  return {
+    samlSigningCertificate: await readFile(`${secretDir}/keycloak-saml-signing.crt`, 'utf8'),
+    ldapBindPassword: bindPassword,
+    ldapTlsTrustCertificate: await readFile(caPath, 'utf8'),
+  };
 }
 
 test.describe('Native pooled tenancy with segregated SSO', () => {
-  test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !ldapPassword
-    || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase,
+  test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !oidcClientSecret || !ldapPassword
+    || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase
+    || !referencePluginDataDir,
     'Run through test:native-tenancy:pooled-e2e with the disposable identity fixtures.');
 
   test('isolates tenant providers and completes OIDC, SAML, and LDAP tenant sign-in @pooled-tenancy-live @segregated-sso-live', async ({ browser }) => {
-    test.setTimeout(180_000);
-    await prepareLdapSecrets();
+    test.setTimeout(240_000);
+    const fixtureSecrets = await identityFixtureSecrets();
     const adminContext = await newAppContext(browser);
     const admin = await adminContext.newPage();
     const userContexts: BrowserContext[] = [];
@@ -245,15 +434,83 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         organizationDiscoveryEnabled: true,
       });
 
-      const tenants: Record<string, JsonObject> = {};
+      const tenants: Record<string, JsonObject & { id: string; slug: string }> = {};
       for (const [slug, name] of [['alpha', 'Alpha Industries'], ['bravo', 'Bravo Services'], ['charlie', 'Charlie Operations']]) {
-        tenants[slug] = await expectStatus(await post(admin, '/api/platform/tenants', {
+        const tenant = await expectStatus(await post(admin, '/api/platform/tenants', {
           name,
           slug,
           ownerUserId: administratorId,
           placementKey: 'pooled-e2e',
         }), 201);
+        expect(tenant).toMatchObject({ id: expect.any(String), slug });
+        tenants[slug] = tenant as JsonObject & { id: string; slug: string };
       }
+
+      const eligibilityServiceAccount = await expectStatus(await post(
+        admin,
+        '/api/authz/service-accounts',
+        {
+          name: 'Pooled E2E tenant eligibility controller',
+          description: 'Disposable workload identity for signed eligibility qualification',
+          scopes: ['tenant:lifecycle'],
+        },
+      ), 201);
+      expect(eligibilityServiceAccount.account).toMatchObject({
+        scopes: ['tenant:lifecycle'],
+        isActive: true,
+      });
+      const eligibilityToken = eligibilityServiceAccount.token as string;
+      expect(eligibilityToken).toMatch(/^egsa_/);
+      const alphaEligibility = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.alpha.id,
+        state: 'active',
+        revision: 1,
+      });
+      const bravoEligibility = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.bravo.id,
+        state: 'trial',
+        revision: 1,
+      });
+      const charlieEligibility = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.charlie.id,
+        state: 'revoked',
+        revision: 1,
+      });
+      expect(alphaEligibility).toMatchObject({ state: 'active', revision: 1 });
+      expect(bravoEligibility).toMatchObject({ state: 'trial', revision: 1 });
+      expect(charlieEligibility).toMatchObject({ state: 'revoked', revision: 1 });
+      expect(JSON.stringify(alphaEligibility)).not.toMatch(/tenantRef|signedProjection|price|agreement/i);
+
+      const secretInputs = {
+        alpha: { purpose: 'oidc.client_secret', value: oidcClientSecret },
+        bravo: { purpose: 'saml.idp_signing_certificate', value: fixtureSecrets.samlSigningCertificate },
+        charlieBind: { purpose: 'ldap.bind_password', value: fixtureSecrets.ldapBindPassword },
+        charlieTrust: { purpose: 'ldap.tls_trust_certificate', value: fixtureSecrets.ldapTlsTrustCertificate },
+      } as const;
+      const provisionSecret = async (slug: string, purpose: string, value: string) => {
+        const secret = await expectStatus(await post(admin, `/api/t/${slug}/identity/provider-secrets`, { purpose, value }), 201);
+        expect(secret).toMatchObject({ purpose, previousRetired: false });
+        expect(secret.reference).toMatch(new RegExp(`^ref:tenant-secret://v1/${tenants[slug].id}/${purpose.replace('.', '\\.')}/`));
+        expect(JSON.stringify(secret)).not.toContain(value);
+        return secret.reference as string;
+      };
+      const secretReferences = {
+        alpha: await provisionSecret('alpha', secretInputs.alpha.purpose, secretInputs.alpha.value),
+        bravo: await provisionSecret('bravo', secretInputs.bravo.purpose, secretInputs.bravo.value),
+        charlieBind: await provisionSecret('charlie', secretInputs.charlieBind.purpose, secretInputs.charlieBind.value),
+        charlieTrust: await provisionSecret('charlie', secretInputs.charlieTrust.purpose, secretInputs.charlieTrust.value),
+      };
+      await expectStatus(await post(admin, '/api/t/bravo/identity/provider-secrets/retire', {
+        purpose: 'oidc.client_secret',
+        reference: secretReferences.alpha,
+        confirmation: 'RETIRE_IDENTITY_PROVIDER_SECRET',
+      }), 400);
 
       await admin.goto('/admin/tenants');
       await expect(admin.getByRole('heading', { name: 'Tenants', exact: true })).toBeVisible();
@@ -308,6 +565,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           configuration: {
             issuerUrl: oidcIssuer,
             clientId: 'enterpriseglue-local',
+            clientSecretRef: secretReferences.alpha,
             callbackUrl,
             scopes: ['openid', 'profile', 'email'],
             groupClaim: 'groups',
@@ -329,7 +587,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
             callbackUrl: samlCallbackUrl,
             ssoUrl: `${oidcIssuer}/protocol/saml`,
             metadataUrl: `${oidcIssuer}/protocol/saml/descriptor`,
-            signingCertificateRef: 'file:///etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt',
+            signingCertificateRef: secretReferences.bravo,
             signatureAlgorithm: 'sha256',
             nameIdAttribute: 'nameID',
             emailAttribute: 'email',
@@ -347,7 +605,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           configuration: {
             url: 'ldaps://openldap:636',
             bindDn: process.env.EG_LDAP_TEST_BIND_DN,
-            bindPasswordRef: 'file:///etc/enterpriseglue/local-identity-secrets/pooled-openldap-bind-password',
+            bindPasswordRef: secretReferences.charlieBind,
             userBaseDn: 'ou=people,dc=identity-mock,dc=test',
             userSearchFilter: '(&(mail={username})(employeeType=active))',
             userEnumerationFilter: '(&(objectClass=inetOrgPerson)(employeeType=active))',
@@ -356,7 +614,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
             groupIdAttribute: 'businessCategory',
             membershipMode: 'group_search',
             nestedGroups: true,
-            tlsTrustRef: 'file:///etc/enterpriseglue/local-identity-secrets/pooled-openldap-ca.crt',
+            tlsTrustRef: secretReferences.charlieTrust,
             allowVerifiedEmailLinking: true,
           },
           sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'ldap_directory', scheduled: false },
@@ -372,6 +630,19 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
           providerSelectionMode: 'chooser',
         }), 200);
       }
+
+      const rotatedAlphaSecret = await expectStatus(await put(
+        admin,
+        '/api/t/alpha/identity/providers/tenant-sso/secrets/oidc.client_secret',
+        { value: oidcClientSecret },
+      ), 200);
+      expect(rotatedAlphaSecret).toMatchObject({ purpose: 'oidc.client_secret', previousRetired: true });
+      expect(rotatedAlphaSecret.reference).not.toBe(secretReferences.alpha);
+      expect(JSON.stringify(rotatedAlphaSecret)).not.toContain(oidcClientSecret);
+      const alphaSecretAvailability = await expectStatus(await admin.request.get(
+        '/api/t/alpha/identity/providers/tenant-sso/secrets/oidc.client_secret/availability',
+      ), 200);
+      expect(alphaSecretAvailability).toMatchObject({ purpose: 'oidc.client_secret', configured: true, available: true });
 
       expect(new Set(Object.values(providers).map((provider) => provider.id)).size).toBe(3);
       expect(Object.values(providers).map((provider) => provider.key)).toEqual(['tenant-sso', 'tenant-sso', 'tenant-sso']);
@@ -437,6 +708,260 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       await assertTenantSession(bravoContext, tenants.bravo, 'charlie');
       await assertTenantSession(charlieContext, tenants.charlie, 'alpha');
 
+      const alphaMember = await alphaContext.newPage();
+      const alphaCatalogue = await expectStatus(
+        await alphaMember.request.get('/api/t/alpha/apps'),
+        200,
+      );
+      expect(alphaCatalogue).toMatchObject({
+        activationPolicy: 'approval_required',
+        applications: [{
+          pluginId: referencePluginId,
+          status: 'available',
+          active: false,
+          entitled: 'active',
+          revision: 0,
+        }],
+      });
+      expect(JSON.stringify(alphaCatalogue)).not.toMatch(/bundle|registry|credential|tenantRef/i);
+      await expectStatus(await post(
+        alphaMember,
+        `/api/t/alpha/apps/${referencePluginId}/activate`,
+        { expectedRevision: 0, idempotencyKey: 'pooled-alpha-member-activate-0001' },
+      ), 403);
+      await expectStatus(await alphaMember.request.get('/api/t/bravo/apps'), 403);
+      const alphaRequested = await expectStatus(await post(
+        alphaMember,
+        `/api/t/alpha/apps/${referencePluginId}/activation-request`,
+        { expectedRevision: 0, idempotencyKey: 'pooled-alpha-request-0001' },
+      ), 200);
+      expect(alphaRequested).toMatchObject({ status: 'requested', active: false, revision: 1 });
+
+      const alphaApproved = await expectStatus(await post(
+        admin,
+        `/api/t/alpha/apps/${referencePluginId}/activation-request/decision`,
+        { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-alpha-approve-0001' },
+      ), 200);
+      expect(alphaApproved).toMatchObject({ status: 'active', active: true, revision: 2 });
+
+      const alphaStatus = await expectStatus(
+        await alphaContext.request.get(
+          `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        200,
+      );
+      expect(alphaStatus).toMatchObject({
+        status: 'ready',
+        pluginId: referencePluginId,
+        version: referencePluginVersion,
+      });
+      const alphaQualification = await expectStatus(
+        await post(
+          alphaMember,
+          `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceQualificationOperation}`,
+          { body: { runRef: 'alpha-pooled-runtime-1' } },
+        ),
+        200,
+      );
+      expect(alphaQualification).toMatchObject({
+        status: 'qualified',
+        storage: { action: 'put', revision: 'r1' },
+        schedule: {
+          status: 'scheduled',
+          jobRef: expect.any(String),
+          revision: 1,
+        },
+      });
+      const alphaStorage = await databaseRows(
+        `SELECT tenant_ref_key, storage_key, value_json, revision::text
+         FROM main.plugin_storage_entries
+         WHERE plugin_id = $1 AND scope = 'tenant'`,
+        [referencePluginId],
+      );
+      expect(alphaStorage).toEqual([{
+        tenant_ref_key: tenants.alpha.id,
+        storage_key: 'qualification/alpha-pooled-runtime-1',
+        value_json: JSON.stringify({ runRef: 'alpha-pooled-runtime-1', status: 'qualified' }),
+        revision: '1',
+      }]);
+      expect(alphaStorage).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ tenant_ref_key: tenants.bravo.id }),
+        ]),
+      );
+
+      const scheduledJobRef = alphaQualification.schedule.jobRef as string;
+      await forceScheduledJobDue(scheduledJobRef);
+      await expect.poll(
+        async () => (await databaseRows(
+          `SELECT status, reason_code, revision::text, attempt
+           FROM main.plugin_scheduled_jobs WHERE job_ref = $1`,
+          [scheduledJobRef],
+        ))[0],
+        { timeout: 20_000 },
+      ).toMatchObject({
+        status: 'scheduled',
+        reason_code: 'qualified',
+        revision: '2',
+        attempt: 0,
+      });
+      await expect.poll(
+        async () => (await pluginDeliveryEvidence()).filter(
+          (entry) => entry.kind === 'schedule' && entry.tenantRef === tenants.alpha.id,
+        ),
+        { timeout: 20_000 },
+      ).toHaveLength(1);
+
+      const alphaEventDeliveryId = await enqueueEngineInventoryEvent({
+        tenantRef: tenants.alpha.id,
+        deliveryRef: 'alpha-inventory-1',
+      });
+      await expect.poll(
+        async () => (await databaseRows(
+          `SELECT status, reason_code, attempt, event_json
+           FROM main.plugin_event_deliveries WHERE delivery_id = $1`,
+          [alphaEventDeliveryId],
+        ))[0],
+        { timeout: 20_000 },
+      ).toMatchObject({
+        status: 'delivered',
+        reason_code: 'qualified',
+        attempt: 1,
+        event_json: '{}',
+      });
+      await expect.poll(
+        async () => (await pluginDeliveryEvidence()).filter(
+          (entry) => entry.kind === 'event' && entry.deliveryId === alphaEventDeliveryId,
+        ),
+        { timeout: 20_000 },
+      ).toEqual([expect.objectContaining({ tenantRef: tenants.alpha.id })]);
+
+      await expectStatus(await post(
+        alphaMember,
+        `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceScheduleDeliveryOperation}`,
+        { body: {} },
+      ), 404);
+      await expectStatus(await post(
+        alphaMember,
+        `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceEventDeliveryOperation}`,
+        { body: {} },
+      ), 404);
+      const alphaEligibilityView = await expectStatus(
+        await alphaContext.request.get(`/api/t/alpha/apps/${referencePluginId}/eligibility`),
+        200,
+      );
+      expect(alphaEligibilityView).toMatchObject({ state: 'active', revision: 1 });
+      expect(JSON.stringify(alphaEligibilityView)).not.toMatch(/tenantRef|signedProjection|price|agreement/i);
+      const charlieBlocked = await expectStatus(
+        await charlieContext.request.get(`/api/t/charlie/apps/${referencePluginId}`),
+        200,
+      );
+      expect(charlieBlocked).toMatchObject({ status: 'revoked', active: false, entitled: 'revoked' });
+      await expectStatus(
+        await charlieContext.request.get(
+          `/t/charlie/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        404,
+      );
+      await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'bravo' }), 200);
+      const bravoBefore = await expectStatus(
+        await admin.request.get(`/api/t/bravo/apps/${referencePluginId}`),
+        200,
+      );
+      expect(bravoBefore).toMatchObject({ status: 'available', active: false, revision: 0 });
+      await expectStatus(await post(
+        admin,
+        `/api/t/bravo/apps/${referencePluginId}/activation-request`,
+        { expectedRevision: 0, idempotencyKey: 'pooled-bravo-request-0001' },
+      ), 200);
+      await expectStatus(await post(
+        admin,
+        `/api/t/bravo/apps/${referencePluginId}/activation-request/decision`,
+        { decision: 'approve', expectedRevision: 1, idempotencyKey: 'pooled-bravo-approve-0001' },
+      ), 200);
+      await expectStatus(
+        await bravoContext.request.get(
+          `/t/bravo/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        200,
+      );
+      const bravoQueuedBeforeRevocation = await enqueueEngineInventoryEvent({
+        tenantRef: tenants.bravo.id,
+        deliveryRef: 'bravo-before-revocation-1',
+        dueAt: Date.now() + 60_000,
+      });
+      const bravoRevokedProjection = await applyTenantEligibility({
+        page: admin,
+        token: eligibilityToken,
+        tenantRef: tenants.bravo.id,
+        state: 'revoked',
+        revision: 2,
+      });
+      expect(bravoRevokedProjection).toMatchObject({ state: 'revoked', revision: 2 });
+      const bravoRevoked = await expectStatus(
+        await admin.request.get(`/api/t/bravo/apps/${referencePluginId}`),
+        200,
+      );
+      expect(bravoRevoked).toMatchObject({ status: 'revoked', active: true, entitled: 'revoked', revision: 2 });
+      const bravoInactive = await expectStatus(await post(
+        admin,
+        `/api/t/bravo/apps/${referencePluginId}/deactivate`,
+        { expectedRevision: 2, idempotencyKey: 'pooled-bravo-deactivate-0001' },
+      ), 200);
+      expect(bravoInactive).toMatchObject({ status: 'revoked', active: false, revision: 3 });
+      await forcePluginEventDue(bravoQueuedBeforeRevocation);
+      await expect.poll(
+        async () => (await databaseRows(
+          `SELECT status, reason_code, attempt
+           FROM main.plugin_event_deliveries WHERE delivery_id = $1`,
+          [bravoQueuedBeforeRevocation],
+        ))[0],
+        { timeout: 20_000 },
+      ).toMatchObject({
+        status: 'dead_letter',
+        reason_code: 'subscription_inactive',
+        attempt: 1,
+      });
+      expect(
+        (await pluginDeliveryEvidence()).filter(
+          (entry) => entry.deliveryId === bravoQueuedBeforeRevocation,
+        ),
+      ).toEqual([]);
+      await expectStatus(
+        await bravoContext.request.get(
+          `/t/bravo/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        404,
+      );
+      await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
+      await expectStatus(
+        await admin.request.get(`/api/t/alpha/apps/${referencePluginId}`),
+        200,
+      ).then((application) => expect(application).toMatchObject({ status: 'active', active: true, revision: 2 }));
+
+      const alphaBootstrap = await expectStatus(
+        await alphaContext.request.get('/t/alpha/api/plugins/v1/frontend'),
+        200,
+      );
+      expect(alphaBootstrap.plugins).toEqual([
+        expect.objectContaining({ pluginId: referencePluginId }),
+      ]);
+      const bravoBootstrap = await expectStatus(
+        await bravoContext.request.get('/t/bravo/api/plugins/v1/frontend'),
+        200,
+      );
+      expect(bravoBootstrap.plugins).toEqual([]);
+      const alphaApplicationAudit = await expectStatus(
+        await admin.request.get(`/api/t/alpha/apps/${referencePluginId}/audit`),
+        200,
+      );
+      expect(alphaApplicationAudit.events.map((event: JsonObject) => event.eventType)).toEqual([
+        'tenant_activation_approved',
+        'tenant_activation_requested',
+        'tenant_eligibility_updated',
+      ]);
+      expect(JSON.stringify(alphaApplicationAudit)).not.toContain(tenants.bravo.id);
+
       const alphaMembersResponse = await admin.request.get('/api/t/alpha/tenant/members');
       const alphaMembers = await alphaMembersResponse.json().catch(() => []);
       expect(alphaMembersResponse.status(), JSON.stringify(alphaMembers)).toBe(200);
@@ -459,6 +984,40 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
         expect.objectContaining({ id: discoveryDomains.alpha.id, tenantId: tenants.alpha.id, domain: 'alpha.example', status: 'verified' }),
       ]);
       await expectStatus(await alphaAdmin.request.get('/api/t/bravo/tenant/discovery-domains'), 403);
+
+      const alphaDeactivated = await expectStatus(await post(
+        admin,
+        `/api/t/alpha/apps/${referencePluginId}/deactivate`,
+        { expectedRevision: 2, idempotencyKey: 'pooled-alpha-deactivate-0001' },
+      ), 200);
+      expect(alphaDeactivated).toMatchObject({
+        status: 'inactive',
+        active: false,
+        revision: 3,
+      });
+      await expectStatus(
+        await alphaContext.request.get(
+          `/t/alpha/api/plugins/v1/${referencePluginId}/operations/${referenceStatusOperation}`,
+        ),
+        404,
+      );
+      const alphaBootstrapAfterDeactivation = await expectStatus(
+        await alphaContext.request.get('/t/alpha/api/plugins/v1/frontend'),
+        200,
+      );
+      expect(alphaBootstrapAfterDeactivation.plugins).toEqual([]);
+      const retainedAlphaStorage = await databaseRows(
+        `SELECT tenant_ref_key, storage_key, value_json, revision::text
+         FROM main.plugin_storage_entries
+         WHERE plugin_id = $1 AND tenant_ref_key = $2`,
+        [referencePluginId, tenants.alpha.id],
+      );
+      expect(retainedAlphaStorage).toEqual([{
+        tenant_ref_key: tenants.alpha.id,
+        storage_key: 'qualification/alpha-pooled-runtime-1',
+        value_json: JSON.stringify({ runRef: 'alpha-pooled-runtime-1', status: 'qualified' }),
+        revision: '1',
+      }]);
 
       await expectStatus(await remove(admin, `/api/t/alpha/tenant/members/${encodeURIComponent(alphaSsoUser.userId)}`), 204);
       await expectStatus(await alphaContext.request.get('/api/auth/me'), 403);

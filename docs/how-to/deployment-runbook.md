@@ -52,6 +52,20 @@ JSON must contain references such as `env://NAME` or `file://name`, never secret
 values.
 
 ## Production Compose Notes
+
+Before publishing a production image, verify that every release Dockerfile has
+immutable base inputs and that Mission Control is self-contained:
+
+```text
+pnpm run guard:release-dockerfile-pins
+pnpm run guard:frontend-self-contained
+```
+
+The first check rejects mutable external base and BuildKit syntax images. The
+second requires bundled IBM Plex fonts, removes Carbon CDN font faces, and
+keeps production font CSP limited to self-hosted or data assets. Do not add a
+public font origin to make a deployment pass.
+
 - `pnpm run prod` serves frontend via Nginx on `FRONTEND_HOST_PORT` (default `8080`).
 - Backend is internal-only in production; API calls are proxied through the frontend origin.
 - Keep `FRONTEND_URL` aligned with `FRONTEND_HOST_PORT` in `.local/docker/env/production.env`.

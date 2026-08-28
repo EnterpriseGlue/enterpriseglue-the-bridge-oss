@@ -153,6 +153,43 @@ describe('TenantService SSO membership', () => {
   });
 });
 
+describe('TenantService workload-safe lifecycle epochs', () => {
+  it('atomically increments placement epoch when lifecycle status changes', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'tenant-1', slug: 'alpha', status: 'active', placementKey: 'shard-a', placementEpoch: 4,
+      }),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      findOneByOrFail: vi.fn().mockResolvedValue({
+        id: 'tenant-1', slug: 'alpha', status: 'suspended', placementKey: 'shard-a', placementEpoch: 5,
+      }),
+    };
+    getDataSource.mockResolvedValue({ getRepository: () => repo });
+
+    await expect(new TenantService().update('tenant-1', {
+      status: 'suspended', expectedPlacementEpoch: 4,
+    })).resolves.toMatchObject({ status: 'suspended', placementEpoch: 5 });
+    expect(repo.update).toHaveBeenCalledWith(
+      { id: 'tenant-1', placementEpoch: 4 },
+      expect.objectContaining({ status: 'suspended', placementEpoch: 5 }),
+    );
+  });
+
+  it('fails a stale lifecycle mutation when the atomic epoch predicate loses', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'tenant-1', slug: 'alpha', status: 'active', placementKey: 'shard-a', placementEpoch: 4,
+      }),
+      update: vi.fn().mockResolvedValue({ affected: 0 }),
+    };
+    getDataSource.mockResolvedValue({ getRepository: () => repo });
+
+    await expect(new TenantService().update('tenant-1', {
+      status: 'suspended', expectedPlacementEpoch: 4,
+    })).rejects.toThrow('Tenant placement changed');
+  });
+});
+
 describe('TenantService organization discovery domains', () => {
   const originalMode = config.tenancyMode;
 

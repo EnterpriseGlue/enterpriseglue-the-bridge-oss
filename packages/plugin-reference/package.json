@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/plugin-reference",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Minimal independent reference plugin for the EnterpriseGlue OSS plugin platform",
   "license": "Apache-2.0",
   "private": true,

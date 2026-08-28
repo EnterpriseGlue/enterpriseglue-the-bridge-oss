@@ -33,6 +33,27 @@ navigation behavior. Plugin frontend code uses the host's React, router, Carbon 
 layout primitives, spacing tokens, and accessible fallback controls; it must not ship a parallel
 design system or a second React runtime.
 
+### Release-image immutability and browser self-containment
+
+Release-producing Dockerfiles pin every external base and declared BuildKit
+syntax image by exact `sha256`. Mission Control also renders without a public
+font host: pinned IBM Plex packages ship with the application, external Carbon
+font faces are removed during bundling, and production keeps
+`font-src 'self' data:`.
+
+Maintainers verify both invariants with:
+
+```text
+pnpm run guard:release-dockerfile-pins
+pnpm run guard:frontend-self-contained
+```
+
+Updating a base image, syntax image, or font package is therefore an explicit
+reviewed source change. Do not widen CSP or restore a mutable tag to repair a
+build. Private-plugin publisher acceptance must still exercise the resulting
+immutable Mission Control image; a source-server browser test is not a
+substitute.
+
 ### Control-plane authorization
 
 The plugin control API uses static OSS FGA actions instead of a broad administrator middleware:
@@ -287,8 +308,11 @@ The available broker families are deliberately scoped:
 - host-rendered notifications; and
 - host-only secret use with opaque references.
 
-An entitlement is a plugin-owned decision. The host may present a safe reason code, but a paid
-plugin backend must check its entitlement on every paid operation.
+Commercial entitlement remains a plugin/control-plane-owned decision. For tenant-enabled plugins,
+the host now verifies and persists only a signed, commercial-data-free eligibility projection and
+rechecks it before every interactive or asynchronous operation. A paid plugin may still enforce
+finer product limits, but it cannot bypass the host's tenant, activation, eligibility, and user or
+resource authorization gates.
 
 ### Customer-side diagnostics and full logs
 
@@ -306,6 +330,13 @@ sanitized case into generic knowledge only through the separately governed knowl
 workflow; it must never infer permission to retain raw artifacts from the diagnostic request.
 
 ## Installation and lifecycle
+
+Deployment installation and tenant activation are deliberately separate. Platform operators
+install and verify one plugin workload; tenant administrators activate only the current tenant's
+application projection. Members may request activation when deployment policy requires approval.
+The safe statuses, actions, endpoints, configuration projection, compatibility alias, and rollback
+contract are specified in the
+[Tenant Application Marketplace reference](../reference/tenant-application-marketplace.md).
 
 The public `@enterpriseglue/plugin-installer` package and `eg-plugin` command verify a signed
 catalog/package inventory before writing deployment state. They support install, enable, disable,
@@ -341,6 +372,28 @@ pnpm test:plugin-platform:compose-lifecycle
 pnpm test:plugin-platform:multi-replica
 pnpm test:plugin-platform:images
 ```
+
+The pooled SaaS gate goes beyond manifest and deployment contracts by running
+the compiled public reference plugin as a real sidecar with three tenants and
+separate OIDC, SAML, and LDAP providers. It proves tenant activation isolation,
+interactive admission, tenant-owned storage, exactly-once schedule and event
+receipts, immediate eligibility revocation, deactivation, retained data, and
+denial of host-owned delivery routes through the interactive gateway:
+
+```sh
+pnpm test:native-tenancy:pooled-e2e
+```
+
+The local combined gate adds the existing multi-replica lease qualification and
+the populated v0.18.0 upgrade, restore, and previous-application rehearsal:
+
+```sh
+pnpm test:saas:combined
+```
+
+Cloud deployment repositories must consume the same digest-pinned host and
+plugin artifacts and repeat the combined assertions on their real cluster;
+local Compose evidence is not a substitute for GKE qualification.
 
 ## Distribution and air-gapped operation
 

@@ -497,6 +497,15 @@ importers:
       '@enterpriseglue/shared':
         specifier: workspace:*
         version: link:../shared
+      '@ibm/plex-mono':
+        specifier: 1.1.0
+        version: 1.1.0
+      '@ibm/plex-sans':
+        specifier: 1.1.0
+        version: 1.1.0
+      '@ibm/plex-sans-arabic':
+        specifier: 1.1.0
+        version: 1.1.0
       '@tanstack/react-query':
         specifier: ^5.62.11
         version: 5.102.0(react@19.2.6)

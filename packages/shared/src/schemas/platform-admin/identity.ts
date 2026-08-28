@@ -2,6 +2,17 @@ import { z } from 'zod';
 
 /** Provider-neutral contracts shared by adapters, mapping services, and API schemas. */
 export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
+export const TENANT_IDENTITY_SECRET_PURPOSES = [
+  'oidc.client_secret',
+  'saml.metadata_xml',
+  'saml.idp_signing_certificate',
+  'saml.request_signing_private_key',
+  'saml.request_signing_certificate',
+  'ldap.bind_password',
+  'ldap.tls_trust_certificate',
+] as const;
+export const TenantIdentitySecretPurposeSchema = z.enum(TENANT_IDENTITY_SECRET_PURPOSES);
+export type TenantIdentitySecretPurpose = z.infer<typeof TenantIdentitySecretPurposeSchema>;
 export const IdentityProviderAuthenticationModeSchema = z.enum(['direct', 'claims_only']);
 export const IdentityProviderDisplayNameSchema = z.string().trim().min(1).max(255);
 export const IdentityProviderLoginDomainSchema = z.string()

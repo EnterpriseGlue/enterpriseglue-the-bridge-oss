@@ -97,6 +97,8 @@ export {
   PluginPermissionGrant,
   PluginPlatformAudit,
   PluginTenantEnablement,
+  PluginTenantEligibility,
+  PluginTenantApplicationOperation,
   pluginPlatformEntities,
 } from './PluginPlatform.js';
 export { Project } from './Project.js';
@@ -123,7 +125,9 @@ export { Tenant } from './Tenant.js';
 export { TenantDiscoveryChallenge } from './TenantDiscoveryChallenge.js';
 export { TenantDiscoveryDomain } from './TenantDiscoveryDomain.js';
 export { TenantDomain } from './TenantDomain.js';
+export { TenantLifecycleOperation } from './TenantLifecycleOperation.js';
 export { TenantLoginPolicy } from './TenantLoginPolicy.js';
+export { TenantRoutingAlias } from './TenantRoutingAlias.js';
 export { ScimGroupLink } from './ScimGroupLink.js';
 export { ScimGroupMembership } from './ScimGroupMembership.js';
 export { ScimUserLink } from './ScimUserLink.js';

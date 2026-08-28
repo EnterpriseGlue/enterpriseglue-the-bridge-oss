@@ -5,6 +5,7 @@ const tenantServiceMock = vi.hoisted(() => ({
   getBySlug: vi.fn(),
   getByHostname: vi.fn(),
   verifyPlacementClaim: vi.fn(),
+  verifyPlacementClaimV2: vi.fn(),
   listForUser: vi.fn(),
 }));
 const getActivePlatformAdministratorUserIds = vi.hoisted(() => vi.fn());
@@ -69,6 +70,18 @@ describe('tenant middleware', () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it('rejects a pooled route that conflicts with an authenticated tenant context', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.params = { tenantSlug: 'bravo' };
+    req.tenant = { tenantId: 'tenant-alpha', tenantSlug: 'alpha' };
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(req.tenant).toEqual({ tenantId: 'tenant-alpha', tenantSlug: 'alpha' });
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+    expect(tenantServiceMock.getBySlug).not.toHaveBeenCalled();
+  });
+
   it('rejects a tenant route that conflicts with a verified tenant hostname', async () => {
     (config as any).tenancyMode = 'pooled';
     req.params = { tenantSlug: 'beta' };
@@ -79,6 +92,46 @@ describe('tenant middleware', () => {
     await resolveTenantContext()(req as Request, res as Response, next);
 
     expect(req.tenant).toBeUndefined();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+  });
+
+  it('resolves a route-bound placement v2 assertion and retains its correlation', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.params = { tenantSlug: 'alpha' };
+    req.hostname = 'app.enterpriseglue.test';
+    req.originalUrl = '/api/t/alpha/projects';
+    req.headers['x-eg-tenant-placement-v2'] = 'header.payload.signature';
+    tenantServiceMock.verifyPlacementClaimV2.mockReturnValue({
+      tenantId: 'tenant-alpha', tenantSlug: 'alpha', shardId: 'shard-a', placementEpoch: 7,
+      correlationId: 'correlation-001',
+    });
+    tenantServiceMock.getById.mockResolvedValue({
+      id: 'tenant-alpha', slug: 'alpha', status: 'active', placementKey: 'shard-a', placementEpoch: 7,
+    });
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(tenantServiceMock.verifyPlacementClaimV2).toHaveBeenCalledWith(
+      'header.payload.signature', 'app.enterpriseglue.test', '/api/t/alpha/projects',
+    );
+    expect(req.tenant).toMatchObject({
+      tenantId: 'tenant-alpha', tenantSlug: 'alpha', placementAssertionVersion: 'v2',
+      placementCorrelationId: 'correlation-001',
+    });
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('rejects mixed placement v1 and v2 headers before tenant lookup', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.headers = {
+      'x-eg-tenant-placement': 'payload',
+      'x-eg-tenant-placement-signature': 'signature',
+      'x-eg-tenant-placement-v2': 'header.payload.signature',
+    };
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(tenantServiceMock.getById).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
   });
 

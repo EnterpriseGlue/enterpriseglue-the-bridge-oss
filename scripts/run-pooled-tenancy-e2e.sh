@@ -62,6 +62,12 @@ const [
   postgresPort,
 ] = process.argv.slice(2);
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
+const hostUid = typeof process.getuid === 'function' && process.getuid() > 0
+  ? process.getuid()
+  : 65532;
+const hostGid = typeof process.getgid === 'function' && process.getgid() > 0
+  ? process.getgid()
+  : 65532;
 const bootstrapPassword = randomHex(24);
 const appPassword = randomHex(24);
 const appUser = 'enterpriseglue_pooled_app';
@@ -69,6 +75,12 @@ const appDatabase = 'enterpriseglue_pooled';
 const adminEmail = 'pooled-tenancy-e2e-admin@example.test';
 const adminPassword = randomHex(24);
 const publicOrigin = `https://localhost:${tlsFrontendPort}`;
+const eligibilityKeys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+const eligibilityKeyFile = `${require('node:path').dirname(envFile)}/eligibility-private-key.pem`;
+const eligibilityPublicJwk = eligibilityKeys.publicKey.export({ format: 'jwk' });
+const invocationKeys = crypto.generateKeyPairSync('ed25519');
+const invocationPrivateKeyFile = `${require('node:path').dirname(envFile)}/plugin-invocation-private.pem`;
+const invocationPublicKeyFile = `${require('node:path').dirname(envFile)}/plugin-invocation-public.pem`;
 const values = {
   NODE_ENV: 'development',
   EG_BACKEND_ENV_FILE: envFile,
@@ -92,6 +104,13 @@ const values = {
   POOLED_TENANCY_POSTGRES_APP_PASSWORD: appPassword,
   POOLED_TENANCY_POSTGRES_APP_DATABASE: appDatabase,
   POOLED_TENANCY_FRONTEND_DIST: `${rootDir}/frontend/dist`,
+  POOLED_TENANCY_PLUGIN_STATE_FILE: `${require('node:path').dirname(envFile)}/plugin-state.json`,
+  POOLED_TENANCY_PLUGIN_ASSET_ROOT: `${require('node:path').dirname(envFile)}/plugin-assets`,
+  POOLED_TENANCY_PLUGIN_INVOCATION_PRIVATE_KEY_FILE: invocationPrivateKeyFile,
+  POOLED_TENANCY_PLUGIN_INVOCATION_PUBLIC_KEY_FILE: invocationPublicKeyFile,
+  POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR: `${require('node:path').dirname(envFile)}/reference-plugin-data`,
+  POOLED_TENANCY_REFERENCE_PLUGIN_UID: String(hostUid),
+  POOLED_TENANCY_REFERENCE_PLUGIN_GID: String(hostGid),
   CAMUNDA_MOCK_HOST_PORT: '0',
   JWT_SECRET: randomHex(32),
   ADMIN_EMAIL: adminEmail,
@@ -111,6 +130,18 @@ const values = {
   EG_TENANCY_MODE: 'pooled',
   EG_TENANT_RLS_ENFORCED: 'true',
   EG_TENANT_PLACEMENT_KEY: randomHex(32),
+  EG_TENANT_SECRET_BROKER_TOKEN: randomHex(32),
+  EG_TENANT_APP_ELIGIBILITY_REQUIRED: 'true',
+  EG_TENANT_APP_ELIGIBILITY_JWKS_JSON: JSON.stringify({ keys: [{
+    ...eligibilityPublicJwk,
+    kid: 'pooled-e2e-eligibility-1',
+    alg: 'ES256',
+    use: 'sig',
+  }] }),
+  EG_TENANT_APP_ELIGIBILITY_ISSUER: 'https://pooled-e2e-control.enterpriseglue.test',
+  EG_TENANT_APP_ELIGIBILITY_AUDIENCE: 'pooled-e2e-shard',
+  POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE: eligibilityKeyFile,
+  POOLED_TENANCY_OIDC_CLIENT_SECRET: randomHex(24),
   EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY: 'true',
   EG_IDENTITY_PROVIDER_ALLOWED_HOSTS: 'localhost,openldap',
   EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS: 'true',
@@ -125,6 +156,21 @@ const values = {
   POOLED_TENANCY_ADMIN_PASSWORD: adminPassword,
 };
 fs.writeFileSync(envFile, `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`, { mode: 0o600 });
+fs.writeFileSync(
+  eligibilityKeyFile,
+  eligibilityKeys.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  { mode: 0o600 },
+);
+fs.writeFileSync(
+  invocationPrivateKeyFile,
+  invocationKeys.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  { mode: 0o644 },
+);
+fs.writeFileSync(
+  invocationPublicKeyFile,
+  invocationKeys.publicKey.export({ type: 'spki', format: 'pem' }),
+  { mode: 0o644 },
+);
 fs.writeFileSync(postgresInitFile, [
   `CREATE ROLE ${appUser} LOGIN PASSWORD '${appPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;`,
   `CREATE DATABASE ${appDatabase} OWNER ${appUser};`,
@@ -136,6 +182,11 @@ for (const client of sourceRealm.clients || []) {
   if (['enterpriseglue-local', 'enterpriseglue-local-entra'].includes(client.clientId)) {
     client.redirectUris = [...new Set([...(client.redirectUris || []), `${publicOrigin}/*`])];
     client.webOrigins = [...new Set([...(client.webOrigins || []), publicOrigin])];
+  }
+  if (client.clientId === 'enterpriseglue-local') {
+    client.publicClient = false;
+    client.clientAuthenticatorType = 'client-secret';
+    client.secret = values.POOLED_TENANCY_OIDC_CLIENT_SECRET;
   }
   if (client.clientId === 'enterpriseglue-local-saml') {
     client.redirectUris = [...new Set([...(client.redirectUris || []), `${publicOrigin}/api/auth/providers/saml/callback`])];
@@ -149,6 +200,8 @@ NODE
 chmod 644 "$postgres_init_file"
 mkdir -p "$identity_secret_dir"
 chmod 755 "$identity_secret_dir"
+mkdir -p "$temp_dir/reference-plugin-data"
+chmod 777 "$temp_dir/reference-plugin-data"
 
 compose=(
   docker compose --progress plain
@@ -171,7 +224,7 @@ run_compose() {
 
 capture_diagnostics() {
   run_compose ps --all > "$artifact_dir/compose-status.txt" 2>&1 || true
-  for service in db backend frontend frontend-tls keycloak camunda-mock; do
+  for service in db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
     run_compose logs --no-color --tail=700 "$service" > "$artifact_dir/${service}.log" 2>&1 || true
   done
   if [[ -d "$playwright_output_dir" ]]; then
@@ -196,12 +249,48 @@ echo '[pooled-tenancy-e2e] Compiling the backend and SPA from installed workspac
 pnpm --filter webmodeler-backend run build
 pnpm run build:frontend-host
 pnpm --filter webmodeler-frontend run build
+pnpm --filter @enterpriseglue/plugin-reference run build
+
+node - "$root_dir" "$temp_dir/plugin-state.json" "$temp_dir/plugin-assets" <<'NODE'
+const { createHash } = require('node:crypto');
+const { cpSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { resolve } = require('node:path');
+const [rootDir, stateFile, assetRoot] = process.argv.slice(2);
+const pluginId = 'io.enterpriseglue.reference-health';
+const bundleRoot = resolve(rootDir, 'packages/plugin-reference/dist/plugin-bundle');
+const manifest = JSON.parse(readFileSync(resolve(bundleRoot, 'plugin.yaml'), 'utf8'));
+const resources = JSON.parse(readFileSync(resolve(bundleRoot, 'deploy/resources.json'), 'utf8'));
+manifest.scope.enablement = 'tenant';
+manifest.entitlement = { provider: 'plugin', feature: 'pooled_reference' };
+const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const pluginAssetRoot = resolve(assetRoot, pluginId);
+mkdirSync(pluginAssetRoot, { recursive: true });
+cpSync(bundleRoot, pluginAssetRoot, { recursive: true });
+writeFileSync(resolve(pluginAssetRoot, 'plugin.yaml'), manifestBytes, { mode: 0o644 });
+writeFileSync(stateFile, `${JSON.stringify({
+  schemaVersion: 1,
+  revision: 1,
+  plugins: {
+    [pluginId]: {
+      pluginId,
+      version: manifest.metadata.version,
+      bundle: `registry.invalid/pooled-reference@sha256:${'1'.repeat(64)}`,
+      manifestSha256: sha256(manifestBytes),
+      manifest,
+      resources,
+      grantedPermissions: manifest.permissions.required,
+      enabled: true,
+    },
+  },
+}, null, 2)}\n`, { mode: 0o644 });
+NODE
 KEYCLOAK_TLS_DIR="$tls_dir" ./infra/docker/keycloak/generate-local-tls.sh
 chmod 755 "$tls_dir"
 chmod 644 "$tls_dir/ca.crt" "$tls_dir/server.crt" "$tls_dir/server.key"
 
 echo "[pooled-tenancy-e2e] Starting disposable pooled stack ($project_name)."
-run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock
+run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health
 
 curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" "https://localhost:${tls_frontend_port}/login" >/dev/null
 curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" \
@@ -243,6 +332,11 @@ common_env=(
   POOLED_TENANCY_POSTGRES_PASSWORD="$(awk -F= '$1 == "POOLED_TENANCY_POSTGRES_APP_PASSWORD" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_POSTGRES_DATABASE="$(awk -F= '$1 == "POOLED_TENANCY_POSTGRES_APP_DATABASE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   POOLED_TENANCY_OIDC_ISSUER_URL="https://localhost:${keycloak_port}/realms/enterpriseglue-local"
+  POOLED_TENANCY_OIDC_CLIENT_SECRET="$(awk -F= '$1 == "POOLED_TENANCY_OIDC_CLIENT_SECRET" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE="$(awk -F= '$1 == "POOLED_TENANCY_ELIGIBILITY_PRIVATE_KEY_FILE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_ELIGIBILITY_ISSUER="$(awk -F= '$1 == "EG_TENANT_APP_ELIGIBILITY_ISSUER" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_ELIGIBILITY_AUDIENCE="$(awk -F= '$1 == "EG_TENANT_APP_ELIGIBILITY_AUDIENCE" { print substr($0, index($0, "=") + 1) }' "$env_file")"
+  POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR="$(awk -F= '$1 == "POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR" { print substr($0, index($0, "=") + 1) }' "$env_file")"
   PLAYWRIGHT_BASE_URL="https://localhost:${tls_frontend_port}"
   PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
   PLAYWRIGHT_WORKERS=1
@@ -269,9 +363,10 @@ writeFileSync(process.argv[2], [
   'mode=pooled',
   'database=postgres-restricted-role-force-rls',
   'tenants=alpha-oidc,bravo-saml,charlie-ldap',
-  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,real-login,session-tenant-binding,cross-tenant-denial,immediate-membership-removal',
+  'assertions=organization-finder,workspace-fallback,tenant-admin-ui,tenant-picker,keyboard-focus,responsive-reflow,200-percent-zoom,verified-email-routing,discovery-domain-isolation,privacy-preserving-email-fallback,provider-discovery-isolation,tenant-admin-provider-isolation,tenant-secret-write-only,tenant-secret-cross-tenant-denial,tenant-secret-rotation,tenant-secret-availability,broker-backed-oidc-saml-ldap-login,session-tenant-binding,cross-tenant-denial,signed-tenant-plugin-eligibility,distinct-tenant-eligibility,eligibility-revocation,tenant-app-member-request,tenant-app-admin-approval,tenant-app-sibling-isolation,tenant-app-deactivation,tenant-app-frontend-bootstrap,actual-plugin-gateway,plugin-storage,plugin-schedule-delivery,plugin-event-delivery,plugin-event-revocation,plugin-host-owned-route-denial,plugin-data-retention,immediate-membership-removal',
+  'plugin_evidence=real-reference-sidecar-with-exactly-once-schedule-and-event-receipts',
   'ui_evidence=deterministic-desktop-responsive-and-zoom-screenshots',
-  'identity_evidence=disposable-keycloak-and-openldap-emulators',
+  'identity_evidence=disposable-keycloak-openldap-and-private-tenant-secret-broker-emulators',
   'credentials=ephemeral-and-not-retained',
   '',
 ].join('\n'));

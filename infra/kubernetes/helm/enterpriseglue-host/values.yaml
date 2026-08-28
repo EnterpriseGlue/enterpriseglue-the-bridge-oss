@@ -1,0 +1,142 @@
+platform: kubernetes
+
+images:
+  backend:
+    repository: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+rolloutRevision: ""
+
+frontend:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  service:
+    port: 80
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+backend:
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+  service:
+    port: 8787
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+workers:
+  enabled: true
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+database:
+  # Non-secret application configuration (DATABASE_TYPE, host, database,
+  # tenancy/RLS settings, public trust material, endpoint policy).
+  configMapName: enterpriseglue-config
+  # Application credentials should have DML access but no schema DDL in the
+  # Kubernetes profile. The migration job uses a separate secret.
+  applicationSecretName: enterpriseglue-secrets
+  migrationSecretName: enterpriseglue-migration-secrets
+  preflightSecretName: enterpriseglue-preflight-secrets
+  migration:
+    enabled: true
+    backoffLimit: 1
+    ttlSecondsAfterFinished: 3600
+  preflight:
+    enabled: true
+    backoffLimit: 0
+    ttlSecondsAfterFinished: 3600
+  # Optional cloud-neutral local database connection proxy. The deployment
+  # supplies a digest-pinned proxy image and arguments; it is disabled by
+  # default so existing direct database connections are unchanged.
+  connectionProxy:
+    enabled: false
+    image: ""
+    args: []
+    port: 5432
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 256Mi }
+
+serviceAccounts:
+  api: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  worker: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  migration: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  preflight: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+
+pluginAssets:
+  enabled: false
+  # A versioned ReadWriteMany volume populated by the trusted installer and
+  # mounted read-only in every API/worker replica.
+  existingClaim: ""
+  mountPath: /var/lib/enterpriseglue/plugins
+
+pluginManager:
+  enabled: false
+  image: ""
+  imagePullPolicy: IfNotPresent
+  serviceAccountName: enterpriseglue-plugin-installer
+  configurationSecret:
+    name: enterpriseglue-plugin-manager
+    key: manager-config.json
+  state:
+    existingClaim: ""
+    size: 10Gi
+    storageClassName: ""
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: enterpriseglue.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+networkPolicy:
+  enabled: true
+  # Selectors identify the ingress-controller pods allowed to reach only the
+  # frontend. The backend is reachable only from frontend pods in this release.
+  ingressNamespaceSelector: {}
+  ingressPodSelector: {}
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+topologySpread:
+  enabled: true
+  topologyKey: kubernetes.io/hostname
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}

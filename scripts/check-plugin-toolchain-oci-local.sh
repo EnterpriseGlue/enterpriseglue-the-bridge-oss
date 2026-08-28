@@ -31,10 +31,13 @@ AIRGAP_RECEIPT="$WORK/toolchain-airgap-import-receipt.json"
 registry_started=false
 target_registry_started=false
 export COSIGN_EXPERIMENTAL=1
-BUILDX_BUILDER_ARGS=()
-if [ -n "${PLUGIN_PLATFORM_BUILDX_BUILDER:-}" ]; then
-  BUILDX_BUILDER_ARGS=(--builder "$PLUGIN_PLATFORM_BUILDX_BUILDER")
-fi
+build_toolchain_image() {
+  if [ -n "${PLUGIN_PLATFORM_BUILDX_BUILDER:-}" ]; then
+    docker buildx build --builder "$PLUGIN_PLATFORM_BUILDX_BUILDER" "$@"
+  else
+    docker buildx build "$@"
+  fi
+}
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -85,8 +88,7 @@ if [ "$MANAGER_VERSION" != "$MANAGER_CHART_VERSION" ]; then
   exit 1
 fi
 
-docker buildx build \
-  "${BUILDX_BUILDER_ARGS[@]}" \
+build_toolchain_image \
   --provenance=false \
   --sbom=false \
   --output "type=oci,dest=$INSTALLER_OCI_LAYOUT" \
@@ -95,8 +97,7 @@ docker buildx build \
   --tag "$INSTALLER_LOCAL_IMAGE" \
   "$ROOT_DIR"
 oras manifest fetch --oci-layout "$INSTALLER_OCI_LAYOUT_REFERENCE" >/dev/null
-docker buildx build \
-  "${BUILDX_BUILDER_ARGS[@]}" \
+build_toolchain_image \
   --provenance=false \
   --sbom=false \
   --output "type=oci,dest=$MANAGER_OCI_LAYOUT" \

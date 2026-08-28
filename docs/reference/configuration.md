@@ -31,6 +31,13 @@ Launcher and validation scripts:
 - `EXPOSE_BACKEND`: publish backend on host in Docker dev (`true`/`false`)
 - `FRONTEND_HOST_PORT`: frontend host port (Docker dev/prod)
 - `DATABASE_TYPE`: `postgres | oracle | mssql | spanner | mysql`
+- `EG_DATABASE_STARTUP_MODE`: `apply` (default) or `verify`. `apply` preserves
+  self-hosted startup migration behavior. `verify` fails when schema work is
+  pending and performs no DDL; use it for Kubernetes API and worker identities
+  after the dedicated migration job.
+- `EG_RUNTIME_ROLE`: `all` (default), `api`, or `worker`. `all` preserves the
+  existing combined process. `api` serves HTTP without pollers; `worker` runs
+  durable/background pollers without opening an HTTP listener.
 - `FRONTEND_URL`: frontend origin for auth links
 
 ### Database Required Variables (by `DATABASE_TYPE`)
@@ -81,12 +88,54 @@ rollback qualification gates pass for the intended deployment.
 - `EG_TENANCY_MODE`: `single` or `pooled`; default `single`.
 - `EG_TENANT_BASE_DOMAIN`: Optional managed suffix for tenant hosts such as
   `<tenant-slug>.saas.example.com`.
-- `EG_TENANT_PLACEMENT_KEY`: HMAC key of at least 32 characters for signed
-  control-plane placement assertions. Required in production pooled mode.
+- `EG_TENANT_PLACEMENT_KEY`: HMAC key of at least 32 characters for legacy
+  placement v1 assertions. Retained during the compatibility window.
 - `EG_TENANT_PLACEMENT_MAX_AGE_SECONDS`: Maximum accepted placement assertion
   lifetime; default `120`, maximum `3600`.
+- `EG_TENANT_PLACEMENT_V2_JWKS_JSON`: Public ES256 JWKS used to verify
+  placement v2 assertions. Overlapping `kid` values support safe key rotation.
+- `EG_TENANT_PLACEMENT_V2_ISSUER`, `EG_TENANT_PLACEMENT_V2_AUDIENCE`, and
+  `EG_TENANT_PLACEMENT_V2_SHARD_ID`: Exact placement v2 trust and shard binding.
+- `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
+  default `5`, maximum `60`.
+- `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2,
+  workload receipt signing, forced RLS, the tenant secret broker, and signed
+  tenant application eligibility settings. The default is `false`.
+- `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY`,
+  `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID`, and
+  `EG_TENANT_WORKLOAD_RECEIPT_ISSUER`: ES256 signing identity for safe tenant
+  lifecycle operation receipts. The private key is shard-only secret material.
 - `EG_TENANT_RLS_ENFORCED`: Must be `true` in pooled mode. Startup fails unless
   `DATABASE_TYPE=postgres` and the expected forced RLS policies are installed.
+- `EG_TENANT_SECRET_BROKER_URL`: Private HTTPS base URL for the cloud-neutral
+  broker. Loopback HTTP is accepted only for development.
+- `EG_TENANT_SECRET_BROKER_TOKEN_REF`: Workload bearer-token reference resolved
+  through the existing environment, file, or Docker provider. It cannot use a
+  tenant-secret reference.
+- `EG_TENANT_SECRET_BROKER_TIMEOUT_MS`: Request timeout; default `5000`, range
+  `100` to `30000`.
+- `EG_TENANT_SECRET_BROKER_CACHE_TTL_MS`: In-memory resolved-value cache TTL;
+  default `15000`, maximum `60000`. Set `0` to disable caching.
+- `EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES`: Per-process cache bound; default
+  `256`, maximum `1024`.
+- `ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY`: Tenant application activation
+  workflow. `direct` is the backward-compatible default; `approval_required`
+  requires a member request and tenant-administrator decision.
+- `EG_TENANT_APP_ELIGIBILITY_REQUIRED`: Set `true` on SaaS shards to require a
+  complete signed tenant application eligibility verifier. Default `false`.
+- `EG_TENANT_APP_ELIGIBILITY_JWKS_JSON`: Public P-256 ES256 JWKS for tenant
+  application eligibility; keys require unique `kid` values.
+- `EG_TENANT_APP_ELIGIBILITY_ISSUER` and
+  `EG_TENANT_APP_ELIGIBILITY_AUDIENCE`: Exact trust bindings for signed
+  eligibility projections.
+- `EG_TENANT_APP_ELIGIBILITY_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
+  default `60`, maximum `300`.
+- `EG_TENANT_APP_ELIGIBILITY_MAX_LIFETIME_SECONDS`: Maximum signed projection
+  lifetime; default `604800`, maximum `2592000`.
+- `EG_TENANT_SECRET_BROKER_REQUIRED`: When `true`, startup requires the broker
+  URL and token reference. Cloud-required mode requires this to be `true`.
+- `EG_TENANT_SECRET_BREAK_GLASS_ENABLED`: Enables the independently audited,
+  workload-only local-reference recovery operation. Default `false`.
 
 Every tenant owns its own login policy and OIDC, SAML, or LDAP provider
 records. Tenant-scoped provider callbacks use the same global callback paths;
@@ -101,6 +150,16 @@ where available, the tenant or platform portal. The existing `v1beta1` bundle
 compatibility automation and do not manage a non-default pooled tenant. See
 [Native SaaS Tenancy](../architecture/11-native-saas-tenancy.md#control-ownership-in-the-first-pooled-oss-slice)
 for the resource-by-resource ownership matrix.
+
+Cloud automation uses only service accounts with the `tenant:lifecycle` scope
+and the `/api/workloads/tenancy/*` and `/api/workloads/tenants/*` contracts.
+These routes reject interactive users and ordinary API clients, require
+`Idempotency-Key` and `X-Correlation-ID`, and return request-hash-bound ES256
+receipts. They never issue a browser or tenant session.
+
+See [Tenant Secret Broker](tenant-secret-broker.md) for its private HTTP
+contract, write-only tenant administration routes, SSO purpose mapping,
+rotation, outage, recovery, and rollback behavior.
 
 ### Git & Encryption
 - `GIT_REPOS_PATH`

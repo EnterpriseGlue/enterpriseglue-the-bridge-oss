@@ -1,0 +1,7 @@
+EnterpriseGlue OSS host {{ .Chart.AppVersion }} rendered with immutable images.
+
+The migration and preflight hooks run before the application rollout. Application
+pods use EG_DATABASE_STARTUP_MODE={{ ternary "verify" "apply" .Values.database.migration.enabled }}.
+Only the frontend Service is referenced by the optional Ingress; the backend and
+Plugin Manager remain cluster-internal.
+

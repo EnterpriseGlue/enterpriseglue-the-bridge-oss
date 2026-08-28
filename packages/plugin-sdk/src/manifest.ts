@@ -252,6 +252,7 @@ const settingsContributionV1Schema = z
     kind: z.literal('settings'),
     routeId: namespacedIdentifierSchema,
     scope: z.enum(['tenant', 'deployment']),
+    configurationSchema: schemaReferenceV1Schema.optional(),
   })
   .strict();
 

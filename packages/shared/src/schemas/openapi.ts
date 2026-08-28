@@ -74,6 +74,11 @@ const {
   TenantDomainVerifyRequestSchema,
   TenantSlugSchema,
   TenancyCapabilitiesSchema,
+  TenantWorkloadCreateRequestSchema,
+  TenantWorkloadEpochRequestSchema,
+  TenantWorkloadSecretBreakGlassRequestSchema,
+  TenantWorkloadAliasReconcileRequestSchema,
+  SignedTenantWorkloadReceiptSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/tenant.js');
 
 const {
@@ -290,6 +295,13 @@ const {
   pluginPlatformEmergencyStateV1Schema,
   pluginSafeListV1Schema,
   pluginSafeSummaryV1Schema,
+  pluginTenantApplicationAuditListV1Schema,
+  pluginTenantApplicationDecisionRequestV1Schema,
+  pluginTenantApplicationListV1Schema,
+  pluginTenantApplicationMutationRequestV1Schema,
+  pluginTenantApplicationV1Schema,
+  pluginTenantEligibilityApplyRequestV1Schema,
+  pluginTenantEligibilityProjectionV1Schema,
   pluginTenantEnablementRequestV1Schema,
   pluginTenantEnablementV1Schema,
 } = await import('@enterpriseglue/plugin-sdk/control');
@@ -328,6 +340,9 @@ const PluginControlErrorResponseSchema = z.object({
     'idempotency_conflict',
     'invalid_state',
     'tenant_enablement_not_supported',
+    'activation_request_not_pending',
+    'activation_request_not_required',
+    'activation_approval_required',
     'request_invalid',
     'access_denied',
     'installation_not_found',
@@ -2557,7 +2572,7 @@ registry.registerPath({
   method: 'get',
   path: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement',
   summary: 'Read tenant plugin enablement',
-  ...authzExtension('platform.settings.read', 'GET', '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement'),
+  ...authzExtension('tenant.apps.read', 'GET', '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement'),
   request: { params: PluginTenantEnablementPathSchema },
   responses: {
     200: { description: 'Tenant enablement state', content: { 'application/json': { schema: pluginTenantEnablementV1Schema } } },
@@ -2568,13 +2583,108 @@ registry.registerPath({
   method: 'put',
   path: '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement',
   summary: 'Set tenant plugin enablement',
-  ...authzExtension('platform.settings.manage', 'PUT', '/t/:tenantSlug/api/plugin-platform/v1/plugins/:pluginId/enablement'),
+  ...authzExtension('tenant.apps.manage', 'PUT', '/t/{tenantSlug}/api/plugin-platform/v1/plugins/{pluginId}/enablement'),
   request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantEnablementRequestV1Schema } } } },
   responses: {
-    200: { description: 'Updated tenant enablement state', content: { 'application/json': { schema: pluginTenantEnablementV1Schema } } },
+    200: { description: 'Tenant enablement lifecycle operation accepted', content: { 'application/json': { schema: pluginLifecycleOperationV1Schema } } },
     404: { description: 'Plugin is not installed or does not support tenant enablement', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
     409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
   },
+});
+for (const method of ['get', 'put'] as const) {
+  registry.registerPath({
+    method,
+    path: '/api/t/{tenantSlug}/plugin-platform/v1/plugins/{pluginId}/enablement',
+    summary: `${method === 'get' ? 'Read' : 'Set'} tenant plugin enablement through the canonical route`,
+    ...authzExtension(
+      method === 'get' ? 'tenant.apps.read' : 'tenant.apps.manage',
+      method.toUpperCase(),
+      '/api/t/{tenantSlug}/plugin-platform/v1/plugins/{pluginId}/enablement',
+    ),
+    request: {
+      params: PluginTenantEnablementPathSchema,
+      ...(method === 'put'
+        ? { body: { content: { 'application/json': { schema: pluginTenantEnablementRequestV1Schema } } } }
+        : {}),
+    },
+    responses: {
+      200: {
+        description: method === 'get' ? 'Tenant enablement state' : 'Tenant enablement lifecycle operation accepted',
+        content: { 'application/json': { schema: method === 'get' ? pluginTenantEnablementV1Schema : pluginLifecycleOperationV1Schema } },
+      },
+      404: { description: 'Plugin is unavailable', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+      409: { description: 'Plugin state or revision conflicts with the request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    },
+  });
+}
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps',
+  summary: 'List the current tenant application catalogue',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps'),
+  request: { params: PluginTenantEnablementPathSchema.omit({ pluginId: true }) },
+  responses: { 200: { description: 'Tenant-safe application catalogue', content: { 'application/json': { schema: pluginTenantApplicationListV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}',
+  summary: 'Read one current-tenant application',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: { 200: { description: 'Tenant-safe application state', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 404: { description: 'Application is unavailable' } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/configuration',
+  summary: 'Read the plugin-owned configuration projection',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}/configuration'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: { 200: { description: 'Safe configuration schema hash and tenant link', content: { 'application/json': { schema: pluginTenantApplicationV1Schema.shape.configuration } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/audit',
+  summary: 'Read application activation audit for the current tenant',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}/audit'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: { 200: { description: 'Tenant-scoped application audit', content: { 'application/json': { schema: pluginTenantApplicationAuditListV1Schema } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/eligibility',
+  summary: 'Read the safe effective eligibility projection for one tenant application',
+  ...authzExtension('tenant.apps.read', 'GET', '/api/t/{tenantSlug}/apps/{pluginId}/eligibility'),
+  request: { params: PluginTenantEnablementPathSchema },
+  responses: {
+    200: { description: 'Tenant-safe eligibility state without commercial or signature material', content: { 'application/json': { schema: pluginTenantEligibilityProjectionV1Schema } } },
+    404: { description: 'Eligibility is unavailable' },
+  },
+});
+for (const action of ['activate', 'deactivate'] as const) {
+  registry.registerPath({
+    method: 'post',
+    path: `/api/t/{tenantSlug}/apps/{pluginId}/${action}`,
+    summary: `${action === 'activate' ? 'Activate' : 'Deactivate'} an application for the current tenant`,
+    ...authzExtension('tenant.apps.manage', 'POST', `/api/t/{tenantSlug}/apps/{pluginId}/${action}`),
+    request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantApplicationMutationRequestV1Schema } } } },
+    responses: { 200: { description: 'Updated tenant application state', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 409: { description: 'Application state, policy, or revision conflict' } },
+  });
+}
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/activation-request',
+  summary: 'Request current-tenant application activation',
+  ...authzExtension('tenant.apps.request', 'POST', '/api/t/{tenantSlug}/apps/{pluginId}/activation-request'),
+  request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantApplicationMutationRequestV1Schema } } } },
+  responses: { 200: { description: 'Pending activation request', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 409: { description: 'Request policy or revision conflict' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/apps/{pluginId}/activation-request/decision',
+  summary: 'Approve or reject a current-tenant activation request',
+  ...authzExtension('tenant.apps.manage', 'POST', '/api/t/{tenantSlug}/apps/{pluginId}/activation-request/decision'),
+  request: { params: PluginTenantEnablementPathSchema, body: { content: { 'application/json': { schema: pluginTenantApplicationDecisionRequestV1Schema } } } },
+  responses: { 200: { description: 'Decided tenant application state', content: { 'application/json': { schema: pluginTenantApplicationV1Schema } } }, 409: { description: 'Request state, policy, or revision conflict' } },
 });
 
 // Admin Governance
@@ -2662,10 +2772,70 @@ registry.register('TenantDomain', TenantDomainSchema);
 registry.register('TenantDiscoveryDomain', TenantDiscoveryDomainSchema);
 registry.register('TenantDiscoveryResponse', TenantDiscoveryResponseSchema);
 registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
+registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
+const TenantWorkloadHeadersSchema = z.object({
+  'idempotency-key': z.string().min(16).max(200),
+  'x-correlation-id': z.string().min(8).max(160),
+});
 registry.registerPath({
   method: 'get', path: '/api/tenancy/capabilities',
   ...authzExemption('GET', '/api/tenancy/capabilities'),
   responses: { 200: { description: 'Non-enumerating native tenancy capabilities', content: { 'application/json': { schema: TenancyCapabilitiesSchema } } } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/workloads/tenancy/capabilities',
+  ...authzExtension('platform.tenants.workload.capabilities.read', 'GET', '/api/workloads/tenancy/capabilities'),
+  responses: { 200: { description: 'Authenticated shard tenancy and workload receipt capabilities', content: { 'application/json': { schema: TenancyCapabilitiesSchema } } }, 401: { description: 'A tenant-lifecycle service account is required' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants',
+  ...authzExtension('platform.tenants.workload.provision', 'POST', '/api/workloads/tenants'),
+  request: { headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadCreateRequestSchema } } } },
+  responses: { 201: { description: 'Tenant provisioned with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or tenant slug conflict' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/suspend',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/suspend'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadEpochRequestSchema } } } },
+  responses: { 200: { description: 'Tenant suspended with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or placement epoch conflict' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/resume',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/resume'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadEpochRequestSchema } } } },
+  responses: { 200: { description: 'Tenant resumed with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or placement epoch conflict' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/identity-provider-secret-reference',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/identity-provider-secret-reference'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadSecretBreakGlassRequestSchema } } } },
+  responses: {
+    200: { description: 'Audited break-glass reference applied with a signed, idempotent receipt; no secret material is returned', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } },
+    403: { description: 'Break-glass recovery is disabled' },
+    409: { description: 'Idempotency or placement epoch conflict' },
+    503: { description: 'The independently mounted recovery reference is unavailable' },
+  },
+});
+registry.registerPath({
+  method: 'put', path: '/api/workloads/tenants/{tenantId}/apps/{pluginId}/eligibility',
+  summary: 'Apply a signed tenant application eligibility projection',
+  ...authzExtension('platform.tenants.workload.lifecycle', 'PUT', '/api/workloads/tenants/{tenantId}/apps/{pluginId}/eligibility'),
+  request: {
+    params: TenantIdPathSchema.extend(PluginIdPathSchema.shape),
+    body: { content: { 'application/json': { schema: pluginTenantEligibilityApplyRequestV1Schema } } },
+  },
+  responses: {
+    200: { description: 'Verified safe eligibility projection applied idempotently', content: { 'application/json': { schema: pluginTenantEligibilityProjectionV1Schema } } },
+    400: { description: 'Projection or signature is invalid' },
+    409: { description: 'Projection scope, revision, or eligibility state conflicts' },
+    503: { description: 'Eligibility verification is not configured' },
+  },
+});
+registry.registerPath({
+  method: 'put', path: '/api/workloads/tenants/{tenantId}/routing-aliases',
+  ...authzExtension('platform.tenants.workload.aliases.reconcile', 'PUT', '/api/workloads/tenants/{tenantId}/routing-aliases'),
+  request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadAliasReconcileRequestSchema } } } },
+  responses: { 200: { description: 'Tenant routing aliases reconciled with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency, alias ownership, or placement epoch conflict' } },
 });
 registry.registerPath({
   method: 'post', path: '/api/auth/tenant-discovery',
@@ -2832,6 +3002,40 @@ registry.registerPath({
   request: { body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderRequestSchema } } } },
   responses: { 201: { description: 'Identity provider created', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } },
 });
+const IdentityProviderSecretPathSchema = z.object({
+  key: z.string().min(1).max(128),
+  purpose: identityProviderMigrationSchemas.TenantIdentitySecretPurposeSchema,
+});
+registry.registerPath({
+  method: 'post', path: '/api/identity/provider-secrets',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/provider-secrets'),
+  request: { body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretProvisionRequestSchema } } } },
+  responses: { 400: { description: 'A tenant-scoped route is required for secret provisioning' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/identity/provider-secrets/retire',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/provider-secrets/retire'),
+  request: { body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretReferenceRetireRequestSchema } } } },
+  responses: { 400: { description: 'A tenant-scoped route is required for secret retirement' } },
+});
+registry.registerPath({
+  method: 'put', path: '/api/identity/providers/{key}/secrets/{purpose}',
+  ...authzExtension('platform.sso.providers.manage', 'PUT', '/api/identity/providers/{key}/secrets/{purpose}'),
+  request: { params: IdentityProviderSecretPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretPutRequestSchema } } } },
+  responses: { 400: { description: 'A tenant-scoped route is required for secret rotation' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/identity/providers/{key}/secrets/{purpose}/availability',
+  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/{key}/secrets/{purpose}/availability'),
+  request: { params: IdentityProviderSecretPathSchema },
+  responses: { 400: { description: 'A tenant-scoped route is required for secret availability checks' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/identity/providers/{key}/secrets/{purpose}/retire',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/secrets/{purpose}/retire'),
+  request: { params: IdentityProviderSecretPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireRequestSchema } } } },
+  responses: { 400: { description: 'A tenant-scoped route is required for secret retirement' } },
+});
 registry.registerPath({
   method: 'put',
   path: '/api/identity/providers/{key}',
@@ -2891,12 +3095,18 @@ registry.registerPath({
 // both the FGA action and the durable tenant scope.
 const TenantProviderPathSchema = TenantPathSchema.extend({ key: z.string().min(1).max(128) });
 const TenantProviderRunPathSchema = TenantProviderPathSchema.extend({ runId: z.string().min(1).max(128) });
+const TenantProviderSecretPathSchema = TenantProviderPathSchema.extend({ purpose: identityProviderMigrationSchemas.TenantIdentitySecretPurposeSchema });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers'), request: { params: TenantPathSchema }, responses: { 200: { description: 'Identity providers owned by the current tenant', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.IdentityProviderResponseSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/provider-secrets', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/provider-secrets'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretProvisionRequestSchema } } } }, responses: { 201: { description: 'Tenant-bound secret provisioned without returning its value', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretMetadataResponseSchema } } }, 503: { description: 'Tenant secret broker unavailable' } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/provider-secrets/retire', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/provider-secrets/retire'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretReferenceRetireRequestSchema } } } }, responses: { 200: { description: 'Unattached tenant-bound secret retired', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Current tenant identity provider', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found in this tenant' } } });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs'), request: { params: TenantProviderPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncRunsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization runs', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncRunSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs/{runId}/events', ...authzExtension('tenant.sso.providers.read', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}/sync-runs/{runId}/events'), request: { params: TenantProviderRunPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncEventsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization events', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncEventSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderRequestSchema } } } }, responses: { 201: { description: 'Tenant identity provider created', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/external-identities/unlink', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/external-identities/unlink'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkRequestSchema } } } }, responses: { 200: { description: 'Tenant provider subject unlinked', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/api/t/{tenantSlug}/identity/providers/{key}/secrets/{purpose}', ...authzExtension('tenant.sso.providers.manage', 'PUT', '/api/t/{tenantSlug}/identity/providers/{key}/secrets/{purpose}'), request: { params: TenantProviderSecretPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretPutRequestSchema } } } }, responses: { 200: { description: 'Provider secret rotated without returning its value', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretMetadataResponseSchema } } }, 503: { description: 'Tenant secret broker unavailable' } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/identity/providers/{key}/secrets/{purpose}/availability', ...authzExtension('tenant.sso.providers.manage', 'GET', '/api/t/{tenantSlug}/identity/providers/{key}/secrets/{purpose}/availability'), request: { params: TenantProviderSecretPathSchema }, responses: { 200: { description: 'Secret availability metadata without secret material', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretAvailabilityResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/secrets/{purpose}/retire', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/secrets/{purpose}/retire'), request: { params: TenantProviderSecretPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireRequestSchema } } } }, responses: { 200: { description: 'Secret retired after the provider is disabled', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireResponseSchema } } } } });
 registry.registerPath({ method: 'put', path: '/api/t/{tenantSlug}/identity/providers/{key}', ...authzExtension('tenant.sso.providers.manage', 'PUT', '/api/t/{tenantSlug}/identity/providers/{key}'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderUpdateSchema } } } }, responses: { 200: { description: 'Tenant identity provider updated', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/reconcile', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/reconcile'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Tenant LDAP provider reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional(), runId: z.string().nullable().optional() }) } } } } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/identity/providers/{key}/reconciliation-preview', ...authzExtension('tenant.sso.providers.manage', 'POST', '/api/t/{tenantSlug}/identity/providers/{key}/reconciliation-preview'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } } }, responses: { 200: { description: 'Tenant provider membership preview', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderReconciliationPreviewSchema } } } } });
@@ -2907,11 +3117,16 @@ registry.registerPath({ method: 'delete', path: '/api/t/{tenantSlug}/identity/pr
 // Retain the established tenant-prefixed provider aliases for clients that
 // adopted unified tenant routing before the canonical /api/t contract existed.
 registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers'), request: { params: TenantPathSchema }, responses: { 200: { description: 'Backward-compatible alias for tenant identity providers', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.IdentityProviderResponseSchema) } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/provider-secrets', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/provider-secrets'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretProvisionRequestSchema } } } }, responses: { 201: { description: 'Backward-compatible alias for tenant secret provisioning', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretMetadataResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/provider-secrets/retire', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/provider-secrets/retire'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretReferenceRetireRequestSchema } } } }, responses: { 200: { description: 'Backward-compatible alias for unattached tenant secret retirement', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Current tenant identity provider', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } }, 404: { description: 'Identity provider not found in this tenant' } } });
 registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs'), request: { params: TenantProviderPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncRunsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization runs', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncRunSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs/{runId}/events', ...authzExtension('tenant.sso.providers.read', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}/sync-runs/{runId}/events'), request: { params: TenantProviderRunPathSchema, query: identityProviderDiagnosticSchemas.IdentityProviderSyncEventsQuerySchema }, responses: { 200: { description: 'Current tenant provider synchronization events', content: { 'application/json': { schema: z.array(identityProviderDiagnosticSchemas.SsoSyncEventSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers'), request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderRequestSchema } } } }, responses: { 201: { description: 'Tenant identity provider created', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/external-identities/unlink', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/external-identities/unlink'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkRequestSchema } } } }, responses: { 200: { description: 'Tenant provider subject unlinked', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/t/{tenantSlug}/api/identity/providers/{key}/secrets/{purpose}', ...authzExtension('tenant.sso.providers.manage', 'PUT', '/t/{tenantSlug}/api/identity/providers/{key}/secrets/{purpose}'), request: { params: TenantProviderSecretPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretPutRequestSchema } } } }, responses: { 200: { description: 'Backward-compatible alias for provider secret rotation', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretMetadataResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/t/{tenantSlug}/api/identity/providers/{key}/secrets/{purpose}/availability', ...authzExtension('tenant.sso.providers.manage', 'GET', '/t/{tenantSlug}/api/identity/providers/{key}/secrets/{purpose}/availability'), request: { params: TenantProviderSecretPathSchema }, responses: { 200: { description: 'Backward-compatible alias for provider secret availability', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretAvailabilityResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/secrets/{purpose}/retire', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/secrets/{purpose}/retire'), request: { params: TenantProviderSecretPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireRequestSchema } } } }, responses: { 200: { description: 'Backward-compatible alias for provider secret retirement', content: { 'application/json': { schema: identityProviderMigrationSchemas.TenantIdentitySecretRetireResponseSchema } } } } });
 registry.registerPath({ method: 'put', path: '/t/{tenantSlug}/api/identity/providers/{key}', ...authzExtension('tenant.sso.providers.manage', 'PUT', '/t/{tenantSlug}/api/identity/providers/{key}'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderUpdateSchema } } } }, responses: { 200: { description: 'Tenant identity provider updated', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/reconcile', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/reconcile'), request: { params: TenantProviderPathSchema }, responses: { 200: { description: 'Tenant LDAP provider reconciliation page', content: { 'application/json': { schema: z.object({ skipped: z.string().optional(), processed: z.number().int().optional(), runId: z.string().nullable().optional() }) } } } } });
 registry.registerPath({ method: 'post', path: '/t/{tenantSlug}/api/identity/providers/{key}/reconciliation-preview', ...authzExtension('tenant.sso.providers.manage', 'POST', '/t/{tenantSlug}/api/identity/providers/{key}/reconciliation-preview'), request: { params: TenantProviderPathSchema, body: { content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderMembershipReplayRequestSchema } } } }, responses: { 200: { description: 'Tenant provider membership preview', content: { 'application/json': { schema: identityProviderDiagnosticSchemas.IdentityProviderReconciliationPreviewSchema } } } } });

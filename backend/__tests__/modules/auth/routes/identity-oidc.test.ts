@@ -171,7 +171,11 @@ describe('provider-neutral OIDC routes', () => {
       .redirects(0);
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
-    expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: expect.any(String) });
+    expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(
+      expect.any(Object),
+      { code: 'code-1', codeVerifier: 'verifier', nonce: expect.any(String) },
+      { tenantId: null },
+    );
     expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc' }), expect.objectContaining({ sub: 'subject-1', email: 'person@example.test' }));
     expect(identityProviderProvisioningService.reconcileOidcLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1', identityProviderUpdatedAt: 1234 }));
@@ -411,7 +415,9 @@ describe('provider-neutral OIDC routes', () => {
       .send({ SAMLResponse: 'signed-response', RelayState: relayState })
       .redirects(0);
     expect(callback.status).toBe(302);
-    expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response', requestId);
+    expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(
+      expect.any(Object), 'signed-response', requestId, { tenantId: null },
+    );
     expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-1', tenantId: null, requestId });
     expect(identityProviderProvisioningService.reconcileSamlLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
     expect(identityProviderProvisioningService.reconcileSamlLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
@@ -551,6 +557,8 @@ describe('provider-neutral OIDC routes', () => {
     expect(refreshTokenRepository.update).toHaveBeenCalledWith(expect.objectContaining({
       identityProviderId: 'provider-1', providerSubjectId: 'subject-1', providerSessionId: 'session-1',
     }), expect.any(Object));
-    expect(genericSamlService.createLogoutResponse).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ ID: '_logout-request' }), 'idp-state');
+    expect(genericSamlService.createLogoutResponse).toHaveBeenCalledWith(
+      expect.any(Object), expect.objectContaining({ ID: '_logout-request' }), 'idp-state', { tenantId: null },
+    );
   });
 });

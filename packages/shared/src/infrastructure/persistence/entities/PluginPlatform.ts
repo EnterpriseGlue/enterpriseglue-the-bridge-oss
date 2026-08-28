@@ -92,6 +92,12 @@ export class PluginInstallation extends AppBaseEntity {
   @Column({ name: 'enablement_scope', type: 'text', default: 'deployment' })
   enablementScope!: string;
 
+  @Column({ name: 'tenant_configuration_path', type: 'text', nullable: true })
+  tenantConfigurationPath!: string | null;
+
+  @Column({ name: 'tenant_configuration_schema_sha256', type: 'text', nullable: true })
+  tenantConfigurationSchemaSha256!: string | null;
+
   @Column({ name: 'grant_set_hash', type: 'text' })
   grantSetHash!: string;
 
@@ -103,6 +109,12 @@ export class PluginInstallation extends AppBaseEntity {
 
   @Column({ name: 'entitlement_state', type: 'text', default: 'not_required' })
   entitlementState!: string;
+
+  @Column({ name: 'entitlement_provider', type: 'text', default: 'none' })
+  entitlementProvider!: string;
+
+  @Column({ name: 'entitlement_feature', type: 'text', nullable: true })
+  entitlementFeature!: string | null;
 
   @Column({ type: 'bigint', default: 0 })
   revision!: number;
@@ -160,6 +172,21 @@ export class PluginTenantEnablement extends AppBaseEntity {
   @Column({ name: 'reason_code', type: 'text', default: 'none' })
   reasonCode!: string;
 
+  @Column({ name: 'activation_request_state', type: 'text', default: 'none' })
+  activationRequestState!: string;
+
+  @Column({ name: 'requested_by_ref', type: 'text', nullable: true })
+  requestedByRef!: string | null;
+
+  @Column({ name: 'requested_at', type: 'bigint', nullable: true })
+  requestedAt!: number | null;
+
+  @Column({ name: 'reviewed_by_ref', type: 'text', nullable: true })
+  reviewedByRef!: string | null;
+
+  @Column({ name: 'reviewed_at', type: 'bigint', nullable: true })
+  reviewedAt!: number | null;
+
   @Column({ type: 'bigint', default: 0 })
   revision!: number;
 
@@ -168,6 +195,96 @@ export class PluginTenantEnablement extends AppBaseEntity {
 
   @Column({ name: 'updated_at', type: 'bigint' })
   updatedAt!: number;
+}
+
+@Index('idx_plugin_tenant_eligibility_identity', ['pluginId', 'tenantRef'], {
+  unique: true,
+})
+@Index('idx_plugin_tenant_eligibility_expiry', ['expiresAt'])
+@Index('idx_plugin_tenant_eligibility_state', ['state', 'effectiveUntil'])
+@Entity({ name: 'plugin_tenant_eligibilities', schema: 'main' })
+export class PluginTenantEligibility extends AppBaseEntity {
+  @Column({ name: 'plugin_id', type: 'text' })
+  pluginId!: string;
+
+  @Column({ name: 'tenant_ref', type: 'text' })
+  tenantRef!: string;
+
+  @Column({ name: 'plugin_version', type: 'text' })
+  pluginVersion!: string;
+
+  @Column({ name: 'release_digest', type: 'text' })
+  releaseDigest!: string;
+
+  @Column({ type: 'text' })
+  state!: string;
+
+  @Column({ name: 'effective_from', type: 'bigint', nullable: true })
+  effectiveFrom!: number | null;
+
+  @Column({ name: 'effective_until', type: 'bigint', nullable: true })
+  effectiveUntil!: number | null;
+
+  @Column({ name: 'limits_hash', type: 'text' })
+  limitsHash!: string;
+
+  @Column({ name: 'projection_revision', type: 'bigint' })
+  projectionRevision!: number;
+
+  @Column({ type: 'text' })
+  issuer!: string;
+
+  @Column({ name: 'expires_at', type: 'bigint' })
+  expiresAt!: number;
+
+  @Column({ name: 'projection_ref', type: 'text' })
+  projectionRef!: string;
+
+  @Column({ name: 'projection_id', type: 'text' })
+  projectionId!: string;
+
+  @Column({ name: 'signature_sha256', type: 'text' })
+  signatureSha256!: string;
+
+  @Column({ name: 'created_at', type: 'bigint' })
+  createdAt!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}
+
+@Index('idx_plugin_tenant_app_op_idempotency', ['idempotencyKeyHash'], {
+  unique: true,
+})
+@Index('idx_plugin_tenant_app_op_scope', ['pluginId', 'tenantRef', 'createdAt'])
+@Entity({ name: 'plugin_tenant_application_operations', schema: 'main' })
+export class PluginTenantApplicationOperation extends AppBaseEntity {
+  @Column({ name: 'plugin_id', type: 'text' })
+  pluginId!: string;
+
+  @Column({ name: 'tenant_ref', type: 'text' })
+  tenantRef!: string;
+
+  @Column({ type: 'text' })
+  type!: string;
+
+  @Column({ name: 'idempotency_key_hash', type: 'text' })
+  idempotencyKeyHash!: string;
+
+  @Column({ name: 'request_hash', type: 'text' })
+  requestHash!: string;
+
+  @Column({ name: 'receipt_json', type: 'text' })
+  receiptJson!: string;
+
+  @Column({ name: 'actor_ref', type: 'text' })
+  actorRef!: string;
+
+  @Column({ name: 'correlation_id', type: 'text' })
+  correlationId!: string;
+
+  @Column({ name: 'created_at', type: 'bigint' })
+  createdAt!: number;
 }
 
 @Index('idx_plugin_op_idempotency', ['idempotencyKeyHash'], {
@@ -928,6 +1045,8 @@ export const pluginPlatformEntities = [
   PluginInstallation,
   PluginPermissionGrant,
   PluginTenantEnablement,
+  PluginTenantEligibility,
+  PluginTenantApplicationOperation,
   PluginLifecycleOperation,
   PluginPlatformAudit,
   PluginBrokerReplay,

@@ -1,14 +1,31 @@
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
 import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { getBpmnEngineRequestContext } from '../bpmn-engine-request-context.js';
+import {
+  HttpTenantSecretBroker,
+  TenantSecretBrokerError,
+  assertTenantSecretReference,
+  parseTenantSecretReference,
+  type TenantSecretAvailability,
+  type TenantSecretBrokerPort,
+  type TenantSecretMetadata,
+  type TenantSecretPurpose,
+} from './TenantSecretBroker.js';
 
 export type StoredSecretKind = 'encrypted_local' | 'external_ref' | 'legacy';
 
 export type SecretResolverSettings = {
   provider: 'env' | 'file' | 'docker';
   fileRoot?: string;
+  tenantSecretBrokerUrl?: string;
+  tenantSecretBrokerTokenRef?: string;
+  tenantSecretBrokerTimeoutMs?: number;
+  tenantSecretBrokerCacheTtlMs?: number;
+  tenantSecretBrokerCacheMaxEntries?: number;
 };
 
 export type SecretReferenceAvailability = {
@@ -20,7 +37,14 @@ export type SecretReferenceAvailability = {
     | 'docker_secret_provider_not_configured'
     | 'docker_secret_invalid_name'
     | 'docker_secret_unavailable'
-    | 'environment_variable_missing';
+    | 'environment_variable_missing'
+    | 'tenant_context_required';
+};
+
+export type TenantSecretResolutionContext = {
+  tenantId: string;
+  purpose: TenantSecretPurpose;
+  correlationId?: string;
 };
 
 const DEFAULT_DOCKER_SECRET_ROOT = '/run/secrets';
@@ -72,10 +96,20 @@ function resolveRegularSecretFile(rootInput: string, fileInput: string): string 
  * connections. Callers persist only the returned ciphertext or opaque ref.
  */
 export class SecretResolver {
+  private readonly cache = new Map<string, { value: string; expiresAt: number }>();
+  private broker: TenantSecretBrokerPort | null;
+
   constructor(private readonly settings: () => SecretResolverSettings = () => ({
     provider: config.configSecretProvider,
     fileRoot: config.configSecretFileRoot,
-  })) {}
+    tenantSecretBrokerUrl: config.tenantSecretBrokerUrl,
+    tenantSecretBrokerTokenRef: config.tenantSecretBrokerTokenRef,
+    tenantSecretBrokerTimeoutMs: config.tenantSecretBrokerTimeoutMs,
+    tenantSecretBrokerCacheTtlMs: config.tenantSecretBrokerCacheTtlMs,
+    tenantSecretBrokerCacheMaxEntries: config.tenantSecretBrokerCacheMaxEntries,
+  }), broker?: TenantSecretBrokerPort) {
+    this.broker = broker || null;
+  }
 
   storeEncryptedLocal(plaintext: string): string {
     if (!plaintext) throw new Error('Secret value is required');
@@ -109,6 +143,10 @@ export class SecretResolver {
    * returning its value. This is safe for config-bundle preflight output.
    */
   checkExternalReference(reference: string): SecretReferenceAvailability {
+    if (reference.startsWith('tenant-secret://')) {
+      try { parseTenantSecretReference(reference); } catch { return { available: false, reason: 'tenant_context_required' }; }
+      return { available: false, reason: 'tenant_context_required' };
+    }
     if (reference.startsWith('docker://')) {
       const settings = this.settings();
       if (settings.provider !== 'docker') return { available: false, reason: 'docker_secret_provider_not_configured' };
@@ -158,6 +196,9 @@ export class SecretResolver {
     if (!value) return null;
     if (this.isExternalReference(value)) {
       const reference = value.slice('ref:'.length);
+      if (reference.startsWith('tenant-secret://')) {
+        throw new Error('Tenant secret references require tenant-scoped asynchronous resolution');
+      }
       if (reference.startsWith('docker://')) {
         const settings = this.settings();
         if (settings.provider !== 'docker') {
@@ -208,6 +249,138 @@ export class SecretResolver {
       return Buffer.from(value.slice('enc:'.length), 'base64').toString('utf8');
     }
     return safeDecrypt(value);
+  }
+
+  private operationContext(context: TenantSecretResolutionContext) {
+    const correlationId = context.correlationId?.trim()
+      || getBpmnEngineRequestContext()?.requestId
+      || randomUUID();
+    return { tenantId: context.tenantId, purpose: context.purpose, correlationId };
+  }
+
+  private tenantReference(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const reference = value.startsWith('ref:') ? value.slice('ref:'.length) : value;
+    return reference.startsWith('tenant-secret://') ? reference : null;
+  }
+
+  private configuredBroker(): TenantSecretBrokerPort {
+    if (this.broker) return this.broker;
+    const settings = this.settings();
+    if (!settings.tenantSecretBrokerUrl || !settings.tenantSecretBrokerTokenRef) {
+      throw new TenantSecretBrokerError('not_configured');
+    }
+    this.broker = new HttpTenantSecretBroker({
+      baseUrl: settings.tenantSecretBrokerUrl,
+      timeoutMs: settings.tenantSecretBrokerTimeoutMs || 5_000,
+      authToken: () => {
+        const configured = settings.tenantSecretBrokerTokenRef!;
+        if (configured.includes('tenant-secret://')) throw new TenantSecretBrokerError('not_configured');
+        try {
+          const token = this.resolveStored(configured.startsWith('ref:') ? configured : `ref:${configured}`);
+          if (!token) throw new Error();
+          return token;
+        } catch {
+          throw new TenantSecretBrokerError('not_configured');
+        }
+      },
+    });
+    return this.broker;
+  }
+
+  private cacheGet(reference: string): string | null {
+    const cached = this.cache.get(reference);
+    if (!cached) return null;
+    if (cached.expiresAt <= Date.now()) {
+      this.cache.delete(reference);
+      return null;
+    }
+    // Refresh insertion order so the bounded map behaves as an LRU cache.
+    this.cache.delete(reference);
+    this.cache.set(reference, cached);
+    return cached.value;
+  }
+
+  private cachePut(reference: string, value: string): void {
+    const settings = this.settings();
+    const ttl = Math.max(0, Math.min(settings.tenantSecretBrokerCacheTtlMs ?? 15_000, 60_000));
+    if (ttl === 0) return;
+    this.cache.delete(reference);
+    this.cache.set(reference, { value, expiresAt: Date.now() + ttl });
+    const maxEntries = Math.max(1, Math.min(settings.tenantSecretBrokerCacheMaxEntries ?? 256, 1_024));
+    while (this.cache.size > maxEntries) {
+      const oldest = this.cache.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.cache.delete(oldest);
+    }
+  }
+
+  invalidateTenantSecret(reference: string): void {
+    const normalized = reference.startsWith('ref:') ? reference.slice('ref:'.length) : reference;
+    this.cache.delete(normalized);
+  }
+
+  async resolveTenantStored(
+    value: string | null | undefined,
+    context: TenantSecretResolutionContext,
+  ): Promise<string | null> {
+    if (!value) return null;
+    const reference = this.tenantReference(value);
+    if (!reference) return this.resolveStored(value);
+    const operation = this.operationContext(context);
+    assertTenantSecretReference(reference, operation);
+    const cached = this.cacheGet(reference);
+    if (cached !== null) return cached;
+    const resolved = await this.configuredBroker().resolve({ ...operation, reference });
+    if (!resolved.value) throw new TenantSecretBrokerError('invalid_response');
+    this.cachePut(reference, resolved.value);
+    return resolved.value;
+  }
+
+  async putTenantSecret(
+    input: TenantSecretResolutionContext & { value: string; previousReference?: string },
+  ): Promise<TenantSecretMetadata> {
+    const operation = this.operationContext(input);
+    const previousReference = input.previousReference
+      ? this.tenantReference(input.previousReference) || undefined
+      : undefined;
+    if (previousReference) assertTenantSecretReference(previousReference, operation);
+    const metadata = await this.configuredBroker().put({
+      ...operation,
+      value: input.value,
+      ...(previousReference ? { previousReference } : {}),
+    });
+    assertTenantSecretReference(metadata.reference, operation);
+    if (previousReference) this.invalidateTenantSecret(previousReference);
+    this.invalidateTenantSecret(metadata.reference);
+    return metadata;
+  }
+
+  async checkTenantExternalReference(
+    value: string,
+    context: TenantSecretResolutionContext,
+  ): Promise<TenantSecretAvailability | SecretReferenceAvailability> {
+    const reference = this.tenantReference(value);
+    if (!reference) {
+      const normalized = value.startsWith('ref:') ? value.slice('ref:'.length) : value;
+      return this.checkExternalReference(normalized);
+    }
+    const operation = this.operationContext(context);
+    assertTenantSecretReference(reference, operation);
+    return this.configuredBroker().availability({ ...operation, reference });
+  }
+
+  async retireTenantSecret(
+    value: string,
+    context: TenantSecretResolutionContext,
+  ): Promise<{ retired: boolean; retiredAt: number }> {
+    const reference = this.tenantReference(value);
+    if (!reference) throw new TenantSecretBrokerError('invalid_reference');
+    const operation = this.operationContext(context);
+    assertTenantSecretReference(reference, operation);
+    const result = await this.configuredBroker().retire({ ...operation, reference });
+    this.invalidateTenantSecret(reference);
+    return result;
   }
 }
 

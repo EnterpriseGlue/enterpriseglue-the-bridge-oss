@@ -1,0 +1,86 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-placement-workload-trust-v2",
+  "type": "feature",
+  "scope": "tenancy",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds asymmetric tenant placement assertions and workload-only, idempotent tenant lifecycle APIs while retaining placement v1 compatibility.",
+  "userImpact": [
+    "Existing single-tenant and pooled installations continue to use their current routes and placement v1 configuration.",
+    "Cloud control planes can provision and operate tenants without acquiring an interactive user session."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "No action is required for existing placement v1 installations.",
+      "Cloud pooled deployments configure the placement v2 JWKS, issuer, audience, shard identity, and workload receipt signing key before enabling the cloud-required profile."
+    ]
+  },
+  "configuration": [
+    "Adds cloud-neutral placement v2 JWKS, issuer, audience, shard identity, and workload receipt signing settings.",
+    "Retains EG_TENANT_PLACEMENT_KEY and EG_TENANT_PLACEMENT_MAX_AGE_SECONDS for placement v1 during its compatibility window."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds the placement-assertion/v2 header contract with ES256 key rotation and routing-bound claims.",
+      "Adds workload-only tenant create, suspend, resume, routing-alias reconciliation, and shard-readiness endpoints with idempotent signed receipts."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "Migration 1700000000127-add-tenant-workload-lifecycle adds durable tenant lifecycle operation receipts and cloud-managed tenant routing aliases."
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "The migration is additive and existing tenant, domain, session, and placement records are unchanged."
+    ]
+  },
+  "security": [
+    "Placement v2 verifies ES256 assertions by public JWKS material and binds issuer, audience, tenant, shard, epoch, host, path, correlation, and validity window.",
+    "Tenant lifecycle endpoints accept only service-account credentials carrying the tenant lifecycle scope and never create browser sessions.",
+      "Lifecycle retries are request-hash bound and return signed, secret-free receipts.",
+      "Suspend and resume atomically advance the placement epoch so assertions minted before a lifecycle transition cannot be reused after reactivation."
+  ],
+  "documentation": [
+    "Documents placement v2 configuration, workload lifecycle APIs, compatibility, rotation, and rollback."
+  ],
+  "knownLimitations": [
+    "Placement v2 currently supports ES256; placement v1 HMAC remains available for compatibility."
+  ],
+  "rollback": [
+    "Disable placement v2 and continue presenting placement v1 assertions while the compatibility window remains supported.",
+    "Roll back the application before removing the additive lifecycle-operation and routing-alias tables."
+  ],
+  "validation": [
+    "Unit tests cover KMS-compatible ES256 fixtures, key rotation, claim and route mismatches, v1 compatibility, workload-only authentication, idempotency conflicts, signed receipts, and alias isolation.",
+    "Existing single-mode and pooled tenancy suites remain required."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.9.0",
+      "newVersion": "0.10.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.7.2",
+      "newVersion": "0.8.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.11.1",
+      "newVersion": "0.12.0",
+      "impact": "minor"
+    }
+  ]
+}

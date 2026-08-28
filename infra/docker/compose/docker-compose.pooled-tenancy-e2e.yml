@@ -12,7 +12,7 @@ services:
     image: node:24-bookworm-slim
     user: node
     working_dir: /repo/backend
-    command: ["node", "dist/backend/src/server.js"]
+    command: ["sh", "-c", "node /repo/test/fixtures/tenant-secret-broker.mjs & exec node dist/backend/src/server.js"]
     environment:
       DATABASE_TYPE: postgres
       POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_APP_USER}
@@ -22,10 +22,56 @@ services:
       EG_TENANCY_MODE: pooled
       EG_TENANT_RLS_ENFORCED: "true"
       EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+      EG_TENANT_SECRET_BROKER_URL: http://127.0.0.1:8791
+      EG_TENANT_SECRET_BROKER_TOKEN_REF: env://EG_TENANT_SECRET_BROKER_TOKEN
+      EG_TENANT_SECRET_BROKER_TOKEN: ${EG_TENANT_SECRET_BROKER_TOKEN}
+      EG_TENANT_SECRET_BROKER_REQUIRED: "true"
+      EG_TENANT_APP_ELIGIBILITY_REQUIRED: "true"
+      EG_TENANT_APP_ELIGIBILITY_JWKS_JSON: ${EG_TENANT_APP_ELIGIBILITY_JWKS_JSON}
+      EG_TENANT_APP_ELIGIBILITY_ISSUER: ${EG_TENANT_APP_ELIGIBILITY_ISSUER}
+      EG_TENANT_APP_ELIGIBILITY_AUDIENCE: ${EG_TENANT_APP_ELIGIBILITY_AUDIENCE}
+      ENTERPRISEGLUE_TENANT_APP_ACTIVATION_POLICY: approval_required
+      ENTERPRISEGLUE_PLUGIN_STATE_FILE: /etc/enterpriseglue/pooled-e2e/plugin-state.json
+      ENTERPRISEGLUE_PLUGIN_ASSET_ROOT: /var/lib/enterpriseglue/pooled-e2e/plugins
+      ENTERPRISEGLUE_PLUGIN_INVOCATION_PRIVATE_KEY_FILE: /etc/enterpriseglue/pooled-e2e/plugin-invocation-private.pem
     volumes: !override
       - .:/repo:ro
       - ${KEYCLOAK_TLS_DIR}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro
       - ${LOCAL_IDENTITY_SECRET_DIR}:/etc/enterpriseglue/local-identity-secrets:ro
+      - ${POOLED_TENANCY_PLUGIN_STATE_FILE}:/etc/enterpriseglue/pooled-e2e/plugin-state.json:ro
+      - ${POOLED_TENANCY_PLUGIN_ASSET_ROOT}:/var/lib/enterpriseglue/pooled-e2e/plugins:ro
+      - ${POOLED_TENANCY_PLUGIN_INVOCATION_PRIVATE_KEY_FILE}:/etc/enterpriseglue/pooled-e2e/plugin-invocation-private.pem:ro
+
+  eg-plugin-io-enterpriseglue-reference-health:
+    build:
+      context: .
+      dockerfile: packages/plugin-reference/Dockerfile
+    restart: "no"
+    init: true
+    read_only: true
+    # The sidecar retains production mode-0600 evidence while using the
+    # invoking non-root host identity so the Linux browser runner can read its
+    # bind-mounted qualification receipt without broadening file permissions.
+    user: "${POOLED_TENANCY_REFERENCE_PLUGIN_UID}:${POOLED_TENANCY_REFERENCE_PLUGIN_GID}"
+    environment:
+      ENTERPRISEGLUE_PLUGIN_INVOCATION_PUBLIC_KEY_FILE: /run/enterpriseglue/plugin-invocation-public.pem
+      REFERENCE_PLUGIN_HOST_BROKER_BASE_URL: http://backend:8787
+      REFERENCE_PLUGIN_DATA_DIR: /var/lib/enterpriseglue/reference-health
+    volumes:
+      - ${POOLED_TENANCY_PLUGIN_INVOCATION_PUBLIC_KEY_FILE}:/run/enterpriseglue/plugin-invocation-public.pem:ro
+      - ${POOLED_TENANCY_REFERENCE_PLUGIN_DATA_DIR}:/var/lib/enterpriseglue/reference-health
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/plugin-healthcheck"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks:
+      - enterpriseglue-network
 
   # Build the SPA from the already-installed workspace dependencies before
   # Compose starts. This keeps the pooled browser lane independent of a second

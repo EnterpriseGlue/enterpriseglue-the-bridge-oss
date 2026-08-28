@@ -5,6 +5,7 @@ import {
   pluginPlatformAuditEventV1Schema,
   pluginPlatformEmergencyStateV1Schema,
   pluginSafeSummaryV1Schema,
+  pluginTenantApplicationV1Schema,
   pluginTenantEnablementV1Schema,
   type PluginId,
   type PluginLifecycleOperationV1,
@@ -12,7 +13,11 @@ import {
   type PluginPlatformAuditEventV1,
   type PluginPlatformEmergencyStateV1,
   type PluginSafeSummaryV1,
+  type PluginTenantApplicationV1,
   type PluginTenantEnablementV1,
+  type PluginTenantEligibilityClaimsV1,
+  type PluginTenantEligibilityProjectionV1,
+  type PluginTenantEligibilityStateV1,
 } from '@enterpriseglue/plugin-sdk';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
@@ -22,15 +27,21 @@ import {
   PluginPermissionGrant,
   PluginPlatformState,
   PluginPlatformAudit,
+  PluginTenantApplicationOperation,
+  PluginTenantEligibility,
   PluginTenantEnablement,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
 import {
   PluginControlErrorV1,
+  eligibilityProjection,
+  eligibilityStateAt,
   type PluginControlMutationV1,
   type PluginControlStoreV1,
   type PluginEmergencyControlMutationV1,
+  type PluginTenantApplicationMutationV1,
+  type PluginTenantEligibilityMutationV1,
   type PluginTenantControlMutationV1,
 } from './pluginControlPlane.js';
 import { findPluginRowForUpdateV1 } from './pluginDatabaseLock.js';
@@ -102,6 +113,12 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
           current.bundleDigest !== source.bundleDigest ||
           current.installerEnabled !== source.installerEnabled ||
           current.enablementScope !== source.enablementScope ||
+          current.entitlementProvider !== (source.entitlementProvider ?? 'none') ||
+          current.entitlementFeature !== (source.entitlementFeature ?? null) ||
+          current.tenantConfigurationPath !==
+            (source.tenantConfiguration?.relativePath ?? null) ||
+          current.tenantConfigurationSchemaSha256 !==
+            (source.tenantConfiguration?.schemaSha256 ?? null) ||
           current.grantSetHash !== grantSetHash;
         if (!current) {
           await installations.insert({
@@ -121,10 +138,16 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
               source.installerEnabled && source.compatible,
             installerEnabled: source.installerEnabled,
             enablementScope: source.enablementScope,
+            tenantConfigurationPath:
+              source.tenantConfiguration?.relativePath ?? null,
+            tenantConfigurationSchemaSha256:
+              source.tenantConfiguration?.schemaSha256 ?? null,
             grantSetHash,
             compatible: source.compatible,
             healthy: source.healthy,
             entitlementState: source.entitled,
+            entitlementProvider: source.entitlementProvider ?? 'none',
+            entitlementFeature: source.entitlementFeature ?? null,
             revision: 0,
             installerRevision: snapshot.revision,
             createdAt: now,
@@ -148,10 +171,16 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
                 source.installerEnabled && source.compatible,
               installerEnabled: source.installerEnabled,
               enablementScope: source.enablementScope,
+              tenantConfigurationPath:
+                source.tenantConfiguration?.relativePath ?? null,
+              tenantConfigurationSchemaSha256:
+                source.tenantConfiguration?.schemaSha256 ?? null,
               grantSetHash,
               compatible: source.compatible,
               healthy: current.desiredEnabled ? source.healthy : false,
               entitlementState: source.entitled,
+              entitlementProvider: source.entitlementProvider ?? 'none',
+              entitlementFeature: source.entitlementFeature ?? null,
               revision: integer(current.revision) + 1,
               installerRevision: snapshot.revision,
               updatedAt: now,
@@ -313,6 +342,17 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             'tenant_enablement_not_supported',
           );
         }
+        if (
+          input.enabled &&
+          !(await databaseTenantEligible(
+            manager,
+            installation,
+            input.tenantRef,
+            input.occurredAt,
+          ))
+        ) {
+          throw new PluginControlErrorV1(409, 'tenant_eligibility_inactive');
+        }
         const tenants = manager.getRepository(PluginTenantEnablement);
         const tenant = await tenants.findOne({
           where: {
@@ -320,23 +360,39 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
             tenantRef: input.tenantRef,
           },
         });
+        if ((!tenant && input.expectedRevision !== 0) ||
+          (tenant && integer(tenant.revision) !== input.expectedRevision)) {
+          throw new PluginControlErrorV1(409, 'revision_conflict');
+        }
         if (!tenant) {
-          throw new PluginControlErrorV1(409, 'revision_conflict');
-        }
-        if (integer(tenant.revision) !== input.expectedRevision) {
-          throw new PluginControlErrorV1(409, 'revision_conflict');
-        }
-        const updated = await tenants.update(
-          { id: tenant.id, revision: input.expectedRevision },
-          {
+          await tenants.insert({
+            id: randomUUID(),
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
             enabled: input.enabled,
             reasonCode: input.reasonCode,
-            revision: input.expectedRevision + 1,
+            activationRequestState: 'none',
+            requestedByRef: null,
+            requestedAt: null,
+            reviewedByRef: null,
+            reviewedAt: null,
+            revision: 1,
+            createdAt: Date.parse(input.occurredAt),
             updatedAt: Date.parse(input.occurredAt),
-          },
-        );
-        if (updated.affected !== 1) {
-          throw new PluginControlErrorV1(409, 'revision_conflict');
+          });
+        } else {
+          const updated = await tenants.update(
+            { id: tenant.id, revision: input.expectedRevision },
+            {
+              enabled: input.enabled,
+              reasonCode: input.reasonCode,
+              revision: input.expectedRevision + 1,
+              updatedAt: Date.parse(input.occurredAt),
+            },
+          );
+          if (updated.affected !== 1) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
         }
         const operation = await insertOperation(
           manager,
@@ -351,7 +407,7 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
           tenantRef: input.tenantRef,
           actorRef: input.actorRef,
           correlationId: input.correlationId,
-          fromState: tenant.enabled ? 'enabled' : 'installed_disabled',
+          fromState: tenant?.enabled ? 'enabled' : 'installed_disabled',
           toState: input.enabled ? 'enabled' : 'installed_disabled',
           reasonCode: input.reasonCode,
           occurredAt: Date.parse(input.occurredAt),
@@ -422,6 +478,379 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
       enabled: record.enabled,
       revision: integer(record.revision),
     });
+  }
+
+  async applyTenantEligibility(
+    input: PluginTenantEligibilityMutationV1,
+  ): Promise<PluginTenantEligibilityProjectionV1> {
+    return runPluginTransactionV1(
+      await this.dataSourceProvider(),
+      async (manager) => {
+        const installation = await findPluginRowForUpdateV1(
+          manager.getRepository(PluginInstallation),
+          { pluginId: input.claims.pluginId },
+        );
+        if (!installation) {
+          throw new PluginControlErrorV1(404, 'plugin_not_found');
+        }
+        if (installation.entitlementProvider !== 'plugin') {
+          throw new PluginControlErrorV1(409, 'tenant_eligibility_not_supported');
+        }
+        const eligibilities = manager.getRepository(PluginTenantEligibility);
+        const current = await eligibilities.findOne({
+          where: {
+            pluginId: input.claims.pluginId,
+            tenantRef: input.claims.tenantRef,
+          },
+        });
+        if (current && integer(current.projectionRevision) === input.claims.revision) {
+          if (current.signatureSha256 !== input.signatureSha256) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
+          return eligibilityProjection(
+            databaseEligibilityClaims(current),
+            input.occurredAt,
+          );
+        }
+        if (current && integer(current.projectionRevision) > input.claims.revision) {
+          throw new PluginControlErrorV1(409, 'revision_conflict');
+        }
+        const now = Date.parse(input.occurredAt);
+        const values = {
+          pluginId: input.claims.pluginId,
+          tenantRef: input.claims.tenantRef,
+          pluginVersion: input.claims.pluginVersion,
+          releaseDigest: input.claims.release,
+          state: input.claims.state,
+          effectiveFrom: input.claims.effectiveFrom
+            ? Date.parse(input.claims.effectiveFrom)
+            : null,
+          effectiveUntil: input.claims.effectiveUntil
+            ? Date.parse(input.claims.effectiveUntil)
+            : null,
+          limitsHash: input.claims.limitsHash,
+          projectionRevision: input.claims.revision,
+          issuer: input.claims.iss,
+          expiresAt: input.claims.exp * 1_000,
+          projectionRef: input.claims.projectionRef,
+          projectionId: input.claims.jti,
+          signatureSha256: input.signatureSha256,
+          updatedAt: now,
+        };
+        if (!current) {
+          await eligibilities.insert({
+            id: randomUUID(),
+            ...values,
+            createdAt: now,
+          });
+        } else {
+          const updated = await eligibilities.update(
+            {
+              id: current.id,
+              projectionRevision: current.projectionRevision,
+            },
+            values,
+          );
+          if (updated.affected !== 1) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
+        }
+        await appendAudit(manager, {
+          eventType: 'tenant_eligibility_updated',
+          pluginId: input.claims.pluginId,
+          tenantRef: input.claims.tenantRef,
+          actorRef: input.actorRef,
+          correlationId: input.correlationId,
+          fromState: current?.state ?? null,
+          toState: input.claims.state,
+          reasonCode: 'none',
+          occurredAt: now,
+        });
+        return eligibilityProjection(input.claims, input.occurredAt);
+      },
+    );
+  }
+
+  async getTenantEligibility(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<PluginTenantEligibilityProjectionV1 | undefined> {
+    const record = await (await this.dataSourceProvider())
+      .getRepository(PluginTenantEligibility)
+      .findOne({ where: { pluginId, tenantRef } });
+    return record
+      ? eligibilityProjection(databaseEligibilityClaims(record), now)
+      : undefined;
+  }
+
+  async isTenantEligible(
+    pluginId: PluginId,
+    tenantRef: string,
+    now: string,
+  ): Promise<boolean> {
+    const dataSource = await this.dataSourceProvider();
+    const installation = await dataSource.getRepository(PluginInstallation)
+      .findOne({ where: { pluginId } });
+    if (!installation) return false;
+    if (installation.entitlementProvider === 'none') return true;
+    const record = await dataSource.getRepository(PluginTenantEligibility)
+      .findOne({ where: { pluginId, tenantRef } });
+    return Boolean(
+      record && eligibilityStateAt(databaseEligibilityClaims(record), now).permitted,
+    );
+  }
+
+  async listTenantApplications(
+    tenantRef: string,
+    tenantSlug: string,
+    now: string,
+  ): Promise<PluginTenantApplicationV1[]> {
+    const dataSource = await this.dataSourceProvider();
+    const installations = await dataSource.getRepository(PluginInstallation)
+      .find({ where: { enablementScope: 'tenant' }, order: { pluginId: 'ASC' } });
+    const enablements = await dataSource.getRepository(PluginTenantEnablement)
+      .find({ where: { tenantRef } });
+    const eligibilities = await dataSource.getRepository(PluginTenantEligibility)
+      .find({ where: { tenantRef } });
+    const byPlugin = new Map(enablements.map((row) => [row.pluginId, row]));
+    const eligibilityByPlugin = new Map(
+      eligibilities.map((row) => [row.pluginId, row]),
+    );
+    return installations.map((installation) =>
+      databaseTenantApplication(
+        installation,
+        byPlugin.get(installation.pluginId),
+        tenantSlug,
+        databaseTenantApplicationEligibility(
+          installation,
+          eligibilityByPlugin.get(installation.pluginId),
+          now,
+        ),
+      ),
+    );
+  }
+
+  async getTenantApplication(
+    pluginId: PluginId,
+    tenantRef: string,
+    tenantSlug: string,
+    now: string,
+  ): Promise<PluginTenantApplicationV1 | undefined> {
+    const dataSource = await this.dataSourceProvider();
+    const installation = await dataSource.getRepository(PluginInstallation)
+      .findOne({ where: { pluginId, enablementScope: 'tenant' } });
+    if (!installation) return undefined;
+    const enablement = await dataSource.getRepository(PluginTenantEnablement)
+      .findOne({ where: { pluginId, tenantRef } });
+    const eligibility = await dataSource.getRepository(PluginTenantEligibility)
+      .findOne({ where: { pluginId, tenantRef } });
+    return databaseTenantApplication(
+      installation,
+      enablement,
+      tenantSlug,
+      databaseTenantApplicationEligibility(installation, eligibility, now),
+    );
+  }
+
+  async mutateTenantActivationRequest(
+    input: PluginTenantApplicationMutationV1,
+  ): Promise<PluginTenantApplicationV1> {
+    try {
+      return await runPluginTransactionV1(
+        await this.dataSourceProvider(),
+        async (manager) => {
+          const operations = manager.getRepository(
+            PluginTenantApplicationOperation,
+          );
+          const repeated = await operations.findOne({
+            where: { idempotencyKeyHash: input.idempotencyKeyHash },
+          });
+          if (repeated) {
+            if (
+              repeated.requestHash !== input.requestHash ||
+              repeated.pluginId !== input.pluginId ||
+              repeated.tenantRef !== input.tenantRef ||
+              repeated.type !== input.operation
+            ) {
+              throw new PluginControlErrorV1(409, 'idempotency_conflict');
+            }
+            return pluginTenantApplicationV1Schema.parse(
+              JSON.parse(repeated.receiptJson),
+            );
+          }
+
+          const installation = await manager.getRepository(PluginInstallation)
+            .findOne({ where: { pluginId: input.pluginId, enablementScope: 'tenant' } });
+          if (!installation) {
+            throw new PluginControlErrorV1(404, 'plugin_not_found');
+          }
+          if (
+            !installation.desiredEnabled ||
+            !installation.compatible ||
+            !['enabled', 'degraded'].includes(installation.state)
+          ) {
+            throw new PluginControlErrorV1(409, 'invalid_state');
+          }
+          if (
+            input.operation !== 'reject' &&
+            !(await databaseTenantEligible(
+              manager,
+              installation,
+              input.tenantRef,
+              input.occurredAt,
+            ))
+          ) {
+            throw new PluginControlErrorV1(409, 'tenant_eligibility_inactive');
+          }
+
+          const enablements = manager.getRepository(PluginTenantEnablement);
+          const current = await enablements.findOne({
+            where: { pluginId: input.pluginId, tenantRef: input.tenantRef },
+          });
+          if (
+            (!current && input.expectedRevision !== 0) ||
+            (current && integer(current.revision) !== input.expectedRevision)
+          ) {
+            throw new PluginControlErrorV1(409, 'revision_conflict');
+          }
+          if (
+            input.operation !== 'request' &&
+            current?.activationRequestState !== 'pending'
+          ) {
+            throw new PluginControlErrorV1(409, 'activation_request_not_pending');
+          }
+
+          const now = Date.parse(input.occurredAt);
+          const next = enablements.create({
+            ...(current ?? {}),
+            id: current?.id ?? randomUUID(),
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
+            enabled:
+              input.operation === 'approve'
+                ? true
+                : input.operation === 'reject'
+                  ? false
+                  : current?.enabled ?? false,
+            reasonCode: 'none',
+            activationRequestState:
+              input.operation === 'request'
+                ? 'pending'
+                : input.operation === 'approve'
+                  ? 'approved'
+                  : 'rejected',
+            requestedByRef:
+              input.operation === 'request'
+                ? input.actorRef
+                : current?.requestedByRef ?? null,
+            requestedAt:
+              input.operation === 'request'
+                ? now
+                : current?.requestedAt ?? null,
+            reviewedByRef:
+              input.operation === 'request' ? null : input.actorRef,
+            reviewedAt: input.operation === 'request' ? null : now,
+            revision: input.expectedRevision + 1,
+            createdAt: current?.createdAt ?? now,
+            updatedAt: now,
+          });
+          if (!current) {
+            await enablements.insert(next);
+          } else {
+            const updated = await enablements.update(
+              { id: current.id, revision: input.expectedRevision },
+              next,
+            );
+            if (updated.affected !== 1) {
+              throw new PluginControlErrorV1(409, 'revision_conflict');
+            }
+          }
+
+          const application = databaseTenantApplication(
+            installation,
+            next,
+            input.tenantSlug,
+            await databaseTenantApplicationEligibilityForManager(
+              manager,
+              installation,
+              input.tenantRef,
+              input.occurredAt,
+            ),
+          );
+          await operations.insert({
+            id: randomUUID(),
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
+            type: input.operation,
+            idempotencyKeyHash: input.idempotencyKeyHash,
+            requestHash: input.requestHash,
+            receiptJson: JSON.stringify(application),
+            actorRef: input.actorRef,
+            correlationId: input.correlationId,
+            createdAt: now,
+          });
+          await appendAudit(manager, {
+            eventType:
+              input.operation === 'request'
+                ? 'tenant_activation_requested'
+                : input.operation === 'approve'
+                  ? 'tenant_activation_approved'
+                  : 'tenant_activation_rejected',
+            pluginId: input.pluginId,
+            tenantRef: input.tenantRef,
+            actorRef: input.actorRef,
+            correlationId: input.correlationId,
+            fromState: databaseTenantApplicationStatus(
+              installation,
+              current,
+              await databaseTenantApplicationEligibilityForManager(
+                manager,
+                installation,
+                input.tenantRef,
+                input.occurredAt,
+              ),
+            ),
+            toState: application.status,
+            reasonCode: 'none',
+            occurredAt: now,
+          });
+          return application;
+        },
+      );
+    } catch (error) {
+      const repeated = await (await this.dataSourceProvider())
+        .getRepository(PluginTenantApplicationOperation)
+        .findOne({ where: { idempotencyKeyHash: input.idempotencyKeyHash } });
+      if (repeated) {
+        if (
+          repeated.requestHash !== input.requestHash ||
+          repeated.pluginId !== input.pluginId ||
+          repeated.tenantRef !== input.tenantRef ||
+          repeated.type !== input.operation
+        ) {
+          throw new PluginControlErrorV1(409, 'idempotency_conflict');
+        }
+        return pluginTenantApplicationV1Schema.parse(
+          JSON.parse(repeated.receiptJson),
+        );
+      }
+      throw error;
+    }
+  }
+
+  async listTenantApplicationAudit(
+    pluginId: PluginId,
+    tenantRef: string,
+  ): Promise<PluginPlatformAuditEventV1[]> {
+    const records = await (await this.dataSourceProvider())
+      .getRepository(PluginPlatformAudit)
+      .find({
+        where: { pluginId, tenantRef },
+        order: { occurredAt: 'DESC' },
+        take: 100,
+      });
+    return records.map(toAudit);
   }
 
   async getOperation(
@@ -539,20 +968,7 @@ export class DatabasePluginControlStoreV1 implements PluginControlStoreV1 {
       order: { occurredAt: 'DESC', id: 'DESC' },
       take: 100,
     });
-    return records.map((record) =>
-      pluginPlatformAuditEventV1Schema.parse({
-        eventId: record.id,
-        eventType: record.eventType,
-        pluginId: record.pluginId,
-        tenantScoped: record.tenantRef !== null,
-        actorRef: record.actorRef,
-        correlationId: record.correlationId,
-        fromState: record.fromState,
-        toState: record.toState,
-        reasonCode: record.reasonCode,
-        occurredAt: new Date(integer(record.occurredAt)).toISOString(),
-      }),
-    );
+    return records.map(toAudit);
   }
 
   private async mutateInstallation(
@@ -679,6 +1095,11 @@ async function reconcileDefaultTenant(
       tenantRef,
       enabled,
       reasonCode: enabled ? 'none' : 'administrator_disabled',
+      activationRequestState: 'none',
+      requestedByRef: null,
+      requestedAt: null,
+      reviewedByRef: null,
+      reviewedAt: null,
       revision: 0,
       createdAt: now,
       updatedAt: now,
@@ -829,6 +1250,150 @@ function toSummary(record: PluginInstallation): PluginSafeSummaryV1 {
   });
 }
 
+function databaseTenantApplicationStatus(
+  installation: PluginInstallation,
+  enablement?: PluginTenantEnablement | null,
+  eligibility: PluginTenantEligibilityStateV1 = installation.entitlementState as PluginTenantEligibilityStateV1,
+): PluginTenantApplicationV1['status'] {
+  if (eligibility === 'revoked') return 'revoked';
+  if (
+    !installation.compatible ||
+    ['expired', 'unavailable'].includes(eligibility)
+  ) {
+    return 'blocked';
+  }
+  if (
+    !installation.desiredEnabled ||
+    !['enabled', 'degraded'].includes(installation.state)
+  ) {
+    return ['trial', 'active', 'grace'].includes(eligibility)
+      ? 'entitled'
+      : 'install-pending';
+  }
+  if (enablement?.activationRequestState === 'pending') return 'requested';
+  if (enablement?.enabled) return 'active';
+  return enablement ? 'inactive' : 'available';
+}
+
+function databaseTenantApplication(
+  installation: PluginInstallation,
+  enablement: PluginTenantEnablement | null | undefined,
+  tenantSlug: string,
+  eligibility: PluginTenantEligibilityStateV1,
+): PluginTenantApplicationV1 {
+  return pluginTenantApplicationV1Schema.parse({
+    apiVersion: 'tenant-application.plugin.enterpriseglue.io/v1',
+    pluginId: installation.pluginId,
+    version: installation.version,
+    displayName: installation.displayName,
+    publisher: installation.publisher,
+    status: databaseTenantApplicationStatus(installation, enablement, eligibility),
+    active: enablement?.enabled ?? false,
+    compatible: installation.compatible,
+    healthy: installation.healthy,
+    entitled: eligibility,
+    reasonCode: installation.reasonCode,
+    revision: enablement ? integer(enablement.revision) : 0,
+    activationRequest: {
+      state: enablement?.activationRequestState ?? 'none',
+      requestedAt: enablement?.requestedAt === null || enablement?.requestedAt === undefined
+        ? null
+        : new Date(integer(enablement.requestedAt)).toISOString(),
+      reviewedAt: enablement?.reviewedAt === null || enablement?.reviewedAt === undefined
+        ? null
+        : new Date(integer(enablement.reviewedAt)).toISOString(),
+    },
+    configuration: {
+      available: Boolean(installation.tenantConfigurationPath),
+      schemaSha256: installation.tenantConfigurationSchemaSha256,
+      href: installation.tenantConfigurationPath
+        ? `/t/${encodeURIComponent(tenantSlug)}/${installation.tenantConfigurationPath}`
+        : null,
+      owner: 'plugin',
+    },
+  });
+}
+
+function databaseEligibilityClaims(
+  record: PluginTenantEligibility,
+): PluginTenantEligibilityClaimsV1 {
+  return {
+    schemaVersion: 'tenant-eligibility.plugin.enterpriseglue.io/v1',
+    iss: record.issuer,
+    aud: 'verified-and-not-persisted',
+    jti: record.projectionId,
+    tenantRef: record.tenantRef,
+    pluginId: record.pluginId as PluginId,
+    pluginVersion: record.pluginVersion,
+    release: record.releaseDigest,
+    state: record.state as PluginTenantEligibilityStateV1,
+    effectiveFrom: record.effectiveFrom === null
+      ? null
+      : new Date(integer(record.effectiveFrom)).toISOString(),
+    effectiveUntil: record.effectiveUntil === null
+      ? null
+      : new Date(integer(record.effectiveUntil)).toISOString(),
+    limitsHash: record.limitsHash,
+    revision: integer(record.projectionRevision),
+    projectionRef: record.projectionRef,
+    iat: Math.max(0, Math.floor(integer(record.createdAt) / 1_000)),
+    exp: Math.floor(integer(record.expiresAt) / 1_000),
+  };
+}
+
+function databaseTenantApplicationEligibility(
+  installation: PluginInstallation,
+  eligibility: PluginTenantEligibility | null | undefined,
+  now: string,
+): PluginTenantEligibilityStateV1 {
+  if (installation.entitlementProvider === 'none') return 'not_required';
+  return eligibility
+    ? eligibilityStateAt(databaseEligibilityClaims(eligibility), now).state
+    : 'unavailable';
+}
+
+async function databaseTenantApplicationEligibilityForManager(
+  manager: EntityManager,
+  installation: PluginInstallation,
+  tenantRef: string,
+  now: string,
+): Promise<PluginTenantEligibilityStateV1> {
+  if (installation.entitlementProvider === 'none') return 'not_required';
+  const eligibility = await manager.getRepository(PluginTenantEligibility)
+    .findOne({ where: { pluginId: installation.pluginId, tenantRef } });
+  return databaseTenantApplicationEligibility(installation, eligibility, now);
+}
+
+async function databaseTenantEligible(
+  manager: EntityManager,
+  installation: PluginInstallation,
+  tenantRef: string,
+  now: string,
+): Promise<boolean> {
+  if (installation.entitlementProvider === 'none') return true;
+  const eligibility = await manager.getRepository(PluginTenantEligibility)
+    .findOne({ where: { pluginId: installation.pluginId, tenantRef } });
+  return Boolean(
+    eligibility &&
+      eligibilityStateAt(databaseEligibilityClaims(eligibility), now).permitted,
+  );
+}
+
+function toAudit(record: PluginPlatformAudit): PluginPlatformAuditEventV1 {
+  return pluginPlatformAuditEventV1Schema.parse({
+    eventId: record.id,
+    eventType: record.eventType,
+    pluginId: record.pluginId,
+    tenantScoped: record.tenantRef !== null,
+    actorRef: record.actorRef,
+    correlationId: record.correlationId,
+    fromState: record.fromState,
+    toState: record.toState,
+    reasonCode: record.reasonCode,
+    occurredAt: new Date(integer(record.occurredAt)).toISOString(),
+  });
+}
+
 function toOperation(
   record: PluginLifecycleOperationEntity,
 ): PluginLifecycleOperationV1 {
@@ -917,6 +1482,7 @@ function installerSnapshotHash(
             sourceRecordHash: source.sourceRecordHash,
             installerEnabled: source.installerEnabled,
             enablementScope: source.enablementScope,
+            tenantConfiguration: source.tenantConfiguration ?? null,
             grantSetHash: hashGrantSet(source.grantedPermissions),
           }),
           'utf8',
