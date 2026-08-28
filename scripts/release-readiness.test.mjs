@@ -94,6 +94,8 @@ test('the local OCI drill qualifies the complete five-artifact toolchain', () =>
   assert.match(toolchainLocal, /docker pull "\$ZOT_IMAGE"/)
   assert.equal([...toolchainLocal.matchAll(/--pull=never/g)].length, 2)
   assert.equal([...toolchainLocal.matchAll(/docker buildx build/g)].length, 2)
+  assert.match(toolchainLocal, /build_toolchain_image\(\)/)
+  assert.doesNotMatch(toolchainLocal, /BUILDX_BUILDER_ARGS/)
   assert.match(toolchainLocal, /--provenance=false/)
   assert.match(toolchainLocal, /--sbom=false/)
   assert.match(toolchainLocal, /--output "type=oci,dest=\$INSTALLER_OCI_LAYOUT"/)
