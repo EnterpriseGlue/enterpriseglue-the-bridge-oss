@@ -243,3 +243,10 @@ strict authz inventory, Helm security lint, paid-plugin source and image boundar
 offline fail-closed tests, deterministic Carbon screenshots, and a private-plugin qualification
 against the exact released OSS commit. Record image digests and CI URLs; a local build alone is not
 a release receipt.
+
+If protected toolchain publication needs recovery, manually dispatch `Publish plugin installation
+toolchain` from `main` with the exact existing OSS `release_tag` and its exact 40-character
+`source_ref`. The protected environment and workflow revalidate that binding and resume only
+digest-addressed images/charts before regenerating signed receipts and distribution assets. Never
+use recovery to replace an immutable artifact, repoint a release tag, or publish an untagged source
+commit.

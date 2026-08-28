@@ -91,3 +91,16 @@ Run `pnpm test:host-chart` for chart rendering/security/compatibility contracts.
 declared Kubernetes-qualified until clean install, upgrade, rollback, manager restart, replica loss,
 pooled RLS and shared plugin-asset tests pass in a real cluster using published image/chart digests.
 
+## Release artifact recovery
+
+The protected `OSS Host Chart` workflow normally follows a successful `Docker Images` release run.
+If chart signing or receipt upload fails after the immutable chart has been published, repair the
+workflow on `main`, then use its manual recovery dispatch with both:
+
+- `source_ref`: the exact 40-character commit targeted by the existing OSS release tag; and
+- `release_tag`: that exact existing semantic tag, for example `v0.19.2`.
+
+The workflow runs through the `plugin-toolchain-production` environment, verifies the tag and
+GitHub release resolve to `source_ref`, compares any existing immutable chart payload with the
+source-built archive, signs the exact digest, and uploads the receipt. It must not replace a chart,
+move a tag, rebuild application images, or publish from an untagged commit.

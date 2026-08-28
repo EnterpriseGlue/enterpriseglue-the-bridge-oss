@@ -8,12 +8,15 @@ const workflow = await readFile(
 
 assert.match(workflow, /workflows: \[Docker Images\]/);
 assert.match(workflow, /github\.event\.workflow_run\.event == 'release'/);
-assert.match(workflow, /source_ref must equal the protected workflow commit/);
+assert.match(workflow, /recovery dispatch requires an exact semantic release_tag/);
+assert.doesNotMatch(workflow, /source_ref must equal the protected workflow commit/);
 assert.match(workflow, /\[\[ "\$\(git rev-list -n 1 "\$release_tag"\)" == "\$SOURCE_REF" \]\]/);
 assert.match(workflow, /Host chart appVersion \$app_version must equal OSS release \$release_tag/);
 assert.match(workflow, /bash scripts\/check-enterpriseglue-host-chart\.sh/);
 assert.equal([...workflow.matchAll(/helm package "\$chart"/g)].length, 2);
 assert.match(workflow, /helm-chart-archive\.mjs compare/);
+assert.match(workflow, /uses: docker\/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9/);
+assert.match(workflow, /registry: ghcr\.io/);
 assert.match(workflow, /helm push "\$CHART_ARCHIVE" oci:\/\/ghcr\.io\/enterpriseglue\/charts/);
 assert.match(workflow, /Published immutable chart version differs from source/);
 assert.match(workflow, /CHART_REFERENCE=\$CHART_REPOSITORY@\$digest/);
@@ -28,4 +31,3 @@ assert.doesNotMatch(workflow, /^\s*uses:\s+[^\s@]+@(?:main|master|v?\d+(?:\.\d+)
 assert.doesNotMatch(workflow, /kubectl\s+(?:apply|create|patch|replace)/);
 
 console.log('OSS host chart protected release policy passed');
-
