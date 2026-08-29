@@ -31,12 +31,26 @@ const retiredNode20Actions = new Set([
   'redhat-actions/oc-installer',
 ])
 
+const releaseCoupledAuthWorkflows = new Set([
+  'authz-pr.yml',
+  'identity-protocol-rehearsal.yml',
+])
+
+const deferredAuthActionPins = new Map([
+  ['actions/checkout', '11bd71901bbe5b1630ceea73d27597364c9af683'],
+  ['actions/setup-node', '53b83947a5a98c8d113130e565377fae1a50d02f'],
+  ['actions/cache', '0057852bfaa89a56745cba8c7296529d2fc39830'],
+  ['actions/upload-artifact', 'b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882'],
+  ['actions/github-script', 'f28e40c7f34bde8b3046d885e986cb6290c5673b'],
+  ['pnpm/action-setup', 'f40ffcd9367d9f12939873eb1018b921a783ffaa'],
+])
+
 function actionRepository(action) {
   if (action.startsWith('github/codeql-action/')) return 'github/codeql-action'
   return action
 }
 
-test('workflows use the approved Node 24 action revisions', async () => {
+test('workflows use approved action revisions with explicit auth release deferrals', async () => {
   const workflowNames = (await readdir(workflowDirectory))
     .filter((name) => name.endsWith('.yml'))
     .sort()
@@ -52,6 +66,13 @@ test('workflows use the approved Node 24 action revisions', async () => {
         continue
       }
       const repository = actionRepository(action)
+      if (releaseCoupledAuthWorkflows.has(workflowName)) {
+        const expectedRevision = deferredAuthActionPins.get(repository)
+        if (expectedRevision && revision !== expectedRevision) {
+          violations.push(`${path.basename(workflowName)}: deferred ${action}@${revision}`)
+        }
+        continue
+      }
       if (retiredNode20Actions.has(repository)) {
         violations.push(`${path.basename(workflowName)}: retired ${action}@${revision}`)
         continue
@@ -69,6 +90,6 @@ test('workflows use the approved Node 24 action revisions', async () => {
   assert.deepEqual(
     violations,
     [],
-    `Node 24 action pins drifted:\n${violations.join('\n')}`,
+    `Action pin policy drifted:\n${violations.join('\n')}`,
   )
 })
