@@ -21,7 +21,7 @@ on:
         type: string
         default: ''
       source_ref:
-        description: Exact source commit to build; defaults to the caller SHA
+        description: Exact source revision recorded in OCI provenance; defaults to the caller SHA
         required: false
         type: string
         default: ''
@@ -82,8 +82,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-        with:
-          ref: ${{ inputs.source_ref || github.sha }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3

@@ -18,10 +18,17 @@ to create another patch version.
    readiness jobs.
 2. The merge queue creates the exact commit that will become the release
    commit. After `CI` succeeds for that merge group, `Release Candidate Stage`
-   verifies that the merge delta contains only generated release files.
+   verifies with read-only permissions that the merge delta contains only
+   generated release files and that the host-chart version change is the exact
+   deterministic result expected from the protected base.
 3. The staging workflow builds the multi-architecture backend, frontend,
    plugin-installer, and Plugin Manager images. It packages the four public
-   plugin packages and four Helm charts.
+   plugin packages and four Helm charts. Jobs with registry write authority
+   execute only the protected base revision. Because the accepted merge delta
+   cannot contain executable source, those bytes are the release candidate's
+   application and plugin bytes. The host chart's two validated release fields
+   are independently derived on that protected checkout; no file or cache from
+   the candidate checkout crosses into a privileged job.
 4. PostgreSQL, exposed-backend, authentication, Oracle, vulnerability,
    package, chart, and plugin-toolchain checks run against the staged payload.
 5. The workflow publishes a signed
@@ -62,9 +69,14 @@ after the tag exists and cannot prevent a partially published version.
 First identify the exact release tag and its 40-character source commit. Do not
 move or recreate the tag.
 
-- If candidate staging failed before merge, rerun `Release Candidate Stage`
-  with the same `source_ref` and `release_tag`. Candidate image, chart, and
-  bundle tags are immutable: an existing payload is compared and reused.
+- If candidate staging failed before merge, rerun that exact failed workflow
+  run or let the merge queue recreate the candidate. Do not manually dispatch
+  an unmerged merge-group SHA. Candidate image, chart, and bundle tags are
+  immutable: an existing payload is compared and reused.
+- Manual `Release Candidate Stage` recovery accepts only the current protected
+  `main` commit and its matching `release_tag`. This supports a release commit
+  that has already reached `main` without allowing a privileged workflow to
+  execute code from an arbitrary revision.
 - If `Docker Images` failed after the release was created, dispatch it with the
   same `source_ref` and `release_tag`. It re-verifies the signed candidate and
   promotes the same digests.

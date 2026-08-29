@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Exact merge-queue or released commit to stage or recover
+        description: Exact current protected-main release commit to recover
         required: true
         type: string
       release_tag:
@@ -17,11 +17,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
-  pull-requests: read
-  statuses: write
 
 concurrency:
   group: release-candidate-${{ inputs.source_ref || github.event.workflow_run.head_sha }}
@@ -37,6 +32,12 @@ jobs:
       base_ref: ${{ steps.resolve.outputs.base_ref }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       candidate_tag: ${{ steps.resolve.outputs.candidate_tag }}
+      trusted_ref: ${{ steps.resolve.outputs.trusted_ref }}
+      derive_release_metadata: ${{ steps.resolve.outputs.derive_release_metadata }}
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
     steps:
       - name: Resolve merge-queue authority and initialize the required status
         id: resolve
@@ -65,12 +66,19 @@ jobs:
                 core.setFailed('Recovery requires an exact source_ref and vX.Y.Z release_tag.');
                 return;
               }
+              if (sourceRef !== context.sha) {
+                await status(sourceRef, 'failure', 'Recovery source must be the current protected main commit');
+                core.setFailed('Recovery source_ref must equal the protected workflow commit.');
+                return;
+              }
               await status(sourceRef, 'pending', `Staging immutable ${releaseTag} candidate`);
               core.setOutput('should_stage', 'true');
               core.setOutput('source_ref', sourceRef);
               core.setOutput('base_ref', `${sourceRef}^1`);
               core.setOutput('release_tag', releaseTag);
               core.setOutput('candidate_tag', `candidate-${releaseTag}-${sourceRef.slice(0, 12)}`);
+              core.setOutput('trusted_ref', context.sha);
+              core.setOutput('derive_release_metadata', 'false');
               return;
             }
 
@@ -125,18 +133,28 @@ jobs:
               return;
             }
             const releaseTag = `v${version}`;
+            const baseRef = String(pull.base?.sha || '');
+            if (baseRef !== context.sha) {
+              await status(sourceRef, 'failure', 'Release merge group is not based on the protected workflow commit');
+              core.setFailed(`Release base ${baseRef} does not equal trusted workflow commit ${context.sha}.`);
+              return;
+            }
             await status(sourceRef, 'pending', `Staging immutable ${releaseTag} candidate`);
             core.setOutput('should_stage', 'true');
             core.setOutput('source_ref', sourceRef);
-            core.setOutput('base_ref', `${sourceRef}^1`);
+            core.setOutput('base_ref', baseRef);
             core.setOutput('release_tag', releaseTag);
             core.setOutput('candidate_tag', `candidate-${releaseTag}-${sourceRef.slice(0, 12)}`);
+            core.setOutput('trusted_ref', context.sha);
+            core.setOutput('derive_release_metadata', 'true');
 
   validate-source:
     name: Validate candidate trust boundary
     needs: resolve
     if: needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout exact candidate history
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -154,6 +172,7 @@ jobs:
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
           git rev-parse --verify "$BASE_REF^{commit}" >/dev/null
+          [[ "$(git rev-parse "$SOURCE_REF^1")" == "$(git rev-parse "$BASE_REF")" ]]
           changed="$(git diff --name-only "$BASE_REF" "$SOURCE_REF")"
           test -n "$changed"
           if grep -Evq '^(\.github/\.release-please-manifest\.json|CHANGELOG\.md|docs/releases/v[0-9]+\.[0-9]+\.[0-9]+\.md|infra/kubernetes/helm/enterpriseglue-host/Chart\.yaml)$' <<< "$changed"; then
@@ -165,8 +184,23 @@ jobs:
           [[ "$(jq -er '.["."]' .github/.release-please-manifest.json)" == "$version" ]]
           grep -Fq "## [$version]" CHANGELOG.md
           test -f "docs/releases/$RELEASE_TAG.md"
-          app_version="$(sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}$/\1/p' infra/kubernetes/helm/enterpriseglue-host/Chart.yaml)"
+          chart_file=infra/kubernetes/helm/enterpriseglue-host/Chart.yaml
+          [[ "$(grep -Ec '^version:' "$chart_file")" == 1 ]]
+          [[ "$(grep -Ec '^appVersion:' "$chart_file")" == 1 ]]
+          base_chart_version="$(git show "$BASE_REF:$chart_file" | sed -n 's/^version:[[:space:]]*//p')"
+          [[ "$base_chart_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          IFS=. read -r chart_major chart_minor chart_patch <<< "$base_chart_version"
+          expected_chart_version="$chart_major.$chart_minor.$((chart_patch + 1))"
+          chart_version="$(sed -n 's/^version:[[:space:]]*//p' "$chart_file")"
+          app_version="$(sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}$/\1/p' "$chart_file")"
+          [[ "$chart_version" == "$expected_chart_version" ]]
           [[ "$app_version" == "$version" ]]
+          expected_chart="$RUNNER_TEMP/enterpriseglue-host-Chart.yaml"
+          git show "$BASE_REF:$chart_file" |
+            sed -E \
+              -e "s/^version:.*/version: $expected_chart_version/" \
+              -e "s/^appVersion:.*/appVersion: \"$version\"/" > "$expected_chart"
+          cmp "$expected_chart" "$chart_file"
           test -z "$(git status --porcelain)"
 
   stage-application-images:
@@ -174,6 +208,11 @@ jobs:
     needs: [resolve, validate-source]
     if: needs.resolve.outputs.should_stage == 'true'
     uses: ./.github/workflows/docker-images-reusable.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     with:
       backend_image: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend
       frontend_image: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend
@@ -195,10 +234,11 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Checkout exact candidate
+      - name: Checkout protected qualification source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
+
+      - name: Verify protected qualification source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
 
       - name: Authenticate read-only candidate access
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -268,6 +308,11 @@ jobs:
     if: needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     outputs:
       installer_ref: ${{ steps.stage.outputs.installer_ref }}
       manager_ref: ${{ steps.stage.outputs.manager_ref }}
@@ -276,10 +321,24 @@ jobs:
       rbac_chart_ref: ${{ steps.stage.outputs.rbac_chart_ref }}
       manager_chart_ref: ${{ steps.stage.outputs.manager_chart_ref }}
     steps:
-      - name: Checkout exact candidate
+      - name: Checkout protected staging source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
+
+      - name: Verify protected staging source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Derive the validated host-chart release metadata
+        if: needs.resolve.outputs.derive_release_metadata == 'true'
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          chart_file=infra/kubernetes/helm/enterpriseglue-host/Chart.yaml
+          base_chart_version="$(sed -n 's/^version:[[:space:]]*//p' "$chart_file")"
+          node scripts/sync-host-chart-release-version.mjs \
+            --file "$chart_file" \
+            --base-chart-version "$base_chart_version" \
+            --app-version "${RELEASE_TAG#v}"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
@@ -291,8 +350,6 @@ jobs:
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
@@ -451,13 +508,18 @@ jobs:
     needs: [resolve, stage-application-images, qualify-application-images, stage-toolchain]
     if: needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     outputs:
       candidate_ref: ${{ steps.publish.outputs.candidate_ref }}
     steps:
-      - name: Checkout exact candidate
+      - name: Checkout protected receipt source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
+
+      - name: Verify protected receipt source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
 
       - name: Download exact candidate payload
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -553,6 +615,9 @@ jobs:
     needs: [resolve, validate-source, stage-application-images, qualify-application-images, stage-toolchain, publish-receipt]
     if: always() && needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - name: Mark the exact candidate successful or failed
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
