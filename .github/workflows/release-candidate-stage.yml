@@ -71,10 +71,21 @@ jobs:
                 core.setFailed('Recovery source_ref must equal the protected workflow commit.');
                 return;
               }
+              const { data: sourceCommit } = await github.rest.repos.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: sourceRef,
+              });
+              const baseRef = String(sourceCommit.parents?.[0]?.sha || '');
+              if (!/^[0-9a-f]{40}$/.test(baseRef)) {
+                await status(sourceRef, 'failure', 'Recovery source has no immutable first parent');
+                core.setFailed('Recovery source must be a release merge commit.');
+                return;
+              }
               await status(sourceRef, 'pending', `Staging immutable ${releaseTag} candidate`);
               core.setOutput('should_stage', 'true');
               core.setOutput('source_ref', sourceRef);
-              core.setOutput('base_ref', `${sourceRef}^1`);
+              core.setOutput('base_ref', baseRef);
               core.setOutput('release_tag', releaseTag);
               core.setOutput('candidate_tag', `candidate-${releaseTag}-${sourceRef.slice(0, 12)}`);
               core.setOutput('trusted_ref', context.sha);
@@ -156,52 +167,99 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout exact candidate history
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ needs.resolve.outputs.source_ref }}
-          fetch-depth: 0
-
-      - name: Verify release-only merge delta and identity
-        shell: bash
+      - name: Verify release-only merge delta and identity without checkout
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
           BASE_REF: ${{ needs.resolve.outputs.base_ref }}
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
-          git rev-parse --verify "$BASE_REF^{commit}" >/dev/null
-          [[ "$(git rev-parse "$SOURCE_REF^1")" == "$(git rev-parse "$BASE_REF")" ]]
-          changed="$(git diff --name-only "$BASE_REF" "$SOURCE_REF")"
-          test -n "$changed"
-          if grep -Evq '^(\.github/\.release-please-manifest\.json|CHANGELOG\.md|docs/releases/v[0-9]+\.[0-9]+\.[0-9]+\.md|infra/kubernetes/helm/enterpriseglue-host/Chart\.yaml)$' <<< "$changed"; then
-            echo "Privileged candidate staging accepts only the generated Release Please delta:" >&2
-            grep -Ev '^(\.github/\.release-please-manifest\.json|CHANGELOG\.md|docs/releases/v[0-9]+\.[0-9]+\.[0-9]+\.md|infra/kubernetes/helm/enterpriseglue-host/Chart\.yaml)$' <<< "$changed" >&2
-            exit 1
-          fi
-          version="${RELEASE_TAG#v}"
-          [[ "$(jq -er '.["."]' .github/.release-please-manifest.json)" == "$version" ]]
-          grep -Fq "## [$version]" CHANGELOG.md
-          test -f "docs/releases/$RELEASE_TAG.md"
-          chart_file=infra/kubernetes/helm/enterpriseglue-host/Chart.yaml
-          [[ "$(grep -Ec '^version:' "$chart_file")" == 1 ]]
-          [[ "$(grep -Ec '^appVersion:' "$chart_file")" == 1 ]]
-          base_chart_version="$(git show "$BASE_REF:$chart_file" | sed -n 's/^version:[[:space:]]*//p')"
-          [[ "$base_chart_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          IFS=. read -r chart_major chart_minor chart_patch <<< "$base_chart_version"
-          expected_chart_version="$chart_major.$chart_minor.$((chart_patch + 1))"
-          chart_version="$(sed -n 's/^version:[[:space:]]*//p' "$chart_file")"
-          app_version="$(sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"[:space:]]*\)"\{0,1\}$/\1/p' "$chart_file")"
-          [[ "$chart_version" == "$expected_chart_version" ]]
-          [[ "$app_version" == "$version" ]]
-          expected_chart="$RUNNER_TEMP/enterpriseglue-host-Chart.yaml"
-          git show "$BASE_REF:$chart_file" |
-            sed -E \
-              -e "s/^version:.*/version: $expected_chart_version/" \
-              -e "s/^appVersion:.*/appVersion: \"$version\"/" > "$expected_chart"
-          cmp "$expected_chart" "$chart_file"
-          test -z "$(git status --porcelain)"
+        with:
+          script: |
+            const sourceRef = String(process.env.SOURCE_REF || '');
+            const baseRef = String(process.env.BASE_REF || '');
+            const releaseTag = String(process.env.RELEASE_TAG || '');
+            if (!/^[0-9a-f]{40}$/.test(sourceRef) || !/^[0-9a-f]{40}$/.test(baseRef)) {
+              core.setFailed('Candidate and base refs must be immutable commits.');
+              return;
+            }
+            if (!/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+              core.setFailed('Candidate release tag must be an exact vX.Y.Z identity.');
+              return;
+            }
+
+            const request = { owner: context.repo.owner, repo: context.repo.repo };
+            const { data: commit } = await github.rest.repos.getCommit({ ...request, ref: sourceRef });
+            if (commit.sha !== sourceRef || commit.parents?.[0]?.sha !== baseRef) {
+              core.setFailed('Candidate must be the exact merge commit whose first parent is the protected base.');
+              return;
+            }
+
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              ...request,
+              basehead: `${baseRef}...${sourceRef}`,
+            });
+            if (comparison.merge_base_commit?.sha !== baseRef) {
+              core.setFailed('Candidate comparison does not have the protected base as its merge base.');
+              return;
+            }
+            const version = releaseTag.slice(1);
+            const expectedPaths = [
+              '.github/.release-please-manifest.json',
+              'CHANGELOG.md',
+              `docs/releases/${releaseTag}.md`,
+              'infra/kubernetes/helm/enterpriseglue-host/Chart.yaml',
+            ].sort();
+            const changedPaths = (comparison.files || []).map((file) => file.filename).sort();
+            if (changedPaths.length !== expectedPaths.length ||
+                changedPaths.some((path, index) => path !== expectedPaths[index])) {
+              core.setFailed(`Privileged candidate staging accepts only the exact generated Release Please delta; received: ${changedPaths.join(', ')}`);
+              return;
+            }
+
+            const readText = async (path, ref) => {
+              const { data } = await github.rest.repos.getContent({ ...request, path, ref });
+              if (Array.isArray(data) || data.type !== 'file' || data.encoding !== 'base64') {
+                throw new Error(`Expected one base64 file at ${path}@${ref}`);
+              }
+              return Buffer.from(String(data.content).replace(/\n/g, ''), 'base64').toString('utf8');
+            };
+            const manifest = JSON.parse(await readText(expectedPaths[0], sourceRef));
+            if (Object.keys(manifest).length !== 1 || manifest['.'] !== version) {
+              core.setFailed('Release Please manifest does not exactly match the proposed version.');
+              return;
+            }
+            const changelog = await readText('CHANGELOG.md', sourceRef);
+            if (!changelog.includes(`## [${version}]`)) {
+              core.setFailed('Changelog does not contain the proposed version.');
+              return;
+            }
+            await readText(`docs/releases/${releaseTag}.md`, sourceRef);
+
+            const chartPath = 'infra/kubernetes/helm/enterpriseglue-host/Chart.yaml';
+            const baseChart = await readText(chartPath, baseRef);
+            const candidateChart = await readText(chartPath, sourceRef);
+            const versions = baseChart.match(/^version:[^\r\n]*$/gm) || [];
+            const appVersions = baseChart.match(/^appVersion:[^\r\n]*$/gm) || [];
+            if (versions.length !== 1 || appVersions.length !== 1) {
+              core.setFailed('Protected host Chart.yaml must have one version and one appVersion.');
+              return;
+            }
+            const baseVersion = versions[0].replace(/^version:\s*/, '');
+            if (!/^\d+\.\d+\.\d+$/.test(baseVersion)) {
+              core.setFailed('Protected host chart version is not major.minor.patch.');
+              return;
+            }
+            const [major, minor, patch] = baseVersion.split('.').map(Number);
+            if (![major, minor, patch].every(Number.isSafeInteger) || patch === Number.MAX_SAFE_INTEGER) {
+              core.setFailed('Protected host chart version cannot be incremented safely.');
+              return;
+            }
+            const expectedChart = baseChart
+              .replace(/^version:[^\r\n]*$/m, `version: ${major}.${minor}.${patch + 1}`)
+              .replace(/^appVersion:[^\r\n]*$/m, `appVersion: "${version}"`);
+            if (candidateChart !== expectedChart) {
+              core.setFailed('Candidate host Chart.yaml is not the exact deterministic release update.');
+            }
 
   stage-application-images:
     name: Stage application images

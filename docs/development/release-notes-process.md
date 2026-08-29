@@ -142,12 +142,14 @@ immutable registry payload. It publishes only candidate tags and a signed
 candidate receipt; it does not create a Git tag, GitHub release, public package
 version, production chart version, Docker Hub tag, or `latest` alias.
 
-The candidate checkout is isolated in a `contents: read` validation job. Every
-job with package-write or signing authority checks out only the protected base
-revision. The validator proves the release merge changes no executable source
-and that its host-chart version update is deterministic; the privileged chart
-job derives that update again from the protected base. Candidate files and
-caches are never imported into privileged execution.
+Candidate commit metadata and the four generated release files are read through
+the GitHub API by a `contents: read` validation job; the candidate is never
+checked out on a runner. Every job with package-write or signing authority
+checks out only the protected base revision. The validator proves the release
+merge changes no executable source and that its host-chart version update is
+deterministic; the privileged chart job derives that update again from the
+protected base. Candidate files and caches are never imported into privileged
+execution.
 
 Branch protection requires the `Release candidate staged` status. A release
 must not be merged while either CI or staging is failed, cancelled, timed out,

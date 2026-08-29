@@ -33,17 +33,24 @@ test('candidate staging is downstream of successful exact merge-queue CI', () =>
   assert.match(stage, /release-please--branches--/)
   assert.match(stage, /context: 'Release candidate staged'/)
   assert.match(stage, /candidate-\$\{releaseTag\}-\$\{sourceRef\.slice\(0, 12\)\}/)
-  assert.match(stage, /Privileged candidate staging accepts only the generated Release Please delta/)
+  assert.match(stage, /Privileged candidate staging accepts only the exact generated Release Please delta/)
   assert.match(stage, /pull\.base\?\.sha/)
   assert.match(stage, /baseRef !== context\.sha/)
-  assert.match(stage, /git rev-parse "\$SOURCE_REF\^1"/)
+  assert.match(stage, /commit\.parents\?\.\[0\]\?\.sha !== baseRef/)
 })
 
 test('candidate staging never executes the merge-queue checkout with write authority', () => {
-  assert.match(stage, /validate-source:[\s\S]*?permissions:\n\s+contents: read[\s\S]*?ref: \$\{\{ needs\.resolve\.outputs\.source_ref \}\}/)
-  assert.equal((stage.match(/^\s+ref: \$\{\{ needs\.resolve\.outputs\.source_ref \}\}$/gm) || []).length, 1)
+  const validator = stage.slice(
+    stage.indexOf('  validate-source:\n'),
+    stage.indexOf('  stage-application-images:\n'),
+  )
+  assert.match(validator, /permissions:\n\s+contents: read/)
+  assert.match(validator, /compareCommitsWithBasehead/)
+  assert.match(validator, /github\.rest\.repos\.getContent/)
+  assert.doesNotMatch(validator, /actions\/checkout/)
+  assert.doesNotMatch(stage, /^\s+ref: \$\{\{ needs\.resolve\.outputs\.source_ref \}\}$/gm)
   assert.doesNotMatch(stage, /release-candidate-overlay/)
-  assert.match(stage, /cmp "\$expected_chart" "\$chart_file"/)
+  assert.match(stage, /candidateChart !== expectedChart/)
   assert.match(stage, /Derive the validated host-chart release metadata/)
   assert.match(stage, /sync-host-chart-release-version\.mjs/)
   assert.match(stage, /derive_release_metadata == 'true'/)
