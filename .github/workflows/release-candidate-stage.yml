@@ -1,0 +1,713 @@
+name: Release Candidate Stage
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact current protected-main release commit to recover
+        required: true
+        type: string
+      release_tag:
+        description: Exact semantic release identity (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ inputs.source_ref || github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve trusted release candidate
+    runs-on: ubuntu-latest
+    outputs:
+      should_stage: ${{ steps.resolve.outputs.should_stage }}
+      source_ref: ${{ steps.resolve.outputs.source_ref }}
+      base_ref: ${{ steps.resolve.outputs.base_ref }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      candidate_tag: ${{ steps.resolve.outputs.candidate_tag }}
+      trusted_ref: ${{ steps.resolve.outputs.trusted_ref }}
+      derive_release_metadata: ${{ steps.resolve.outputs.derive_release_metadata }}
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Resolve merge-queue authority and initialize the required status
+        id: resolve
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        with:
+          script: |
+            const status = async (sha, state, description) => {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha,
+                state,
+                context: 'Release candidate staged',
+                description,
+                target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+            };
+
+            if (context.eventName === 'workflow_dispatch') {
+              const sourceRef = String(process.env.INPUT_SOURCE_REF || '');
+              const releaseTag = String(process.env.INPUT_RELEASE_TAG || '');
+              if (!/^[0-9a-f]{40}$/.test(sourceRef) || !/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+                core.setFailed('Recovery requires an exact source_ref and vX.Y.Z release_tag.');
+                return;
+              }
+              if (sourceRef !== context.sha) {
+                await status(sourceRef, 'failure', 'Recovery source must be the current protected main commit');
+                core.setFailed('Recovery source_ref must equal the protected workflow commit.');
+                return;
+              }
+              const { data: sourceCommit } = await github.rest.repos.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: sourceRef,
+              });
+              const baseRef = String(sourceCommit.parents?.[0]?.sha || '');
+              if (!/^[0-9a-f]{40}$/.test(baseRef)) {
+                await status(sourceRef, 'failure', 'Recovery source has no immutable first parent');
+                core.setFailed('Recovery source must be a release merge commit.');
+                return;
+              }
+              await status(sourceRef, 'pending', `Staging immutable ${releaseTag} candidate`);
+              core.setOutput('should_stage', 'true');
+              core.setOutput('source_ref', sourceRef);
+              core.setOutput('base_ref', baseRef);
+              core.setOutput('release_tag', releaseTag);
+              core.setOutput('candidate_tag', `candidate-${releaseTag}-${sourceRef.slice(0, 12)}`);
+              core.setOutput('trusted_ref', context.sha);
+              core.setOutput('derive_release_metadata', 'false');
+              return;
+            }
+
+            const run = context.payload.workflow_run;
+            let sourceRef = String(run?.head_sha || '');
+            if (!/^[0-9a-f]{40}$/.test(sourceRef)) {
+              core.setFailed('CI workflow_run did not provide an immutable source revision.');
+              return;
+            }
+
+            if (run.event === 'pull_request') {
+              sourceRef = String(run.pull_requests?.[0]?.head?.sha || sourceRef);
+              await status(sourceRef, 'success', 'Candidate staging runs on the exact merge-queue commit');
+              core.setOutput('should_stage', 'false');
+              core.setOutput('source_ref', sourceRef);
+              return;
+            }
+
+            if (run.event !== 'merge_group') {
+              core.setOutput('should_stage', 'false');
+              core.setOutput('source_ref', sourceRef);
+              return;
+            }
+
+            const match = String(run.head_branch || '').match(/\/pr-(\d+)-/);
+            if (!match) {
+              await status(sourceRef, 'failure', 'Could not bind merge group to its pull request');
+              core.setFailed('Could not resolve the merge-queue pull request number.');
+              return;
+            }
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number(match[1]),
+            });
+            const isReleasePull = String(pull.head?.ref || '').startsWith('release-please--branches--');
+            if (!isReleasePull) {
+              await status(sourceRef, 'success', 'No release artifacts required for this change');
+              core.setOutput('should_stage', 'false');
+              core.setOutput('source_ref', sourceRef);
+              return;
+            }
+            if (run.conclusion !== 'success') {
+              await status(sourceRef, 'failure', 'The exact release candidate did not pass CI');
+              core.setFailed(`CI concluded ${run.conclusion} for the release merge group.`);
+              return;
+            }
+            const version = String(pull.title || '').match(/release (\d+\.\d+\.\d+)\b/i)?.[1] || '';
+            if (!version) {
+              await status(sourceRef, 'failure', 'Could not resolve the Release Please version');
+              core.setFailed('Release Please pull request title has no semantic version.');
+              return;
+            }
+            const releaseTag = `v${version}`;
+            const baseRef = String(pull.base?.sha || '');
+            if (baseRef !== context.sha) {
+              await status(sourceRef, 'failure', 'Release merge group is not based on the protected workflow commit');
+              core.setFailed(`Release base ${baseRef} does not equal trusted workflow commit ${context.sha}.`);
+              return;
+            }
+            await status(sourceRef, 'pending', `Staging immutable ${releaseTag} candidate`);
+            core.setOutput('should_stage', 'true');
+            core.setOutput('source_ref', sourceRef);
+            core.setOutput('base_ref', baseRef);
+            core.setOutput('release_tag', releaseTag);
+            core.setOutput('candidate_tag', `candidate-${releaseTag}-${sourceRef.slice(0, 12)}`);
+            core.setOutput('trusted_ref', context.sha);
+            core.setOutput('derive_release_metadata', 'true');
+
+  validate-source:
+    name: Validate candidate trust boundary
+    needs: resolve
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Verify release-only merge delta and identity without checkout
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          BASE_REF: ${{ needs.resolve.outputs.base_ref }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        with:
+          script: |
+            const sourceRef = String(process.env.SOURCE_REF || '');
+            const baseRef = String(process.env.BASE_REF || '');
+            const releaseTag = String(process.env.RELEASE_TAG || '');
+            if (!/^[0-9a-f]{40}$/.test(sourceRef) || !/^[0-9a-f]{40}$/.test(baseRef)) {
+              core.setFailed('Candidate and base refs must be immutable commits.');
+              return;
+            }
+            if (!/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+              core.setFailed('Candidate release tag must be an exact vX.Y.Z identity.');
+              return;
+            }
+
+            const request = { owner: context.repo.owner, repo: context.repo.repo };
+            const { data: commit } = await github.rest.repos.getCommit({ ...request, ref: sourceRef });
+            if (commit.sha !== sourceRef || commit.parents?.[0]?.sha !== baseRef) {
+              core.setFailed('Candidate must be the exact merge commit whose first parent is the protected base.');
+              return;
+            }
+
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              ...request,
+              basehead: `${baseRef}...${sourceRef}`,
+            });
+            if (comparison.merge_base_commit?.sha !== baseRef) {
+              core.setFailed('Candidate comparison does not have the protected base as its merge base.');
+              return;
+            }
+            const version = releaseTag.slice(1);
+            const expectedPaths = [
+              '.github/.release-please-manifest.json',
+              'CHANGELOG.md',
+              `docs/releases/${releaseTag}.md`,
+              'infra/kubernetes/helm/enterpriseglue-host/Chart.yaml',
+            ].sort();
+            const changedPaths = (comparison.files || []).map((file) => file.filename).sort();
+            if (changedPaths.length !== expectedPaths.length ||
+                changedPaths.some((path, index) => path !== expectedPaths[index])) {
+              core.setFailed(`Privileged candidate staging accepts only the exact generated Release Please delta; received: ${changedPaths.join(', ')}`);
+              return;
+            }
+
+            const readText = async (path, ref) => {
+              const { data } = await github.rest.repos.getContent({ ...request, path, ref });
+              if (Array.isArray(data) || data.type !== 'file' || data.encoding !== 'base64') {
+                throw new Error(`Expected one base64 file at ${path}@${ref}`);
+              }
+              return Buffer.from(String(data.content).replace(/\n/g, ''), 'base64').toString('utf8');
+            };
+            const manifest = JSON.parse(await readText(expectedPaths[0], sourceRef));
+            if (Object.keys(manifest).length !== 1 || manifest['.'] !== version) {
+              core.setFailed('Release Please manifest does not exactly match the proposed version.');
+              return;
+            }
+            const changelog = await readText('CHANGELOG.md', sourceRef);
+            if (!changelog.includes(`## [${version}]`)) {
+              core.setFailed('Changelog does not contain the proposed version.');
+              return;
+            }
+            await readText(`docs/releases/${releaseTag}.md`, sourceRef);
+
+            const chartPath = 'infra/kubernetes/helm/enterpriseglue-host/Chart.yaml';
+            const baseChart = await readText(chartPath, baseRef);
+            const candidateChart = await readText(chartPath, sourceRef);
+            const versions = baseChart.match(/^version:[^\r\n]*$/gm) || [];
+            const appVersions = baseChart.match(/^appVersion:[^\r\n]*$/gm) || [];
+            if (versions.length !== 1 || appVersions.length !== 1) {
+              core.setFailed('Protected host Chart.yaml must have one version and one appVersion.');
+              return;
+            }
+            const baseVersion = versions[0].replace(/^version:\s*/, '');
+            if (!/^\d+\.\d+\.\d+$/.test(baseVersion)) {
+              core.setFailed('Protected host chart version is not major.minor.patch.');
+              return;
+            }
+            const [major, minor, patch] = baseVersion.split('.').map(Number);
+            if (![major, minor, patch].every(Number.isSafeInteger) || patch === Number.MAX_SAFE_INTEGER) {
+              core.setFailed('Protected host chart version cannot be incremented safely.');
+              return;
+            }
+            const expectedChart = baseChart
+              .replace(/^version:[^\r\n]*$/m, `version: ${major}.${minor}.${patch + 1}`)
+              .replace(/^appVersion:[^\r\n]*$/m, `appVersion: "${version}"`);
+            if (candidateChart !== expectedChart) {
+              core.setFailed('Candidate host Chart.yaml is not the exact deterministic release update.');
+            }
+
+  stage-application-images:
+    name: Stage application images
+    needs: [resolve, validate-source]
+    if: needs.resolve.outputs.should_stage == 'true'
+    uses: ./.github/workflows/docker-images-reusable.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      backend_image: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend
+      frontend_image: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend
+      image_tag: ${{ needs.resolve.outputs.candidate_tag }}
+      image_version: ${{ needs.resolve.outputs.release_tag }}
+      source_ref: ${{ needs.resolve.outputs.source_ref }}
+      image_platforms: linux/amd64,linux/arm64
+      security_rebuild: false
+      enable_dockerhub: false
+    secrets: inherit
+
+  qualify-application-images:
+    name: Qualify exact candidate images
+    needs: [resolve, stage-application-images]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout protected qualification source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify protected qualification source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Authenticate read-only candidate access
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Bind candidate tags to the qualified digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(oras resolve '${{ needs.stage-application-images.outputs.backend_image }}:${{ needs.stage-application-images.outputs.image_tag }}')" == "${{ needs.stage-application-images.outputs.backend_digest }}" ]]
+          [[ "$(oras resolve '${{ needs.stage-application-images.outputs.frontend_image }}:${{ needs.stage-application-images.outputs.image_tag }}')" == "${{ needs.stage-application-images.outputs.frontend_digest }}" ]]
+
+      - name: Prepare isolated candidate deployment inputs
+        shell: bash
+        env:
+          BACKEND_IMAGE: ${{ needs.stage-application-images.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.stage-application-images.outputs.frontend_image }}
+          IMAGE_TAG: ${{ needs.stage-application-images.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/release-candidate-smoke
+          cp infra/docker/env/examples/images.postgres.env.example .artifacts/release-candidate-smoke/postgres.env
+          cp infra/docker/env/examples/images.oracle.env.example .artifacts/release-candidate-smoke/oracle.env
+          for file in .artifacts/release-candidate-smoke/postgres.env .artifacts/release-candidate-smoke/oracle.env; do
+            awk -v backend="$BACKEND_IMAGE" -v frontend="$FRONTEND_IMAGE" -v tag="$IMAGE_TAG" '
+              /^BACKEND_IMAGE=/ { print "BACKEND_IMAGE=" backend; next }
+              /^FRONTEND_IMAGE=/ { print "FRONTEND_IMAGE=" frontend; next }
+              /^IMAGE_TAG=/ { print "IMAGE_TAG=" tag; next }
+              { print }
+            ' "$file" > "$file.tmp"
+            mv "$file.tmp" "$file"
+          done
+
+      - name: Run PostgreSQL, exposed-backend, authentication, and Oracle image smokes
+        env:
+          COMPOSE_PROJECT_NAME: enterpriseglue-release-candidate
+        run: >-
+          bash scripts/smoke-images-local.sh
+          --postgres-env .artifacts/release-candidate-smoke/postgres.env
+          --oracle-env .artifacts/release-candidate-smoke/oracle.env
+          --force-oracle
+
+      - name: Scan exact candidate image digests
+        shell: bash
+        env:
+          BACKEND_REF: ${{ needs.stage-application-images.outputs.backend_image }}@${{ needs.stage-application-images.outputs.backend_digest }}
+          FRONTEND_REF: ${{ needs.stage-application-images.outputs.frontend_image }}@${{ needs.stage-application-images.outputs.frontend_digest }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+        run: |
+          set -euo pipefail
+          for subject in "$BACKEND_REF" "$FRONTEND_REF"; do
+            docker run --rm --volume "$HOME/.docker:/root/.docker:ro" \
+              "$TRIVY_IMAGE" image --quiet --exit-code 1 \
+              --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN \
+              --ignorefile .trivyignore "$subject"
+          done
+
+  stage-toolchain:
+    name: Stage packages, plugin images, and charts
+    needs: [resolve, validate-source]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      installer_ref: ${{ steps.stage.outputs.installer_ref }}
+      manager_ref: ${{ steps.stage.outputs.manager_ref }}
+      host_chart_ref: ${{ steps.stage.outputs.host_chart_ref }}
+      runtime_chart_ref: ${{ steps.stage.outputs.runtime_chart_ref }}
+      rbac_chart_ref: ${{ steps.stage.outputs.rbac_chart_ref }}
+      manager_chart_ref: ${{ steps.stage.outputs.manager_chart_ref }}
+    steps:
+      - name: Checkout protected staging source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify protected staging source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Derive the validated host-chart release metadata
+        if: needs.resolve.outputs.derive_release_metadata == 'true'
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          chart_file=infra/kubernetes/helm/enterpriseglue-host/Chart.yaml
+          base_chart_version="$(sed -n 's/^version:[[:space:]]*//p' "$chart_file")"
+          node scripts/sync-host-chart-release-version.mjs \
+            --file "$chart_file" \
+            --base-chart-version "$base_chart_version" \
+            --app-version "${RELEASE_TAG#v}"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.19.5
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate OCI clients
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Authenticate Helm
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$REGISTRY_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Install immutable dependencies and build public packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter @enterpriseglue/plugin-sdk run test
+          pnpm --filter @enterpriseglue/plugin-sdk run build
+          pnpm --filter @enterpriseglue/plugin-sdk run test:compat
+          pnpm --filter @enterpriseglue/plugin-runtime run test
+          pnpm --filter @enterpriseglue/plugin-runtime run build
+          pnpm --filter @enterpriseglue/plugin-installer run test
+          pnpm --filter @enterpriseglue/plugin-installer run build
+          pnpm --filter @enterpriseglue/plugin-manager run test
+          pnpm --filter @enterpriseglue/plugin-manager run build
+
+      - name: Stage immutable toolchain artifacts
+        id: stage
+        shell: bash
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          payload="$GITHUB_WORKSPACE/.artifacts/release-candidate-payload"
+          chart_output="$payload/charts"
+          package_output="$payload/packages"
+          mkdir -p "$chart_output" "$package_output"
+
+          installer_version="$(node -p "require('./packages/plugin-installer/package.json').version")"
+          manager_version="$(node -p "require('./packages/plugin-manager/package.json').version")"
+          installer_tag="ghcr.io/enterpriseglue/plugin-installer:$installer_version-$SOURCE_REF"
+          manager_tag="ghcr.io/enterpriseglue/plugin-manager:$manager_version-$SOURCE_REF"
+
+          stage_image() {
+            local tag="$1" dockerfile="$2" version="$3"
+            if ! docker buildx imagetools inspect "$tag" >/dev/null 2>&1; then
+              docker buildx build --pull --push --platform linux/amd64,linux/arm64 \
+                --provenance=mode=max --sbom=true \
+                --file "$dockerfile" \
+                --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+                --label "org.opencontainers.image.revision=$SOURCE_REF" \
+                --label "org.opencontainers.image.version=$version" \
+                --tag "$tag" .
+            fi
+            local digest
+            digest="$(oras resolve "$tag")"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            printf '%s@%s' "${tag%:*}" "$digest"
+          }
+
+          installer_ref="$(stage_image "$installer_tag" packages/plugin-installer/Dockerfile "$installer_version")"
+          manager_ref="$(stage_image "$manager_tag" packages/plugin-manager/Dockerfile "$manager_version")"
+
+          for subject in "$installer_ref" "$manager_ref"; do
+            cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+            docker run --rm --volume "$HOME/.docker:/root/.docker:ro" \
+              "$TRIVY_IMAGE" image --quiet --exit-code 1 --severity HIGH,CRITICAL "$subject"
+          done
+
+          pnpm --dir packages/plugin-sdk pack --pack-destination "$package_output"
+          pnpm --dir packages/plugin-runtime pack --pack-destination "$package_output"
+          pnpm --dir packages/plugin-installer pack --pack-destination "$package_output"
+          pnpm --dir packages/plugin-manager pack --pack-destination "$package_output"
+          node scripts/verify-plugin-package-tarballs.mjs "$package_output" > "$package_output/release-receipt.json"
+          node scripts/publish-plugin-package-set.mjs plan "$package_output" > "$package_output/registry-plan.json"
+
+          helm package infra/kubernetes/helm/enterpriseglue-host --destination "$chart_output" >/dev/null
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-runtime --destination "$chart_output" >/dev/null
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac --destination "$chart_output" >/dev/null
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-manager --destination "$chart_output" >/dev/null
+
+          stage_chart() {
+            local archive="$1" repository="$2" version="$3"
+            local existing pulled layer
+            existing="$(oras resolve "$repository:$version" 2>/dev/null || true)"
+            if [[ -z "$existing" ]]; then
+              helm push "$archive" "oci://${repository%/*}" >/dev/null
+            else
+              layer="$(oras manifest fetch "$repository@$existing" | jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end')"
+              pulled="$RUNNER_TEMP/existing-$(basename "$archive")"
+              oras blob fetch --output "$pulled" "$repository@$layer"
+              node scripts/helm-chart-archive.mjs compare "$archive" "$pulled"
+            fi
+            local digest
+            digest="$(oras resolve "$repository:$version")"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            printf '%s@%s' "$repository" "$digest"
+          }
+
+          host_version="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-host/Chart.yaml)"
+          runtime_version="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-runtime/Chart.yaml)"
+          rbac_version="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac/Chart.yaml)"
+          manager_chart_version="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-manager/Chart.yaml)"
+          host_chart_ref="$(stage_chart "$chart_output/enterpriseglue-host-$host_version.tgz" ghcr.io/enterpriseglue/release-candidates/charts/enterpriseglue-host "$host_version")"
+          runtime_chart_ref="$(stage_chart "$chart_output/enterpriseglue-plugin-runtime-$runtime_version.tgz" ghcr.io/enterpriseglue/release-candidates/charts/enterpriseglue-plugin-runtime "$runtime_version")"
+          rbac_chart_ref="$(stage_chart "$chart_output/enterpriseglue-plugin-installer-rbac-$rbac_version.tgz" ghcr.io/enterpriseglue/release-candidates/charts/enterpriseglue-plugin-installer-rbac "$rbac_version")"
+          manager_chart_ref="$(stage_chart "$chart_output/enterpriseglue-plugin-manager-$manager_chart_version.tgz" ghcr.io/enterpriseglue/release-candidates/charts/enterpriseglue-plugin-manager "$manager_chart_version")"
+
+          for subject in "$host_chart_ref" "$runtime_chart_ref" "$rbac_chart_ref" "$manager_chart_ref"; do
+            cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+          done
+          {
+            echo "installer_ref=$installer_ref"
+            echo "manager_ref=$manager_ref"
+            echo "host_chart_ref=$host_chart_ref"
+            echo "runtime_chart_ref=$runtime_chart_ref"
+            echo "rbac_chart_ref=$rbac_chart_ref"
+            echo "manager_chart_ref=$manager_chart_ref"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Retain exact candidate packages and charts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-candidate-payload-${{ needs.resolve.outputs.source_ref }}
+          path: .artifacts/release-candidate-payload
+          if-no-files-found: error
+          retention-days: 90
+
+  publish-receipt:
+    name: Publish signed candidate receipt
+    needs: [resolve, stage-application-images, qualify-application-images, stage-toolchain]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      candidate_ref: ${{ steps.publish.outputs.candidate_ref }}
+    steps:
+      - name: Checkout protected receipt source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify protected receipt source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Download exact candidate payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-candidate-payload-${{ needs.resolve.outputs.source_ref }}
+          path: .artifacts/release-candidate-payload
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create, publish, and verify the immutable candidate bundle
+        id: publish
+        shell: bash
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          BACKEND_REF: ${{ needs.stage-application-images.outputs.backend_image }}@${{ needs.stage-application-images.outputs.backend_digest }}
+          FRONTEND_REF: ${{ needs.stage-application-images.outputs.frontend_image }}@${{ needs.stage-application-images.outputs.frontend_digest }}
+          INSTALLER_REF: ${{ needs.stage-toolchain.outputs.installer_ref }}
+          MANAGER_REF: ${{ needs.stage-toolchain.outputs.manager_ref }}
+          HOST_CHART_REF: ${{ needs.stage-toolchain.outputs.host_chart_ref }}
+          RUNTIME_CHART_REF: ${{ needs.stage-toolchain.outputs.runtime_chart_ref }}
+          RBAC_CHART_REF: ${{ needs.stage-toolchain.outputs.rbac_chart_ref }}
+          MANAGER_CHART_REF: ${{ needs.stage-toolchain.outputs.manager_chart_ref }}
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          payload="$GITHUB_WORKSPACE/.artifacts/release-candidate-payload"
+          receipt="$payload/release-candidate.json"
+          node scripts/release-candidate-receipt.mjs create \
+            --output "$receipt" --artifacts "$payload" \
+            --source-ref "$SOURCE_REF" --release-tag "$RELEASE_TAG" \
+            --backend "$BACKEND_REF" --frontend "$FRONTEND_REF" \
+            --pluginInstaller "$INSTALLER_REF" --pluginManager "$MANAGER_REF" \
+            --hostChart "$HOST_CHART_REF" --runtimeChart "$RUNTIME_CHART_REF" \
+            --installerRbacChart "$RBAC_CHART_REF" --managerChart "$MANAGER_CHART_REF" >/dev/null
+          node scripts/release-candidate-receipt.mjs verify \
+            --receipt "$receipt" --artifacts "$payload" \
+            --source-ref "$SOURCE_REF" --release-tag "$RELEASE_TAG" >/dev/null
+
+          repository="ghcr.io/enterpriseglue/enterpriseglue-oss-release-candidate"
+          tag="sha-$SOURCE_REF"
+          existing="$(oras resolve "$repository:$tag" 2>/dev/null || true)"
+          if [[ -z "$existing" ]]; then
+            push_args=("$repository:$tag" "release-candidate.json:application/vnd.enterpriseglue.release-candidate.v1+json")
+            while IFS= read -r file; do
+              if [[ "$file" == *.tgz ]]; then
+                media_type="application/vnd.enterpriseglue.release-candidate.payload.v1+gzip"
+              else
+                media_type="application/vnd.enterpriseglue.release-candidate.metadata.v1+json"
+              fi
+              push_args+=("$file:$media_type")
+            done < <(cd "$payload" && find charts packages -type f -print | LC_ALL=C sort)
+            (cd "$payload" && oras push --artifact-type application/vnd.enterpriseglue.release-candidate.v1 "${push_args[@]}")
+          else
+            comparison="$RUNNER_TEMP/existing-release-candidate"
+            mkdir -p "$comparison"
+            oras pull "$repository@$existing" --output "$comparison"
+            diff -qr "$payload" "$comparison"
+          fi
+          digest="$(oras resolve "$repository:$tag")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          subject="$repository@$digest"
+          cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+          cosign verify \
+            --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/release-candidate-stage.yml@refs/heads/main" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$subject" >/dev/null
+          echo "candidate_ref=$subject" >> "$GITHUB_OUTPUT"
+
+      - name: Retain the signed candidate receipt
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-candidate-receipt-${{ needs.resolve.outputs.source_ref }}
+          path: .artifacts/release-candidate-payload/release-candidate.json
+          if-no-files-found: error
+          retention-days: 90
+
+  finalize:
+    name: Record required candidate status
+    needs: [resolve, validate-source, stage-application-images, qualify-application-images, stage-toolchain, publish-receipt]
+    if: always() && needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Mark the exact candidate successful or failed
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          VALIDATE_RESULT: ${{ needs.validate-source.result }}
+          IMAGE_RESULT: ${{ needs.stage-application-images.result }}
+          QUALIFY_RESULT: ${{ needs.qualify-application-images.result }}
+          TOOLCHAIN_RESULT: ${{ needs.stage-toolchain.result }}
+          RECEIPT_RESULT: ${{ needs.publish-receipt.result }}
+          CANDIDATE_REF: ${{ needs.publish-receipt.outputs.candidate_ref }}
+        with:
+          script: |
+            const results = [
+              process.env.VALIDATE_RESULT,
+              process.env.IMAGE_RESULT,
+              process.env.QUALIFY_RESULT,
+              process.env.TOOLCHAIN_RESULT,
+              process.env.RECEIPT_RESULT,
+            ];
+            const passed = results.every((result) => result === 'success');
+            const description = passed
+              ? `Immutable ${process.env.RELEASE_TAG} candidate is qualified`
+              : `Candidate staging failed: ${results.join(', ')}`;
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: process.env.SOURCE_REF,
+              state: passed ? 'success' : 'failure',
+              context: 'Release candidate staged',
+              description: description.slice(0, 140),
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+            if (!passed) core.setFailed(description);

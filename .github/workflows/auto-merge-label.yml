@@ -46,4 +46,4 @@ jobs:
         with:
           token: ${{ github.token }}
           pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: squash
+          merge-method: merge

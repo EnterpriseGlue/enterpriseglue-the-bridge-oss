@@ -52,16 +52,16 @@ test('nightly reads and reports OCI provenance from every configured platform', 
 test('image publishing labels and verifies source, revision, and version', () => {
   for (const label of [
     'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}',
-    'org.opencontainers.image.revision=${{ github.sha }}',
-    'org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}',
+    'org.opencontainers.image.revision=${{ steps.meta.outputs.source_revision }}',
+    'org.opencontainers.image.version=${{ steps.meta.outputs.image_version }}',
   ]) {
     assert.equal(imagePublish.split(label).length - 1, 4, `${label} must cover both image attempts`);
   }
 
   assert.match(imagePublish, /- name: Verify published image provenance/);
   assert.match(imagePublish, /EXPECTED_SOURCE: \$\{\{ github\.server_url \}\}\/\$\{\{ github\.repository \}\}/);
-  assert.match(imagePublish, /EXPECTED_REVISION: \$\{\{ github\.sha \}\}/);
-  assert.match(imagePublish, /EXPECTED_VERSION: \$\{\{ steps\.meta\.outputs\.image_tag \}\}/);
+  assert.match(imagePublish, /EXPECTED_REVISION: \$\{\{ steps\.meta\.outputs\.source_revision \}\}/);
+  assert.match(imagePublish, /EXPECTED_VERSION: \$\{\{ steps\.meta\.outputs\.image_version \}\}/);
   assert.match(imagePublish, /verify-oci-image-metadata\.mjs "\$prefix"/);
 });
 

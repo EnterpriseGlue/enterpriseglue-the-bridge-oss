@@ -106,4 +106,4 @@ jobs:
         with:
           token: ${{ secrets.release_please_token }}
           pull-request-number: ${{ steps.evaluate.outputs.pull_number }}
-          merge-method: squash
+          merge-method: merge

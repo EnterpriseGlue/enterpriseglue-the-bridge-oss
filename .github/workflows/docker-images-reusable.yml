@@ -15,6 +15,16 @@ on:
       image_tag:
         required: true
         type: string
+      image_version:
+        description: OCI version label and host compatibility version; defaults to image_tag
+        required: false
+        type: string
+        default: ''
+      source_ref:
+        description: Exact source revision recorded in OCI provenance; defaults to the caller SHA
+        required: false
+        type: string
+        default: ''
       image_platforms:
         required: false
         type: string
@@ -100,6 +110,8 @@ jobs:
           INPUT_FRONTEND_IMAGE: ${{ inputs.frontend_image }}
           INPUT_DOCKERHUB_NAMESPACE: ${{ inputs.dockerhub_namespace }}
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          INPUT_IMAGE_VERSION: ${{ inputs.image_version }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
           INPUT_IMAGE_PLATFORMS: ${{ inputs.image_platforms }}
           ENABLE_DOCKERHUB: ${{ inputs.enable_dockerhub }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -118,6 +130,13 @@ jobs:
 
           image_platforms="${INPUT_IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
           image_tag="${INPUT_IMAGE_TAG}"
+          image_version="${INPUT_IMAGE_VERSION:-$image_tag}"
+          source_revision="${INPUT_SOURCE_REF:-$GITHUB_SHA}"
+
+          [[ "$source_revision" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "source_ref must resolve to an immutable 40-character commit" >&2
+            exit 1
+          }
 
           default_host_version="$(sed -n "s/^[[:space:]]*hostVersion: '\([^']*\)',/\1/p" packages/plugin-sdk/src/platform.ts | head -n 1)"
           if [[ ! "${default_host_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -127,9 +146,11 @@ jobs:
           host_version="${default_host_version}"
 
           publish_latest="false"
+          if [[ "${image_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            host_version="${image_version#v}"
+          fi
           if [[ "${image_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             publish_latest="true"
-            host_version="${image_tag#v}"
           fi
 
           publish_dockerhub="false"
@@ -141,6 +162,8 @@ jobs:
             echo "backend_image=${backend_image}"
             echo "frontend_image=${frontend_image}"
             echo "image_tag=${image_tag}"
+            echo "image_version=${image_version}"
+            echo "source_revision=${source_revision}"
             echo "host_version=${host_version}"
             echo "publish_latest=${publish_latest}"
             echo "publish_dockerhub=${publish_dockerhub}"
@@ -184,8 +207,8 @@ jobs:
             ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.source_revision }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_version }}
 
       - name: Build and push backend image (attempt 2 after transient failure)
         id: backend_try2
@@ -208,8 +231,8 @@ jobs:
             ${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.source_revision }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_version }}
 
       - name: Capture backend digest
         id: backend
@@ -331,8 +354,8 @@ jobs:
             ${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.frontend_temp_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.source_revision }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_version }}
 
       - name: Build and push frontend image (attempt 2 after transient failure)
         id: frontend_try2
@@ -355,8 +378,8 @@ jobs:
             ${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.frontend_temp_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.meta.outputs.image_tag }}
+            org.opencontainers.image.revision=${{ steps.meta.outputs.source_revision }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.image_version }}
 
       - name: Capture frontend digest
         id: frontend
@@ -460,8 +483,8 @@ jobs:
         env:
           EXPECTED_PLATFORMS: ${{ steps.meta.outputs.image_platforms }}
           EXPECTED_SOURCE: ${{ github.server_url }}/${{ github.repository }}
-          EXPECTED_REVISION: ${{ github.sha }}
-          EXPECTED_VERSION: ${{ steps.meta.outputs.image_tag }}
+          EXPECTED_REVISION: ${{ steps.meta.outputs.source_revision }}
+          EXPECTED_VERSION: ${{ steps.meta.outputs.image_version }}
         run: |
           set -euo pipefail
 
@@ -497,8 +520,8 @@ jobs:
             echo "backend_digest=${{ steps.backend.outputs.digest }}"
             echo "frontend_digest=${{ steps.frontend.outputs.digest }}"
             echo "source=${{ github.server_url }}/${{ github.repository }}"
-            echo "revision=${{ github.sha }}"
-            echo "version=${{ steps.meta.outputs.image_tag }}"
+            echo "revision=${{ steps.meta.outputs.source_revision }}"
+            echo "version=${{ steps.meta.outputs.image_version }}"
             echo "publish_latest=${{ steps.meta.outputs.publish_latest }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -512,8 +535,8 @@ jobs:
             "backend_digest": "${{ steps.backend.outputs.digest }}",
             "frontend_digest": "${{ steps.frontend.outputs.digest }}",
             "source": "${{ github.server_url }}/${{ github.repository }}",
-            "revision": "${{ github.sha }}",
-            "version": "${{ steps.meta.outputs.image_tag }}",
+            "revision": "${{ steps.meta.outputs.source_revision }}",
+            "version": "${{ steps.meta.outputs.image_version }}",
             "platforms": "${{ steps.meta.outputs.image_platforms }}",
             "publish_latest": "${{ steps.meta.outputs.publish_latest }}"
           }

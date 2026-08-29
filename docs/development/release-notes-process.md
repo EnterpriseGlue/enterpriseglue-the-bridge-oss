@@ -118,7 +118,7 @@ source fragments and rerun the generator. Release pull requests use merge
 commits so the release commit, generated document, manifest, and changelog stay
 together.
 
-## Release-candidate readiness
+## Release-candidate readiness and staging
 
 Release Please pull requests have an additional read-only qualification phase
 before they may merge. The phase runs again on the merge-queue candidate and
@@ -135,16 +135,38 @@ binds its retained receipt to the exact candidate commit. It:
 6. rehearses chart receipts, signatures, immutable repulls, the signed air-gap
    bundle, and a disconnected registry import.
 
-The readiness job has only `contents: read` and `packages: read`. Package,
-image, chart, signature, attestation, and release publication remain separate
-post-tag operations. A release must not be merged while any candidate workflow
-is failed, cancelled, timed out, still running, or awaiting action, even if an
-individual required status context appears green.
+The readiness job has only `contents: read` and `packages: read`. After the
+exact Release Please merge-group commit passes that gate and the rest of CI,
+the privileged `Release Candidate Stage` workflow builds and qualifies the
+immutable registry payload. It publishes only candidate tags and a signed
+candidate receipt; it does not create a Git tag, GitHub release, public package
+version, production chart version, Docker Hub tag, or `latest` alias.
+
+Candidate commit metadata and the four generated release files are read through
+the GitHub API by a `contents: read` validation job; the candidate is never
+checked out on a runner. Every job with package-write or signing authority
+checks out only the protected base revision. The validator proves the release
+merge changes no executable source and that its host-chart version update is
+deterministic; the privileged chart job derives that update again from the
+protected base. Candidate files and caches are never imported into privileged
+execution.
+
+Branch protection requires the `Release candidate staged` status. A release
+must not be merged while either CI or staging is failed, cancelled, timed out,
+still running, or awaiting action, even if an individual required status
+context appears green.
 
 The retained `.artifacts/release-readiness/release-readiness.json` identifies
 the exact source revision and comparison tag and records that no publication
 occurred. Registry plan and dry-run receipts remain CI artifacts rather than
 repository documentation.
+
+The signed `enterpriseglue-release-candidate/v1` receipt binds the merge-group
+commit and proposed release version to exact application and toolchain image
+digests, chart manifests, package tarball checksums, and chart archive
+checksums. Post-tag workflows verify that receipt and promote the same bytes.
+See [Release artifact staging and promotion](../runbooks/release-artifact-promotion.md)
+for the operator sequence and recovery rules.
 
 Immutable package comparison hashes paths, file modes, links, and file
 contents. Because JSON object member order has no semantic meaning, the
@@ -177,3 +199,8 @@ After publication, verify:
 - the signed plugin-toolchain workflow completes for the exact release commit;
 - package consumers and EnterpriseGlue EE are updated to the package versions
   listed in the release notes.
+
+`latest` and Docker Hub aliases are advanced only after the immutable release
+tags pass PostgreSQL, exposed-backend, Oracle, and vulnerability qualification.
+Retry a failed publication against the same tag and source commit. Create a new
+version only when the shipped payload itself must change.

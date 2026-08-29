@@ -7,6 +7,10 @@ on:
         description: Exact 40-character OSS commit to build and publish
         required: true
         type: string
+      release_tag:
+        description: Signed candidate release tag; required for new non-dry-run publications
+        required: false
+        type: string
       dry_run:
         description: Build, pack, and validate without publishing
         required: false
@@ -47,10 +51,14 @@ jobs:
             echo "The protected package workflow must run from refs/heads/main" >&2
             exit 1
           }
-          [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
-            echo "source_ref must equal the protected workflow commit" >&2
-            exit 1
-          }
+          if [[ -z "${{ inputs.release_tag }}" ]]; then
+            [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
+              echo "A non-current source_ref requires an exact release_tag" >&2
+              exit 1
+            }
+          else
+            [[ "${{ inputs.release_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          fi
 
       - name: Checkout the exact public OSS revision
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -59,11 +67,30 @@ jobs:
           fetch-depth: 1
 
       - name: Verify checked-out source identity
+        id: source
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
           test -z "$(git status --porcelain)"
+          if [[ -n "${{ inputs.release_tag }}" ]]; then
+            git fetch --force --tags origin
+            [[ "$(git rev-list -n 1 '${{ inputs.release_tag }}')" == "$SOURCE_REF" ]]
+            gh release view "${{ inputs.release_tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null
+          fi
+          if [[ "${{ inputs.dry_run }}" != "true" ]] && git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+            [[ "${{ inputs.release_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "New package publications require the signed candidate release_tag" >&2
+              exit 1
+            }
+          fi
+          candidate_required=false
+          if [[ -n "${{ inputs.release_tag }}" ]] && git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+            candidate_required=true
+          fi
+          echo "candidate_required=$candidate_required" >> "$GITHUB_OUTPUT"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
@@ -79,6 +106,34 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
           registry-url: https://npm.pkg.github.com
           scope: "@enterpriseglue"
+
+      - name: Set up ORAS
+        if: steps.source.outputs.candidate_required == 'true'
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign
+        if: steps.source.outputs.candidate_required == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate to GHCR
+        if: steps.source.outputs.candidate_required == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch the signed pre-tag package payload
+        if: steps.source.outputs.candidate_required == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/release-candidate"
+          mkdir -p "$candidate"
+          bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "${{ inputs.release_tag }}" "$candidate" >/dev/null
+          echo "CANDIDATE_PAYLOAD=$candidate" >> "$GITHUB_ENV"
 
       - name: Install immutable dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -102,10 +157,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$PACKAGE_DIRECTORY"
-          pnpm --dir packages/plugin-sdk pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
-          pnpm --dir packages/plugin-runtime pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
-          pnpm --dir packages/plugin-installer pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
-          pnpm --dir packages/plugin-manager pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+          if [[ -n "${CANDIDATE_PAYLOAD:-}" ]]; then
+            cp "$CANDIDATE_PAYLOAD"/packages/*.tgz "$PACKAGE_DIRECTORY/"
+          else
+            pnpm --dir packages/plugin-sdk pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+            pnpm --dir packages/plugin-runtime pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+            pnpm --dir packages/plugin-installer pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+            pnpm --dir packages/plugin-manager pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
+          fi
           node scripts/verify-plugin-package-tarballs.mjs "$PACKAGE_DIRECTORY" |
             tee "$PACKAGE_DIRECTORY/release-receipt.json"
 

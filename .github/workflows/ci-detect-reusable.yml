@@ -188,7 +188,7 @@ jobs:
                 run_native_tenancy=true
               fi
 
-              if grep -Eq '^(\.github/workflows/(ci|ci-detect-reusable|release-notes-preflight-reusable|plugin-package-release|plugin-toolchain-release|host-chart-release)\.yml|scripts/(check-ci-aggregate-contract|evaluate-ci-needs|check-release-candidate-readiness|plan-plugin-toolchain-charts|check-plugin-platform-production-images|check-plugin-toolchain-oci-local|check-enterpriseglue-host-chart|publish-plugin-package-set|verify-plugin-package-tarballs|check-plugin-toolchain-release-policy|check-plugin-package-release-policy|check-host-chart-release-policy|check-published-package-version-discipline|check-workspace-dependency-version-drift|helm-chart-archive)(\.|$))' <<< "$CHANGED_FILES"; then
+              if grep -Eq '^(\.github/workflows/(ci|ci-detect-reusable|release-notes-preflight-reusable|release-please|release-candidate-stage|docker-images|docker-images-reusable|plugin-package-release|plugin-toolchain-release|host-chart-release)\.yml|scripts/(check-ci-aggregate-contract|evaluate-ci-needs|check-release-candidate-readiness|release-candidate-receipt|fetch-release-candidate|plan-plugin-toolchain-charts|check-plugin-platform-production-images|check-plugin-toolchain-oci-local|check-enterpriseglue-host-chart|publish-plugin-package-set|verify-plugin-package-tarballs|check-plugin-toolchain-release-policy|check-plugin-package-release-policy|check-host-chart-release-policy|check-published-package-version-discipline|check-workspace-dependency-version-drift|helm-chart-archive)(\.|$))' <<< "$CHANGED_FILES"; then
                 run_release_readiness=true
               fi
             fi

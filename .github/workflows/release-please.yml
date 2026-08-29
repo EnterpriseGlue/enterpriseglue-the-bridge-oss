@@ -12,6 +12,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  packages: read
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -34,6 +35,50 @@ jobs:
 
       - name: Validate release baseline
         run: node scripts/release-notes.mjs baseline --allow-pending
+
+      - name: Detect an exact release publication commit
+        id: publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          message="$(git log -1 --format=%s)"
+          version="$(sed -n 's/^chore(main)!\{0,1\}: release \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p' <<< "$message")"
+          if [[ -n "$version" ]]; then
+            [[ "$(jq -er '.["."]' .github/.release-please-manifest.json)" == "$version" ]]
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=v$version" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up ORAS for candidate verification
+        if: steps.publication.outputs.is_release == 'true'
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign for candidate verification
+        if: steps.publication.outputs.is_release == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate read-only candidate access
+        if: steps.publication.outputs.is_release == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify signed candidate before tag creation
+        if: steps.publication.outputs.is_release == 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.publication.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/release-candidate"
+          mkdir -p "$candidate"
+          bash scripts/fetch-release-candidate.sh "$GITHUB_SHA" "$RELEASE_TAG" "$candidate" >/dev/null
 
       - name: Run Release Please
         id: release
