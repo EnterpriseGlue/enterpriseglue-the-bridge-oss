@@ -84,6 +84,8 @@ test('the production image gate scans every release image', () => {
     /for image in "\$BACKEND_IMAGE" "\$FRONTEND_IMAGE" "\$INSTALLER_IMAGE" "\$MANAGER_IMAGE"/,
   )
   assert.match(productionImages, /PLUGIN_PLATFORM_TRIVY_CACHE_DIR/)
+  assert.match(productionImages, /docker volume create "\$TRIVY_CACHE_SOURCE"/)
+  assert.match(productionImages, /docker volume rm --force "\$TRIVY_CACHE_SOURCE"/)
   assert.match(productionImages, /\/root\/\.cache\/trivy/)
   assert.match(productionImages, /--severity HIGH,CRITICAL/)
 })
