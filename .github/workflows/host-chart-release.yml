@@ -116,6 +116,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Fetch the signed pre-tag candidate when required
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+            candidate="$RUNNER_TEMP/release-candidate"
+            mkdir -p "$candidate"
+            bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "$RELEASE_TAG" "$candidate" >/dev/null
+            echo "CANDIDATE_RECEIPT=$candidate/release-candidate.json" >> "$GITHUB_ENV"
+            echo "CANDIDATE_PAYLOAD=$candidate" >> "$GITHUB_ENV"
+          else
+            echo "LEGACY_RELEASE_WITHOUT_CANDIDATE=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Validate and package reproducibly
         shell: bash
         run: |
@@ -129,6 +143,10 @@ jobs:
           helm package "$chart" --destination "$repro" >/dev/null
           archive="$output/enterpriseglue-host-$CHART_VERSION.tgz"
           node scripts/helm-chart-archive.mjs compare "$archive" "$repro/$(basename "$archive")"
+          if [[ -n "${CANDIDATE_PAYLOAD:-}" ]]; then
+            node scripts/helm-chart-archive.mjs compare \
+              "$archive" "$CANDIDATE_PAYLOAD/charts/$(basename "$archive")"
+          fi
           echo "CHART_ARCHIVE=$archive" >> "$GITHUB_ENV"
 
       - name: Authenticate Helm to GHCR
@@ -145,7 +163,15 @@ jobs:
           set -euo pipefail
           existing="$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION" 2>/dev/null || true)"
           if [[ -z "$existing" ]]; then
-            helm push "$CHART_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+            if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+              candidate_subject="$(jq -er '.subjects.hostChart.subject' "$CANDIDATE_RECEIPT")"
+              candidate_digest="${candidate_subject##*@}"
+              [[ "${candidate_subject%@*}" == "ghcr.io/enterpriseglue/release-candidates/charts/enterpriseglue-host" ]]
+              oras cp -r "$candidate_subject" "$CHART_REPOSITORY:$CHART_VERSION"
+              [[ "$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION")" == "$candidate_digest" ]]
+            else
+              helm push "$CHART_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+            fi
           else
             layer="$(oras manifest fetch "$CHART_REPOSITORY@$existing" |
               jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end')"
@@ -158,6 +184,9 @@ jobs:
           fi
           digest="$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION")"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+            [[ "$digest" == "$(jq -er '.subjects.hostChart.subject' "$CANDIDATE_RECEIPT" | sed 's/.*@//')" ]]
+          fi
           echo "CHART_REFERENCE=$CHART_REPOSITORY@$digest" >> "$GITHUB_ENV"
 
       - name: Sign and verify the exact chart subject

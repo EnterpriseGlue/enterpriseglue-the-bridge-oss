@@ -201,6 +201,20 @@ jobs:
           printf '%s' "$REGISTRY_TOKEN" |
             helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
+      - name: Fetch the signed pre-tag candidate when required
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+            candidate="$RUNNER_TEMP/release-candidate"
+            mkdir -p "$candidate"
+            bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "$RELEASE_TAG" "$candidate" >/dev/null
+            echo "CANDIDATE_RECEIPT=$candidate/release-candidate.json" >> "$GITHUB_ENV"
+            echo "CANDIDATE_PAYLOAD=$candidate" >> "$GITHUB_ENV"
+          else
+            echo "LEGACY_RELEASE_WITHOUT_CANDIDATE=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Resolve resumable immutable image state
         id: existing-images
         shell: bash
@@ -275,6 +289,14 @@ jobs:
           [[ "$MANAGER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "MANAGER_REFERENCE=$MANAGER_REPOSITORY@$MANAGER_DIGEST" >> "$GITHUB_ENV"
 
+      - name: Bind toolchain images to the qualified candidate
+        if: env.CANDIDATE_RECEIPT != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$INSTALLER_REFERENCE" == "$(jq -er '.subjects.pluginInstaller.subject' "$CANDIDATE_RECEIPT")" ]]
+          [[ "$MANAGER_REFERENCE" == "$(jq -er '.subjects.pluginManager.subject' "$CANDIDATE_RECEIPT")" ]]
+
       - name: Package and publish the fixed Helm charts
         shell: bash
         run: |
@@ -305,15 +327,32 @@ jobs:
             "$RBAC_ARCHIVE" "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")"
           node scripts/helm-chart-archive.mjs compare \
             "$MANAGER_ARCHIVE" "$REPRO_OUTPUT/$(basename "$MANAGER_ARCHIVE")"
+          if [[ -n "${CANDIDATE_PAYLOAD:-}" ]]; then
+            node scripts/helm-chart-archive.mjs compare \
+              "$RUNTIME_ARCHIVE" "$CANDIDATE_PAYLOAD/charts/$(basename "$RUNTIME_ARCHIVE")"
+            node scripts/helm-chart-archive.mjs compare \
+              "$RBAC_ARCHIVE" "$CANDIDATE_PAYLOAD/charts/$(basename "$RBAC_ARCHIVE")"
+            node scripts/helm-chart-archive.mjs compare \
+              "$MANAGER_ARCHIVE" "$CANDIDATE_PAYLOAD/charts/$(basename "$MANAGER_ARCHIVE")"
+          fi
           publish_or_verify_chart() {
             local archive="$1"
             local repository="$2"
             local version="$3"
+            local candidate_key="$4"
             local existing
             existing="$(oras resolve "$repository:$version" 2>/dev/null || true)"
             if [[ -z "$existing" ]]; then
-              helm push "$archive" oci://ghcr.io/enterpriseglue/charts
-              return
+              if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+                local candidate_subject candidate_digest
+                candidate_subject="$(jq -er --arg key "$candidate_key" '.subjects[$key].subject' "$CANDIDATE_RECEIPT")"
+                candidate_digest="${candidate_subject##*@}"
+                oras cp -r "$candidate_subject" "$repository:$version"
+                [[ "$(oras resolve "$repository:$version")" == "$candidate_digest" ]]
+              else
+                helm push "$archive" oci://ghcr.io/enterpriseglue/charts
+              fi
+              existing="$(oras resolve "$repository:$version")"
             fi
             local layer pulled
             layer="$(
@@ -326,10 +365,13 @@ jobs:
                 echo "Published immutable chart version $repository:$version differs from source" >&2
                 exit 1
               }
+            if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+              [[ "$existing" == "$(jq -er --arg key "$candidate_key" '.subjects[$key].subject' "$CANDIDATE_RECEIPT" | sed 's/.*@//')" ]]
+            fi
           }
-          publish_or_verify_chart "$RUNTIME_ARCHIVE" "$RUNTIME_CHART_REPOSITORY" "$TOOLCHAIN_VERSION"
-          publish_or_verify_chart "$RBAC_ARCHIVE" "$RBAC_CHART_REPOSITORY" "$TOOLCHAIN_VERSION"
-          publish_or_verify_chart "$MANAGER_ARCHIVE" "$MANAGER_CHART_REPOSITORY" "$MANAGER_VERSION"
+          publish_or_verify_chart "$RUNTIME_ARCHIVE" "$RUNTIME_CHART_REPOSITORY" "$TOOLCHAIN_VERSION" runtimeChart
+          publish_or_verify_chart "$RBAC_ARCHIVE" "$RBAC_CHART_REPOSITORY" "$TOOLCHAIN_VERSION" installerRbacChart
+          publish_or_verify_chart "$MANAGER_ARCHIVE" "$MANAGER_CHART_REPOSITORY" "$MANAGER_VERSION" managerChart
           RUNTIME_DIGEST="$(oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
           RBAC_DIGEST="$(oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
           MANAGER_CHART_DIGEST="$(oras resolve "$MANAGER_CHART_REPOSITORY:$MANAGER_VERSION")"

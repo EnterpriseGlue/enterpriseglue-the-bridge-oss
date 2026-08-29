@@ -6,6 +6,14 @@ on:
       - published
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: Exact release commit for idempotent candidate promotion
+        required: false
+        type: string
+      release_tag:
+        description: Exact existing release tag for idempotent candidate promotion
+        required: false
+        type: string
       security_rebuild:
         description: Rebuild without cache and pull latest base image layers
         required: false
@@ -30,6 +38,8 @@ jobs:
       frontend_image: ${{ steps.meta.outputs.frontend_image }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_platforms: ${{ steps.meta.outputs.image_platforms }}
+      source_ref: ${{ steps.meta.outputs.source_ref }}
+      mode: ${{ steps.meta.outputs.mode }}
     steps:
       - name: Resolve image names and tags
         id: meta
@@ -42,6 +52,9 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          SECURITY_REBUILD: ${{ inputs.security_rebuild }}
         run: |
           set -euo pipefail
 
@@ -56,31 +69,238 @@ jobs:
 
           if [[ "${EVENT_NAME}" == "release" && -n "${RELEASE_TAG}" ]]; then
             image_tag="${RELEASE_TAG}"
+            source_ref="$GITHUB_SHA"
+            mode="promote"
+          elif [[ -n "${INPUT_SOURCE_REF:-}" || -n "${INPUT_RELEASE_TAG:-}" ]]; then
+            [[ "${INPUT_SOURCE_REF:-}" =~ ^[0-9a-f]{40}$ ]]
+            [[ "${INPUT_RELEASE_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            [[ "${SECURITY_REBUILD:-false}" != "true" ]] || {
+              echo "Candidate promotion and security_rebuild are mutually exclusive" >&2
+              exit 1
+            }
+            image_tag="$INPUT_RELEASE_TAG"
+            source_ref="$INPUT_SOURCE_REF"
+            mode="promote"
           elif [[ "${REF_TYPE}" == "tag" ]]; then
             image_tag="${REF_NAME}"
+            source_ref="$GITHUB_SHA"
+            mode="build"
           else
             image_tag="sha-${GITHUB_SHA::12}"
+            source_ref="$GITHUB_SHA"
+            mode="build"
           fi
 
           echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
           echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "image_platforms=${image_platforms}" >> "$GITHUB_OUTPUT"
+          echo "source_ref=${source_ref}" >> "$GITHUB_OUTPUT"
+          echo "mode=${mode}" >> "$GITHUB_OUTPUT"
 
-  publish:
+  build:
     needs: resolve
+    if: needs.resolve.outputs.mode == 'build'
     uses: ./.github/workflows/docker-images-reusable.yml
     with:
       backend_image: ${{ needs.resolve.outputs.backend_image }}
       frontend_image: ${{ needs.resolve.outputs.frontend_image }}
       dockerhub_namespace: ${{ vars.DOCKERHUB_NAMESPACE }}
       image_tag: ${{ needs.resolve.outputs.image_tag }}
+      image_version: ${{ needs.resolve.outputs.image_tag }}
+      source_ref: ${{ needs.resolve.outputs.source_ref }}
       image_platforms: ${{ needs.resolve.outputs.image_platforms }}
       security_rebuild: ${{ github.event_name == 'workflow_dispatch' && inputs.security_rebuild }}
       enable_dockerhub: ${{ github.event_name == 'release' }}
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  promote:
+    name: Promote exact candidate image digests
+    needs: resolve
+    if: needs.resolve.outputs.mode == 'promote'
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ needs.resolve.outputs.backend_image }}
+      frontend_image: ${{ needs.resolve.outputs.frontend_image }}
+      image_tag: ${{ needs.resolve.outputs.image_tag }}
+      image_platforms: ${{ needs.resolve.outputs.image_platforms }}
+      backend_digest: ${{ steps.promote.outputs.backend_digest }}
+      frontend_digest: ${{ steps.promote.outputs.frontend_digest }}
+    steps:
+      - name: Checkout exact release source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve.outputs.source_ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch and verify the signed candidate bundle
+        shell: bash
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+            output="$RUNNER_TEMP/release-candidate"
+            mkdir -p "$output"
+            bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "$RELEASE_TAG" "$output" >/dev/null
+            echo "CANDIDATE_RECEIPT=$output/release-candidate.json" >> "$GITHUB_ENV"
+          else
+            echo "LEGACY_RELEASE_WITHOUT_CANDIDATE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Promote without rebuilding
+        id: promote
+        shell: bash
+        env:
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.image_tag }}
+          BACKEND_IMAGE: ${{ needs.resolve.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.resolve.outputs.frontend_image }}
+          IMAGE_PLATFORMS: ${{ needs.resolve.outputs.image_platforms }}
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+            backend_subject="$(jq -er '.subjects.backend.subject' "$CANDIDATE_RECEIPT")"
+            frontend_subject="$(jq -er '.subjects.frontend.subject' "$CANDIDATE_RECEIPT")"
+            [[ "${backend_subject%@*}" == "$BACKEND_IMAGE" ]]
+            [[ "${frontend_subject%@*}" == "$FRONTEND_IMAGE" ]]
+          else
+            backend_digest="$(oras resolve "$BACKEND_IMAGE:$RELEASE_TAG")"
+            frontend_digest="$(oras resolve "$FRONTEND_IMAGE:$RELEASE_TAG")"
+            backend_subject="$BACKEND_IMAGE@$backend_digest"
+            frontend_subject="$FRONTEND_IMAGE@$frontend_digest"
+          fi
+          backend_digest="${backend_subject##*@}"
+          frontend_digest="${frontend_subject##*@}"
+
+          promote_or_verify() {
+            local source="$1" target="$2" expected_digest="$3"
+            local existing
+            existing="$(oras resolve "$target" 2>/dev/null || true)"
+            if [[ -z "$existing" ]]; then
+              docker buildx imagetools create --tag "$target" "$source"
+            elif [[ "$existing" != "$expected_digest" ]]; then
+              echo "Immutable release tag $target already points at $existing, expected $expected_digest" >&2
+              exit 1
+            fi
+            [[ "$(oras resolve "$target")" == "$expected_digest" ]]
+          }
+          promote_or_verify "$backend_subject" "$BACKEND_IMAGE:$RELEASE_TAG" "$backend_digest"
+          promote_or_verify "$frontend_subject" "$FRONTEND_IMAGE:$RELEASE_TAG" "$frontend_digest"
+
+          export EXPECTED_PLATFORMS="$IMAGE_PLATFORMS"
+          export EXPECTED_SOURCE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          export EXPECTED_REVISION="$SOURCE_REF"
+          export EXPECTED_VERSION="$RELEASE_TAG"
+          for entry in "backend:$BACKEND_IMAGE:$RELEASE_TAG" "frontend:$FRONTEND_IMAGE:$RELEASE_TAG"; do
+            prefix="${entry%%:*}"
+            ref="${entry#*:}"
+            docker buildx imagetools inspect "$ref" --format '{{json .}}' |
+              node scripts/verify-oci-image-metadata.mjs "$prefix" >/dev/null
+          done
+          for subject in "$BACKEND_IMAGE@$backend_digest" "$FRONTEND_IMAGE@$frontend_digest"; do
+            cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+          done
+          {
+            echo "backend_digest=$backend_digest"
+            echo "frontend_digest=$frontend_digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Capture promoted image digest metadata
+        shell: bash
+        run: |
+          cat > image-digests.json <<EOF
+          {
+            "backend_image": "${{ needs.resolve.outputs.backend_image }}:${{ needs.resolve.outputs.image_tag }}",
+            "frontend_image": "${{ needs.resolve.outputs.frontend_image }}:${{ needs.resolve.outputs.image_tag }}",
+            "backend_digest": "${{ steps.promote.outputs.backend_digest }}",
+            "frontend_digest": "${{ steps.promote.outputs.frontend_digest }}",
+            "source": "${{ github.server_url }}/${{ github.repository }}",
+            "revision": "${{ needs.resolve.outputs.source_ref }}",
+            "version": "${{ needs.resolve.outputs.image_tag }}",
+            "platforms": "${{ needs.resolve.outputs.image_platforms }}",
+            "publish_latest": "false",
+            "promotionOnly": true
+          }
+          EOF
+
+      - name: Upload promoted image digest artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: image-digests-${{ needs.resolve.outputs.image_tag }}
+          path: image-digests.json
+          if-no-files-found: error
+
+  publish:
+    name: Select published image result
+    needs: [resolve, build, promote]
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.select.outputs.backend_image }}
+      frontend_image: ${{ steps.select.outputs.frontend_image }}
+      image_tag: ${{ steps.select.outputs.image_tag }}
+      image_platforms: ${{ steps.select.outputs.image_platforms }}
+      backend_digest: ${{ steps.select.outputs.backend_digest }}
+      frontend_digest: ${{ steps.select.outputs.frontend_digest }}
+    steps:
+      - name: Select candidate promotion or explicit rebuild
+        id: select
+        shell: bash
+        env:
+          MODE: ${{ needs.resolve.outputs.mode }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+          BACKEND_IMAGE: ${{ needs.resolve.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.resolve.outputs.frontend_image }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
+          IMAGE_PLATFORMS: ${{ needs.resolve.outputs.image_platforms }}
+          BUILD_BACKEND_DIGEST: ${{ needs.build.outputs.backend_digest }}
+          BUILD_FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}
+          PROMOTE_BACKEND_DIGEST: ${{ needs.promote.outputs.backend_digest }}
+          PROMOTE_FRONTEND_DIGEST: ${{ needs.promote.outputs.frontend_digest }}
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == "promote" ]]; then
+            [[ "$PROMOTE_RESULT" == "success" ]]
+            backend_digest="$PROMOTE_BACKEND_DIGEST"
+            frontend_digest="$PROMOTE_FRONTEND_DIGEST"
+          else
+            [[ "$BUILD_RESULT" == "success" ]]
+            backend_digest="$BUILD_BACKEND_DIGEST"
+            frontend_digest="$BUILD_FRONTEND_DIGEST"
+          fi
+          [[ "$backend_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$frontend_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          {
+            echo "backend_image=$BACKEND_IMAGE"
+            echo "frontend_image=$FRONTEND_IMAGE"
+            echo "image_tag=$IMAGE_TAG"
+            echo "image_platforms=$IMAGE_PLATFORMS"
+            echo "backend_digest=$backend_digest"
+            echo "frontend_digest=$frontend_digest"
+          } >> "$GITHUB_OUTPUT"
 
   smoke-postgres-image-deploy:
     needs: publish
@@ -416,3 +636,83 @@ jobs:
               echo "" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
+
+  promote-public-aliases:
+    name: Promote latest and Docker Hub after qualification
+    needs:
+      - publish
+      - smoke-postgres-image-deploy
+      - smoke-postgres-image-deploy-exposed
+      - smoke-oracle-image-deploy
+      - security-published-scan
+    if: >-
+      startsWith(needs.publish.outputs.image_tag, 'v') &&
+      needs.smoke-postgres-image-deploy.result == 'success' &&
+      needs.smoke-postgres-image-deploy-exposed.result == 'success' &&
+      needs.smoke-oracle-image-deploy.result == 'success' &&
+      needs.security-published-scan.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve Docker Hub publication authority
+        id: dockerhub
+        shell: bash
+        env:
+          NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+          USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [[ -n "$NAMESPACE" && -n "$USERNAME" && -n "$TOKEN" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to Docker Hub
+        if: steps.dockerhub.outputs.enabled == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Promote qualified public aliases without rebuilding
+        shell: bash
+        env:
+          BACKEND_IMAGE: ${{ needs.publish.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.publish.outputs.frontend_image }}
+          RELEASE_TAG: ${{ needs.publish.outputs.image_tag }}
+          BACKEND_DIGEST: ${{ needs.publish.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.publish.outputs.frontend_digest }}
+          DOCKERHUB_ENABLED: ${{ steps.dockerhub.outputs.enabled }}
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create --tag "$BACKEND_IMAGE:latest" "$BACKEND_IMAGE@$BACKEND_DIGEST"
+          docker buildx imagetools create --tag "$FRONTEND_IMAGE:latest" "$FRONTEND_IMAGE@$FRONTEND_DIGEST"
+          [[ "$(oras resolve "$BACKEND_IMAGE:latest")" == "$BACKEND_DIGEST" ]]
+          [[ "$(oras resolve "$FRONTEND_IMAGE:latest")" == "$FRONTEND_DIGEST" ]]
+
+          if [[ "$DOCKERHUB_ENABLED" == "true" ]]; then
+            dockerhub_backend="docker.io/$DOCKERHUB_NAMESPACE/enterpriseglue-the-bridge-oss-backend"
+            dockerhub_frontend="docker.io/$DOCKERHUB_NAMESPACE/enterpriseglue-the-bridge-oss-frontend"
+            docker buildx imagetools create --tag "$dockerhub_backend:$RELEASE_TAG" "$BACKEND_IMAGE@$BACKEND_DIGEST"
+            docker buildx imagetools create --tag "$dockerhub_frontend:$RELEASE_TAG" "$FRONTEND_IMAGE@$FRONTEND_DIGEST"
+            docker buildx imagetools create --tag "$dockerhub_backend:latest" "$dockerhub_backend:$RELEASE_TAG"
+            docker buildx imagetools create --tag "$dockerhub_frontend:latest" "$dockerhub_frontend:$RELEASE_TAG"
+            [[ "$(oras resolve "$dockerhub_backend:$RELEASE_TAG")" == "$BACKEND_DIGEST" ]]
+            [[ "$(oras resolve "$dockerhub_frontend:$RELEASE_TAG")" == "$FRONTEND_DIGEST" ]]
+            [[ "$(oras resolve "$dockerhub_backend:latest")" == "$BACKEND_DIGEST" ]]
+            [[ "$(oras resolve "$dockerhub_frontend:latest")" == "$FRONTEND_DIGEST" ]]
+          fi
