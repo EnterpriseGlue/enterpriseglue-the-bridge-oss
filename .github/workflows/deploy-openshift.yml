@@ -40,10 +40,34 @@ jobs:
     environment: production
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install OpenShift CLI
-        uses: redhat-actions/oc-installer@35b60c3f9757ae4301521556e1b75ff6f59f8d7c # v1
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          oc_release_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable"
+          oc_archive_name="openshift-client-linux.tar.gz"
+          oc_install_dir="$(mktemp -d "$RUNNER_TEMP/enterpriseglue-oc.XXXXXX")"
+          oc_archive="$oc_install_dir/$oc_archive_name"
+          oc_checksums="$oc_install_dir/sha256sum.txt"
+
+          curl --fail --location --retry 5 --retry-all-errors \
+            "$oc_release_url/$oc_archive_name" \
+            --output "$oc_archive"
+          curl --fail --location --retry 5 --retry-all-errors \
+            "$oc_release_url/sha256sum.txt" \
+            --output "$oc_checksums"
+
+          expected_sha="$(awk -v archive="$oc_archive_name" '$2 == archive { print $1 }' "$oc_checksums")"
+          test -n "$expected_sha"
+          printf '%s  %s\n' "$expected_sha" "$oc_archive" | sha256sum --check --strict -
+
+          tar --extract --gzip --file "$oc_archive" --directory "$oc_install_dir" oc
+          chmod 0755 "$oc_install_dir/oc"
+          echo "$oc_install_dir" >> "$GITHUB_PATH"
+          "$oc_install_dir/oc" version --client=true
 
       - name: Login to OpenShift
         shell: bash

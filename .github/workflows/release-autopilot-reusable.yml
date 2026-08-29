@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Evaluate autopilot eligibility
         id: evaluate
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           AI_AUTOPILOT_ENABLED: ${{ inputs.ai_autopilot_enabled }}
           RELEASE_AUTOPILOT_ENABLED: ${{ inputs.release_autopilot_enabled }}
@@ -48,7 +48,7 @@ jobs:
             const isReleasePleaseBranch = (pr.head.ref || '').startsWith('release-please--branches--');
             const isAllowedBotReleasePR = isReleasePleaseBranch && authorLogin.endsWith('[bot]');
             const isDependabotAuthor = authorLogin.includes('dependabot');
-            const isTrivyActionBumpPR = prTitle.includes('aquasecurity/trivy-action') || prHeadRef.includes('aquasecurity/trivy-action');
+            const isTrivyActionBumpPR = prTitle.includes('aquasecurity/setup-trivy') || prHeadRef.includes('aquasecurity/setup-trivy');
             const isAllowedDependabotTrivyPR = isDependabotAuthor && isTrivyActionBumpPR;
             if (!autopilotEnabled) {
               core.notice('AI_AUTOPILOT_ENABLED is false. Skipping autopilot merge.');

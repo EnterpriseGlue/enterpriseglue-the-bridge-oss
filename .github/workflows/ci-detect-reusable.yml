@@ -65,7 +65,7 @@ jobs:
       changed_files_count: ${{ steps.detect.outputs.changed_files_count }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -136,7 +136,7 @@ jobs:
 
             if grep -Eq '^(backend/|packages/(backend-host|shared|enterprise-plugin-api|plugin-manager)/|package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)' <<< "$CHANGED_FILES"; then backend_changed=true; ci_only=false; fi
             if grep -Eq '^(frontend/|packages/(frontend-host|shared|enterprise-plugin-api|plugin-manager)/|package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)' <<< "$CHANGED_FILES"; then frontend_changed=true; ci_only=false; fi
-            if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/smoke-images-local\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod)' <<< "$CHANGED_FILES"; then infra_changed=true; ci_only=false; fi
+            if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/(smoke-images-local|run-trivy-image-scan)\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod)' <<< "$CHANGED_FILES"; then infra_changed=true; ci_only=false; fi
             if grep -Eq '^packages/shared/src/(db|config|infrastructure/persistence)/|^backend/src/shared/(db|config)/|^backend/src/modules/.*/.*(db|migration)|^backend/.+migration' <<< "$CHANGED_FILES"; then db_changed=true; ci_only=false; fi
             if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|CODE_OF_CONDUCT\.md|CONTRIBUTING\.md|LICENSE|SECURITY\.md|SUPPORT\.md|THIRD_PARTY_NOTICES\.md|third_party_licenses\.json|\.github/|local-docs/|\.sync/|\.windsurf/|\.vscode/|archive/)' <<< "$CHANGED_FILES"; then ci_only=false; fi
 

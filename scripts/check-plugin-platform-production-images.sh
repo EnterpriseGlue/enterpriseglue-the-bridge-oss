@@ -91,12 +91,32 @@ for image in "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do
   docker run --rm --entrypoint cosign "$image" version
 done
 
+CREATED_TRIVY_CACHE_VOLUME=false
+if [[ -n "${PLUGIN_PLATFORM_TRIVY_CACHE_DIR:-}" ]]; then
+  TRIVY_CACHE_SOURCE="$PLUGIN_PLATFORM_TRIVY_CACHE_DIR"
+  mkdir -p "$TRIVY_CACHE_SOURCE"
+else
+  TRIVY_CACHE_SOURCE="enterpriseglue-plugin-trivy-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
+  docker volume create "$TRIVY_CACHE_SOURCE" >/dev/null
+  CREATED_TRIVY_CACHE_VOLUME=true
+fi
+cleanup_trivy_cache() {
+  if [[ "$CREATED_TRIVY_CACHE_VOLUME" == "true" ]]; then
+    docker volume rm --force "$TRIVY_CACHE_SOURCE" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_trivy_cache EXIT
+
 for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do
   docker run --rm \
     --volume /var/run/docker.sock:/var/run/docker.sock \
+    --volume "$TRIVY_CACHE_SOURCE:/root/.cache/trivy" \
     "$TRIVY_IMAGE" image --quiet --exit-code 1 \
       --severity HIGH,CRITICAL "$image"
 done
+
+cleanup_trivy_cache
+trap - EXIT
 
 printf '{"event":"plugin_platform_production_images","status":"passed","backend":"%s","frontend":"%s","installer":"%s","manager":"%s"}\n' \
   "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$INSTALLER_IMAGE" "$MANAGER_IMAGE"

@@ -41,7 +41,7 @@ test('nightly preserves evidence before enforcing the high and critical gate', (
 
 test('nightly reads and reports OCI provenance from every configured platform', () => {
   assert.match(nightlyCaller, /image_platforms: \$\{\{ needs\.resolve\.outputs\.image_platforms \}\}/);
-  assert.match(nightly, /docker\/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f/);
+  assert.match(nightly, /docker\/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e/);
   assert.match(nightly, /docker buildx imagetools inspect "\$backend_ref" --format '\{\{json \.\}\}'/);
   assert.match(nightly, /verify-oci-image-metadata\.mjs backend/);
   assert.match(nightly, /verify-oci-image-metadata\.mjs frontend/);
