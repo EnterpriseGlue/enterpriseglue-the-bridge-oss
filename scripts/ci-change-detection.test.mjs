@@ -36,6 +36,12 @@ test('package changes continue to select plugin compatibility and package checks
   assert.match(workflow, /run_plugin_package=true/);
 });
 
+test('Trivy wrapper changes select image smoke and security qualification', () => {
+  assert.match(workflow, /scripts\/\(smoke-images-local\|run-trivy-image-scan\)\\\.sh/);
+  assert.match(workflow, /if \[ "\$run_smoke" = true \]; then/);
+  assert.match(workflow, /run_security_scan=true/);
+});
+
 test('draft pull requests use the normal change-aware gates', () => {
   assert.doesNotMatch(workflow, /changed_files_count=draft/);
   assert.doesNotMatch(workflow, /PR_DRAFT/);

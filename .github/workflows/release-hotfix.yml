@@ -31,13 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full release history
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
 
       - name: Setup Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
 
@@ -56,7 +56,7 @@ jobs:
       - name: Run Release Please (automatic bump)
         id: release_auto
         if: ${{ inputs.release_as == '' }}
-        uses: googleapis/release-please-action@c3fc4de07084f75a2b61a5b933069bda6edf3d5c # v4
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
@@ -65,7 +65,7 @@ jobs:
       - name: Run Release Please (forced release-as)
         id: release_forced
         if: ${{ inputs.release_as != '' }}
-        uses: googleapis/release-please-action@c3fc4de07084f75a2b61a5b933069bda6edf3d5c # v4
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
@@ -74,7 +74,7 @@ jobs:
 
       - name: Resolve release outputs
         id: resolve
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PRS_JSON: ${{ steps.release_auto.outputs.prs || steps.release_forced.outputs.prs || '[]' }}
           PR_JSON: ${{ steps.release_auto.outputs.pr || steps.release_forced.outputs.pr || '{}' }}

@@ -16,6 +16,7 @@ const workflow = await readFile(
 test('ci-complete explicitly covers every CI job', () => {
   const result = assertAggregateCoverage(workflow)
   assert.ok(result.coveredJobs.includes('plugin-platform'))
+  assert.ok(result.coveredJobs.includes('plugin-platform-images'))
   assert.ok(result.coveredJobs.includes('release-readiness'))
   assert.deepEqual(
     new Set(parseAggregateNeeds(workflow)),

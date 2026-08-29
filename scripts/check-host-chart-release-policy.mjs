@@ -15,7 +15,7 @@ assert.match(workflow, /Host chart appVersion \$app_version must equal OSS relea
 assert.match(workflow, /bash scripts\/check-enterpriseglue-host-chart\.sh/);
 assert.equal([...workflow.matchAll(/helm package "\$chart"/g)].length, 2);
 assert.match(workflow, /helm-chart-archive\.mjs compare/);
-assert.match(workflow, /uses: docker\/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9/);
+assert.match(workflow, /uses: docker\/login-action@dbcb813823bdd20940b903addbd779551569679f/);
 assert.match(workflow, /registry: ghcr\.io/);
 assert.match(workflow, /helm push "\$CHART_ARCHIVE" oci:\/\/ghcr\.io\/enterpriseglue\/charts/);
 assert.match(workflow, /Published immutable chart version differs from source/);
