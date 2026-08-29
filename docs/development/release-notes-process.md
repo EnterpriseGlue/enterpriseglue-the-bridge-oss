@@ -99,6 +99,13 @@ release pull request. The workflow then:
 5. publishes the same document as the GitHub release body after the release
    pull request is merged.
 
+Release Please may mutate a release branch only when at least one non-schema
+`.release-notes/*.json` fragment changed since the latest stable tag, or when
+the current commit is the exact release-publication commit. Internal, CI-only,
+documentation-exempt, and recovery commits without a fragment therefore do not
+create patch versions merely because their merge history contains a
+conventional `fix` commit.
+
 Generated release documents include repository publication front matter. This
 classifies them as technical release documentation for operators, developers,
 and maintainers and allows the same document to pass the documentation boundary

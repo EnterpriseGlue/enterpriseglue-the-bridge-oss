@@ -327,6 +327,21 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   assert.match(hotfix, /merge-method: merge/)
 })
 
+test('Release Please mutates release state only when fragments demand a release', () => {
+  const release = readFileSync(new URL('../.github/workflows/release-please.yml', import.meta.url), 'utf8')
+  const demand = release.indexOf('      - name: Detect fragment-derived release demand\n')
+  const action = release.indexOf('      - name: Run Release Please\n')
+  const context = release.indexOf('      - name: Resolve detailed release-note context\n')
+  assert.ok(demand > 0)
+  assert.ok(action > demand)
+  assert.ok(context > action)
+  assert.match(release, /git diff --name-only --diff-filter=ACMR "\$base_tag"\.\.\.HEAD -- \.release-notes/)
+  assert.match(release, /grep -Fv '\.release-notes\/schema\.json'/)
+  assert.match(release, /No release-note fragment changed since \$base_tag; skipping Release Please mutation/)
+  assert.match(release, /Run Release Please[\s\S]*?if: steps\.publication\.outputs\.is_release == 'true' \|\| steps\.demand\.outputs\.should_run == 'true'/)
+  assert.match(release, /Resolve detailed release-note context[\s\S]*?if: steps\.publication\.outputs\.is_release == 'true' \|\| steps\.demand\.outputs\.should_run == 'true'/)
+})
+
 test('release preparation advances the host chart once and binds it to the OSS release', () => {
   assert.equal(nextHostChartPatchVersion('0.1.0'), '0.1.1')
   assert.equal(nextHostChartPatchVersion('4.19.9'), '4.19.10')
