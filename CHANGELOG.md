@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.19.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.19.2...v0.19.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* **ci:** isolate release candidate execution boundary ([5be1763](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5be176301db3fb24e2b33bb443b0c08009dcc605))
+* **ci:** preserve merge-queue candidate identity ([ea76eeb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ea76eeb815f0da4c4895d20da6d65d9827eb6229))
+* **ci:** validate release metadata without checkout ([fdc94d9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fdc94d9cae97efb3215c58474b61fd273237b99f))
+
 ## [0.19.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.19.1...v0.19.2) (2026-08-28)
 
 
