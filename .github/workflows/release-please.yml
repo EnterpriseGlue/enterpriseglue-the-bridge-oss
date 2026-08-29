@@ -51,6 +51,28 @@ jobs:
             echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Detect fragment-derived release demand
+        id: demand
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          test -n "$base_tag"
+          fragments="$(
+            git diff --name-only --diff-filter=ACMR "$base_tag"...HEAD -- .release-notes |
+              grep -E '^\.release-notes/[^/]+\.json$' |
+              grep -Fv '.release-notes/schema.json' || true
+          )"
+          if [[ -n "$fragments" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Release Please demand is backed by fragment(s) changed since $base_tag:"
+            printf '%s\n' "$fragments"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "No release-note fragment changed since $base_tag; skipping Release Please mutation."
+          fi
+          echo "base_tag=$base_tag" >> "$GITHUB_OUTPUT"
+
       - name: Set up ORAS for candidate verification
         if: steps.publication.outputs.is_release == 'true'
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
@@ -82,6 +104,7 @@ jobs:
 
       - name: Run Release Please
         id: release
+        if: steps.publication.outputs.is_release == 'true' || steps.demand.outputs.should_run == 'true'
         uses: googleapis/release-please-action@c3fc4de07084f75a2b61a5b933069bda6edf3d5c # v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
@@ -90,6 +113,7 @@ jobs:
 
       - name: Resolve detailed release-note context
         id: notes
+        if: steps.publication.outputs.is_release == 'true' || steps.demand.outputs.should_run == 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           PRS_JSON: ${{ steps.release.outputs.prs || '[]' }}
