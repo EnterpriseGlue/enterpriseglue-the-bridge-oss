@@ -61,6 +61,13 @@ merge-queue commits. Ordinary pull requests receive a successful no-op status;
 Release Please pull requests receive a preliminary success on the pull-request
 head and must stage the exact merge-group commit before it can leave the queue.
 
+Configure the merge queue's merge method as **merge**, not squash or rebase.
+The qualified merge-group commit must become the exact `main` commit so the
+signed receipt, OCI revision labels, Git tag, and GitHub release all identify
+one immutable source revision. The repository's auto-merge workflows request
+the same method. Changing the commit after qualification invalidates the
+candidate and is not supported.
+
 Do not replace this status with a release-event job. A release event occurs
 after the tag exists and cannot prevent a partially published version.
 

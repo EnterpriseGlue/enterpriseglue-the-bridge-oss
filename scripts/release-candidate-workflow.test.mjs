@@ -14,6 +14,8 @@ const [
   fetchCandidate,
   detect,
   releasePlease,
+  autoMerge,
+  releaseAutopilot,
 ] = await Promise.all([
   read('../.github/workflows/release-candidate-stage.yml'),
   read('../.github/workflows/docker-images.yml'),
@@ -24,6 +26,8 @@ const [
   read('./fetch-release-candidate.sh'),
   read('../.github/workflows/ci-detect-reusable.yml'),
   read('../.github/workflows/release-please.yml'),
+  read('../.github/workflows/auto-merge-label.yml'),
+  read('../.github/workflows/release-autopilot-reusable.yml'),
 ])
 
 test('candidate staging is downstream of successful exact merge-queue CI', () => {
@@ -60,6 +64,13 @@ test('candidate staging never executes the merge-queue checkout with write autho
     dockerReusable.indexOf('      - name: Set up QEMU\n'),
   )
   assert.doesNotMatch(checkout, /ref:/)
+})
+
+test('auto-merge preserves the qualified merge-group commit identity', () => {
+  assert.match(autoMerge, /merge-method: merge/)
+  assert.doesNotMatch(autoMerge, /merge-method: squash/)
+  assert.match(releaseAutopilot, /merge-method: merge/)
+  assert.doesNotMatch(releaseAutopilot, /merge-method: squash/)
 })
 
 test('candidate staging qualifies every public artifact before recording success', () => {
