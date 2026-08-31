@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/plugin-sdk",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Public, product-neutral contracts for EnterpriseGlue OSS plugins",
   "license": "Apache-2.0",
   "private": false,

@@ -95,6 +95,24 @@
       "impact": "minor"
     },
     {
+      "name": "@enterpriseglue/plugin-runtime",
+      "previousVersion": "0.2.2",
+      "newVersion": "0.2.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.5",
+      "newVersion": "0.2.6",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.5",
+      "newVersion": "0.1.6",
+      "impact": "patch"
+    },
+    {
       "name": "@enterpriseglue/shared",
       "previousVersion": "0.14.1",
       "newVersion": "0.15.0",

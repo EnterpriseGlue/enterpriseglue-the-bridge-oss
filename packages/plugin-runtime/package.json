@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/plugin-runtime",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Plural, owner-aware runtime primitives for EnterpriseGlue OSS plugins",
   "license": "Apache-2.0",
   "private": false,
