@@ -208,6 +208,7 @@ exports[`Plugin API surface snapshot > frontend contract surface matches snapsho
   "api: {",
   "components: {",
   "hooks: {",
+  "runtime?: {",
   "export interface EnterpriseFrontendPlugin {",
   "routes?: EnterpriseRoute[];",
   "tenantRoutes?: EnterpriseRoute[];",
@@ -218,5 +219,14 @@ exports[`Plugin API surface snapshot > frontend contract surface matches snapsho
   "init?(context: FrontendPluginContext): void;",
   "headerSlots?: never;",
   "sidebarItems?: never;",
+  "export interface TrustedSystemFrontendModuleDescriptorV1 {",
+  "ownerId: string;",
+  "entryPath: string;",
+  "integrity: \`sha256-\${string}\`;",
+  "required?: boolean;",
+  "export interface TrustedSystemFrontendModuleV1 {",
+  "ownerId: string;",
+  "activate(context: FrontendPluginContext): EnterpriseFrontendPlugin | Promise<EnterpriseFrontendPlugin>;",
+  "export type RegisterTrustedSystemFrontendModuleV1 = (module: TrustedSystemFrontendModuleV1) => void;",
 ]
 `;

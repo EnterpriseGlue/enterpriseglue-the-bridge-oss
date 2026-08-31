@@ -13,6 +13,7 @@ const { createNotificationsRouter, dashboardContextRoute, identityProvisioningRo
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/tenant.js', () => ({
+  requireTenantRole: () => noopMiddleware,
   resolveTenantContext: () => (req: any, res: any, next: any) => {
     if (req.get('x-test-require-route-tenant') === 'true' && !req.params?.tenantSlug) {
       return res.status(404).json({ error: 'Tenant not found' });
