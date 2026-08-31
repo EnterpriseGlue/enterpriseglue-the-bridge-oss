@@ -463,7 +463,7 @@ describe('connected OCI plugin acquisition', () => {
     expect(connectedStart).toBeGreaterThanOrEqual(0);
     expect(connectedEnd).toBeGreaterThan(connectedStart);
     expect(dockerfile).toContain('golang:1.26.6-alpine3.23@sha256:');
-    expect(dockerfile).toContain('go get oras.land/oras/cmd/oras@v1.3.3');
+    expect(dockerfile).toContain('go get oras.land/oras/cmd/oras@v1.3.4');
     expect(dockerfile).toContain(
       'go build -buildvcs=false -trimpath -o /out/oras oras.land/oras/cmd/oras',
     );
@@ -472,8 +472,11 @@ describe('connected OCI plugin acquisition', () => {
     expect(dockerfile).toContain(
       'github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3',
     );
+    expect(dockerfile.match(/golang\.org\/x\/crypto@v0\.55\.0/g)).toHaveLength(
+      2,
+    );
     expect(dockerfile).toContain('golang.org/x/mod@v0.40.0');
-    expect(dockerfile).toContain('golang.org/x/text@v0.39.0');
+    expect(dockerfile).toContain('golang.org/x/text@v0.41.0');
     expect(dockerfile).toContain('google.golang.org/grpc@v1.82.1');
     expect(dockerfile).toContain(
       'enterpriseglue-plugin-installer/Apache-2.0.txt',
@@ -481,7 +484,7 @@ describe('connected OCI plugin acquisition', () => {
     expect(dockerIgnore).toContain(
       '!packages/plugin-installer/third_party_licenses.json',
     );
-    expect(containerNotices).toContain('| ORAS CLI | 1.3.3 | Apache-2.0 |');
+    expect(containerNotices).toContain('| ORAS CLI | 1.3.4 | Apache-2.0 |');
     expect(containerNotices).toContain('| Cosign | 3.1.3 | Apache-2.0 |');
     expect(connectedBranch).toContain('--network "$network"');
     expect(connectedBranch).toContain(

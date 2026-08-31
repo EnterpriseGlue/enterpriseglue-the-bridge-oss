@@ -90,12 +90,22 @@ assert.doesNotMatch(
 );
 for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   assert.match(dockerfile, /golang:1\.26\.6-alpine3\.23@sha256:[a-f0-9]{64}/);
-  assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.3/);
+  assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.4/);
   assert.match(dockerfile, /go build -buildvcs=false -trimpath -o \/out\/oras/);
   assert.doesNotMatch(dockerfile, /go install oras\.land\/oras\/cmd\/oras/);
   assert.match(dockerfile, /github\.com\/sigstore\/cosign\/v3\/cmd\/cosign@v3\.1\.3/);
+  assert.equal(
+    [...dockerfile.matchAll(/golang\.org\/x\/crypto@v0\.55\.0/g)].length,
+    2,
+    'Both embedded OCI tools must use the fixed x/crypto dependency floor',
+  );
+  assert.equal(
+    [...dockerfile.matchAll(/golang\.org\/x\/crypto\[\[:space:\]\]\+v0\\\.55\\\.0/g)].length,
+    2,
+    'Both embedded OCI binaries must verify the fixed x/crypto dependency floor',
+  );
   assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
-  assert.match(dockerfile, /golang\.org\/x\/text@v0\.39\.0/);
+  assert.match(dockerfile, /golang\.org\/x\/text@v0\.41\.0/);
   assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.82\.1/);
   assert.equal(
     [...dockerfile.matchAll(/id=enterpriseglue-plugin-toolchain-go-modules/g)].length,
@@ -253,8 +263,8 @@ assert.match(workflow, /MANAGER_REFERENCE=.*@\$MANAGER_DIGEST/);
 assert.match(workflow, /MANAGER_CHART_REFERENCE=.*@\$MANAGER_CHART_DIGEST/);
 assert.equal(
   [...workflow.matchAll(/cosign sign --yes/g)].length,
-  1,
-  'The single looped signing command must cover all five exact subjects',
+  2,
+  'The toolchain loop and the distribution-lock publication must sign their exact subjects',
 );
 assert.match(workflow, /"\$INSTALLER_REFERENCE"/);
 assert.match(workflow, /"\$MANAGER_REFERENCE"/);
@@ -315,6 +325,29 @@ assert.match(workflow, /build-plugin-compose-deployment-kit\.mjs/);
 assert.match(workflow, /enterpriseglue-distribution-lock\.mjs create/);
 assert.match(workflow, /enterpriseglue-distribution-lock\.mjs verify/);
 assert.match(workflow, /enterpriseglue-distribution-lock-\$RELEASE_TAG\.sigstore\.json/);
+assert.match(
+  workflow,
+  /DISTRIBUTION_REPOSITORY: ghcr\.io\/enterpriseglue\/releases\/enterpriseglue-oss-distribution/,
+);
+assert.match(
+  workflow,
+  /oras push "\$distribution_tag"[\s\S]*--disable-path-validation[\s\S]*application\/vnd\.enterpriseglue\.distribution-lock\.v1\+json/,
+);
+assert.match(workflow, /oras resolve "\$distribution_tag"/);
+assert.match(workflow, /oras manifest fetch "\$distribution_reference"/);
+assert.match(workflow, /oras blob fetch --output "\$published_lock"/);
+assert.match(
+  workflow,
+  /Published immutable OSS distribution lock differs from the release payload/,
+);
+assert.match(
+  workflow,
+  /cosign sign --yes --registry-referrers-mode=oci-1-1[\s\S]*"\$distribution_reference"/,
+);
+assert.match(
+  workflow,
+  /cosign verify[\s\S]*--certificate-identity "\$CERTIFICATE_IDENTITY"[\s\S]*"\$distribution_reference"/,
+);
 assert.match(workflow, /gh release upload "\$RELEASE_TAG"/);
 assert.match(workflow, /enterpriseglue-frontend-static-\$RELEASE_TAG\.tar\.gz/);
 assert.match(workflow, /enterpriseglue-plugin-deployment-kit-\$RELEASE_TAG\.tar\.gz/);

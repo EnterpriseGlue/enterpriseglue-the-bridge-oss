@@ -431,8 +431,10 @@ The protected public release workflow is
 [`plugin-toolchain-release.yml`](../../.github/workflows/plugin-toolchain-release.yml). It starts
 after the release images succeed, can also resume manually for the same protected release commit,
 publishes immutable multi-architecture toolchain subjects, verifies workflow-identity signatures,
-and permanently attaches the signed lock, receipts, deployment kit, static frontend, and offline
-archive to the GitHub release. Its local disposable-registry counterpart is:
+publishes the distribution lock as a signed OCI subject for downstream SaaS manifests, and
+permanently attaches the signed lock blob, receipts, deployment kit, static frontend, and offline
+archive to the GitHub release. Recovery reuses the semantic OCI tag only when its extracted lock
+bytes match the release payload exactly. Its local disposable-registry counterpart is:
 
 ```sh
 pnpm test:plugin-toolchain-release-policy

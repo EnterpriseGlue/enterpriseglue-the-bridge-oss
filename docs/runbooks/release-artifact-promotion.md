@@ -45,9 +45,14 @@ to create another patch version.
    Hub release and `latest` tags advanced.
 9. The protected host-chart and plugin-toolchain workflows copy the signed
    candidate chart manifests into their production repositories, sign the
-   production subjects, verify the exact archives, and attach receipts and
-   distribution assets to the existing GitHub release.
-10. Public plugin package publication consumes the exact candidate tarballs
+   production subjects, and verify the exact archives. The plugin-toolchain
+   workflow also publishes the distribution lock at
+   `ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution:<release-tag>`,
+   verifies its bytes, and signs its immutable digest for Cloud release-manifest
+   consumption.
+10. The workflow attaches the signed lock blob, receipts, deployment kit,
+    static frontend, and offline archive to the existing GitHub release.
+11. Public plugin package publication consumes the exact candidate tarballs
     when `release_tag` is supplied.
 
 The candidate repository and `candidate-vX.Y.Z-<commit>` image tags are
@@ -89,7 +94,8 @@ move or recreate the tag.
   promotes the same digests.
 - If the host-chart or plugin-toolchain workflow failed, dispatch the failed
   workflow with the same `source_ref` and `release_tag`. Existing production
-  versions must match the candidate digest or the workflow fails closed.
+  versions and the distribution-lock OCI subject must match the release
+  payload or the workflow fails closed.
 - If public plugin packages still need publication, dispatch
   `Publish plugin SDK packages` with the same `source_ref`, `release_tag`, and
   `dry_run=false`. The workflow publishes the retained candidate tarballs in

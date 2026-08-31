@@ -17,7 +17,7 @@
   "upgrade": {
     "required": false,
     "instructions": [
-      "Use plugin runtime and installer RBAC charts 0.2.6 with @enterpriseglue/plugin-installer 0.2.6, and use the Plugin Manager chart 0.1.6 with @enterpriseglue/plugin-manager 0.1.6."
+      "Use plugin runtime and installer RBAC charts 0.2.7 with @enterpriseglue/plugin-installer 0.2.7, and use the Plugin Manager chart 0.1.7 with @enterpriseglue/plugin-manager 0.1.7."
     ]
   },
   "configuration": [],

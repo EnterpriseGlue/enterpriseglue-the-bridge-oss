@@ -122,7 +122,8 @@ The packaged `scripts/eg-plugin` wrapper mounts the customer's standard Docker/O
 `config.json` read-only, copies it into an ephemeral private acquisition directory, permits only
 the selected registry network, and supplies no Docker socket, kubeconfig, host database
 credential, plugin secret, or browser request. The installer image includes digest-pinned ORAS
-1.3.3 and Cosign 3.1.2, their Apache-2.0 notice and license text, and the generated JavaScript
+1.3.4 and Cosign 3.1.3 with a fixed `golang.org/x/crypto` dependency floor, their Apache-2.0 notice
+and license text, and the generated JavaScript
 runtime-dependency license inventory. Image loading and cluster reconciliation remain separate
 deployment-owned adapters. Customers run neither publisher CI nor source builds. Publication of
 the installer image and customer-registry acceptance remain release gates.

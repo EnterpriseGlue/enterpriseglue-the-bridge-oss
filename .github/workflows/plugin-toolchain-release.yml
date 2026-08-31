@@ -43,6 +43,7 @@ jobs:
       RUNTIME_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-runtime
       RBAC_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-installer-rbac
       MANAGER_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-manager
+      DISTRIBUTION_REPOSITORY: ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution
       TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
       ZOT_IMAGE: ghcr.io/project-zot/zot-minimal@sha256:892f2a5a63dd99bdf85320fee5448506119328a6d5e1a2d14d4db876be595236
       COSIGN_EXPERIMENTAL: '1'
@@ -760,6 +761,35 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --trusted-root "$TRUSTED_ROOT" \
             "$LOCK" >/dev/null
+
+          distribution_tag="$DISTRIBUTION_REPOSITORY:$RELEASE_TAG"
+          distribution_digest="$(oras resolve "$distribution_tag" 2>/dev/null || true)"
+          if [[ -z "$distribution_digest" ]]; then
+            oras push "$distribution_tag" \
+              --disable-path-validation \
+              --artifact-type application/vnd.enterpriseglue.distribution-lock.v1+json \
+              "$LOCK:application/vnd.enterpriseglue.distribution-lock.v1+json" >/dev/null
+            distribution_digest="$(oras resolve "$distribution_tag")"
+          fi
+          [[ "$distribution_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          distribution_reference="$DISTRIBUTION_REPOSITORY@$distribution_digest"
+          distribution_layer="$(
+            oras manifest fetch "$distribution_reference" |
+              jq -er '[.layers[] | select(.mediaType == "application/vnd.enterpriseglue.distribution-lock.v1+json") | .digest] | if length == 1 then .[0] else error("expected one distribution-lock layer") end'
+          )"
+          published_lock="$DISTRIBUTION/published-$(basename "$LOCK")"
+          oras blob fetch --output "$published_lock" \
+            "$DISTRIBUTION_REPOSITORY@$distribution_layer"
+          cmp --silent "$LOCK" "$published_lock" || {
+            echo "Published immutable OSS distribution lock differs from the release payload" >&2
+            exit 1
+          }
+          cosign sign --yes --registry-referrers-mode=oci-1-1 \
+            "$distribution_reference"
+          cosign verify \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$distribution_reference" >/dev/null
 
           gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \

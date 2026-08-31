@@ -90,7 +90,7 @@ test('the production image gate scans every release image', () => {
   assert.match(productionImages, /--severity HIGH,CRITICAL/)
 })
 
-test('the local OCI drill qualifies the complete five-artifact toolchain', () => {
+test('the local OCI drill qualifies the complete toolchain and distribution lock', () => {
   assert.match(
     toolchainLocal,
     /ZOT_IMAGE="\$\{EG_PLUGIN_TOOLCHAIN_ZOT_IMAGE:-ghcr\.io\/project-zot\/zot-minimal@sha256:[a-f0-9]{64}\}"/,
@@ -115,6 +115,16 @@ test('the local OCI drill qualifies the complete five-artifact toolchain', () =>
   assert.match(toolchainLocal, /--arg managerVersion "\$MANAGER_VERSION"/)
   assert.match(toolchainLocal, /--arg manager "\$MANAGER_REFERENCE"/)
   assert.match(toolchainLocal, /--arg managerChart "\$MANAGER_CHART_REFERENCE"/)
+  assert.match(toolchainLocal, /enterpriseglue-distribution-lock\.mjs" create/)
+  assert.match(
+    toolchainLocal,
+    /oras push --plain-http "\$DISTRIBUTION_TAG"[\s\S]*--disable-path-validation[\s\S]*application\/vnd\.enterpriseglue\.distribution-lock\.v1\+json/,
+  )
+  assert.match(toolchainLocal, /oras resolve --plain-http "\$DISTRIBUTION_TAG"/)
+  assert.match(toolchainLocal, /cmp --silent "\$DISTRIBUTION_LOCK" "\$DISTRIBUTION_PULLED"/)
+  assert.match(toolchainLocal, /"\$DISTRIBUTION_REFERENCE" >\/dev\/null/)
+  assert.match(toolchainLocal, /--arg distributionLock "\$DISTRIBUTION_REFERENCE"/)
+  assert.match(toolchainLocal, /distributionLockDigestRepullVerified: true/)
   assert.match(toolchainLocal, /and \(\.artifacts \| length == 5\)/)
   assert.match(toolchainLocal, /for image in "\$TARGET_INSTALLER_REFERENCE" "\$TARGET_MANAGER_REFERENCE"/)
   assert.doesNotMatch(toolchainLocal, /sha256_file "\$REPRO_OUTPUT/)

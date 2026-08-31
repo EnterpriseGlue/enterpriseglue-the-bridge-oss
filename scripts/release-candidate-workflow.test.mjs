@@ -93,6 +93,21 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /results\.every\(\(result\) => result === 'success'\)/)
 })
 
+test('candidate package planning authenticates to GitHub Packages', () => {
+  const toolchainStage = stage.slice(
+    stage.indexOf('  stage-toolchain:\n'),
+    stage.indexOf('\n  publish-receipt:\n'),
+  )
+  assert.match(
+    toolchainStage,
+    /name: Set up Node\.js and GitHub Packages[\s\S]*registry-url: https:\/\/npm\.pkg\.github\.com[\s\S]*scope: "@enterpriseglue"/,
+  )
+  assert.match(
+    toolchainStage,
+    /name: Stage immutable toolchain artifacts[\s\S]*NODE_AUTH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}[\s\S]*publish-plugin-package-set\.mjs plan/,
+  )
+})
+
 test('application release publication promotes candidate digests and delays aliases', () => {
   assert.match(dockerReusable, /source_ref:/)
   assert.match(dockerReusable, /image_version:/)
