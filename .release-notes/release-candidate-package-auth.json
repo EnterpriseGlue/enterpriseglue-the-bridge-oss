@@ -1,0 +1,48 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-candidate-package-auth",
+  "type": "fix",
+  "scope": "release-pipeline",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Configures authenticated GitHub Packages reads while staging immutable release candidates so package publication planning can complete before a release merges.",
+  "userImpact": [
+    "Protected releases can stage the signed plugin package, image, and chart candidate without failing when the package planner checks existing GitHub Packages versions."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Candidate staging uses the job-scoped GitHub token through the generated npm configuration and retains the existing packages permission boundary.",
+    "The release remains fail closed when registry authentication or immutable package comparison fails."
+  ],
+  "documentation": [
+    "Generated release notes record the authenticated package-planning correction and protected staging evidence."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the workflow configuration to disable candidate staging; no public release tag or production package version is created by the staging workflow."
+  ],
+  "validation": [
+    "Release-candidate workflow contract coverage for GitHub Packages registry configuration and job-scoped authentication",
+    "Local CI contract and release-note preflight validation",
+    "Protected merge-queue gating keeps EnterpriseGlue v0.20.0 blocked until exact-candidate staging succeeds"
+  ],
+  "packages": []
+}

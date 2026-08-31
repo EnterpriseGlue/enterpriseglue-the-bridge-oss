@@ -404,10 +404,12 @@ jobs:
           version: 11.0.8
           run_install: false
 
-      - name: Set up Node.js
+      - name: Set up Node.js and GitHub Packages
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@enterpriseglue"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
