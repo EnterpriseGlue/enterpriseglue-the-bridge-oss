@@ -29,9 +29,18 @@ RUNTIME_VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$ROOT_DIR/infra/kubernet
 RBAC_VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$ROOT_DIR/infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac/Chart.yaml")"
 MANAGER_CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$ROOT_DIR/infra/kubernetes/helm/enterpriseglue-plugin-manager/Chart.yaml")"
 
-[[ "$INSTALLER_VERSION" == "$RUNTIME_VERSION" ]]
-[[ "$INSTALLER_VERSION" == "$RBAC_VERSION" ]]
-[[ "$MANAGER_VERSION" == "$MANAGER_CHART_VERSION" ]]
+if [[ "$INSTALLER_VERSION" != "$RUNTIME_VERSION" ]]; then
+  echo "Plugin runtime chart version $RUNTIME_VERSION must match installer package version $INSTALLER_VERSION" >&2
+  exit 1
+fi
+if [[ "$INSTALLER_VERSION" != "$RBAC_VERSION" ]]; then
+  echo "Plugin installer RBAC chart version $RBAC_VERSION must match installer package version $INSTALLER_VERSION" >&2
+  exit 1
+fi
+if [[ "$MANAGER_VERSION" != "$MANAGER_CHART_VERSION" ]]; then
+  echo "Plugin Manager chart version $MANAGER_CHART_VERSION must match manager package version $MANAGER_VERSION" >&2
+  exit 1
+fi
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
