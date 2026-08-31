@@ -1,17 +1,20 @@
 import { Router } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { requireAuth, requireAdmin } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireServiceAccountScope } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import { requireTenantRole, resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { tenantDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/TenantDiscoveryService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/platform-admin/TenantWorkloadLifecycleService.js';
+import { tenantCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/TenantCloudIdentityService.js';
+import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import { tenantIdentityProviderSecretService } from '@enterpriseglue/shared/services/platform-admin/TenantIdentityProviderSecretService.js';
 import { ServiceAccountScopes } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
@@ -37,11 +40,14 @@ import {
   TenantMemberUpsertRequestSchema,
   NativeTenantMembershipSchema,
   NativeTenantSchema,
+  TenantCloudIdentityResponseSchema,
   TenancyCapabilitiesSchema,
   TenantUpdateRequestSchema,
   TenantWorkloadAliasReconcileRequestSchema,
   TenantWorkloadCreateRequestSchema,
   TenantWorkloadEpochRequestSchema,
+  TenantReleaseWorkAssignmentRequestSchema,
+  TenantReleaseWorkAssignmentResponseSchema,
   TenantWorkloadSecretBreakGlassRequestSchema,
   SignedTenantWorkloadReceiptSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
@@ -59,6 +65,7 @@ function tenancyCapabilities(includeShardIdentity: boolean) {
   const placementAssertionVersions = [
     ...(config.tenantPlacementKey ? ['v1' as const] : []),
     ...(config.tenantPlacementV2JwksJson ? ['v2' as const] : []),
+    ...(config.tenantPlacementV2JwksJson && config.tenantPlacementReleaseId ? ['v3' as const] : []),
   ];
   const workloadConfigured = Boolean(
     config.tenantPlacementV2ShardId
@@ -92,6 +99,21 @@ router.get('/api/tenancy/capabilities', (_req, res) => {
 });
 
 const workloadScope = requireServiceAccountScope(ServiceAccountScopes.TENANT_LIFECYCLE);
+
+function requireTenantReleaseController(req: { headers: Record<string, unknown> }, _res: unknown, next: (error?: unknown) => void): void {
+  try {
+    const expected = config.tenantReleaseControllerToken;
+    const authorization = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+    const supplied = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (!expected || !supplied) throw Errors.unauthorized('Tenant release controller bearer token required');
+    const expectedBytes = Buffer.from(expected);
+    const suppliedBytes = Buffer.from(supplied);
+    if (expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) {
+      throw Errors.unauthorized('Tenant release controller bearer token required');
+    }
+    next();
+  } catch (error) { next(error); }
+}
 
 router.get('/api/workloads/tenancy/capabilities', workloadScope, (_req, res) => {
   res.json(tenancyCapabilities(true));
@@ -168,6 +190,16 @@ router.post('/api/workloads/tenants/:tenantId/resume', workloadScope, validateBo
     },
   });
   res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.put('/api/workloads/tenants/:tenantId/release-assignment', requireTenantReleaseController, validateBody(TenantReleaseWorkAssignmentRequestSchema), asyncHandler(async (req, res) => {
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  res.setHeader('cache-control', 'no-store');
+  res.json(TenantReleaseWorkAssignmentResponseSchema.parse(await tenantReleaseWorkAssignmentService.assign({
+    tenantId,
+    releaseId: req.body.releaseId,
+    assignmentEpoch: req.body.assignmentEpoch,
+  })));
 }));
 
 router.put('/api/workloads/tenants/:tenantId/routing-aliases', workloadScope, validateBody(TenantWorkloadAliasReconcileRequestSchema), asyncHandler(async (req, res) => {
@@ -296,6 +328,24 @@ router.patch('/api/platform/tenants/:tenantId', requireAuth, requireAdmin, requi
 }));
 
 const tenantScope = [resolveTenantContext({ required: true }), requireAuth] as const;
+
+router.get('/api/t/:tenantSlug/tenant/cloud-identity', ...tenantScope, requireTenantRole(), asyncHandler(async (req, res) => {
+  const tenant = req.tenant!;
+  if (tenant.placementAssertionVersion !== 'v3' || !tenant.placementKey || !tenant.releaseId || !tenant.assignmentEpoch || !tenant.placementEpoch) {
+    throw Errors.serviceUnavailable('Release-aware tenant cloud identity is unavailable');
+  }
+  res.setHeader('cache-control', 'no-store');
+  res.json(TenantCloudIdentityResponseSchema.parse({ ...tenantCloudIdentityService.issue({
+    userId: req.user!.userId,
+    tenantId: tenant.tenantId,
+    tenantSlug: tenant.tenantSlug,
+    tenantRole: req.tenantRole!,
+    shardId: tenant.placementKey,
+    releaseId: tenant.releaseId,
+    placementEpoch: tenant.placementEpoch,
+    assignmentEpoch: tenant.assignmentEpoch,
+  }), tenantRole: req.tenantRole }));
+}));
 
 router.get('/api/t/:tenantSlug/tenant', ...tenantScope, requireAction('tenant.settings.read'), asyncHandler(async (req, res) => {
   const tenant = await tenantService.getById(req.tenant!.tenantId);

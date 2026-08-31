@@ -3,10 +3,12 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   normalizeIdentityProviderSyncForMandatoryLogin,
   type IdentityProviderAuthenticationMode as SchemaIdentityProviderAuthenticationMode,
@@ -157,6 +159,17 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
   }
 }
 
+function ensureManagedTenantCallback(protocol: IdentityProviderProtocol, configuration: Record<string, unknown>, tenantSlug: string): void {
+  if (protocol !== 'oidc' && protocol !== 'saml') return;
+  const callback = typeof configuration.callbackUrl === 'string' ? new URL(configuration.callbackUrl) : null;
+  const expectedPath = protocol === 'oidc'
+    ? `/api/t/${tenantSlug}/auth/identity/callback`
+    : `/api/t/${tenantSlug}/auth/providers/saml/callback`;
+  if (!callback || callback.pathname !== expectedPath) {
+    throw Errors.validation(`${protocol.toUpperCase()} callbackUrl must use the tenant-scoped managed callback ${expectedPath}`);
+  }
+}
+
 function ensureSync(protocol: IdentityProviderProtocol, sync: Record<string, unknown> | undefined): void {
   if (!sync) return;
   if (sync.triggers !== undefined && (!Array.isArray(sync.triggers) || sync.triggers.some((trigger) => !['login', 'scheduled', 'manual'].includes(String(trigger))))) {
@@ -288,13 +301,18 @@ class IdentityProviderServiceClass {
   async upsert(input: IdentityProviderInput, store?: DataSource | EntityManager): Promise<IdentityProvider> {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();
     if (!key) throw Errors.validation('Identity provider key is required');
-    ensureConfig(input.protocol, input.configuration);
-    ensureSync(input.protocol, input.sync);
-    const sync = normalizeIdentityProviderSyncForMandatoryLogin(input.sync);
     if (!store) {
       const dataSource = await getDataSource();
       return dataSource.transaction((manager) => this.upsert(input, manager));
     }
+    ensureConfig(input.protocol, input.configuration);
+    if (config.tenancyCloudRequired && tenantId) {
+      const tenant = await store.getRepository(Tenant).findOne({ where: { id: tenantId }, select: ['slug'] });
+      if (!tenant) throw Errors.validation('Identity provider tenant does not exist');
+      ensureManagedTenantCallback(input.protocol, input.configuration, tenant.slug);
+    }
+    ensureSync(input.protocol, input.sync);
+    const sync = normalizeIdentityProviderSyncForMandatoryLogin(input.sync);
     const repo = store.getRepository(IdentityProvider); const now = Date.now();
     const providerKeyIdentity = identityProviderKeyIdentity(tenantId, key);
     const existing = await repo.findOne({ where: { providerKeyIdentity } });

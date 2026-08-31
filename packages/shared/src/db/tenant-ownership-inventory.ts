@@ -212,6 +212,7 @@ const pluginTenantRows: TenantPersistenceOwnershipV1[] = [
   ['plugin_notification_publications', ['tenant_ref']],
   ['plugin_scheduled_jobs', ['tenant_ref']],
   ['plugin_schedule_commands', ['tenant_ref']],
+  ['tenant_release_work_assignments', ['tenant_ref']],
   ['plugin_contribution_availability', ['tenant_ref']],
 ].map(([table, keyColumns]) => ({
   table: table as string,

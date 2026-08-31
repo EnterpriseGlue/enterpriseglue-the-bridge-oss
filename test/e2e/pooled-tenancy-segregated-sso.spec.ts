@@ -552,8 +552,8 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       expect(pendingDiscovery).toEqual(unknownDiscovery);
       await markDiscoveryDomainVerified(discoveryDomains.alpha.id);
 
-      const callbackUrl = `${baseUrl}/api/auth/identity/callback`;
-      const samlCallbackUrl = `${baseUrl}/api/auth/providers/saml/callback`;
+      const callbackUrl = `${baseUrl}/api/t/alpha/auth/identity/callback`;
+      const samlCallbackUrl = `${baseUrl}/api/t/bravo/auth/providers/saml/callback`;
       const providerPayloads: Record<string, JsonObject> = {
         alpha: {
           key: 'tenant-sso',

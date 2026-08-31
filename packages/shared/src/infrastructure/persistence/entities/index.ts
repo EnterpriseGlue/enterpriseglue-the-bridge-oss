@@ -86,6 +86,7 @@ export {
   PluginNotificationPublication,
   PluginScheduledJob,
   PluginScheduleCommand,
+  TenantReleaseWorkAssignment,
   PluginContributionAvailabilityState,
   PluginLifecycleOperation,
   PluginInstallationIntent,

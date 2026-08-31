@@ -25,6 +25,12 @@ function validManifest() {
       frontendProtocol: 1,
       backendProtocol: 1,
       requiredSlots: ['mission-control.incident.actions.v1'],
+      releaseAffinity: {
+        mixedHostReleases: true,
+        dataFallback: 'compatible',
+        backgroundWork: 'tenant_release',
+        events: 'backward_compatible',
+      },
     },
     deployment: {
       frontend: {
@@ -161,6 +167,10 @@ describe('EnterpriseGluePluginManifestV1', () => {
     expect(parsed.deployment.backend?.operations).toHaveLength(2);
     expect(parsed.events.subscriptions).toHaveLength(1);
     expect(parsed.jobs.fixedSchedules).toEqual([]);
+    expect(parsed.compatibility.releaseAffinity).toMatchObject({
+      mixedHostReleases: true,
+      dataFallback: 'compatible',
+    });
     expect(parsed.contributions[1]).toMatchObject({
       destination: 'voyager',
       parentDestination: 'mission-control',

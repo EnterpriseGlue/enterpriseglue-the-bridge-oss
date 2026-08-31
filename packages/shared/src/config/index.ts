@@ -60,6 +60,9 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantPlacementV2Issuer: z.string().min(1).max(255).optional(),
   tenantPlacementV2Audience: z.string().min(1).max(255).optional(),
   tenantPlacementV2ShardId: z.string().min(1).max(160).optional(),
+  tenantPlacementReleaseId: z.string().min(1).max(256).optional(),
+  tenantCloudIdentityAudience: z.string().min(1).max(256).optional(),
+  tenantReleaseControllerToken: z.string().min(32).max(512).optional(),
   tenantPlacementV2ClockSkewSeconds: z.number().int().nonnegative().max(60).default(5),
   tenancyCloudRequired: z.boolean().default(false),
   tenantAppEligibilityRequired: z.boolean().default(false),
@@ -216,6 +219,9 @@ function loadConfig(): Config {
     tenantPlacementV2Issuer: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_ISSUER),
     tenantPlacementV2Audience: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_AUDIENCE),
     tenantPlacementV2ShardId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_SHARD_ID),
+    tenantPlacementReleaseId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_RELEASE_ID),
+    tenantCloudIdentityAudience: envOrUndefined(process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE),
+    tenantReleaseControllerToken: envOrUndefined(process.env.EG_TENANT_RELEASE_CONTROLLER_TOKEN),
     tenantPlacementV2ClockSkewSeconds: process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS
       ? Number(process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS)
       : undefined,
@@ -459,6 +465,12 @@ if (config.tenancyMode === 'pooled') {
     ].filter(([, value]) => !value).map(([name]) => name);
     if (missing.length) {
       throw new Error(`EG_TENANCY_CLOUD_REQUIRED=true requires ${missing.join(', ')}.`);
+    }
+    if (config.tenantPlacementReleaseId && !config.tenantCloudIdentityAudience) {
+      throw new Error('Release-aware cloud tenancy requires EG_TENANT_CLOUD_IDENTITY_AUDIENCE.');
+    }
+    if (config.tenantPlacementReleaseId && !config.tenantReleaseControllerToken) {
+      throw new Error('Release-aware cloud tenancy requires EG_TENANT_RELEASE_CONTROLLER_TOKEN.');
     }
   }
 }

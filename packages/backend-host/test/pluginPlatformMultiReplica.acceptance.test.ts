@@ -32,11 +32,13 @@ import {
 import { AddPluginPlatform1700000000114 } from '@enterpriseglue/shared/db/migrations/1700000000114-add-plugin-platform.js';
 import { AddPluginStorage1700000000116 } from '@enterpriseglue/shared/db/migrations/1700000000116-add-plugin-storage.js';
 import { AddPluginEvents1700000000117 } from '@enterpriseglue/shared/db/migrations/1700000000117-add-plugin-events.js';
+import { AddPluginNotificationsAndSchedules1700000000118 } from '@enterpriseglue/shared/db/migrations/1700000000118-add-plugin-notifications-and-schedules.js';
 import { AddPluginEmergencyControl1700000000119 } from '@enterpriseglue/shared/db/migrations/1700000000119-add-plugin-emergency-control.js';
 import { AddPluginGatewayAdmission1700000000120 } from '@enterpriseglue/shared/db/migrations/1700000000120-add-plugin-gateway-admission.js';
 import { AddPluginEventCircuit1700000000121 } from '@enterpriseglue/shared/db/migrations/1700000000121-add-plugin-event-circuit.js';
 import { AddTenantApplicationMarketplace1700000000128 } from '@enterpriseglue/shared/db/migrations/1700000000128-add-tenant-application-marketplace.js';
 import { AddTenantPluginEligibility1700000000129 } from '@enterpriseglue/shared/db/migrations/1700000000129-add-tenant-plugin-eligibility.js';
+import { AddReleaseAwarePluginWork1700000000130 } from '@enterpriseglue/shared/db/migrations/1700000000130-add-release-aware-plugin-work.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from '@enterpriseglue/shared/db/spanner-migration-ledger.js';
 import { MySQLAdapter } from '@enterpriseglue/shared/db/adapters/MySQLAdapter.js';
 import { OracleAdapter } from '@enterpriseglue/shared/db/adapters/OracleAdapter.js';
@@ -158,11 +160,13 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
         AddPluginPlatform1700000000114,
         AddPluginStorage1700000000116,
         AddPluginEvents1700000000117,
+        AddPluginNotificationsAndSchedules1700000000118,
         AddPluginEmergencyControl1700000000119,
         AddPluginGatewayAdmission1700000000120,
         AddPluginEventCircuit1700000000121,
         AddTenantApplicationMarketplace1700000000128,
         AddTenantPluginEligibility1700000000129,
+        AddReleaseAwarePluginWork1700000000130,
     ]);
     const replicaSourceA = acceptanceDataSource(databaseUrl);
     const replicaSourceB = acceptanceDataSource(databaseUrl);

@@ -96,6 +96,16 @@ rollback qualification gates pass for the intended deployment.
   placement v2 assertions. Overlapping `kid` values support safe key rotation.
 - `EG_TENANT_PLACEMENT_V2_ISSUER`, `EG_TENANT_PLACEMENT_V2_AUDIENCE`, and
   `EG_TENANT_PLACEMENT_V2_SHARD_ID`: Exact placement v2 trust and shard binding.
+- `EG_TENANT_PLACEMENT_RELEASE_ID`: Optional immutable host-release identity.
+  When set, the host requires release-aware placement v3 and rejects an assertion
+  for any other release. Existing single and self-hosted pooled deployments leave
+  it unset and retain placement v1/v2 behavior.
+- `EG_TENANT_CLOUD_IDENTITY_AUDIENCE`: Exact release-neutral Cloud API audience
+  used for the short-lived tenant identity issued by the host. It is required
+  when a managed release ID is configured.
+- `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
+  `PUT /api/workloads/tenants/{tenantId}/release-assignment`. Do not reuse a
+  service-account token or expose it in frontend runtime configuration.
 - `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
   default `5`, maximum `60`.
 - `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2,
@@ -383,6 +393,15 @@ document from `EG_FRONTEND_RUNTIME_API_BASE_URL` and
 allows the same published image digest to be promoted between environments.
 When the runtime API value is empty, the document applies no override and the
 existing `VITE_API_BASE_URL`, then same-origin, precedence remains unchanged.
+
+Managed deployments may also add `systemFrontendModules` to that runtime
+document. Each entry contains a reverse-DNS `ownerId`, same-origin `entryPath`,
+`sha256-...` integrity value, and `required` flag. The frontend downloads the
+exact bytes, verifies the digest before import, and gives the module only the
+constrained extension host API. A required module fails startup closed; an
+optional module is skipped safely. This boundary is intended for mandatory
+deployment-owned administration pages and is separate from tenant-optional
+marketplace plugins. Omitting the field retains the previous frontend behavior.
 
 `EG_FRONTEND_RUNTIME_API_BASE_URL` must be an absolute `http://` or `https://`
 URL without embedded credentials, a query string, or a fragment. The image adds

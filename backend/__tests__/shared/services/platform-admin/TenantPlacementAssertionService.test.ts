@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   TENANT_PLACEMENT_ASSERTION_V2_SCHEMA,
+  TENANT_PLACEMENT_ASSERTION_V3_SCHEMA,
   TenantPlacementAssertionService,
 } from '@enterpriseglue/shared/services/platform-admin/TenantPlacementAssertionService.js';
 
@@ -14,6 +15,7 @@ const original = {
   shardId: config.tenantPlacementV2ShardId,
   clockSkew: config.tenantPlacementV2ClockSkewSeconds,
   maximumAge: config.tenantPlacementMaxAgeSeconds,
+  releaseId: config.tenantPlacementReleaseId,
 };
 
 function keyPair(kid: string) {
@@ -71,6 +73,7 @@ describe('TenantPlacementAssertionService placement v2', () => {
     (config as any).tenantPlacementV2ShardId = 'shard-a';
     (config as any).tenantPlacementV2ClockSkewSeconds = 5;
     (config as any).tenantPlacementMaxAgeSeconds = 120;
+    (config as any).tenantPlacementReleaseId = 'release-2';
   });
 
   afterEach(() => {
@@ -80,6 +83,7 @@ describe('TenantPlacementAssertionService placement v2', () => {
     (config as any).tenantPlacementV2ShardId = original.shardId;
     (config as any).tenantPlacementV2ClockSkewSeconds = original.clockSkew;
     (config as any).tenantPlacementMaxAgeSeconds = original.maximumAge;
+    (config as any).tenantPlacementReleaseId = original.releaseId;
   });
 
   it('verifies KMS-compatible ES256 assertions using public JWKS material only', () => {
@@ -141,5 +145,39 @@ describe('TenantPlacementAssertionService placement v2', () => {
     expect(() => service.verifyV2({
       compactJws, hostname: 'app.enterpriseglue.test', requestPath: '/api/t/bravo/projects', nowSeconds: now,
     })).toThrow('does not match the request route');
+  });
+
+  it('verifies v3 release and assignment affinity without weakening v2', () => {
+    const compactJws = assertion(active, {
+      schemaVersion: TENANT_PLACEMENT_ASSERTION_V3_SCHEMA,
+      region: 'europe-west4',
+      releaseId: 'release-2',
+      assignmentEpoch: 9,
+    });
+    expect(service.verifyV3({ compactJws, hostname: 'app.enterpriseglue.test', requestPath: '/api/t/alpha/projects', nowSeconds: now })).toMatchObject({ releaseId: 'release-2', assignmentEpoch: 9, placementEpoch: 7 });
+    (config as any).tenantPlacementReleaseId = 'release-1';
+    expect(() => service.verifyV3({ compactJws, hostname: 'app.enterpriseglue.test', requestPath: '/api/t/alpha/projects', nowSeconds: now })).toThrow('another release');
+    expect(service.verifyV2({ compactJws: assertion(active), hostname: 'app.enterpriseglue.test', requestPath: '/api/t/alpha/projects', nowSeconds: now }).placementEpoch).toBe(7);
+  });
+
+  it('rejects malformed-length and invalid fixed-length v3 signatures independently', () => {
+    const compactJws = assertion(active, {
+      schemaVersion: TENANT_PLACEMENT_ASSERTION_V3_SCHEMA,
+      region: 'europe-west4',
+      releaseId: 'release-2',
+      assignmentEpoch: 9,
+    });
+    const [header, payload] = compactJws.split('.');
+    const verify = (signature: string) => service.verifyV3({
+      compactJws: `${header}.${payload}.${signature}`,
+      hostname: 'app.enterpriseglue.test',
+      requestPath: '/api/t/alpha',
+      nowSeconds: now,
+    });
+
+    expect(() => verify(Buffer.alloc(63).toString('base64url')))
+      .toThrow('Invalid tenant placement v3 signature');
+    expect(() => verify(Buffer.alloc(64).toString('base64url')))
+      .toThrow('Invalid tenant placement v3 signature');
   });
 });

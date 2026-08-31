@@ -1,0 +1,128 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-release-affinity-contracts",
+  "type": "feature",
+  "scope": "cloud-release-affinity",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds release-aware placement v3, tenant-scoped mixed-release SSO callbacks, short-lived tenant Cloud identity, plugin work handoff, plugin release-affinity declarations, and a trusted system frontend boundary for managed SaaS.",
+  "userImpact": [
+    "Managed deployments can expose tenant administration pages from a release-neutral control plane without packaging those pages as an optional tenant marketplace plugin.",
+    "Existing OSS, EE, and native marketplace plugin behavior remains unchanged when no system frontend modules are configured.",
+    "Managed pooled deployments can bind each request to the exact tenant, shard, release, placement epoch, and release-assignment epoch without changing tenant SSO ownership.",
+    "Managed mixed-release deployments can keep each tenant's OIDC or SAML callback and asynchronous plugin work on that tenant's assigned release."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Managed operators may add same-origin trusted system module descriptors to the existing frontend runtime configuration document.",
+      "Managed mixed-release shards set EG_TENANT_PLACEMENT_RELEASE_ID, EG_TENANT_CLOUD_IDENTITY_AUDIENCE, and the secret EG_TENANT_RELEASE_CONTROLLER_TOKEN; self-hosted deployments leave them unset.",
+      "Register tenant-scoped OIDC and SAML callback URLs before opening Preview enrollment; the established global callbacks remain supported for existing deployments."
+    ]
+  },
+  "configuration": [
+    "The optional systemFrontendModules runtime-config field declares reverse-DNS owner ids, same-origin JavaScript entry paths, and SHA-256 integrity values.",
+    "A configured module marked required fails application startup when its descriptor, integrity check, import, or activation fails; optional modules fail closed without affecting the OSS shell.",
+    "Managed release hosts require an exact release ID, Cloud identity audience, and dedicated private release-controller token."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The enterprise frontend plugin API exports additive trusted system module descriptor and module contracts.",
+      "The frontend host can activate multiple owner-isolated system modules in addition to the existing singular EE compatibility bridge.",
+      "Placement assertion v3 and the tenant Cloud identity endpoint are additive; placement v1 and v2 remain supported.",
+      "Plugin manifest v1 accepts an optional releaseAffinity declaration for mixed-host, fallback, job, and event compatibility.",
+      "Tenant-scoped OIDC and SAML callback routes and the workload-only release-assignment route are additive; global callback routes remain available."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000130-add-release-aware-plugin-work"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "The additive migration stores nullable release ID and assignment epoch on plugin event deliveries and scheduled jobs, and adds one tenant release-work assignment row per managed tenant.",
+      "Existing rows and unmanaged deployments remain valid because the new event/job columns are nullable and the assignment table is unused without a managed release ID."
+    ]
+  },
+  "security": [
+    "System module entry URLs must resolve to the application origin and each downloaded module is verified against a configured SHA-256 digest before import.",
+    "Owner identifiers and extension keys are validated and cross-owner collisions fail atomically.",
+    "System modules receive the existing constrained host context and cannot register legacy feature or component replacements.",
+    "Tenant Cloud identity assertions are short lived and contain tenant, role, shard, release, and epoch claims but no SSO provider configuration, identity assertion, or secret.",
+    "The release-work handoff uses a dedicated constant-time bearer check, requires an exact configured host release, rejects stale epochs, and does not accept interactive or ordinary service-account tokens."
+  ],
+  "documentation": [
+    "Frontend runtime configuration documents the optional trusted system module boundary, integrity requirements, failure behavior, and separation from tenant marketplace plugins.",
+    "Native SaaS tenancy, SSO, plugin authoring, configuration, and tenant workload lifecycle documentation cover release-aware routing, callbacks, and asynchronous work handoff."
+  ],
+  "knownLimitations": [
+    "Content Security Policy must permit the host's integrity-verified module import mechanism when system modules are enabled.",
+    "The OSS repository provides the neutral extension mechanism; managed release policy, tenant lifecycle, and control-plane APIs remain deployment-owned concerns."
+  ],
+  "rollback": [
+    "Remove systemFrontendModules from runtime configuration or roll back the frontend image; deployments without the field retain the previous startup path."
+  ],
+  "validation": [
+    "Frontend-host unit coverage for descriptor validation, same-origin enforcement, SHA-256 verification, required and optional failure behavior, owner isolation, and coexistence with the EE bridge",
+    "Runtime-config unit coverage proving the new field is additive and omitted configurations retain prior behavior",
+    "Tenant-scoped OIDC and SAML callback, placement v3, Cloud identity, release-work handoff, plugin schedule/event affinity, and pooled tenancy coverage",
+    "Frontend host build, backend plugin runtime suite, migration portability checks, plugin SDK compatibility, and release-note contract validation"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.3.0",
+      "newVersion": "0.4.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.14.0",
+      "newVersion": "0.15.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/plugin-sdk",
+      "previousVersion": "0.5.0",
+      "newVersion": "0.6.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/plugin-runtime",
+      "previousVersion": "0.2.2",
+      "newVersion": "0.2.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.5",
+      "newVersion": "0.2.6",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.5",
+      "newVersion": "0.1.6",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.14.1",
+      "newVersion": "0.15.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.12.1",
+      "newVersion": "0.13.0",
+      "impact": "minor"
+    }
+  ]
+}

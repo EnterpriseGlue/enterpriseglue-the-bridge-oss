@@ -514,6 +514,12 @@ export class PluginEventDelivery extends AppBaseEntity {
   @Column({ name: 'tenant_ref', type: 'text' })
   tenantRef!: string;
 
+  @Column({ name: 'release_id', type: 'text', nullable: true })
+  releaseId!: string | null;
+
+  @Column({ name: 'assignment_epoch', type: 'bigint', nullable: true })
+  assignmentEpoch!: number | null;
+
   @Column({ name: 'subscription_type', type: 'text' })
   subscriptionType!: string;
 
@@ -681,6 +687,12 @@ export class PluginScheduledJob extends AppBaseEntity {
   @Column({ name: 'tenant_ref', type: 'text' })
   tenantRef!: string;
 
+  @Column({ name: 'release_id', type: 'text', nullable: true })
+  releaseId!: string | null;
+
+  @Column({ name: 'assignment_epoch', type: 'bigint', nullable: true })
+  assignmentEpoch!: number | null;
+
   @Column({ name: 'job_type', type: 'text' })
   jobType!: string;
 
@@ -754,6 +766,22 @@ export class PluginScheduleCommand extends AppBaseEntity {
 
   @Column({ name: 'created_at', type: 'bigint' })
   createdAt!: number;
+}
+
+@Index('idx_tenant_release_work_assignment_release', ['releaseId'])
+@Entity({ name: 'tenant_release_work_assignments', schema: 'main' })
+export class TenantReleaseWorkAssignment extends AppBaseEntity {
+  @Column({ name: 'tenant_ref', type: 'text', unique: true })
+  tenantRef!: string;
+
+  @Column({ name: 'release_id', type: 'text' })
+  releaseId!: string;
+
+  @Column({ name: 'assignment_epoch', type: 'bigint' })
+  assignmentEpoch!: number;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
 }
 
 @Index(
@@ -1060,6 +1088,7 @@ export const pluginPlatformEntities = [
   PluginNotificationPublication,
   PluginScheduledJob,
   PluginScheduleCommand,
+  TenantReleaseWorkAssignment,
   PluginContributionAvailabilityState,
   PluginInstallationIntent,
   PluginInstallationReview,

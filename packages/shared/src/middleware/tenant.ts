@@ -18,8 +18,10 @@ export interface TenantContext {
   tenantSlug: string;
   placementKey?: string | null;
   placementEpoch?: number;
-  placementAssertionVersion?: 'v1' | 'v2';
+  placementAssertionVersion?: 'v1' | 'v2' | 'v3';
   placementCorrelationId?: string;
+  releaseId?: string;
+  assignmentEpoch?: number;
 }
 
 export const DEFAULT_TENANT_ID = OSS_DEFAULT_TENANT_ID;
@@ -41,16 +43,22 @@ function routeTenantSlug(req: Request): string | null {
 
 type PlacementHeaders =
   | { version: 'v1'; payload: string; signature: string }
-  | { version: 'v2'; compactJws: string };
+  | { version: 'v2' | 'v3'; compactJws: string };
 
 function placementHeaders(req: Request): PlacementHeaders | null {
   const payload = req.headers['x-eg-tenant-placement'];
   const signature = req.headers['x-eg-tenant-placement-signature'];
   const compactJws = req.headers['x-eg-tenant-placement-v2'];
+  const releaseCompactJws = req.headers['x-eg-tenant-placement-v3'];
   const hasV1 = payload !== undefined || signature !== undefined;
   const hasV2 = compactJws !== undefined;
-  if (hasV1 && hasV2) throw Errors.unauthorized('Mixed tenant placement assertion versions are not allowed');
-  if (!hasV1 && !hasV2) return null;
+  const hasV3 = releaseCompactJws !== undefined;
+  if ([hasV1, hasV2, hasV3].filter(Boolean).length > 1) throw Errors.unauthorized('Mixed tenant placement assertion versions are not allowed');
+  if (!hasV1 && !hasV2 && !hasV3) return null;
+  if (hasV3) {
+    if (typeof releaseCompactJws !== 'string' || !releaseCompactJws) throw Errors.unauthorized('Invalid tenant placement v3 assertion');
+    return { version: 'v3', compactJws: releaseCompactJws };
+  }
   if (hasV2) {
     if (typeof compactJws !== 'string' || !compactJws) {
       throw Errors.unauthorized('Invalid tenant placement v2 assertion');
@@ -123,26 +131,25 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
             throw Errors.unauthorized('Stale or mismatched tenant placement assertion');
           }
         } else {
-          const claim = tenantService.verifyPlacementClaimV2(
-            signedPlacement.compactJws,
-            req.hostname || '',
-            req.originalUrl || req.url || '/',
-          );
+          const claim = signedPlacement.version === 'v3'
+            ? tenantService.verifyPlacementClaimV3(signedPlacement.compactJws, req.hostname || '', req.originalUrl || req.url || '/')
+            : tenantService.verifyPlacementClaimV2(signedPlacement.compactJws, req.hostname || '', req.originalUrl || req.url || '/');
           tenant = await tenantService.getById(claim.tenantId);
           if (
             !tenant || tenant.slug !== claim.tenantSlug || tenant.placementKey !== claim.shardId
             || Number(tenant.placementEpoch) !== claim.placementEpoch
             || (requestedSlug && requestedSlug !== tenant.slug)
           ) {
-            throw Errors.unauthorized('Stale or mismatched tenant placement v2 assertion');
+            throw Errors.unauthorized(`Stale or mismatched tenant placement ${signedPlacement.version} assertion`);
           }
           req.tenant = {
             tenantId: tenant.id,
             tenantSlug: tenant.slug,
             placementKey: tenant.placementKey,
             placementEpoch: Number(tenant.placementEpoch),
-            placementAssertionVersion: 'v2',
+            placementAssertionVersion: signedPlacement.version,
             placementCorrelationId: claim.correlationId,
+            ...('releaseId' in claim ? { releaseId: claim.releaseId, assignmentEpoch: claim.assignmentEpoch } : {}),
           };
         }
       } else if (requestedSlug) {
@@ -170,6 +177,8 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
         placementEpoch: Number(tenant.placementEpoch),
         ...(signedPlacement ? { placementAssertionVersion: signedPlacement.version } : {}),
         ...(req.tenant?.placementCorrelationId ? { placementCorrelationId: req.tenant.placementCorrelationId } : {}),
+        ...(req.tenant?.releaseId ? { releaseId: req.tenant.releaseId } : {}),
+        ...(req.tenant?.assignmentEpoch ? { assignmentEpoch: req.tenant.assignmentEpoch } : {}),
       });
     } catch (error) {
       next(error);

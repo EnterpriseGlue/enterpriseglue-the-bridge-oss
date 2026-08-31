@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { config } from '@src/config';
-import { initRuntimeConfig, RuntimeConfigError } from '@src/runtimeConfig';
+import { getConfiguredSystemFrontendModules, initRuntimeConfig, RuntimeConfigError } from '@src/runtimeConfig';
 
 /** Build a JSON Response for the mocked fetch. */
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -66,6 +66,15 @@ describe('initRuntimeConfig', () => {
     await initRuntimeConfig();
 
     expect(config.apiBaseUrl).toBe('https://runtime.example');
+  });
+
+  it('retains additive trusted system module descriptors for post-config startup', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/config.json');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      systemFrontendModules: [{ ownerId: 'io.enterpriseglue.cloud-system', entryPath: '/cloud-system/releases.js', integrity: `sha256-${'A'.repeat(43)}=`, required: true }],
+    })));
+    await initRuntimeConfig();
+    expect(getConfiguredSystemFrontendModules()).toEqual([{ ownerId: 'io.enterpriseglue.cloud-system', entryPath: '/cloud-system/releases.js', integrity: `sha256-${'A'.repeat(43)}=`, required: true }]);
   });
 
   it('falls back to build-time config when the document is a malformed shape', async () => {

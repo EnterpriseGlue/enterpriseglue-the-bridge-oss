@@ -61,6 +61,14 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('POST', '/api/auth/tenant-discovery/exchange', 'high', 'native-tenancy', 'A short-lived single-use email token may list only the linked user\'s active memberships and never creates an authenticated session.'),
   tokenAuthenticatedRoute('GET', '/api/auth/my-tenants', 'medium', 'Lists only active tenant memberships belonging to the authenticated principal.'),
   tokenAuthenticatedRoute('POST', '/api/auth/switch-tenant', 'high', 'Exchanges the authenticated session only after rechecking the caller\'s active target-tenant membership.'),
+  {
+    method: 'GET', route: '/api/t/:tenantSlug/tenant/cloud-identity', kind: 'auth-only', risk: 'high', owner: 'native-tenancy',
+    reason: 'The native session, resolved placement v3 assertion, and active tenant membership are revalidated before a short-lived release-bound identity is minted.',
+  },
+  {
+    method: 'PUT', route: '/api/workloads/tenants/:tenantId/release-assignment', kind: 'auth-only', risk: 'critical', owner: 'native-tenancy',
+    reason: 'A private release-controller bearer credential may move only queued plugin work to the release and monotonically increasing assignment epoch configured on the target host.',
+  },
   publicRoute('POST', '/api/auth/forgot-password', 'medium', 'platform-auth', 'Password recovery initiation must be reachable before authentication and returns a non-enumerating response.'),
   publicRoute('POST', '/api/auth/reset-password-with-token', 'high', 'platform-auth', 'A single-use reset token authorizes password replacement before a session exists.'),
   publicRoute('GET', '/api/auth/verify-reset-token', 'low', 'platform-auth', 'The recovery UI may validate an opaque reset token without exposing account details.'),
@@ -77,6 +85,8 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('GET', '/api/t/:tenantSlug/auth/login-methods', 'low', 'platform-auth', 'The tenant login page needs its sanitized, policy-resolved login methods before authentication.'),
   publicRoute('GET', '/api/t/:tenantSlug/auth/providers/:providerId/start', 'medium', 'platform-auth', 'Starts a state-bound provider-neutral redirect login in the resolved tenant scope.'),
   publicRoute('POST', '/api/t/:tenantSlug/auth/providers/:providerId/login', 'high', 'platform-auth', 'Tenant-scoped directory login validates credentials before issuing a session and is rate limited.'),
+  publicRoute('GET', '/api/t/:tenantSlug/auth/identity/callback', 'high', 'platform-auth', 'Consumes a signed OIDC state only after release-aware tenant routing resolves the callback to the tenant assignment.'),
+  publicRoute('POST', '/api/t/:tenantSlug/auth/providers/saml/callback', 'high', 'platform-auth', 'Consumes a signed SAML assertion and RelayState only after release-aware tenant routing resolves the callback to the tenant assignment.'),
   publicRoute('POST', '/api/auth/providers/saml/callback', 'high', 'platform-auth', 'Consumes a signed provider-neutral SAML assertion and state before issuing a local session.'),
   tokenAuthenticatedRoute('POST', '/api/auth/providers/:providerId/oidc/backchannel-logout', 'critical', 'A verified OIDC logout_token revokes only sessions bound to its configured provider subject or session identifier.'),
   publicRoute('POST', '/api/auth/identity/:providerKey/saml/logout', 'critical', 'platform-auth', 'Consumes only XML-signed SAML LogoutRequest or correlated signed LogoutResponse messages from the configured provider.'),

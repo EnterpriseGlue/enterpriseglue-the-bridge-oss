@@ -91,6 +91,9 @@ describe('identity provider endpoint policy', () => {
   it('binds callbacks to the configured EnterpriseGlue origin and canonical protocol path', () => {
     expect(validateIdentityProviderCallbackUrl('http://localhost:5173/api/auth/identity/callback', 'oidc').pathname).toBe('/api/auth/identity/callback');
     expect(validateIdentityProviderCallbackUrl('http://localhost:5173/api/auth/providers/saml/callback', 'saml').pathname).toBe('/api/auth/providers/saml/callback');
+    expect(validateIdentityProviderCallbackUrl('http://localhost:5173/api/t/acme/auth/identity/callback', 'oidc').pathname).toBe('/api/t/acme/auth/identity/callback');
+    expect(validateIdentityProviderCallbackUrl('http://localhost:5173/api/t/acme/auth/providers/saml/callback', 'saml').pathname).toBe('/api/t/acme/auth/providers/saml/callback');
+    expect(() => validateIdentityProviderCallbackUrl('http://localhost:5173/api/t/Other/auth/identity/callback', 'oidc')).toThrow('canonical');
     expect(() => validateIdentityProviderCallbackUrl('https://attacker.example.test/api/auth/identity/callback', 'oidc')).toThrow('canonical');
     expect(() => validateIdentityProviderCallbackUrl('http://localhost:5173/api/auth/identity/callback?next=evil', 'oidc')).toThrow('query');
     expect(() => validateIdentityProviderCallbackUrl('http://localhost:5173/wrong', 'saml')).toThrow('canonical');

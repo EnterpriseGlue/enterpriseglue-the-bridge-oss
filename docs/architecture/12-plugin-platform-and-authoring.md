@@ -111,6 +111,14 @@ matrix. Test both against the current and previous supported OSS host releases. 
 remain installable only while their signed catalog entry and entitlement are active; they are not
 silently treated as compatible with newer hosts.
 
+Managed SaaS plugins may add the optional `releaseAffinity` object to manifest v1. It declares
+whether one plugin release has passed mixed-host qualification, whether Preview-created data can
+fall back safely, and whether background work and events are tenant/release-aware or not
+applicable. This declaration is evidence input, not an authorization grant: the signed catalog
+still needs exact `testedHostVersions`, and the Cloud release manifest binds the exact two host
+versions and artifacts. Older manifests remain valid for self-hosted and single-release use, but
+a managed mixed-release admission policy may require this field before Preview eligibility.
+
 ## System boundary
 
 ```mermaid
@@ -168,7 +176,7 @@ The authoritative TypeScript and Zod contracts are in
 
 | Contract | Rule |
 | --- | --- |
-| Manifest | Closed, versioned, reverse-DNS identity, immutable image digest, declared compatibility, permissions, and an optional static end-user authorization action for each interactive backend operation |
+| Manifest | Closed, versioned, reverse-DNS identity, immutable image digest, declared compatibility, permissions, optional mixed-release affinity, and an optional static end-user authorization action for each interactive backend operation |
 | Frontend module | Same-origin ESM, manifest-equal identity and contributions, shared host React/router/Carbon runtime |
 | Backend capability | Fixed health/readiness/capability paths plus closed declared operations |
 | Invocation claim | Short-lived Ed25519 token with plugin, tenant, deployment, subject, operation, request digest, and one-time ID |

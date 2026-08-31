@@ -196,6 +196,10 @@ export interface FrontendPluginContext {
     useModal<T = any>(): { isOpen: boolean; data: T | undefined; openModal(data?: T): void; closeModal(): void };
     useToast(): { notify(toast: ToastInput): void };
   };
+  runtime?: {
+    /** Host React instance. New hosts provide it; legacy plugin contexts remain valid. */
+    react: typeof import('react');
+  };
 }
 
 export interface EnterpriseFrontendPlugin {
@@ -212,3 +216,23 @@ export interface EnterpriseFrontendPlugin {
   /** @deprecated Unsupported by OSS host; use `navItems` instead. */
   sidebarItems?: never;
 }
+
+/** Deployment-owned, mandatory UI module descriptor from same-origin runtime config. */
+export interface TrustedSystemFrontendModuleDescriptorV1 {
+  ownerId: string;
+  entryPath: string;
+  integrity: `sha256-${string}`;
+  required?: boolean;
+}
+
+/**
+ * A trusted system module is distinct from a tenant-optional marketplace
+ * plugin. It can add routes/navigation but cannot replace host features or
+ * components.
+ */
+export interface TrustedSystemFrontendModuleV1 {
+  ownerId: string;
+  activate(context: FrontendPluginContext): EnterpriseFrontendPlugin | Promise<EnterpriseFrontendPlugin>;
+}
+
+export type RegisterTrustedSystemFrontendModuleV1 = (module: TrustedSystemFrontendModuleV1) => void;

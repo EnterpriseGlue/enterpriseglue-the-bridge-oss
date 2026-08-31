@@ -17,6 +17,7 @@ import { NATIVE_TENANT_ROLE_IDS } from '@enterpriseglue/shared/authz/native-tena
 import {
   tenantPlacementAssertionService,
   type TenantPlacementClaimV2,
+  type TenantPlacementClaimV3,
 } from './TenantPlacementAssertionService.js';
 
 const TENANT_ROLE_IDS = [
@@ -607,6 +608,10 @@ export class TenantService {
 
   verifyPlacementClaimV2(compactJws: string, hostname: string, requestPath: string): TenantPlacementClaimV2 {
     return tenantPlacementAssertionService.verifyV2({ compactJws, hostname, requestPath });
+  }
+
+  verifyPlacementClaimV3(compactJws: string, hostname: string, requestPath: string): TenantPlacementClaimV3 {
+    return tenantPlacementAssertionService.verifyV3({ compactJws, hostname, requestPath });
   }
 }
 

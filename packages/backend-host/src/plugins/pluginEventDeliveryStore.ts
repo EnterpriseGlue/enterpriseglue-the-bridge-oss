@@ -11,11 +11,13 @@ import {
   type PluginId,
 } from '@enterpriseglue/plugin-sdk';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   PluginEventDelivery,
   PluginEventQueueState,
   PluginEventSubscriptionState,
   PluginPlatformAudit,
+  TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
@@ -290,6 +292,7 @@ implements PluginEventDeliveryStoreV1 {
             dataSource,
             async (manager) => {
             const repository = manager.getRepository(PluginEventDelivery);
+            const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
             const existing = await repository.findOne({
               where: { deliveryId },
             });
@@ -385,6 +388,8 @@ implements PluginEventDeliveryStoreV1 {
               pluginId: input.pluginId,
               deploymentRef: input.deploymentRef,
               tenantRef: input.tenantRef,
+              releaseId: releaseAssignment?.releaseId ?? null,
+              assignmentEpoch: releaseAssignment?.assignmentEpoch ?? null,
               subscriptionType: input.subscriptionType,
               operationId: input.operationId,
               eventId: event.id,
@@ -492,6 +497,9 @@ implements PluginEventDeliveryStoreV1 {
         )
         .orderBy('delivery.next_attempt_at', 'ASC')
         .addOrderBy('delivery.created_at', 'ASC');
+      if (config.tenantPlacementReleaseId) {
+        query.andWhere('delivery.release_id = :hostReleaseId', { hostReleaseId: config.tenantPlacementReleaseId });
+      }
       const records =
         dataSource.options.type === 'oracle'
           ? await lockOraclePluginClaimCandidatesV1(
@@ -1237,4 +1245,13 @@ function summary(record: EventSummaryRecordV1): PluginEventSafeSummaryV1 {
     nextAttemptAt: number(record.nextAttemptAt),
     updatedAt: number(record.updatedAt),
   };
+}
+
+async function requireManagedReleaseAssignment(manager: EntityManager, tenantRef: string): Promise<TenantReleaseWorkAssignment | null> {
+  if (!config.tenantPlacementReleaseId) return null;
+  const assignment = await manager.getRepository(TenantReleaseWorkAssignment).findOneBy({ tenantRef });
+  if (!assignment || assignment.releaseId !== config.tenantPlacementReleaseId) {
+    throw new Error('plugin_event_release_not_assigned');
+  }
+  return assignment;
 }

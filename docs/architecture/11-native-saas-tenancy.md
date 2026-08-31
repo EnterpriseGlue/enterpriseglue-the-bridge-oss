@@ -107,6 +107,15 @@ The assertion proves that the routing tier sent the request to the expected
 shard. It does not prove tenant membership and does not bypass session or FGA
 authorization.
 
+### Placement v3 release affinity
+
+Managed shards that set `EG_TENANT_PLACEMENT_RELEASE_ID` require placement v3.
+It adds the immutable release ID, assignment epoch, and region to the v2 proof.
+The receiving process verifies the configured release ID and both placement and
+assignment epochs, so a valid Stable assertion cannot be replayed against a
+Preview workload on the same shard. Self-hosted single and pooled modes do not
+set a release ID and remain compatible with the established assertion versions.
+
 ## Tenant lifecycle and membership
 
 The `tenants` table is the lifecycle and placement authority. It records the
@@ -143,8 +152,10 @@ In pooled mode authentication is tenant-first:
 - password login uses `/api/t/:tenantSlug/auth/login`;
 - login-method and provider discovery occurs only after tenant resolution;
 - OAuth state or SAML RelayState carries signed tenant and provider context;
-- provider callbacks remain global so an identity provider needs only one
-  stable callback URL per shard;
+- managed mixed-release deployments use tenant-scoped callback URLs so the
+  release-neutral edge resolves the tenant before selecting a release;
+- established global callback URLs remain backward-compatible aliases for
+  single-release and self-hosted deployments;
 - access tokens, refresh tokens, and onboarding tokens carry the tenant id and
   slug;
 - refresh verifies that the tenant is active and the membership still exists;
@@ -214,7 +225,15 @@ query caches include the route tenant so data from a previously visited tenant
 cannot be reused for another one. Backend tenant-admin authorization remains
 authoritative; the UI permission state is not a security control.
 
-SSO callbacks use the established global endpoints:
+For managed mixed-release SaaS, configure tenant-scoped callback endpoints:
+
+- OIDC: `/api/t/{tenantSlug}/auth/identity/callback`
+- SAML ACS: `/api/t/{tenantSlug}/auth/providers/saml/callback`
+
+The signed state or RelayState tenant must exactly match the callback route.
+The provider configuration and secret reference remain owned by that tenant;
+a release transition does not copy or reinterpret either one. Established
+global endpoints remain available for backward compatibility:
 
 - OIDC: `/api/auth/identity/callback`
 - OIDC back-channel logout:
@@ -275,6 +294,14 @@ idempotency key, or lock must include the canonical tenant id. Workers must
 activate the same tenant database context before accessing tenant-owned data.
 Code review and two-tenant adversarial tests should reject any background path
 that cannot identify its tenant before loading work.
+
+On a managed mixed-release shard, queued plugin events and schedules also carry
+the release ID and assignment epoch. The private controller changes the
+tenant's work assignment through
+`PUT /api/workloads/tenants/{tenantId}/release-assignment` before the edge starts
+routing new requests. Claims select only the configured host release; in-flight
+delivery blocks handoff, while an identical or stale handoff is idempotent and
+cannot move work backwards.
 
 ## Native HTTP contracts
 
@@ -358,8 +385,11 @@ organization-name fallback.
 | `EG_TENANT_PLACEMENT_V2_ISSUER` | unset | Exact trusted issuer. |
 | `EG_TENANT_PLACEMENT_V2_AUDIENCE` | unset | Exact shard and receipt audience. |
 | `EG_TENANT_PLACEMENT_V2_SHARD_ID` | unset | Canonical shard identity. |
+| `EG_TENANT_PLACEMENT_RELEASE_ID` | unset | Exact managed release accepted by placement v3; self-hosted deployments leave it unset. |
 | `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
 | `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, tenant secret broker, and signed tenant application eligibility settings are complete. |
+| `EG_TENANT_CLOUD_IDENTITY_AUDIENCE` | unset | Exact Cloud API audience for short-lived tenant identity; required with a managed release ID. |
+| `EG_TENANT_RELEASE_CONTROLLER_TOKEN` | unset | Private release-controller bearer for release-aware plugin work handoff; required with a managed release ID. |
 | `EG_TENANT_APP_ELIGIBILITY_REQUIRED` | `false` | Require a complete signed tenant application eligibility verifier; cloud-required mode requires `true`. |
 | `EG_TENANT_APP_ELIGIBILITY_JWKS_JSON` | unset | Public P-256 ES256 keys trusted for tenant/plugin eligibility projections. |
 | `EG_TENANT_APP_ELIGIBILITY_ISSUER` | unset | Exact trusted eligibility issuer. |

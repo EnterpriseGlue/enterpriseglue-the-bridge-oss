@@ -4,30 +4,67 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { identityProviderKeyIdentity, identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 describe('identityProviderService', () => {
   const find = vi.fn(); const findOne = vi.fn(); const insert = vi.fn(); const update = vi.fn();
-  const transaction = vi.fn();
+  const tenantFindOne = vi.fn(); const transaction = vi.fn();
   beforeEach(() => {
-    vi.clearAllMocks(); findOne.mockResolvedValue(null); find.mockResolvedValue([]); insert.mockResolvedValue(undefined);
+    vi.clearAllMocks(); findOne.mockResolvedValue(null); tenantFindOne.mockResolvedValue(null); find.mockResolvedValue([]); insert.mockResolvedValue(undefined);
+    (config as { tenancyCloudRequired: boolean }).tenancyCloudRequired = false;
     const manager = { getRepository: (entity: unknown) => {
       if (entity === IdentityProvider) return { find, findOne, insert, update };
+      if (entity === Tenant) return { findOne: tenantFindOne };
       throw new Error('Unexpected repository');
     }};
     transaction.mockImplementation(async (work: (store: typeof manager) => Promise<unknown>) => work(manager));
     (getDataSource as any).mockResolvedValue({ ...manager, transaction });
   });
   afterEach(() => {
+    (config as { tenancyCloudRequired: boolean }).tenancyCloudRequired = false;
     delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY;
     delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS;
     delete process.env.EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS;
+  });
+
+  it('requires the exact tenant callback for managed OIDC and SAML providers', async () => {
+    (config as { tenancyCloudRequired: boolean }).tenancyCloudRequired = true;
+    tenantFindOne.mockResolvedValue({ slug: 'acme' });
+
+    await expect(identityProviderService.upsert({
+      tenantId: 'tenant-a', key: 'entra', protocol: 'oidc',
+      configuration: {
+        issuerUrl: 'https://login.example.test', clientId: 'client',
+        callbackUrl: 'http://localhost:5173/api/t/acme/auth/identity/callback',
+      },
+    })).resolves.toMatchObject({ protocol: 'oidc', tenantId: 'tenant-a' });
+
+    await expect(identityProviderService.upsert({
+      tenantId: 'tenant-a', key: 'wrong-tenant', protocol: 'oidc',
+      configuration: {
+        issuerUrl: 'https://login.example.test', clientId: 'client',
+        callbackUrl: 'http://localhost:5173/api/t/other/auth/identity/callback',
+      },
+    })).rejects.toThrow('/api/t/acme/auth/identity/callback');
+
+    await expect(identityProviderService.upsert({
+      tenantId: 'tenant-a', key: 'saml', protocol: 'saml',
+      configuration: {
+        entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test',
+        callbackUrl: 'http://localhost:5173/api/t/acme/auth/providers/saml/callback',
+        ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'SAML_CERT',
+      },
+    })).resolves.toMatchObject({ protocol: 'saml', tenantId: 'tenant-a' });
+
+    expect(tenantFindOne).toHaveBeenCalledWith({ where: { id: 'tenant-a' }, select: ['slug'] });
   });
   it('creates OIDC providers with secret references only', async () => {
     const provider = await identityProviderService.upsert({ key: 'entra', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client', clientSecretRef: 'EG_ENTRA_SECRET' } });
