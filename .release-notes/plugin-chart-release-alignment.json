@@ -1,0 +1,49 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-chart-release-alignment",
+  "type": "fix",
+  "scope": "plugin-installation-toolchain",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps the plugin installer, runtime, RBAC, and Plugin Manager Helm chart versions aligned for protected release-candidate qualification and publication.",
+  "userImpact": [
+    "The plugin toolchain can be staged and published as one coherent set instead of failing release qualification because package and chart versions differ."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use plugin runtime and installer RBAC charts 0.2.6 with @enterpriseglue/plugin-installer 0.2.6, and use the Plugin Manager chart 0.1.6 with @enterpriseglue/plugin-manager 0.1.6."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Release qualification continues to fail closed unless package, chart, and image version subjects form a coordinated immutable toolchain."
+  ],
+  "documentation": [
+    "Generated release notes record the matching plugin package and Helm chart versions required for deployment."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Before publication, revert the chart metadata and matching package-version changes together; after immutable publication, correct any artifact defect with a new forward version."
+  ],
+  "validation": [
+    "Plugin-toolchain release-policy checks validate live package and chart metadata before expensive candidate builds.",
+    "Release-candidate chart planning compares all three new chart versions with the immutable OCI registry without publishing.",
+    "Helm lint and plugin-platform chart tests cover the aligned runtime, RBAC, and Plugin Manager charts."
+  ],
+  "packages": []
+}

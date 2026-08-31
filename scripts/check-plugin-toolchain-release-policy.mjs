@@ -20,6 +20,65 @@ const managerDockerfile = await readFile(
   new URL('../packages/plugin-manager/Dockerfile', import.meta.url),
   'utf8',
 );
+const installerPackage = JSON.parse(
+  await readFile(
+    new URL('../packages/plugin-installer/package.json', import.meta.url),
+    'utf8',
+  ),
+);
+const managerPackage = JSON.parse(
+  await readFile(
+    new URL('../packages/plugin-manager/package.json', import.meta.url),
+    'utf8',
+  ),
+);
+const runtimeChart = await readFile(
+  new URL(
+    '../infra/kubernetes/helm/enterpriseglue-plugin-runtime/Chart.yaml',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const installerRbacChart = await readFile(
+  new URL(
+    '../infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac/Chart.yaml',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const managerChart = await readFile(
+  new URL(
+    '../infra/kubernetes/helm/enterpriseglue-plugin-manager/Chart.yaml',
+    import.meta.url,
+  ),
+  'utf8',
+);
+
+function chartMetadata(chart, name) {
+  const version = chart.match(/^version:\s*"?([^"\s]+)"?\s*$/m)?.[1];
+  const appVersion = chart.match(/^appVersion:\s*"?([^"\s]+)"?\s*$/m)?.[1];
+  assert.ok(version, `${name} must declare a chart version`);
+  assert.ok(appVersion, `${name} must declare an appVersion`);
+  return { version, appVersion };
+}
+
+for (const [name, chart, expectedVersion] of [
+  ['plugin runtime chart', runtimeChart, installerPackage.version],
+  ['plugin installer RBAC chart', installerRbacChart, installerPackage.version],
+  ['Plugin Manager chart', managerChart, managerPackage.version],
+]) {
+  const metadata = chartMetadata(chart, name);
+  assert.equal(
+    metadata.version,
+    expectedVersion,
+    `${name} version must match its published package version`,
+  );
+  assert.equal(
+    metadata.appVersion,
+    expectedVersion,
+    `${name} appVersion must match its published package version`,
+  );
+}
 
 assert.match(workflow, /\bon:\n  workflow_run:/);
 assert.match(workflow, /workflows: \[Docker Images\]/);
