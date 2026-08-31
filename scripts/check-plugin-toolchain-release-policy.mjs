@@ -90,12 +90,22 @@ assert.doesNotMatch(
 );
 for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   assert.match(dockerfile, /golang:1\.26\.6-alpine3\.23@sha256:[a-f0-9]{64}/);
-  assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.3/);
+  assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.4/);
   assert.match(dockerfile, /go build -buildvcs=false -trimpath -o \/out\/oras/);
   assert.doesNotMatch(dockerfile, /go install oras\.land\/oras\/cmd\/oras/);
   assert.match(dockerfile, /github\.com\/sigstore\/cosign\/v3\/cmd\/cosign@v3\.1\.3/);
+  assert.equal(
+    [...dockerfile.matchAll(/golang\.org\/x\/crypto@v0\.55\.0/g)].length,
+    2,
+    'Both embedded OCI tools must use the fixed x/crypto dependency floor',
+  );
+  assert.equal(
+    [...dockerfile.matchAll(/golang\.org\/x\/crypto\[\[:space:\]\]\+v0\\\.55\\\.0/g)].length,
+    2,
+    'Both embedded OCI binaries must verify the fixed x/crypto dependency floor',
+  );
   assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
-  assert.match(dockerfile, /golang\.org\/x\/text@v0\.39\.0/);
+  assert.match(dockerfile, /golang\.org\/x\/text@v0\.41\.0/);
   assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.82\.1/);
   assert.equal(
     [...dockerfile.matchAll(/id=enterpriseglue-plugin-toolchain-go-modules/g)].length,

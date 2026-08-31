@@ -5,11 +5,11 @@ standalone command-line tools:
 
 | Component | Version | License | Source |
 |---|---:|---|---|
-| ORAS CLI | 1.3.3 | Apache-2.0 | https://github.com/oras-project/oras |
+| ORAS CLI | 1.3.4 | Apache-2.0 | https://github.com/oras-project/oras |
 | Cosign | 3.1.3 | Apache-2.0 | https://github.com/sigstore/cosign |
 
 ORAS and Cosign are reproducibly compiled from their immutable Go module
-releases with the patched Go toolchain and security dependency floors pinned
+releases with the patched Go toolchain and `golang.org/x/crypto` security floor pinned
 in this package's `Dockerfile`. The complete Apache License 2.0 text is
 installed in the image at
 `/usr/share/licenses/enterpriseglue-plugin-installer/Apache-2.0.txt`.
