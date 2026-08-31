@@ -40,8 +40,11 @@ in `engine-tenant-mappings.json`. See
 | EG_TENANT_PLACEMENT_V2_ISSUER | Required for cloud-required pooled mode | unset | Exact trusted placement assertion issuer. |
 | EG_TENANT_PLACEMENT_V2_AUDIENCE | Required for cloud-required pooled mode | unset | Exact shard assertion audience and workload receipt audience. |
 | EG_TENANT_PLACEMENT_V2_SHARD_ID | Required for cloud-required pooled mode | unset | Canonical shard identity; must match the durable tenant placement key. |
+| EG_TENANT_PLACEMENT_RELEASE_ID | Required for managed mixed-release shards | unset | Exact immutable SaaS release identity accepted by placement v3. Omit it for ordinary self-hosted single or pooled deployments. |
 | EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS | No | 5 | Clock tolerance for `iat`, `nbf`, and `exp`; maximum 60. |
 | EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2, signed workload receipts, forced RLS, the tenant secret broker, and signed tenant application eligibility without changing the self-hosted default. |
+| EG_TENANT_CLOUD_IDENTITY_AUDIENCE | Required with a managed release ID | unset | Exact Cloud control-plane audience for the host-issued, short-lived tenant administrator identity assertion. |
+| EG_TENANT_RELEASE_CONTROLLER_TOKEN | Required with a managed release ID | unset | Dedicated workload bearer used only by the private release controller to hand tenant jobs, events, and schedules to the assigned release. Store and rotate it as a secret. |
 | EG_TENANT_APP_ELIGIBILITY_REQUIRED | No | false | Set true for SaaS shards. Requires the complete tenant application eligibility issuer, audience, and JWKS configuration. |
 | EG_TENANT_APP_ELIGIBILITY_JWKS_JSON | Required when eligibility is required | unset | Public P-256 ES256 JWKS with unique `kid` values; overlapping keys support rotation. |
 | EG_TENANT_APP_ELIGIBILITY_ISSUER | Required when eligibility is required | unset | Exact trusted issuer for signed tenant/plugin eligibility projections. |

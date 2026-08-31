@@ -1,5 +1,5 @@
 import type { EnterpriseFrontendPlugin, FrontendPluginContext } from '@enterpriseglue/enterprise-plugin-api/frontend';
-import type { ComponentType } from 'react';
+import React, { type ComponentType } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { 
   LEGACY_ENTERPRISE_PLUGIN_OWNER,
@@ -82,7 +82,19 @@ function getInjectedPlugin(): unknown {
   return (globalThis as Record<string, unknown>)[injectedPluginGlobal];
 }
 
-function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
+export function createFrontendPluginContext(): FrontendPluginContext {
+  return {
+    api: {
+      client: apiClient,
+      errors: { ApiError: ApiError as any, parseApiError, getUiErrorMessage, getErrorMessageFromResponse },
+    },
+    components: { PageHeader, PageLayout, PAGE_GRADIENTS, ConfirmModal, InviteMemberModal },
+    hooks: { useAuth, useModal, useToast },
+    runtime: { react: React },
+  };
+}
+
+export function registerFrontendPlugin(ownerId: string, pluginCandidate: unknown, initialize = true): EnterpriseFrontendPlugin {
   if (!pluginCandidate || typeof pluginCandidate !== 'object') {
     return emptyPlugin;
   }
@@ -90,22 +102,8 @@ function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
   const plugin = pluginCandidate as FrontendPluginRuntimeShape;
 
   // Provide shared host utilities to the plugin via dependency injection
-  if (typeof plugin.init === 'function') {
-    const context: FrontendPluginContext = {
-      api: {
-        client: apiClient,
-        errors: { ApiError: ApiError as any, parseApiError, getUiErrorMessage, getErrorMessageFromResponse },
-      },
-      components: {
-        PageHeader,
-        PageLayout,
-        PAGE_GRADIENTS,
-        ConfirmModal,
-        InviteMemberModal,
-      },
-      hooks: { useAuth, useModal, useToast },
-    };
-    plugin.init(context);
+  if (initialize && typeof plugin.init === 'function') {
+    plugin.init(createFrontendPluginContext());
   }
 
   const routes = Array.isArray(plugin.routes) ? plugin.routes : [];
@@ -125,7 +123,7 @@ function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
     ? plugin.featureOverrides.filter(isFeatureOverrideCandidate)
     : [];
 
-  replacePluginExtensions(LEGACY_ENTERPRISE_PLUGIN_OWNER, {
+  replacePluginExtensions(ownerId, {
     rootRoutes: registryRoutes,
     tenantRoutes: registryTenantRoutes,
     navItems,
@@ -155,12 +153,12 @@ function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
 export async function loadEnterpriseFrontendPlugin(): Promise<EnterpriseFrontendPlugin> {
   const injectedPlugin = getInjectedPlugin();
   if (injectedPlugin) {
-    return registerPlugin(resolvePluginCandidate(injectedPlugin));
+    return registerFrontendPlugin(LEGACY_ENTERPRISE_PLUGIN_OWNER, resolvePluginCandidate(injectedPlugin));
   }
 
   try {
     const mod = await dynamicImport('@enterpriseglue/enterprise-frontend');
-    return registerPlugin(resolvePluginCandidate(mod));
+    return registerFrontendPlugin(LEGACY_ENTERPRISE_PLUGIN_OWNER, resolvePluginCandidate(mod));
   } catch {
     // Plugin not available (OSS mode) - expected in OSS repo
     return emptyPlugin;

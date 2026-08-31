@@ -40,8 +40,11 @@ identifiers and are not shown as login-button labels.
 The tenant login page reads the sanitized, policy-resolved
 `GET /api/t/{tenantSlug}/auth/login-methods` contract. Redirect providers start
 at `/api/t/{tenantSlug}/auth/providers/{providerId}/start`; LDAP submits to
-`/api/t/{tenantSlug}/auth/providers/{providerId}/login`; OIDC and SAML callbacks
-remain platform callback URLs. OIDC binds provider, tenant, and return path
+`/api/t/{tenantSlug}/auth/providers/{providerId}/login`. Managed mixed-release
+SaaS uses `/api/t/{tenantSlug}/auth/identity/callback` for OIDC and
+`/api/t/{tenantSlug}/auth/providers/saml/callback` for SAML; self-hosted and
+single-release deployments may keep the global compatibility callbacks. OIDC
+binds provider, tenant, and return path
 through exact HttpOnly cookie equality plus a cryptographic state nonce, PKCE,
 and ID-token nonce; SAML carries the same context in signed, expiring
 RelayState plus a short-lived HttpOnly browser transaction cookie. Production
@@ -79,10 +82,20 @@ how often that provider is due. Outside production, set a positive scheduler
 interval explicitly when testing scheduled reconciliation.
 
 Provider callback URLs do not belong in that allowlist. They must match the
-configured `FRONTEND_URL` origin and exactly one canonical path:
+configured `FRONTEND_URL` origin and either the global compatibility path or
+the canonical tenant-scoped path for the same signed tenant:
 
 - OIDC: `/api/auth/identity/callback`
+- OIDC managed tenant: `/api/t/{tenantSlug}/auth/identity/callback`
 - SAML: `/api/auth/providers/saml/callback`
+- SAML managed tenant: `/api/t/{tenantSlug}/auth/providers/saml/callback`
+
+When `EG_TENANCY_CLOUD_REQUIRED=true`, every tenant-owned OIDC or SAML
+provider must configure the tenant-scoped path containing that same tenant's
+canonical slug. Provider updates fail validation when they omit the tenant
+path, use the global compatibility path, or name a different tenant. Platform
+providers and self-hosted deployments retain the global callbacks for backward
+compatibility.
 
 For a deliberately local emulator, set
 `EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY=true`, allowlist the exact local

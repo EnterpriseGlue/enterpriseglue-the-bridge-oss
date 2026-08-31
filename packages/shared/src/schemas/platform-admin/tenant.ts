@@ -127,6 +127,21 @@ export const TenantWorkloadEpochRequestSchema = z.object({
   expectedPlacementEpoch: z.number().int().positive(),
 }).strict();
 
+export const TenantReleaseWorkAssignmentRequestSchema = z.object({
+  releaseId: z.string().min(1).max(256).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  assignmentEpoch: z.number().int().positive(),
+}).strict();
+
+export const TenantReleaseWorkAssignmentResponseSchema = z.object({
+  schemaVersion: z.literal('tenant-release-work-assignment.enterpriseglue.io/v1'),
+  tenantId: z.string().min(1).max(160),
+  releaseId: z.string().min(1).max(256),
+  assignmentEpoch: z.number().int().positive(),
+  updatedEvents: z.number().int().nonnegative(),
+  updatedSchedules: z.number().int().nonnegative(),
+  idempotent: z.boolean(),
+}).strict();
+
 export const TenantWorkloadAliasReconcileRequestSchema = z.object({
   aliases: z.array(z.string().trim().min(1).max(253)).max(100),
   expectedPlacementEpoch: z.number().int().positive(),
@@ -184,6 +199,12 @@ export const NativeTenantMembershipSchema = z.object({
   tenantStatus: TenantStatusSchema,
   role: z.enum(['admin', 'member']),
 });
+
+export const TenantCloudIdentityResponseSchema = z.object({
+  token: z.string().min(32),
+  expiresIn: z.number().int().positive().max(300),
+  tenantRole: z.enum(['tenant_admin', 'member']),
+}).strict();
 
 export const TenantMemberSchema = z.object({
   userId: z.string().min(1),
@@ -266,7 +287,7 @@ export const TenancyCapabilitiesSchema = z.object({
   customDomainsEnabled: z.boolean(),
   organizationDiscoveryEnabled: z.boolean().default(false),
   signedPlacementAssertionsEnabled: z.boolean(),
-  placementAssertionVersions: z.array(z.enum(['v1', 'v2'])).default([]),
+  placementAssertionVersions: z.array(z.enum(['v1', 'v2', 'v3'])).default([]),
   placementV2Required: z.boolean().default(false),
   workloadTenantLifecycleEnabled: z.boolean().default(false),
   tenantSecretBrokerEnabled: z.boolean().default(false),

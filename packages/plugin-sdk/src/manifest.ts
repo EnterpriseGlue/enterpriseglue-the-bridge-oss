@@ -380,6 +380,15 @@ export const enterpriseGluePluginManifestV1Schema = z
         frontendProtocol: z.literal(1).optional(),
         backendProtocol: z.literal(1).optional(),
         requiredSlots: z.array(pluginSlotIdSchema).max(100).default([]),
+        releaseAffinity: z
+          .object({
+            mixedHostReleases: z.boolean(),
+            dataFallback: z.enum(['compatible', 'one_way']),
+            backgroundWork: z.enum(['tenant_release', 'not_applicable']),
+            events: z.enum(['backward_compatible', 'not_applicable']),
+          })
+          .strict()
+          .optional(),
       })
       .strict(),
     deployment: z

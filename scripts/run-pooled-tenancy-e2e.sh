@@ -189,7 +189,11 @@ for (const client of sourceRealm.clients || []) {
     client.secret = values.POOLED_TENANCY_OIDC_CLIENT_SECRET;
   }
   if (client.clientId === 'enterpriseglue-local-saml') {
-    client.redirectUris = [...new Set([...(client.redirectUris || []), `${publicOrigin}/api/auth/providers/saml/callback`])];
+    client.redirectUris = [...new Set([
+      ...(client.redirectUris || []),
+      `${publicOrigin}/api/auth/providers/saml/callback`,
+      `${publicOrigin}/api/t/bravo/auth/providers/saml/callback`,
+    ])];
   }
 }
 fs.writeFileSync(realmImportFile, `${JSON.stringify(sourceRealm, null, 2)}\n`, { mode: 0o644 });

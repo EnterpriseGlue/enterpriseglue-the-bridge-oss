@@ -57,6 +57,33 @@ The authenticated response also reports tenant-secret broker availability and
 whether workload-only secret-reference recovery is enabled. It never exposes a
 broker token, secret-manager identifier, or secret value.
 
+For a managed mixed-release shard it additionally reports the configured host
+release. Such a shard accepts only placement v3 assertions for that exact
+release.
+
+## Hand off tenant-owned asynchronous work
+
+`PUT /api/workloads/tenants/<tenant-id>/release-assignment` is a separate
+private controller contract. It deliberately does not accept the ordinary
+`tenant:lifecycle` service-account credential; it requires the dedicated
+`EG_TENANT_RELEASE_CONTROLLER_TOKEN` bearer.
+
+```json
+{
+  "releaseId": "saas-2026-09",
+  "assignmentEpoch": 12
+}
+```
+
+Only the host whose configured `EG_TENANT_PLACEMENT_RELEASE_ID` exactly matches
+`releaseId` may accept the assignment. The operation is transactional and
+monotonic: it updates queued plugin events and schedules to the new release and
+epoch, returns the same result for an identical retry, rejects stale epochs,
+and blocks while delivery is in flight. The Cloud controller must complete
+this handoff before exposing the new assignment to edge routing. Rotate the
+controller token across all concurrently supported host releases as one
+coordinated secret operation; never put it in browser configuration or logs.
+
 ## Provision a tenant
 
 `POST /api/workloads/tenants`
@@ -187,6 +214,9 @@ before accepting the receipt.
   conflict outside pooled mode.
 - Existing platform-user tenant routes and placement v1 remain supported.
 - The lifecycle ledger and routing-alias tables are additive.
+- The release-work assignment table and nullable release fields are additive;
+  unmanaged schedules/events continue to use their established rows when no
+  managed release ID is configured.
 - Disable `EG_TENANCY_CLOUD_REQUIRED` and stop calling the workload routes
   before rolling the application back. Keep additive tables through the
   application rollback window.

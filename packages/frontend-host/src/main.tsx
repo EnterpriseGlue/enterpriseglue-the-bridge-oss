@@ -23,12 +23,14 @@ import { ToastProvider } from './shared/notifications/ToastProvider'
 import { createAppRoutes } from './routes'
 
 import { getEnterpriseFrontendPlugin } from './enterprise/loadEnterpriseFrontendPlugin'
+import { extensions } from './enterprise/extensionRegistry'
+import { loadTrustedSystemFrontendModules } from './enterprise/trustedSystemFrontendModules'
 import {
   getNativePluginRoutesV1,
   loadInstalledNativePluginsV1,
 } from './plugins/nativePluginRuntime'
 import { HostContextualFlowProviderV1 } from './plugins/contextualFlowRuntime'
-import { initRuntimeConfig } from './runtimeConfig'
+import { getConfiguredSystemFrontendModules, initRuntimeConfig } from './runtimeConfig'
 import { initializeTenancyCapabilities } from './services/tenancy'
 
 /**
@@ -85,15 +87,12 @@ export async function startApp() {
     return
   }
 
-  const enterprisePlugin = await getEnterpriseFrontendPlugin()
+  await getEnterpriseFrontendPlugin()
+  await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
   await initializeTenancyCapabilities()
   await loadInstalledNativePluginsV1()
-  const enterpriseRootChildren = [
-    ...((enterprisePlugin.routes || []) as any[]),
-  ]
-  const enterpriseTenantChildren = [
-    ...((enterprisePlugin.tenantRoutes || []) as any[]),
-  ]
+  const enterpriseRootChildren = [...extensions.rootRoutes] as any[]
+  const enterpriseTenantChildren = [...extensions.tenantRoutes] as any[]
   const nativePluginRootChildren = getNativePluginRoutesV1('root')
   const nativePluginTenantChildren = getNativePluginRoutesV1('tenant')
 

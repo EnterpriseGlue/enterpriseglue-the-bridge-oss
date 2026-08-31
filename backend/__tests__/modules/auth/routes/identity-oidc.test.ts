@@ -216,6 +216,22 @@ describe('provider-neutral OIDC routes', () => {
     );
   });
 
+  it('rejects a tenant-scoped OIDC callback when the route differs from signed state', async () => {
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    const state = buildSignedOidcState(
+      { params: { tenantSlug: 'other' }, query: {} } as any,
+      tenantProvider.id,
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+    );
+    const response = await request(app)
+      .get(`/api/t/default/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+    expect(response.status).toBe(401);
+    expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
+    expect(authSessionService.issue).not.toHaveBeenCalled();
+  });
+
   it('binds a tenant provider session and records SSO-owned tenant membership', async () => {
     const tenantProvider = { ...provider, tenantId: 'tenant-default' };
     let providerLookupContext: ReturnType<typeof getTenantDatabaseContext>;
@@ -230,7 +246,7 @@ describe('provider-neutral OIDC routes', () => {
     );
 
     const response = await request(app)
-      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .get(`/api/t/default/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
       .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
       .redirects(0);
 
@@ -271,7 +287,7 @@ describe('provider-neutral OIDC routes', () => {
     const relayState = genericSamlService.createAuthorizationRequest.mock.calls[0][1];
 
     const callback = await browser
-      .post('/api/auth/providers/saml/callback')
+      .post('/api/t/default/auth/providers/saml/callback')
       .type('form')
       .send({ SAMLResponse: 'signed-response', RelayState: relayState })
       .redirects(0);

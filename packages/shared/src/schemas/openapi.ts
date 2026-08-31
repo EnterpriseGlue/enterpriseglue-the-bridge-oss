@@ -59,6 +59,7 @@ const {
   TenantCreateRequestSchema,
   TenantUpdateRequestSchema,
   NativeTenantMembershipSchema,
+  TenantCloudIdentityResponseSchema,
   TenantMemberSchema,
   TenantMemberUpsertRequestSchema,
   TenantLoginPolicySchema,
@@ -76,6 +77,8 @@ const {
   TenancyCapabilitiesSchema,
   TenantWorkloadCreateRequestSchema,
   TenantWorkloadEpochRequestSchema,
+  TenantReleaseWorkAssignmentRequestSchema,
+  TenantReleaseWorkAssignmentResponseSchema,
   TenantWorkloadSecretBreakGlassRequestSchema,
   TenantWorkloadAliasReconcileRequestSchema,
   SignedTenantWorkloadReceiptSchema,
@@ -2773,6 +2776,8 @@ registry.register('TenantDiscoveryDomain', TenantDiscoveryDomainSchema);
 registry.register('TenantDiscoveryResponse', TenantDiscoveryResponseSchema);
 registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
 registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
+registry.register('TenantCloudIdentityResponse', TenantCloudIdentityResponseSchema);
+registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
 const TenantWorkloadHeadersSchema = z.object({
   'idempotency-key': z.string().min(16).max(200),
   'x-correlation-id': z.string().min(8).max(160),
@@ -2804,6 +2809,16 @@ registry.registerPath({
   ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/resume'),
   request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadEpochRequestSchema } } } },
   responses: { 200: { description: 'Tenant resumed with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or placement epoch conflict' } },
+});
+registry.registerPath({
+  method: 'put', path: '/api/workloads/tenants/{tenantId}/release-assignment',
+  ...authzExemption('PUT', '/api/workloads/tenants/{tenantId}/release-assignment'),
+  request: { params: TenantIdPathSchema, body: { content: { 'application/json': { schema: TenantReleaseWorkAssignmentRequestSchema } } } },
+  responses: {
+    200: { description: 'Tenant plugin jobs and queued events atomically rebound to the target host release', content: { 'application/json': { schema: TenantReleaseWorkAssignmentResponseSchema } } },
+    409: { description: 'Assignment epoch is stale, target release differs from this host, or plugin work is still in flight' },
+    503: { description: 'Release-aware plugin work is not configured on this host' },
+  },
 });
 registry.registerPath({
   method: 'post', path: '/api/workloads/tenants/{tenantId}/identity-provider-secret-reference',
@@ -2876,6 +2891,17 @@ registry.registerPath({
   ...authzExtension('platform.tenants.manage', 'PATCH', '/api/platform/tenants/{tenantId}'),
   request: { params: TenantIdPathSchema, body: { content: { 'application/json': { schema: TenantUpdateRequestSchema } } } },
   responses: { 200: { description: 'Tenant lifecycle or placement state updated', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Placement epoch conflict or protected default-tenant transition' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/tenant/cloud-identity',
+  ...authzExemption('GET', '/api/t/{tenantSlug}/tenant/cloud-identity'),
+  request: { params: TenantPathSchema },
+  responses: {
+    200: { description: 'Short-lived tenant and release-bound identity for the managed control plane', content: { 'application/json': { schema: TenantCloudIdentityResponseSchema } } },
+    401: { description: 'A native user session is required' },
+    403: { description: 'Active tenant membership is required' },
+    503: { description: 'Release-aware placement or cloud identity signing is unavailable' },
+  },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant',
@@ -4052,6 +4078,8 @@ const TenantProviderParamsSchema = z.object({ tenantSlug: z.string(), providerId
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/login-methods', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/login-methods'), request: { params: z.object({ tenantSlug: z.string() }) }, responses: { 200: { description: 'Tenant-scoped policy-resolved login methods safe to show before authentication', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/providers/{providerId}/start'), request: { params: TenantProviderParamsSchema }, responses: { 302: { description: 'Redirect to the selected tenant-scoped OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found in the resolved tenant scope' } } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/t/{tenantSlug}/auth/providers/{providerId}/login'), request: { params: TenantProviderParamsSchema, body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Tenant-scoped provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/identity/callback', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/identity/callback'), request: { params: TenantPathSchema }, responses: { 302: { description: 'Release-aware tenant-scoped OIDC callback redirect' }, 401: { description: 'Invalid, expired, or cross-tenant state' } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/providers/saml/callback', ...authzExemption('POST', '/api/t/{tenantSlug}/auth/providers/saml/callback'), request: { params: TenantPathSchema, body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } } } }, responses: { 302: { description: 'Release-aware tenant-scoped SAML callback redirect' }, 401: { description: 'Invalid, expired, or cross-tenant assertion state' } } });
 
 // Tenant SSO config
 const TenantSsoConfigResponseSchema = z.object({

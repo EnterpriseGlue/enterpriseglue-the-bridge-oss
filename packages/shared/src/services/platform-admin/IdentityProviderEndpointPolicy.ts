@@ -136,11 +136,14 @@ export function validateIdentityProviderCallbackUrl(raw: string, protocol: 'oidc
   try { parsed = new URL(raw); } catch { throw new Error(`${label} must be a valid URL`); }
   const frontend = new URL(config.frontendUrl);
   const expectedPath = protocol === 'oidc' ? '/api/auth/identity/callback' : '/api/auth/providers/saml/callback';
+  const tenantCallbackPattern = protocol === 'oidc'
+    ? /^\/api\/t\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\/auth\/identity\/callback$/
+    : /^\/api\/t\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\/auth\/providers\/saml\/callback$/;
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error(`${label} must not include credentials, query parameters, or a fragment`);
   }
-  if (parsed.origin !== frontend.origin || parsed.pathname !== expectedPath) {
-    throw new Error(`${label} must be the canonical ${frontend.origin}${expectedPath} endpoint`);
+  if (parsed.origin !== frontend.origin || (parsed.pathname !== expectedPath && !tenantCallbackPattern.test(parsed.pathname))) {
+    throw new Error(`${label} must be the canonical global or tenant-scoped callback endpoint on ${frontend.origin}`);
   }
   if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
     throw new Error(`${label} must use HTTPS in production`);

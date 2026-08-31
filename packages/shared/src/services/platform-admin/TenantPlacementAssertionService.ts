@@ -3,6 +3,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 export const TENANT_PLACEMENT_ASSERTION_V2_SCHEMA = 'placement-assertion.enterpriseglue.io/v2' as const;
+export const TENANT_PLACEMENT_ASSERTION_V3_SCHEMA = 'placement-assertion.enterpriseglue.io/v3' as const;
 
 interface PlacementJwk extends JsonWebKey {
   kid?: string;
@@ -33,6 +34,13 @@ export interface TenantPlacementClaimV2 {
   keyId: string;
 }
 
+export interface TenantPlacementClaimV3 extends Omit<TenantPlacementClaimV2, 'schemaVersion'> {
+  schemaVersion: typeof TENANT_PLACEMENT_ASSERTION_V3_SCHEMA;
+  region: string;
+  releaseId: string;
+  assignmentEpoch: number;
+}
+
 export interface TenantPlacementV2VerificationInput {
   compactJws: string;
   hostname: string;
@@ -49,6 +57,9 @@ interface RawPlacementClaims {
   tenantSlug?: unknown;
   shardId?: unknown;
   placementEpoch?: unknown;
+  region?: unknown;
+  releaseId?: unknown;
+  assignmentEpoch?: unknown;
   routingIdentity?: unknown;
   correlationId?: unknown;
   iat?: unknown;
@@ -224,6 +235,53 @@ export class TenantPlacementAssertionService {
       expiresAt,
       keyId: kid,
     };
+  }
+
+
+  verifyV3(input: TenantPlacementV2VerificationInput): TenantPlacementClaimV3 {
+    const parts = input.compactJws.split('.');
+    if (parts.length !== 3 || parts.some((part) => !part)) unauthorized('Invalid tenant placement v3 assertion');
+    const [encodedHeader, encodedPayload, encodedSignature] = parts as [string, string, string];
+    const header = parseJsonSegment(encodedHeader, 'header');
+    if (header.alg !== 'ES256' || (header.typ !== undefined && header.typ !== 'JWT')) unauthorized('Unsupported tenant placement v3 algorithm');
+    const kid = boundedString(header.kid, 'key ID', 160);
+    const key = selectVerificationKey(readJwks(config.tenantPlacementV2JwksJson), kid);
+    const signature = Buffer.from(encodedSignature, 'base64url');
+    if (signature.length !== 64 || !verifySignature('sha256', Buffer.from(`${encodedHeader}.${encodedPayload}`, 'ascii'), { key, dsaEncoding: 'ieee-p1363' }, signature)) unauthorized('Invalid tenant placement v3 signature');
+    const raw = parseJsonSegment(encodedPayload, 'payload') as RawPlacementClaims;
+    if (raw.schemaVersion !== TENANT_PLACEMENT_ASSERTION_V3_SCHEMA) unauthorized('Unsupported tenant placement v3 schema');
+    const issuer = boundedString(raw.iss, 'issuer');
+    if (!config.tenantPlacementV2Issuer || issuer !== config.tenantPlacementV2Issuer) unauthorized('Invalid tenant placement v3 issuer');
+    const expectedAudience = config.tenantPlacementV2Audience;
+    const audiences = Array.isArray(raw.aud) ? raw.aud : [raw.aud];
+    if (!expectedAudience || !audiences.includes(expectedAudience)) unauthorized('Invalid tenant placement v3 audience');
+    const tenantId = boundedString(raw.tenantId, 'tenant ID', 160);
+    if (raw.sub !== `tenant:${tenantId}`) unauthorized('Invalid tenant placement v3 subject');
+    const tenantSlug = boundedString(raw.tenantSlug, 'tenant slug', 63).toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(tenantSlug)) unauthorized('Invalid tenant placement v3 tenant slug');
+    const shardId = boundedString(raw.shardId, 'shard ID', 160);
+    if (!config.tenantPlacementV2ShardId || shardId !== config.tenantPlacementV2ShardId) unauthorized('Tenant placement v3 assertion targets another shard');
+    const region = boundedString(raw.region, 'region', 63);
+    const releaseId = boundedString(raw.releaseId, 'release ID', 256);
+    if (!config.tenantPlacementReleaseId || releaseId !== config.tenantPlacementReleaseId) unauthorized('Tenant placement v3 assertion targets another release');
+    const placementEpoch = integerClaim(raw.placementEpoch, 'placement epoch', 1);
+    const assignmentEpoch = integerClaim(raw.assignmentEpoch, 'assignment epoch', 1);
+    const correlationId = boundedString(raw.correlationId, 'correlation ID', 160);
+    if (correlationId.length < 8) unauthorized('Invalid tenant placement v3 correlation ID');
+    const issuedAt = integerClaim(raw.iat, 'issued-at time', 1);
+    const notBefore = integerClaim(raw.nbf, 'not-before time', 1);
+    const expiresAt = integerClaim(raw.exp, 'expiry time', 1);
+    const now = input.nowSeconds ?? Math.floor(Date.now() / 1000);
+    const skew = config.tenantPlacementV2ClockSkewSeconds;
+    const maximumAge = config.tenantPlacementMaxAgeSeconds;
+    if (issuedAt > now + skew || notBefore > now + skew || expiresAt <= now - skew || notBefore < issuedAt - skew || expiresAt <= notBefore || expiresAt - issuedAt > maximumAge || now - issuedAt > maximumAge + skew) unauthorized('Invalid tenant placement v3 validity window');
+    if (!raw.routingIdentity || typeof raw.routingIdentity !== 'object' || Array.isArray(raw.routingIdentity)) unauthorized('Invalid tenant placement v3 routing identity');
+    const routing = raw.routingIdentity as Record<string, unknown>;
+    const hostname = normalizeHostname(boundedString(routing.hostname, 'routing hostname', 253));
+    const pathPrefix = boundedString(routing.pathPrefix, 'routing path', 255);
+    if (pathPrefix !== `/t/${tenantSlug}` && pathPrefix !== `/api/t/${tenantSlug}`) unauthorized('Invalid tenant placement v3 routing path');
+    if (hostname !== normalizeHostname(input.hostname) || !routeMatches(normalizePath(input.requestPath), pathPrefix)) unauthorized('Tenant placement v3 assertion does not match the request route');
+    return { schemaVersion: TENANT_PLACEMENT_ASSERTION_V3_SCHEMA, issuer, audience: expectedAudience, tenantId, tenantSlug, shardId, region, releaseId, placementEpoch, assignmentEpoch, routingIdentity: { hostname, pathPrefix }, correlationId, issuedAt, notBefore, expiresAt, keyId: kid };
   }
 }
 

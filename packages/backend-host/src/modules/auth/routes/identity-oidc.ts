@@ -134,6 +134,10 @@ async function runInSsoCallbackTenantContext<T>(
   state: SsoState,
   callback: () => Promise<T>,
 ): Promise<T> {
+  const routeTenantSlug = typeof req.params?.tenantSlug === 'string' ? req.params.tenantSlug.trim() : '';
+  if (routeTenantSlug && routeTenantSlug !== state.tenantSlug) {
+    throw Errors.unauthorized('Identity provider callback tenant does not match the signed login state');
+  }
   if (!state.identityProviderTenantId) {
     if (config.tenancyMode === 'pooled') throw Errors.unauthorized('Identity provider login is not tenant-scoped');
     return callback();
@@ -354,7 +358,7 @@ router.get('/api/auth/identity/:key/start', apiLimiter, identityFlowLimiter, res
   await startMeasuredProviderLogin(req, res, provider);
 }));
 
-router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
+async function completeOidcLogin(req: Request, res: Response): Promise<void> {
   const state = typeof req.query.state === 'string' ? req.query.state : '';
   const parsed = parseSignedOidcState(state);
   const redirectRejected = typeof req.query.error === 'string';
@@ -398,9 +402,9 @@ router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, async
     });
     throw error;
   }
-}));
+}
 
-router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
+async function completeSamlLogin(req: Request, res: Response): Promise<void> {
   const samlResponse = typeof req.body?.SAMLResponse === 'string' ? req.body.SAMLResponse : '';
   const relayState = typeof req.body?.RelayState === 'string' ? req.body.RelayState : '';
   const parsed = parseSignedSamlState(relayState);
@@ -450,7 +454,15 @@ router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter
     recordLoginExperienceMetric({ method: 'saml', event: 'failed', durationMs: stateDuration(parsed?.timestamp) });
     throw error;
   }
-}));
+}
+
+// A tenant-scoped callback is required by release-aware pooled deployments so
+// the edge can select the tenant's assigned host release before any provider
+// state is consumed. The global callbacks remain backward-compatible aliases.
+router.get('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, asyncHandler(completeOidcLogin));
+router.post('/api/t/:tenantSlug/auth/providers/saml/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, asyncHandler(completeSamlLogin));
+router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, asyncHandler(completeOidcLogin));
+router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter, asyncHandler(completeSamlLogin));
 
 router.post('/api/auth/identity/:key/ldap/login', apiLimiter, identityFlowLimiter, authLimiter, resolveRootLoginTenant, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {
   const providerKey = typeof req.params.key === 'string' ? req.params.key : '';

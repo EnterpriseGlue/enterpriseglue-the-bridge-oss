@@ -11,9 +11,11 @@ import {
 } from '@enterpriseglue/plugin-sdk';
 import type { PluginFixedScheduleStoreV1 } from '@enterpriseglue/plugin-runtime/host-broker';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   PluginScheduleCommand,
   PluginScheduledJob,
+  TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
 
@@ -143,6 +145,7 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
           return duplicate(existingCommand.responseJson);
         }
         const now = this.clock();
+        const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
         const jobRepository = manager.getRepository(PluginScheduledJob);
         const current = await findPluginRowForUpdateV1(jobRepository, {
           jobRef,
@@ -167,6 +170,8 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
           pluginId: input.pluginId,
           deploymentRef: input.deploymentRef,
           tenantRef: input.tenantRef,
+          releaseId: releaseAssignment?.releaseId ?? null,
+          assignmentEpoch: releaseAssignment?.assignmentEpoch ?? null,
           jobType: input.request.jobType,
           operationId: input.deliveryOperationId,
           intervalSeconds:
@@ -246,6 +251,9 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
         )
         .orderBy('job.next_run_at', 'ASC')
         .addOrderBy('job.created_at', 'ASC');
+      if (config.tenantPlacementReleaseId) {
+        query.andWhere('job.release_id = :hostReleaseId', { hostReleaseId: config.tenantPlacementReleaseId });
+      }
       const records =
         dataSource.options.type === 'oracle'
           ? await lockOraclePluginClaimCandidatesV1(
@@ -595,4 +603,13 @@ function summary(record: JobSummaryRecordV1): PluginScheduledJobSafeSummaryV1 {
 
 function hash(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+async function requireManagedReleaseAssignment(manager: EntityManager, tenantRef: string): Promise<TenantReleaseWorkAssignment | null> {
+  if (!config.tenantPlacementReleaseId) return null;
+  const assignment = await manager.getRepository(TenantReleaseWorkAssignment).findOneBy({ tenantRef });
+  if (!assignment || assignment.releaseId !== config.tenantPlacementReleaseId) {
+    throw new Error('plugin_schedule_release_not_assigned');
+  }
+  return assignment;
 }

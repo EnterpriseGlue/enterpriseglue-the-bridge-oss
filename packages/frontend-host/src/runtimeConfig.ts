@@ -35,6 +35,7 @@
  */
 
 import { applyRuntimeConfig, config } from './config';
+import type { TrustedSystemFrontendModuleDescriptorV1 } from '@enterpriseglue/enterprise-plugin-api/frontend';
 
 /**
  * Shape of the runtime configuration document.
@@ -46,7 +47,14 @@ import { applyRuntimeConfig, config } from './config';
 export interface RuntimeConfig {
   apiBaseUrl?: string;
   required?: boolean;
+  systemFrontendModules?: unknown;
   [key: string]: unknown;
+}
+
+let systemFrontendModules: TrustedSystemFrontendModuleDescriptorV1[] = [];
+
+export function getConfiguredSystemFrontendModules(): readonly TrustedSystemFrontendModuleDescriptorV1[] {
+  return systemFrontendModules.map((descriptor) => ({ ...descriptor }));
 }
 
 /** Thrown when a *required* runtime configuration cannot be loaded. */
@@ -240,6 +248,11 @@ async function fetchRuntimeConfig(url: string): Promise<RuntimeConfig> {
         `but received ${describeShape(record.required)}.`,
     );
   }
+  if (record.systemFrontendModules !== undefined && !Array.isArray(record.systemFrontendModules)) {
+    throw new RuntimeConfigError(
+      `Runtime config at ${url} has an invalid "systemFrontendModules": expected an array, but received ${describeShape(record.systemFrontendModules)}.`,
+    );
+  }
 
   return record as RuntimeConfig;
 }
@@ -255,6 +268,7 @@ async function fetchRuntimeConfig(url: string): Promise<RuntimeConfig> {
  * loaded or yields no usable `apiBaseUrl`.
  */
 export async function initRuntimeConfig(): Promise<void> {
+  systemFrontendModules = [];
   const url = readEnv('VITE_RUNTIME_CONFIG_URL');
   if (!url) return; // Off unless a config URL is provided — no behaviour change.
 
@@ -277,7 +291,9 @@ export async function initRuntimeConfig(): Promise<void> {
       );
     }
 
+    const parsedSystemFrontendModules = parseSystemFrontendModules(runtime.systemFrontendModules, url);
     applyRuntimeConfig({ apiBaseUrl });
+    systemFrontendModules = parsedSystemFrontendModules;
 
     if (config.environment === 'development') {
       console.log(
@@ -300,4 +316,15 @@ export async function initRuntimeConfig(): Promise<void> {
         `Set VITE_RUNTIME_CONFIG_REQUIRED=true to treat this as a fatal error instead.`,
     );
   }
+}
+
+function parseSystemFrontendModules(value: unknown, sourceUrl: string): TrustedSystemFrontendModuleDescriptorV1[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 10) throw new RuntimeConfigError(`Runtime config at ${sourceUrl} has invalid system frontend modules.`);
+  return value.map((item, index) => {
+    if (!item || Array.isArray(item) || typeof item !== 'object') throw new RuntimeConfigError(`Runtime config at ${sourceUrl} has an invalid system frontend module at index ${index}.`);
+    const record = item as Record<string, unknown>;
+    if (typeof record.ownerId !== 'string' || typeof record.entryPath !== 'string' || typeof record.integrity !== 'string' || (record.required !== undefined && typeof record.required !== 'boolean')) throw new RuntimeConfigError(`Runtime config at ${sourceUrl} has an invalid system frontend module at index ${index}.`);
+    return { ownerId: record.ownerId, entryPath: record.entryPath, integrity: record.integrity as `sha256-${string}`, ...(record.required === true ? { required: true } : {}) };
+  });
 }
