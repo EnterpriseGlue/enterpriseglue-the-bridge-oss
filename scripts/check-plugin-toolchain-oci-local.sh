@@ -28,6 +28,10 @@ BUNDLE="$WORK/toolchain-airgap"
 TAMPERED_BUNDLE="$WORK/toolchain-airgap-tampered"
 TAMPERED_UTILITY_BUNDLE="$WORK/toolchain-airgap-utility-tampered"
 AIRGAP_RECEIPT="$WORK/toolchain-airgap-import-receipt.json"
+DISTRIBUTION_LOCK="$WORK/enterpriseglue-distribution-lock-v$VERSION.json"
+DISTRIBUTION_STATIC="$WORK/enterpriseglue-frontend-static-v$VERSION.tar.gz"
+DISTRIBUTION_KIT="$WORK/enterpriseglue-plugin-deployment-kit-v$VERSION.tar.gz"
+DISTRIBUTION_PULLED="$WORK/pulled-enterpriseglue-distribution-lock-v$VERSION.json"
 registry_started=false
 target_registry_started=false
 export COSIGN_EXPERIMENTAL=1
@@ -58,7 +62,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-for command in docker helm oras cosign curl jq node; do
+for command in docker helm oras cosign curl jq node cmp; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "$command is required for the local plugin-toolchain OCI drill" >&2
     exit 1
@@ -319,6 +323,58 @@ jq -e \
     and (.managerChart.subject | contains("@sha256:"))' \
   "$WORK/release.json" >/dev/null
 
+printf 'synthetic static frontend payload for the local OCI drill' \
+  > "$DISTRIBUTION_STATIC"
+printf 'synthetic deployment kit payload for the local OCI drill' \
+  > "$DISTRIBUTION_KIT"
+EG_DISTRIBUTION_GENERATED_AT="$(
+  date -u -r "$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
+    date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ'
+)" node "$ROOT_DIR/scripts/enterpriseglue-distribution-lock.mjs" create \
+  --version "v$VERSION" \
+  --source-revision "$(git -C "$ROOT_DIR" rev-parse HEAD)" \
+  --backend "$INSTALLER_REFERENCE" \
+  --frontend "$MANAGER_REFERENCE" \
+  --toolchain-release "$WORK/release.json" \
+  --frontend-static "$DISTRIBUTION_STATIC" \
+  --deployment-kit "$DISTRIBUTION_KIT" \
+  --output "$DISTRIBUTION_LOCK" >/dev/null
+node "$ROOT_DIR/scripts/enterpriseglue-distribution-lock.mjs" verify \
+  --lock "$DISTRIBUTION_LOCK" \
+  --root "$WORK" >/dev/null
+
+DISTRIBUTION_TAG="$REGISTRY/enterpriseglue/releases/enterpriseglue-oss-distribution:v$VERSION"
+oras push --plain-http "$DISTRIBUTION_TAG" \
+  --disable-path-validation \
+  --artifact-type application/vnd.enterpriseglue.distribution-lock.v1+json \
+  "$DISTRIBUTION_LOCK:application/vnd.enterpriseglue.distribution-lock.v1+json" \
+  >/dev/null
+DISTRIBUTION_DIGEST="$(oras resolve --plain-http "$DISTRIBUTION_TAG")"
+if [[ ! "$DISTRIBUTION_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  echo "Distribution-lock subject did not resolve to a SHA-256 digest" >&2
+  exit 1
+fi
+DISTRIBUTION_REFERENCE="${DISTRIBUTION_TAG%:*}@$DISTRIBUTION_DIGEST"
+DISTRIBUTION_LAYER="$(
+  oras manifest fetch --plain-http "$DISTRIBUTION_REFERENCE" |
+    jq -er '[.layers[] | select(.mediaType == "application/vnd.enterpriseglue.distribution-lock.v1+json") | .digest] | if length == 1 then .[0] else error("expected one distribution-lock layer") end'
+)"
+oras blob fetch --plain-http \
+  --output "$DISTRIBUTION_PULLED" \
+  "${DISTRIBUTION_REFERENCE%@*}@$DISTRIBUTION_LAYER"
+cmp --silent "$DISTRIBUTION_LOCK" "$DISTRIBUTION_PULLED"
+COSIGN_PASSWORD='' cosign sign --yes \
+  --key "$COSIGN_PREFIX.key" \
+  --signing-config "$COSIGN_SIGNING_CONFIG" \
+  --allow-http-registry \
+  --registry-referrers-mode=oci-1-1 \
+  "$DISTRIBUTION_REFERENCE" >/dev/null
+cosign verify \
+  --key "$COSIGN_PREFIX.pub" \
+  --allow-http-registry \
+  --insecure-ignore-tlog \
+  "$DISTRIBUTION_REFERENCE" >/dev/null
+
 EG_PLUGIN_TOOLCHAIN_AIRGAP_GENERATED_AT="$(
   date -u -r "$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
     date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ'
@@ -438,6 +494,7 @@ jq -n \
   --arg runtimeChart "$TARGET_RUNTIME_REFERENCE" \
   --arg rbacChart "$TARGET_RBAC_REFERENCE" \
   --arg managerChart "$TARGET_MANAGER_CHART_REFERENCE" \
+  --arg distributionLock "$DISTRIBUTION_REFERENCE" \
   '{
     status: $status,
     version: $version,
@@ -447,9 +504,11 @@ jq -n \
     runtimeChart: $runtimeChart,
     installerRbacChart: $rbacChart,
     managerChart: $managerChart,
+    distributionLock: $distributionLock,
     signaturesVerified: true,
     deterministicChartsVerified: true,
     digestRepullVerified: true,
+    distributionLockDigestRepullVerified: true,
     bundledToolsExecuted: true,
     signedAirgapBundleVerified: true,
     tamperedAirgapArchiveRejected: true,

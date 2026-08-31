@@ -1,0 +1,50 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "oss-distribution-lock-oci",
+  "type": "fix",
+  "scope": "release-and-deployment",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Publishes the signed OSS distribution lock as an immutable OCI subject that downstream Cloud release manifests can pin and verify.",
+  "userImpact": [
+    "SaaS composition can reference the real v0.20.0 OSS distribution lock by digest instead of relying on a placeholder subject or a mutable download URL."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Resolve and verify ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution:v0.20.0, then record its digest-pinned subject in the SaaS release manifest."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The protected release workflow compares any existing semantic OCI tag with the generated lock bytes and fails closed on a mismatch.",
+    "The digest-pinned distribution subject is signed and verified with the plugin-toolchain workflow identity before release completion."
+  ],
+  "documentation": [
+    "Release promotion and plugin-platform architecture documentation describe OCI lock discovery, verification, and recovery."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "The publication is additive and does not alter application runtime behavior; recover the same release workflow against the same tag and source revision if publication is interrupted."
+  ],
+  "validation": [
+    "Plugin-toolchain release-policy contract for publish-or-verify behavior, byte comparison, signing, and signature verification",
+    "Release-note preflight and documentation publication-boundary checks"
+  ],
+  "packages": []
+}
