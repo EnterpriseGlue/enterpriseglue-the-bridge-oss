@@ -159,4 +159,25 @@ describe('TenantPlacementAssertionService placement v2', () => {
     expect(() => service.verifyV3({ compactJws, hostname: 'app.enterpriseglue.test', requestPath: '/api/t/alpha/projects', nowSeconds: now })).toThrow('another release');
     expect(service.verifyV2({ compactJws: assertion(active), hostname: 'app.enterpriseglue.test', requestPath: '/api/t/alpha/projects', nowSeconds: now }).placementEpoch).toBe(7);
   });
+
+  it('rejects malformed-length and invalid fixed-length v3 signatures independently', () => {
+    const compactJws = assertion(active, {
+      schemaVersion: TENANT_PLACEMENT_ASSERTION_V3_SCHEMA,
+      region: 'europe-west4',
+      releaseId: 'release-2',
+      assignmentEpoch: 9,
+    });
+    const [header, payload] = compactJws.split('.');
+    const verify = (signature: string) => service.verifyV3({
+      compactJws: `${header}.${payload}.${signature}`,
+      hostname: 'app.enterpriseglue.test',
+      requestPath: '/api/t/alpha',
+      nowSeconds: now,
+    });
+
+    expect(() => verify(Buffer.alloc(63).toString('base64url')))
+      .toThrow('Invalid tenant placement v3 signature');
+    expect(() => verify(Buffer.alloc(64).toString('base64url')))
+      .toThrow('Invalid tenant placement v3 signature');
+  });
 });

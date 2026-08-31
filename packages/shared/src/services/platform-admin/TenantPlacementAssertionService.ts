@@ -246,8 +246,24 @@ export class TenantPlacementAssertionService {
     if (header.alg !== 'ES256' || (header.typ !== undefined && header.typ !== 'JWT')) unauthorized('Unsupported tenant placement v3 algorithm');
     const kid = boundedString(header.kid, 'key ID', 160);
     const key = selectVerificationKey(readJwks(config.tenantPlacementV2JwksJson), kid);
-    const signature = Buffer.from(encodedSignature, 'base64url');
-    if (signature.length !== 64 || !verifySignature('sha256', Buffer.from(`${encodedHeader}.${encodedPayload}`, 'ascii'), { key, dsaEncoding: 'ieee-p1363' }, signature)) unauthorized('Invalid tenant placement v3 signature');
+    let signature: Buffer;
+    try {
+      signature = Buffer.from(encodedSignature, 'base64url');
+    } catch {
+      unauthorized('Invalid tenant placement v3 signature');
+    }
+    if (signature.length !== 64) {
+      unauthorized('Invalid tenant placement v3 signature');
+    }
+    const signatureIsValid = verifySignature(
+      'sha256',
+      Buffer.from(`${encodedHeader}.${encodedPayload}`, 'ascii'),
+      { key, dsaEncoding: 'ieee-p1363' },
+      signature,
+    );
+    if (!signatureIsValid) {
+      unauthorized('Invalid tenant placement v3 signature');
+    }
     const raw = parseJsonSegment(encodedPayload, 'payload') as RawPlacementClaims;
     if (raw.schemaVersion !== TENANT_PLACEMENT_ASSERTION_V3_SCHEMA) unauthorized('Unsupported tenant placement v3 schema');
     const issuer = boundedString(raw.iss, 'issuer');
