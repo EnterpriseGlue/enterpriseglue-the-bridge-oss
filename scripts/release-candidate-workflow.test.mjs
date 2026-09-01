@@ -86,6 +86,8 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /smoke-images-local\.sh/)
   assert.match(stage, /--force-oracle/)
   assert.match(stage, /--severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN/)
+  assert.match(stage, /--volume "\$GITHUB_WORKSPACE\/\.trivyignore:\/workspace\/\.trivyignore:ro"/)
+  assert.match(stage, /--ignorefile \/workspace\/\.trivyignore/)
   assert.match(stage, /plugin-installer:\$installer_version-\$SOURCE_REF/)
   assert.match(stage, /release-candidates\/charts\/enterpriseglue-host/)
   assert.match(stage, /release-candidate-receipt\.mjs create/)

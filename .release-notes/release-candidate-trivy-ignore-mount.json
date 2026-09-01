@@ -1,0 +1,48 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-candidate-trivy-ignore-mount",
+  "type": "fix",
+  "scope": "release-pipeline",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Mounts the repository vulnerability exception policy into the protected Trivy container so exact release-candidate image scans can run fail closed.",
+  "userImpact": [
+    "Protected releases no longer fail because the containerized candidate scan cannot read the checked-in Trivy ignore policy."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The scanner receives the read-only policy file at an explicit container path and still rejects every non-ignored vulnerability severity.",
+    "Candidate publication remains blocked when the policy file is absent, unreadable, or the scan fails."
+  ],
+  "documentation": [
+    "Generated release notes record the protected candidate-scan correction and backward-compatible release impact."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the workflow mount to disable the correction; no application, API, configuration, or database state changes are involved."
+  ],
+  "validation": [
+    "Release-candidate workflow contract coverage requires the read-only Trivy policy mount and container path.",
+    "Local containerized Trivy invocation proves the mounted ignore policy is readable.",
+    "Protected merge-queue staging must scan the exact backend and frontend candidate digests before release publication."
+  ],
+  "packages": []
+}
