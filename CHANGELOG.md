@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.20.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.19.2...v0.20.0) (2026-09-01)
+
+
+### Features
+
+* add managed SaaS release affinity ([b3ab5cf](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b3ab5cf9e3bfba18278d4544f9451b5f1b0b1591))
+* add managed SaaS release affinity ([002dfa6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/002dfa66816b067fd98703db7c41bfb8bb034ccf))
+
+
+### Bug Fixes
+
+* align plugin API compatibility baseline ([6c0a971](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6c0a9712685a408ef1db4b22a825baa9492a8d0b))
+* **ci:** isolate release candidate execution boundary ([5be1763](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5be176301db3fb24e2b33bb443b0c08009dcc605))
+* **ci:** preserve merge-queue candidate identity ([ea76eeb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ea76eeb815f0da4c4895d20da6d65d9827eb6229))
+* **ci:** validate release metadata without checkout ([fdc94d9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fdc94d9cae97efb3215c58474b61fd273237b99f))
+* fail closed for placement assertion signatures ([06db3f8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/06db3f8d60569d971585763f9edf896e11087985))
+* **release:** align plugin chart versions ([f262f8e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f262f8ef97b49e159d6681c6ac2d682c8de5afad))
+* **release:** align plugin chart versions ([2c051bd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2c051bd004c1dcadd8cc2592e2c5947c5bb77797))
+* **release:** authenticate candidate package planning ([407d153](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/407d1538b73c8d2e19747b00e12ee92fd523eee0))
+* **release:** isolate candidate chart diagnostics ([04516a2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/04516a2a1d6b2cdbb2d679ba4b2401d105b3f226))
+* **release:** isolate candidate chart diagnostics ([4cb11e8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4cb11e85cc4dd96fc5a5c66d6c6e484946b73547))
+* **release:** mount Trivy policy for candidate scans ([0c2ed2e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0c2ed2ea8bfbe3fabe34b09186e3358e5a807a15))
+* **release:** mount Trivy policy for candidate scans ([d230c47](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d230c47ea3d32540aaaffa84281f331d89547fad))
+* **release:** publish cloud-consumable distribution lock ([254175a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/254175a814d8742b95fe51be5ed282bc9afdd5c0))
+* **security:** refresh plugin OCI tools ([a08fcde](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a08fcde45a914f39b3bb4e7b890e2a8608ea5a79))
+* **security:** secure release candidate staging ([ca1adb8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ca1adb81c7f6c1062ea5f504861eb22aaa78ab55))
+* version published packages for SaaS contracts ([b64327d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b64327de6879ee543081e87c262b7f1b71399561))
+
 ## [0.19.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.19.1...v0.19.2) (2026-08-28)
 
 
