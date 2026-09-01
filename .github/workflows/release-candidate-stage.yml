@@ -528,7 +528,7 @@ jobs:
               layer="$(oras manifest fetch "$repository@$existing" | jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end')"
               pulled="$RUNNER_TEMP/existing-$(basename "$archive")"
               oras blob fetch --output "$pulled" "$repository@$layer"
-              node scripts/helm-chart-archive.mjs compare "$archive" "$pulled"
+              node scripts/helm-chart-archive.mjs compare "$archive" "$pulled" >&2
             fi
             local digest
             digest="$(oras resolve "$repository:$version")"

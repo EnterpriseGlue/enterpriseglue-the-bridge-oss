@@ -1,0 +1,45 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-candidate-chart-output-isolation",
+  "type": "fix",
+  "scope": "release-pipeline",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps successful Helm chart comparison diagnostics out of release-candidate subject references during idempotent staging retries.",
+  "userImpact": [
+    "Protected release retries can reuse an equivalent staged chart without corrupting the immutable reference passed to Cosign."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The candidate workflow still verifies the canonical Helm payload before signing the exact immutable chart subject."
+  ],
+  "documentation": [
+    "Generated release notes record the retry-safe candidate staging correction and backward-compatible release impact."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the workflow output redirection; no application, API, configuration, or database state changes are involved."
+  ],
+  "validation": [
+    "Release-candidate workflow contract coverage requires comparison diagnostics to bypass command-substitution stdout.",
+    "Protected merge-queue staging must reuse equivalent candidate charts and sign parseable digest-qualified subjects."
+  ],
+  "packages": []
+}
