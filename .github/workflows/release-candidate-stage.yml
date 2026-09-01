@@ -354,10 +354,12 @@ jobs:
         run: |
           set -euo pipefail
           for subject in "$BACKEND_REF" "$FRONTEND_REF"; do
-            docker run --rm --volume "$HOME/.docker:/root/.docker:ro" \
+            docker run --rm \
+              --volume "$HOME/.docker:/root/.docker:ro" \
+              --volume "$GITHUB_WORKSPACE/.trivyignore:/workspace/.trivyignore:ro" \
               "$TRIVY_IMAGE" image --quiet --exit-code 1 \
               --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN \
-              --ignorefile .trivyignore "$subject"
+              --ignorefile /workspace/.trivyignore "$subject"
           done
 
   stage-toolchain:
