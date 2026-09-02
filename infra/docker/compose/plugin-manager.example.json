@@ -5,7 +5,7 @@
     "apiVersion": "manager-capability.plugin.enterpriseglue.io/v1",
     "kind": "EnterpriseGluePluginManagerCapability",
     "managerId": "enterpriseglue-plugin-manager",
-    "managerVersion": "0.1.7",
+    "managerVersion": "0.1.8",
     "protocolVersions": ["v1"],
     "deploymentModes": ["compose_planner"],
     "architectures": ["amd64", "arm64"],
