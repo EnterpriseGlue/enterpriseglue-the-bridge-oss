@@ -120,12 +120,23 @@ test('application release publication promotes candidate digests and delays alia
   assert.match(docker, /Promote without rebuilding/)
   assert.match(docker, /Immutable release tag \$target already points at/)
   const aliases = docker.slice(docker.indexOf('  promote-public-aliases:\n'))
+  const jobSection = (job) => {
+    const marker = `\n  ${job}:\n`
+    const start = docker.indexOf(marker)
+    assert.ok(start >= 0, `missing ${job} job`)
+    const tail = docker.slice(start + marker.length)
+    const nextJob = tail.search(/\n  [a-z0-9][a-z0-9-]*:\n/)
+    return nextJob >= 0 ? tail.slice(0, nextJob) : tail
+  }
   for (const gate of [
     'smoke-postgres-image-deploy',
     'smoke-postgres-image-deploy-exposed',
     'smoke-oracle-image-deploy',
     'security-published-scan',
   ]) {
+    const section = jobSection(gate)
+    assert.match(section, /needs: publish/)
+    assert.match(section, /if:[\s\S]{0,160}always\(\)[\s\S]{0,160}needs\.publish\.result == 'success'/)
     assert.match(aliases, new RegExp(`needs\\.${gate}\\.result == 'success'`))
   }
   assert.match(aliases, /dockerhub_backend:\$RELEASE_TAG/)
@@ -139,6 +150,12 @@ test('Release Please fails closed before creating a tag without a signed candida
   assert.ok(release > verify)
   assert.match(releasePlease, /bash scripts\/fetch-release-candidate\.sh "\$GITHUB_SHA" "\$RELEASE_TAG"/)
   assert.match(releasePlease, /packages: read/)
+  assert.match(releasePlease, /git log -1 --format=%B/)
+  assert.equal(
+    releasePlease.match(/match\(\/\^chore\\\(main\\\)!\?: release .*\\s\*\$\/m\)/g)?.length,
+    2,
+    'release-note publication and release existence checks must recognize a release title in a merge commit body',
+  )
 })
 
 test('charts and packages consume the signed candidate with a legacy recovery boundary', () => {
