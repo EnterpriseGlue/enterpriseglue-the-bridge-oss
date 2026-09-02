@@ -65,6 +65,7 @@
     "Workspace runtime validation now matches the reference plugin's intentional previous-SDK compatibility fixture, and the bundled plugin-manager example advertises the current package version.",
     "Release-policy CI refreshes pull-request labels after labeled and unlabeled events so concurrent release-label automation cannot create a false missing-label failure while auto-merge is being enabled.",
     "Plugin toolchain image contracts pin google.golang.org/grpc 1.83.1, and production-image scanning verifies the rebuilt Cosign binaries contain no HIGH or CRITICAL findings.",
+    "The multi-replica PostgreSQL acceptance uses bounded five-second operation and two-second circuit windows so loaded CI runners validate durable admission and circuit behavior without sub-second scheduler races.",
     "The 1440x900 UI evidence audit validates process overview, completed detail, and missing-layout detail screenshots.",
     "A production-image contract and container rehearsal verify that all compiled migrations are packaged and that a v0.20.0 empty migration ledger is repaired without replaying historical DDL."
   ],

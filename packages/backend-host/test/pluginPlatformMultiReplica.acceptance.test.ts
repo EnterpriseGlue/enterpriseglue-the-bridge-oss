@@ -87,6 +87,13 @@ const tenantRef = 'tenant-multi-replica';
 const otherTenantRef = 'tenant-other';
 const subjectRef = 'subject-multi-replica';
 const deploymentRef = 'deployment-multi-replica';
+// The acceptance exercises real HTTP servers and a disposable database while
+// the CI runner may also be compiling and scanning images. Keep coordination
+// windows comfortably above scheduler jitter so the assertions test durable
+// admission and circuit state instead of sub-second host timing.
+const operationTimeoutMs = 5_000;
+const circuitOpenMs = 2_000;
+const circuitRecoveryDelayMs = circuitOpenMs + 100;
 
 function currentHostCompatibilityRange(): string {
   return pluginMinorCompatibilityRangeV1(
@@ -290,7 +297,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
           request.socket.destroy();
           return;
         } else if (operationMode === 'timeout') {
-          await delay(350);
+          await delay(operationTimeoutMs + 250);
           if (response.destroyed || response.writableEnded) return;
         }
         response.status(201).json({ caseRef: `case-${operationCalls}` });
@@ -568,7 +575,14 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
       await operationEntered.promise;
       const capabilitiesWhileHeld = capabilityCalls;
       const rejectedConcurrent = await invoke(hostB.baseUrl);
-      expect(rejectedConcurrent.status).toBe(429);
+      const rejectedConcurrentBody = await rejectedConcurrent.text();
+      expect({
+        status: rejectedConcurrent.status,
+        body: rejectedConcurrentBody,
+      }).toEqual({
+        status: 429,
+        body: JSON.stringify({ error: 'Plugin operation is busy' }),
+      });
       expect(capabilityCalls).toBe(capabilitiesWhileHeld);
       releaseOperation.resolve();
       expect((await heldInvocation).status).toBe(201);
@@ -596,7 +610,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
       });
       operationMode = 'success';
       expect((await invoke(hostB.baseUrl)).status).toBe(201);
-      await delay(225);
+      await delay(circuitRecoveryDelayMs);
       expect((await invoke(hostA.baseUrl)).status).toBe(201);
 
       operationMode = 'timeout';
@@ -609,7 +623,7 @@ it.skipIf(!process.env.ENTERPRISEGLUE_PLUGIN_ACCEPTANCE_DATABASE_URL)(
       expect({ capabilityCalls, operationCalls }).toEqual(callsAfterTimeout);
       operationMode = 'success';
       expect((await invoke(hostB.baseUrl)).status).toBe(201);
-      await delay(225);
+      await delay(circuitRecoveryDelayMs);
       expect((await invoke(hostA.baseUrl)).status).toBe(201);
 
       const ordinaryRoute = await fetch(
@@ -1001,7 +1015,7 @@ function createReplica(
     gatewayAdmission: admission,
     gatewayCircuitBreaker: new PluginGatewayCircuitBreakerV1({
       failureThreshold: 1,
-      openMs: 200,
+      openMs: circuitOpenMs,
     }),
     operationAuthorizer: async (input) =>
       ['platform.dashboard.read', 'tenant.apps.use'].includes(input.actionId) &&
@@ -1402,7 +1416,7 @@ async function createFixture(
             requiredPermissions: ['host.identity.read_safe'],
             maxRequestBytes: 8_192,
             maxResponseBytes: 8_192,
-            timeoutMs: 150,
+            timeoutMs: operationTimeoutMs,
             streaming: 'none',
           },
           {
