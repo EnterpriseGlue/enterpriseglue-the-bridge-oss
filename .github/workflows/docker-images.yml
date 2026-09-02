@@ -650,6 +650,7 @@ jobs:
       - smoke-oracle-image-deploy
       - security-published-scan
     if: >-
+      always() &&
       startsWith(needs.publish.outputs.image_tag, 'v') &&
       needs.smoke-postgres-image-deploy.result == 'success' &&
       needs.smoke-postgres-image-deploy-exposed.result == 'success' &&

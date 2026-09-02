@@ -139,6 +139,7 @@ test('application release publication promotes candidate digests and delays alia
     assert.match(section, /if:[\s\S]{0,160}always\(\)[\s\S]{0,160}needs\.publish\.result == 'success'/)
     assert.match(aliases, new RegExp(`needs\\.${gate}\\.result == 'success'`))
   }
+  assert.match(aliases, /if: >-\n\s+always\(\) &&/)
   assert.match(aliases, /dockerhub_backend:\$RELEASE_TAG/)
   assert.match(aliases, /\$BACKEND_IMAGE:latest/)
 })
