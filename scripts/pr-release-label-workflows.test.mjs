@@ -29,3 +29,15 @@ for (const workflowPath of breakingDetectionWorkflows) {
     assert.doesNotMatch(workflow, /body(?:IndicatesBreaking|DeclaresBreaking)?\s*=\s*\/breaking\\s\+change/i);
   });
 }
+
+test('release policy refreshes labels for concurrent label mutation events', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/release-policy.yml', import.meta.url), 'utf8');
+
+  assert.match(
+    workflow,
+    /const needsFresh = \[[^\]]*'opened'[^\]]*'labeled'[^\]]*'unlabeled'[^\]]*\]\.includes/,
+  );
+  assert.match(workflow, /await new Promise\(\(r\) => setTimeout\(r, 15000\)\)/);
+  assert.match(workflow, /github\.rest\.pulls\.get/);
+  assert.match(workflow, /labels = \(freshPR\.labels \|\| \[\]\)\.map/);
+});

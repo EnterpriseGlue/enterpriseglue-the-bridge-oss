@@ -62,6 +62,7 @@
     "A browser end-to-end run against PostgreSQL and Operaton 2.1.4 verifies the overview list, valid and missing-layout diagrams, tenant navigation, completed state, historical variables, edit-target behavior, repeated health polling, and a clean authenticated console.",
     "The pull-request CI pipeline runs an explicit Mission Control regression suite for health persistence, all five TypeORM adapter mappings, Operaton definition compatibility, process overview/detail behavior, historical variables, diagram layout states, and tenant-safe navigation; a CI contract prevents that lane or the transformer database-matrix trigger from being removed silently.",
     "Workspace runtime validation now matches the reference plugin's intentional previous-SDK compatibility fixture, and the bundled plugin-manager example advertises the current package version.",
+    "Release-policy CI refreshes pull-request labels after labeled and unlabeled events so concurrent release-label automation cannot create a false missing-label failure while auto-merge is being enabled.",
     "The 1440x900 UI evidence audit validates process overview, completed detail, and missing-layout detail screenshots.",
     "A production-image contract and container rehearsal verify that all compiled migrations are packaged and that a v0.20.0 empty migration ledger is repaired without replaying historical DDL."
   ],
