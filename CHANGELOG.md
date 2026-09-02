@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.20.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.0...v0.20.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* **ci:** avoid release label mutation races ([d8b34b7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d8b34b7d8147930e280695359c065f285e009954))
+* **mission-control:** restore engine health and process views ([6a9b0f9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6a9b0f906ef6f6178dad438604b76b01336192d2))
+* **mission-control:** restore engine health and process views ([e68b247](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e68b24721b3cbbdaf08585302bd05f4afddfe408))
+* **security:** rebuild cosign with patched grpc ([303de4f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/303de4fc1a4305e512b6cb4fa8aaf0b051c8625a))
+
 ## [0.20.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.19.2...v0.20.0) (2026-09-01)
 
 
