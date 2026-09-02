@@ -1,0 +1,63 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "fast-uri-security-patch",
+  "type": "security",
+  "scope": "production-images",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Updates vulnerable production dependency locks and preserves post-qualification public image alias promotion.",
+  "userImpact": [
+    "Production images no longer include fast-uri 3.1.5, which is affected by four HIGH-severity URI normalization and host-confusion vulnerabilities, or qs 6.15.3, which is affected by two MODERATE denial-of-service vulnerabilities.",
+    "Qualified release images can promote their public latest and Docker Hub aliases after candidate-reuse builds skip their mutually exclusive build jobs."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The backend-host ProcessDefinition TypeScript contract now represents nullable engine-native versionTag values and the optional suspended state already accepted by the Mission Control response schema."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This security update does not change application data, schemas, migrations, or supported TypeORM database adapters."
+    ]
+  },
+  "security": [
+    "Pins fast-uri to the patched 3.1.6 release line for CVE-2026-75899, CVE-2026-75931, CVE-2026-75975, and CVE-2026-76172.",
+    "Pins qs to 6.16.0 for CVE-2026-82417 and CVE-2026-82562.",
+    "A CI contract rejects vulnerable fast-uri and qs versions even when a vulnerability database is temporarily stale, while production-image Trivy scanning remains the authoritative dynamic gate."
+  ],
+  "documentation": [
+    "The generated technical release notes identify the patched dependency and immutable replacement-image requirement."
+  ],
+  "knownLimitations": [
+    "The production dependency audit still reports the MODERATE CVE-2026-54285 through Google Spanner's OpenTelemetry 1.x compatibility chain. Google Spanner 8.11.0 is current, and forcing the OpenTelemetry 2.x major through its 1.x dependency ranges is deferred to avoid weakening TypeORM Spanner compatibility."
+  ],
+  "rollback": [
+    "Redeploy the previous immutable release images only as an emergency rollback; they retain the vulnerable fast-uri 3.1.5 dependency and should be replaced as soon as possible."
+  ],
+  "validation": [
+    "Resolve the workspace dependency graph and confirm @enterpriseglue/plugin-runtime uses ajv with fast-uri 3.1.6.",
+    "Run the CI contract suites, release-note preflight, published-package version discipline, production plugin-platform image tests, and HIGH/CRITICAL Trivy scans.",
+    "Qualify a new immutable release candidate and verify PostgreSQL, Oracle, public alias, registry, signature, and release-receipt gates before publication."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.13.1",
+      "newVersion": "0.13.2",
+      "impact": "patch"
+    }
+  ]
+}
