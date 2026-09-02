@@ -79,6 +79,10 @@ describe('SpannerAdapter metadata normalization', () => {
       (column) => (column.target as any)?.name === 'RuntimeResource'
         && column.propertyName === 'tenantMappingVersion',
     );
+    const engineHealthCheckedAtColumn = metadata.columns.find(
+      (column) => (column.target as any)?.name === 'EngineHealth'
+        && column.propertyName === 'checkedAt',
+    );
 
     expect(usersTable?.schema).toBeUndefined();
     expect(idColumn?.options).toMatchObject({ type: 'string', length: 191 });
@@ -86,6 +90,11 @@ describe('SpannerAdapter metadata normalization', () => {
     expect(activeColumn?.options.type).toBe('bool');
     expect(observedAtColumn?.options.type).toBe('int64');
     expect(versionColumn?.options.type).toBe('int64');
+    const healthTransformer = Array.isArray(engineHealthCheckedAtColumn?.options.transformer)
+      ? engineHealthCheckedAtColumn?.options.transformer[0]
+      : engineHealthCheckedAtColumn?.options.transformer;
+    expect(engineHealthCheckedAtColumn?.options.type).toBe('int64');
+    expect(healthTransformer?.from('1700000000000')).toBe(1700000000000);
   });
 
   it('null-filters unique indexes over nullable natural keys', () => {

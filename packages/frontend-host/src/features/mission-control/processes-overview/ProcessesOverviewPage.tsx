@@ -10,7 +10,7 @@ import { TableSearchBar } from '../../../shared/components/ui/TableSearchBar'
 import { SplitPane, Pane } from 'react-split-pane'
 import { useProcessesFilterStore } from '../shared/stores/processesFilterStore'
 import { useDiagramViewStore } from '../shared/stores/diagramViewStore'
-import { createCountBadge, getBadgePosition } from '../../shared/components/viewer/viewerUtils'
+import { createCountBadge, getBadgePosition, hasBpmnDiagramLayout } from '../../shared/components/viewer/viewerUtils'
 import { ProcessesDataTable } from './components/ProcessesDataTable'
 import { useAlert } from '../../../shared/hooks/useAlert'
 import AlertModal from '../../../shared/components/AlertModal'
@@ -1178,6 +1178,15 @@ export default function ProcessesOverviewPage() {
         )}
       </BreadcrumbBar>
       <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      {defsQ.error && !engineAccessError && (
+        <InlineNotification
+          kind="error"
+          title="Process definitions could not be loaded"
+          subtitle={getUiErrorMessage(defsQ.error, 'The engine process-definition request failed.')}
+          hideCloseButton
+          style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }}
+        />
+      )}
       {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
         <RuntimeCollectionEmptyState kind="process_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
       )}
@@ -1205,7 +1214,7 @@ export default function ProcessesOverviewPage() {
           {currentKey && selectedVersion === null && (
             <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To see a Diagram, select a single Version</div>
           )}
-          {currentKey && selectedVersion !== null && xmlQ.data && (
+          {currentKey && selectedVersion !== null && xmlQ.data && hasBpmnDiagramLayout(xmlQ.data as string) && (
             <React.Suspense fallback={<LoadingState message="Loading diagram..." />}>
               <Viewer
                 key={`${defIdForVersion || currentKey}-${selectedVersion || 'all'}`}
@@ -1245,6 +1254,12 @@ export default function ProcessesOverviewPage() {
               {defIdForVersion && xmlQ.status === 'success' && !xmlQ.data ? (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-tertiary)', background: 'var(--color-bg-primary)', zIndex: 10 }}>
                   No diagram XML for the selected version
+                </div>
+              ) : null}
+              {defIdForVersion && xmlQ.data && !hasBpmnDiagramLayout(xmlQ.data as string) ? (
+                <div role="status" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)', alignItems: 'center', justifyContent: 'center', padding: 'var(--spacing-5)', color: 'var(--color-text-secondary)', background: 'var(--color-bg-primary)', textAlign: 'center', zIndex: 10 }}>
+                  <strong style={{ color: 'var(--color-text-primary)' }}>Diagram layout unavailable</strong>
+                  <span>The deployed BPMN is executable, but it does not contain BPMN DI layout coordinates. Redeploy the model with diagram layout metadata to display it.</span>
                 </div>
               ) : null}
             </>

@@ -98,8 +98,12 @@ COPY --from=deps /repo/packages/plugin-sdk/node_modules ./dist/packages/plugin-s
 COPY --from=build /repo/packages/plugin-runtime/package.json ./dist/packages/plugin-runtime/package.json
 COPY --from=build /repo/packages/plugin-runtime/dist ./dist/packages/plugin-runtime/dist
 COPY --from=deps /repo/packages/plugin-runtime/node_modules ./dist/packages/plugin-runtime/node_modules
-COPY --from=build /repo/packages/shared/src/db/adapters/sql ./packages/shared/src/db/adapters/sql
-COPY --from=build /repo/packages/shared/src/db/migrations ./packages/shared/src/db/migrations
+# Keep the compiled shared package available beside its pnpm dependencies. The
+# database adapters resolve production migrations from this dist tree; copying
+# TypeScript sources elsewhere leaves the production image with an empty
+# TypeORM migration inventory.
+COPY --from=build /repo/packages/shared/package.json ./dist/packages/shared/package.json
+COPY --from=build /repo/packages/shared/dist ./dist/packages/shared/dist
 
 EXPOSE 8787
 

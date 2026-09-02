@@ -122,6 +122,9 @@ describe('OracleAdapter metadata normalization', () => {
     const createdAtColumn = metadata.columns.find(
       (column) => (column.target as any)?.name === 'User' && column.propertyName === 'createdAt'
     );
+    const engineHealthCheckedAtColumn = metadata.columns.find(
+      (column) => (column.target as any)?.name === 'EngineHealth' && column.propertyName === 'checkedAt'
+    );
     const transformer = Array.isArray(isActiveColumn?.options.transformer)
       ? isActiveColumn?.options.transformer[0]
       : isActiveColumn?.options.transformer;
@@ -135,6 +138,12 @@ describe('OracleAdapter metadata normalization', () => {
     expect(createdAtColumn?.options.type).toBe('number');
     expect(createdAtColumn?.options.precision).toBe(19);
     expect(createdAtColumn?.options.scale).toBe(0);
+
+    const healthTransformer = Array.isArray(engineHealthCheckedAtColumn?.options.transformer)
+      ? engineHealthCheckedAtColumn?.options.transformer[0]
+      : engineHealthCheckedAtColumn?.options.transformer;
+    expect(engineHealthCheckedAtColumn?.options.type).toBe('number');
+    expect(healthTransformer?.from('1700000000000')).toBe(1700000000000);
   });
 
   it('uses CLOB for bounded native-grant and backstop evidence instead of Oracle display-text length', () => {

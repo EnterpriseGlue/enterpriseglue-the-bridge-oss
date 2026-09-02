@@ -1,5 +1,6 @@
 import { Entity, Column } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
+import { bigintNumberTransformer } from '../transformers/bigintNumber.js';
 
 @Entity({ name: 'engine_health', schema: 'main' })
 export class EngineHealth extends AppBaseEntity {
@@ -15,15 +16,15 @@ export class EngineHealth extends AppBaseEntity {
   @Column({ type: 'text', nullable: true })
   message!: string | null;
 
-  @Column({ name: 'checked_at', type: 'bigint' })
+  @Column({ name: 'checked_at', type: 'bigint', transformer: bigintNumberTransformer })
   checkedAt!: number;
 
-  @Column({ name: 'last_check', type: 'bigint', nullable: true })
+  @Column({ name: 'last_check', type: 'bigint', nullable: true, transformer: bigintNumberTransformer })
   lastCheck!: number | null;
 
-  @Column({ name: 'created_at', type: 'bigint', nullable: true })
+  @Column({ name: 'created_at', type: 'bigint', nullable: true, transformer: bigintNumberTransformer })
   createdAt!: number | null;
 
-  @Column({ name: 'updated_at', type: 'bigint', nullable: true })
+  @Column({ name: 'updated_at', type: 'bigint', nullable: true, transformer: bigintNumberTransformer })
   updatedAt!: number | null;
 }

@@ -36,4 +36,18 @@ describe('MySQLAdapter native-grant evidence mapping', () => {
       }
     }
   });
+
+  it('keeps the EngineHealth BIGINT timestamp transformer active', () => {
+    new MySQLAdapter();
+
+    const checkedAtColumn = getMetadataArgsStorage().columns.find(
+      (column: any) => column.target?.name === 'EngineHealth' && column.propertyName === 'checkedAt',
+    );
+    const transformer = Array.isArray(checkedAtColumn?.options.transformer)
+      ? checkedAtColumn?.options.transformer[0]
+      : checkedAtColumn?.options.transformer;
+
+    expect(checkedAtColumn?.options.type).toBe('bigint');
+    expect(transformer?.from('1700000000000')).toBe(1700000000000);
+  });
 });

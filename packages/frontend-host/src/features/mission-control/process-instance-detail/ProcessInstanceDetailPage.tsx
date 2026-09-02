@@ -23,7 +23,6 @@ import { useNodeMetadata } from './components/hooks/useNodeMetadata'
 import { useSplitPaneState } from '../shared/hooks/useSplitPaneState'
 import { useBpmnElementSelection } from './components/hooks/useBpmnElementSelection'
 import { useElementLinkPillOverlay } from './components/hooks/useElementLinkPillOverlay'
-import { useProcessesFilterStore } from '../shared/stores/processesFilterStore'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
@@ -79,14 +78,6 @@ export default function ProcessInstanceDetailPage() {
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
-
-  // Get filter state from Zustand store (persisted)
-  const { selectedProcess, selectedVersion } = useProcessesFilterStore()
-
-  // Build process label with version for breadcrumb
-  const processLabel = selectedProcess
-    ? `${selectedProcess.label}${selectedVersion !== null ? ` (v${selectedVersion})` : ''}`
-    : null
 
   // Early return if no instanceId
   if (!instanceId) {
@@ -159,6 +150,7 @@ export default function ProcessInstanceDetailPage() {
     defId,
     defKey,
     defName,
+    defVersion,
     sortedActs,
     runtimeActivityInstances,
     allRetryItems,
@@ -170,6 +162,12 @@ export default function ProcessInstanceDetailPage() {
     parentId,
     status,
   } = instanceData
+  // Breadcrumb identity belongs to the opened instance. A persisted overview
+  // filter may reference a different process when a detail URL is opened
+  // directly or in another tab.
+  const processLabel = defName && defName !== '--'
+    ? `${defName}${defVersion !== null ? ` (v${defVersion})` : ''}`
+    : null
   const runtimeActionDecisions = runtimeQ.data?.runtimeActionDecisions
   const suspensionDecision = withRuntimeActionDecision(snapshotSuspensionDecision, runtimeActionDecisions?.suspension)
   const retryDecision = withRuntimeActionDecision(snapshotRetryDecision, runtimeActionDecisions?.retry)
@@ -1060,6 +1058,8 @@ export default function ProcessInstanceDetailPage() {
         <ProcessInstanceDiagramPane
           instanceId={instanceId}
           xml={xmlQ.data as string}
+          isLoading={xmlQ.isLoading}
+          error={xmlQ.error}
           onReady={setViewerApi}
           onDiagramReset={applyOverlays}
           onElementNavigate={handleElementNavigate}

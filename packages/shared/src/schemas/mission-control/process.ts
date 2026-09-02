@@ -6,7 +6,8 @@ export const ProcessDefinitionSchema = z.object({
   key: z.string(),
   name: z.string().optional(),
   version: z.number(),
-  versionTag: z.string().optional(),
+  // Camunda-compatible engines use null when no version tag was deployed.
+  versionTag: z.string().nullable().optional(),
   suspended: z.boolean().optional(),
 }).passthrough();
 

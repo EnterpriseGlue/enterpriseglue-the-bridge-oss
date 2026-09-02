@@ -1,4 +1,4 @@
-import { In, IsNull, QueryRunner, Table, TableColumn, TableIndex } from 'typeorm';
+import { In, IsNull, MigrationExecutor, QueryRunner, Table, TableColumn, TableIndex } from 'typeorm';
 import type { DataSource } from 'typeorm';
 import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from '../infrastructure/persistence/entities/EnvironmentTag.js';
@@ -448,6 +448,71 @@ async function recordFreshMigrationBaseline(
   await spannerDatabase.table(migrationsTableName).insert(migrations);
 }
 
+// v0.20.0 production images copied the migration TypeScript sources outside
+// the compiled runtime tree. A fresh database was therefore synchronized to
+// the current entity model, but its TypeORM migration ledger stayed empty.
+// Keep this recovery deliberately pinned to that exact migration inventory so
+// a future release cannot mistake a genuinely old schema for a v0.20.0 one.
+const V020_PUBLISHED_IMAGE_MIGRATION_COUNT = 132;
+const V020_PUBLISHED_IMAGE_LAST_MIGRATION = 1700000000130;
+
+function hasV020PublishedImageMigrationInventory(dataSource: DataSource): boolean {
+  const timestamps = (dataSource.migrations ?? [])
+    .map((migration) => {
+      const name = migration.name || migration.constructor.name;
+      return Number(name.slice(-13));
+    })
+    .filter(Number.isSafeInteger);
+
+  return timestamps.length === V020_PUBLISHED_IMAGE_MIGRATION_COUNT
+    && Math.max(...timestamps) === V020_PUBLISHED_IMAGE_LAST_MIGRATION;
+}
+
+async function hasEmptyMigrationLedger(dataSource: DataSource, queryRunner: QueryRunner): Promise<boolean> {
+  const executedMigrations = await new MigrationExecutor(dataSource, queryRunner).getExecutedMigrations();
+  return executedMigrations.length === 0;
+}
+
+async function matchesCurrentEntityColumnShape(dataSource: DataSource, queryRunner: QueryRunner): Promise<boolean> {
+  if (!dataSource.entityMetadatas.length) {
+    return false;
+  }
+
+  for (const metadata of dataSource.entityMetadatas) {
+    const table = await queryRunner.getTable(metadata.tablePath);
+    if (!table) {
+      return false;
+    }
+
+    const actualColumns = new Set(table.columns.map((column) => column.name));
+    if (metadata.columns.some((column) => !actualColumns.has(column.databaseName))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function recoverV020PublishedImageMigrationLedger(
+  dataSource: DataSource,
+  queryRunner: QueryRunner,
+  dbType: ReturnType<typeof adapter.getDatabaseType>,
+): Promise<boolean> {
+  if (!hasV020PublishedImageMigrationInventory(dataSource)) {
+    return false;
+  }
+  if (!(await hasEmptyMigrationLedger(dataSource, queryRunner))) {
+    return false;
+  }
+  if (!(await matchesCurrentEntityColumnShape(dataSource, queryRunner))) {
+    return false;
+  }
+
+  await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
+  console.log('  ✅ Recovered the v0.20.0 published-image migration baseline');
+  return true;
+}
+
 /**
  * Run database migrations using TypeORM
  * Database-agnostic implementation supporting PostgreSQL, Oracle, MySQL, SQL Server, Spanner
@@ -564,6 +629,14 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
           initializedFreshSchema = true;
           console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
         }
+      }
+
+      if (
+        mode === 'apply'
+        && !initializedFreshSchema
+        && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
+      ) {
+        initializedFreshSchema = true;
       }
 
     } finally {

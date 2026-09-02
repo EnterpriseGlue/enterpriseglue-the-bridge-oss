@@ -190,6 +190,21 @@ describe('mission-control processes routes', () => {
     });
   });
 
+  it('preserves a null process-definition version tag from Operaton', async () => {
+    vi.mocked(listProcessDefinitions).mockResolvedValueOnce([
+      { id: 'process1:1:pd1', key: 'process1', name: 'Process 1', version: 1, versionTag: null },
+    ]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'process1:1:pd1', key: 'process1', name: 'Process 1', version: 1, versionTag: null },
+    ]);
+  });
+
   it('returns process definition details', async () => {
     const response = await request(app)
       .get('/mission-control-api/process-definitions/pd1')
@@ -314,14 +329,23 @@ describe('mission-control processes routes', () => {
     expect(response.body?.error).toBe('Invalid query parameters');
   });
 
-  it('does not infer a Starbase edit target from a matching process key without deployment lineage', async () => {
+  it('returns an unavailable edit target without an error when deployment lineage is absent', async () => {
     fileFind.mockResolvedValueOnce([{ id: 'file-key-match', projectId: 'project-1' }]);
 
     const response = await request(app)
       .get('/mission-control-api/process-definitions/edit-target')
       .query({ engineId: 'engine-1', key: 'invoice', version: 3 });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      canShowEditButton: false,
+      canEdit: false,
+      engineId: 'engine-1',
+      projectId: '',
+      fileId: '',
+      processKey: 'invoice',
+      processVersion: 3,
+    });
     expect(fileFind).not.toHaveBeenCalled();
   });
 
@@ -540,7 +564,7 @@ describe('mission-control processes routes', () => {
     }));
   });
 
-  it('returns 404 when no accessible deployed process mapping exists', async () => {
+  it('returns an unavailable edit target when no accessible deployed process mapping exists', async () => {
     artifactFind.mockResolvedValueOnce([
       {
         projectId: 'project-denied',
@@ -558,7 +582,8 @@ describe('mission-control processes routes', () => {
       .get('/mission-control-api/process-definitions/edit-target')
       .query({ engineId: 'engine-1', key: 'invoice', version: 3 });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ canShowEditButton: false, canEdit: false });
   });
 
   it('does not expose an edit target backed only by discovered engine lineage', async () => {
@@ -569,6 +594,7 @@ describe('mission-control processes routes', () => {
       .get('/mission-control-api/process-definitions/edit-target')
       .query({ engineId: 'engine-1', key: 'invoice', version: 3 });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ canShowEditButton: false, canEdit: false });
   });
 });

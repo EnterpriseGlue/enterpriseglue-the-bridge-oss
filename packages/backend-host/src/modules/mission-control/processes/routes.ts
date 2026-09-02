@@ -102,7 +102,17 @@ r.get('/mission-control-api/process-definitions/edit-target', requireAuth, valid
     artifactVersion: processVersion,
     artifactId: processDefinitionId,
   })
-  if (!target) throw Errors.notFound('Deployed process mapping')
+  if (!target) {
+    return res.json(ProcessEditTargetSchema.parse({
+      canShowEditButton: false,
+      canEdit: false,
+      engineId,
+      projectId: '',
+      fileId: '',
+      processKey,
+      processVersion,
+    }))
+  }
 
   res.json(ProcessEditTargetSchema.parse({
     ...target,

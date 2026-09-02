@@ -18,6 +18,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js'
 import { SavedFilter } from '@enterpriseglue/shared/infrastructure/persistence/entities/SavedFilter.js'
 import { EngineHealth } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineHealth.js'
+import { normalizeBigIntToSafeNumber } from '@enterpriseglue/shared/infrastructure/persistence/transformers/bigintNumber.js'
 import { In, Not, IsNull, type DataSource, type EntityManager } from 'typeorm'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js'
@@ -2572,7 +2573,12 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngi
     }
   }
   // Select all then sort in memory
-  const rows = await healthRepo.find({ where: { engineId } })
+  const rows = (await healthRepo.find({ where: { engineId } })).map((row) => ({
+    ...row,
+    // TypeORM transformers cover normal entity hydration. Keep this response
+    // boundary defensive for driver-specific and legacy repository results.
+    checkedAt: normalizeBigIntToSafeNumber(row.checkedAt),
+  }))
   if (rows.length === 0) {
     // Auto-ping once if no health yet
     const eng = await engineRepo.findOneBy({ id: engineId })
@@ -2580,7 +2586,7 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngi
       return res.json(EngineConnectionHealthResponseSchema.parse(await testEngineConnectionAndRecord(dataSource, eng)))
     }
   }
-  const last = rows.sort((a: any, b: any) => (b.checkedAt as number) - (a.checkedAt as number))[0]
+  const last = rows.sort((a, b) => b.checkedAt - a.checkedAt)[0]
   res.json(EngineConnectionHealthResponseSchema.nullable().parse(last || null))
 }))
 

@@ -58,7 +58,17 @@ r.get('/mission-control-api/decision-definitions/edit-target', requireAuth, vali
     artifactVersion: decisionVersion,
     artifactId: decisionDefinitionId,
   });
-  if (!target) throw Errors.notFound('Deployed decision mapping');
+  if (!target) {
+    return res.json(DecisionEditTargetSchema.parse({
+      canShowEditButton: false,
+      canEdit: false,
+      engineId,
+      projectId: '',
+      fileId: '',
+      decisionKey,
+      decisionVersion,
+    }));
+  }
 
   res.json(DecisionEditTargetSchema.parse({
     ...target,
