@@ -308,6 +308,10 @@ jobs:
         if: matrix.database == 'postgres'
         run: pnpm run test:unit
 
+      - name: Run Mission Control engine and diagram regressions when provided
+        if: matrix.database == 'postgres'
+        run: pnpm run --if-present test:mission-control-regressions
+
       - name: Enforce headless administrator configuration parity
         if: matrix.database == 'postgres'
         run: node --test scripts/headless-admin-contract-parity.test.mjs scripts/headless-admin-cli-lifecycle.test.mjs

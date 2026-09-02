@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Copy } from "@carbon/icons-react"
-import { useNavigate } from "react-router-dom"
+import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 
 interface CopyableLinkProps {
   /** Full value to copy and use for navigation */
@@ -29,7 +29,7 @@ export function CopyableLink({
   maxLength = 19,
   openInNewTab = false,
 }: CopyableLinkProps) {
-  const navigate = useNavigate()
+  const { tenantNavigate, toTenantPath } = useTenantNavigate()
 
   const truncatedValue = displayValue ?? (
     fullValue.length > maxLength
@@ -40,9 +40,9 @@ export function CopyableLink({
   const handleClick = () => {
     if (navigateTo) {
       if (openInNewTab) {
-        window.open(navigateTo, '_blank')
+        window.open(toTenantPath(navigateTo), '_blank')
       } else {
-        navigate(navigateTo)
+        tenantNavigate(navigateTo)
       }
     }
   }

@@ -1,0 +1,88 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "engine-health-and-completed-variables",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps persisted engine health readable across supported database drivers, restores Operaton process overview and diagram behavior, shows final variables after completion, and restores the production image migration inventory.",
+  "userImpact": [
+    "Engine connection health remains connected after the first persisted health poll instead of changing to Unknown when a database driver returns a BIGINT timestamp as a string.",
+    "Completed process-instance details show their final global variable values from engine history after runtime variables are no longer available.",
+    "Operaton process definitions without a version tag populate the process overview and can load their diagrams.",
+    "Process overview and detail pages explain when executable BPMN lacks BPMN DI layout coordinates instead of showing a blank canvas.",
+    "Process and decision instance links preserve the active tenant URL, and process detail breadcrumbs identify the opened instance rather than a stale overview filter.",
+    "Engine-native deployments no longer create expected 404 console errors while checking whether a Starbase edit target exists.",
+    "The production backend image includes executable compiled migrations and repairs the empty migration ledger created by the v0.20.0 image when its synchronized schema matches the known v0.20.0 shape."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The existing engine-health response continues to expose checkedAt as a JSON number; database-native BIGINT representations are normalized before response validation.",
+      "Process-definition collection responses now accept and preserve the null versionTag value returned by Camunda-compatible engines.",
+      "Edit-target lookups return a successful canShowEditButton=false response when an engine-native deployment has no EnterpriseGlue lineage instead of using an expected 404 as control flow."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No application columns or stored values change. A TypeORM value transformer normalizes safe BIGINT timestamp values returned as number, string, or bigint by PostgreSQL, MySQL, SQL Server, Oracle, and Spanner drivers.",
+      "A v0.20.0 published-image database with a completely empty migration ledger is baselined only when the loaded inventory is exactly the 132 migrations through 1700000000130 and every current entity column is present."
+    ]
+  },
+  "security": [
+    "Historic variable values continue through the existing history authorization and redaction route; the frontend does not bypass engine variable permissions."
+  ],
+  "documentation": [
+    "This release note documents the corrected persisted-health and completed-instance variable behavior; no configuration or operator procedure changes."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous backend and frontend images or package versions; no database rollback is required."
+  ],
+  "validation": [
+    "Unit tests cover TypeORM BIGINT hydration for number, string, bigint, nullable, invalid, fractional, and unsafe timestamp values.",
+    "Database-adapter metadata tests verify the transformer remains active for PostgreSQL, MySQL, SQL Server, Oracle, and Spanner mappings.",
+    "Backend route tests cover a persisted string timestamp and require a numeric engine-health response.",
+    "Frontend hook tests cover active runtime variables and completed-instance historical variable fallback.",
+    "Process-definition route and schema tests cover Operaton's null versionTag response, while viewer tests cover valid BPMN DI and executable BPMN without layout metadata.",
+    "Tenant navigation and instance identity tests cover tenant-prefixed links and breadcrumb names derived from the opened process instance.",
+    "A browser end-to-end run against PostgreSQL and Operaton 2.1.4 verifies the overview list, valid and missing-layout diagrams, tenant navigation, completed state, historical variables, edit-target behavior, repeated health polling, and a clean authenticated console.",
+    "The pull-request CI pipeline runs an explicit Mission Control regression suite for health persistence, all five TypeORM adapter mappings, Operaton definition compatibility, process overview/detail behavior, historical variables, diagram layout states, and tenant-safe navigation; a CI contract prevents that lane or the transformer database-matrix trigger from being removed silently.",
+    "Workspace runtime validation now matches the reference plugin's intentional previous-SDK compatibility fixture, and the bundled plugin-manager example advertises the current package version.",
+    "The 1440x900 UI evidence audit validates process overview, completed detail, and missing-layout detail screenshots.",
+    "A production-image contract and container rehearsal verify that all compiled migrations are packaged and that a v0.20.0 empty migration ledger is repaired without replaying historical DDL."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.15.0",
+      "newVersion": "0.15.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.13.0",
+      "newVersion": "0.13.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.15.0",
+      "newVersion": "0.15.1",
+      "impact": "patch"
+    }
+  ]
+}

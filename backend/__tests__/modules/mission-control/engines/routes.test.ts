@@ -1960,6 +1960,39 @@ describe('mission-control engines routes', () => {
     delete process.env.CAMUNDA_BASE_URL;
   });
 
+  it('normalizes a persisted database BIGINT timestamp in the engine health response', async () => {
+    const healthFind = vi.fn().mockResolvedValue([
+      {
+        id: 'health-1',
+        engineId: 'e1',
+        status: 'connected',
+        latencyMs: 18,
+        message: null,
+        checkedAt: '1700000000000',
+      },
+    ]);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'EngineHealth'
+        ? { find: healthFind }
+        : {
+            findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }),
+            findOneBy: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }),
+          },
+    });
+
+    const response = await request(app).get('/engines-api/engines/e1/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'health-1',
+      engineId: 'e1',
+      status: 'connected',
+      latencyMs: 18,
+      checkedAt: 1700000000000,
+    });
+    expect(typeof response.body.checkedAt).toBe('number');
+  });
+
   it('lists saved filters only for engines authorized by the action resolver', async () => {
     const engineFind = vi.fn().mockResolvedValue([
       { id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' },

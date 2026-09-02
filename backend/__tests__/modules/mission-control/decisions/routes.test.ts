@@ -324,14 +324,23 @@ describe('mission-control decisions routes', () => {
     expect(listDecisionDefinitions).not.toHaveBeenCalled();
   });
 
-  it('does not infer a Starbase edit target from a matching decision key without deployment lineage', async () => {
+  it('returns an unavailable edit target without an error when decision deployment lineage is absent', async () => {
     fileFind.mockResolvedValueOnce([{ id: 'file-key-match', projectId: 'project-1' }]);
 
     const response = await request(app)
       .get('/mission-control-api/decision-definitions/edit-target')
       .query({ engineId: 'engine-1', key: 'risk', version: 2 });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      canShowEditButton: false,
+      canEdit: false,
+      engineId: 'engine-1',
+      projectId: '',
+      fileId: '',
+      decisionKey: 'risk',
+      decisionVersion: 2,
+    });
     expect(fileFind).not.toHaveBeenCalled();
   });
 

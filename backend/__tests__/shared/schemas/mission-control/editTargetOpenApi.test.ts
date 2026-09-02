@@ -16,6 +16,10 @@ describe('deployed edit-target transport contracts', () => {
       canShowEditButton: true, canEdit: false, engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1',
       decisionKey: 'credit', decisionVersion: 4,
     })).toMatchObject({ decisionKey: 'credit', canEdit: false });
+    expect(ProcessEditTargetSchema.parse({
+      canShowEditButton: false, canEdit: false, engineId: 'engine-1', projectId: '', fileId: '',
+      processKey: 'external-process', processVersion: 1,
+    })).toMatchObject({ processKey: 'external-process', canShowEditButton: false });
   });
 
   it('documents both edit-target routes using shared schemas', () => {

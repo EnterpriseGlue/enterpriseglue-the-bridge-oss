@@ -54,6 +54,7 @@ import {
   AddPostgresTenantRls1700000000126,
 } from '@enterpriseglue/shared/db/migrations/1700000000126-add-postgres-tenant-rls.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineHealth } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineHealth.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
@@ -113,6 +114,7 @@ const ids = {
   legacyEngine: `${runId}-legacy-engine`,
   legacyResource: `${runId}-legacy-resource`,
   serviceEngine: `${runId}-service-engine`,
+  serviceHealth: `${runId}-service-health`,
   serviceResource: `${runId}-service-resource`,
   rollbackMapping: `${runId}-rollback-mapping`,
   rollbackImportRun: `${runId}-rollback-import-run`,
@@ -776,6 +778,23 @@ async function qualifyServiceBehavior(dataSource) {
       runtimeTenantId: 'runtime-a',
     },
   ));
+  const checkedAt = 1700000000000;
+  await dataSource.getRepository(EngineHealth).insert({
+    id: ids.serviceHealth,
+    engineId: ids.serviceEngine,
+    status: 'connected',
+    latencyMs: 18,
+    message: null,
+    checkedAt,
+    lastCheck: checkedAt,
+    createdAt: checkedAt,
+    updatedAt: checkedAt,
+  });
+  const storedHealth = await dataSource.getRepository(EngineHealth).findOneByOrFail({
+    id: ids.serviceHealth,
+  });
+  assert.equal(typeof storedHealth.checkedAt, 'number');
+  assert.equal(storedHealth.checkedAt, checkedAt);
 
   const first = await engineTenantMappingService.upsert({
     engineId: ids.serviceEngine,
@@ -836,6 +855,7 @@ async function qualifyServiceBehavior(dataSource) {
       'runtime inventory resolves to the mapped tenant',
       'same-version retry is idempotent',
       'mapping version advances exactly once',
+      'engine health BIGINT timestamps hydrate as safe JavaScript numbers',
     ],
   };
 }
@@ -927,6 +947,7 @@ async function qualifyCleanup(dataSource) {
   const mappingRepository = dataSource.getRepository(EngineTenantMapping);
   const resourceRepository = dataSource.getRepository(RuntimeResource);
   const engineRepository = dataSource.getRepository(Engine);
+  const engineHealthRepository = dataSource.getRepository(EngineHealth);
   const identityMappingRepository = dataSource.getRepository(IdentityEntitlementMapping);
   const identityProviderRepository = dataSource.getRepository(IdentityProvider);
   const groupRepository = dataSource.getRepository(AuthzGroup);
@@ -938,6 +959,7 @@ async function qualifyCleanup(dataSource) {
   const projectRepository = dataSource.getRepository(Project);
   await mappingRepository.delete({ engineId: ids.serviceEngine });
   await resourceRepository.delete({ id: ids.serviceResource });
+  await engineHealthRepository.delete({ id: ids.serviceHealth });
   await engineRepository.delete({ id: ids.serviceEngine });
   await resourceRepository.delete({ id: ids.legacyResource });
   await projectTargetRepository.delete({ id: ids.migrationProjectTarget });
@@ -952,6 +974,7 @@ async function qualifyCleanup(dataSource) {
   await settingsRepository.delete({ id: 'default' });
   assert.equal(await mappingRepository.countBy({ engineId: ids.serviceEngine }), 0);
   assert.equal(await resourceRepository.countBy({ id: ids.serviceResource }), 0);
+  assert.equal(await engineHealthRepository.countBy({ id: ids.serviceHealth }), 0);
   assert.equal(await engineRepository.countBy({ id: ids.serviceEngine }), 0);
   assert.equal(await resourceRepository.countBy({ id: ids.legacyResource }), 0);
   assert.equal(await engineRepository.countBy({ id: ids.legacyEngine }), 0);

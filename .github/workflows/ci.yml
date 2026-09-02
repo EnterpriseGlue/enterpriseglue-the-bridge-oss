@@ -467,6 +467,10 @@ jobs:
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: pnpm run test:unit
 
+      - name: Run Mission Control engine and diagram regressions
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        run: pnpm run test:mission-control-regressions
+
       - name: Enforce fine-grained authorization coverage contracts
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: pnpm run test:authz:structure

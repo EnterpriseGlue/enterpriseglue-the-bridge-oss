@@ -1,6 +1,19 @@
 import { PADDING_FACTOR, STATE_COLORS, BADGE_STYLES, BADGE_POSITIONS_RECTANGLE, InstanceState } from './viewerConstants'
 
 /**
+ * A process can be executable without carrying BPMN Diagram Interchange (DI)
+ * coordinates. bpmn-js cannot draw that model, so distinguish it from an
+ * empty/loading response instead of leaving a silent blank canvas.
+ */
+export function hasBpmnDiagramLayout(xml: string | null | undefined): boolean {
+  if (!xml) return false
+  const namespaced = '(?:[A-Za-z_][\\w.-]*:)?'
+  return new RegExp(`<${namespaced}BPMNDiagram(?:\\s|>)`).test(xml)
+    && new RegExp(`<${namespaced}BPMNPlane(?:\\s|>)`).test(xml)
+    && new RegExp(`<${namespaced}BPMNShape(?:\\s|>)`).test(xml)
+}
+
+/**
  * Notify viewport change callback if provided
  */
 export function notifyViewportChange(

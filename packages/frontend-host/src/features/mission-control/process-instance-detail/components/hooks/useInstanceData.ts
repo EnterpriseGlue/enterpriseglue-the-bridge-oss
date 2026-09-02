@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import type { ActivityInstance, ProcessDefinition } from '../types'
-import type { RuntimeActivityInstanceTree } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { RuntimeActivityInstanceTree, Variables } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { HistoricVariableInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import { useSelectedEngine } from '../../../../../components/EngineSelector'
 import {
   getProcessInstance,
@@ -59,6 +60,26 @@ export function flattenRuntimeActivityTree(tree: RuntimeActivityInstanceTree | n
   return flattened
 }
 
+export function historicProcessVariables(
+  entries: HistoricVariableInstance[],
+  processInstanceId: string,
+): Variables {
+  const variables: Variables = {}
+  const hasExecutionScope = entries.some((entry) => entry.executionId !== undefined && entry.executionId !== null)
+
+  for (const entry of entries) {
+    if (!entry?.name || variables[entry.name]) continue
+    if (hasExecutionScope && String(entry.executionId ?? '') !== processInstanceId) continue
+    variables[entry.name] = {
+      type: entry.type || 'String',
+      value: entry.value,
+      ...(entry.valueRedacted === true ? { valueRedacted: true } : {}),
+    }
+  }
+
+  return variables
+}
+
 export function useInstanceData(instanceId: string, options: UseInstanceDataOptions = {}) {
   const selectedEngineId = useSelectedEngine()
   const historyProcessInstanceEnabled = options.historyProcessInstanceEnabled ?? true
@@ -96,10 +117,12 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   // Derived process definition info
   const defId = histQ.data?.processDefinitionId || runtimeQ.data?.definitionId || null
   const defKey = histQ.data?.processDefinitionKey || runtimeQ.data?.definitionId?.split(':')[0] || ''
-  const defName = useMemo(() => {
-    const m = (defsQ.data || []).find(d => d.key === defKey)
-    return m?.name || defKey || '--'
-  }, [defsQ.data, defKey])
+  const matchingDefinition = useMemo(
+    () => (defsQ.data || []).find(d => d.id === defId) || (defsQ.data || []).find(d => d.key === defKey),
+    [defsQ.data, defId, defKey]
+  )
+  const defName = histQ.data?.processDefinitionName || matchingDefinition?.name || defKey || '--'
+  const defVersion = histQ.data?.processDefinitionVersion ?? matchingDefinition?.version ?? runtimeQ.data?.version ?? null
 
   // Process definition XML
   const xmlQ = useQuery({
@@ -112,7 +135,7 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   const varsQ = useQuery({
     queryKey: ['mission-control', 'vars', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceVariables(instanceId, selectedEngineId),
-    enabled: variablesEnabled && !!instanceId && !!selectedEngineId,
+    enabled: variablesEnabled && !!instanceId && !!selectedEngineId && histQ.isFetched && !histQ.data?.endTime,
   })
 
   // Historical variables
@@ -122,6 +145,17 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
     enabled: historicVariablesEnabled && !!instanceId && !!selectedEngineId,
   })
 
+  const completedVariables = useMemo(
+    () => historicProcessVariables(histVarsQ.data || [], instanceId),
+    [histVarsQ.data, instanceId]
+  )
+  const completed = Boolean(histQ.data?.endTime)
+  const displayVarsQ = useMemo(() => ({
+    ...varsQ,
+    data: completed ? completedVariables : varsQ.data,
+    isLoading: completed ? histVarsQ.isLoading : varsQ.isLoading,
+  }), [completed, completedVariables, histVarsQ.isLoading, varsQ])
+
   // Variable type map
   const variableTypeMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -130,14 +164,14 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
         map.set(entry.name, entry.type)
       }
     }
-    const globals = varsQ.data || {}
+    const globals = displayVarsQ.data || {}
     for (const [name, meta] of Object.entries(globals)) {
       if (name && (meta as any)?.type && !map.has(name)) {
         map.set(name, (meta as any).type)
       }
     }
     return map
-  }, [histVarsQ.data, varsQ.data])
+  }, [displayVarsQ.data, histVarsQ.data])
 
   const lookupVarType = useMemo(
     () => (name?: string | null) => {
@@ -263,7 +297,7 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
     runtimeQ,
     defsQ,
     xmlQ,
-    varsQ,
+    varsQ: displayVarsQ,
     histVarsQ,
     actQ,
     activityTreeQ,
@@ -275,6 +309,7 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
     defId,
     defKey,
     defName,
+    defVersion,
     sortedActs,
     runtimeActivityInstances,
     allRetryItems,

@@ -111,4 +111,18 @@ describe('SqlServerAdapter metadata normalization', () => {
     expect(configKeyIndex?.unique).toBe(true);
     expect(configKeyIndex?.where).toBe('[config_key_identity] IS NOT NULL');
   });
+
+  it('keeps the EngineHealth BIGINT timestamp transformer active', () => {
+    new SqlServerAdapter();
+
+    const checkedAtColumn = getMetadataArgsStorage().columns.find(
+      (column: any) => column.target?.name === 'EngineHealth' && column.propertyName === 'checkedAt',
+    );
+    const transformer = Array.isArray(checkedAtColumn?.options.transformer)
+      ? checkedAtColumn?.options.transformer[0]
+      : checkedAtColumn?.options.transformer;
+
+    expect(checkedAtColumn?.options.type).toBe('bigint');
+    expect(transformer?.from('1700000000000')).toBe(1700000000000);
+  });
 });

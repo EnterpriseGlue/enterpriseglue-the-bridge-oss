@@ -133,6 +133,8 @@ test('executes every stage against the real adapter and service transaction', ()
   }
   assert.match(worker, /runMigrations/);
   assert.match(worker, /engineTenantMappingService\.upsert/);
+  assert.match(worker, /EngineHealth/);
+  assert.match(worker, /engine health BIGINT timestamps hydrate as safe JavaScript numbers/);
   assert.match(worker, /expectedMappingVersion: 0/);
   assert.match(worker, /expectedMappingVersion: 1/);
   assert.match(worker, /tenantResolutionDetailsJson/);

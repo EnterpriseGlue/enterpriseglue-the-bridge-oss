@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { MigrationExecutor } from 'typeorm';
 import {
   LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
   projectLegacyLocalRoleAssignmentsOnce,
@@ -210,6 +211,105 @@ describe('runMigrations bootstrap behavior', () => {
     expect(dataSource.showMigrations).not.toHaveBeenCalled();
     expect(bootstrapRunner.release).toHaveBeenCalledTimes(1);
     expect(integrityRunner.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers the empty ledger produced by the v0.20.0 published image', async () => {
+    const executedMigrations = vi
+      .spyOn(MigrationExecutor.prototype, 'getExecutedMigrations')
+      .mockResolvedValue([]);
+    const bootstrapRunner = {
+      ...createBootstrapRunner(vi.fn().mockResolvedValue(true)),
+      getTable: vi.fn(async (tablePath: string) => {
+        if (tablePath === 'main.users') {
+          return { name: 'users', schema: 'main', columns: [{ name: 'id' }] };
+        }
+        return undefined;
+      }),
+    };
+    const integrityRunner = createIntegrityRunner();
+    const migrations = Array.from({ length: 131 }, (_, index) => ({
+      name: `Migration${1700000000000 + index}`,
+    }));
+    migrations.push({ name: 'AlternateMigration1700000000085' });
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: `main.${String(entity.name).toLowerCase()}`,
+      })),
+      entityMetadatas: [{
+        tablePath: 'main.users',
+        columns: [{ databaseName: 'id' }],
+      }],
+      migrations,
+      options: { migrationsTableName: 'migrations' },
+      driver: {
+        options: { type: 'postgres', schema: 'main' },
+        database: 'eg_test',
+        buildTableName: vi.fn().mockReturnValue('main.migrations'),
+      },
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations();
+
+    expect(executedMigrations).toHaveBeenCalledOnce();
+    expect(dataSource.runMigrations).toHaveBeenCalledOnce();
+    expect(dataSource.runMigrations).toHaveBeenCalledWith({ fake: true });
+    expect(dataSource.showMigrations).not.toHaveBeenCalled();
+    executedMigrations.mockRestore();
+  });
+
+  it('does not baseline an empty ledger when the entity column shape is incomplete', async () => {
+    const executedMigrations = vi
+      .spyOn(MigrationExecutor.prototype, 'getExecutedMigrations')
+      .mockResolvedValue([]);
+    const bootstrapRunner = {
+      ...createBootstrapRunner(vi.fn().mockResolvedValue(true)),
+      getTable: vi.fn(async (tablePath: string) => tablePath === 'main.users'
+        ? { name: 'users', schema: 'main', columns: [{ name: 'legacy_id' }] }
+        : undefined),
+    };
+    const integrityRunner = createIntegrityRunner();
+    const migrations = Array.from({ length: 131 }, (_, index) => ({
+      name: `Migration${1700000000000 + index}`,
+    }));
+    migrations.push({ name: 'AlternateMigration1700000000085' });
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: `main.${String(entity.name).toLowerCase()}`,
+      })),
+      entityMetadatas: [{
+        tablePath: 'main.users',
+        columns: [{ databaseName: 'id' }],
+      }],
+      migrations,
+      options: { migrationsTableName: 'migrations' },
+      driver: {
+        options: { type: 'postgres', schema: 'main' },
+        database: 'eg_test',
+        buildTableName: vi.fn().mockReturnValue('main.migrations'),
+      },
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations();
+
+    expect(executedMigrations).toHaveBeenCalledOnce();
+    expect(dataSource.runMigrations).toHaveBeenCalledOnce();
+    expect(dataSource.runMigrations).toHaveBeenCalledWith({ transaction: 'all' });
+    expect(dataSource.runMigrations).not.toHaveBeenCalledWith({ fake: true });
+    executedMigrations.mockRestore();
   });
 
   it('does not fake the migration baseline when a non-core canonical table already exists', async () => {

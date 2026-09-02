@@ -149,13 +149,18 @@ test('derives published plugin host identity from the immutable release tag', as
   assert.equal(managerExample.capability.managerVersion, managerPackage.version);
   assert.match(
     referenceBundleSource,
-    /sdk: pluginMinorCompatibilityRangeV1\(\s*pluginPlatformReleaseIdentityV1\.sdkVersion,?\s*\)/,
-    'the reference plugin SDK range must derive from the canonical release identity',
+    /const previousSdkVersion\s*=\s*pluginPlatformReleaseIdentityV1\.supportedSdkVersions\.find/,
+    'the reference plugin compatibility fixture must select from the canonical supported SDK versions',
   );
   assert.match(
     referenceBundleSource,
-    /pluginPlatformReleaseIdentityV1\.sharedFrontend\.pluginSdk/,
-    'the reference plugin shared SDK runtime must derive from the canonical release identity',
+    /sdk: pluginMinorCompatibilityRangeV1\(previousSdkVersion\)/,
+    'the reference plugin SDK range must exercise the selected previous supported SDK',
+  );
+  assert.match(
+    referenceBundleSource,
+    /pluginSdk: previousSdkVersion/,
+    'the reference plugin shared SDK runtime must match its compatibility range',
   );
 
   for (const [path, dockerfile] of [
@@ -170,7 +175,17 @@ test('derives published plugin host identity from the immutable release tag', as
     assert.match(dockerfile, /ENV ENTERPRISEGLUE_HOST_VERSION=\$\{ENTERPRISEGLUE_HOST_VERSION\}/);
   }
 
-  assert.match(workflow, /host_version="\$\{image_tag#v\}"/);
+  assert.match(
+    workflow,
+    /default_host_version=.*packages\/plugin-sdk\/src\/platform\.ts/,
+    'non-release image builds must derive host identity from the checked-in platform contract',
+  );
+  assert.match(workflow, /host_version="\$\{default_host_version\}"/);
+  assert.match(
+    workflow,
+    /host_version="\$\{image_version#v\}"/,
+    'release builds must derive host identity from the immutable release version',
+  );
   assert.equal(
     [...workflow.matchAll(/ENTERPRISEGLUE_HOST_VERSION=\$\{\{ steps\.meta\.outputs\.host_version \}\}/g)].length,
     2,
@@ -188,4 +203,19 @@ test('keeps the real source backend image build in both CI implementations', asy
     assert.match(workflow, /name: Verify source backend image dependency contract/);
     assert.match(workflow, /-f backend\/Dockerfile \\\n\s+-t eg-source-backend-contract:pr/);
   }
+});
+
+test('packages compiled shared migrations in the production backend image', async () => {
+  const dockerfile = await readFile(new URL('backend/Dockerfile.prod', rootUrl), 'utf8');
+
+  assert.match(
+    dockerfile,
+    /COPY --from=build \/repo\/packages\/shared\/dist \.\/dist\/packages\/shared\/dist/,
+    'the production image must include the compiled shared migration inventory',
+  );
+  assert.doesNotMatch(
+    dockerfile,
+    /COPY --from=build \/repo\/packages\/shared\/src\/db\/migrations/,
+    'raw TypeScript migrations are not executable in the production image',
+  );
 });

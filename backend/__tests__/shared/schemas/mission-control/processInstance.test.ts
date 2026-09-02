@@ -23,6 +23,14 @@ describe('process instance transport contract', () => {
     expect(definition).toMatchObject({ key: 'payments', adapterDiagnostic: { retained: true } });
   });
 
+  it('accepts the null version tag returned by Camunda-compatible engines', () => {
+    const definition = ProcessDefinitionSchema.parse({
+      id: 'payments:3:abc', key: 'payments', name: 'Payments', version: 3, versionTag: null,
+    });
+
+    expect(definition.versionTag).toBeNull();
+  });
+
   it('validates recursive runtime activity trees while retaining adapter diagnostics', () => {
     const tree = RuntimeActivityInstanceTreeSchema.parse({ id: 'root', activityId: 'start', childActivityInstances: [{ id: 'child', activityId: 'task', adapterDiagnostic: true }] });
     expect(tree.childActivityInstances?.[0]).toMatchObject({ id: 'child', adapterDiagnostic: true });
