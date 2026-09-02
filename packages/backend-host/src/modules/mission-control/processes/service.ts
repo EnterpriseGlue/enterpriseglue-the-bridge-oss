@@ -6,6 +6,8 @@ export interface ProcessDefinition {
   key: string
   name?: string
   version: number
+  versionTag?: string | null
+  suspended?: boolean
   deploymentId: string
   tenantId?: string
 }

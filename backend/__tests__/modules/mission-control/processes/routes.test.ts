@@ -192,7 +192,14 @@ describe('mission-control processes routes', () => {
 
   it('preserves a null process-definition version tag from Operaton', async () => {
     vi.mocked(listProcessDefinitions).mockResolvedValueOnce([
-      { id: 'process1:1:pd1', key: 'process1', name: 'Process 1', version: 1, versionTag: null },
+      {
+        id: 'process1:1:pd1',
+        key: 'process1',
+        name: 'Process 1',
+        version: 1,
+        versionTag: null,
+        deploymentId: 'deployment-1',
+      },
     ]);
 
     const response = await request(app)
@@ -201,7 +208,14 @@ describe('mission-control processes routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
-      { id: 'process1:1:pd1', key: 'process1', name: 'Process 1', version: 1, versionTag: null },
+      {
+        id: 'process1:1:pd1',
+        key: 'process1',
+        name: 'Process 1',
+        version: 1,
+        versionTag: null,
+        deploymentId: 'deployment-1',
+      },
     ]);
   });
 
