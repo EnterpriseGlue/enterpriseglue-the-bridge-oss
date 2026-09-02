@@ -43,7 +43,8 @@
     ]
   },
   "security": [
-    "Historic variable values continue through the existing history authorization and redaction route; the frontend does not bypass engine variable permissions."
+    "Historic variable values continue through the existing history authorization and redaction route; the frontend does not bypass engine variable permissions.",
+    "Plugin installer and manager images rebuild Cosign with patched google.golang.org/grpc 1.83.1 so the bundled verification tool is not affected by the upstream xDS RBAC header-matching vulnerability."
   ],
   "documentation": [
     "This release note documents the corrected persisted-health and completed-instance variable behavior; no configuration or operator procedure changes."
@@ -63,6 +64,7 @@
     "The pull-request CI pipeline runs an explicit Mission Control regression suite for health persistence, all five TypeORM adapter mappings, Operaton definition compatibility, process overview/detail behavior, historical variables, diagram layout states, and tenant-safe navigation; a CI contract prevents that lane or the transformer database-matrix trigger from being removed silently.",
     "Workspace runtime validation now matches the reference plugin's intentional previous-SDK compatibility fixture, and the bundled plugin-manager example advertises the current package version.",
     "Release-policy CI refreshes pull-request labels after labeled and unlabeled events so concurrent release-label automation cannot create a false missing-label failure while auto-merge is being enabled.",
+    "Plugin toolchain image contracts pin google.golang.org/grpc 1.83.1, and production-image scanning verifies the rebuilt Cosign binaries contain no HIGH or CRITICAL findings.",
     "The 1440x900 UI evidence audit validates process overview, completed detail, and missing-layout detail screenshots.",
     "A production-image contract and container rehearsal verify that all compiled migrations are packaged and that a v0.20.0 empty migration ledger is repaired without replaying historical DDL."
   ],

@@ -73,7 +73,7 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && go mod init enterpriseglue.local/cosign-build \
   && retry go get github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3 \
       golang.org/x/crypto@v0.55.0 \
-      google.golang.org/grpc@v1.82.1 \
+      google.golang.org/grpc@v1.83.1 \
       golang.org/x/mod@v0.40.0 \
       golang.org/x/text@v0.41.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
@@ -83,7 +83,7 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && go version -m /out/cosign | grep -E 'golang.org/x/crypto[[:space:]]+v0\.55\.0' \
   && go version -m /out/cosign | grep -E 'golang.org/x/mod[[:space:]]+v0\.40\.0' \
   && go version -m /out/cosign | grep -E 'golang.org/x/text[[:space:]]+v0\.41\.0' \
-  && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.82\.1'
+  && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.83\.1'
 
 FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
