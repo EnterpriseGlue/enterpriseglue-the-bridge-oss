@@ -14,7 +14,8 @@
   "summary": "Publish host packages from exact signed release-candidate bytes and harden engine health, compatibility, release timing, changelog, native arm64, and rollback controls.",
   "userImpact": [
     "Engine health checks stop automatically repeating deterministic client errors and use bounded backoff for transient failures.",
-    "The frontend host package now resolves its exported static assets from the files actually retained in the package."
+    "The frontend host package now resolves its exported static assets from the files actually retained in the package.",
+    "The public plugin API and its host consumers now use new immutable patch versions whose retained package bytes include the repository license."
   ],
   "upgrade": {
     "required": false,
@@ -54,6 +55,18 @@
     "Run the scheduled scratch recovery drill contract and release changelog merge-strategy tests."
   ],
   "packages": [
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.4.0",
+      "newVersion": "0.4.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.13.4",
+      "newVersion": "0.13.5",
+      "impact": "patch"
+    },
     {
       "name": "@enterpriseglue/frontend-host",
       "previousVersion": "0.15.3",
