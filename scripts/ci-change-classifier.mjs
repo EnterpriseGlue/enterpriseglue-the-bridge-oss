@@ -122,7 +122,7 @@ const classifiers = {
   ],
   plugin_packaging: [
     /^packages\/(?:enterprise-plugin-api|plugin-sdk|plugin-runtime|plugin-installer|plugin-manager)\/package\.json$/,
-    /^scripts\/(?:publish-plugin-package-set|verify-plugin-package-tarballs|check-published-package-version-discipline|check-workspace-dependency-version-drift|enterpriseglue-distribution-lock)/,
+    /^scripts\/(?:publish-(?:plugin|host)-package-set|verify-(?:plugin|host)-package-tarballs|package-tarball-contract|check-published-package-version-discipline|check-workspace-dependency-version-drift|enterpriseglue-distribution-lock)/,
     /^\.github\/workflows\/(?:plugin-package-release|publish-(?:backend-host|frontend-host|plugin-api|shared))\.yml$/,
     rootDependencyPattern,
   ],
@@ -146,7 +146,7 @@ const classifiers = {
     /^\.github\/(?:workflows|actions)\//,
     /^\.release-notes\/schema\.json$/,
     /^plugins\/enterpriseglue-dev-workflows\//,
-    /^scripts\/(?:check-ci-aggregate-contract|ci-(?:change-classifier|change-detection|observability)|security-workflow-contract|evaluate-ci-needs|release-|run-release-|prepare-release-|fetch-release-candidate|publish-plugin-package-set|verify-plugin-package-tarballs|check-(?:release|plugin-package-release|plugin-toolchain-release|host-chart-release|published-package-version-discipline|workspace-dependency-version-drift)|plan-plugin-toolchain-charts|helm-chart-archive)/,
+    /^scripts\/(?:check-ci-aggregate-contract|ci-(?:change-classifier|change-detection|observability)|security-workflow-contract|evaluate-ci-needs|release-|run-release-|prepare-release-|fetch-release-candidate|publish-(?:plugin|host)-package-set|verify-(?:plugin|host)-package-tarballs|package-tarball-contract|check-(?:release|plugin-package-release|plugin-toolchain-release|host-chart-release|published-package-version-discipline|workspace-dependency-version-drift)|plan-plugin-toolchain-charts|helm-chart-archive)/,
     /^docs\/runbooks\/release-artifact-promotion\.md$/,
     /^docs\/development\/(?:ci-and-release-routing|release-notes-process|codex-workflow-plugin)\.md$/,
   ],

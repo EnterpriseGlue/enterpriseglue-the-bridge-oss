@@ -94,10 +94,17 @@ release pull request. The workflow then:
 1. validates that the manifest, latest stable tag, and changelog agree;
 2. finds all fragments changed since the latest stable tag;
 3. generates `docs/releases/vX.Y.Z.md` on the Release Please branch;
-4. synchronizes that document to a managed release pull-request comment while
+4. removes duplicate top-release changelog entries only when Git proves that
+   one linked commit is already represented by its merge commit;
+5. synchronizes that document to a managed release pull-request comment while
    preserving Release Please's machine-readable pull-request body; and
-5. publishes the same document as the GitHub release body after the release
+6. publishes the same document as the GitHub release body after the release
    pull request is merged.
+
+The ancestry-aware changelog pass retains the merge commit entry, leaves
+unrelated commits with identical text untouched, and never rewrites an older
+published release section. This accommodates the merge-queue identity required
+by signed release candidates without accepting duplicate release entries.
 
 Release Please may mutate a release branch only when at least one non-schema
 `.release-notes/*.json` fragment changed since the latest stable tag, or when
@@ -134,7 +141,8 @@ binds its retained receipt to the exact candidate commit. It:
 1. verifies that every job in the main CI workflow is covered by the required
    `ci-complete` aggregate;
 2. checks published-package version discipline from the latest stable tag;
-3. builds, tests, packs, and validates the public plugin package set;
+3. builds, tests, packs, and validates the five plugin/API packages and the
+   shared, backend-host, and frontend-host package set;
 4. compares existing immutable package and Helm chart versions with the
    candidate payload, or records that a new version would be published;
 5. builds the backend, frontend, plugin-installer, and Plugin Manager
@@ -203,6 +211,8 @@ After publication, verify:
 - release image smoke tests pass;
 - the vulnerability scan evaluates the newly published digests; and
 - protected package publication completes for the exact release commit;
+- host package publication consumes the exact signed candidate tarballs rather
+  than rebuilding from an arbitrary `main` push;
 - the signed plugin-toolchain workflow completes for the exact release commit;
 - supported plugin-consumer compatibility checks pass against the package
   versions listed in the release notes.

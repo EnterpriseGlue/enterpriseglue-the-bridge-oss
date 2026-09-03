@@ -1,6 +1,9 @@
-name: Publish plugin SDK packages
+name: Publish Plugin/API Packages
 
 on:
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       source_ref:
@@ -24,7 +27,7 @@ permissions:
   attestations: write
 
 concurrency:
-  group: enterpriseglue-plugin-packages-production
+  group: enterpriseglue-plugin-packages-production-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -35,36 +38,62 @@ jobs:
     environment: plugin-packages-production
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      SOURCE_REF: ${{ inputs.source_ref }}
       PACKAGE_DIRECTORY: .artifacts/plugin-packages
     steps:
       - name: Validate protected release authority
+        id: authority
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
+          if [[ "$EVENT_NAME" == release ]]; then
+            SOURCE_REF="$GITHUB_SHA"
+            RELEASE_TAG="$EVENT_RELEASE_TAG"
+            DRY_RUN=false
+            [[ "$GITHUB_REF" == "refs/tags/$RELEASE_TAG" ]] || {
+              echo "The release event ref must match the published tag" >&2
+              exit 1
+            }
+          else
+            SOURCE_REF="$INPUT_SOURCE_REF"
+            RELEASE_TAG="$INPUT_RELEASE_TAG"
+            DRY_RUN="${INPUT_DRY_RUN:-true}"
+            [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+              echo "Manual package recovery must run from refs/heads/main" >&2
+              exit 1
+            }
+          fi
           [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]] || {
             echo "source_ref must be an immutable 40-character commit" >&2
             exit 1
           }
           [[ "$GITHUB_REPOSITORY_OWNER" == "EnterpriseGlue" ]]
-          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
-            echo "The protected package workflow must run from refs/heads/main" >&2
-            exit 1
-          }
-          if [[ -z "${{ inputs.release_tag }}" ]]; then
+          if [[ -z "$RELEASE_TAG" ]]; then
             [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
               echo "A non-current source_ref requires an exact release_tag" >&2
               exit 1
             }
           else
-            [[ "${{ inputs.release_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           fi
+          {
+            echo "SOURCE_REF=$SOURCE_REF"
+            echo "RELEASE_TAG=$RELEASE_TAG"
+            echo "source_ref=$SOURCE_REF"
+            echo "release_tag=$RELEASE_TAG"
+            echo "dry_run=$DRY_RUN"
+          } | tee -a "$GITHUB_ENV" >> "$GITHUB_OUTPUT"
 
       - name: Checkout the exact public OSS revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 1
+          ref: ${{ steps.authority.outputs.source_ref }}
+          fetch-depth: 0
 
       - name: Verify checked-out source identity
         id: source
@@ -74,20 +103,25 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$SOURCE_REF" refs/remotes/origin/main || {
+            echo "Released package source must be contained in protected main" >&2
+            exit 1
+          }
           test -z "$(git status --porcelain)"
-          if [[ -n "${{ inputs.release_tag }}" ]]; then
+          if [[ -n "$RELEASE_TAG" ]]; then
             git fetch --force --tags origin
-            [[ "$(git rev-list -n 1 '${{ inputs.release_tag }}')" == "$SOURCE_REF" ]]
-            gh release view "${{ inputs.release_tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null
+            [[ "$(git rev-list -n 1 "$RELEASE_TAG")" == "$SOURCE_REF" ]]
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
           fi
-          if [[ "${{ inputs.dry_run }}" != "true" ]] && git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
-            [[ "${{ inputs.release_tag }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+          if [[ "${{ steps.authority.outputs.dry_run }}" != "true" ]] && git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
               echo "New package publications require the signed candidate release_tag" >&2
               exit 1
             }
           fi
           candidate_required=false
-          if [[ -n "${{ inputs.release_tag }}" ]] && git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
+          if [[ -n "$RELEASE_TAG" ]] && git cat-file -e "$SOURCE_REF:.github/workflows/release-candidate-stage.yml" 2>/dev/null; then
             candidate_required=true
           fi
           echo "candidate_required=$candidate_required" >> "$GITHUB_OUTPUT"
@@ -132,13 +166,15 @@ jobs:
           set -euo pipefail
           candidate="$RUNNER_TEMP/release-candidate"
           mkdir -p "$candidate"
-          bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "${{ inputs.release_tag }}" "$candidate" >/dev/null
+          bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "$RELEASE_TAG" "$candidate" >/dev/null
           echo "CANDIDATE_PAYLOAD=$candidate" >> "$GITHUB_ENV"
 
-      - name: Install immutable dependencies
+      - name: Install fallback build dependencies
+        if: steps.source.outputs.candidate_required != 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Test and build public packages
+      - name: Test and build fallback public packages
+        if: steps.source.outputs.candidate_required != 'true'
         run: |
           set -euo pipefail
           pnpm --filter @enterpriseglue/plugin-sdk run test
@@ -158,8 +194,9 @@ jobs:
           set -euo pipefail
           mkdir -p "$PACKAGE_DIRECTORY"
           if [[ -n "${CANDIDATE_PAYLOAD:-}" ]]; then
-            cp "$CANDIDATE_PAYLOAD"/packages/*.tgz "$PACKAGE_DIRECTORY/"
+            cp "$CANDIDATE_PAYLOAD"/packages/plugin/*.tgz "$PACKAGE_DIRECTORY/"
           else
+            pnpm --dir packages/enterprise-plugin-api pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
             pnpm --dir packages/plugin-sdk pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
             pnpm --dir packages/plugin-runtime pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
             pnpm --dir packages/plugin-installer pack --pack-destination "$GITHUB_WORKSPACE/$PACKAGE_DIRECTORY"
@@ -178,7 +215,7 @@ jobs:
             tee "$PACKAGE_DIRECTORY/registry-plan.json"
 
       - name: Publish dry run
-        if: inputs.dry_run == true
+        if: steps.authority.outputs.dry_run == 'true'
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -188,7 +225,7 @@ jobs:
             tee "$PACKAGE_DIRECTORY/publication-receipt.json"
 
       - name: Publish packages in dependency order
-        if: inputs.dry_run != true
+        if: steps.authority.outputs.dry_run != 'true'
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -198,13 +235,13 @@ jobs:
             tee "$PACKAGE_DIRECTORY/publication-receipt.json"
 
       - name: Attest published package payloads
-        if: inputs.dry_run != true
+        if: steps.authority.outputs.dry_run != 'true'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
           subject-path: ${{ env.PACKAGE_DIRECTORY }}/*.tgz
 
       - name: Verify registry visibility
-        if: inputs.dry_run != true
+        if: steps.authority.outputs.dry_run != 'true'
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -216,7 +253,7 @@ jobs:
       - name: Retain non-secret package receipt and tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: plugin-packages-${{ inputs.source_ref }}
+          name: plugin-packages-${{ steps.authority.outputs.source_ref }}
           path: ${{ env.PACKAGE_DIRECTORY }}
           if-no-files-found: error
           retention-days: 30

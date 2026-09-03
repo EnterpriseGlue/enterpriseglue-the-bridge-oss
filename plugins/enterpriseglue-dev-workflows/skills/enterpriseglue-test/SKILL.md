@@ -17,8 +17,10 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
    - OpenAPI, JSON configuration, TypeORM, or documentation parity:
      `enterpriseglue-contract-parity`;
    - migration portability: `pnpm run test:engine-tenancy:database-matrix`.
-3. Check PostgreSQL, Docker, browsers, and local stack readiness before the
-   lanes that require them. Preserve existing services and evidence.
+3. Check PostgreSQL, Docker, browsers, ports, worktree-local environment, and
+   stack identity before lanes that require them. Preserve existing services
+   and evidence; do not reuse another worktree's Compose identity as test
+   evidence.
 4. Run commands with the active worktree as explicit working directory. Record
    exact commands, versions, counts, failures, skipped lanes, and artifacts.
 5. In an owning plugin repository, include its OSS plugin API and supported
@@ -28,8 +30,11 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
    and `pnpm run test:ci-change-detection`. Verify selected lanes cannot be
    skipped by the stable aggregate. For Mission Control browser evidence, fail
    on unexpected console warnings/errors, page errors, failed requests, HTTP
-   4xx/5xx responses, and visible error boundaries.
+   4xx/5xx responses, and visible error boundaries. For package release
+   changes, pack the built five plugin/API and three host packages and verify
+   dependency references plus exported entry points from the tarballs.
 7. Treat the five-database candidate aggregate and pinned real-Operaton browser
    journey as distinct evidence. Static adapter tests do not replace physical
    database qualification, and a mock engine does not replace the required
-   supported Operaton backstop.
+   supported Operaton backstop. The scheduled moving-Operaton lane is an early
+   compatibility warning and does not replace the pinned release gate.

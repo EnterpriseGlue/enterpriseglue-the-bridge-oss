@@ -4,9 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { verifyPackageEntryPoints } from './package-tarball-contract.mjs';
 
 const expected = new Map(
   [
+    ['@enterpriseglue/enterprise-plugin-api', '../packages/enterprise-plugin-api/package.json'],
     ['@enterpriseglue/plugin-sdk', '../packages/plugin-sdk/package.json'],
     ['@enterpriseglue/plugin-runtime', '../packages/plugin-runtime/package.json'],
     ['@enterpriseglue/plugin-installer', '../packages/plugin-installer/package.json'],
@@ -20,7 +24,7 @@ const expected = new Map(
   }),
 );
 
-const forbiddenReference = /^(?:workspace:|link:|file:|\/|[A-Za-z]:\\)/;
+const forbiddenReference = /^(?:workspace:|link:|file:|\/|\.\.?[\\/]|[A-Za-z]:\\)/;
 
 function fail(message) {
   throw new Error(message);
@@ -53,6 +57,7 @@ export function verifyPluginPackageTarballs(directory) {
     if (!manifest.exports && !manifest.bin) {
       fail(`${manifest.name} has neither exports nor a CLI binary.`);
     }
+    verifyPackageEntryPoints({ manifest, tarball });
     for (const field of [
       'dependencies',
       'optionalDependencies',
@@ -81,7 +86,8 @@ export function verifyPluginPackageTarballs(directory) {
   return receipt.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-try {
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) try {
   const directory = process.argv[2];
   if (!directory) fail('Usage: node scripts/verify-plugin-package-tarballs.mjs <directory>');
   console.log(JSON.stringify({ packages: verifyPluginPackageTarballs(directory) }, null, 2));

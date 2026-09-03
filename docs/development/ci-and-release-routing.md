@@ -74,17 +74,23 @@ error boundaries fail the test. An exception must name an owner and reason,
 have a future expiry date, and link to an HTTPS issue. Wildcard exceptions are
 invalid.
 
-Engine health queries share a bounded retry policy: client-side 4xx responses
-are not retried, while a network or server failure receives one retry. This
-prevents a single dependency or contract error from becoming a browser error
-storm.
+Engine health queries share one cache key and a bounded retry/polling policy.
+Client-side 4xx responses are neither retried nor automatically polled until a
+configuration mutation invalidates the query. Network and server failures
+receive one immediate retry, then poll with exponential backoff capped at five
+minutes. Healthy engines poll every 30 seconds, background tabs do not poll,
+and window focus does not multiply requests. This prevents a single dependency
+or contract error from becoming a browser error storm while allowing transient
+outages to recover automatically.
 
 ## Candidate images and promotion
 
 Backend and frontend images build as four independent component/platform jobs:
 backend amd64, backend arm64, frontend amd64, and frontend arm64. Each job uses
-a component- and architecture-specific registry cache. Until protected native
-arm64 capacity is configured, arm64 uses the explicit QEMU fallback.
+a component- and architecture-specific registry cache. The amd64 jobs run on
+`ubuntu-24.04`; arm64 jobs run natively on GitHub's `ubuntu-24.04-arm` runner.
+Both architectures remain mandatory, and a missing native runner fails closed
+instead of silently moving release-critical compilation back under emulation.
 
 The image workflow checks out the exact immutable `source_ref`, disables
 persisted Git credentials, verifies `HEAD`, and uses that same SHA for OCI
@@ -97,14 +103,36 @@ component, verifies the resolved digest and OCI metadata, then signs and
 attests the manifest. Release publication promotes the exact qualified
 candidate digest; it does not rebuild source bytes after qualification.
 
+The signed candidate also carries the exact shared, backend-host, and
+frontend-host package tarballs. These packages no longer publish merely
+because their source reaches `main`. The release event verifies the Git tag,
+candidate signature, receipt checksum, canonical registry payload, and
+protected environment before publishing the retained bytes in dependency
+order. The protected publisher does not reinstall or rebuild release packages;
+those gates already ran before the candidate was signed. The fallback build is
+available only to the non-publishing legacy verification path.
+
 ## Release canary
 
 `.github/workflows/release-canary.yml` runs nightly and supports manual
 dispatch. It invokes the production reusable image workflow against dedicated
 GHCR scratch repositories, verifies exact ORAS and Cosign identities, and runs
 the package, chart, image, plugin-payload, and receipt readiness drill with
-publication disabled. It cannot advance a semantic release tag, `latest`, a
-Docker Hub alias, or a public package.
+no public publication. A second scratch-only job deliberately advances one
+half of a backend/frontend alias pair, detects the partial state, restores the
+previous pair, and proves missing candidate and registry lookups fail closed.
+
+`.github/workflows/engine-compatibility.yml` runs weekly and on demand. It runs
+the complete Mission Control process/health/BPMN/variables/console journey in
+parallel against the pinned supported Operaton 2.1 digest and the moving
+upstream `latest` tag. The moving lane is deliberately outside pull-request and
+release critical paths, but it is not allowed to hide a compatibility failure.
+
+`.github/workflows/ci-cost-report.yml` evaluates a rolling seven-day window
+daily. It opens or refreshes one repository issue for a candidate p95 above 45
+minutes, first-attempt success below 90%, real workflow failures, workflow or
+application-image retries, or a tagged application-image rebuild. Superseded
+cancellations remain separately classified and do not become failures.
 
 Treat a failed canary as a release-control defect. Repair and rerun it before a
 material release workflow change is allowed to publish.

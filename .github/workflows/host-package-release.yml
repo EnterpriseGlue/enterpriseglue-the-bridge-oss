@@ -1,0 +1,196 @@
+name: Publish Host Packages
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact 40-character released OSS commit
+        required: true
+        type: string
+      release_tag:
+        description: Existing vX.Y.Z GitHub release tag
+        required: true
+        type: string
+      dry_run:
+        description: Verify the signed candidate without publishing
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: host-packages-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish exact signed candidate host packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: host-packages-production
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PACKAGE_DIRECTORY: ${{ github.workspace }}/.artifacts/host-packages
+      PLUGIN_DEPENDENCY_DIRECTORY: ${{ github.workspace }}/.artifacts/plugin-dependencies
+    steps:
+      - name: Resolve immutable release identity
+        id: release
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == release ]]; then
+            source_ref="$GITHUB_SHA"
+            release_tag="$EVENT_RELEASE_TAG"
+            dry_run=false
+            [[ "$GITHUB_REF" == "refs/tags/$release_tag" ]] || {
+              echo "The release event ref must match the published tag" >&2
+              exit 1
+            }
+          else
+            [[ "$GITHUB_REF" == refs/heads/main ]] || {
+              echo "Manual package recovery must run from refs/heads/main" >&2
+              exit 1
+            }
+            source_ref="$INPUT_SOURCE_REF"
+            release_tag="$INPUT_RELEASE_TAG"
+            dry_run="${INPUT_DRY_RUN:-true}"
+          fi
+          [[ "$GITHUB_REPOSITORY_OWNER" == EnterpriseGlue ]]
+          [[ "$source_ref" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          {
+            echo "source_ref=$source_ref"
+            echo "release_tag=$release_tag"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact released source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.source_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag and GitHub release identity
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_REF: ${{ steps.release.outputs.source_ref }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$SOURCE_REF" refs/remotes/origin/main || {
+            echo "Released package source must be contained in protected main" >&2
+            exit 1
+          }
+          [[ "$(git rev-list -n 1 "$RELEASE_TAG")" == "$SOURCE_REF" ]]
+          [[ "$(gh release view "$RELEASE_TAG" --json tagName --jq .tagName)" == "$RELEASE_TAG" ]]
+          test -z "$(git status --porcelain)"
+
+      - name: Set up Node.js and GitHub Packages
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@enterpriseglue"
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v3.10.1
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch exact host package candidate payload
+        env:
+          SOURCE_REF: ${{ steps.release.outputs.source_ref }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/release-candidate"
+          mkdir -p "$candidate" "$PACKAGE_DIRECTORY" "$PLUGIN_DEPENDENCY_DIRECTORY"
+          bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "$RELEASE_TAG" "$candidate" >/dev/null
+          cp "$candidate"/packages/host/*.tgz "$PACKAGE_DIRECTORY/"
+          cp "$candidate"/packages/plugin/*.tgz "$PLUGIN_DEPENDENCY_DIRECTORY/"
+          node scripts/verify-host-package-tarballs.mjs "$PACKAGE_DIRECTORY" > "$PACKAGE_DIRECTORY/release-receipt.json"
+          node scripts/verify-plugin-package-tarballs.mjs "$PLUGIN_DEPENDENCY_DIRECTORY" > "$PLUGIN_DEPENDENCY_DIRECTORY/release-receipt.json"
+
+      - name: Require exact plugin and API dependency versions in the registry
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          error_log="$RUNNER_TEMP/plugin-package-verification.err"
+          for attempt in $(seq 1 45); do
+            if node scripts/publish-plugin-package-set.mjs verify "$PLUGIN_DEPENDENCY_DIRECTORY" \
+              > "$PLUGIN_DEPENDENCY_DIRECTORY/registry-verification.json" 2> "$error_log"; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 45 ]]; then sleep 20; fi
+          done
+          cat "$error_log" >&2
+          echo "Host package publication is blocked until every signed plugin/API dependency is visible." >&2
+          exit 1
+
+      - name: Verify existing versions or plan immutable publications
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-host-package-set.mjs plan "$PACKAGE_DIRECTORY" | tee "$PACKAGE_DIRECTORY/registry-plan.json"
+
+      - name: Publish dry run
+        if: steps.release.outputs.dry_run == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-host-package-set.mjs dry-run "$PACKAGE_DIRECTORY" | tee "$PACKAGE_DIRECTORY/publication-receipt.json"
+
+      - name: Publish exact candidate packages in dependency order
+        if: steps.release.outputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-host-package-set.mjs publish "$PACKAGE_DIRECTORY" | tee "$PACKAGE_DIRECTORY/publication-receipt.json"
+
+      - name: Attest exact published package payloads
+        if: steps.release.outputs.dry_run != 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.1.0
+        with:
+          subject-path: ${{ env.PACKAGE_DIRECTORY }}/*.tgz
+
+      - name: Verify registry payload identity
+        if: steps.release.outputs.dry_run != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-host-package-set.mjs verify "$PACKAGE_DIRECTORY" | tee "$PACKAGE_DIRECTORY/registry-verification.json"
+
+      - name: Retain non-secret publication receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: host-packages-${{ steps.release.outputs.source_ref }}
+          path: |
+            ${{ env.PACKAGE_DIRECTORY }}
+            ${{ env.PLUGIN_DEPENDENCY_DIRECTORY }}
+          if-no-files-found: warn
+          retention-days: 30

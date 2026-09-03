@@ -1,0 +1,161 @@
+name: Engine Compatibility
+
+on:
+  schedule:
+    - cron: "40 1 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-compatibility-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  operaton-browser:
+    name: Operaton ${{ matrix.profile }} Mission Control journey
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: supported-2.1
+            image: operaton/operaton@sha256:0843bc2b4cedf1d01fdc965203f8c213c3d63a810d49c43fc141608a6f9bb813
+            expected_version: ^2\.1(?:\.|$)
+          - profile: upstream-latest-advisory
+            image: operaton/operaton:latest
+            expected_version: ^[0-9]+\.[0-9]+(?:\.|$)
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: postgres
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: false
+      POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      JWT_SECRET: engine-compatibility-browser-secret-000000000000000
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      FRONTEND_URL: http://localhost:5173
+      EG_ENGINE_ALLOWED_HOSTS: 127.0.0.1
+      EG_ENGINE_ALLOW_PRIVATE_HOSTS: true
+      EG_ALLOW_INSECURE_ENGINE_HTTP: true
+      EG_ENFORCE_ENGINE_ENDPOINT_POLICY: true
+    steps:
+      - name: Checkout exact compatibility source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact source checkout
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.0.8
+
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build compatibility sources
+        run: |
+          pnpm --filter shared run build
+          pnpm --filter frontend-host run build
+          pnpm --filter webmodeler-backend run build:skip-generate
+
+      - name: Prepare database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+          pnpm --filter webmodeler-backend run db:schema:sync
+
+      - name: Start Operaton and EnterpriseGlue
+        env:
+          OPERATON_IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          mkdir -p ".artifacts/engine-compatibility/${{ matrix.profile }}"
+          docker run --detach --rm --name "eg-operaton-${{ matrix.profile }}" \
+            --publish 127.0.0.1:18080:8080 "$OPERATON_IMAGE" >/dev/null
+          pnpm --filter webmodeler-backend run start:compiled > ".artifacts/engine-compatibility/${{ matrix.profile }}/backend.log" 2>&1 &
+          pnpm --filter webmodeler-frontend run dev -- --host 0.0.0.0 --port 5173 > ".artifacts/engine-compatibility/${{ matrix.profile }}/frontend.log" 2>&1 &
+          for _ in {1..120}; do
+            if curl -sf http://localhost:8787/ready >/dev/null \
+              && curl -sf http://localhost:5173/login >/dev/null \
+              && curl -sf http://127.0.0.1:18080/engine-rest/version >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Run process overview, detail, BPMN, variables, state, health, and diagnostics
+        env:
+          OPERATON_EXPECTED_VERSION_PATTERN: ${{ matrix.expected_version }}
+        run: |
+          set -euo pipefail
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm --network host --ipc host --user "$(id -u):$(id -g)" \
+            -e CI=true -e HOME=/tmp -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_API_BASE_URL=http://localhost:8787 \
+            -e E2E_SEED_USER=true -e E2E_DIRECT_DB_CLEANUP=true \
+            -e DATABASE_TYPE -e POSTGRES_HOST -e POSTGRES_PORT -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD -e POSTGRES_DATABASE -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e OPERATON_BACKSTOP_BROWSER_EVIDENCE=true \
+            -e OPERATON_BACKSTOP_RESTART_BACKEND=false \
+            -e OPERATON_EXPECTED_VERSION_PATTERN \
+            -e OPERATON_BACKSTOP_ENGINE_URL=http://127.0.0.1:18080/engine-rest \
+            -e OPERATON_BACKSTOP_DIRECT_URL=http://127.0.0.1:18080/engine-rest \
+            -v "$PWD:/work" -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test test/e2e/operaton-backstop-browser.spec.ts --config test/e2e/playwright.config.ts"
+
+      - name: Capture engine compatibility diagnostics
+        if: failure()
+        run: |
+          docker logs --tail 300 "eg-operaton-${{ matrix.profile }}" > ".artifacts/engine-compatibility/${{ matrix.profile }}/operaton.log" 2>&1 || true
+          docker ps --all --format '{{.Names}} {{.Image}} {{.Status}}' > ".artifacts/engine-compatibility/${{ matrix.profile }}/docker-ps.txt"
+
+      - name: Retain compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-compatibility-${{ matrix.profile }}-${{ github.sha }}
+          path: |
+            .artifacts/engine-compatibility/${{ matrix.profile }}
+            test/results/playwright
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove Operaton compatibility container
+        if: always()
+        continue-on-error: true
+        run: docker rm --force "eg-operaton-${{ matrix.profile }}"

@@ -33,6 +33,100 @@ jobs:
       enable_dockerhub: false
     secrets: inherit
 
+  scratch-alias-recovery-drill:
+    name: Detect partial publication and restore scratch aliases
+    needs: scratch-images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout exact recovery logic
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact recovery source
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Authenticate scratch registry writes
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Exercise partial-publication detection and rollback
+        shell: bash
+        env:
+          SCRATCH_BACKEND: ${{ needs.scratch-images.outputs.backend_image }}
+          SCRATCH_FRONTEND: ${{ needs.scratch-images.outputs.frontend_image }}
+          CANDIDATE_BACKEND_DIGEST: ${{ needs.scratch-images.outputs.backend_digest }}
+          CANDIDATE_FRONTEND_DIGEST: ${{ needs.scratch-images.outputs.frontend_digest }}
+          PUBLIC_BACKEND: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend
+          PUBLIC_FRONTEND: ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend
+        run: |
+          set -euo pipefail
+          [[ "$SCRATCH_BACKEND" == ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend ]]
+          [[ "$SCRATCH_FRONTEND" == ghcr.io/enterpriseglue/enterpriseglue-release-canary-frontend ]]
+          baseline_backend="$(oras resolve "$PUBLIC_BACKEND:latest")"
+          baseline_frontend="$(oras resolve "$PUBLIC_FRONTEND:latest")"
+
+          docker buildx imagetools create --tag "$SCRATCH_BACKEND:recovery-baseline" "$PUBLIC_BACKEND@$baseline_backend"
+          docker buildx imagetools create --tag "$SCRATCH_FRONTEND:recovery-baseline" "$PUBLIC_FRONTEND@$baseline_frontend"
+          docker buildx imagetools create --tag "$SCRATCH_BACKEND:recovery-active" "$SCRATCH_BACKEND@$baseline_backend"
+          docker buildx imagetools create --tag "$SCRATCH_FRONTEND:recovery-active" "$SCRATCH_FRONTEND@$baseline_frontend"
+
+          # Deliberately advance only one half of the pair. The mismatch must be
+          # observed before rollback; otherwise the drill is not meaningful.
+          docker buildx imagetools create --tag "$SCRATCH_BACKEND:recovery-active" "$SCRATCH_BACKEND@$CANDIDATE_BACKEND_DIGEST"
+          active_backend="$(oras resolve "$SCRATCH_BACKEND:recovery-active")"
+          active_frontend="$(oras resolve "$SCRATCH_FRONTEND:recovery-active")"
+          [[ "$active_backend" == "$CANDIDATE_BACKEND_DIGEST" ]]
+          [[ "$active_frontend" == "$baseline_frontend" ]]
+          [[ "$active_frontend" != "$CANDIDATE_FRONTEND_DIGEST" ]]
+
+          docker buildx imagetools create --tag "$SCRATCH_BACKEND:recovery-active" "$SCRATCH_BACKEND@$baseline_backend"
+          docker buildx imagetools create --tag "$SCRATCH_FRONTEND:recovery-active" "$SCRATCH_FRONTEND@$baseline_frontend"
+          [[ "$(oras resolve "$SCRATCH_BACKEND:recovery-active")" == "$baseline_backend" ]]
+          [[ "$(oras resolve "$SCRATCH_FRONTEND:recovery-active")" == "$baseline_frontend" ]]
+
+      - name: Prove missing candidates and registries fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing="$RUNNER_TEMP/missing-candidate"
+          mkdir -p "$missing"
+          if EG_RELEASE_CANDIDATE_REPOSITORY=ghcr.io/enterpriseglue/enterpriseglue-release-canary-missing \
+            bash scripts/fetch-release-candidate.sh "$(printf '0%.0s' {1..40})" v0.0.0 "$missing" >/dev/null 2>&1; then
+            echo "Missing candidate unexpectedly passed verification" >&2
+            exit 1
+          fi
+          if oras resolve ghcr.io/enterpriseglue/enterpriseglue-release-canary-missing:registry-outage-fixture >/dev/null 2>&1; then
+            echo "Missing registry fixture unexpectedly resolved" >&2
+            exit 1
+          fi
+
+      - name: Summarize scratch recovery evidence
+        run: |
+          {
+            echo "## Scratch release recovery drill"
+            echo
+            echo "- Partial backend/frontend alias update detected: yes"
+            echo "- Previous signed public digest pair restored in scratch: yes"
+            echo "- Missing candidate failed closed: yes"
+            echo "- Missing registry fixture failed closed: yes"
+            echo "- Production aliases changed: no"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   non-publishing-release-drill:
     name: Verify release control flow without public aliases
     needs: scratch-images
@@ -120,8 +214,10 @@ jobs:
         run: |
           set -euo pipefail
           jq -e '.publicationPerformed == false' .artifacts/release-readiness/release-readiness.json >/dev/null
-          jq -e '.mode == "plan"' .artifacts/release-readiness/packages/registry-plan.json >/dev/null
-          jq -e '.mode == "dry-run"' .artifacts/release-readiness/packages/publication-dry-run.json >/dev/null
+          jq -e '.mode == "plan"' .artifacts/release-readiness/packages/plugin/registry-plan.json >/dev/null
+          jq -e '.mode == "dry-run"' .artifacts/release-readiness/packages/plugin/publication-dry-run.json >/dev/null
+          jq -e '.mode == "plan"' .artifacts/release-readiness/packages/host/registry-plan.json >/dev/null
+          jq -e '.mode == "dry-run"' .artifacts/release-readiness/packages/host/publication-dry-run.json >/dev/null
           {
             echo "## Release canary"
             echo

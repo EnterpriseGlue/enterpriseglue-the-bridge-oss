@@ -15,7 +15,8 @@ import { spawnSync } from 'node:child_process';
 
 const DEFAULT_REGISTRY = 'https://npm.pkg.github.com';
 const MODES = new Set(['plan', 'dry-run', 'publish', 'verify']);
-const PACKAGE_ORDER = [
+export const PLUGIN_PACKAGE_ORDER = [
+  '@enterpriseglue/enterprise-plugin-api',
   '@enterpriseglue/plugin-sdk',
   '@enterpriseglue/plugin-runtime',
   '@enterpriseglue/plugin-installer',
@@ -206,6 +207,8 @@ export async function processPackageSet({
   directory,
   registryClient,
   digestPackage = canonicalPackageDigest,
+  packageOrder = PLUGIN_PACKAGE_ORDER,
+  schemaVersion = 'enterpriseglue-plugin-package-publication/v1',
 }) {
   assert.ok(MODES.has(mode), `unsupported mode: ${mode}`);
   const receiptPath = join(directory, 'release-receipt.json');
@@ -215,12 +218,12 @@ export async function processPackageSet({
   const results = [];
   const orderedPackages = [...receipt.packages].sort(
     (left, right) =>
-      PACKAGE_ORDER.indexOf(left.name) - PACKAGE_ORDER.indexOf(right.name),
+      packageOrder.indexOf(left.name) - packageOrder.indexOf(right.name),
   );
   assert.deepEqual(
     orderedPackages.map(({ name }) => name),
-    PACKAGE_ORDER,
-    'the protected publication set must contain each public package exactly once',
+    packageOrder,
+    'the protected publication set must contain each expected package exactly once',
   );
   for (const entry of orderedPackages) {
     assert.equal(typeof entry.name, 'string');
@@ -278,7 +281,7 @@ export async function processPackageSet({
   }
 
   return {
-    schemaVersion: 'enterpriseglue-plugin-package-publication/v1',
+    schemaVersion,
     mode,
     registry: process.env.NPM_REGISTRY || DEFAULT_REGISTRY,
     packages: results,

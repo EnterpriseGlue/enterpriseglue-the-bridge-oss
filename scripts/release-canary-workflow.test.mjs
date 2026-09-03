@@ -49,6 +49,23 @@ test('release drill verifies exact digests and cannot publish public artifacts',
   assert.doesNotMatch(drill, /docker buildx imagetools create/)
 })
 
+test('recovery drill detects a partial update and restores only scratch aliases', () => {
+  const recovery = workflow.slice(
+    workflow.indexOf('  scratch-alias-recovery-drill:\n'),
+    workflow.indexOf('  non-publishing-release-drill:\n'),
+  )
+  assert.match(recovery, /packages: write/)
+  assert.match(recovery, /enterpriseglue-release-canary-backend/)
+  assert.match(recovery, /enterpriseglue-release-canary-frontend/)
+  assert.match(recovery, /recovery-baseline/)
+  assert.match(recovery, /recovery-active/)
+  assert.match(recovery, /active_frontend.*!=.*CANDIDATE_FRONTEND_DIGEST/)
+  assert.match(recovery, /fetch-release-candidate\.sh/)
+  assert.match(recovery, /Missing candidate unexpectedly passed verification/)
+  assert.match(recovery, /Production aliases changed: no/)
+  assert.doesNotMatch(recovery, /--tag "\$PUBLIC_(?:BACKEND|FRONTEND):/)
+})
+
 test('frontend assets build natively while runtime tools match the target platform', () => {
   assert.match(
     frontendDockerfile,

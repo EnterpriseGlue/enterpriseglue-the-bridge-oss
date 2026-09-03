@@ -48,8 +48,9 @@ node scripts/sync-host-chart-release-version.mjs \
   --file "$chart_file" \
   --base-chart-version "$base_chart_version" \
   --app-version "$RELEASE_VERSION"
+node scripts/dedupe-release-changelog.mjs --file CHANGELOG.md
 
-git add "$release_file" "$chart_file"
+git add "$release_file" "$chart_file" CHANGELOG.md
 if ! git diff --cached --quiet; then
   git config user.name "enterpriseglue-release-bot"
   git config user.email "release-bot@enterpriseglue.local"
