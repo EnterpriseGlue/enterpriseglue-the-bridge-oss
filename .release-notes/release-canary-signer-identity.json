@@ -1,0 +1,44 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-canary-signer-identity",
+  "type": "internal",
+  "scope": "release-canary",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "security",
+    "developers"
+  ],
+  "summary": "Verify canary application-image signatures against the reusable workflow that actually performs the trusted signing operation.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Cosign verification remains pinned to the repository, main ref, GitHub Actions OIDC issuer, and exact reusable signer workflow."
+  ],
+  "documentation": [
+    "The canary workflow is the executable operator record for its trusted signer identity; no external procedure changes."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the expected identity only if signing responsibility moves out of the reusable image workflow."
+  ],
+  "validation": [
+    "The canary workflow contract test rejects the caller workflow as the expected application-image signer.",
+    "A protected canary must verify both signed image manifests before release resumes."
+  ],
+  "packages": []
+}

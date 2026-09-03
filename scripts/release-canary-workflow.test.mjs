@@ -35,6 +35,11 @@ test('release drill verifies exact digests and cannot publish public artifacts',
   assert.doesNotMatch(drill, /packages: write/)
   assert.match(drill, /oras resolve/)
   assert.match(drill, /cosign verify/)
+  assert.match(
+    drill,
+    /CERTIFICATE_IDENTITY: \$\{\{ github\.server_url \}\}\/\$\{\{ github\.repository \}\}\/\.github\/workflows\/docker-images-reusable\.yml@\$\{\{ github\.ref \}\}/,
+  )
+  assert.doesNotMatch(drill, /CERTIFICATE_IDENTITY: .*release-canary\.yml/)
   assert.match(drill, /pnpm run test:release-readiness/)
   assert.match(drill, /publicationPerformed == false/)
   assert.match(drill, /publication-dry-run\.json/)

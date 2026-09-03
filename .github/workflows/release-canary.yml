@@ -96,7 +96,7 @@ jobs:
           IMAGE_TAG: ${{ needs.scratch-images.outputs.image_tag }}
           BACKEND_DIGEST: ${{ needs.scratch-images.outputs.backend_digest }}
           FRONTEND_DIGEST: ${{ needs.scratch-images.outputs.frontend_digest }}
-          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/release-canary.yml@${{ github.ref }}
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/docker-images-reusable.yml@${{ github.ref }}
         run: |
           set -euo pipefail
           [[ "$(oras resolve "$BACKEND_IMAGE:$IMAGE_TAG")" == "$BACKEND_DIGEST" ]]
