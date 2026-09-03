@@ -44,6 +44,22 @@ test('classifier contract tests stay on the workflow verification path', () => {
   assert.equal(result.run_plugin_images, false);
 });
 
+test('workflow plugin source is known release tooling, not an unknown high-risk surface', () => {
+  const result = classifyChangedFiles([
+    'plugins/enterpriseglue-dev-workflows/.codex-plugin/plugin.json',
+    'plugins/enterpriseglue-dev-workflows/skills/enterpriseglue-release/SKILL.md',
+  ]);
+
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_tests, false);
+  assert.equal(result.run_ci_images, false);
+  assert.equal(result.run_database_matrix, false);
+  assert.equal(result.run_identity_rehearsal, false);
+  assert.equal(result.run_deployment_evidence, false);
+});
+
 test('release fragments without documentation stay on the policy-only path', () => {
   const result = classifyChangedFiles(['.release-notes/example-fix.json']);
 

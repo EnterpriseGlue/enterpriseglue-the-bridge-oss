@@ -1,0 +1,140 @@
+name: Release Canary
+
+on:
+  schedule:
+    - cron: "20 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-canary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scratch-images:
+    name: Build signed scratch release images
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/docker-images-reusable.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      backend_image: ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend
+      frontend_image: ghcr.io/enterpriseglue/enterpriseglue-release-canary-frontend
+      image_tag: canary-${{ github.sha }}
+      image_version: canary-${{ github.sha }}
+      source_ref: ${{ github.sha }}
+      image_platforms: linux/amd64,linux/arm64
+      security_rebuild: false
+      enable_dockerhub: false
+    secrets: inherit
+
+  non-publishing-release-drill:
+    name: Verify release control flow without public aliases
+    needs: scratch-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout exact canary source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify exact source checkout
+        run: test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Set up Node.js with read-only package access
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@enterpriseglue"
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v3.10.1
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate read-only scratch registry access
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install release test dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Verify scratch tag and digest identity
+        shell: bash
+        env:
+          BACKEND_IMAGE: ${{ needs.scratch-images.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.scratch-images.outputs.frontend_image }}
+          IMAGE_TAG: ${{ needs.scratch-images.outputs.image_tag }}
+          BACKEND_DIGEST: ${{ needs.scratch-images.outputs.backend_digest }}
+          FRONTEND_DIGEST: ${{ needs.scratch-images.outputs.frontend_digest }}
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/release-canary.yml@${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$(oras resolve "$BACKEND_IMAGE:$IMAGE_TAG")" == "$BACKEND_DIGEST" ]]
+          [[ "$(oras resolve "$FRONTEND_IMAGE:$IMAGE_TAG")" == "$FRONTEND_DIGEST" ]]
+          for subject in "$BACKEND_IMAGE@$BACKEND_DIGEST" "$FRONTEND_IMAGE@$FRONTEND_DIGEST"; do
+            cosign verify \
+              --certificate-identity "$CERTIFICATE_IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$subject" >/dev/null
+          done
+
+      - name: Run complete non-publishing package, chart, image, and receipt drill
+        run: pnpm run test:release-readiness
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLUGIN_PLATFORM_BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+
+      - name: Confirm the canary cannot publish packages or public aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.publicationPerformed == false' .artifacts/release-readiness/release-readiness.json >/dev/null
+          jq -e '.mode == "plan"' .artifacts/release-readiness/packages/registry-plan.json >/dev/null
+          jq -e '.mode == "dry-run"' .artifacts/release-readiness/packages/publication-dry-run.json >/dev/null
+          {
+            echo "## Release canary"
+            echo
+            echo "- Source: ${{ github.sha }}"
+            echo "- Scratch image tag: ${{ needs.scratch-images.outputs.image_tag }}"
+            echo "- Public aliases changed: no"
+            echo "- Package publication performed: no"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain canary readiness evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-canary-evidence-${{ github.sha }}
+          path: .artifacts/release-readiness
+          if-no-files-found: warn
+          retention-days: 30

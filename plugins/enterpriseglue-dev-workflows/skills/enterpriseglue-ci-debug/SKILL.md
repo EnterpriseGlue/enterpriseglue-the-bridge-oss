@@ -13,11 +13,17 @@ description: Use when the user says /ci-debug, debug CI, investigate a failed Gi
    before any rerun. Check the baseline tag/manifest/changelog, changed
    fragment, PR title, `release:*` label, exemption reason, package versions,
    and the uploaded preview artifact.
-4. Classify other failures as product regression, test defect/flakiness,
-   environment/infrastructure, security/policy, package/release, or external
-   dependency. Distinguish cancelled and skipped jobs from failures.
+4. Classify other outcomes as product regression, test defect/flakiness,
+   environment/infrastructure, security/policy, package/release, external
+   dependency, superseded cancellation, manual/external cancellation, or an
+   intentional skip. A selected lane that is skipped or missing is a failed
+   aggregate contract, while an older same-branch run superseded by a newer
+   run is not a product failure.
 5. Reproduce the smallest relevant command locally, implement only an
    authorized fix, and rerun proportionately. Do not rerun expensive suites
    while a deterministic preflight or contract failure remains.
 6. Report root cause, evidence, fix, local verification, remaining jobs, and
-   whether a rerun was requested or performed.
+   whether a rerun was requested or performed. For duration investigations,
+   separate queue, execution, wall-clock critical path, and runner minutes;
+   include candidate and publication workflows rather than sampling only PR
+   CI.

@@ -62,6 +62,7 @@ Audience: Developers and architects.
 - [Documentation Publication Policy](development/documentation-publication-policy.md)
 - [Cloud-Readiness Tenant Ownership Inventory](development/cloud-readiness-ownership-inventory.md)
 - [EnterpriseGlue Codex Workflow Plugin](development/codex-workflow-plugin.md)
+- [CI and Release Routing](development/ci-and-release-routing.md)
 - [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)
 - [Enterprise Backend Plugin Database API](reference/enterprise-backend-plugin-database-api.md)
 - [Customer Sidecar Backstop Test Report](development/customer-sidecar-backstop-test-report.md)

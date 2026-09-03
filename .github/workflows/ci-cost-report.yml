@@ -1,4 +1,4 @@
-name: CI Cost Report
+name: CI and Release Observability
 
 on:
   schedule:
@@ -10,143 +10,67 @@ permissions:
   contents: read
 
 jobs:
-  weekly-ci-cost-report:
+  weekly-ci-release-report:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Build weekly CI cost report (last 7 days)
+      - name: Checkout reporting code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build weekly CI and release report (last 7 days)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('node:fs');
+            const { pathToFileURL } = require('node:url');
+            const reportModule = await import(pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/scripts/ci-observability.mjs`,
+            ).href);
 
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const workflowId = 'ci.yml';
             const daysBack = 7;
-            const lookbackMs = daysBack * 24 * 60 * 60 * 1000;
-            const nowMs = Date.now();
-            const sinceMs = nowMs - lookbackMs;
-
-            const allRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
+            const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+            const allRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
               owner,
               repo,
-              workflow_id: workflowId,
-              event: 'pull_request',
+              status: 'completed',
+              created: `>=${since.toISOString()}`,
               per_page: 100,
             });
-
             const recentRuns = allRuns
-              .filter((run) => run.status === 'completed' && Date.parse(run.created_at) >= sinceMs)
-              .slice(0, 60);
+              .filter((run) => Date.parse(run.created_at) >= since.getTime())
+              .slice(0, 200);
 
-            const durationMinutes = (startedAt, completedAt) => {
-              if (!startedAt || !completedAt) return null;
-              const started = Date.parse(startedAt);
-              const completed = Date.parse(completedAt);
-              if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return null;
-              return (completed - started) / 60000;
-            };
-
-            const byJobName = new Map();
-            const runDurations = [];
-
-            for (const run of recentRuns) {
-              const runDuration = durationMinutes(run.created_at, run.updated_at);
-              if (runDuration !== null) {
-                runDurations.push(runDuration);
-              }
-
+            const jobsByRun = new Map();
+            for (const run of recentRuns.slice(0, 120)) {
               const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
                 owner,
                 repo,
                 run_id: run.id,
+                filter: 'all',
                 per_page: 100,
               });
-
-              for (const job of jobs) {
-                const jobDuration = durationMinutes(job.started_at, job.completed_at);
-                if (jobDuration === null) continue;
-
-                const key = String(job.name || 'unknown');
-                const prev = byJobName.get(key) || { name: key, count: 0, totalMinutes: 0 };
-                prev.count += 1;
-                prev.totalMinutes += jobDuration;
-                byJobName.set(key, prev);
-              }
+              jobsByRun.set(run.id, jobs);
             }
 
-            const median = (values) => {
-              if (!values.length) return 0;
-              const sorted = [...values].sort((a, b) => a - b);
-              const mid = Math.floor(sorted.length / 2);
-              if (sorted.length % 2 === 0) {
-                return (sorted[mid - 1] + sorted[mid]) / 2;
-              }
-              return sorted[mid];
-            };
-
-            const jobs = Array.from(byJobName.values())
-              .map((j) => ({
-                ...j,
-                avgMinutes: j.totalMinutes / j.count,
-              }))
-              .sort((a, b) => b.totalMinutes - a.totalMinutes);
-
-            const topJobs = jobs.slice(0, 5);
-            const totalJobMinutes = jobs.reduce((sum, j) => sum + j.totalMinutes, 0);
-            const medianRun = median(runDurations);
-            const avgRun = runDurations.length
-              ? runDurations.reduce((sum, v) => sum + v, 0) / runDurations.length
-              : 0;
-
-            const report = {
-              generatedAt: new Date().toISOString(),
+            const report = reportModule.buildCiObservabilityReport({
+              runs: recentRuns,
+              jobsByRun,
               daysBack,
-              analyzedRuns: recentRuns.length,
-              medianRunMinutes: Number(medianRun.toFixed(2)),
-              averageRunMinutes: Number(avgRun.toFixed(2)),
-              totalJobMinutes: Number(totalJobMinutes.toFixed(2)),
-              topJobs: topJobs.map((j) => ({
-                name: j.name,
-                runs: j.count,
-                totalMinutes: Number(j.totalMinutes.toFixed(2)),
-                avgMinutes: Number(j.avgMinutes.toFixed(2)),
-              })),
-            };
+            });
+            const markdown = reportModule.renderCiObservabilityMarkdown(report);
 
-            const lines = [];
-            lines.push('# Weekly CI Cost Report');
-            lines.push('');
-            lines.push(`Window: last ${daysBack} days`);
-            lines.push(`Analyzed CI pull_request runs: ${report.analyzedRuns}`);
-            lines.push(`Median PR CI runtime: ${report.medianRunMinutes} min`);
-            lines.push(`Average PR CI runtime: ${report.averageRunMinutes} min`);
-            lines.push(`Total job compute minutes: ${report.totalJobMinutes} min`);
-            lines.push('');
-            lines.push('## Most expensive jobs (by total minutes)');
-            lines.push('');
+            fs.writeFileSync('ci-release-observability.json', `${JSON.stringify(report, null, 2)}\n`);
+            fs.writeFileSync('ci-release-observability.md', `${markdown}\n`);
+            await core.summary.addRaw(markdown).write();
 
-            if (report.topJobs.length === 0) {
-              lines.push('- No completed PR runs found in this window.');
-            } else {
-              for (const [idx, job] of report.topJobs.entries()) {
-                lines.push(`${idx + 1}. ${job.name} — total ${job.totalMinutes} min across ${job.runs} runs (avg ${job.avgMinutes} min)`);
-              }
-            }
-
-            const markdown = lines.join('\n');
-            fs.writeFileSync('ci-cost-report.json', JSON.stringify(report, null, 2));
-            fs.writeFileSync('ci-cost-report.md', markdown + '\n');
-
-            await core.summary
-              .addRaw(markdown)
-              .write();
-
-      - name: Upload CI cost report artifacts
+      - name: Upload CI and release observability artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ci-cost-report
+          name: ci-release-observability
           path: |
-            ci-cost-report.json
-            ci-cost-report.md
+            ci-release-observability.json
+            ci-release-observability.md
           if-no-files-found: error
+          retention-days: 30
