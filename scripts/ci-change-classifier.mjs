@@ -146,7 +146,7 @@ const classifiers = {
     /^\.github\/(?:workflows|actions)\//,
     /^\.release-notes\/schema\.json$/,
     /^plugins\/enterpriseglue-dev-workflows\//,
-    /^scripts\/(?:check-ci-aggregate-contract|ci-(?:change-classifier|change-detection|observability)|security-workflow-contract|evaluate-ci-needs|release-|run-release-|prepare-release-|fetch-release-candidate|publish-(?:plugin|host)-package-set|verify-(?:plugin|host)-package-tarballs|package-tarball-contract|check-(?:release|plugin-package-release|plugin-toolchain-release|host-chart-release|published-package-version-discipline|workspace-dependency-version-drift)|plan-plugin-toolchain-charts|helm-chart-archive)/,
+    /^scripts\/(?:check-ci-aggregate-contract|ci-(?:change-classifier|change-detection|observability)|dedupe-release-changelog|engine-compatibility-workflow|published-package-workflow|security-workflow-contract|evaluate-ci-needs|release-|run-release-|prepare-release-|fetch-release-candidate|publish-(?:plugin|host)-package-set|verify-(?:plugin|host)-package-tarballs|package-tarball-contract|check-(?:release|plugin-package-release|plugin-toolchain-release|host-chart-release|published-package-version-discipline|workspace-dependency-version-drift)|plan-plugin-toolchain-charts|helm-chart-archive)/,
     /^docs\/runbooks\/release-artifact-promotion\.md$/,
     /^docs\/development\/(?:ci-and-release-routing|release-notes-process|codex-workflow-plugin)\.md$/,
   ],

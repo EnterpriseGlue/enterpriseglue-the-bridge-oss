@@ -34,6 +34,28 @@ test('release workflow changes run release readiness without unrelated applicati
   assert.equal(result.run_plugin_checks, false);
 });
 
+test('release hardening helpers do not fan out into unrelated heavyweight matrices', () => {
+  const result = classifyChangedFiles([
+    '.github/workflows/engine-compatibility.yml',
+    '.github/workflows/host-package-release.yml',
+    'scripts/dedupe-release-changelog.mjs',
+    'scripts/dedupe-release-changelog.test.mjs',
+    'scripts/engine-compatibility-workflow.test.mjs',
+    'scripts/package-tarball-contract.mjs',
+    'scripts/published-package-workflow.test.mjs',
+    'scripts/verify-host-package-tarballs.test.mjs',
+  ]);
+
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_database_matrix, false);
+  assert.equal(result.run_identity_rehearsal, false);
+  assert.equal(result.run_deployment_evidence, false);
+  assert.equal(result.run_native_tenancy, false);
+  assert.equal(result.run_ci_images, false);
+});
+
 test('classifier contract tests stay on the workflow verification path', () => {
   const result = classifyChangedFiles(['scripts/ci-change-detection.test.mjs']);
 
