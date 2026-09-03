@@ -16,6 +16,29 @@ describe('process instance transport contract', () => {
     expect(instance).toMatchObject({ state: 'SUSPENDED', hasIncident: true, adapterDiagnostic: 'retained' });
   });
 
+  it('accepts an Operaton completed-instance response without a business key', () => {
+    const instance = ProcessInstanceDetailSchema.parse({
+      id: '4c908379-a774-11f1-a3cc-5a297f77b652',
+      businessKey: null,
+      processDefinitionId: 'egprocess:5:4c722604-a774-11f1-a3cc-5a297f77b652',
+      processDefinitionKey: 'egprocess',
+      processDefinitionName: 'EnterpriseGlue authorization fixture',
+      processDefinitionVersion: 5,
+      startTime: '2026-09-03T08:48:56.778+0000',
+      endTime: '2026-09-03T08:48:56.784+0000',
+      durationInMillis: 6,
+      state: 'COMPLETED',
+    });
+
+    expect(instance).toMatchObject({
+      businessKey: null,
+      processDefinitionId: 'egprocess:5:4c722604-a774-11f1-a3cc-5a297f77b652',
+      processDefinitionName: 'EnterpriseGlue authorization fixture',
+      processDefinitionVersion: 5,
+      state: 'COMPLETED',
+    });
+  });
+
   it('keeps process-definition adapter extensions at the shared route boundary', () => {
     const definition = ProcessDefinitionSchema.parse({
       id: 'payments:3:abc', key: 'payments', name: 'Payments', version: 3, adapterDiagnostic: { retained: true },

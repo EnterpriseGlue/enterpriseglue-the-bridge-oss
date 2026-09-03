@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { getE2ECredentials, hasE2ECredentials } from '../utils/credentials';
 import { getMockProcessFixture } from '../utils/mockCamundaFixture';
+import { monitorBrowserDiagnostics } from '../utils/browserDiagnostics';
 
 const shouldSkip = !hasE2ECredentials();
 const requireMock = process.env.E2E_REQUIRE_MISSION_CONTROL_MOCK === 'true';
@@ -72,6 +73,7 @@ test.describe('Smoke: Mission Control process instance detail', () => {
     await login(page);
     await enableInstanceCounts(page);
     await clearPersistedEngineSelection(page);
+    const diagnostics = monitorBrowserDiagnostics(page);
     const enginesPromise = requireMock
       ? waitForJsonResponse(page, '/engines-api/engines')
       : Promise.resolve(null);
@@ -120,5 +122,7 @@ test.describe('Smoke: Mission Control process instance detail', () => {
       await expect(page.locator('body')).not.toContainText(/Failed to load|Error loading XML|No diagram XML/i);
     }
     await expectProcessInstanceState(page, instanceId);
+    await diagnostics.expectClean('Mission Control process instance detail');
+    diagnostics.dispose();
   });
 });
