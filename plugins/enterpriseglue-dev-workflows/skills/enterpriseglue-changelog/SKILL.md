@@ -1,6 +1,6 @@
 ---
 name: enterpriseglue-changelog
-description: Use when the user says /changelog, preview next release, show pending Release Please changelog, categorize commits since the last release, or estimate OSS/EE release contents.
+description: Use when the user says /changelog, preview the next release, show a pending Release Please changelog, categorize commits since the last release, or estimate OSS host and plugin-platform release contents.
 ---
 
 # EnterpriseGlue /changelog

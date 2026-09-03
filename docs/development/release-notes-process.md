@@ -204,8 +204,8 @@ After publication, verify:
 - the vulnerability scan evaluates the newly published digests; and
 - protected package publication completes for the exact release commit;
 - the signed plugin-toolchain workflow completes for the exact release commit;
-- package consumers and EnterpriseGlue EE are updated to the package versions
-  listed in the release notes.
+- supported plugin-consumer compatibility checks pass against the package
+  versions listed in the release notes.
 
 `latest` and Docker Hub aliases are advanced only after the immutable release
 tags pass PostgreSQL, exposed-backend, Oracle, and vulnerability qualification.

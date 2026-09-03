@@ -1,6 +1,6 @@
 ---
 name: enterpriseglue-hotfix
-description: Use when the user says /hotfix, urgent EnterpriseGlue fix, fast-track a patch, create a fix worktree and PR quickly, or ship a critical OSS or EE patch.
+description: Use when the user says /hotfix, urgent EnterpriseGlue fix, fast-track a patch, create a fix worktree and PR quickly, or ship a critical OSS host or plugin patch.
 ---
 
 # EnterpriseGlue /hotfix

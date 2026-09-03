@@ -121,21 +121,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Notify EE canary
-        if: >-
-          !(github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
-          && steps.check.outcome != 'success'
-        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
-        with:
-          token: ${{ secrets.EE_DISPATCH_TOKEN }}
-          repository: EnterpriseGlue/enterpriseglue-the-bridge-ee
-          event-type: oss-package-published
-          client-payload: |
-            {
-              "package_name": "${{ steps.pkg.outputs.name }}",
-              "package_version": "${{ steps.pkg.outputs.version }}"
-            }
-
       - name: Summary
         run: |
           echo "### Shared Package Published :package:" >> "$GITHUB_STEP_SUMMARY"

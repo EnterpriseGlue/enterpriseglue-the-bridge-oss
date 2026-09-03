@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 
@@ -24,6 +24,7 @@ const expectedSkills = [
   'enterpriseglue-local-deploy',
   'enterpriseglue-new-change',
   'enterpriseglue-oss-to-ee',
+  'enterpriseglue-plugin-development',
   'enterpriseglue-post-ship-watch',
   'enterpriseglue-pr-readiness',
   'enterpriseglue-release',
@@ -71,6 +72,27 @@ test('all versioned skills have portable instructions and UI metadata', () => {
     assert.doesNotMatch(instructions, /\[TODO:|\/Users\/|\/home\//, `${skill} portability`)
     assert.match(metadata, /^interface:$/m, `${skill} metadata`)
     assert.match(metadata, new RegExp(`\\$${skill}\\b`), `${skill} default prompt`)
+  }
+})
+
+test('OSS delivery has no write path to the retired EE repository', () => {
+  const workflowRoot = join(root, '.github/workflows')
+  const workflowText = readdirSync(workflowRoot)
+    .filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'))
+    .map((name) => readFileSync(join(workflowRoot, name), 'utf8'))
+    .join('\n')
+
+  assert.equal(existsSync(join(workflowRoot, 'notify-ee-oss-release.yml')), false)
+  assert.doesNotMatch(workflowText, /EnterpriseGlue\/enterpriseglue-the-bridge-ee/)
+  assert.doesNotMatch(workflowText, /EE_DISPATCH_TOKEN|OSS_EE_SYNC_TOKEN/)
+
+  const bootGuard = readFileSync(join(root, 'scripts/check-plugin-boot-mode.sh'), 'utf8')
+  assert.doesNotMatch(bootGuard, /MODE.*ee|EE plugin boot path/)
+
+  for (const skill of ['enterpriseglue-oss-to-ee', 'enterpriseglue-sync-ee']) {
+    const instructions = readFileSync(join(pluginRoot, 'skills', skill, 'SKILL.md'), 'utf8')
+    assert.match(instructions, /Do not create or modify EE worktrees/)
+    assert.match(instructions, /owning plugin repository/)
   }
 })
 

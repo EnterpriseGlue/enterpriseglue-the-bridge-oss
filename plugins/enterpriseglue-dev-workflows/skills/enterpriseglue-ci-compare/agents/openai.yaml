@@ -1,4 +1,4 @@
 interface:
   display_name: "EnterpriseGlue CI Compare"
-  short_description: "Compare EnterpriseGlue OSS and EE CI"
+  short_description: "Compare OSS host and plugin consumer CI"
   default_prompt: "Use $enterpriseglue-ci-compare to help with this EnterpriseGlue task."

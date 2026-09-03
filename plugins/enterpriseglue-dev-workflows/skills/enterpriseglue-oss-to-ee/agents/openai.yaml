@@ -1,4 +1,4 @@
 interface:
-  display_name: "EnterpriseGlue OSS to EE"
-  short_description: "Coordinate EnterpriseGlue OSS-to-EE changes"
+  display_name: "EnterpriseGlue OSS to EE (Retired)"
+  short_description: "Redirect legacy EE work to OSS plugins"
   default_prompt: "Use $enterpriseglue-oss-to-ee to help with this EnterpriseGlue task."
