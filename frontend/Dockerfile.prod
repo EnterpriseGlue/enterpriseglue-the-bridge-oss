@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS build
 
 WORKDIR /repo
 
@@ -36,7 +36,6 @@ COPY backend/package.json backend/
 # we only ever want the latest mirror fetch for security.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     apk upgrade --no-cache zlib \
-    && apk add --no-cache busybox-static \
     && pnpm install --frozen-lockfile
 
 COPY frontend frontend
@@ -44,19 +43,19 @@ COPY packages packages
 RUN pnpm --filter plugin-sdk run build \
     && pnpm --filter plugin-runtime run build \
     && pnpm run build:frontend-host \
-    && pnpm --filter webmodeler-frontend run build \
-    && mkdir -p /tmp/busybox-bin \
-    && cp /bin/busybox.static /tmp/busybox-bin/busybox \
-    && ln -s busybox /tmp/busybox-bin/sh \
-    && ln -s busybox /tmp/busybox-bin/sed
+    && pnpm --filter webmodeler-frontend run build
 
 FROM cgr.dev/chainguard/nginx:latest-dev@sha256:8ee1f40c0147c3006f2621de1ca1bd9867851e83d17930e21060d2dddaf617ff
 
 USER root
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache \
+    && apk add --no-cache busybox-static \
+    && mkdir -p /busybox \
+    && cp /bin/busybox /busybox/busybox \
+    && ln -s busybox /busybox/sh \
+    && ln -s busybox /busybox/sed
 USER 65532
 
-COPY --from=build /tmp/busybox-bin/ /busybox/
 COPY --from=build /repo/frontend/nginx.conf /nginx-site.conf.template
 COPY --from=build /repo/frontend/nginx-main.conf /etc/nginx/nginx.conf
 COPY --from=build /repo/frontend/dist /usr/share/nginx/html

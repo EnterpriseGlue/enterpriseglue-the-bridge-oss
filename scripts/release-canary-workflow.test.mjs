@@ -6,6 +6,10 @@ const workflow = await readFile(
   new URL('../.github/workflows/release-canary.yml', import.meta.url),
   'utf8',
 )
+const frontendDockerfile = await readFile(
+  new URL('../frontend/Dockerfile.prod', import.meta.url),
+  'utf8',
+)
 
 test('release canary is scheduled, manual, immutable, and non-cancelling', () => {
   assert.match(workflow, /schedule:/)
@@ -37,4 +41,20 @@ test('release drill verifies exact digests and cannot publish public artifacts',
   assert.doesNotMatch(drill, /npm publish(?! --dry-run)/)
   assert.doesNotMatch(drill, /oras (?:push|cp)/)
   assert.doesNotMatch(drill, /docker buildx imagetools create/)
+})
+
+test('frontend assets build natively while runtime tools match the target platform', () => {
+  assert.match(
+    frontendDockerfile,
+    /^FROM --platform=\$BUILDPLATFORM node:24-alpine@sha256:[0-9a-f]{64} AS build$/m,
+  )
+  assert.doesNotMatch(frontendDockerfile, /FROM --platform=\$TARGETPLATFORM node:/)
+
+  const runtimeStage = frontendDockerfile.slice(frontendDockerfile.lastIndexOf('\nFROM '))
+  assert.match(runtimeStage, /apk add --no-cache busybox-static/)
+  assert.match(runtimeStage, /cp \/bin\/busybox \/busybox\/busybox/)
+  assert.doesNotMatch(
+    frontendDockerfile.slice(0, frontendDockerfile.lastIndexOf('\nFROM ')),
+    /busybox-static/,
+  )
 })
