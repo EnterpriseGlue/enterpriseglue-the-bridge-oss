@@ -52,27 +52,39 @@ test('nightly reads and reports OCI provenance from every configured platform', 
 test('image publishing labels and verifies source, revision, and version', () => {
   for (const label of [
     'org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}',
-    'org.opencontainers.image.revision=${{ steps.meta.outputs.source_revision }}',
-    'org.opencontainers.image.version=${{ steps.meta.outputs.image_version }}',
+    'org.opencontainers.image.revision=${{ needs.prepare.outputs.source_revision }}',
+    'org.opencontainers.image.version=${{ needs.prepare.outputs.image_version }}',
   ]) {
-    assert.equal(imagePublish.split(label).length - 1, 4, `${label} must cover both image attempts`);
+    assert.equal(imagePublish.split(label).length - 1, 2, `${label} must cover both matrix build attempts`);
   }
 
-  assert.match(imagePublish, /- name: Verify published image provenance/);
+  assert.match(imagePublish, /- name: Verify published image provenance and platform coverage/);
   assert.match(imagePublish, /EXPECTED_SOURCE: \$\{\{ github\.server_url \}\}\/\$\{\{ github\.repository \}\}/);
-  assert.match(imagePublish, /EXPECTED_REVISION: \$\{\{ steps\.meta\.outputs\.source_revision \}\}/);
-  assert.match(imagePublish, /EXPECTED_VERSION: \$\{\{ steps\.meta\.outputs\.image_version \}\}/);
+  assert.match(imagePublish, /EXPECTED_REVISION: \$\{\{ needs\.prepare\.outputs\.source_revision \}\}/);
+  assert.match(imagePublish, /EXPECTED_VERSION: \$\{\{ needs\.prepare\.outputs\.image_version \}\}/);
   assert.match(imagePublish, /verify-oci-image-metadata\.mjs "\$prefix"/);
 });
 
 test('multi-architecture image publishing allows healthy emulated builds to finish', () => {
-  assert.match(imagePublish, /publish:\n    runs-on: ubuntu-latest\n    timeout-minutes: 150/);
+  assert.match(imagePublish, /build:\n    name: Build \$\{\{ matrix\.component \}\} \$\{\{ matrix\.platform \}\} application image/);
+  assert.match(imagePublish, /platform: linux\/amd64/);
+  assert.match(imagePublish, /platform: linux\/arm64/);
+  assert.match(imagePublish, /publish:\n    name: Promote and verify application image manifests\n    needs: \[prepare, build\]/);
   assert.equal(
     imagePublish.match(/timeout-minutes: 60/g)?.length,
-    4,
-    'both attempts for both images must have the extended build window',
+    2,
+    'both matrix build attempts must have the extended build window',
   );
-  assert.doesNotMatch(imagePublish, /timeout-minutes: (?:30|90)/);
+  const buildJob = imagePublish.slice(
+    imagePublish.indexOf('  build:\n'),
+    imagePublish.indexOf('\n  publish:\n'),
+  );
+  assert.match(
+    buildJob,
+    /timeout-minutes: 130/,
+    'the matrix job must leave enough time for setup and both 60-minute build attempts',
+  );
+  assert.doesNotMatch(buildJob, /timeout-minutes: (?:30|90)/);
 });
 
 test('published Postgres image smoke compiles test dependencies and preserves fail-closed engine policy', () => {

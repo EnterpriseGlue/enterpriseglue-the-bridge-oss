@@ -130,6 +130,30 @@ test('application Dockerfiles select cached image, smoke, security, and release 
   assert.equal(result.run_release_readiness, true);
 });
 
+test('application image workflow contracts avoid unrelated broad verification', () => {
+  const result = classifyChangedFiles([
+    '.github/workflows/docker-images-reusable.yml',
+    '.release-notes/release-image-build-cache.json',
+    'scripts/release-candidate-workflow.test.mjs',
+    'scripts/security-workflow-contract.test.mjs',
+  ]);
+
+  assert.equal(result.application_container, true);
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.run_ci_images, true);
+  assert.equal(result.run_security_scan, true);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_tests, false);
+  assert.equal(result.run_postgres, false);
+  assert.equal(result.run_oracle, false);
+  assert.equal(result.run_plugin_checks, false);
+  assert.equal(result.run_native_tenancy, false);
+  assert.equal(result.run_database_matrix, false);
+  assert.equal(result.run_identity_rehearsal, false);
+  assert.equal(result.run_deployment_evidence, false);
+});
+
 test('authorization and Operaton changes select their focused browser matrices', () => {
   const authorization = classifyChangedFiles([
     'packages/shared/src/authz/tenant-role-policy.ts',

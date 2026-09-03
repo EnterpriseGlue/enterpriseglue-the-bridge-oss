@@ -1,0 +1,47 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-image-build-cache",
+  "type": "internal",
+  "scope": "release-images",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Build backend and frontend release images per architecture in parallel, reuse protected registry caches, and assemble immutable multi-platform manifests.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Each architecture is built from the exact immutable source revision with persisted Git credentials disabled.",
+    "Manifest publication retains OCI revision/version labels, signatures, attestations, and provenance verification."
+  ],
+  "documentation": [
+    "Workflow summaries identify component, architecture, cache namespace, source revision, and final manifest digest."
+  ],
+  "knownLimitations": [
+    "The workflow uses QEMU when native arm64 runner capacity is unavailable; this fallback remains slower than native execution."
+  ],
+  "rollback": [
+    "Revert the reusable image workflow to the previous serialized multi-platform build; already published immutable digests remain valid."
+  ],
+  "validation": [
+    "Workflow contracts verify the four component/platform build jobs, protected registry cache configuration, exact source checkout, manifest assembly, OCI metadata, signing, and provenance checks.",
+    "Actionlint validates the reusable workflow syntax and expressions."
+  ],
+  "packages": []
+}

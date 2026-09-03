@@ -60,11 +60,9 @@ test('candidate staging never executes the merge-queue checkout with write autho
   assert.match(stage, /sync-host-chart-release-version\.mjs/)
   assert.match(stage, /derive_release_metadata == 'true'/)
   assert.doesNotMatch(dockerReusable, /checkout_ref:/)
-  const checkout = dockerReusable.slice(
-    dockerReusable.indexOf('      - name: Checkout\n'),
-    dockerReusable.indexOf('      - name: Set up QEMU\n'),
-  )
-  assert.doesNotMatch(checkout, /ref:/)
+  assert.match(stage, /stage-application-images:[\s\S]*needs: \[resolve, validate-source\]/)
+  assert.match(dockerReusable, /ref: \$\{\{ inputs\.source_ref \|\| github\.sha \}\}/)
+  assert.equal(dockerReusable.match(/persist-credentials: false/g)?.length, 3)
 })
 
 test('auto-merge preserves the qualified merge-group commit identity', () => {
@@ -114,8 +112,21 @@ test('candidate package planning authenticates to GitHub Packages', () => {
 
 test('application release publication promotes candidate digests and delays aliases', () => {
   assert.match(dockerReusable, /source_ref:/)
+  assert.match(dockerReusable, /ref: \$\{\{ inputs\.source_ref \|\| github\.sha \}\}/)
+  assert.match(dockerReusable, /ref: \$\{\{ needs\.prepare\.outputs\.source_revision \}\}/)
+  assert.match(dockerReusable, /Verify exact image source checkout/)
+  assert.match(dockerReusable, /Verify exact manifest source checkout/)
   assert.match(dockerReusable, /image_version:/)
-  assert.match(dockerReusable, /org\.opencontainers\.image\.revision=\$\{\{ steps\.meta\.outputs\.source_revision \}\}/)
+  assert.match(dockerReusable, /platform: linux\/amd64/)
+  assert.match(dockerReusable, /platform: linux\/arm64/)
+  assert.equal(dockerReusable.match(/component: backend/g)?.length, 2)
+  assert.equal(dockerReusable.match(/component: frontend/g)?.length, 2)
+  assert.match(dockerReusable, /org\.opencontainers\.image\.revision=\$\{\{ needs\.prepare\.outputs\.source_revision \}\}/)
+  assert.match(dockerReusable, /cache-from: type=registry,ref=\$\{\{ steps\.component\.outputs\.cache_ref \}\}/)
+  assert.match(dockerReusable, /cache-to: type=registry,ref=\$\{\{ steps\.component\.outputs\.cache_ref \}\},mode=max/)
+  assert.match(dockerReusable, /needs: \[prepare, build\]/)
+  assert.match(dockerReusable, /Assemble and expose exact multi-platform build digests/)
+  assert.match(dockerReusable, /docker buildx imagetools create -t "\$image:\$IMAGE_TAG" "\$\{sources\[@\]\}"/)
   assert.match(docker, /mode="promote"/)
   assert.match(docker, /fetch-release-candidate\.sh/)
   assert.match(docker, /Promote without rebuilding/)
