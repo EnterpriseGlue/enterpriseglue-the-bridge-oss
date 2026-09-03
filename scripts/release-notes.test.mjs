@@ -319,7 +319,8 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   assert.match(prepare, /issues\/\$\{RELEASE_PR_NUMBER\}\/comments/)
   assert.match(prepare, /git show "\$\{base_tag\}:\$\{chart_file\}"/)
   assert.match(prepare, /node scripts\/sync-host-chart-release-version\.mjs/)
-  assert.match(prepare, /git add "\$release_file" "\$chart_file"/)
+  assert.match(prepare, /dedupe-release-changelog\.mjs --file CHANGELOG\.md/)
+  assert.match(prepare, /git add "\$release_file" "\$chart_file" CHANGELOG\.md/)
   assert.doesNotMatch(
     prepare,
     /repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{RELEASE_PR_NUMBER\}/,

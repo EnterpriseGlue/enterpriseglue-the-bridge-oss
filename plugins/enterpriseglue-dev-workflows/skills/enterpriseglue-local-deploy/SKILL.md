@@ -15,5 +15,9 @@ Codex adaptation:
 - Free only the ports described by the workflow or ports the user explicitly chooses.
 - Ensure workspace dependencies and any required plugin registry auth before
   running deploy scripts.
+- Require a worktree-local environment and non-conflicting ports/Compose
+  identity. Do not borrow another worktree's ignored environment file when it
+  would reuse that stack; use an explicitly isolated fixture or report the
+  browser lane as unavailable.
 - Verify frontend/backend health from localhost and report exact URLs and logs.
 - Do not commit, push, merge, or clean branches from this workflow.

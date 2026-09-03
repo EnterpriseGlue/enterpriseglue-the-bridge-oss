@@ -69,7 +69,7 @@ permissions:
 jobs:
   prepare:
     name: Resolve immutable image build metadata
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -170,7 +170,7 @@ jobs:
   build:
     name: Build ${{ matrix.component }} ${{ matrix.platform }} application image
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     # Setup plus two isolated 60-minute build attempts. Keep the enclosing
     # budget larger than both retry windows so a timed-out first attempt does
     # not make the declared retry impossible.
@@ -182,15 +182,19 @@ jobs:
           - component: backend
             platform: linux/amd64
             platform_id: linux-amd64
+            runner: ubuntu-24.04
           - component: backend
             platform: linux/arm64
             platform_id: linux-arm64
+            runner: ubuntu-24.04-arm
           - component: frontend
             platform: linux/amd64
             platform_id: linux-amd64
+            runner: ubuntu-24.04
           - component: frontend
             platform: linux/arm64
             platform_id: linux-arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -205,9 +209,6 @@ jobs:
 
       - name: Verify exact image source checkout
         run: test "$(git rev-parse HEAD)" = "${{ needs.prepare.outputs.source_revision }}"
-
-      - name: Set up QEMU fallback for cross-platform builds
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - name: Set up Docker Buildx
         id: buildx

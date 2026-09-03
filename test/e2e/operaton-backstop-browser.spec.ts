@@ -16,6 +16,9 @@ const enabled = process.env.OPERATON_BACKSTOP_BROWSER_EVIDENCE === 'true'
   && /^http:\/\/(?:host\.docker\.internal|127\.0\.0\.1|localhost)(?::\d+)?\/engine-rest$/.test(engineUrl)
   && /^http:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\/engine-rest$/.test(operatonUrl);
 const restartBackendForDurability = process.env.OPERATON_BACKSTOP_RESTART_BACKEND === 'true';
+const expectedEngineVersionPattern = new RegExp(
+  process.env.OPERATON_EXPECTED_VERSION_PATTERN || '^2\\.1(?:\\.|$)',
+);
 const execFileAsync = promisify(execFile);
 
 type CreatedEngine = { id: string; name: string };
@@ -53,8 +56,9 @@ async function login(page: Page): Promise<void> {
 async function restartLocalBackend(page: Page): Promise<void> {
   if (!restartBackendForDurability) return;
   const repoRoot = process.cwd();
+  const backendEnvFile = process.env.EG_BACKEND_ENV_FILE || resolve(repoRoot, '.env.docker');
   await execFileAsync('docker', [
-    'compose', '--project-directory', repoRoot, '--env-file', resolve(repoRoot, '.env.docker'),
+    'compose', '--project-directory', repoRoot, '--env-file', backendEnvFile,
     '-f', resolve(repoRoot, 'infra/docker/compose/docker-compose.yml'),
     '-f', resolve(repoRoot, 'infra/docker/compose/docker-compose.backend-expose.yml'),
     'restart', 'backend',
@@ -154,7 +158,7 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
           await page.request.get(`${operatonUrl}/version`),
           'read pinned Operaton engine version',
         );
-        expect(directEngine.version).toMatch(/^2\.1(?:\.|$)/);
+        expect(directEngine.version).toMatch(expectedEngineVersionPattern);
         for (let poll = 0; poll < 2; poll += 1) {
           const health = await json<{ status?: string; checkedAt?: number; version?: string }>(
             await page.request.get(`/engines-api/engines/${encodeURIComponent(engine.id)}/health`),
@@ -162,13 +166,13 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
           );
           expect(health.status).toBe('connected');
           expect(Number.isSafeInteger(health.checkedAt)).toBe(true);
-          if (poll === 0) expect(health.version).toMatch(/^2\.1(?:\.|$)/);
+          if (poll === 0) expect(health.version).toMatch(expectedEngineVersionPattern);
         }
         const inventory = await json<Array<{ id: string; version?: string | null }>>(
           await page.request.get('/engines-api/engines'),
           'read engine inventory after version discovery',
         );
-        expect(inventory.find((candidate) => candidate.id === engine?.id)?.version).toMatch(/^2\.1(?:\.|$)/);
+        expect(inventory.find((candidate) => candidate.id === engine?.id)?.version).toMatch(expectedEngineVersionPattern);
         const started = await json<{ id: string }>(
           await page.request.post(`${operatonUrl}/process-definition/key/egprocess/start`, {
             data: {

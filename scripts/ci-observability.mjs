@@ -43,6 +43,8 @@ export function buildCiObservabilityReport({ runs, jobsByRun = new Map(), daysBa
   let retries = 0
   let firstAttemptSuccesses = 0
   let firstAttempts = 0
+  let releaseRebuilds = 0
+  let applicationImageRetries = 0
 
   for (const run of runs) {
     if (run.conclusion === 'cancelled') {
@@ -53,7 +55,10 @@ export function buildCiObservabilityReport({ runs, jobsByRun = new Map(), daysBa
       conclusions.other += 1
     }
     if (Number(run.run_attempt || 1) > 1) retries += 1
-    if (Number(run.run_attempt || 1) === 1) {
+    if (
+      Number(run.run_attempt || 1) === 1
+      && ['success', 'failure'].includes(run.conclusion)
+    ) {
       firstAttempts += 1
       if (run.conclusion === 'success') firstAttemptSuccesses += 1
     }
@@ -70,7 +75,21 @@ export function buildCiObservabilityReport({ runs, jobsByRun = new Map(), daysBa
     bucket.conclusions[run.conclusion || 'unknown'] = (bucket.conclusions[run.conclusion || 'unknown'] || 0) + 1
     workflowBuckets.set(name, bucket)
 
-    for (const job of jobsByRun.get(run.id) || []) {
+    const runJobs = jobsByRun.get(run.id) || []
+    if (
+      run.name === 'Docker Images'
+      && run.event === 'release'
+      && runJobs.some((job) => /^build(?:\s*\/|$)/i.test(String(job.name || '')) && job.conclusion === 'success')
+    ) {
+      releaseRebuilds += 1
+    }
+    for (const job of runJobs) {
+      if ((job.steps || []).some((step) => (
+        String(step.name || '').includes('attempt 2 after transient failure')
+        && step.conclusion === 'success'
+      ))) {
+        applicationImageRetries += 1
+      }
       const duration = minutesBetween(job.started_at, job.completed_at)
       if (duration === null) continue
       const jobName = String(job.name || 'unknown')
@@ -107,6 +126,10 @@ export function buildCiObservabilityReport({ runs, jobsByRun = new Map(), daysBa
     analyzedRuns: runs.length,
     conclusions,
     retries,
+    releaseIntegrity: {
+      releaseRebuilds,
+      applicationImageRetries,
+    },
     firstAttemptSuccessRate: firstAttempts
       ? Number((firstAttemptSuccesses / firstAttempts).toFixed(4))
       : 0,
@@ -115,9 +138,63 @@ export function buildCiObservabilityReport({ runs, jobsByRun = new Map(), daysBa
   }
 }
 
+export function evaluateCiSlo(report, {
+  candidateP95Minutes = 45,
+  minimumFirstAttemptSuccessRate = 0.9,
+} = {}) {
+  const breaches = []
+  const candidate = report.workflows.find((workflow) => workflow.name === 'Release Candidate Stage')
+  if (candidate && candidate.p95WallMinutes > candidateP95Minutes) {
+    breaches.push({
+      code: 'candidate_p95',
+      message: `Release Candidate Stage p95 is ${candidate.p95WallMinutes}m (target <= ${candidateP95Minutes}m).`,
+    })
+  }
+  if (report.firstAttemptSuccessRate < minimumFirstAttemptSuccessRate) {
+    breaches.push({
+      code: 'first_attempt_success',
+      message: `First-attempt success is ${(report.firstAttemptSuccessRate * 100).toFixed(1)}% (target >= ${(minimumFirstAttemptSuccessRate * 100).toFixed(1)}%).`,
+    })
+  }
+  if (report.conclusions.failure > 0) {
+    breaches.push({ code: 'workflow_failures', message: `${report.conclusions.failure} completed workflow run(s) failed.` })
+  }
+  if (report.retries > 0) {
+    breaches.push({ code: 'workflow_retries', message: `${report.retries} workflow run(s) required a retry.` })
+  }
+  if (report.releaseIntegrity.releaseRebuilds > 0) {
+    breaches.push({
+      code: 'release_rebuild',
+      message: `${report.releaseIntegrity.releaseRebuilds} tagged release(s) rebuilt application images instead of promoting candidates.`,
+    })
+  }
+  if (report.releaseIntegrity.applicationImageRetries > 0) {
+    breaches.push({
+      code: 'image_build_retry',
+      message: `${report.releaseIntegrity.applicationImageRetries} application image job(s) used the second build attempt.`,
+    })
+  }
+  return {
+    status: breaches.length ? 'breached' : 'met',
+    thresholds: { candidateP95Minutes, minimumFirstAttemptSuccessRate },
+    breaches,
+  }
+}
+
 export function renderCiObservabilityMarkdown(report) {
+  const sloLines = report.slo
+    ? [
+        '',
+        '## Release SLO assessment',
+        '',
+        `Status: **${report.slo.status}**`,
+        ...(report.slo.breaches.length
+          ? report.slo.breaches.map((breach) => `- **${breach.code}**: ${breach.message}`)
+          : ['- No rolling threshold breaches detected.']),
+      ]
+    : []
   const lines = [
-    '# Weekly CI and release observability',
+    '# Rolling CI and release observability',
     '',
     `Window: last ${report.daysBack} days`,
     `Analyzed workflow runs: ${report.analyzedRuns}`,
@@ -126,6 +203,9 @@ export function renderCiObservabilityMarkdown(report) {
     `Failures: ${report.conclusions.failure}`,
     `Superseded cancellations: ${report.conclusions.cancelled_superseded}`,
     `Manual/external cancellations: ${report.conclusions.cancelled_manual_or_external}`,
+    `Tagged release rebuilds: ${report.releaseIntegrity.releaseRebuilds}`,
+    `Application image build retries: ${report.releaseIntegrity.applicationImageRetries}`,
+    ...sloLines,
     '',
     '## Workflow critical paths',
     '',

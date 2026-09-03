@@ -24,16 +24,21 @@ async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'eg-release-candidate-'))
   const artifacts = path.join(root, 'artifacts')
   await mkdir(path.join(artifacts, 'charts'), { recursive: true })
-  await mkdir(path.join(artifacts, 'packages'), { recursive: true })
+  await mkdir(path.join(artifacts, 'packages', 'plugin'), { recursive: true })
+  await mkdir(path.join(artifacts, 'packages', 'host'), { recursive: true })
   const files = [
     'charts/enterpriseglue-host-0.1.2.tgz',
     'charts/enterpriseglue-plugin-installer-rbac-0.2.6.tgz',
     'charts/enterpriseglue-plugin-manager-0.1.6.tgz',
     'charts/enterpriseglue-plugin-runtime-0.2.6.tgz',
-    'packages/enterpriseglue-plugin-installer-0.2.6.tgz',
-    'packages/enterpriseglue-plugin-manager-0.1.6.tgz',
-    'packages/enterpriseglue-plugin-runtime-0.2.3.tgz',
-    'packages/enterpriseglue-plugin-sdk-0.5.1.tgz',
+    'packages/plugin/enterpriseglue-enterprise-plugin-api-0.4.0.tgz',
+    'packages/plugin/enterpriseglue-plugin-installer-0.2.6.tgz',
+    'packages/plugin/enterpriseglue-plugin-manager-0.1.6.tgz',
+    'packages/plugin/enterpriseglue-plugin-runtime-0.2.3.tgz',
+    'packages/plugin/enterpriseglue-plugin-sdk-0.5.1.tgz',
+    'packages/host/enterpriseglue-shared-0.15.3.tgz',
+    'packages/host/enterpriseglue-backend-host-0.13.4.tgz',
+    'packages/host/enterpriseglue-frontend-host-0.15.4.tgz',
   ]
   await Promise.all(files.map((file) => writeFile(path.join(artifacts, file), `payload:${file}`)))
   return { root, artifacts, output: path.join(root, 'release-candidate.json') }
@@ -51,7 +56,7 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   const created = await createReceipt(args)
   assert.equal(created.schemaVersion, 'enterpriseglue-release-candidate/v1')
   assert.equal(created.publicationPerformed, false)
-  assert.equal(created.artifacts.length, 8)
+  assert.equal(created.artifacts.length, 12)
   assert.deepEqual(await verifyReceipt({
     receipt: output,
     artifacts,
@@ -69,7 +74,7 @@ test('rejects changed candidate bytes', async () => {
     output,
     ...subjectArgs,
   })
-  await writeFile(path.join(artifacts, 'packages/enterpriseglue-plugin-sdk-0.5.1.tgz'), 'changed')
+  await writeFile(path.join(artifacts, 'packages/plugin/enterpriseglue-plugin-sdk-0.5.1.tgz'), 'changed')
   await assert.rejects(
     verifyReceipt({ receipt: output, artifacts }),
     /checksums or inventory/,

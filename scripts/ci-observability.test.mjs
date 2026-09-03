@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   buildCiObservabilityReport,
   classifyCancelledRun,
+  evaluateCiSlo,
   percentile,
   renderCiObservabilityMarkdown,
 } from './ci-observability.mjs'
@@ -46,7 +47,51 @@ test('report separates conclusions and exposes workflow and job p95', () => {
   assert.equal(report.conclusions.cancelled_manual_or_external, 1)
   assert.equal(report.workflows[0].p95WallMinutes, 21)
   assert.equal(report.topJobs[0].totalMinutes, 10)
+  assert.equal(report.firstAttemptSuccessRate, 0.5)
   assert.match(renderCiObservabilityMarkdown(report), /Superseded cancellations/)
+})
+
+test('SLO assessment reports candidate duration, failures, retries, and release rebuilds', () => {
+  const runs = [
+    run({ id: 1, name: 'Release Candidate Stage', updated_at: '2026-09-01T00:51:00Z' }),
+    run({ id: 2, name: 'Docker Images', event: 'release', conclusion: 'failure', run_attempt: 2 }),
+    run({ id: 3, name: 'CI', conclusion: 'failure' }),
+  ]
+  const jobs = new Map([[2, [{
+    name: 'build / Build backend application image (linux/arm64)',
+    conclusion: 'success',
+    started_at: runs[1].run_started_at,
+    completed_at: runs[1].updated_at,
+    steps: [{ name: 'Build attempt 2 after transient failure', conclusion: 'success' }],
+  }]]])
+  const report = buildCiObservabilityReport({ runs, jobsByRun: jobs })
+  const assessment = evaluateCiSlo(report)
+  assert.equal(assessment.status, 'breached')
+  assert.deepEqual(assessment.breaches.map(({ code }) => code), [
+    'candidate_p95',
+    'first_attempt_success',
+    'workflow_failures',
+    'workflow_retries',
+    'release_rebuild',
+    'image_build_retry',
+  ])
+})
+
+test('first-attempt reliability excludes superseded, manual, and skipped runs', () => {
+  const runs = [
+    run({ id: 1 }),
+    run({ id: 2, conclusion: 'cancelled' }),
+    run({ id: 3, conclusion: 'skipped' }),
+  ]
+  const report = buildCiObservabilityReport({ runs })
+  assert.equal(report.firstAttemptSuccessRate, 1)
+})
+
+test('SLO assessment passes a clean, fast representative window', () => {
+  const report = buildCiObservabilityReport({
+    runs: [run({ name: 'Release Candidate Stage', updated_at: '2026-09-01T00:41:00Z' })],
+  })
+  assert.equal(evaluateCiSlo(report).status, 'met')
 })
 
 test('scheduled workflow collects repository-wide CI and release evidence', () => {
@@ -54,5 +99,7 @@ test('scheduled workflow collects repository-wide CI and release evidence', () =
   assert.match(workflow, /listWorkflowRunsForRepo/)
   assert.match(workflow, /filter: 'all'/)
   assert.match(workflow, /ci-release-observability\.json/)
+  assert.match(workflow, /evaluateCiSlo/)
+  assert.match(workflow, /\[CI SLO\] Release pipeline threshold breach/)
   assert.doesNotMatch(workflow, /workflowId = 'ci\.yml'/)
 })

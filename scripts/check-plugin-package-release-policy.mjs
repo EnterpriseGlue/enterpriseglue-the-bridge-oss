@@ -14,17 +14,24 @@ const versionDiscipline = await readFile(
   'utf8',
 );
 
-assert.match(workflow, /\bon:\n  workflow_dispatch:/);
-assert.doesNotMatch(workflow, /^  (?:push|pull_request|pull_request_target|release|schedule):/m);
+assert.match(workflow, /\bon:\n  release:\n/);
+assert.match(workflow, /workflow_dispatch:/);
+assert.doesNotMatch(workflow, /^  (?:push|pull_request|pull_request_target|schedule):/m);
 assert.match(workflow, /environment: plugin-packages-production/);
+assert.match(workflow, /refs\/tags\/\$RELEASE_TAG/);
+assert.match(workflow, /refs\/heads\/main/);
+assert.match(workflow, /git merge-base --is-ancestor "\$SOURCE_REF" refs\/remotes\/origin\/main/);
 assert.match(workflow, /source_ref must be an immutable 40-character commit/);
 assert.match(workflow, /A non-current source_ref requires an exact release_tag/);
 assert.match(workflow, /git rev-list -n 1/);
 assert.match(workflow, /gh release view/);
 assert.match(workflow, /fetch-release-candidate\.sh/);
-assert.match(workflow, /cp "\$CANDIDATE_PAYLOAD"\/packages\/\*\.tgz/);
+assert.match(workflow, /cp "\$CANDIDATE_PAYLOAD"\/packages\/plugin\/\*\.tgz/);
+assert.match(workflow, /packages\/enterprise-plugin-api pack/);
 assert.match(workflow, /test -z "\$\(git status --porcelain\)"/);
 assert.match(workflow, /pnpm install --frozen-lockfile --ignore-scripts/);
+assert.match(workflow, /name: Install fallback build dependencies\n\s+if: steps\.source\.outputs\.candidate_required != 'true'/);
+assert.match(workflow, /name: Test and build fallback public packages\n\s+if: steps\.source\.outputs\.candidate_required != 'true'/);
 assert.match(workflow, /plugin-sdk run test/);
 assert.match(workflow, /plugin-runtime run test/);
 assert.match(workflow, /plugin-installer run test/);
@@ -37,6 +44,7 @@ assert.match(workflow, /publish-plugin-package-set\.mjs publish/);
 assert.match(workflow, /publish-plugin-package-set\.mjs verify/);
 assert.match(workflow, /actions\/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a/);
 assert.doesNotMatch(workflow, /^\s*uses:\s+[^\s@]+@(?:main|master|v?\d+(?:\.\d+){0,2})\s*$/m);
+assert.match(tarballVerifier, /packages\/enterprise-plugin-api\/package\.json/);
 assert.match(tarballVerifier, /packages\/plugin-sdk\/package\.json/);
 assert.match(tarballVerifier, /packages\/plugin-runtime\/package\.json/);
 assert.match(tarballVerifier, /packages\/plugin-installer\/package\.json/);
@@ -67,4 +75,4 @@ assert.match(packageSetPublisher, /npm[\s\S]*pack/);
 assert.match(packageSetPublisher, /different immutable payload/);
 assert.match(packageSetPublisher, /registry payload differs after publication/);
 
-console.log(JSON.stringify({ status: 'passed', packages: 4, customerCiRequired: false }));
+console.log(JSON.stringify({ status: 'passed', packages: 5, customerCiRequired: false }));

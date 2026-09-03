@@ -496,6 +496,7 @@ jobs:
             -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
             -e OPERATON_BACKSTOP_BROWSER_EVIDENCE=true \
             -e OPERATON_BACKSTOP_RESTART_BACKEND=false \
+            -e 'OPERATON_EXPECTED_VERSION_PATTERN=^2\.1(?:\.|$)' \
             -e OPERATON_BACKSTOP_ENGINE_URL=http://127.0.0.1:18080/engine-rest \
             -e OPERATON_BACKSTOP_DIRECT_URL=http://127.0.0.1:18080/engine-rest \
             -v "$PWD:/work" \
@@ -724,6 +725,9 @@ jobs:
           pnpm --filter @enterpriseglue/plugin-installer run build
           pnpm --filter @enterpriseglue/plugin-manager run test
           pnpm --filter @enterpriseglue/plugin-manager run build
+          pnpm --filter @enterpriseglue/shared run build
+          pnpm --filter @enterpriseglue/backend-host run build
+          pnpm --filter @enterpriseglue/frontend-host run build
 
       - name: Stage immutable toolchain artifacts
         id: stage
@@ -738,7 +742,9 @@ jobs:
           payload="$GITHUB_WORKSPACE/.artifacts/release-candidate-payload"
           chart_output="$payload/charts"
           package_output="$payload/packages"
-          mkdir -p "$chart_output" "$package_output"
+          plugin_package_output="$package_output/plugin"
+          host_package_output="$package_output/host"
+          mkdir -p "$chart_output" "$plugin_package_output" "$host_package_output"
 
           installer_version="$(node -p "require('./packages/plugin-installer/package.json').version")"
           manager_version="$(node -p "require('./packages/plugin-manager/package.json').version")"
@@ -771,12 +777,19 @@ jobs:
               "$TRIVY_IMAGE" image --quiet --exit-code 1 --severity HIGH,CRITICAL "$subject"
           done
 
-          pnpm --dir packages/plugin-sdk pack --pack-destination "$package_output"
-          pnpm --dir packages/plugin-runtime pack --pack-destination "$package_output"
-          pnpm --dir packages/plugin-installer pack --pack-destination "$package_output"
-          pnpm --dir packages/plugin-manager pack --pack-destination "$package_output"
-          node scripts/verify-plugin-package-tarballs.mjs "$package_output" > "$package_output/release-receipt.json"
-          node scripts/publish-plugin-package-set.mjs plan "$package_output" > "$package_output/registry-plan.json"
+          pnpm --dir packages/enterprise-plugin-api pack --pack-destination "$plugin_package_output"
+          pnpm --dir packages/plugin-sdk pack --pack-destination "$plugin_package_output"
+          pnpm --dir packages/plugin-runtime pack --pack-destination "$plugin_package_output"
+          pnpm --dir packages/plugin-installer pack --pack-destination "$plugin_package_output"
+          pnpm --dir packages/plugin-manager pack --pack-destination "$plugin_package_output"
+          node scripts/verify-plugin-package-tarballs.mjs "$plugin_package_output" > "$plugin_package_output/release-receipt.json"
+          node scripts/publish-plugin-package-set.mjs plan "$plugin_package_output" > "$plugin_package_output/registry-plan.json"
+
+          pnpm --dir packages/shared pack --pack-destination "$host_package_output"
+          pnpm --dir packages/backend-host pack --pack-destination "$host_package_output"
+          pnpm --dir packages/frontend-host pack --pack-destination "$host_package_output"
+          node scripts/verify-host-package-tarballs.mjs "$host_package_output" > "$host_package_output/release-receipt.json"
+          node scripts/publish-host-package-set.mjs plan "$host_package_output" > "$host_package_output/registry-plan.json"
 
           helm package infra/kubernetes/helm/enterpriseglue-host --destination "$chart_output" >/dev/null
           helm package infra/kubernetes/helm/enterpriseglue-plugin-runtime --destination "$chart_output" >/dev/null

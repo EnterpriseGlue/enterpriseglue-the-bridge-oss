@@ -21,10 +21,14 @@ const REQUIRED_ARTIFACTS = [
   /^charts\/enterpriseglue-plugin-runtime-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
   /^charts\/enterpriseglue-plugin-installer-rbac-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
   /^charts\/enterpriseglue-plugin-manager-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
-  /^packages\/enterpriseglue-plugin-sdk-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
-  /^packages\/enterpriseglue-plugin-runtime-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
-  /^packages\/enterpriseglue-plugin-installer-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
-  /^packages\/enterpriseglue-plugin-manager-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/plugin\/enterpriseglue-enterprise-plugin-api-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/plugin\/enterpriseglue-plugin-sdk-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/plugin\/enterpriseglue-plugin-runtime-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/plugin\/enterpriseglue-plugin-installer-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/plugin\/enterpriseglue-plugin-manager-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/host\/enterpriseglue-shared-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/host\/enterpriseglue-backend-host-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^packages\/host\/enterpriseglue-frontend-host-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
 ]
 
 function fail(message) {

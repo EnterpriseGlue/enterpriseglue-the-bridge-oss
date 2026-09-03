@@ -22,14 +22,16 @@ to create another patch version.
    generated release files and that the host-chart version change is the exact
    deterministic result expected from the protected base.
 3. The staging workflow builds the multi-architecture backend, frontend,
-   plugin-installer, and Plugin Manager images. It packages the four public
-   plugin packages and four Helm charts. Before any registry-write job runs,
+   plugin-installer, and Plugin Manager images. It packages the five
+   plugin/API packages and four Helm charts. Before any registry-write job runs,
    the read-only trust-boundary job proves that the candidate is the exact
    merge commit based on the protected revision and that its delta contains
    only the four generated release files. Application image jobs then check out
    that immutable candidate without persisted Git credentials, verify the
    checkout SHA, and bind the actual build context to the same OCI revision.
-   Plugin and chart staging remains on the protected checkout; the host chart's
+   The candidate also contains the exact shared, backend-host, and
+   frontend-host tarballs in addition to the five plugin/API packages. Plugin,
+   host-package, and chart staging remains on the protected checkout; the host chart's
    two validated release fields are derived there deterministically.
 4. PostgreSQL, MySQL, SQL Server, Oracle, and Spanner execute as independent
    TypeORM qualification shards. The aggregate requires all five observations,
@@ -61,8 +63,12 @@ to create another patch version.
    consumption.
 11. The workflow attaches the signed lock blob, receipts, deployment kit,
     static frontend, and offline archive to the existing GitHub release.
-12. Public plugin package publication consumes the exact candidate tarballs
-    when `release_tag` is supplied.
+12. `Publish Plugin/API Packages` and `Publish Host Packages` automatically
+    consume their exact signed candidate tarballs on the release event. Host
+    publication waits until every plugin/API dependency version is visible in
+    the registry. The host publisher verifies canonical registry payload
+    identity, publishes only missing versions in dependency order, and
+    attests them.
 
 The candidate repository and `candidate-vX.Y.Z-<commit>` image tags are
 staging identities. Consumers must use released semantic tags or digest
@@ -71,15 +77,23 @@ references from a published distribution lock.
 Backend and frontend candidate images are each split into amd64 and arm64 jobs.
 The four jobs use separate registry-backed BuildKit caches and publish temporary
 architecture digests. Only after every job succeeds does the reusable workflow
-assemble, sign, attest, and verify the multi-architecture manifests. Arm64 uses
-the declared emulation fallback until protected native runner capacity is
-available; both platforms remain mandatory.
+assemble, sign, attest, and verify the multi-architecture manifests. Arm64
+application images run on `ubuntu-24.04-arm` and amd64 application images on
+`ubuntu-24.04`; both native platforms remain mandatory. Treat unavailable
+native runner capacity as a release blocker rather than silently reintroducing
+an emulated critical path.
 
 The nightly `Release Canary` invokes this same reusable image path in dedicated
 scratch repositories and runs the non-publishing release-readiness drill. It
 must be green before enabling a material release-control change. It is evidence
 for workflow permissions and control flow, not permission to skip the exact
 candidate checks above.
+
+The canary also maintains only `recovery-baseline` and `recovery-active` tags
+in the dedicated canary repositories. It creates a deliberate partial alias
+update, requires the mismatch to be visible, restores the baseline digest
+pair, and verifies unavailable candidate/registry inputs fail closed. It never
+writes an application release tag or production `latest` alias.
 
 ## Required repository rule
 
@@ -119,9 +133,12 @@ move or recreate the tag.
   versions and the distribution-lock OCI subject must match the release
   payload or the workflow fails closed.
 - If public plugin packages still need publication, dispatch
-  `Publish plugin SDK packages` with the same `source_ref`, `release_tag`, and
+  `Publish Plugin/API Packages` with the same `source_ref`, `release_tag`, and
   `dry_run=false`. The workflow publishes the retained candidate tarballs in
-  dependency order.
+  dependency order. If host packages still need publication, dispatch
+  `Publish Host Packages` from protected `main` with the same `source_ref`,
+  `release_tag`, and `dry_run=false`; it consumes the host tarballs from that
+  same signed candidate.
 
 Create a new patch release only when shipped content must change. Authentication
 failures, registry timeouts, runner loss, signature retries, and incomplete

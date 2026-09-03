@@ -119,9 +119,14 @@ test('candidate package planning authenticates to GitHub Packages', () => {
     toolchainStage,
     /name: Stage immutable toolchain artifacts[\s\S]*NODE_AUTH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}[\s\S]*publish-plugin-package-set\.mjs plan/,
   )
+  assert.match(toolchainStage, /packages\/enterprise-plugin-api pack --pack-destination "\$plugin_package_output"/)
 })
 
 test('application release publication promotes candidate digests and delays aliases', () => {
+  const applicationBuild = dockerReusable.slice(
+    dockerReusable.indexOf('  build:\n'),
+    dockerReusable.indexOf('\n  publish:\n'),
+  )
   assert.match(dockerReusable, /source_ref:/)
   assert.match(dockerReusable, /ref: \$\{\{ inputs\.source_ref \|\| github\.sha \}\}/)
   assert.match(dockerReusable, /ref: \$\{\{ needs\.prepare\.outputs\.source_revision \}\}/)
@@ -130,6 +135,14 @@ test('application release publication promotes candidate digests and delays alia
   assert.match(dockerReusable, /image_version:/)
   assert.match(dockerReusable, /platform: linux\/amd64/)
   assert.match(dockerReusable, /platform: linux\/arm64/)
+  assert.equal(dockerReusable.match(/runner: ubuntu-24\.04-arm/g)?.length, 2)
+  assert.equal(dockerReusable.match(/runner: ubuntu-24\.04\n/g)?.length, 2)
+  assert.match(applicationBuild, /runs-on: \$\{\{ matrix\.runner \}\}/)
+  assert.doesNotMatch(applicationBuild, /runs-on: ubuntu-latest/)
+  assert.doesNotMatch(
+    applicationBuild,
+    /setup-qemu-action/,
+  )
   assert.equal(dockerReusable.match(/component: backend/g)?.length, 2)
   assert.equal(dockerReusable.match(/component: frontend/g)?.length, 2)
   assert.match(dockerReusable, /org\.opencontainers\.image\.revision=\$\{\{ needs\.prepare\.outputs\.source_revision \}\}/)
@@ -191,7 +204,7 @@ test('charts and packages consume the signed candidate with a legacy recovery bo
   assert.match(toolchain, /fetch-release-candidate\.sh/)
   assert.match(toolchain, /Bind toolchain images to the qualified candidate/)
   assert.match(toolchain, /oras cp -r "\$candidate_subject" "\$repository:\$version"/)
-  assert.match(packages, /cp "\$CANDIDATE_PAYLOAD"\/packages\/\*\.tgz/)
+  assert.match(packages, /cp "\$CANDIDATE_PAYLOAD"\/packages\/plugin\/\*\.tgz/)
   assert.match(packages, /New package publications require the signed candidate release_tag/)
 })
 

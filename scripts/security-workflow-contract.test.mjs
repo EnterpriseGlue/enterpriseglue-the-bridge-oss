@@ -65,7 +65,7 @@ test('image publishing labels and verifies source, revision, and version', () =>
   assert.match(imagePublish, /verify-oci-image-metadata\.mjs "\$prefix"/);
 });
 
-test('multi-architecture image publishing allows healthy emulated builds to finish', () => {
+test('multi-architecture image publishing allows both native platform builds to finish', () => {
   assert.match(imagePublish, /build:\n    name: Build \$\{\{ matrix\.component \}\} \$\{\{ matrix\.platform \}\} application image/);
   assert.match(imagePublish, /platform: linux\/amd64/);
   assert.match(imagePublish, /platform: linux\/arm64/);
@@ -73,7 +73,7 @@ test('multi-architecture image publishing allows healthy emulated builds to fini
   assert.equal(
     imagePublish.match(/timeout-minutes: 60/g)?.length,
     2,
-    'both matrix build attempts must have the extended build window',
+    'both native matrix build attempts must have the extended build window',
   );
   const buildJob = imagePublish.slice(
     imagePublish.indexOf('  build:\n'),

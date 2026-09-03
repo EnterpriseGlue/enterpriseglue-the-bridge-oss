@@ -18,6 +18,7 @@ async function digestFixturePackage(tarball) {
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'eg-plugin-package-set-'));
   const packages = [
+    { name: '@enterpriseglue/enterprise-plugin-api', version: '0.4.0', filename: 'api.tgz', payload: 'api' },
     { name: '@enterpriseglue/plugin-sdk', version: '0.3.0', filename: 'sdk.tgz', payload: 'sdk' },
     { name: '@enterpriseglue/plugin-runtime', version: '0.2.0', filename: 'runtime.tgz', payload: 'runtime' },
     { name: '@enterpriseglue/plugin-installer', version: '0.2.1', filename: 'installer.tgz', payload: 'installer' },
@@ -72,7 +73,7 @@ test('canonical package digests still reject a package.json value change', async
 
 test('plans only new payloads and safely reuses content-identical versions', async () => {
   const { directory, packages } = await fixture();
-  const existing = sha512Integrity(Buffer.from(packages[0].payload));
+  const existing = sha512Integrity(Buffer.from(packages[1].payload));
   const result = await processPackageSet({
     mode: 'plan',
     directory,
@@ -86,6 +87,7 @@ test('plans only new payloads and safely reuses content-identical versions', asy
     },
   });
   assert.deepEqual(result.packages.map(({ status }) => status), [
+    'new',
     'reused',
     'new',
     'new',
@@ -117,7 +119,7 @@ test('publishes only missing packages and verifies registry integrity afterward'
   const registry = new Map([
     [
       '@enterpriseglue/plugin-sdk@0.3.0',
-      sha512Integrity(Buffer.from(packages[0].payload)),
+      sha512Integrity(Buffer.from(packages[1].payload)),
     ],
   ]);
   const published = [];
@@ -133,30 +135,56 @@ test('publishes only missing packages and verifies registry integrity afterward'
       publish: async (tarball, { dryRun }) => {
         assert.equal(dryRun, false);
         published.push(tarball);
+        const entry = packages.find((candidate) => tarball.endsWith(candidate.filename));
+        assert.ok(entry);
         registry.set(
-          tarball.includes('runtime')
-            ? '@enterpriseglue/plugin-runtime@0.2.0'
-            : tarball.includes('installer')
-              ? '@enterpriseglue/plugin-installer@0.2.1'
-              : '@enterpriseglue/plugin-manager@0.1.1',
-          sha512Integrity(
-            Buffer.from(
-              tarball.includes('runtime')
-                ? packages[1].payload
-                : tarball.includes('installer')
-                  ? packages[2].payload
-                  : packages[3].payload,
-            ),
-          ),
+          `${entry.name}@${entry.version}`,
+          sha512Integrity(Buffer.from(entry.payload)),
         );
       },
     },
   });
-  assert.equal(published.length, 3);
+  assert.equal(published.length, 4);
   assert.deepEqual(result.packages.map(({ status }) => status), [
+    'published',
     'reused',
     'published',
     'published',
     'published',
+  ]);
+});
+
+test('supports an exact alternate dependency-ordered publication set', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'eg-host-package-set-'));
+  const packages = [
+    { name: '@enterpriseglue/frontend-host', version: '3.0.0', filename: 'frontend.tgz', payload: 'frontend' },
+    { name: '@enterpriseglue/shared', version: '1.0.0', filename: 'shared.tgz', payload: 'shared' },
+    { name: '@enterpriseglue/backend-host', version: '2.0.0', filename: 'backend.tgz', payload: 'backend' },
+  ];
+  for (const entry of packages) await writeFile(join(directory, entry.filename), entry.payload);
+  await writeFile(
+    join(directory, 'release-receipt.json'),
+    JSON.stringify({ packages: packages.map(({ payload: _payload, ...entry }) => entry) }),
+  );
+  const result = await processPackageSet({
+    mode: 'plan',
+    directory,
+    digestPackage: digestFixturePackage,
+    packageOrder: [
+      '@enterpriseglue/shared',
+      '@enterpriseglue/backend-host',
+      '@enterpriseglue/frontend-host',
+    ],
+    schemaVersion: 'enterpriseglue-host-package-publication/v1',
+    registryClient: {
+      describe: async () => null,
+      publish: async () => assert.fail('plan must not publish'),
+    },
+  });
+  assert.equal(result.schemaVersion, 'enterpriseglue-host-package-publication/v1');
+  assert.deepEqual(result.packages.map(({ subject }) => subject), [
+    '@enterpriseglue/shared@1.0.0',
+    '@enterpriseglue/backend-host@2.0.0',
+    '@enterpriseglue/frontend-host@3.0.0',
   ]);
 });

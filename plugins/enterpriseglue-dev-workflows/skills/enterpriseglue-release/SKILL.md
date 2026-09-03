@@ -31,15 +31,21 @@ description: Use when the user says /release, release the EnterpriseGlue OSS hos
    passing evidence.
 7. Merge Release Please PRs with a merge commit. Do not squash them. Never
    create a release by manually tagging around the manifest workflow.
-8. Monitor GitHub release creation, Docker Images, protected package
-   publication, and the downstream signed plugin toolchain. Verify immutable
-   version tags, `latest`, source revision, digests, smoke tests, vulnerability
-   results, registry visibility, signatures, and release receipts.
-   Do not dispatch or require an EE package synchronization.
+8. Monitor GitHub release creation, Docker Images, `Publish Plugin/API
+   Packages`, `Publish Host Packages`, and the downstream signed plugin
+   toolchain. The two package workflows must consume the eight exact tarballs
+   from the signed candidate; host publication must wait for the five
+   plugin/API dependency versions and verify canonical registry payloads.
+   Never substitute a package rebuilt from a `main` push. Verify immutable
+   image tags, `latest`, source revision, digests, smoke tests, vulnerability
+   results, registry visibility, signatures, and release receipts. Do not
+   dispatch or require an EE package synchronization.
 9. Before enabling a material release-workflow change, require a successful
    non-publishing canary using the production reusable control flow, scratch
-   repositories, exact ORAS digest checks, and non-publisher verification. A
-   canary must never advance semantic tags, `latest`, Docker Hub, or packages.
+   repositories, exact ORAS digest checks, partial-alias detection/restoration,
+   and non-publisher verification. A canary must never advance semantic tags,
+   production `latest`, Docker Hub, or packages. Review the rolling release-SLO
+   issue before declaring recovery complete.
 10. Verify the published GitHub release body matches
    `docs/releases/vX.Y.Z.md`. Never delete, recreate, or repoint a published
    `v*` tag; repair mistakes with a reviewed forward release.
