@@ -8,7 +8,7 @@
   "audiences": ["operators", "developers"],
   "summary": "Publishes externally consumable shared and host packages without unresolved pnpm workspace protocol dependencies.",
   "userImpact": [
-    "EnterpriseGlue EE and other external package consumers can refresh lockfiles after an OSS release without pnpm treating @enterpriseglue/plugin-sdk as a missing local workspace package."
+    "External plugin consumers can refresh lockfiles after an OSS release without pnpm treating @enterpriseglue/plugin-sdk as a missing local workspace package."
   ],
   "upgrade": {
     "required": false,
@@ -38,8 +38,7 @@
   ],
   "validation": [
     "CI packs every public package and rejects workspace protocol dependencies in the external manifest.",
-    "A clean external-consumer install validates the packed shared and host package set.",
-    "EnterpriseGlue EE package sync refreshes lockfiles and runs plugin API compatibility, typecheck, and unit tests."
+    "A clean external-consumer install validates the packed shared and host package set."
   ],
   "packages": [
     {
