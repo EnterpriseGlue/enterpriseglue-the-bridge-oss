@@ -191,11 +191,12 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=\$\{\{ matrix\.browser \}\}/);
   assert.match(authzPrWorkflow, /fine-grained-access-local\.spec\.ts/);
   assert.match(authzPrWorkflow, /variable-access-control-local\.spec\.ts/);
-  assert.match(authzPrWorkflow, /adapter-backstop-changes:/);
+  assert.match(authzPrWorkflow, /^  detect:$/m);
   assert.match(authzPrWorkflow, /pull-requests: read/);
-  assert.match(authzPrWorkflow, /github\.paginate\(github\.rest\.pulls\.listFiles/);
-  assert.match(authzPrWorkflow, /core\.setOutput\('should_run', String\(relevant\)\)/);
-  assert.match(authzPrWorkflow, /needs\.adapter-backstop-changes\.outputs\.should_run == 'true'/);
+  assert.match(authzPrWorkflow, /uses: \.\/\.github\/workflows\/ci-detect-reusable\.yml/);
+  assert.match(authzPrWorkflow, /authorization:[\s\S]*?needs: \[release-notes-preflight, detect\][\s\S]*?if: needs\.detect\.outputs\.authorization == 'true'/);
+  assert.match(authzPrWorkflow, /needs\.detect\.outputs\.run_adapter_backstop == 'true'/);
+  assert.doesNotMatch(authzPrWorkflow, /github\.rest\.pulls\.listFiles/);
   assert.match(authzPrWorkflow, /adapter-backstop:/);
   assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?services:[\s\S]*?image: postgres:17/);
   assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?POSTGRES_HOST: localhost/);

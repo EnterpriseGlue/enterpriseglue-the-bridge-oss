@@ -1,0 +1,49 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-pipeline-redesign",
+  "type": "internal",
+  "scope": "ci-release",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Route pull-request verification through a deterministic change classifier while keeping every selected lane fail closed in the stable CI aggregate.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The stable CI aggregate rejects a selected job that is skipped, missing, cancelled, timed out, action-required, or failed.",
+    "Unknown paths select the broad verification route instead of silently using a reduced test set."
+  ],
+  "documentation": [
+    "Workflow summaries explain the detected change classes and the verification lanes selected for each pull request."
+  ],
+  "knownLimitations": [
+    "Path classification cannot infer runtime effects outside the repository; unrecognized repository paths therefore use the broad verification route."
+  ],
+  "rollback": [
+    "Revert the classifier and reusable detection workflow together to restore the previous broad run-tests selection."
+  ],
+  "validation": [
+    "Test deterministic path classification, required-check aggregation, workflow contracts, and release-note-only fast-path behavior.",
+    "Verify TypeORM, authorization, Operaton, plugin, image, security, and documentation changes select their owning lanes.",
+    "Verify broad workspace dependency files do not select the independent five-database, identity-protocol, or deployment-evidence workflows unless an owning change surface is present.",
+    "Require documentation-only changes to run the publication-boundary guard without installing application dependencies."
+  ],
+  "packages": []
+}

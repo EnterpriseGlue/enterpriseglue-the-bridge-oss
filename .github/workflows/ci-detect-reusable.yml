@@ -9,11 +9,37 @@ on:
         type: boolean
         default: true
       security_scan_on_smoke_only:
-        description: Run security scan only when smoke lane should run
+        description: Run image security scans only when the application image lane is selected
         required: false
         type: boolean
         default: true
     outputs:
+      metadata_only:
+        value: ${{ jobs.detect.outputs.metadata_only }}
+      frontend:
+        value: ${{ jobs.detect.outputs.frontend }}
+      backend:
+        value: ${{ jobs.detect.outputs.backend }}
+      persistence:
+        value: ${{ jobs.detect.outputs.persistence }}
+      engine_integration:
+        value: ${{ jobs.detect.outputs.engine_integration }}
+      authorization:
+        value: ${{ jobs.detect.outputs.authorization }}
+      plugin_contract:
+        value: ${{ jobs.detect.outputs.plugin_contract }}
+      plugin_packaging:
+        value: ${{ jobs.detect.outputs.plugin_packaging }}
+      application_container:
+        value: ${{ jobs.detect.outputs.application_container }}
+      toolchain_container:
+        value: ${{ jobs.detect.outputs.toolchain_container }}
+      helm:
+        value: ${{ jobs.detect.outputs.helm }}
+      workflow_or_release:
+        value: ${{ jobs.detect.outputs.workflow_or_release }}
+      unknown_high_risk:
+        value: ${{ jobs.detect.outputs.unknown_high_risk }}
       run_tests:
         value: ${{ jobs.detect.outputs.run_tests }}
       current_sha:
@@ -24,6 +50,8 @@ on:
         value: ${{ jobs.detect.outputs.run_oracle }}
       run_smoke:
         value: ${{ jobs.detect.outputs.run_smoke }}
+      run_documentation_guard:
+        value: ${{ jobs.detect.outputs.run_documentation_guard }}
       test_databases:
         value: ${{ jobs.detect.outputs.test_databases }}
       run_boundary_guards:
@@ -32,6 +60,14 @@ on:
         value: ${{ jobs.detect.outputs.run_plugin_checks }}
       run_plugin_package:
         value: ${{ jobs.detect.outputs.run_plugin_package }}
+      run_plugin_images:
+        value: ${{ jobs.detect.outputs.run_plugin_images }}
+      run_package_discipline:
+        value: ${{ jobs.detect.outputs.run_package_discipline }}
+      run_compose_render:
+        value: ${{ jobs.detect.outputs.run_compose_render }}
+      run_ci_images:
+        value: ${{ jobs.detect.outputs.run_ci_images }}
       run_security_scan:
         value: ${{ jobs.detect.outputs.run_security_scan }}
       run_smoke_exposed:
@@ -40,8 +76,20 @@ on:
         value: ${{ jobs.detect.outputs.run_native_tenancy }}
       run_release_readiness:
         value: ${{ jobs.detect.outputs.run_release_readiness }}
+      run_adapter_backstop:
+        value: ${{ jobs.detect.outputs.run_adapter_backstop }}
+      run_engine_browser:
+        value: ${{ jobs.detect.outputs.run_engine_browser }}
+      run_database_matrix:
+        value: ${{ jobs.detect.outputs.run_database_matrix }}
+      run_identity_rehearsal:
+        value: ${{ jobs.detect.outputs.run_identity_rehearsal }}
+      run_deployment_evidence:
+        value: ${{ jobs.detect.outputs.run_deployment_evidence }}
       changed_files_count:
         value: ${{ jobs.detect.outputs.changed_files_count }}
+      selection_summary:
+        value: ${{ jobs.detect.outputs.selection_summary }}
 
 jobs:
   detect:
@@ -49,224 +97,119 @@ jobs:
     permissions:
       contents: read
     outputs:
-      run_tests: ${{ steps.detect.outputs.run_tests }}
-      current_sha: ${{ steps.detect.outputs.current_sha }}
-      run_postgres: ${{ steps.detect.outputs.run_postgres }}
-      run_oracle: ${{ steps.detect.outputs.run_oracle }}
-      run_smoke: ${{ steps.detect.outputs.run_smoke }}
-      test_databases: ${{ steps.detect.outputs.test_databases }}
-      run_boundary_guards: ${{ steps.detect.outputs.run_boundary_guards }}
-      run_plugin_checks: ${{ steps.detect.outputs.run_plugin_checks }}
-      run_plugin_package: ${{ steps.detect.outputs.run_plugin_package }}
-      run_security_scan: ${{ steps.detect.outputs.run_security_scan }}
-      run_smoke_exposed: ${{ steps.detect.outputs.run_smoke_exposed }}
-      run_native_tenancy: ${{ steps.detect.outputs.run_native_tenancy }}
-      run_release_readiness: ${{ steps.detect.outputs.run_release_readiness }}
-      changed_files_count: ${{ steps.detect.outputs.changed_files_count }}
+      metadata_only: ${{ steps.classify.outputs.metadata_only }}
+      frontend: ${{ steps.classify.outputs.frontend }}
+      backend: ${{ steps.classify.outputs.backend }}
+      persistence: ${{ steps.classify.outputs.persistence }}
+      engine_integration: ${{ steps.classify.outputs.engine_integration }}
+      authorization: ${{ steps.classify.outputs.authorization }}
+      plugin_contract: ${{ steps.classify.outputs.plugin_contract }}
+      plugin_packaging: ${{ steps.classify.outputs.plugin_packaging }}
+      application_container: ${{ steps.classify.outputs.application_container }}
+      toolchain_container: ${{ steps.classify.outputs.toolchain_container }}
+      helm: ${{ steps.classify.outputs.helm }}
+      workflow_or_release: ${{ steps.classify.outputs.workflow_or_release }}
+      unknown_high_risk: ${{ steps.classify.outputs.unknown_high_risk }}
+      run_tests: ${{ steps.classify.outputs.run_tests }}
+      current_sha: ${{ steps.source.outputs.current_sha }}
+      run_postgres: ${{ steps.classify.outputs.run_postgres }}
+      run_oracle: ${{ steps.classify.outputs.run_oracle }}
+      run_smoke: ${{ steps.classify.outputs.run_smoke }}
+      run_documentation_guard: ${{ steps.classify.outputs.run_documentation_guard }}
+      test_databases: ${{ steps.classify.outputs.test_databases }}
+      run_boundary_guards: ${{ steps.classify.outputs.run_boundary_guards }}
+      run_plugin_checks: ${{ steps.classify.outputs.run_plugin_checks }}
+      run_plugin_package: ${{ steps.classify.outputs.run_plugin_package }}
+      run_plugin_images: ${{ steps.classify.outputs.run_plugin_images }}
+      run_package_discipline: ${{ steps.classify.outputs.run_package_discipline }}
+      run_compose_render: ${{ steps.classify.outputs.run_compose_render }}
+      run_ci_images: ${{ steps.classify.outputs.run_ci_images }}
+      run_security_scan: ${{ steps.classify.outputs.run_security_scan }}
+      run_smoke_exposed: ${{ steps.classify.outputs.run_smoke_exposed }}
+      run_native_tenancy: ${{ steps.classify.outputs.run_native_tenancy }}
+      run_release_readiness: ${{ steps.classify.outputs.run_release_readiness }}
+      run_adapter_backstop: ${{ steps.classify.outputs.run_adapter_backstop }}
+      run_engine_browser: ${{ steps.classify.outputs.run_engine_browser }}
+      run_database_matrix: ${{ steps.classify.outputs.run_database_matrix }}
+      run_identity_rehearsal: ${{ steps.classify.outputs.run_identity_rehearsal }}
+      run_deployment_evidence: ${{ steps.classify.outputs.run_deployment_evidence }}
+      changed_files_count: ${{ steps.classify.outputs.changed_files_count }}
+      selection_summary: ${{ steps.classify.outputs.selection_summary }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Detect changes since last nightly run
-        id: detect
+      - name: Resolve exact comparison
+        id: source
+        shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          ENABLE_PLUGIN_PACKAGE: ${{ inputs.enable_plugin_package }}
-          SECURITY_SCAN_ON_SMOKE_ONLY: ${{ inputs.security_scan_on_smoke_only }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          current_sha="$(git rev-parse HEAD)"
+          echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
+          changed_file="$RUNNER_TEMP/enterpriseglue-changed-files.txt"
+          : > "$changed_file"
 
-          normalize_bool() {
-            if [ "${1:-}" = "true" ]; then
-              echo "true"
-            else
-              echo "false"
+          case "$EVENT_NAME" in
+            pull_request)
+              test -n "$PR_BASE_SHA"
+              test -n "$PR_HEAD_SHA"
+              git diff --name-only "$PR_BASE_SHA" "$PR_HEAD_SHA" > "$changed_file"
+              ;;
+            merge_group)
+              test -n "$MERGE_GROUP_BASE_SHA"
+              test -n "$MERGE_GROUP_HEAD_SHA"
+              git diff --name-only "$MERGE_GROUP_BASE_SHA" "$MERGE_GROUP_HEAD_SHA" > "$changed_file"
+              ;;
+            schedule)
+              last_sha="$(gh api 'repos/{owner}/{repo}/actions/workflows/ci.yml/runs?event=schedule&status=success&per_page=1' --jq '.workflow_runs[0].head_sha // ""' 2>/dev/null || true)"
+              if [[ -z "$last_sha" || "$last_sha" != "$current_sha" ]]; then
+                echo "force_full=true" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            workflow_dispatch)
+              echo "force_full=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "force_full=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+          # A pull request or merge-group comparison with no resolved paths is
+          # ambiguous (for example, a shallow/missing ref or malformed event).
+          # Fail closed instead of silently taking the policy-only fast path.
+          if [[ "$EVENT_NAME" == "pull_request" || "$EVENT_NAME" == "merge_group" ]]; then
+            if [[ ! -s "$changed_file" ]]; then
+              echo "force_full=true" >> "$GITHUB_OUTPUT"
             fi
-          }
-
-          ENABLE_PLUGIN_PACKAGE="$(normalize_bool "$ENABLE_PLUGIN_PACKAGE")"
-          SECURITY_SCAN_ON_SMOKE_ONLY="$(normalize_bool "$SECURITY_SCAN_ON_SMOKE_ONLY")"
-
-          emit_all_true() {
-            echo "run_tests=true" >> "$GITHUB_OUTPUT"
-            echo "run_postgres=true" >> "$GITHUB_OUTPUT"
-            echo "run_oracle=true" >> "$GITHUB_OUTPUT"
-            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
-            echo 'test_databases=["postgres","oracle"]' >> "$GITHUB_OUTPUT"
-            echo "run_boundary_guards=true" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_checks=true" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_package=$ENABLE_PLUGIN_PACKAGE" >> "$GITHUB_OUTPUT"
-            echo "run_security_scan=true" >> "$GITHUB_OUTPUT"
-            echo "run_smoke_exposed=true" >> "$GITHUB_OUTPUT"
-            echo "run_native_tenancy=true" >> "$GITHUB_OUTPUT"
-            echo "run_release_readiness=true" >> "$GITHUB_OUTPUT"
-          }
-
-          CURRENT_SHA=$(git rev-parse HEAD)
-          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
-
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            emit_all_true
-            echo "changed_files_count=manual" >> "$GITHUB_OUTPUT"
-            exit 0
           fi
 
-          if [ "${EVENT_NAME}" = "pull_request" ]; then
-            BASE_SHA="${PR_BASE_SHA}"
-            HEAD_SHA="${PR_HEAD_SHA:-$CURRENT_SHA}"
-            CHANGED_FILES="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
-            CHANGED_COUNT="$(printf '%s\n' "$CHANGED_FILES" | sed '/^$/d' | wc -l | tr -d ' ')"
-            echo "changed_files_count=$CHANGED_COUNT" >> "$GITHUB_OUTPUT"
+          echo "changed_file=$changed_file" >> "$GITHUB_OUTPUT"
 
-            if [ -z "$CHANGED_FILES" ]; then
-              emit_all_true
-              exit 0
-            fi
-
-            backend_changed=false
-            frontend_changed=false
-            infra_changed=false
-            db_changed=false
-            ci_only=true
-
-            if grep -Eq '^(backend/|packages/(backend-host|shared|enterprise-plugin-api|plugin-manager)/|package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)' <<< "$CHANGED_FILES"; then backend_changed=true; ci_only=false; fi
-            if grep -Eq '^(frontend/|packages/(frontend-host|shared|enterprise-plugin-api|plugin-manager)/|package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)' <<< "$CHANGED_FILES"; then frontend_changed=true; ci_only=false; fi
-            if grep -Eq '^(infra/docker/|infra/kubernetes/|scripts/(smoke-images-local|run-trivy-image-scan)\.sh|backend/Dockerfile\.prod|frontend/Dockerfile\.prod)' <<< "$CHANGED_FILES"; then infra_changed=true; ci_only=false; fi
-            if grep -Eq '^packages/shared/src/(db|config|infrastructure/persistence)/|^backend/src/shared/(db|config)/|^backend/src/modules/.*/.*(db|migration)|^backend/.+migration' <<< "$CHANGED_FILES"; then db_changed=true; ci_only=false; fi
-            if grep -Evq '^(docs/|README\.md|CHANGELOG\.md|CODE_OF_CONDUCT\.md|CONTRIBUTING\.md|LICENSE|SECURITY\.md|SUPPORT\.md|THIRD_PARTY_NOTICES\.md|third_party_licenses\.json|\.github/|local-docs/|\.sync/|\.windsurf/|\.vscode/|archive/)' <<< "$CHANGED_FILES"; then ci_only=false; fi
-
-            run_tests=false
-            run_postgres=false
-            run_oracle=false
-            run_smoke=false
-            run_boundary_guards=false
-            run_plugin_checks=false
-            run_plugin_package=false
-            run_security_scan=false
-            run_smoke_exposed=false
-            run_native_tenancy=false
-            run_release_readiness=false
-
-            if [ "$ci_only" = false ]; then
-              run_tests=true
-              if [ "$backend_changed" = true ] || [ "$frontend_changed" = true ] || [ "$infra_changed" = true ]; then
-                run_postgres=true
-              fi
-              if [ "$backend_changed" = true ] || [ "$db_changed" = true ] || [ "$infra_changed" = true ]; then
-                run_oracle=true
-              fi
-              if [ "$backend_changed" = true ] || [ "$frontend_changed" = true ] || [ "$infra_changed" = true ] || [ "$db_changed" = true ]; then
-                run_smoke=true
-              fi
-
-              run_boundary_guards=true
-              if [ "$backend_changed" = true ] || [ "$frontend_changed" = true ]; then
-                run_plugin_checks=true
-                if [ "$ENABLE_PLUGIN_PACKAGE" = "true" ]; then
-                  run_plugin_package=true
-                fi
-              fi
-
-              if [ "$SECURITY_SCAN_ON_SMOKE_ONLY" = "true" ]; then
-                if [ "$run_smoke" = true ]; then
-                  run_security_scan=true
-                fi
-              elif [ "$backend_changed" = true ] || [ "$frontend_changed" = true ] || [ "$infra_changed" = true ]; then
-                run_security_scan=true
-              fi
-
-              if [ "$run_smoke" = true ] && [ "$infra_changed" = true ]; then
-                run_smoke_exposed=true
-              fi
-
-              if grep -Eq '^(packages/backend-host/src/(routes/index|plugins/(pluginControlPlane|pluginControlRoutes|pluginControlStore|pluginRuntime|pluginTenantEligibility)|modules/(tenancy|auth|invitations|platform-admin/routes/(authz|identity-providers)))|packages/frontend-host/src/(pages/Login|routes/index|main|utils/httpInterceptor|services/(auth|tenancy)|features/(platform-admin|shared/components/(NativeTenantPicker|LayoutWithProSidebar)))|packages/plugin-sdk/src/control|packages/shared/src/(config|db|authz|interfaces/middleware|middleware|schemas/(openapi|platform-admin/(authz|tenant))|services/(AuthSessionService|invitations|tenant-database-context|email|platform-admin/(Tenant|LoginMethod|ActionAvailability|permissions))|utils/jwt)|backend/(test/integration/nativeTenantRls|__tests__/.*(tenant|identity|auth|invitation|Tenant|Login))|frontend/__tests__/.*(Tenant|tenant|Login\.organization|LayoutWithProSidebar)|test/(e2e/pooled-tenancy|authz/authorization-state-space-contract)|scripts/run-(native-tenancy-postgres-rls|pooled-tenancy-e2e|saas-upgrade-restore-rollback)|scripts/saas-qualification-contracts\.test\.mjs|infra/docker/(compose/docker-compose\.pooled-tenancy-e2e|env/examples/.*)|docs/(architecture/(11-native-saas-tenancy|12-plugin-platform-and-authoring)|reference/tenant-application-marketplace|runbooks/saas-upgrade-restore-rollback)|\.release-notes/(native-saas-tenancy|tenant-eligibility-runtime-reconciliation|combined-pooled-saas-qualification)|package\.json)' <<< "$CHANGED_FILES"; then
-                run_native_tenancy=true
-              fi
-
-              if grep -Eq '^(\.github/workflows/(ci|ci-detect-reusable|release-notes-preflight-reusable|release-please|release-candidate-stage|docker-images|docker-images-reusable|plugin-package-release|plugin-toolchain-release|host-chart-release)\.yml|scripts/(check-ci-aggregate-contract|evaluate-ci-needs|check-release-candidate-readiness|release-candidate-receipt|fetch-release-candidate|plan-plugin-toolchain-charts|check-plugin-platform-production-images|check-plugin-toolchain-oci-local|check-enterpriseglue-host-chart|publish-plugin-package-set|verify-plugin-package-tarballs|check-plugin-toolchain-release-policy|check-plugin-package-release-policy|check-host-chart-release-policy|check-published-package-version-discipline|check-workspace-dependency-version-drift|helm-chart-archive)(\.|$))' <<< "$CHANGED_FILES"; then
-                run_release_readiness=true
-              fi
-            fi
-
-            if [ "$run_tests" = true ] && [ "$run_postgres" = false ] && [ "$run_oracle" = false ]; then
-              run_postgres=true
-            fi
-
-            test_databases='["postgres"]'
-            if [ "$run_postgres" = true ] && [ "$run_oracle" = true ]; then
-              test_databases='["postgres","oracle"]'
-            elif [ "$run_oracle" = true ]; then
-              test_databases='["oracle"]'
-            fi
-
-            echo "run_tests=$run_tests" >> "$GITHUB_OUTPUT"
-            echo "run_postgres=$run_postgres" >> "$GITHUB_OUTPUT"
-            echo "run_oracle=$run_oracle" >> "$GITHUB_OUTPUT"
-            echo "run_smoke=$run_smoke" >> "$GITHUB_OUTPUT"
-            echo "test_databases=$test_databases" >> "$GITHUB_OUTPUT"
-            echo "run_boundary_guards=$run_boundary_guards" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_checks=$run_plugin_checks" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_package=$run_plugin_package" >> "$GITHUB_OUTPUT"
-            echo "run_security_scan=$run_security_scan" >> "$GITHUB_OUTPUT"
-            echo "run_smoke_exposed=$run_smoke_exposed" >> "$GITHUB_OUTPUT"
-            echo "run_native_tenancy=$run_native_tenancy" >> "$GITHUB_OUTPUT"
-            echo "run_release_readiness=$run_release_readiness" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # merge_group: the PR already passed full CI — run a lighter validation
-          # Keep fast static/build/image smoke validation on the queued SHA, but
-          # skip duplicate PR-only lanes such as Oracle, plugin compatibility,
-          # plugin packaging, and security scanning.
-          if [ "${EVENT_NAME}" = "merge_group" ]; then
-            echo "run_tests=true" >> "$GITHUB_OUTPUT"
-            echo "run_postgres=true" >> "$GITHUB_OUTPUT"
-            echo "run_oracle=false" >> "$GITHUB_OUTPUT"
-            echo "run_smoke=true" >> "$GITHUB_OUTPUT"
-            echo 'test_databases=["postgres"]' >> "$GITHUB_OUTPUT"
-            echo "run_boundary_guards=true" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_checks=false" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_package=false" >> "$GITHUB_OUTPUT"
-            echo "run_security_scan=false" >> "$GITHUB_OUTPUT"
-            echo "run_smoke_exposed=false" >> "$GITHUB_OUTPUT"
-            echo "run_native_tenancy=false" >> "$GITHUB_OUTPUT"
-            echo "run_release_readiness=false" >> "$GITHUB_OUTPUT"
-            echo "changed_files_count=merge-queue" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${EVENT_NAME}" != "schedule" ]; then
-            emit_all_true
-            echo "changed_files_count=all" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          LAST_SHA=$(
-            gh api "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?event=schedule&status=success&per_page=1" \
-              --jq '.workflow_runs[0].head_sha // ""' 2>/dev/null || echo ""
+      - name: Classify changed paths and select evidence lanes
+        id: classify
+        shell: bash
+        env:
+          CHANGED_FILE: ${{ steps.source.outputs.changed_file }}
+          FORCE_FULL: ${{ steps.source.outputs.force_full }}
+          ENABLE_PLUGIN_PACKAGE: ${{ inputs.enable_plugin_package }}
+          SECURITY_SCAN_ON_SMOKE_ONLY: ${{ inputs.security_scan_on_smoke_only }}
+        run: |
+          set -euo pipefail
+          args=(
+            --changed-files "$CHANGED_FILE"
+            --github-output "$GITHUB_OUTPUT"
+            --summary "$GITHUB_STEP_SUMMARY"
           )
-          echo "last_successful_nightly_sha=$LAST_SHA" >> "$GITHUB_OUTPUT"
-
-          if [ -n "$LAST_SHA" ] && [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
-            echo "run_tests=false" >> "$GITHUB_OUTPUT"
-            echo "run_postgres=false" >> "$GITHUB_OUTPUT"
-            echo "run_oracle=false" >> "$GITHUB_OUTPUT"
-            echo "run_smoke=false" >> "$GITHUB_OUTPUT"
-            echo 'test_databases=["postgres"]' >> "$GITHUB_OUTPUT"
-            echo "run_boundary_guards=false" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_checks=false" >> "$GITHUB_OUTPUT"
-            echo "run_plugin_package=false" >> "$GITHUB_OUTPUT"
-            echo "run_security_scan=false" >> "$GITHUB_OUTPUT"
-            echo "run_smoke_exposed=false" >> "$GITHUB_OUTPUT"
-            echo "run_native_tenancy=false" >> "$GITHUB_OUTPUT"
-            echo "run_release_readiness=false" >> "$GITHUB_OUTPUT"
-            echo "changed_files_count=0" >> "$GITHUB_OUTPUT"
-          else
-            emit_all_true
-            echo "changed_files_count=since-last-nightly" >> "$GITHUB_OUTPUT"
-          fi
+          if [[ "$FORCE_FULL" == "true" ]]; then args+=(--full); fi
+          if [[ "$ENABLE_PLUGIN_PACKAGE" != "true" ]]; then args+=(--disable-plugin-package); fi
+          if [[ "$SECURITY_SCAN_ON_SMOKE_ONLY" != "true" ]]; then args+=(--security-on-container-or-toolchain); fi
+          node scripts/ci-change-classifier.mjs "${args[@]}"

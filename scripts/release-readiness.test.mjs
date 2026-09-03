@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { classifyChangedFiles } from './ci-change-classifier.mjs'
 
 const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const preflight = await readFile(
@@ -36,7 +37,9 @@ test('release candidate detection works for pull requests, manual runs, and merg
   assert.match(preflight, /github\.rest\.pulls\.list/)
   assert.match(preflight, /head: `\$\{context\.repo\.owner\}:\$\{branch\}`/)
   assert.match(detect, /run_release_readiness/)
-  assert.match(detect, /check-release-candidate-readiness/)
+  const classification = classifyChangedFiles(['scripts/check-release-candidate-readiness.sh'])
+  assert.equal(classification.workflow_or_release, true)
+  assert.equal(classification.run_release_readiness, true)
 })
 
 test('the release-readiness CI job is read-only and part of the aggregate', () => {
