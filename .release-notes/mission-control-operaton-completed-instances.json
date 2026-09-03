@@ -1,0 +1,74 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "mission-control-operaton-completed-instances",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Restore completed Operaton process details when the engine returns a null business key, including the BPMN diagram, final variables, definition identity, state, and duration.",
+  "userImpact": [
+    "Mission Control process overview deep links select the requested accessible engine before issuing engine queries.",
+    "Completed Operaton instances display their BPMN diagram and process-scope variable snapshot without runtime-only request errors."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The process-instance response contract now explicitly accepts the null businessKey value already returned by supported Camunda-compatible engines."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema migration is required; engine-health BIGINT conversion and the relevant TypeORM behavior are qualified on PostgreSQL, MySQL, SQL Server, Oracle, and Spanner."
+    ]
+  },
+  "security": [
+    "Deep-link engine IDs are accepted only when present in the caller's accessible engine inventory."
+  ],
+  "documentation": [
+    "Document the real-Operaton and strict browser-diagnostic release qualification path."
+  ],
+  "knownLimitations": [
+    "Executable BPMN without Diagram Interchange coordinates receives an explicit layout-unavailable state; rendering requires a deployment that includes BPMN DI."
+  ],
+  "rollback": [
+    "Revert the nullable transport contract and URL-first engine selection together; no database rollback is needed."
+  ],
+  "validation": [
+    "Run the Mission Control schema, query-policy, overview, detail, diagram, and variable regression suites.",
+    "Run the authenticated browser journey against the pinned Operaton 2.1.0 image and require a clean console, page-error, request-failure, and HTTP-error report.",
+    "Run physical TypeORM qualification for PostgreSQL, MySQL, SQL Server, Oracle, and Spanner."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.15.2",
+      "newVersion": "0.15.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.15.2",
+      "newVersion": "0.15.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.13.3",
+      "newVersion": "0.13.4",
+      "impact": "patch"
+    }
+  ]
+}

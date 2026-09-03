@@ -41,7 +41,10 @@ export const ProcessInstanceRuntimeActionDecisionsSchema = z.object({
 export const ProcessInstanceSchema = z.object({
   id: z.string(),
   processDefinitionKey: z.string().optional(),
-  businessKey: z.string().optional(),
+  // Operaton and Camunda return JSON null when no business key was supplied.
+  // Accept that engine-native value so completed-instance history remains the
+  // source of truth for state, definition identity, BPMN, and variables.
+  businessKey: z.string().nullable().optional(),
   version: z.number().optional(),
   superProcessInstanceId: z.string().nullable().optional(),
   rootProcessInstanceId: z.string().nullable().optional(),

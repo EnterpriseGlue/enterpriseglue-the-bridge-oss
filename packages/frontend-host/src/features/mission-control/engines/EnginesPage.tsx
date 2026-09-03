@@ -66,6 +66,7 @@ import type {
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
 import { createEngine, deleteEngine as deleteEngineRequest, getManageableEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineMembers, getEngineProjectTargets, setEngineEnvironment, testEngineConnection, updateEngine } from './api/engines'
+import { engineHealthQueryPolicy } from './engineHealthQueryPolicy'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -2539,7 +2540,11 @@ export default function Engines() {
 }
 
 function EngineHealthBadge({ engineId, version }: { engineId: string; version?: string | null }) {
-  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => getEngineConnectionHealth(engineId) })
+  const q = useQuery({
+    queryKey: ['engines','health', engineId],
+    queryFn: () => getEngineConnectionHealth(engineId),
+    ...engineHealthQueryPolicy,
+  })
   const h = q.data
   const status = h?.status || 'unknown'
   const label = status === 'connected' ? 'Connected' : (status === 'disconnected' ? 'Disconnected' : 'Unknown')
@@ -2558,7 +2563,11 @@ function EngineHealthBadge({ engineId, version }: { engineId: string; version?: 
  * action can describe the current user intent without gaining host access.
  */
 function EngineVersionCell({ engineId, initialVersion }: { engineId: string; initialVersion?: string | null }) {
-  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => getEngineConnectionHealth(engineId) })
+  const q = useQuery({
+    queryKey: ['engines','health', engineId],
+    queryFn: () => getEngineConnectionHealth(engineId),
+    ...engineHealthQueryPolicy,
+  })
   const v = initialVersion || q.data?.version
   return <span style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>{v ? `v${v}` : '—'}</span>
 }

@@ -4,16 +4,16 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { getE2ECredentials } from './utils/credentials';
+import { monitorBrowserDiagnostics } from './utils/browserDiagnostics';
 
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
-// The EnterpriseGlue backend runs in Docker, so its registration endpoint
-// needs Docker's host gateway. The browser talks to the same disposable engine
-// through the loopback address that was published by the test runner.
+// Local Compose uses Docker's host gateway while the release-candidate job runs
+// the backend directly on its isolated runner. Both routes stay localhost-only.
 const engineUrl = process.env.OPERATON_BACKSTOP_ENGINE_URL || '';
 const operatonUrl = process.env.OPERATON_BACKSTOP_DIRECT_URL || '';
 const enabled = process.env.OPERATON_BACKSTOP_BROWSER_EVIDENCE === 'true'
   && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/.test(baseUrl)
-  && /^http:\/\/host\.docker\.internal(?::\d+)?\/engine-rest$/.test(engineUrl)
+  && /^http:\/\/(?:host\.docker\.internal|127\.0\.0\.1|localhost)(?::\d+)?\/engine-rest$/.test(engineUrl)
   && /^http:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\/engine-rest$/.test(operatonUrl);
 const restartBackendForDurability = process.env.OPERATON_BACKSTOP_RESTART_BACKEND === 'true';
 const execFileAsync = promisify(execFile);
@@ -28,16 +28,16 @@ async function json<T>(response: Awaited<ReturnType<Page['request']['get']>>, la
   return body as T;
 }
 
-async function csrf(page: Page): Promise<string> {
-  const response = await page.request.get('/api/csrf-token');
+async function csrf(page: Page, timeout = 30_000): Promise<string> {
+  const response = await page.request.get('/api/csrf-token', { timeout });
   expect(response.status()).toBe(200);
   const value = response.headers()['x-csrf-token'];
   expect(value).toBeTruthy();
   return value;
 }
 
-async function mutation(page: Page, data?: unknown) {
-  return { headers: { 'X-CSRF-Token': await csrf(page) }, ...(data === undefined ? {} : { data }) };
+async function mutation(page: Page, data?: unknown, timeout = 30_000) {
+  return { headers: { 'X-CSRF-Token': await csrf(page, timeout) }, timeout, ...(data === undefined ? {} : { data }) };
 }
 
 async function login(page: Page): Promise<void> {
@@ -101,6 +101,12 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
   test('maps, previews, applies, detects drift, and keeps native IDs write-only against direct Operaton', async ({ page }, testInfo) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await login(page);
+      // The dashboard performs background authenticated reads and each response
+      // carries the latest double-submit token. Quiesce the document while the
+      // fixture uses direct API requests so another response cannot supersede a
+      // freshly fetched CSRF token between the GET and mutation.
+      await page.goto('about:blank');
+      const diagnostics = monitorBrowserDiagnostics(page);
       await deployFixture(page);
       const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const groupName = `Operaton browser operators ${suffix}`;
@@ -144,6 +150,65 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
           })),
           'create Operaton engine',
         );
+        const directEngine = await json<{ version?: string }>(
+          await page.request.get(`${operatonUrl}/version`),
+          'read pinned Operaton engine version',
+        );
+        expect(directEngine.version).toMatch(/^2\.1(?:\.|$)/);
+        for (let poll = 0; poll < 2; poll += 1) {
+          const health = await json<{ status?: string; checkedAt?: number; version?: string }>(
+            await page.request.get(`/engines-api/engines/${encodeURIComponent(engine.id)}/health`),
+            `poll Operaton engine health ${poll + 1}`,
+          );
+          expect(health.status).toBe('connected');
+          expect(Number.isSafeInteger(health.checkedAt)).toBe(true);
+          if (poll === 0) expect(health.version).toMatch(/^2\.1(?:\.|$)/);
+        }
+        const inventory = await json<Array<{ id: string; version?: string | null }>>(
+          await page.request.get('/engines-api/engines'),
+          'read engine inventory after version discovery',
+        );
+        expect(inventory.find((candidate) => candidate.id === engine?.id)?.version).toMatch(/^2\.1(?:\.|$)/);
+        const started = await json<{ id: string }>(
+          await page.request.post(`${operatonUrl}/process-definition/key/egprocess/start`, {
+            data: {
+              variables: {
+                amount: { value: 84, type: 'Integer' },
+                completionNote: { value: 'completed by Operaton 2.1 browser qualification', type: 'String' },
+              },
+            },
+          }),
+          'start Operaton qualification process',
+        );
+
+        await page.goto(`/t/default/mission-control/processes?engineId=${encodeURIComponent(engine.id)}`);
+        const processCombobox = page.getByRole('combobox', { name: 'Process', exact: true });
+        await expect(processCombobox).toBeVisible({ timeout: 30_000 });
+        await processCombobox.click();
+        const processOption = page.getByRole('option', { name: 'EnterpriseGlue authorization fixture', exact: true });
+        await expect(processOption).toBeVisible({ timeout: 30_000 });
+        await processOption.click();
+        await expect(processCombobox).toHaveValue('EnterpriseGlue authorization fixture');
+        const activeFilter = page.getByRole('checkbox', { name: 'Active', exact: true });
+        const incidentFilter = page.getByRole('checkbox', { name: 'Incidents', exact: true });
+        const completedFilter = page.getByRole('checkbox', { name: 'Completed', exact: true });
+        await page.locator('label[for="sidebar-status-active"]').click();
+        await page.locator('label[for="sidebar-status-incidents"]').click();
+        await page.locator('label[for="sidebar-status-completed"]').click();
+        await expect(activeFilter).not.toBeChecked();
+        await expect(incidentFilter).not.toBeChecked();
+        await expect(completedFilter).toBeChecked();
+        await expect(page.getByText('1 Process Instances', { exact: true })).toBeVisible({ timeout: 30_000 });
+        const instanceLink = page.getByTitle(started.id, { exact: true });
+        await expect(instanceLink).toBeVisible();
+        await instanceLink.click();
+        await expect(page).toHaveURL(new RegExp(`/mission-control/processes/instances/${started.id}(?:\\?|$)`));
+        await expect(page.getByText(/Variables|Instance History/i).first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByText('completionNote', { exact: true })).toBeVisible();
+        await expect(page.getByText('completed by Operaton 2.1 browser qualification', { exact: true })).toBeVisible();
+        await expect(page.locator('.djs-container svg[data-element-id]')).toBeVisible();
+        await expect(page.locator('body')).not.toContainText(/Failed to load|Error loading XML|No diagram XML/i);
+        await diagnostics.expectClean('Operaton 2.1 process overview, completed detail, variables, and BPMN diagram');
         await json(
           await page.request.post(`/engines-api/engines/${encodeURIComponent(engine.id)}/runtime-resources/reconcile`, await mutation(page)),
           'reconcile Operaton runtime resources',
@@ -214,10 +279,22 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
           await writeFile(process.env.OPERATON_BACKSTOP_SCREENSHOT_PATH, screenshot);
         }
       } finally {
-        for (const assignmentId of assignmentIds.reverse()) await page.request.delete(`/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`, await mutation(page)).catch(() => undefined);
-        if (roleId) await page.request.delete(`/api/authz/roles/${encodeURIComponent(roleId)}`, await mutation(page)).catch(() => undefined);
-        if (engine) await page.request.delete(`/engines-api/engines/${encodeURIComponent(engine.id)}`, await mutation(page)).catch(() => undefined);
-        if (groupId) await page.request.put(`/api/authz/groups/${encodeURIComponent(groupId)}`, await mutation(page, { isArchived: true })).catch(() => undefined);
+        diagnostics.dispose();
+        // Stop page-level polling before the direct cleanup mutations so the
+        // browser cannot rotate their double-submit token between requests.
+        await page.goto('about:blank').catch(() => undefined);
+        for (const assignmentId of assignmentIds.reverse()) {
+          try { await page.request.delete(`/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`, await mutation(page, undefined, 5_000)); } catch {}
+        }
+        if (roleId) {
+          try { await page.request.delete(`/api/authz/roles/${encodeURIComponent(roleId)}`, await mutation(page, undefined, 5_000)); } catch {}
+        }
+        if (engine) {
+          try { await page.request.delete(`/engines-api/engines/${encodeURIComponent(engine.id)}`, await mutation(page, undefined, 5_000)); } catch {}
+        }
+        if (groupId) {
+          try { await page.request.put(`/api/authz/groups/${encodeURIComponent(groupId)}`, await mutation(page, { isArchived: true }, 5_000)); } catch {}
+        }
       }
   });
 });

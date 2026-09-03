@@ -42,6 +42,7 @@ describe('EngineSelector', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    window.history.replaceState(null, '', '/');
     useEngineSelectorStore.setState({ selectedEngineId: undefined });
   });
 
@@ -63,6 +64,17 @@ describe('EngineSelector', () => {
 
     await waitFor(() => expect(result.current.selectedEngineId).toBe('engine-z'));
     expect(useEngineSelectorStore.getState().selectedEngineId).toBe('engine-z');
+  });
+
+  it('uses an accessible deep-link engine before the persisted selection', async () => {
+    window.history.replaceState(null, '', '/t/default/mission-control/processes?engineId=engine-z');
+    useEngineSelectorStore.getState().setSelectedEngineId('engine-a');
+    vi.mocked(getAccessibleEngines).mockResolvedValue(engines);
+
+    const { result } = renderHook(() => useEngineSelection(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.selectedEngineId).toBe('engine-z'));
+    await waitFor(() => expect(useEngineSelectorStore.getState().selectedEngineId).toBe('engine-z'));
   });
 
   it('replaces a stale persisted selection with an accessible engine', async () => {

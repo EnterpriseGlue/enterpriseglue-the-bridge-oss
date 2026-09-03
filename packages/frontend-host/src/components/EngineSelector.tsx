@@ -20,8 +20,15 @@ export function sortAccessibleEngines(engines: AccessibleEngineSummary[]): Acces
 export function resolveSelectedEngineId(
   engines: AccessibleEngineSummary[],
   persistedEngineId: string | undefined,
+  requestedEngineId?: string,
 ): string | undefined {
   if (engines.length === 0) return undefined
+  // A deep link must select its explicit accessible engine before any feature
+  // query is enabled. Applying this only in a page effect allowed one render
+  // against a stale persisted engine, producing avoidable 4xx/5xx requests.
+  if (requestedEngineId && engines.some((engine) => engine.id === requestedEngineId)) {
+    return requestedEngineId
+  }
   if (persistedEngineId && engines.some((engine) => engine.id === persistedEngineId)) {
     return persistedEngineId
   }
@@ -41,8 +48,11 @@ export function useEngineSelection() {
     () => sortAccessibleEngines(enginesQuery.data || []),
     [enginesQuery.data],
   )
+  const requestedEngineId = typeof window === 'undefined'
+    ? undefined
+    : new URLSearchParams(window.location.search).get('engineId') || undefined
   const selectedEngineId = enginesQuery.isSuccess
-    ? resolveSelectedEngineId(engines, persistedEngineId)
+    ? resolveSelectedEngineId(engines, persistedEngineId, requestedEngineId)
     : undefined
 
   React.useEffect(() => {

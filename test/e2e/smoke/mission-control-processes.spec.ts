@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { getE2ECredentials, hasE2ECredentials } from '../utils/credentials';
 import { getMockProcessFixture } from '../utils/mockCamundaFixture';
+import { monitorBrowserDiagnostics } from '../utils/browserDiagnostics';
 
 const shouldSkip = !hasE2ECredentials();
 const requireMock = process.env.E2E_REQUIRE_MISSION_CONTROL_MOCK === 'true';
@@ -46,6 +47,7 @@ test.describe('Smoke: Mission Control processes', () => {
   test('processes list loads @smoke @mission-control', async ({ page }) => {
     const fixture = requireMock ? await getMockProcessFixture() : null;
     await login(page);
+    const diagnostics = monitorBrowserDiagnostics(page);
     const definitionsPromise = requireMock
       ? waitForJsonResponse(page, '/mission-control-api/process-definitions')
       : Promise.resolve(null);
@@ -65,5 +67,7 @@ test.describe('Smoke: Mission Control processes', () => {
     await expectMissionControlState(page, requireMock && fixture?.listProcessDefinitionName
       ? new RegExp(`Processes|${fixture.listProcessDefinitionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
       : /To view a diagram|Process Instances|Processes/i);
+    await diagnostics.expectClean('Mission Control process overview');
+    diagnostics.dispose();
   });
 });
