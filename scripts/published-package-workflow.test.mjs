@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { isCompatiblePatchVersion } from './check-plugin-api-version.mjs';
 
 const workflow = await readFile(
   new URL('../.github/workflows/host-package-release.yml', import.meta.url),
@@ -46,4 +47,13 @@ test('the signed candidate inventory contains every host package exactly once', 
   }
   assert.match(candidateStage, /verify-host-package-tarballs\.mjs/);
   assert.match(candidateStage, /publish-host-package-set\.mjs plan/);
+});
+
+test('plugin API compatibility accepts immutable patch releases without weakening its line', () => {
+  assert.equal(isCompatiblePatchVersion('0.4.0', '0.4.0'), true);
+  assert.equal(isCompatiblePatchVersion('0.4.1', '0.4.0'), true);
+  assert.equal(isCompatiblePatchVersion('0.4.99', '0.4.0'), true);
+  assert.equal(isCompatiblePatchVersion('0.3.99', '0.4.0'), false);
+  assert.equal(isCompatiblePatchVersion('0.5.0', '0.4.0'), false);
+  assert.equal(isCompatiblePatchVersion('0.4.2-beta.1', '0.4.0'), false);
 });

@@ -56,7 +56,9 @@ assert_contains "$BACKEND_DTS" "getNotificationTenantResolver" "backend notifica
 
 if [[ "$MODE" == "current" ]]; then
   assert_contains "$PKG_JSON" '"private": false' "non-private plugin-api package"
-  assert_contains "$PKG_JSON" '"version": "0.4.0"' "plugin-api baseline version"
+  if ! node ./scripts/check-plugin-api-version.mjs "$PKG_JSON" "0.4.0"; then
+    fail=1
+  fi
 
   # pnpm v9 doesn't support --dry-run; pack and clean up tarball instead
   if ! pnpm --dir packages/enterprise-plugin-api pack >/dev/null 2>&1; then
