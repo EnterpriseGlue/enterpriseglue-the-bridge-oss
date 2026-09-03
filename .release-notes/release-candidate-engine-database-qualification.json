@@ -1,0 +1,50 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-candidate-engine-database-qualification",
+  "type": "internal",
+  "scope": "release-qualification",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Qualify each immutable release candidate on all supported TypeORM databases and a pinned real Operaton browser journey before publication.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "PostgreSQL, MySQL, SQL Server, Oracle, and Spanner execute as independent candidate shards, followed by one aggregate schema-equivalence check."
+    ]
+  },
+  "security": [
+    "The candidate source validator remains read-only and proves the exact release-only delta before any workflow with package write authority runs.",
+    "Database credentials and the Operaton fixture remain isolated to disposable candidate jobs."
+  ],
+  "documentation": [
+    "Candidate receipts record the five-database aggregate and pinned Operaton browser result as distinct release evidence."
+  ],
+  "knownLimitations": [
+    "A single database shard or the supported Operaton journey being skipped, missing, or failed blocks candidate readiness."
+  ],
+  "rollback": [
+    "Revert candidate qualification changes and retain the previous full local readiness workflow; do not publish a candidate whose new receipt is incomplete."
+  ],
+  "validation": [
+    "The physical database matrix passes all five supported adapters with one schema fingerprint.",
+    "The authenticated Operaton 2.1.0 browser journey verifies health, version persistence, process start, completed overview, detail navigation, final variables, BPMN rendering, and clean diagnostics.",
+    "Workflow contracts verify every shard and aggregate is a non-skippable candidate dependency."
+  ],
+  "packages": []
+}

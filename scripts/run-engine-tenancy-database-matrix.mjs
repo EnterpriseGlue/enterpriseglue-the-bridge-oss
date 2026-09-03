@@ -404,16 +404,19 @@ if (startCommit !== endCommit) {
   throw new Error('Source commit changed while database-matrix evidence was running');
 }
 
-const allTargetsExecuted = Object.keys(contract.databases)
+const allConfiguredDatabases = Object.keys(contract.databases);
+const allSelectedTargetsExecuted = selectedDatabases
   .every((database) => results[database]?.status === 'passed');
 const schemaFingerprints = new Set(
   Object.values(results)
     .filter((result) => result.status === 'passed')
     .map((result) => result.schemaFingerprint),
 );
-const schemaEquivalent = allTargetsExecuted && schemaFingerprints.size === 1;
+const schemaEquivalent = allSelectedTargetsExecuted && schemaFingerprints.size === 1;
 const sourceState = endChanges ? 'dirty-development-run' : 'clean';
-const status = allTargetsExecuted && schemaEquivalent ? 'passed' : 'incomplete';
+const status = allSelectedTargetsExecuted && schemaEquivalent ? 'passed' : 'incomplete';
+const fullMatrix = selectedDatabases.length === allConfiguredDatabases.length
+  && allConfiguredDatabases.every((database) => selectedDatabases.includes(database));
 const evidence = {
   schemaVersion: 1,
   evidenceKind: 'engine-tenancy-database-matrix',
@@ -421,7 +424,11 @@ const evidence = {
   generatedAt: new Date().toISOString(),
   commit: endCommit,
   sourceState,
-  releaseCommitQualified: status === 'passed' && sourceState === 'clean',
+  releaseCommitQualified: status === 'passed' && sourceState === 'clean' && fullMatrix,
+  selection: {
+    mode: fullMatrix ? 'full' : 'shard',
+    databases: selectedDatabases,
+  },
   contract: 'test/database/engine-tenancy-database-matrix-contract.json',
   requiredStages: contract.requiredStages,
   upgradeBaselines: contract.upgradeBaselines,
@@ -431,7 +438,7 @@ const evidence = {
       .map(([database]) => database),
   },
   schemaEquivalence: {
-    status: schemaEquivalent ? 'passed' : 'incomplete',
+    status: fullMatrix ? (schemaEquivalent ? 'passed' : 'incomplete') : 'shard_only',
     fingerprintCount: schemaFingerprints.size,
     expectedFingerprintCount: 1,
   },
@@ -448,7 +455,7 @@ mkdirSync(releaseDirectory, { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
 console.log(
   `[database-matrix] ${Object.values(results).filter((result) => result.status === 'passed').length}/` +
-  `${Object.keys(contract.databases).length} adapters; schema equivalence ${evidence.schemaEquivalence.status}: ` +
+  `${selectedDatabases.length} selected adapters; schema equivalence ${evidence.schemaEquivalence.status}: ` +
   `${path.relative(root, outputPath)}`,
 );
 if (status !== 'passed') process.exitCode = 1;

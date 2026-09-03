@@ -261,6 +261,271 @@ jobs:
               core.setFailed('Candidate host Chart.yaml is not the exact deterministic release update.');
             }
 
+  qualify-database-adapters:
+    name: Qualify TypeORM on ${{ matrix.database }}
+    needs: [resolve, validate-source]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [postgres, mysql, mssql, oracle, spanner]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout protected qualification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify protected qualification source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Resolve pnpm store
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install qualification dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Run adapter migration and engine-health qualification
+        run: node scripts/run-engine-tenancy-database-matrix.mjs --database=${{ matrix.database }}
+
+      - name: Upload adapter evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-database-${{ matrix.database }}-${{ needs.resolve.outputs.source_ref }}
+          path: test/results/engine-tenancy-release/database-observations/${{ matrix.database }}.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Remove qualification container
+        if: always()
+        continue-on-error: true
+        run: docker rm -f -v eg-engine-tenancy-dbq-${{ matrix.database }}
+
+  qualify-database-matrix:
+    name: Verify five-adapter schema equivalence
+    needs: [resolve, qualify-database-adapters]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download exact adapter evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-candidate-database-*-${{ needs.resolve.outputs.source_ref }}
+          path: ${{ runner.temp }}/release-candidate-databases
+          merge-multiple: true
+
+      - name: Verify denominator, behavior, and logical schema parity
+        shell: bash
+        env:
+          EVIDENCE_DIRECTORY: ${{ runner.temp }}/release-candidate-databases
+          SOURCE_REF: ${{ needs.resolve.outputs.trusted_ref }}
+        run: |
+          set -euo pipefail
+          mapfile -t evidence < <(find "$EVIDENCE_DIRECTORY" -maxdepth 1 -name '*.json' -type f | LC_ALL=C sort)
+          [[ "${#evidence[@]}" -eq 5 ]]
+          jq -s -e '
+            (map(.database) | sort) == ["mssql", "mysql", "oracle", "postgres", "spanner"] and
+            all(.[]; .status == "passed") and
+            ([.[].schemaFingerprint] | unique | length) == 1 and
+            all(.[]; .stages.service_behavior.status == "passed")
+          ' "${evidence[@]}" >/dev/null
+          jq -s --arg commit "$SOURCE_REF" '
+            {
+              schemaVersion: 1,
+              evidenceKind: "release-candidate-database-matrix",
+              status: "passed",
+              commit: $commit,
+              databases: (map(.database) | sort),
+              schemaFingerprint: .[0].schemaFingerprint,
+              results: (map({key: .database, value: .}) | from_entries)
+            }
+          ' "${evidence[@]}" > release-candidate-database-matrix.json
+
+      - name: Retain complete database matrix evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-database-matrix-${{ needs.resolve.outputs.source_ref }}
+          path: release-candidate-database-matrix.json
+          if-no-files-found: error
+          retention-days: 90
+
+  qualify-operaton-browser:
+    name: Qualify Operaton 2.1 process UI and diagnostics
+    needs: [resolve, validate-source]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: postgres
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: false
+      POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      JWT_SECRET: release-candidate-operaton-browser-secret-000000000000
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      FRONTEND_URL: http://localhost:5173
+      EG_ENGINE_ALLOWED_HOSTS: 127.0.0.1
+      EG_ENGINE_ALLOW_PRIVATE_HOSTS: true
+      EG_ALLOW_INSECURE_ENGINE_HTTP: true
+      EG_ENFORCE_ENGINE_ENDPOINT_POLICY: true
+    steps:
+      - name: Checkout protected qualification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify protected qualification source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build browser qualification sources
+        run: |
+          pnpm --filter shared run build
+          pnpm --filter frontend-host run build
+          pnpm --filter webmodeler-backend run build:skip-generate
+
+      - name: Prepare database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+          pnpm --filter webmodeler-backend run db:schema:sync
+
+      - name: Start pinned Operaton 2.1.0 and EnterpriseGlue
+        shell: bash
+        env:
+          OPERATON_IMAGE: operaton/operaton@sha256:0843bc2b4cedf1d01fdc965203f8c213c3d63a810d49c43fc141608a6f9bb813
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/release-candidate-operaton
+          docker run --detach --rm --name eg-release-candidate-operaton \
+            --publish 127.0.0.1:18080:8080 "$OPERATON_IMAGE" >/dev/null
+          pnpm --filter webmodeler-backend run start:compiled > .artifacts/release-candidate-operaton/backend.log 2>&1 &
+          pnpm --filter webmodeler-frontend run dev -- --host 0.0.0.0 --port 5173 > .artifacts/release-candidate-operaton/frontend.log 2>&1 &
+          for _ in {1..120}; do
+            if curl -sf http://localhost:8787/ready >/dev/null \
+              && curl -sf http://localhost:5173/login >/dev/null \
+              && curl -sf http://127.0.0.1:18080/engine-rest/version >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Run real Operaton process overview, detail, BPMN, variables, health, and console gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI=true \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_API_BASE_URL=http://localhost:8787 \
+            -e E2E_SEED_USER=true \
+            -e E2E_DIRECT_DB_CLEANUP=true \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e OPERATON_BACKSTOP_BROWSER_EVIDENCE=true \
+            -e OPERATON_BACKSTOP_RESTART_BACKEND=false \
+            -e OPERATON_BACKSTOP_ENGINE_URL=http://127.0.0.1:18080/engine-rest \
+            -e OPERATON_BACKSTOP_DIRECT_URL=http://127.0.0.1:18080/engine-rest \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test test/e2e/operaton-backstop-browser.spec.ts --config test/e2e/playwright.config.ts"
+
+      - name: Capture Operaton diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          docker logs --tail 300 eg-release-candidate-operaton > .artifacts/release-candidate-operaton/operaton.log 2>&1 || true
+          docker ps --all --format '{{.Names}} {{.Image}} {{.Status}}' > .artifacts/release-candidate-operaton/docker-ps.txt
+
+      - name: Retain Operaton browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-operaton-browser-${{ needs.resolve.outputs.source_ref }}
+          path: |
+            .artifacts/release-candidate-operaton
+            test/results/playwright
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Remove Operaton qualification container
+        if: always()
+        continue-on-error: true
+        run: docker rm --force eg-release-candidate-operaton
+
   stage-application-images:
     name: Stage application images
     needs: [resolve, validate-source]
@@ -567,7 +832,7 @@ jobs:
 
   publish-receipt:
     name: Publish signed candidate receipt
-    needs: [resolve, stage-application-images, qualify-application-images, stage-toolchain]
+    needs: [resolve, qualify-database-matrix, qualify-operaton-browser, stage-application-images, qualify-application-images, stage-toolchain]
     if: needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -674,7 +939,7 @@ jobs:
 
   finalize:
     name: Record required candidate status
-    needs: [resolve, validate-source, stage-application-images, qualify-application-images, stage-toolchain, publish-receipt]
+    needs: [resolve, validate-source, qualify-database-adapters, qualify-database-matrix, qualify-operaton-browser, stage-application-images, qualify-application-images, stage-toolchain, publish-receipt]
     if: always() && needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -687,6 +952,9 @@ jobs:
           SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
           VALIDATE_RESULT: ${{ needs.validate-source.result }}
+          DATABASE_ADAPTER_RESULT: ${{ needs.qualify-database-adapters.result }}
+          DATABASE_MATRIX_RESULT: ${{ needs.qualify-database-matrix.result }}
+          OPERATON_BROWSER_RESULT: ${{ needs.qualify-operaton-browser.result }}
           IMAGE_RESULT: ${{ needs.stage-application-images.result }}
           QUALIFY_RESULT: ${{ needs.qualify-application-images.result }}
           TOOLCHAIN_RESULT: ${{ needs.stage-toolchain.result }}
@@ -696,6 +964,9 @@ jobs:
           script: |
             const results = [
               process.env.VALIDATE_RESULT,
+              process.env.DATABASE_ADAPTER_RESULT,
+              process.env.DATABASE_MATRIX_RESULT,
+              process.env.OPERATON_BROWSER_RESULT,
               process.env.IMAGE_RESULT,
               process.env.QUALIFY_RESULT,
               process.env.TOOLCHAIN_RESULT,
