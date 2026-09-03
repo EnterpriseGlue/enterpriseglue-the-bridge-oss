@@ -34,6 +34,16 @@ test('release workflow changes run release readiness without unrelated applicati
   assert.equal(result.run_plugin_checks, false);
 });
 
+test('classifier contract tests stay on the workflow verification path', () => {
+  const result = classifyChangedFiles(['scripts/ci-change-detection.test.mjs']);
+
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_ci_images, false);
+  assert.equal(result.run_plugin_images, false);
+});
+
 test('release fragments without documentation stay on the policy-only path', () => {
   const result = classifyChangedFiles(['.release-notes/example-fix.json']);
 
