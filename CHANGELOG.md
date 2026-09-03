@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.20.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.2...v0.20.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* **ci:** authenticate reusable source image builds ([e932dda](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e932ddaa2960f78c90a686ad77c68b0ce30389e6))
+* **ci:** authenticate reusable source image builds ([7434be5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7434be5c0b1d51e030fe477d152b4ea34f42598c))
+* **packages:** resolve workspace protocols before publish ([72d9d4c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/72d9d4cc9fb018554d59a8d42f8b7742f768e244))
+* **packages:** resolve workspace protocols before publish ([30bf5a1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/30bf5a14edc43eb7e093239f1d1e5da6382b7687))
+* **plugins:** focus delivery on OSS plugin architecture ([21cc3f6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/21cc3f64cf8bd0046ebd58111def0be372d249b1))
+* **plugins:** focus delivery on OSS plugin architecture ([4ba1cc2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4ba1cc2b8e89996252890f0cee22a94669e17238))
+* **release:** describe external plugin consumers ([b07fd6b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b07fd6b5edba88286a8834af1e56814205a71b48))
+* **release:** describe external plugin consumers ([310fd3f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/310fd3f39c97935c21b6a045498a0a2afad49242))
+
 ## [0.20.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.1...v0.20.2) (2026-09-02)
 
 
