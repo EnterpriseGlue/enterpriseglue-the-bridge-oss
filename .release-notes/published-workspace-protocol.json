@@ -1,0 +1,64 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "published-workspace-protocol",
+  "type": "fix",
+  "scope": "packages",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Publishes externally consumable shared and host packages without unresolved pnpm workspace protocol dependencies.",
+  "userImpact": [
+    "EnterpriseGlue EE and other external package consumers can refresh lockfiles after an OSS release without pnpm treating @enterpriseglue/plugin-sdk as a missing local workspace package."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Package consumers should update @enterpriseglue/shared to 0.15.2, @enterpriseglue/backend-host to 0.13.3, and @enterpriseglue/frontend-host to 0.15.2 together."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The package payload is unchanged except for resolving internal workspace dependency declarations to immutable published versions."
+  ],
+  "documentation": [
+    "The generated release notes describe the corrected public package dependency contract and coordinated package versions."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Consumers can restore their previous lockfile and package versions; no database or configuration rollback is required."
+  ],
+  "validation": [
+    "CI packs every public package and rejects workspace protocol dependencies in the external manifest.",
+    "A clean external-consumer install validates the packed shared and host package set.",
+    "EnterpriseGlue EE package sync refreshes lockfiles and runs plugin API compatibility, typecheck, and unit tests."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.15.1",
+      "newVersion": "0.15.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.13.2",
+      "newVersion": "0.13.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.15.1",
+      "newVersion": "0.15.2",
+      "impact": "patch"
+    }
+  ]
+}
