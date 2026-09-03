@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.20.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.3...v0.20.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* **mission-control:** restore completed Operaton details ([2717a98](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2717a9841e49da64ea0e9e8f31850766b2be34f5))
+* **mission-control:** restore completed Operaton details ([5c2c078](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5c2c078dc472b259c547be3e5f1761567c04fff4))
+* **release:** fetch canary tag history ([901ee70](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/901ee707937a985efbbb6a43783f0698a6136f5f))
+* **release:** fetch canary tag history ([4ee0513](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4ee05138248b1a3041d985c6f10a31a48e38d689))
+* **release:** verify reusable image signer ([87f35b0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/87f35b0592ee237265a421302829c61590fb733c))
+* **release:** verify reusable image signer ([21cd510](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/21cd510f84831c44125d62d55e6a8efc4a621f15))
+
+
+### Performance Improvements
+
+* **release:** compile frontend natively ([f256dd8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f256dd8e1f7cb560f8efd091d6c39154a32a72b2))
+* **release:** compile frontend natively ([ab8ca88](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ab8ca88bcaa14353b2ccdc157aa333750625d152))
+
 ## [0.20.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.2...v0.20.3) (2026-09-03)
 
 
