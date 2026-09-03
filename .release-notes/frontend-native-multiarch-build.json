@@ -1,0 +1,45 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "frontend-native-multiarch-build",
+  "type": "internal",
+  "scope": "release-images",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Compile architecture-neutral frontend assets on the native build runner while keeping runtime tools aligned with each target image platform.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The final nginx image and its BusyBox runtime tools are still resolved and installed for the requested target platform."
+  ],
+  "documentation": [
+    "This release note records the native frontend compilation and target-platform runtime boundary; no operator procedure changes."
+  ],
+  "knownLimitations": [
+    "Final target-platform package installation still uses QEMU when no native arm64 runner is available, but frontend compilation no longer does."
+  ],
+  "rollback": [
+    "Revert the Dockerfile stage-platform change to compile frontend assets on the target platform."
+  ],
+  "validation": [
+    "A Dockerfile contract test enforces native frontend compilation and target-platform runtime executable installation.",
+    "The release canary exercises both amd64 and arm64 images before public aliases are permitted."
+  ],
+  "packages": []
+}
