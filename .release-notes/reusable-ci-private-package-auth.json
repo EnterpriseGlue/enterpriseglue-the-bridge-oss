@@ -1,0 +1,44 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "reusable-ci-private-package-auth",
+  "type": "fix",
+  "scope": "continuous-integration",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Authenticates private host-package downloads during reusable source-image validation.",
+  "userImpact": [
+    "Enterprise consumers can run the shared source-image CI gate without an unauthorized package download failure."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This CI-only fix does not change application schemas, migrations, TypeORM behavior, or supported database adapters."
+    ]
+  },
+  "security": [
+    "The reusable workflow passes its existing least-privilege package token only to the Docker dependency-install build argument."
+  ],
+  "documentation": [
+    "The generated technical release notes describe the repaired reusable CI authentication contract."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the workflow change to restore the previous behavior; no application or database rollback is required."
+  ],
+  "validation": [
+    "The workspace runtime contract requires the reusable source-image build to pass its package token.",
+    "CI contract tests and workflow lint validate the reusable workflow."
+  ],
+  "packages": []
+}
