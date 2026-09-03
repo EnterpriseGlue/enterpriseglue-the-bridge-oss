@@ -52,15 +52,20 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
 8. Run the repository's appropriate verification level, commit coherent
    changes, and push only the active branch. Create or update the PR without
    rewriting unrelated metadata.
-9. Determine whether the PR is first-party by comparing its head repository
+9. For CI or release-control changes, require the deterministic classifier
+   fixtures, workflow contracts, and self-validating `ci-complete` aggregate.
+   Confirm metadata-only changes avoid unrelated expensive lanes and selected
+   jobs cannot pass by being skipped. Do not replace exact candidate evidence
+   with an advisory or mocked lane.
+10. Determine whether the PR is first-party by comparing its head repository
    owner with the base repository owner. For a first-party PR that is not
    explicitly requested or marked as draft, enable auto-merge by default after
    the required checks and release metadata are in place. Do not enable
    auto-merge for fork/external PRs or explicitly draft PRs unless the user
    explicitly requests it. Enabling auto-merge does not authorize bypassing
    branch protection, dismissing reviews, or merging a draft.
-10. For a Release Please PR, require `docs/releases/vX.Y.Z.md`, require its body
+11. For a Release Please PR, require `docs/releases/vX.Y.Z.md`, require its body
    to match that document, and use a merge commit—not squash. Do not delete or
    recreate published tags.
-11. Do not remove worktrees or branches without satisfying cleanup conditions
+12. Do not remove worktrees or branches without satisfying cleanup conditions
    and any required user confirmation.

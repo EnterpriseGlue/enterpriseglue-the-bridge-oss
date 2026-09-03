@@ -1,0 +1,50 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-canary-observability",
+  "type": "internal",
+  "scope": "release-operations",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Exercise the production release control flow through a scheduled non-publishing canary and report CI queue, execution, critical-path, cancellation, and retry metrics.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The canary writes only immutable scratch image tags and cannot advance semantic tags, latest aliases, Docker Hub, packages, charts, or GitHub releases.",
+    "The canary verifies exact ORAS digests, signatures, provenance, vulnerability evidence, and non-publisher pull access before reporting success."
+  ],
+  "documentation": [
+    "Maintainer routing and artifact-promotion runbooks describe lane selection, canary evidence, rollback, OSS/plugin ownership, and p95 release targets.",
+    "Developer-workflow skills route all future work to the OSS host and independently released owning plugin repositories; standalone EE development is retired."
+  ],
+  "knownLimitations": [
+    "The 45-minute release objective remains an observed rollout target until protected canary, cache, representative pull-request, and controlled patch-release evidence is collected."
+  ],
+  "rollback": [
+    "Pause the scheduled canary and restore the previous cost-report workflow; scratch artifacts may expire naturally under registry retention policy.",
+    "Keep the immutable candidate workflow fail closed while investigating any canary or digest mismatch."
+  ],
+  "validation": [
+    "Canary contracts verify scratch-only publication, production reusable-workflow reuse, exact digest checks, and prohibition of public package or release mutation.",
+    "Observability tests verify p50/p95 timing, runner minutes, superseded cancellation classification, retries, and workflow/job summaries.",
+    "The EnterpriseGlue developer-workflow plugin validates all versioned skills and contains no EE write or synchronization path."
+  ],
+  "packages": []
+}

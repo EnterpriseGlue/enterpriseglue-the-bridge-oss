@@ -20,8 +20,10 @@ description: Use when the user says /release, release the EnterpriseGlue OSS hos
 5. Require `Release candidate readiness` and the self-validating `ci-complete`
    aggregate on the exact candidate SHA. Download the readiness receipt and
    verify its source revision, comparison tag, package and chart plans,
-   production image scan, toolchain rehearsal, and
-   `publicationPerformed: false` result.
+   production image scan, toolchain rehearsal, five-database aggregate,
+   pinned supported-Operaton browser evidence, and
+   `publicationPerformed: false` result. A supported database shard that is
+   missing or skipped blocks the release.
 6. Inspect every workflow for the candidate SHA, not only branch protection's
    required contexts. Failure, cancellation, timeout, action-required, pending,
    or an unexpectedly skipped readiness job blocks release. Treat intentionally
@@ -34,6 +36,10 @@ description: Use when the user says /release, release the EnterpriseGlue OSS hos
    version tags, `latest`, source revision, digests, smoke tests, vulnerability
    results, registry visibility, signatures, and release receipts.
    Do not dispatch or require an EE package synchronization.
-9. Verify the published GitHub release body matches
+9. Before enabling a material release-workflow change, require a successful
+   non-publishing canary using the production reusable control flow, scratch
+   repositories, exact ORAS digest checks, and non-publisher verification. A
+   canary must never advance semantic tags, `latest`, Docker Hub, or packages.
+10. Verify the published GitHub release body matches
    `docs/releases/vX.Y.Z.md`. Never delete, recreate, or repoint a published
    `v*` tag; repair mistakes with a reviewed forward release.

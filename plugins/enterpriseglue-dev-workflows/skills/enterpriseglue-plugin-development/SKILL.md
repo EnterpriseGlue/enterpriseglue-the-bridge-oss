@@ -26,3 +26,7 @@ description: Use when planning, implementing, testing, or releasing EnterpriseGl
    documentation CMS under the documentation-governance workflow.
 6. Release OSS host/platform artifacts and each plugin independently. Never add
    an OSS-to-EE synchronization or release dependency.
+7. Let owning plugin repositories consume reusable OSS contract workflows and
+   publish their own signed artifacts and receipts. An OSS host release may
+   advertise a compatibility target, but must not wait for every proprietary
+   plugin to release.

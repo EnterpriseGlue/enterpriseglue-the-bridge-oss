@@ -24,3 +24,12 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
 5. In an owning plugin repository, include its OSS plugin API and supported
    host-version compatibility guards. Do not treat an advisory or emulator
    lane as production evidence.
+6. For OSS routing or release-control changes, run `pnpm run test:ci-contracts`
+   and `pnpm run test:ci-change-detection`. Verify selected lanes cannot be
+   skipped by the stable aggregate. For Mission Control browser evidence, fail
+   on unexpected console warnings/errors, page errors, failed requests, HTTP
+   4xx/5xx responses, and visible error boundaries.
+7. Treat the five-database candidate aggregate and pinned real-Operaton browser
+   journey as distinct evidence. Static adapter tests do not replace physical
+   database qualification, and a mock engine does not replace the required
+   supported Operaton backstop.

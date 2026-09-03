@@ -1,6 +1,6 @@
 {
   "name": "enterpriseglue-dev-workflows",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Versioned OSS host and plugin development, validation, delivery, and release workflows for EnterpriseGlue.",
   "author": {
     "name": "EnterpriseGlue"

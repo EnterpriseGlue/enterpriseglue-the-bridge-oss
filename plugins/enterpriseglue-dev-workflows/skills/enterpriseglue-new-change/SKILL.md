@@ -32,5 +32,9 @@ description: Use when the user says /new-change, newchange, start a new change, 
 8. Keep the expected PR title, `release:*` classification, and package version
    impact consistent with the fragment. Breaking work uses `!` in the
    conventional title and `release:breaking`.
-9. Implement and verify in proportion to risk. Hand off shipping to the
+9. If the change adds a top-level path or changes CI/release routing, update the
+   deterministic classifier and positive/negative fixtures. Unknown paths must
+   continue to select the broad fail-closed lane; metadata-only changes must
+   not select unrelated application, database, browser, or image work.
+10. Implement and verify in proportion to risk. Hand off shipping to the
    `enterpriseglue-ship` skill rather than merging from this workflow.
