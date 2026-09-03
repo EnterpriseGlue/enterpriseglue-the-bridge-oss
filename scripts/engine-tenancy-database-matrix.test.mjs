@@ -108,7 +108,9 @@ test('runs every database in an isolated disposable localhost container', () => 
   assert.match(runner, /database-observations/);
   assert.match(runner, /schemaFingerprints\.size === 1/);
   assert.match(runner, /Database-matrix evidence must be run from a clean worktree/);
-  assert.match(runner, /releaseCommitQualified: status === 'passed' && sourceState === 'clean'/);
+  assert.match(runner, /releaseCommitQualified: status === 'passed' && sourceState === 'clean' && fullMatrix/);
+  assert.match(runner, /mode: fullMatrix \? 'full' : 'shard'/);
+  assert.match(runner, /allSelectedTargetsExecuted/);
   assert.match(runner, /new sql\.ConnectionPool\(serverConfig\)/);
   assert.doesNotMatch(runner, /sql\.connect\(serverConfig\)/);
   assert.match(workflow, /pnpm run test:engine-tenancy:database-matrix/);

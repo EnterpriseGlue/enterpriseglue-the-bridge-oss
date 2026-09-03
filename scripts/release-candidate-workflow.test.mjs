@@ -44,10 +44,10 @@ test('candidate staging is downstream of successful exact merge-queue CI', () =>
   assert.match(stage, /commit\.parents\?\.\[0\]\?\.sha !== baseRef/)
 })
 
-test('candidate staging never executes the merge-queue checkout with write authority', () => {
+test('candidate staging validates the release-only delta before exact artifact checkout', () => {
   const validator = stage.slice(
     stage.indexOf('  validate-source:\n'),
-    stage.indexOf('  stage-application-images:\n'),
+    stage.indexOf('  qualify-database-adapters:\n'),
   )
   assert.match(validator, /permissions:\n\s+contents: read/)
   assert.match(validator, /compareCommitsWithBasehead/)
@@ -75,6 +75,9 @@ test('auto-merge preserves the qualified merge-group commit identity', () => {
 test('candidate staging qualifies every public artifact before recording success', () => {
   for (const job of [
     'validate-source',
+    'qualify-database-adapters',
+    'qualify-database-matrix',
+    'qualify-operaton-browser',
     'stage-application-images',
     'qualify-application-images',
     'stage-toolchain',
@@ -82,6 +85,14 @@ test('candidate staging qualifies every public artifact before recording success
   ]) {
     assert.match(stage, new RegExp(`\\b${job}\\b`))
   }
+  assert.match(stage, /database: \[postgres, mysql, mssql, oracle, spanner\]/)
+  assert.match(stage, /run-engine-tenancy-database-matrix\.mjs --database=\$\{\{ matrix\.database \}\}/)
+  assert.match(stage, /Verify five-adapter schema equivalence/)
+  assert.match(stage, /\[\.\[\]\.schemaFingerprint\] \| unique \| length/)
+  assert.match(stage, /DATABASE_MATRIX_RESULT/)
+  assert.match(stage, /operaton\/operaton@sha256:0843bc2b4cedf1d01fdc965203f8c213c3d63a810d49c43fc141608a6f9bb813/)
+  assert.match(stage, /OPERATON_BROWSER_RESULT/)
+  assert.match(stage, /operaton-backstop-browser\.spec\.ts/)
   assert.match(stage, /smoke-images-local\.sh/)
   assert.match(stage, /--force-oracle/)
   assert.match(stage, /--severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN/)
