@@ -203,6 +203,34 @@ test('keeps the real source backend image build in both CI implementations', asy
     assert.match(workflow, /name: Verify source backend image dependency contract/);
     assert.match(workflow, /-f backend\/Dockerfile \\\n\s+-t eg-source-backend-contract:pr/);
   }
+
+  const reusableWorkflow = await readFile(
+    new URL('.github/workflows/ci-core-reusable.yml', rootUrl),
+    'utf8',
+  );
+  assert.match(
+    reusableWorkflow,
+    /name: Verify source backend image dependency contract[\s\S]*?NODE_AUTH_TOKEN: \$\{\{ secrets\.ci_token \}\}[\s\S]*?--build-arg NODE_AUTH_TOKEN="\$NODE_AUTH_TOKEN"/,
+    'the reusable source-image build must authenticate private host package downloads',
+  );
+  for (const script of [
+    'lint',
+    'test:ci-change-detection',
+    'test:workspace-runtime-contract',
+    'guard:published-package-runtime',
+    'test:authz:mutation',
+  ]) {
+    assert.match(
+      reusableWorkflow,
+      new RegExp(`pnpm run --if-present ${script.replaceAll(':', '\\:')}`),
+      `the reusable CI workflow must tolerate consumers that do not provide ${script}`,
+    );
+  }
+  assert.match(
+    reusableWorkflow,
+    /if \[\[ -f scripts\/headless-admin-contract-parity\.test\.mjs && -f scripts\/headless-admin-cli-lifecycle\.test\.mjs \]\]/,
+    'headless administrator tests must remain optional for reusable-workflow consumers',
+  );
 });
 
 test('packages compiled shared migrations in the production backend image', async () => {

@@ -69,16 +69,16 @@ jobs:
         run: pnpm run typecheck
 
       - name: Lint workspace and architecture boundaries
-        run: pnpm run lint
+        run: pnpm run --if-present lint
 
       - name: Verify CI change-detection contracts
-        run: pnpm run test:ci-change-detection
+        run: pnpm run --if-present test:ci-change-detection
 
       - name: Verify workspace runtime contract
-        run: pnpm run test:workspace-runtime-contract
+        run: pnpm run --if-present test:workspace-runtime-contract
 
       - name: Verify packed backend-host runtime dependencies
-        run: pnpm run guard:published-package-runtime
+        run: pnpm run --if-present guard:published-package-runtime
 
   compose-render:
     runs-on: ubuntu-latest
@@ -314,7 +314,12 @@ jobs:
 
       - name: Enforce headless administrator configuration parity
         if: matrix.database == 'postgres'
-        run: node --test scripts/headless-admin-contract-parity.test.mjs scripts/headless-admin-cli-lifecycle.test.mjs
+        run: |
+          if [[ -f scripts/headless-admin-contract-parity.test.mjs && -f scripts/headless-admin-cli-lifecycle.test.mjs ]]; then
+            node --test scripts/headless-admin-contract-parity.test.mjs scripts/headless-admin-cli-lifecycle.test.mjs
+          else
+            echo "Headless administrator parity tests are not provided by this consumer."
+          fi
 
       - name: Run integration tests
         if: matrix.database == 'postgres'
@@ -322,7 +327,7 @@ jobs:
 
       - name: Run authorization mutation guard
         if: matrix.database == 'postgres'
-        run: pnpm run test:authz:mutation
+        run: pnpm run --if-present test:authz:mutation
 
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
@@ -489,11 +494,14 @@ jobs:
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Verify source backend image dependency contract
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
         run: |
           docker buildx build --load \
             --pull \
             --cache-from type=gha,scope=ci-source-backend-contract \
             --cache-to type=gha,mode=max,scope=ci-source-backend-contract \
+            --build-arg NODE_AUTH_TOKEN="$NODE_AUTH_TOKEN" \
             -f backend/Dockerfile \
             -t eg-source-backend-contract:pr \
             .
