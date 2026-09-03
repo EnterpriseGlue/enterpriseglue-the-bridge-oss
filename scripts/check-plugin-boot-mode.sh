@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# check-plugin-boot-mode.sh — lightweight structural smoke for OSS/EE plugin boot paths.
-# Usage: bash scripts/check-plugin-boot-mode.sh [oss|ee]
+# check-plugin-boot-mode.sh — lightweight structural smoke for the OSS plugin host.
+# Usage: bash scripts/check-plugin-boot-mode.sh [oss]
 set -euo pipefail
 
 MODE="${1:-oss}"
@@ -23,7 +23,6 @@ assert_contains() {
   fi
 }
 
-# ── OSS mode ──────────────────────────────────────────────
 if [[ "$MODE" == "oss" ]]; then
   echo "▶ Checking OSS plugin boot path…"
 
@@ -51,42 +50,8 @@ if [[ "$MODE" == "oss" ]]; then
   assert_file "packages/enterprise-plugin-api/src/frontend.d.ts"
   assert_file "packages/enterprise-plugin-api/src/backend.d.ts"
 
-# ── EE mode ───────────────────────────────────────────────
-# NOTE: EE no longer uses a git submodule. It consumes OSS as npm packages.
-# This mode should be run from the EE repo root.
-elif [[ "$MODE" == "ee" ]]; then
-  echo "▶ Checking EE plugin boot path…"
-
-  # EE frontend plugin entry exists and exports plugin object
-  FE_ENTRY="packages/enterprise-frontend/src/index.ts"
-  assert_file "$FE_ENTRY"
-  assert_contains "$FE_ENTRY" "enterpriseFrontendPlugin"
-  assert_contains "$FE_ENTRY" "componentOverrides"
-  assert_contains "$FE_ENTRY" "featureOverrides"
-
-  # EE backend plugin entry exists and exports hooks
-  BE_ENTRY="packages/enterprise-backend/src/index.ts"
-  assert_file "$BE_ENTRY"
-  assert_contains "$BE_ENTRY" "enterpriseBackendPlugin"
-  assert_contains "$BE_ENTRY" "registerRoutes"
-  assert_contains "$BE_ENTRY" "migrateEnterpriseDatabase"
-
-  # EE engines override component exists
-  assert_file "packages/enterprise-frontend/src/features/engines/EEEnginesPage.tsx"
-
-  # Multi-tenant feature registers the override
-  MT="packages/enterprise-frontend/src/features/multi-tenant/index.ts"
-  assert_file "$MT"
-  assert_contains "$MT" "engines-page"
-  assert_contains "$MT" "EEEnginesPage"
-
-  # Plugin API consumed as npm package (no local packages/enterprise-plugin-api/)
-  # Verify it's listed as a dependency in enterprise packages
-  assert_contains "packages/enterprise-backend/package.json" "@enterpriseglue/enterprise-plugin-api"
-  assert_contains "packages/enterprise-frontend/package.json" "@enterpriseglue/enterprise-plugin-api"
-
 else
-  echo "❌ [plugin-boot] Unknown mode: $MODE (use oss|ee)"
+  echo "❌ [plugin-boot] Unknown mode: $MODE (use oss)"
   exit 1
 fi
 

@@ -13,6 +13,7 @@ Codex adaptation:
 - Treat `/local-deploy` as the explicit workflow trigger.
 - Only run from the active worktree unless the user explicitly chooses another path.
 - Free only the ports described by the workflow or ports the user explicitly chooses.
-- Ensure dependencies and EE registry auth before running deploy scripts.
+- Ensure workspace dependencies and any required plugin registry auth before
+  running deploy scripts.
 - Verify frontend/backend health from localhost and report exact URLs and logs.
 - Do not commit, push, merge, or clean branches from this workflow.

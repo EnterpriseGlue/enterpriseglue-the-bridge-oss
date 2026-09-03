@@ -1,19 +1,19 @@
 {
   "name": "enterpriseglue-dev-workflows",
-  "version": "0.1.2",
-  "description": "Versioned EnterpriseGlue development, validation, delivery, and release workflows for Codex.",
+  "version": "0.1.3",
+  "description": "Versioned OSS host and plugin development, validation, delivery, and release workflows for EnterpriseGlue.",
   "author": {
     "name": "EnterpriseGlue"
   },
   "homepage": "https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss",
   "repository": "https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss",
   "license": "Apache-2.0",
-  "keywords": ["enterpriseglue", "development", "ci", "release", "authorization", "documentation"],
+  "keywords": ["enterpriseglue", "oss", "plugins", "development", "ci", "release", "authorization", "documentation"],
   "skills": "./skills/",
   "interface": {
     "displayName": "EnterpriseGlue Dev Workflows",
     "shortDescription": "Build, validate, ship, and release EnterpriseGlue safely.",
-    "longDescription": "Version-controlled Codex workflows for EnterpriseGlue worktrees, testing, CI diagnosis, documentation governance, release notes, access governance, UI evidence, contract parity, shipping, and releases.",
+    "longDescription": "Version-controlled Codex workflows for the EnterpriseGlue OSS host and independently delivered plugins, including worktrees, testing, CI diagnosis, documentation governance, release notes, access governance, UI evidence, contract parity, shipping, and releases.",
     "developerName": "EnterpriseGlue",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Write"],
@@ -21,7 +21,8 @@
       "Audit this EnterpriseGlue pull request for readiness.",
       "Select the right EnterpriseGlue tests for this change.",
       "Route this EnterpriseGlue document to the correct publication boundary.",
-      "Validate release notes and contract parity."
+      "Validate release notes and contract parity.",
+      "Route this EnterpriseGlue host or plugin change to the correct repository."
     ]
   }
 }

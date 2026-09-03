@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Plugin Development"
+  short_description: "Route OSS host and plugin changes safely"
+  default_prompt: "Use $enterpriseglue-plugin-development to plan and implement this EnterpriseGlue plugin architecture change."

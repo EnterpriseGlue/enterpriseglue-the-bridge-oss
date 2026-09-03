@@ -1,6 +1,6 @@
 ---
 name: enterpriseglue-ci-debug
-description: Use when the user says /ci-debug, debug CI, investigate a failed GitHub Actions run, inspect failed PR checks, diagnose EnterpriseGlue OSS or EE CI failures, or triage Docker Images publish failures.
+description: Use when the user says /ci-debug, debug CI, investigate a failed GitHub Actions run, inspect failed PR checks, diagnose EnterpriseGlue OSS host or plugin repository CI failures, or triage image publication failures.
 ---
 
 # EnterpriseGlue /ci-debug

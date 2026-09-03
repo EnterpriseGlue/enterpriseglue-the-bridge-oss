@@ -1,0 +1,46 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "oss-plugin-architecture-direction",
+  "type": "fix",
+  "scope": "plugins",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Makes OSS the sole EnterpriseGlue product host and routes independently delivered capabilities through public plugin contracts.",
+  "userImpact": [
+    "The EnterpriseGlue OSS application remains the product host; independently delivered plugins continue to install through the supported plugin platform."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "No host upgrade action is required; plugin owners should qualify against the supported OSS host and plugin API versions."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database schema or persisted data changes are included."
+    ]
+  },
+  "security": [
+    "Removes obsolete OSS automation credentials and repository dispatches that targeted the retired standalone EE delivery path."
+  ],
+  "documentation": [
+    "Updates contributor architecture, release guidance, and Codex workflows for the OSS-host and independent-plugin model."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the workflow and documentation commit; no data rollback is required."
+  ],
+  "validation": [
+    "CI contract tests reject future OSS workflow dispatches to the retired EE repository.",
+    "The versioned Codex plugin and every bundled skill pass the repository and official validators."
+  ],
+  "packages": []
+}

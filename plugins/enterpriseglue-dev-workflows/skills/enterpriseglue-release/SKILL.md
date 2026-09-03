@@ -1,12 +1,13 @@
 ---
 name: enterpriseglue-release
-description: Use when the user says /release, release OSS, release EE, merge a Release Please PR, monitor Docker Images, verify published GHCR or Docker Hub images, or recover from partial release publish.
+description: Use when the user says /release, release the EnterpriseGlue OSS host or an owning plugin repository, merge a Release Please PR, monitor images, verify registries, or recover from partial release publication.
 ---
 
 # EnterpriseGlue /release
 
-1. Resolve OSS versus EE and the exact Release Please PR. Ask only when it
-   cannot be inferred safely.
+1. Resolve the OSS host versus an owning plugin repository and the exact
+   release PR. The standalone EE repository is not a release target. Ask only
+   when the intended current repository cannot be inferred safely.
 2. Verify the latest stable tag, `.github/.release-please-manifest.json`, and
    `CHANGELOG.md` agree. Run `pnpm run guard:release-baseline` when available.
 3. Require the Release Please PR to contain `docs/releases/vX.Y.Z.md`; confirm
@@ -32,6 +33,7 @@ description: Use when the user says /release, release OSS, release EE, merge a R
    publication, and the downstream signed plugin toolchain. Verify immutable
    version tags, `latest`, source revision, digests, smoke tests, vulnerability
    results, registry visibility, signatures, and release receipts.
+   Do not dispatch or require an EE package synchronization.
 9. Verify the published GitHub release body matches
    `docs/releases/vX.Y.Z.md`. Never delete, recreate, or repoint a published
    `v*` tag; repair mistakes with a reviewed forward release.

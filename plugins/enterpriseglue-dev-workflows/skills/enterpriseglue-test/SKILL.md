@@ -21,5 +21,6 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
    lanes that require them. Preserve existing services and evidence.
 4. Run commands with the active worktree as explicit working directory. Record
    exact commands, versions, counts, failures, skipped lanes, and artifacts.
-5. In EE, include the applicable plugin API guard. Do not treat an advisory or
-   emulator lane as production evidence.
+5. In an owning plugin repository, include its OSS plugin API and supported
+   host-version compatibility guards. Do not treat an advisory or emulator
+   lane as production evidence.

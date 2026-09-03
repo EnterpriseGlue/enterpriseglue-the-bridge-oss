@@ -1,16 +1,18 @@
 ---
 name: enterpriseglue-oss-to-ee
-description: Use when the user says /oss-to-ee, run an OSS to EE pipeline, implement in OSS then consume in EE, publish OSS packages then bump EE, or coordinate cross-repo EnterpriseGlue changes.
+description: Use when the user invokes the legacy /oss-to-ee workflow or asks for an OSS-to-EE package sync; explain that the standalone EE development path is retired and route the work to OSS plus the owning plugin repository.
 ---
 
-# EnterpriseGlue /oss-to-ee
+# EnterpriseGlue /oss-to-ee (retired)
 
-Resolve OSS and EE from their remotes and keep separate absolute worktree paths
-for the complete workflow.
+The standalone EE repository is not a forward-development or release target.
+Do not create or modify EE worktrees, branches, package bumps, pull requests,
+dispatches, or releases.
 
-Codex adaptation:
-- Treat `/oss-to-ee` as the explicit workflow trigger.
-- This is an orchestration workflow. Load and use `/new-change`, `/ship`, `/release`, and `/sync-ee` workflow files at the points where this workflow hands off.
-- Never assume OSS packages published successfully. Verify package versions before bumping EE.
-- Keep OSS and EE worktrees distinct and state clearly which repo/worktree is active.
-- If GitHub Packages auth fails, explain the `read:packages` requirement.
+1. Tell the user that `/oss-to-ee` is retained only as a safe legacy redirect.
+2. Route host, runtime, SDK, installer, manager, deployment, and public contract
+   changes to the OSS repository.
+3. Route proprietary product behavior to its owning plugin repository and
+   validate it against supported public OSS plugin contracts and packages.
+4. If the user explicitly requests a historical EE audit, keep it read-only
+   and clearly separate it from the current OSS/plugin delivery path.

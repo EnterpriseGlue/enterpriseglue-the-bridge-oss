@@ -14,7 +14,9 @@ This document defines the **logical architecture** of the EnterpriseGlue OSS pro
   - Cross-cutting capabilities such as configuration, persistence, middleware, services, and contracts live in `packages/shared`.
 
 - **Extension-ready OSS core**
-  - The OSS core defines extension points so enterprise capabilities can be composed without embedding EE-specific code in OSS modules.
+  - The OSS core is the product host and defines public extension points so
+    independently delivered plugins can be composed without embedding
+    product-specific plugin code in OSS modules.
 
 ## Logical Architecture Diagram
 ```mermaid
@@ -208,7 +210,8 @@ This foundation provides the validated runtime configuration, persistence model,
 - `packages/shared/src/contracts/`
 
 ### 10. Extension and Composition Layer
-This layer makes the OSS host extensible while preserving a clean boundary between OSS and enterprise-specific implementations.
+This layer makes the OSS host extensible while preserving a clean boundary
+between the shared host and independently delivered plugin implementations.
 
 **Responsibilities**
 - dynamic plugin loading

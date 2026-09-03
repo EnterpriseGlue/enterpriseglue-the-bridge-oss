@@ -93,4 +93,6 @@ flowchart TD
   - Authorization is expressed through platform roles, project roles, engine roles, and explicit grants.
 
 - **Extension-ready OSS core**
-  - OSS exposes extension points for enterprise composition without embedding EE-specific behavior into OSS domain modules.
+  - OSS is the product host and exposes public extension points for independently
+    delivered plugins without embedding product-specific plugin behavior into
+    OSS domain modules.

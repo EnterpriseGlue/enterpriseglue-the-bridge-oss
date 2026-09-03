@@ -40,8 +40,11 @@ plugin cache.
 
 The plugin contains the existing EnterpriseGlue lifecycle skills plus focused
 documentation-governance, PR-readiness, UI-evidence, access-governance
-verification, and contract-parity skills. `agents/openai.yaml` metadata is
-generated and validated for every skill.
+verification, contract-parity, and plugin-development skills. The OSS
+repository is the sole product-host workflow target; product-specific
+capabilities route to their owning plugin repositories. Legacy OSS-to-EE and
+EE-sync triggers remain only as safe redirects and do not authorize EE writes.
+`agents/openai.yaml` metadata is generated and validated for every skill.
 
 Repository scripts and tests remain the authority for deterministic behavior;
 skills select and orchestrate those commands rather than duplicating product

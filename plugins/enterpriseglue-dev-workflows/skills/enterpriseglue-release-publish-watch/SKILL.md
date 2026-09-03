@@ -14,7 +14,8 @@ description: Use when the user says /release-publish-watch, watch release publis
 4. Confirm release smoke tests and vulnerability scans evaluated those exact
    digests. Do not treat a scan of an older `latest` image as release evidence.
 5. Verify listed OSS packages exist at the versions recorded in the detailed
-   release notes and identify required EE synchronization.
+   release notes and confirm supported plugin consumers can install the public
+   package set. Do not require or create an EE synchronization follow-up.
 6. Never delete, recreate, or repoint a published tag. Rerun jobs only for a
    clearly transient failure or when the user authorizes automatic recovery.
 7. If asked to keep watching later, use a thread heartbeat automation rather

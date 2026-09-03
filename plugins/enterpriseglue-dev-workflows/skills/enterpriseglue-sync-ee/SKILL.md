@@ -1,15 +1,18 @@
 ---
 name: enterpriseglue-sync-ee
-description: Use when the user says /sync-ee, sync EE, bump OSS packages in EE, check @enterpriseglue package versions, update EE to latest OSS packages, or inspect Dependabot OSS package bump PRs.
+description: Use when the user invokes the legacy /sync-ee workflow or asks to bump OSS packages in EE; explain that standalone EE synchronization is retired and route compatibility work to the owning plugin repository.
 ---
 
-# EnterpriseGlue /sync-ee
+# EnterpriseGlue /sync-ee (retired)
 
-Read `.windsurf/workflows/sync-ee.md` from the resolved repository root when present. Detect OSS and EE from their remotes; never assume a developer-specific checkout path.
+The standalone EE repository is not a package consumer or release target for
+forward development. Do not create or modify EE worktrees, dependency bumps,
+lockfiles, pull requests, dispatches, or releases.
 
-Codex adaptation:
-- Treat `/sync-ee` as the explicit workflow trigger.
-- Check current versions and pending Dependabot PRs before making changes.
-- Use an isolated EE worktree for any package bump.
-- Refresh every required lockfile after a bump.
-- Verify `guard:ee-plugin-api:current`, typecheck, and unit tests before handing off to `/ship`.
+1. Tell the user that `/sync-ee` is retained only as a safe legacy redirect.
+2. Resolve the owning plugin repository that consumes the changed OSS package.
+3. Verify the published OSS package version and public manifest before changing
+   that plugin consumer.
+4. Update and test the plugin repository through its normal dependency,
+   compatibility, and shipping workflows.
+5. If the user explicitly requests a historical EE audit, keep it read-only.
