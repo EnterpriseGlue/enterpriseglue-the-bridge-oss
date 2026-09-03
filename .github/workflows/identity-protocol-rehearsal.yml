@@ -35,10 +35,21 @@ jobs:
       base_ref: ${{ github.base_ref || 'main' }}
       pull_number: ${{ github.event.pull_request.number || 0 }}
 
+  detect:
+    needs: release-notes-preflight
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-detect-reusable.yml
+    with:
+      enable_plugin_package: false
+      security_scan_on_smoke_only: true
+    secrets: inherit
+
   protocol-rehearsal:
     name: Disposable OIDC, Entra-compatible OIDC, SAML, and LDAP browser rehearsal
     runs-on: ubuntu-latest
-    needs: release-notes-preflight
+    needs: [release-notes-preflight, detect]
+    if: needs.detect.outputs.run_identity_rehearsal == 'true'
     # Start advisory while the new full-stack lane proves stable. Set this to
     # false when the team elects to make it a required branch-protection check.
     continue-on-error: true

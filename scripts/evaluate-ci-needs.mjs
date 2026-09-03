@@ -6,6 +6,33 @@ import { fileURLToPath } from 'node:url'
 
 const acceptedResults = new Set(['success', 'skipped'])
 
+const selectedJobMap = new Map([
+  ['run_documentation_guard', ['documentation-boundary']],
+  ['run_boundary_guards', ['boundary-guards']],
+  ['run_plugin_checks', ['plugin-platform', 'plugin-api-compat-current', 'plugin-api-compat-next']],
+  ['run_plugin_images', ['plugin-platform-images']],
+  ['run_package_discipline', ['published-package-version-discipline']],
+  ['run_plugin_package', ['plugin-api-package']],
+  ['run_compose_render', ['compose-render']],
+  ['run_tests', ['test']],
+  ['run_ci_images', ['build-ci-images']],
+  ['run_smoke', ['smoke-postgres-image-deploy']],
+  ['run_smoke_exposed', ['smoke-postgres-image-deploy-exposed']],
+  ['run_security_scan', ['security-pr-scan']],
+  ['run_native_tenancy', ['native-tenancy-pooled-e2e', 'saas-upgrade-restore-rollback']],
+])
+
+export function requiredJobsForSelection(selection) {
+  assert.ok(selection && typeof selection === 'object' && !Array.isArray(selection), 'selection must be an object')
+  const required = new Set()
+  for (const [output, jobs] of selectedJobMap) {
+    if (selection[output] === true || selection[output] === 'true') {
+      for (const job of jobs) required.add(job)
+    }
+  }
+  return [...required].sort()
+}
+
 export function evaluateNeeds(needs, { requiredNonSkippedJobs = [] } = {}) {
   assert.ok(needs && typeof needs === 'object' && !Array.isArray(needs), 'needs must be an object')
   const required = new Set(requiredNonSkippedJobs)
@@ -20,7 +47,7 @@ export function evaluateNeeds(needs, { requiredNonSkippedJobs = [] } = {}) {
   for (const job of required) {
     assert.ok(jobs.some((entry) => entry.job === job), `required job is missing from needs: ${job}`)
   }
-  return { jobs, rejected, passed: rejected.length === 0 }
+  return { jobs, rejected, passed: rejected.length === 0, requiredJobs: [...required].sort() }
 }
 
 export function renderSummary(evaluation) {
@@ -30,6 +57,8 @@ export function renderSummary(evaluation) {
     '| Job | Result |',
     '| --- | --- |',
     ...evaluation.jobs.map(({ job, result }) => `| ${job} | ${result || 'missing'} |`),
+    '',
+    `Selected non-skippable jobs: ${evaluation.requiredJobs.join(', ') || 'none'}`,
     '',
     evaluation.passed
       ? 'All required CI jobs succeeded or were intentionally skipped.'
@@ -46,6 +75,10 @@ async function main() {
     .split(',')
     .map((job) => job.trim())
     .filter(Boolean)
+  const selection = process.env.CI_SELECTION_JSON
+    ? JSON.parse(process.env.CI_SELECTION_JSON)
+    : {}
+  requiredNonSkippedJobs.push(...requiredJobsForSelection(selection))
   const evaluation = evaluateNeeds(JSON.parse(rawNeeds), { requiredNonSkippedJobs })
   const summary = renderSummary(evaluation)
   process.stdout.write(summary)

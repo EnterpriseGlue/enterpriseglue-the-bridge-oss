@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { classifyChangedFiles } from './ci-change-classifier.mjs'
 
 const read = (relative) => readFile(new URL(relative, import.meta.url), 'utf8')
 
@@ -173,7 +174,14 @@ test('charts and packages consume the signed candidate with a legacy recovery bo
 })
 
 test('candidate pipeline changes always re-run release readiness', () => {
-  assert.match(detect, /release-candidate-stage/)
-  assert.match(detect, /release-candidate-receipt/)
-  assert.match(detect, /fetch-release-candidate/)
+  assert.match(detect, /node scripts\/ci-change-classifier\.mjs/)
+  for (const changedPath of [
+    '.github/workflows/release-candidate-stage.yml',
+    'scripts/release-candidate-receipt.mjs',
+    'scripts/fetch-release-candidate.sh',
+  ]) {
+    const classification = classifyChangedFiles([changedPath])
+    assert.equal(classification.workflow_or_release, true, changedPath)
+    assert.equal(classification.run_release_readiness, true, changedPath)
+  }
 })

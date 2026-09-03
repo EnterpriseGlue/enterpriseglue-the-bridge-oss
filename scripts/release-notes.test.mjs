@@ -267,7 +267,7 @@ test('CI blocks change detection and its aggregate gate on release-note prefligh
 
 test('expensive pull-request workflows cannot start before release-note preflight', () => {
   const dependencyRoots = new Map([
-    ['authz-pr.yml', ['adapter-backstop-changes', 'authorization']],
+    ['authz-pr.yml', ['detect']],
     ['identity-protocol-rehearsal.yml', ['protocol-rehearsal']],
     ['engine-tenancy-database.yml', ['database-matrix']],
     ['access-governance-deployment-evidence.yml', ['contract']],
@@ -288,7 +288,11 @@ test('expensive pull-request workflows cannot start before release-note prefligh
       assert.notEqual(start, -1, `${filename} is missing ${root}`)
       const next = workflow.slice(start + root.length + 3).search(/^  [a-z0-9-]+:\n/m)
       const block = next === -1 ? workflow.slice(start) : workflow.slice(start, start + root.length + 3 + next)
-      assert.match(block, /^    needs: release-notes-preflight$/m, `${filename}:${root} must wait for preflight`)
+      assert.match(
+        block,
+        /^    needs: (?:release-notes-preflight|\[[^\]\n]*release-notes-preflight[^\]\n]*\])$/m,
+        `${filename}:${root} must wait for preflight`,
+      )
     }
   }
 })
