@@ -20,7 +20,7 @@ async function createTarball(directory, manifest, suffix = '') {
   await mkdir(packageDirectory);
   await writeFile(join(packageDirectory, 'package.json'), JSON.stringify(manifest, null, 2));
   for (const reference of packageEntryPointReferences(manifest)) {
-    const relative = reference.slice(2).replace('*', 'fixture');
+    const relative = reference.slice(2).replaceAll('*', 'fixture');
     const target = join(packageDirectory, relative);
     await mkdir(join(target, '..'), { recursive: true });
     await writeFile(target, 'export const ready = true;\n');
