@@ -33,6 +33,7 @@ test('release drill verifies exact digests and cannot publish public artifacts',
   const drill = workflow.slice(workflow.indexOf('  non-publishing-release-drill:\n'))
   assert.match(drill, /packages: read/)
   assert.doesNotMatch(drill, /packages: write/)
+  assert.match(drill, /ref: \$\{\{ github\.sha \}\}\n\s+fetch-depth: 0/)
   assert.match(drill, /oras resolve/)
   assert.match(drill, /cosign verify/)
   assert.match(

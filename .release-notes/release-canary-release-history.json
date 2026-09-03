@@ -1,0 +1,43 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-canary-release-history",
+  "type": "internal",
+  "scope": "release-canary",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Fetch tag history in the release canary so readiness qualification can resolve the latest stable comparison base.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The canary remains pinned to the immutable triggering SHA; full history is read-only and used only to resolve the stable release baseline."
+  ],
+  "documentation": [
+    "This release note records the canary checkout prerequisite; no operator procedure changes."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the full-history checkout only if readiness receives an equally immutable explicit comparison ref."
+  ],
+  "validation": [
+    "The canary workflow contract requires exact-SHA checkout together with full tag history.",
+    "A protected canary must complete the release-readiness drill before release resumes."
+  ],
+  "packages": []
+}
