@@ -44,6 +44,18 @@ try {
     run('tar', ['-xzf', path.join(packDirectory, tarball), '-C', extractionDirectory]);
     const packageDirectory = path.join(extractionDirectory, 'package');
     const manifest = JSON.parse(await readFile(path.join(packageDirectory, 'package.json'), 'utf8'));
+    const dependencyEntries = {
+      ...manifest.dependencies,
+      ...manifest.peerDependencies,
+      ...manifest.optionalDependencies,
+    };
+    const workspaceDependencies = Object.entries(dependencyEntries)
+      .filter(([, value]) => typeof value === 'string' && value.startsWith('workspace:'));
+    if (workspaceDependencies.length > 0) {
+      throw new Error(
+        `Packed ${packageName} contains workspace dependencies: ${workspaceDependencies.map(([name]) => name).join(', ')}`,
+      );
+    }
     packedPackages.set(packageName, { manifest, packageDirectory });
   }
 
@@ -58,17 +70,6 @@ try {
         `Packed backend host must depend on ${dependencyName}@${dependency.manifest.version}; found ${String(packedRange)}`,
       );
     }
-  }
-
-  const dependencyEntries = {
-    ...backend.manifest.dependencies,
-    ...backend.manifest.peerDependencies,
-    ...backend.manifest.optionalDependencies,
-  };
-  const workspaceDependencies = Object.entries(dependencyEntries)
-    .filter(([, value]) => typeof value === 'string' && value.startsWith('workspace:'));
-  if (workspaceDependencies.length > 0) {
-    throw new Error(`Packed backend host contains workspace dependencies: ${workspaceDependencies.map(([name]) => name).join(', ')}`);
   }
 
   const smokeRoot = path.join(temporaryRoot, 'runtime');
