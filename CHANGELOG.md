@@ -13,10 +13,8 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 * **ci:** classify release hardening helpers ([b3daacc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b3daacc2f7b67cafd8cfbf67d1e5ebb3dca52df1))
 * **ci:** fully replace wildcard test fixtures ([e6f3912](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e6f3912adfaa80cea649ad41165fb68dde4bb650))
 * **ci:** keep generated releases on fast path ([9ed61a0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9ed61a05577e894a94d8868c6d30e3a9052fe1cb))
-* **ci:** keep generated releases on fast path ([b7ebd4f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b7ebd4f8f2f41a0692f494706fc327a4f04708a3))
 * **packages:** version immutable API payload ([ad45b1a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ad45b1a8b0cc1fca7b5e3febe50612076f36dcf8))
 * **release-runtime:** harden candidate publication and CI feedback ([9e6ffe2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9e6ffe2ff8c3a7ed3e92749f6f54053b7ab306f0))
-* **release-runtime:** harden candidate publication and CI feedback ([b81c995](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b81c995b2576efa44231f114fdcd0a0efd6c8a59))
 
 ## [0.20.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.3...v0.20.4) (2026-09-03)
 
