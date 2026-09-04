@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * make admin bootstrap replica safe ([866b785](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/866b785f7c0325de4fb4898b8032536b887fd82f))
-* make admin bootstrap replica safe ([03e34df](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/03e34df098393651a07783da782f01a49dc72617))
 * **plugin-platform:** authorize active tenant routes ([c13949b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c13949b6d4c0d6f3d4aa582d4d094fcdde6eeb26))
 * **release:** enforce package versions with source changes ([0b65784](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0b65784acb216412bdce5b8dec0651ca6623ee86))
 * **release:** version published packages with source changes ([8662a4f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8662a4f97d9d200da1f049c339f894e7d82164ef))
