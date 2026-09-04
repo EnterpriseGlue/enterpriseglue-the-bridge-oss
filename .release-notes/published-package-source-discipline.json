@@ -1,0 +1,29 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "published-package-source-discipline",
+  "type": "fix",
+  "scope": "release-pipeline",
+  "breaking": false,
+  "audiences": ["developers"],
+  "summary": "Requires published package versions to be bumped in the same pull request as their source changes.",
+  "userImpact": [],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "The privileged release candidate remains restricted to the exact generated Release Please delta."
+  ],
+  "documentation": [
+    "Release validation now catches missing package version bumps before a change reaches the release queue."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the classifier change; runtime artifacts are unaffected."
+  ],
+  "validation": [
+    "Classifier tests cover source changes in every published OSS package."
+  ],
+  "packages": []
+}

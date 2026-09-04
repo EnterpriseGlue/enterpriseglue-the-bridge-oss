@@ -160,6 +160,26 @@ test('frontend source changes select application tests but not Oracle or image b
   assert.equal(result.run_oracle, false);
   assert.equal(result.run_ci_images, false);
   assert.equal(result.run_engine_browser, true);
+  assert.equal(result.run_package_discipline, true);
+});
+
+test('published package source changes require same-PR package version discipline', () => {
+  for (const path of [
+    'packages/shared/src/db/bootstrap.ts',
+    'packages/backend-host/src/modules/auth/service.ts',
+    'packages/frontend-host/src/enterprise/extensionRouteAuthz.tsx',
+    'packages/enterprise-plugin-api/src/index.ts',
+    'packages/plugin-sdk/src/platform.ts',
+    'packages/plugin-runtime/src/index.ts',
+    'packages/plugin-installer/src/cli.ts',
+    'packages/plugin-manager/src/index.ts',
+  ]) {
+    assert.equal(
+      classifyChangedFiles([path]).run_package_discipline,
+      true,
+      `${path} must select package version discipline`
+    );
+  }
 });
 
 test('TypeORM persistence changes select both database adapters and engine regressions', () => {
