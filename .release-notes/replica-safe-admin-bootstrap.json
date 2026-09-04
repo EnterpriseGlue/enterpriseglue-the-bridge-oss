@@ -1,0 +1,56 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "replica-safe-admin-bootstrap",
+  "type": "fix",
+  "scope": "backend-bootstrap",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Makes initial administrator bootstrap safe when multiple API or worker replicas start concurrently against an empty database.",
+  "userImpact": [
+    "A newly deployed multi-replica installation no longer restarts one backend process when two replicas race to create the configured bootstrap administrator."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The fix uses portable TypeORM repository and transaction operations and does not change schemas, migrations, or supported database adapters."
+    ]
+  },
+  "security": [
+    "Concurrent recovery accepts only the configured active local bootstrap account and still reconciles its canonical authenticated-user and optional platform-administrator memberships transactionally.",
+    "Persistence and membership errors remain fatal when no matching concurrent bootstrap winner exists."
+  ],
+  "documentation": [
+    "The generated technical release notes describe the replica-safe bootstrap behavior and database-portability contract."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous backend image or `@enterpriseglue/shared` package; no database or configuration rollback is required."
+  ],
+  "validation": [
+    "The bootstrap unit suite covers the normal first administrator, non-privileged bootstrap, existing administrator reconciliation, a concurrent bootstrap winner, and preservation of genuine persistence failures.",
+    "The shared package build and complete backend TypeScript check pass with TypeORM 0.3.31."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.15.3",
+      "newVersion": "0.15.4",
+      "impact": "patch"
+    }
+  ]
+}
