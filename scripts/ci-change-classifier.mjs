@@ -55,6 +55,8 @@ const metadataPatterns = [
 
 const rootDependencyPattern = /^(?:package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/;
 
+const publishedPackageSourcePattern = /^packages\/(?:shared|backend-host|frontend-host|enterprise-plugin-api|plugin-sdk|plugin-runtime|plugin-installer|plugin-manager)\/(?!Dockerfile(?:\..*)?$|third_party_licenses\.json$|README(?:\.md)?$|CHANGELOG\.md$|docs\/)/;
+
 const identityRehearsalPatterns = [
   /^\.github\/workflows\/(?:identity-protocol-rehearsal|entra-id-rehearsal)\.yml$/,
   /^(?:backend|frontend|packages\/(?:backend-host|frontend-host|shared))\/.*(?:identity|sso|oidc|saml|ldap|login)/i,
@@ -220,7 +222,8 @@ export function classifyChangedFiles(rawPaths, {
   const runPluginChecks = raw.plugin_contract || unknownHighRisk;
   const runPluginPackage = enablePluginPackage && (raw.plugin_packaging || raw.plugin_contract || unknownHighRisk);
   const runPluginImages = raw.toolchain_container || raw.plugin_contract || unknownHighRisk;
-  const runPackageDiscipline = raw.plugin_packaging || unknownHighRisk;
+  const runPackageDiscipline = raw.plugin_packaging || unknownHighRisk
+    || paths.some((path) => publishedPackageSourcePattern.test(path));
   const runComposeRender = raw.application_container || raw.helm || unknownHighRisk;
   const runSecurityScan = securityScanOnSmokeOnly ? runCiImages : (runCiImages || raw.toolchain_container);
   const runReleaseReadiness = raw.workflow_or_release || raw.plugin_packaging || raw.toolchain_container
