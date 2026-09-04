@@ -10,9 +10,11 @@ This workflow is read-only. Do not create, edit, or merge release pull requests.
 1. Resolve the repository and fetch tags plus the default branch.
 2. Run `node scripts/release-notes.mjs baseline` when the repository provides
    it. Report manifest/tag/changelog drift before estimating a version.
-3. Find an open Release Please PR. If present, read its body,
+3. Find an open Release Please PR. If present, read its machine-readable body,
+   the managed `<!-- enterpriseglue-detailed-release-notes -->` issue comment,
    `CHANGELOG.md` change, version manifest change, and
-   `docs/releases/vX.Y.Z.md`. Report omissions or contradictions.
+   `docs/releases/vX.Y.Z.md`. Report omissions, stale comment content, or
+   contradictions without replacing the Release Please body.
 4. If no release PR exists, run the detailed preview from the latest stable tag:
 
    ```bash

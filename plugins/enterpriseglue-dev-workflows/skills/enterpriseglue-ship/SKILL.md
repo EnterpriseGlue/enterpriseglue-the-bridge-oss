@@ -64,8 +64,9 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
    auto-merge for fork/external PRs or explicitly draft PRs unless the user
    explicitly requests it. Enabling auto-merge does not authorize bypassing
    branch protection, dismissing reviews, or merging a draft.
-11. For a Release Please PR, require `docs/releases/vX.Y.Z.md`, require its body
-   to match that document, and use a merge commit—not squash. Do not delete or
-   recreate published tags.
+11. For a Release Please PR, require `docs/releases/vX.Y.Z.md` and require the
+   managed `<!-- enterpriseglue-detailed-release-notes -->` issue comment to
+   match that document. Preserve Release Please's machine-readable PR body and
+   use a merge commit—not squash. Do not delete or recreate published tags.
 12. Do not remove worktrees or branches without satisfying cleanup conditions
    and any required user confirmation.

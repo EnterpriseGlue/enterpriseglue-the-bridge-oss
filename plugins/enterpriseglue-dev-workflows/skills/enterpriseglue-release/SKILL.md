@@ -10,10 +10,13 @@ description: Use when the user says /release, release the EnterpriseGlue OSS hos
    when the intended current repository cannot be inferred safely.
 2. Verify the latest stable tag, `.github/.release-please-manifest.json`, and
    `CHANGELOG.md` agree. Run `pnpm run guard:release-baseline` when available.
-3. Require the Release Please PR to contain `docs/releases/vX.Y.Z.md`; confirm
-   its PR body matches the generated document and covers users, operators,
-   upgrade, compatibility, API/configuration, migrations, packages, security,
-   limitations, rollback, and evidence.
+3. Require the Release Please PR to contain `docs/releases/vX.Y.Z.md`; find the
+   managed issue comment beginning
+   `<!-- enterpriseglue-detailed-release-notes -->` and confirm the content
+   after that marker matches the generated document. Preserve Release Please's
+   machine-readable PR body. Confirm the detailed document covers users,
+   operators, upgrade, compatibility, API/configuration, migrations, packages,
+   security, limitations, rollback, and evidence.
 4. Confirm every relevant merged change since the previous stable tag has a
    fragment or a permitted documented exemption. Confirm the proposed semantic
    version matches `release-notes:assert-version` for the previous stable tag.

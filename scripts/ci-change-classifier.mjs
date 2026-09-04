@@ -43,6 +43,7 @@ const booleanOutputs = [
 
 const metadataPatterns = [
   /^\.release-notes\/(?!schema\.json$)[a-z0-9][a-z0-9-]*\.json$/,
+  /^\.github\/\.release-please-manifest\.json$/,
   /^docs\//,
   /^(?:README|CHANGELOG|CODE_OF_CONDUCT|CONTRIBUTING|SECURITY|SUPPORT)\.md$/,
   /^(?:LICENSE|NOTICE)$/,

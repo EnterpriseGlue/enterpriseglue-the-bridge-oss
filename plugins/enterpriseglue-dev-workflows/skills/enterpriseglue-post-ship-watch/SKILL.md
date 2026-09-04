@@ -8,8 +8,10 @@ description: Use when the user says /post-ship-watch, watch after ship, monitor 
 1. Monitor the shipped PR, merge queue, package publication, Release Please
    run, and resulting release PR with `gh`.
 2. Confirm the release PR generator committed `docs/releases/vX.Y.Z.md` and
-   copied it into the PR body. Treat missing or stale detailed notes as a
-   release blocker.
+   copied it into the managed
+   `<!-- enterpriseglue-detailed-release-notes -->` issue comment while leaving
+   Release Please's machine-readable PR body intact. Treat missing or stale
+   detailed notes as a release blocker.
 3. Confirm package versions in the generated document match the exact tarballs
    retained in the signed release candidate. Do not accept a package rebuilt
    from a later `main` checkout.

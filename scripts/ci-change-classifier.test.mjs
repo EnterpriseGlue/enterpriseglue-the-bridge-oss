@@ -20,6 +20,40 @@ test('release-note and ordinary documentation changes use the policy-only fast p
   assert.deepEqual(result.selected_classes, ['metadata_only']);
 });
 
+test('generated Release Please delta stays off unrelated heavyweight lanes', () => {
+  const result = classifyChangedFiles([
+    '.github/.release-please-manifest.json',
+    'CHANGELOG.md',
+    'docs/releases/v0.20.5.md',
+    'infra/kubernetes/helm/enterpriseglue-host/Chart.yaml',
+  ]);
+
+  assert.equal(result.metadata_only, false);
+  assert.equal(result.helm, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.run_documentation_guard, true);
+  assert.equal(result.run_boundary_guards, true);
+  assert.equal(result.run_compose_render, true);
+  assert.equal(result.run_release_readiness, true);
+  for (const lane of [
+    'run_tests',
+    'run_postgres',
+    'run_oracle',
+    'run_ci_images',
+    'run_plugin_checks',
+    'run_plugin_images',
+    'run_package_discipline',
+    'run_native_tenancy',
+    'run_adapter_backstop',
+    'run_engine_browser',
+    'run_database_matrix',
+    'run_identity_rehearsal',
+    'run_deployment_evidence',
+  ]) {
+    assert.equal(result[lane], false, `${lane} must stay off for the generated release delta`);
+  }
+});
+
 test('release workflow changes run release readiness without unrelated application suites', () => {
   const result = classifyChangedFiles([
     '.github/workflows/release-candidate-stage.yml',
