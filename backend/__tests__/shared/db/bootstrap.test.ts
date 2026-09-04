@@ -94,4 +94,33 @@ describe('bootstrapAdmin authorization boundary', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'existing-admin-1');
     expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'existing-admin-1');
   });
+
+  it('recovers portably when another replica creates the bootstrap administrator first', async () => {
+    const duplicateInsert = new Error('database-specific unique constraint failure');
+    save.mockRejectedValueOnce(duplicateInsert);
+    userRepo.findOne.mockResolvedValueOnce({ id: 'concurrent-admin-1' });
+
+    await expect(bootstrapAdmin()).resolves.toBeUndefined();
+
+    expect(userRepo.findOne).toHaveBeenCalledWith({
+      where: {
+        email: 'admin@example.com',
+        authProvider: 'local',
+        isActive: true,
+      },
+    });
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'concurrent-admin-1');
+    expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'concurrent-admin-1');
+  });
+
+  it('does not hide a failed bootstrap transaction when no concurrent administrator exists', async () => {
+    const persistenceFailure = new Error('persistence unavailable');
+    save.mockRejectedValueOnce(persistenceFailure);
+    userRepo.findOne.mockResolvedValueOnce(null);
+
+    await expect(bootstrapAdmin()).rejects.toBe(persistenceFailure);
+
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+  });
 });

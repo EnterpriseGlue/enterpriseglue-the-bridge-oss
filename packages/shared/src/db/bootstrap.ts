@@ -15,6 +15,21 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
   const { allowPlatformAdmin = true } = options;
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
+  const findConfiguredBootstrapAdmin = () => userRepo.findOne({
+    where: {
+      email: config.adminEmail,
+      authProvider: 'local',
+      isActive: true,
+    },
+  });
+  const reconcileBootstrapMemberships = async (adminId: string) => {
+    await dataSource.transaction(async (manager) => {
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
+      if (allowPlatformAdmin) {
+        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
+      }
+    });
+  };
 
   try {
     // Check if any users exist
@@ -25,20 +40,9 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       // before canonical authorization groups were introduced. Reconcile only
       // that active local account: it remains the documented break-glass
       // administrator and must not be locked out when SSO enforcement begins.
-      const existingBootstrapAdmin = await userRepo.findOne({
-        where: {
-          email: config.adminEmail,
-          authProvider: 'local',
-          isActive: true,
-        },
-      });
+      const existingBootstrapAdmin = await findConfiguredBootstrapAdmin();
       if (existingBootstrapAdmin) {
-        await dataSource.transaction(async (manager) => {
-          await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, existingBootstrapAdmin.id);
-          if (allowPlatformAdmin) {
-            await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, existingBootstrapAdmin.id);
-          }
-        });
+        await reconcileBootstrapMemberships(existingBootstrapAdmin.id);
         console.log('✅ Reconciled configured bootstrap administrator memberships');
         return;
       }
@@ -73,13 +77,26 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       createdByUserId: null,
     });
 
-    await dataSource.transaction(async (manager) => {
-      await manager.getRepository(User).save(admin);
-      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
-      if (allowPlatformAdmin) {
-        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
-      }
-    });
+    try {
+      await dataSource.transaction(async (manager) => {
+        await manager.getRepository(User).save(admin);
+        await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
+        if (allowPlatformAdmin) {
+          await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
+        }
+      });
+    } catch (creationError) {
+      // Multiple API/worker replicas can observe an empty database at the same
+      // time. Do not inspect driver-specific duplicate-key codes: after the
+      // failed transaction, a portable TypeORM lookup distinguishes a winning
+      // concurrent bootstrap from a real persistence or membership failure.
+      const concurrentBootstrapAdmin = await findConfiguredBootstrapAdmin();
+      if (!concurrentBootstrapAdmin) throw creationError;
+
+      await reconcileBootstrapMemberships(concurrentBootstrapAdmin.id);
+      console.log('✅ Reconciled configured bootstrap administrator after concurrent startup');
+      return;
+    }
 
     console.log(`✅ Admin account created: ${config.adminEmail}`);
     console.log(`   Password: [REDACTED - check ADMIN_PASSWORD environment variable]`);
