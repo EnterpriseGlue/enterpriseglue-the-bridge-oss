@@ -43,6 +43,15 @@ Documentation and Markdown changes select a dedicated lightweight publication-
 boundary job. They do not select the larger OSS/configuration/plugin boundary
 bundle unless another changed path requires it.
 
+The exact generated Release Please delta is also explicit: the version
+manifest, top-level changelog, versioned release document, and host chart
+metadata select documentation, boundary, Helm render, and release-readiness
+checks. They do not enter the unknown/high-risk fallback or repeat application,
+database, identity, authorization, browser, or image suites already qualified
+on the source changes. The release merge group still stages and qualifies the
+signed candidate across all five TypeORM adapters, the pinned Operaton browser
+journey, packages, charts, and multi-platform images before publication.
+
 ## Expensive evidence
 
 - Ordinary backend changes run focused PostgreSQL integration.

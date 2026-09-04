@@ -36,7 +36,7 @@
     "The scheduled recovery drill mutates only dedicated scratch aliases and proves that partial publication is detected and rolled back."
   ],
   "documentation": [
-    "Update maintainer release documentation for exact candidate package publication, native arm64 execution, SLO alerts, scheduled engine compatibility, ancestry-aware changelog cleanup, and scratch recovery drills."
+    "Update maintainer release documentation for exact candidate package publication, native arm64 execution, SLO alerts, scheduled engine compatibility, ancestry-aware changelog cleanup, scratch recovery drills, and the generated release fast path."
   ],
   "knownLimitations": [
     "Native arm64 runner capacity is an external release dependency; workflow telemetry and the immutable candidate controls remain the rollback signal.",
@@ -52,7 +52,8 @@
     "Run engine-health query policy tests for deterministic errors, transient retry backoff, and successful polling.",
     "Run the pinned and advisory Operaton process overview, detail, BPMN, final-variable, state, health, and clean-console journey.",
     "Verify release observability reports real failures, retries, release rebuilds, and candidate p95 breaches while excluding superseded cancellations.",
-    "Run the scheduled scratch recovery drill contract and release changelog merge-strategy tests."
+    "Run the scheduled scratch recovery drill contract and release changelog merge-strategy tests.",
+    "Prove the exact four-file Release Please delta cannot enter the unknown/high-risk fallback or repeat unrelated heavyweight matrices."
   ],
   "packages": [
     {
