@@ -7,13 +7,16 @@ import {
   validateExtensionRouteAuthz,
 } from '@src/enterprise/extensionRouteAuthz';
 import type { EnterpriseExtensionRoute } from '@src/enterprise/extensionRegistry';
+import type { CurrentUserPermissions } from '@src/shared/types/auth';
 
-const authState = vi.hoisted(() => ({
+const authState = vi.hoisted((): { permissions: CurrentUserPermissions } => ({
   permissions: {
     userId: 'user-1',
+    tenantId: null,
     platform: [] as string[],
     projects: [],
     engines: [],
+    authorizationVersion: 'test',
     generatedAt: 1,
   },
 }));
@@ -92,9 +95,11 @@ describe('extensionRouteAuthz', () => {
   it('renders a valid extension route when the current permission snapshot allows its action', () => {
     authState.permissions = {
       userId: 'user-1',
+      tenantId: null,
       platform: ['platform:audit:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test',
       generatedAt: 1,
     };
 
@@ -112,9 +117,11 @@ describe('extensionRouteAuthz', () => {
   it('shows an unauthorized state when the extension route action is denied', () => {
     authState.permissions = {
       userId: 'user-1',
+      tenantId: null,
       platform: [],
       projects: [],
       engines: [],
+      authorizationVersion: 'test',
       generatedAt: 1,
     };
 
@@ -128,6 +135,32 @@ describe('extensionRouteAuthz', () => {
 
     expect(screen.getByText('Not authorized')).toBeInTheDocument();
     expect(screen.getByText('Missing permission platform:audit:view')).toBeInTheDocument();
+  });
+
+  it('uses the active tenant for tenant-scoped extension route actions', () => {
+    authState.permissions = {
+      userId: 'user-1',
+      tenantId: 'tenant-default',
+      platform: [],
+      tenant: {
+        resourceId: 'tenant-default',
+        permissions: ['tenant:settings:view'],
+      },
+      projects: [],
+      engines: [],
+      authorizationVersion: 'test',
+      generatedAt: 1,
+    };
+
+    renderRoutes([
+      {
+        path: 'enterprise',
+        element: <div>Tenant settings extension</div>,
+        authz: { actionId: 'tenant.settings.read' },
+      },
+    ]);
+
+    expect(screen.getByText('Tenant settings extension')).toBeInTheDocument();
   });
 
   it('excludes extension routes that have invalid entry authz metadata', () => {

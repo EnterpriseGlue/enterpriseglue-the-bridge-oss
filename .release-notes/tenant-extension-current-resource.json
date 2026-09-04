@@ -1,0 +1,38 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "tenant-extension-current-resource",
+  "type": "fix",
+  "scope": "plugin-platform",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Allows trusted plugin and system routes to authorize against the active tenant without hard-coding a tenant identifier.",
+  "userImpact": [
+    "Tenant-scoped plugin and system pages now render when the signed-in user has the declared tenant permission."
+  ],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "Route authorization still uses the server-provided permission snapshot and now binds an omitted tenant resource identifier to that snapshot's active tenant."
+  ],
+  "documentation": [
+    "The generated technical release notes describe current-tenant authorization for trusted extension routes."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend host package or frontend image; no database rollback is required."
+  ],
+  "validation": [
+    "The extension route authorization suite covers active-tenant resource inference and continues to reject missing or unknown authorization metadata."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.15.4",
+      "newVersion": "0.15.5",
+      "impact": "patch"
+    }
+  ]
+}

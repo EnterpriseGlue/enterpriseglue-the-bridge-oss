@@ -57,12 +57,22 @@ export function getExtensionAuthzActionIds(authz: ExtensionRouteAuthzMetadata | 
   ].filter(Boolean);
 }
 
-function actionResource(authz: ExtensionRouteAuthzMetadata, actionId: string): ActionResource | undefined {
-  if (!authz.actionResourceType && typeof authz.actionResourceId === 'undefined') return undefined;
+function actionResource(
+  authz: ExtensionRouteAuthzMetadata,
+  actionId: string,
+  snapshot: ReturnType<typeof useAuth>['permissions']
+): ActionResource | undefined {
   const action = getAuthzActionDefinition(actionId);
+  const resourceType = authz.actionResourceType ?? action?.resourceType;
+  const resourceId = typeof authz.actionResourceId !== 'undefined'
+    ? authz.actionResourceId
+    : resourceType === 'tenant'
+      ? snapshot?.tenant?.resourceId
+      : undefined;
+  if (!resourceType && typeof resourceId === 'undefined') return undefined;
   return {
-    type: authz.actionResourceType ?? action?.resourceType ?? 'platform',
-    id: authz.actionResourceId ?? null,
+    type: resourceType ?? 'platform',
+    id: resourceId ?? null,
   };
 }
 
@@ -203,7 +213,7 @@ function ExtensionRouteAuthzBoundary({
   const { permissions } = useAuth();
   const actionIds = getExtensionAuthzActionIds(authz);
   const decisions = actionIds.map((actionId) =>
-    evaluateActionSnapshot(permissions, actionId, actionResource(authz, actionId))
+    evaluateActionSnapshot(permissions, actionId, actionResource(authz, actionId, permissions))
   );
   const allowed = decisions.some((decision) => decision.allowed);
   if (allowed) return <>{children}</>;
