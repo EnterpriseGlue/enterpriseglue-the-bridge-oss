@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "saas-tenant-auth-routing",
+  "type": "fix",
+  "scope": "authentication",
+  "breaking": false,
+  "audiences": ["users", "administrators", "operators", "developers", "security"],
+  "summary": "Keeps browser session authentication on the resolved tenant route so SaaS refresh and profile requests reach the assigned shard.",
+  "userImpact": [
+    "Tenant-qualified SaaS pages can restore and refresh browser sessions without showing tenant_route_required errors.",
+    "Unauthenticated tenant login pages no longer emit a token-refresh warning while checking for an existing session."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Deploy this frontend-host patch together with a tenant edge that accepts the existing X-Tenant-Slug browser routing hint."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The fix changes request routing only and does not alter TypeORM entities, migrations, or database-specific behavior."
+    ]
+  },
+  "security": [
+    "The tenant slug is a shard-routing hint only; refresh tokens remain HTTP-only, tenant-bound, membership-checked, and revocation-checked credentials.",
+    "The SaaS edge does not forward the unsigned hint as tenant authority, and canonical tenant routes continue to use signed placement assertions."
+  ],
+  "documentation": [
+    "The generated technical release notes describe the tenant-qualified SaaS browser-session routing fix and coordinated deployment requirement."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend-host and tenant-edge images; no database rollback is required."
+  ],
+  "validation": [
+    "Frontend unit tests cover tenant shard hints on refresh and current-session requests.",
+    "Cloud edge and browser checks cover tenant login without tenant_route_required console or network failures."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.15.5",
+      "newVersion": "0.15.6",
+      "impact": "patch"
+    }
+  ]
+}

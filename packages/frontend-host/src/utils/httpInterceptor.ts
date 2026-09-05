@@ -197,9 +197,10 @@ async function refreshAccessToken(): Promise<boolean> {
     const response = await fetch(applyApiBaseUrl(`${API_BASE_URL}/auth/refresh`), {
       method: 'POST',
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      // The SaaS edge uses this as a bounded shard-routing hint. It is not
+      // tenant authority: the backend still validates the tenant-bound refresh
+      // token and active membership before issuing a new access token.
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -286,7 +287,10 @@ export async function interceptedFetch(
         // After refresh the accessToken cookie changed; get a fresh CSRF token
         // by making a lightweight GET that goes through CSRF middleware.
         try {
-          const csrfResp = await fetch(applyApiBaseUrl('/api/auth/me'), { credentials: 'include' });
+          const csrfResp = await fetch(applyApiBaseUrl('/api/auth/me'), {
+            credentials: 'include',
+            headers: getAuthHeaders(),
+          });
           updateCsrfToken(csrfResp);
         } catch { /* best effort */ }
 

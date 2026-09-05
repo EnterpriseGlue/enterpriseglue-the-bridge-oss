@@ -181,6 +181,7 @@ describe('httpInterceptor', () => {
 
     describe('token refresh on 401', () => {
       it('refreshes token and retries request', async () => {
+        window.location.pathname = '/t/alpha/dashboard';
         const first401 = new Response(null, { status: 401 });
         const refreshSuccess = new Response(JSON.stringify({ expiresIn: 3600 }), {
           status: 200,
@@ -199,6 +200,10 @@ describe('httpInterceptor', () => {
 
         expect(result.status).toBe(200);
         expect(fetchMock).toHaveBeenCalledTimes(4);
+        expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/auth/refresh');
+        expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('x-tenant-slug')).toBe('alpha');
+        expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/auth/me');
+        expect(new Headers(fetchMock.mock.calls[2]?.[1]?.headers).get('x-tenant-slug')).toBe('alpha');
       });
 
       it('redirects to login on failed refresh', async () => {
