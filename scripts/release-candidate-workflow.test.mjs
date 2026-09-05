@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { classifyChangedFiles } from './ci-change-classifier.mjs'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 
 const read = (relative) => readFile(new URL(relative, import.meta.url), 'utf8')
 
@@ -219,4 +224,134 @@ test('candidate pipeline changes always re-run release readiness', () => {
     assert.equal(classification.workflow_or_release, true, changedPath)
     assert.equal(classification.run_release_readiness, true, changedPath)
   }
+})
+
+test('candidate toolchain rehearsal is mandatory, bounded, retained and before receipt publication', async () => {
+  const job = stage.slice(stage.indexOf('  stage-toolchain:\n'), stage.indexOf('\n  publish-receipt:\n'))
+  const rehearsal = job.indexOf('      - name: Rehearse candidate package publication and disconnected toolchain import\n')
+  assert.ok(rehearsal > job.indexOf('      - name: Stage immutable toolchain artifacts\n'))
+  assert.ok(rehearsal < job.indexOf('      - name: Retain exact candidate packages and charts\n'))
+  const step = job.slice(rehearsal, job.indexOf('      - name: Retain candidate-bound toolchain rehearsal diagnostics\n'))
+  assert.match(step, /timeout-minutes: 30/)
+  assert.doesNotMatch(step, /continue-on-error:|\n\s+if:/)
+  assert.match(step, /check-release-candidate-toolchain\.sh "\$SOURCE_REF" "\$TRUSTED_REF" "\$RELEASE_TAG"/)
+  assert.match(job, /Retain candidate-bound toolchain rehearsal diagnostics\n\s+if: always\(\)/)
+  assert.match(job, /name: release-candidate-toolchain-rehearsal-\$\{\{ needs\.resolve\.outputs\.source_ref \}\}/)
+  assert.match(job, /path: \.artifacts\/release-candidate-toolchain\n\s+if-no-files-found: error\n\s+retention-days: 90/)
+  const script = await read('./check-release-candidate-toolchain.sh')
+  assert.doesNotMatch(script, /check-release-candidate-readiness\.sh|test:release-readiness/)
+  assert.match(script, /publish-plugin-package-set\.mjs dry-run/)
+  assert.match(script, /publish-host-package-set\.mjs dry-run/)
+  assert.match(script, /test:plugin-toolchain-release:local/)
+  const classification = classifyChangedFiles(['scripts/check-release-candidate-toolchain.sh'])
+  assert.equal(classification.run_release_readiness, true)
+  assert.equal(classification.unknown_high_risk, false)
+  assert.equal(classification.run_ci_images, false)
+  assert.equal(classification.run_database_matrix, false)
+})
+
+async function rehearsalFixture(operation) {
+  const root = await mkdtemp(path.join(tmpdir(), 'eg-candidate-rehearsal-'))
+  try {
+    await mkdir(path.join(root, 'scripts'))
+    await mkdir(path.join(root, 'bin'))
+    for (const type of ['plugin', 'host']) await mkdir(path.join(root, '.artifacts/release-candidate-payload/packages', type), { recursive: true })
+    for (const [type, count] of [['plugin', 5], ['host', 3]]) for (let index = 0; index < count; index++) await writeFile(path.join(root, `.artifacts/release-candidate-payload/packages/${type}/package-${index}.tgz`), `synthetic-${type}-${index}`)
+    await writeFile(path.join(root, 'scripts/check-release-candidate-toolchain.sh'), await read('./check-release-candidate-toolchain.sh'))
+    execFileSync('git', ['init', '--quiet', root])
+    execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'fixture'], { cwd: root })
+    const trusted = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+    for (const command of ['node', 'pnpm']) {
+      await writeFile(path.join(root, 'bin', command), `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';
+const step = ${JSON.stringify(command)} === 'pnpm' ? 'rehearsal' : process.argv[2].includes('plugin-package') ? 'plugin' : 'host';
+if (step !== 'rehearsal' && (process.argv[3] !== 'dry-run' || !process.argv[4].endsWith('/.artifacts/release-candidate-payload/packages/'+step))) process.exit(19);
+if (step === 'rehearsal' && process.argv.slice(2).join(' ') !== 'run test:plugin-toolchain-release:local') process.exit(19);
+appendFileSync(process.env.TEST_CALLS, step+'\\n');
+if (process.env.TEST_MUTATE === step) appendFileSync(process.argv[4]+'/package-0.tgz', 'changed');
+if (process.env.TEST_FAIL === step) { process.stderr.write('synthetic diagnostic '+step); process.exit(17); }
+if (process.env.TEST_HANG === step) setInterval(()=>{},1000);
+else process.stdout.write(JSON.stringify({step,mode:'dry-run'})+'\\n');
+`, { mode: 0o755 })
+    }
+    const args = ['scripts/check-release-candidate-toolchain.sh', '1'.repeat(40), trusted, 'v0.20.9']
+    const env = { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}`, TEST_CALLS: path.join(root, 'calls'), GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2' }
+    await operation({ root, args, env, trusted })
+  } finally { await rm(root, { recursive: true, force: true }) }
+}
+
+test('rehearsal binds both sources and runs all three commands before writing passed', async () => {
+  await rehearsalFixture(async ({ root, args, env, trusted }) => {
+    execFileSync('bash', args, { cwd: root, env })
+    assert.equal(await readFile(path.join(root, 'calls'), 'utf8'), 'plugin\nhost\nrehearsal\n')
+    const receipt = JSON.parse(await readFile(path.join(root, '.artifacts/release-candidate-toolchain/rehearsal.json'), 'utf8'))
+    assert.equal(receipt.sourceRevision, '1'.repeat(40))
+    assert.equal(receipt.trustedSourceRevision, trusted)
+    assert.equal(receipt.releaseTag, 'v0.20.9')
+    assert.equal(receipt.runId, '42'); assert.equal(receipt.runAttempt, '2')
+    assert.equal(receipt.status, 'passed'); assert.equal(receipt.publicationPerformed, false)
+    assert.ok(Object.values(receipt.checks).every((value) => value === true))
+    const { runId, runAttempt, ...proof } = receipt
+    assert.equal(proof.artifacts.length, 8)
+    for (const artifact of proof.artifacts) assert.equal(artifact.sha256, createHash('sha256').update(await readFile(path.join(root, '.artifacts/release-candidate-payload', artifact.path))).digest('hex'))
+    assert.deepEqual(JSON.parse(await readFile(path.join(root, '.artifacts/release-candidate-payload/packages/toolchain-rehearsal.json'), 'utf8')), proof)
+  })
+})
+
+for (const failed of ['plugin', 'host', 'rehearsal']) test(`failed ${failed} cannot issue passing evidence`, async () => {
+  await rehearsalFixture(async ({ root, args, env }) => {
+    assert.throws(() => execFileSync('bash', args, { cwd: root, env: { ...env, TEST_FAIL: failed } }))
+    const output = path.join(root, '.artifacts/release-candidate-toolchain')
+    await assert.rejects(readFile(path.join(output, 'rehearsal.json')), { code: 'ENOENT' })
+    await assert.rejects(readFile(path.join(root, '.artifacts/release-candidate-payload/packages/toolchain-rehearsal.json')), { code: 'ENOENT' })
+    assert.equal(JSON.parse(await readFile(path.join(output, 'execution.json'), 'utf8')).status, 'started')
+    assert.equal((await readFile(path.join(root, 'calls'), 'utf8')).trim().split('\n').at(-1), failed)
+    const log = failed === 'rehearsal' ? 'toolchain-local.log' : `${failed}-package-dry-run.stderr.log`
+    assert.match(await readFile(path.join(output, log), 'utf8'), /synthetic diagnostic/)
+  })
+})
+
+test('wrong checkout authority is rejected before any rehearsal command', async () => {
+  await rehearsalFixture(async ({ root, args, env }) => {
+    args[2] = '2'.repeat(40)
+    assert.throws(() => execFileSync('bash', args, { cwd: root, env }))
+    await assert.rejects(readFile(path.join(root, 'calls')), { code: 'ENOENT' })
+  })
+})
+
+test('a changed tarball cannot be certified as the original candidate payload', async () => {
+  await rehearsalFixture(async ({ root, args, env }) => {
+    assert.throws(() => execFileSync('bash', args, { cwd: root, env: { ...env, TEST_MUTATE: 'plugin' } }))
+    await assert.rejects(readFile(path.join(root, '.artifacts/release-candidate-payload/packages/toolchain-rehearsal.json')), { code: 'ENOENT' })
+  })
+})
+
+test('new run identities do not change immutable signed proof for unchanged candidate bytes', async () => {
+  await rehearsalFixture(async ({ root, args, env }) => {
+    execFileSync('bash', args, { cwd: root, env })
+    const proofPath = path.join(root, '.artifacts/release-candidate-payload/packages/toolchain-rehearsal.json')
+    const original = await readFile(proofPath, 'utf8')
+    // Only this test-owned diagnostic directory is discarded to model a new runner.
+    await rm(path.join(root, '.artifacts/release-candidate-toolchain'), { recursive: true })
+    execFileSync('bash', args, { cwd: root, env: { ...env, GITHUB_RUN_ID: '43', GITHUB_RUN_ATTEMPT: '3' } })
+    assert.equal(await readFile(proofPath, 'utf8'), original)
+    assert.equal(JSON.parse(await readFile(path.join(root, '.artifacts/release-candidate-toolchain/execution.json'), 'utf8')).runId, '43')
+  })
+})
+
+test('cancelled rehearsal retains partial diagnostics without a passing receipt', async () => {
+  await rehearsalFixture(async ({ root, args, env }) => {
+    const child = spawn('bash', args, { cwd: root, env: { ...env, TEST_HANG: 'rehearsal' }, detached: true, stdio: 'ignore' })
+    const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve) })
+    try {
+      let entered = false
+      for (let attempt = 0; attempt < 500; attempt++) {
+        const calls = await readFile(path.join(root, 'calls'), 'utf8').catch(() => '')
+        if (calls.endsWith('rehearsal\n')) { entered = true; break }
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      assert.equal(entered, true)
+    } finally { process.kill(-child.pid, 'SIGTERM'); await closed }
+    await assert.rejects(readFile(path.join(root, '.artifacts/release-candidate-toolchain/rehearsal.json')), { code: 'ENOENT' })
+    assert.equal(JSON.parse(await readFile(path.join(root, '.artifacts/release-candidate-toolchain/execution.json'), 'utf8')).status, 'started')
+  })
 })

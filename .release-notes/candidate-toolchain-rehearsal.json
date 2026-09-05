@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "candidate-toolchain-rehearsal",
+  "type": "fix",
+  "scope": "release",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Require package publication dry runs and the disconnected toolchain rehearsal before an exact release candidate can pass staging.",
+  "userImpact": [],
+  "upgrade": {"required": false, "instructions": ["Release candidates now retain source-bound rehearsal diagnostics before the signed candidate receipt is published."]},
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": ["A failed, cancelled, or timed-out rehearsal cannot produce a passing qualification receipt. Existing protected-source and promotion checks remain unchanged."],
+  "documentation": ["docs/development/release-notes-process.md"],
+  "knownLimitations": ["The local disposable-registry rehearsal exercises the validated candidate's protected source and derived release metadata; it is not a customer environment test or a replacement for exact promoted-image scans."],
+  "rollback": ["Revert the workflow change only through normal review; never bypass required candidate checks to publish a release."],
+  "validation": ["Workflow regression and isolated command-failure tests cover both package dry runs, the local OCI rehearsal, and source-bound success/failure evidence."],
+  "packages": []
+}
