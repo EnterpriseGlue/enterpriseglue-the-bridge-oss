@@ -1,0 +1,47 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-staging-fast-path",
+  "type": "performance",
+  "scope": "ci-release",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Qualify each exact Release Please merge candidate once instead of rebuilding the same release payload in both CI and candidate staging.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The required candidate status remains bound to the exact merge-queue SHA and still requires the five-database, Operaton, package, chart, image, scan, signature, and receipt gates.",
+    "Pipeline implementation changes continue to run the read-only release-readiness rehearsal before merge."
+  ],
+  "documentation": [
+    "The maintainer CI and release routing documentation explains the single authoritative heavy candidate gate."
+  ],
+  "knownLimitations": [
+    "This change removes duplicate work; it does not reduce the scope of the authoritative Release Candidate Stage."
+  ],
+  "rollback": [
+    "Revert the CI condition and aggregate selection expression to restore readiness qualification on Release Please heads and merge groups."
+  ],
+  "validation": [
+    "Run release-readiness and candidate-workflow contract tests, change-classifier fixtures, aggregate coverage checks, and release-note preflight.",
+    "Verify a release-only generated delta skips the duplicate readiness job while the merge-queue candidate still requires signed staging."
+  ],
+  "packages": []
+}

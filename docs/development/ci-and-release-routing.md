@@ -46,11 +46,14 @@ bundle unless another changed path requires it.
 The exact generated Release Please delta is also explicit: the version
 manifest, top-level changelog, versioned release document, and host chart
 metadata select documentation, boundary, Helm render, and release-readiness
-checks. They do not enter the unknown/high-risk fallback or repeat application,
-database, identity, authorization, browser, or image suites already qualified
-on the source changes. The release merge group still stages and qualifies the
-signed candidate across all five TypeORM adapters, the pinned Operaton browser
-journey, packages, charts, and multi-platform images before publication.
+classification, but the expensive readiness rehearsal runs only when release
+pipeline contracts themselves change. Release Please heads and merge groups do
+not repeat application, database, identity, authorization, browser, package,
+chart, or image suites already qualified on the source changes. The release
+merge group still stages and qualifies the signed candidate across all five
+TypeORM adapters, the pinned Operaton browser journey, packages, charts, and
+multi-platform images before publication. The required `Release candidate
+staged` status cannot pass until that exact-SHA qualification completes.
 
 ## Expensive evidence
 
