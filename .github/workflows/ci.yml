@@ -1056,9 +1056,10 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # Read-only release candidate qualification. Runs for Release Please pull
-  # requests and whenever its own contracts change. All registry operations are
-  # plan, compare, pull, or dry-run operations; publication remains post-tag.
+  # Read-only release pipeline qualification. Runs when its own contracts change
+  # or when requested manually. Release Please heads and merge groups deliberately
+  # skip this duplicate build: the privileged Release Candidate Stage qualifies
+  # the exact merge-queue SHA once before the required status can turn green.
   # ---------------------------------------------------------------------------
 
   release-readiness:
@@ -1067,10 +1068,11 @@ jobs:
     if: >-
       needs.release-notes-preflight.result == 'success' &&
       needs.detect.result == 'success' &&
-      (needs.release-notes-preflight.outputs.is_release_pull_request == 'true' ||
-      (needs.detect.outputs.run_release_readiness == 'true' &&
+      needs.release-notes-preflight.outputs.is_release_pull_request != 'true' &&
+      needs.detect.outputs.run_release_readiness == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository)))
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -1192,5 +1194,5 @@ jobs:
         env:
           CI_NEEDS_JSON: ${{ toJSON(needs) }}
           CI_SELECTION_JSON: ${{ toJSON(needs.detect.outputs) }}
-          CI_REQUIRED_NON_SKIPPED_JOBS: ${{ (needs.release-notes-preflight.outputs.is_release_pull_request == 'true' || (needs.detect.outputs.run_release_readiness == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository))) && 'release-readiness' || '' }}
+          CI_REQUIRED_NON_SKIPPED_JOBS: ${{ (needs.release-notes-preflight.outputs.is_release_pull_request != 'true' && needs.detect.outputs.run_release_readiness == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))) && 'release-readiness' || '' }}
         run: node scripts/evaluate-ci-needs.mjs

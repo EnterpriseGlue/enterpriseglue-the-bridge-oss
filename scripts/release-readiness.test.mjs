@@ -42,7 +42,7 @@ test('release candidate detection works for pull requests, manual runs, and merg
   assert.equal(classification.run_release_readiness, true)
 })
 
-test('the release-readiness CI job is read-only and part of the aggregate', () => {
+test('the release-readiness CI job is read-only, contract-scoped, and part of the aggregate', () => {
   const start = ci.indexOf('  release-readiness:\n')
   const end = ci.indexOf('\n  ci-complete:\n', start)
   assert.notEqual(start, -1)
@@ -52,13 +52,25 @@ test('the release-readiness CI job is read-only and part of the aggregate', () =
   assert.match(job, /packages: read/)
   assert.doesNotMatch(job, /packages: write/)
   assert.match(job, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/)
+  assert.match(job, /is_release_pull_request != 'true'/)
+  assert.doesNotMatch(job, /is_release_pull_request == 'true'/)
+  assert.match(job, /github\.event_name == 'pull_request'/)
   assert.match(job, /pnpm run test:release-readiness/)
   assert.match(job, /PLUGIN_PLATFORM_BUILDX_BUILDER: \$\{\{ steps\.release-buildx\.outputs\.name \}\}/)
   assert.match(ci, /      - release-readiness/)
   assert.match(
     ci,
-    /CI_REQUIRED_NON_SKIPPED_JOBS: \$\{\{ .*needs\.detect\.outputs\.run_release_readiness == 'true' && \(github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\)/,
+    /CI_REQUIRED_NON_SKIPPED_JOBS: \$\{\{ .*is_release_pull_request != 'true' && needs\.detect\.outputs\.run_release_readiness == 'true' && \(github\.event_name == 'workflow_dispatch' \|\| \(github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository\)\)/,
   )
+})
+
+test('Release Please heads and merge groups do not duplicate candidate staging qualification', () => {
+  const start = ci.indexOf('  release-readiness:\n')
+  const end = ci.indexOf('\n  ci-complete:\n', start)
+  const job = ci.slice(start, end)
+  assert.match(job, /needs\.release-notes-preflight\.outputs\.is_release_pull_request != 'true'/)
+  assert.doesNotMatch(job, /github\.event_name == 'merge_group'/)
+  assert.match(ci, /Release Candidate Stage qualifies/)
 })
 
 test('readiness covers immutable package, chart, image, scan, and receipt gates', () => {

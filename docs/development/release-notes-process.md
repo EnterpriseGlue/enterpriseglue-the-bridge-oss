@@ -134,9 +134,8 @@ together.
 
 ## Release-candidate readiness and staging
 
-Release Please pull requests have an additional read-only qualification phase
-before they may merge. The phase runs again on the merge-queue candidate and
-binds its retained receipt to the exact candidate commit. It:
+Release pipeline implementation changes run an additional read-only
+qualification phase before they may merge. That contract-focused phase:
 
 1. verifies that every job in the main CI workflow is covered by the required
    `ci-complete` aggregate;
@@ -150,12 +149,15 @@ binds its retained receipt to the exact candidate commit. It:
 6. rehearses chart receipts, signatures, immutable repulls, the signed air-gap
    bundle, and a disconnected registry import.
 
-The readiness job has only `contents: read` and `packages: read`. After the
-exact Release Please merge-group commit passes that gate and the rest of CI,
-the privileged `Release Candidate Stage` workflow builds and qualifies the
-immutable registry payload. It publishes only candidate tags and a signed
-candidate receipt; it does not create a Git tag, GitHub release, public package
-version, production chart version, Docker Hub tag, or `latest` alias.
+The readiness job has only `contents: read` and `packages: read`. Release
+Please heads and merge groups skip that source-level rehearsal because the
+source change was already qualified before the release pull request was
+generated. After the exact Release Please merge-group commit passes CI, the
+privileged `Release Candidate Stage` workflow performs the one authoritative
+heavy qualification of the immutable registry payload. It publishes only
+candidate tags and a signed candidate receipt; it does not create a Git tag,
+GitHub release, public package version, production chart version, Docker Hub
+tag, or `latest` alias.
 
 Candidate commit metadata and the four generated release files are read through
 the GitHub API by a `contents: read` validation job; the candidate is never
