@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.20.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.8...v0.20.9) (2026-09-05)
+
+
+### Bug Fixes
+
+* **packaging:** align frontend host with shared activation patch ([e56d3a7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e56d3a740cbb5fbde74026cf88a3870540dec080))
+* **release:** require exact candidate toolchain rehearsal ([da61cbe](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/da61cbefe7949acbbd1ec1627c0ab6f9e3725361))
+* **release:** require exact candidate toolchain rehearsal ([86d0541](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/86d054170c425e49ad8c39d3855566ee2372d043))
+* **tenancy:** fence conditional release activation against current tenant state ([6cb05bd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6cb05bd31610ccc213cc9c593ef8801649d5d11b))
+* **tenancy:** fence conditional release activation against current tenant state ([2e212c6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2e212c6dd40ba930ce6f5ca42488fa97cced70b8))
+
 ## [0.20.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.7...v0.20.8) (2026-09-05)
 
 
