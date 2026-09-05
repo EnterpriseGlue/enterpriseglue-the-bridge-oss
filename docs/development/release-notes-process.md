@@ -159,6 +159,20 @@ candidate tags and a signed candidate receipt; it does not create a Git tag,
 GitHub release, public package version, production chart version, Docker Hub
 tag, or `latest` alias.
 
+Exact candidate staging also runs both package-set publication dry runs against
+its packed payload and the local disposable-registry toolchain rehearsal before
+the signed candidate receipt can be published. This does not repeat the entire
+source-level readiness build. A thirty-minute step timeout fails closed.
+The ninety-day rehearsal artifact binds the merge-group source, protected
+checkout source, proposed version, workflow run and attempt. It retains partial
+logs on failure; only a fully completed sequence writes a passing rehearsal
+receipt. Deterministic proof with the eight unchanged candidate tarball hashes
+also travels in the signed candidate bundle; run IDs and registry-dependent
+diagnostics stay in CI artifacts so retries preserve immutable bundle bytes.
+`publicationPerformed: false` means no production publication. The local
+rehearsal writes only disposable registries, while other candidate stages
+still write their explicitly scoped candidate artifacts.
+
 Candidate commit metadata and the four generated release files are read through
 the GitHub API by a `contents: read` validation job; the candidate is never
 checked out on a runner. Every job with package-write or signing authority

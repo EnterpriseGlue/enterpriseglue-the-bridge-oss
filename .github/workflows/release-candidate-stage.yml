@@ -835,6 +835,24 @@ jobs:
             echo "manager_chart_ref=$manager_chart_ref"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Rehearse candidate package publication and disconnected toolchain import
+        timeout-minutes: 30
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          TRUSTED_REF: ${{ needs.resolve.outputs.trusted_ref }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: bash scripts/check-release-candidate-toolchain.sh "$SOURCE_REF" "$TRUSTED_REF" "$RELEASE_TAG"
+
+      - name: Retain candidate-bound toolchain rehearsal diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-toolchain-rehearsal-${{ needs.resolve.outputs.source_ref }}
+          path: .artifacts/release-candidate-toolchain
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Retain exact candidate packages and charts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
