@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "conditional-tenant-release-activation",
+  "type": "security",
+  "scope": "tenancy",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Add current-state and placement-epoch fencing to conditional tenant release-work activation.",
+  "userImpact": ["Controllers can reject activation of missing, inactive, or moved tenants even when replaying an existing assignment.", "Oracle release assignment no longer fails on the locking query's row-limited view."],
+  "upgrade": {"required": false, "instructions": ["Upgrade the host before enabling conditional activation in controllers; require the v2 response and matching placement epoch.", "Use the coordinated shared, backend-host, and frontend-host patch versions. The frontend-host update only tracks its immutable shared-package dependency; no UI source changes are included."]},
+  "configuration": [],
+  "api": {"compatibility": "additive", "changes": ["An optional expectedPlacementEpoch on release-assignment selects a v2 response with tenantStatus and placementEpoch. Requests without it preserve the v1 response."]},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["Uses existing Tenant and work-assignment entities within one TypeORM transaction; no durable schema change.", "Oracle retains pessimistic assignment locking through a unique-key query without a row-limiting view."]},
+  "security": ["Conditional activation validates current tenant state before idempotent replay and serializes with tenant lifecycle writes."],
+  "documentation": ["docs/reference/tenant-workload-lifecycle-api.md"],
+  "knownLimitations": ["The response is a transaction snapshot, not a guarantee against later lifecycle changes. Legacy v1 activation does not provide a tenant-state proof."],
+  "rollback": ["No database rollback is needed. Conditional clients must remain fail-closed on older hosts; do not silently downgrade them to v1."],
+  "validation": [
+    "Focused schema, generated OpenAPI, service, HTTP authorization, and real in-memory SQLite regression tests passed.",
+    "Local PostgreSQL, MySQL, SQL Server, Oracle, and Spanner emulator database qualification shards passed, including real conditional DML and idempotent replay checks. PostgreSQL also passed the concurrent lifecycle-write check.",
+    "Authorization structure and all 125 authorization decision tests passed against a disposable PostgreSQL database; backend build/typecheck, database portability, plugin work, documentation, and CI routing guards passed.",
+    "Exact tenant lifecycle and assignment service paths now select physical database qualification in CI. Local dirty-worktree shards are not a clean release-candidate aggregate or production Spanner qualification."
+  ],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.15.4", "newVersion": "0.15.5", "impact": "patch"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.13.6", "newVersion": "0.13.7", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.15.6", "newVersion": "0.15.7", "impact": "patch"}
+  ]
+}

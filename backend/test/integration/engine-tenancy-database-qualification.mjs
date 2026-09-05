@@ -68,6 +68,9 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { TenantReleaseWorkAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
+import { TenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import { TenantDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDomain.js';
 import { TenantDiscoveryDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryDomain.js';
 import { TenantDiscoveryChallenge } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryChallenge.js';
@@ -761,6 +764,7 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
 }
 
 async function qualifyServiceBehavior(dataSource) {
+  await qualifyConditionalReleaseActivation(dataSource);
   await dataSource.getRepository(Engine).insert(engineRow(ids.serviceEngine, {
     runtimeAccessScope: 'resource_aware',
     tenancyMode: 'shared',
@@ -851,6 +855,7 @@ async function qualifyServiceBehavior(dataSource) {
   observation.stages.service_behavior = {
     status: 'passed',
     assertions: [
+      'conditional release activation verifies active tenant placement on first use and idempotent replay',
       'shared mapping create is atomic',
       'runtime inventory resolves to the mapped tenant',
       'same-version retry is idempotent',
@@ -858,6 +863,78 @@ async function qualifyServiceBehavior(dataSource) {
       'engine health BIGINT timestamps hydrate as safe JavaScript numbers',
     ],
   };
+}
+
+async function qualifyConditionalReleaseActivation(dataSource) {
+  const tenantId = `${runId}-activation`;
+  const tenants = dataSource.getRepository(Tenant);
+  const assignments = dataSource.getRepository(TenantReleaseWorkAssignment);
+  const service = new TenantReleaseWorkAssignmentService(async () => dataSource);
+  const previousRelease = config.tenantPlacementReleaseId;
+  const input = { tenantId, releaseId: 'dbq-conditional-release', assignmentEpoch: 1, expectedPlacementEpoch: 7 };
+  config.tenantPlacementReleaseId = input.releaseId;
+  const assertConflict = async (request = input) => {
+    await assert.rejects(service.assign(request), (error) => error.statusCode === 409);
+  };
+  try {
+    await assertConflict(); // Missing tenant must not create an assignment.
+    assert.equal(await assignments.countBy({ tenantRef: tenantId }), 0);
+    await tenants.insert({
+      id: tenantId, name: 'Disposable activation qualification', slug: tenantId,
+      status: 'active', placementKey: 'dbq-shard', placementEpoch: 7,
+      createdByUserId: null, createdAt: 1700000000000, updatedAt: 1700000000000,
+    });
+    await assertConflict({ ...input, expectedPlacementEpoch: 6 });
+    for (const status of ['suspended', 'deleting']) {
+      await tenants.update({ id: tenantId }, { status });
+      await assertConflict();
+    }
+    assert.equal(await assignments.countBy({ tenantRef: tenantId }), 0);
+    await tenants.update({ id: tenantId }, { status: 'active' });
+    const activated = await service.assign(input);
+    assert.equal(activated.schemaVersion, 'tenant-release-work-assignment.enterpriseglue.io/v2');
+    assert.equal(activated.tenantStatus, 'active');
+    assert.equal(activated.placementEpoch, 7);
+    assert.equal(activated.idempotent, false);
+    assert.equal((await service.assign(input)).idempotent, true);
+    const stored = await tenants.findOneByOrFail({ id: tenantId });
+    assert.equal(Number(stored.placementEpoch), 7);
+    assert.equal(Number(stored.updatedAt), 1700000000000);
+    if (database === 'postgres') {
+      // Hold a real concurrent lifecycle write. Activation must wait for its
+      // outcome and then deny it, including when the assignment already exists.
+      const lifecycle = dataSource.createQueryRunner();
+      let activation;
+      try {
+        await lifecycle.startTransaction();
+        await lifecycle.manager.getRepository(Tenant).update({ id: tenantId }, { status: 'suspended' });
+        let settled = false;
+        activation = service.assign(input).then(
+          (value) => { settled = true; return { value }; },
+          (error) => { settled = true; return { error }; },
+        );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.equal(settled, false, 'activation must not bypass an uncommitted tenant lifecycle write');
+        await lifecycle.commitTransaction();
+        const result = await activation;
+        assert.equal(result.error?.statusCode, 409);
+      } finally {
+        if (lifecycle.isTransactionActive) await lifecycle.rollbackTransaction();
+        await activation;
+        await lifecycle.release();
+      }
+    }
+    await tenants.update({ id: tenantId }, { status: 'suspended', placementEpoch: 8 });
+    await assertConflict(); // Same assignment epoch cannot bypass current tenant state.
+    await tenants.update({ id: tenantId }, { status: 'active' });
+    await assertConflict(); // Current status alone cannot bypass a changed placement epoch.
+    await tenants.delete({ id: tenantId });
+    await assertConflict(); // An existing assignment is not proof of tenant existence.
+  } finally {
+    config.tenantPlacementReleaseId = previousRelease;
+    await assignments.delete({ tenantRef: tenantId });
+    await tenants.delete({ id: tenantId });
+  }
 }
 
 async function qualifyRollback(dataSource) {

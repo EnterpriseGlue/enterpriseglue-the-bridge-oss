@@ -116,3 +116,11 @@ test('independent database, identity, and deployment workflows honor classifier 
   assert.match(deploymentWorkflow, /uses: \.\/\.github\/workflows\/ci-detect-reusable\.yml/);
   assert.match(deploymentWorkflow, /if: needs\.detect\.outputs\.run_deployment_evidence == 'true'/);
 });
+
+test('tenant activation and lifecycle service changes trigger the physical database workflow on PR and main', () => {
+  for (const name of ['TenantService', 'TenantReleaseWorkAssignmentService']) {
+    const path = `packages/shared/src/services/platform-admin/${name}.ts`;
+    assert.equal(databaseWorkflow.split(`"${path}"`).length - 1, 2);
+    assert.equal(classifyChangedFiles([path]).run_database_matrix, true);
+  }
+});

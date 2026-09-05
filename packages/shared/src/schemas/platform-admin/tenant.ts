@@ -130,9 +130,10 @@ export const TenantWorkloadEpochRequestSchema = z.object({
 export const TenantReleaseWorkAssignmentRequestSchema = z.object({
   releaseId: z.string().min(1).max(256).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
   assignmentEpoch: z.number().int().positive(),
+  expectedPlacementEpoch: z.number().int().positive().optional(),
 }).strict();
 
-export const TenantReleaseWorkAssignmentResponseSchema = z.object({
+const TenantReleaseWorkAssignmentV1ResponseSchema = z.object({
   schemaVersion: z.literal('tenant-release-work-assignment.enterpriseglue.io/v1'),
   tenantId: z.string().min(1).max(160),
   releaseId: z.string().min(1).max(256),
@@ -141,6 +142,15 @@ export const TenantReleaseWorkAssignmentResponseSchema = z.object({
   updatedSchedules: z.number().int().nonnegative(),
   idempotent: z.boolean(),
 }).strict();
+
+export const TenantReleaseWorkAssignmentResponseSchema = z.discriminatedUnion('schemaVersion', [
+  TenantReleaseWorkAssignmentV1ResponseSchema,
+  TenantReleaseWorkAssignmentV1ResponseSchema.extend({
+    schemaVersion: z.literal('tenant-release-work-assignment.enterpriseglue.io/v2'),
+    tenantStatus: z.literal('active'),
+    placementEpoch: z.number().int().positive(),
+  }).strict(),
+]);
 
 export const TenantWorkloadAliasReconcileRequestSchema = z.object({
   aliases: z.array(z.string().trim().min(1).max(253)).max(100),

@@ -199,6 +199,7 @@ router.put('/api/workloads/tenants/:tenantId/release-assignment', requireTenantR
     tenantId,
     releaseId: req.body.releaseId,
     assignmentEpoch: req.body.assignmentEpoch,
+    expectedPlacementEpoch: req.body.expectedPlacementEpoch,
   })));
 }));
 
