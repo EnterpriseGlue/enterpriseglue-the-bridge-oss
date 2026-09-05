@@ -84,6 +84,53 @@ this handoff before exposing the new assignment to edge routing. Rotate the
 controller token across all concurrently supported host releases as one
 coordinated secret operation; never put it in browser configuration or logs.
 
+### Conditional activation (v2)
+
+Controllers that need a current tenant-state proof must also send
+`expectedPlacementEpoch`, obtained from the tenant lifecycle receipt:
+
+```json
+{
+  "releaseId": "saas-2026-09",
+  "assignmentEpoch": 12,
+  "expectedPlacementEpoch": 7
+}
+```
+
+The successful response uses
+`schemaVersion: "tenant-release-work-assignment.enterpriseglue.io/v2"` and
+includes `tenantStatus: "active"` and `placementEpoch: 7`, alongside the existing
+tenant, release, assignment epoch, update counts, and idempotency fields.
+The transaction first conditionally writes the existing Tenant row without
+changing its epoch or timestamp. It requires exactly one matching active tenant
+at the expected placement epoch before locking or modifying assignments and
+queued work. Missing, suspended, deleting, or moved tenants fail with `409`,
+including on an otherwise identical assignment replay. Lifecycle writes to the
+Tenant row serialize with this fence; serialization failures remain failures
+and must not be interpreted as successful activation.
+
+This uses TypeORM conditional DML rather than database-specific locking SQL.
+MySQL must retain its driver's default `FOUND_ROWS` behavior; an overridden
+affected-row mode or an unavailable affected-row count fails closed. No schema
+migration is required. Transaction lock order is Tenant, assignment, then work;
+future lifecycle changes must not acquire these locks in reverse order.
+Oracle assignment locking uses an unbounded unique-key query because Oracle
+does not allow `FOR UPDATE` on TypeORM's row-limited `findOne` view.
+
+Requests without the precondition retain the exact v1 response and legacy
+semantics; they do **not** prove tenant existence or activity. Older hosts reject
+the new field because request validation is strict. Conditional clients must
+nevertheless require v2, active status, and matching tenant, release, assignment
+and placement epochs; never silently fall back to v1 or treat a stripped field
+as successful negotiation. Downgrading a host leaves conditional clients
+fail-closed until a compatible host is restored.
+
+The v2 response proves the transaction's snapshot, not future availability.
+A subsequent suspension, deletion, or placement change can invalidate it;
+normal host request-time placement/status enforcement remains mandatory. An
+old signed creation receipt alone is not a current-state proof, and resume must
+not be used merely to obtain a newer receipt.
+
 ## Provision a tenant
 
 `POST /api/workloads/tenants`

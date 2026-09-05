@@ -148,6 +148,16 @@ test('independent heavy workflows select only their owning change surfaces', () 
   assert.equal(deployment.run_identity_rehearsal, false);
 });
 
+test('tenant activation and lifecycle services select database qualification without broad service fan-out', () => {
+  for (const name of ['TenantService', 'TenantReleaseWorkAssignmentService']) {
+    const result = classifyChangedFiles([`packages/shared/src/services/platform-admin/${name}.ts`]);
+    assert.equal(result.run_database_matrix, true);
+    assert.equal(result.run_tests, true);
+  }
+  const unrelated = classifyChangedFiles(['packages/shared/src/services/platform-admin/EmailService.ts']);
+  assert.equal(unrelated.run_database_matrix, false);
+});
+
 test('frontend source changes select application tests but not Oracle or image builds', () => {
   const result = classifyChangedFiles([
     'packages/frontend-host/src/features/mission-control/engines/EnginesPage.tsx',

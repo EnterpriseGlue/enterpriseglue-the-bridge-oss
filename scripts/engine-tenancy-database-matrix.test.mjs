@@ -31,6 +31,16 @@ const stages = [
   'cleanup',
 ];
 
+test('qualifies conditional activation through the real service in every adapter lane', () => {
+  assert.match(worker, /async function qualifyServiceBehavior\(dataSource\)\s*\{\s*await qualifyConditionalReleaseActivation\(dataSource\)/);
+  assert.match(worker, /new TenantReleaseWorkAssignmentService\(async \(\) => dataSource\)/);
+  assert.match(worker, /expectedPlacementEpoch: 7/);
+  assert.match(worker, /\['suspended', 'deleting'\]/);
+  assert.match(worker, /activated\.schemaVersion, 'tenant-release-work-assignment\.enterpriseglue\.io\/v2'/);
+  assert.match(worker, /service\.assign\(input\)\)\.idempotent, true/);
+  assert.match(worker, /activation must not bypass an uncommitted tenant lifecycle write/);
+});
+
 test('declares the exact five-adapter, six-baseline, seven-stage denominator', () => {
   assert.equal(contract.schemaVersion, 1);
   assert.deepEqual(Object.keys(contract.databases), databases);

@@ -91,6 +91,7 @@ const classifiers = {
   ],
   persistence: [
     /^packages\/shared\/src\/(?:db|config|infrastructure\/persistence)\//,
+    /^packages\/shared\/src\/services\/platform-admin\/(?:TenantService|TenantReleaseWorkAssignmentService)\.ts$/,
     /^backend\/src\/shared\/(?:db|config)\//,
     /^backend\/(?:__tests__\/shared\/db|test\/integration\/engine-tenancy-database)/,
     /^backend\/src\/modules\/.*(?:db|migration)/,

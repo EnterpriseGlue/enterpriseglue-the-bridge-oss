@@ -2815,8 +2815,8 @@ registry.registerPath({
   ...authzExemption('PUT', '/api/workloads/tenants/{tenantId}/release-assignment'),
   request: { params: TenantIdPathSchema, body: { content: { 'application/json': { schema: TenantReleaseWorkAssignmentRequestSchema } } } },
   responses: {
-    200: { description: 'Tenant plugin jobs and queued events atomically rebound to the target host release', content: { 'application/json': { schema: TenantReleaseWorkAssignmentResponseSchema } } },
-    409: { description: 'Assignment epoch is stale, target release differs from this host, or plugin work is still in flight' },
+    200: { description: 'Tenant plugin work atomically assigned; expectedPlacementEpoch requests return a v2 active-tenant placement snapshot, otherwise the legacy v1 response', content: { 'application/json': { schema: TenantReleaseWorkAssignmentResponseSchema } } },
+    409: { description: 'Assignment epoch is stale, target release differs, plugin work is in flight, or the conditional tenant existence/active status/placement epoch check failed' },
     503: { description: 'Release-aware plugin work is not configured on this host' },
   },
 });

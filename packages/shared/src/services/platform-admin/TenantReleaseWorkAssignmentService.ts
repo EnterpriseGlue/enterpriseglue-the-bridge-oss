@@ -9,9 +9,24 @@ import {
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 
-export interface TenantReleaseWorkAssignmentResult {
+interface AssignmentInput {
+  tenantId: string;
+  releaseId: string;
+  assignmentEpoch: number;
+  expectedPlacementEpoch?: number;
+}
+
+type AssignmentState = {
   schemaVersion: 'tenant-release-work-assignment.enterpriseglue.io/v1';
+} | {
+  schemaVersion: 'tenant-release-work-assignment.enterpriseglue.io/v2';
+  tenantStatus: 'active';
+  placementEpoch: number;
+};
+
+export type TenantReleaseWorkAssignmentResult = AssignmentState & {
   tenantId: string;
   releaseId: string;
   assignmentEpoch: number;
@@ -23,18 +38,39 @@ export interface TenantReleaseWorkAssignmentResult {
 export class TenantReleaseWorkAssignmentService {
   constructor(private readonly dataSourceProvider = getDataSource) {}
 
-  async assign(input: { tenantId: string; releaseId: string; assignmentEpoch: number }): Promise<TenantReleaseWorkAssignmentResult> {
+  async assign(input: AssignmentInput): Promise<TenantReleaseWorkAssignmentResult> {
     if (!config.tenantPlacementReleaseId) throw Errors.serviceUnavailable('Release-aware plugin work is not configured');
     if (config.tenantPlacementReleaseId !== input.releaseId) {
       throw Errors.conflict('Release assignment must be applied through its target host release');
     }
     const dataSource = await this.dataSourceProvider();
     return dataSource.transaction(async (manager) => {
+      if (input.expectedPlacementEpoch !== undefined) {
+        // Acquire the Tenant write fence BEFORE assignment/event/schedule locks.
+        // Same-value conditional DML also works on Spanner and SQLite, where
+        // TypeORM does not support SELECT FOR UPDATE. Do not advance the epoch:
+        // activation verifies placement; it does not perform a placement change.
+        const guard = await manager.getRepository(Tenant).update(
+          { id: input.tenantId, status: 'active', placementEpoch: input.expectedPlacementEpoch },
+          { placementEpoch: input.expectedPlacementEpoch },
+        );
+        if (guard.affected !== 1) {
+          throw Errors.conflict('Tenant must exist, be active, and match the expected placement epoch');
+        }
+      }
       const assignmentRepository = manager.getRepository(TenantReleaseWorkAssignment);
-      const current = await assignmentRepository.findOne({
-        where: { tenantRef: input.tenantId },
-        lock: dataSource.options.type === 'spanner' ? undefined : { mode: 'pessimistic_write' },
-      });
+      // Oracle rejects FOR UPDATE on the row-limited view that findOne adds.
+      // tenantRef is unique, so getOne needs no limiting wrapper here.
+      const current = dataSource.options.type === 'oracle'
+        ? await assignmentRepository.createQueryBuilder('assignment')
+          .where({ tenantRef: input.tenantId })
+          .setLock('pessimistic_write')
+          .getOne()
+        : await assignmentRepository.findOne({
+          where: { tenantRef: input.tenantId },
+          lock: ['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(dataSource.options.type)
+            ? undefined : { mode: 'pessimistic_write' },
+        });
       if (current && Number(current.assignmentEpoch) > input.assignmentEpoch) {
         throw Errors.conflict('Tenant release assignment epoch is stale');
       }
@@ -73,14 +109,22 @@ export class TenantReleaseWorkAssignmentService {
 }
 
 function response(
-  input: { tenantId: string; releaseId: string; assignmentEpoch: number },
+  input: AssignmentInput,
   updatedEvents: number,
   updatedSchedules: number,
   idempotent: boolean,
 ): TenantReleaseWorkAssignmentResult {
   return {
-    schemaVersion: 'tenant-release-work-assignment.enterpriseglue.io/v1',
-    ...input,
+    ...(input.expectedPlacementEpoch === undefined
+      ? { schemaVersion: 'tenant-release-work-assignment.enterpriseglue.io/v1' as const }
+      : {
+        schemaVersion: 'tenant-release-work-assignment.enterpriseglue.io/v2' as const,
+        tenantStatus: 'active' as const,
+        placementEpoch: input.expectedPlacementEpoch,
+      }),
+    tenantId: input.tenantId,
+    releaseId: input.releaseId,
+    assignmentEpoch: input.assignmentEpoch,
     updatedEvents,
     updatedSchedules,
     idempotent,
