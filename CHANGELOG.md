@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.20.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.6...v0.20.7) (2026-09-05)
+
+
+### Bug Fixes
+
+* **auth:** route SaaS session refresh through tenant shard ([786c989](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/786c9892dfeaaeaf0771a642b803efc49041c16c))
+* **auth:** route SaaS session refresh through tenant shard ([091c3b7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/091c3b7b2c643538bbea9dc32e3619e55675ea28))
+
 ## [0.20.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.5...v0.20.6) (2026-09-04)
 
 
