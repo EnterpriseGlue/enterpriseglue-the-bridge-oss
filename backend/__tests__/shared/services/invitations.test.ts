@@ -250,6 +250,19 @@ describe('InvitationService', () => {
     }));
   });
 
+  it.each(['info', 'otp', 'redeem'] as const)('rejects foreign routed tenant before %s invitation access or writes', async (operation) => {
+    invitationRepo.findOneBy.mockResolvedValue({ id: 'inv-1', tenantId: 'tenant-alpha', tenantSlug: 'alpha',
+      status: 'pending', deliveryMethod: 'email', inviteTokenHash: hashToken('invite-token') });
+    const tenant = { tenantId: 'tenant-beta', tenantSlug: 'beta' };
+    const result = operation === 'info' ? service.getInvitationInfo('invite-token', tenant)
+      : operation === 'otp' ? service.verifyOneTimePassword('invite-token', 'password', tenant)
+      : service.redeemEmailInvitation('invite-token', tenant);
+    await expect(result).rejects.toMatchObject({ statusCode: 404 });
+    expect(invitationRepo.update).not.toHaveBeenCalled();
+    expect(invitationRepo.createQueryBuilder).not.toHaveBeenCalled();
+    expect(verifyPassword).not.toHaveBeenCalled();
+  });
+
   it('locks the invitation after the fifth invalid one-time password attempt', async () => {
     invitationRepo.findOneBy.mockResolvedValue({
       id: 'inv-1',
@@ -441,7 +454,10 @@ describe('InvitationService', () => {
         isEmailVerified: true,
       }),
     );
-    expect(projectMemberService.addMember).toHaveBeenCalledWith('project-1', 'user-1', ['delegate', 'viewer'], 'admin-1');
+    expect(projectMemberService.addMember).toHaveBeenCalledWith('project-1', 'user-1', ['delegate', 'viewer'], 'admin-1', expect.objectContaining({ getRepository: expect.any(Function) }), undefined);
+    const projectStore = vi.mocked(projectMemberService.addMember).mock.calls[0]![4]!;
+    expect(projectStore.getRepository(User)).toBe(managerUserRepo);
+    expect(projectStore.getRepository(Invitation)).toBe(managerInvitationRepo);
     expect(assignRole).not.toHaveBeenCalled();
     expect((projectMemberService.addMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
       managerInvitationRepo.update.mock.invocationCallOrder[0],
@@ -504,7 +520,10 @@ describe('InvitationService', () => {
 
     await service.completeInvitation('inv-1', 'StrongPass!123');
 
-    expect(engineService.addEngineMember).toHaveBeenCalledWith('engine-1', 'user-1', 'deployer', 'admin-1');
+    expect(engineService.addEngineMember).toHaveBeenCalledWith('engine-1', 'user-1', 'deployer', 'admin-1', expect.objectContaining({ getRepository: expect.any(Function) }), undefined);
+    const engineStore = vi.mocked(engineService.addEngineMember).mock.calls[0]![4]!;
+    expect(engineStore.getRepository(User)).toBe(managerUserRepo);
+    expect(engineStore.getRepository(Invitation)).toBe(managerInvitationRepo);
     expect(assignRole).not.toHaveBeenCalled();
     expect((engineService.addEngineMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
       managerInvitationRepo.update.mock.invocationCallOrder[0],

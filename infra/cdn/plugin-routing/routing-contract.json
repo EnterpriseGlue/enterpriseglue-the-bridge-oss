@@ -10,6 +10,12 @@
       "methods": ["GET", "HEAD"]
     },
     {
+      "path": "/t/*/_enterpriseglue/plugins/*",
+      "origin": "backend",
+      "cache": "disabled",
+      "methods": ["GET", "HEAD"]
+    },
+    {
       "path": "/api/plugins/v1/*/operations/*",
       "origin": "backend",
       "cache": "disabled",

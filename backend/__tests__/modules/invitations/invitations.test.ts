@@ -17,11 +17,15 @@ import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilit
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 
 const authState = vi.hoisted(() => ({
   user: { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' } as any,
 }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({ loginMethodService: { get: vi.fn() } }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -128,6 +132,7 @@ vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
   config: {
     nodeEnv: 'test',
+    tenancyMode: 'single',
     jwtAccessTokenExpires: 900,
     jwtRefreshTokenExpires: 604800,
   },
@@ -155,6 +160,7 @@ describe('invitation and onboarding routes', () => {
     app.use(onboardingRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    config.tenancyMode = 'single';
     authSessionService.issue.mockResolvedValue({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -434,6 +440,32 @@ describe('invitation and onboarding routes', () => {
         invitedEmail: 'invitee@example.com',
       }),
     }));
+  });
+
+  it.each(['verify-otp', 'redeem'])('reports tenant-controlled enrollment modes after %s', async (endpoint) => {
+    config.tenancyMode = 'pooled';
+    for (const [password, provider, mode, requiresPasswordSet] of [
+      [true, false, 'password', true], [true, true, 'choice', false],
+      [false, true, 'provider', false], [false, false, 'unavailable', false],
+    ] as const) {
+      vi.mocked(loginMethodService.get).mockResolvedValue({ localPassword: { enabled: password },
+        providers: provider ? [{ id: 'provider-a', key: 'oidc-a', displayName: 'Organization', protocol: 'oidc', loginMethod: 'redirect', organization: null, preferred: false, loginDomains: [] }] : [],
+        providerSelection: 'chooser', autoRedirectProviderId: null, configurationStatus: 'ready' });
+      const response = await request(app).post(`/api/invitations/token-1/${endpoint}`)
+        .send(endpoint === 'verify-otp' ? { oneTimePassword: 'RevealMe123!' } : {});
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ requiresPasswordSet, enrollmentMode: mode });
+      expect(loginMethodService.get).toHaveBeenLastCalledWith('tenant-default');
+    }
+  });
+
+  it('passes resolved route authority to all tenant-prefixed invitation operations', async () => {
+    expect((await request(app).get('/api/t/default/invitations/token-1')).status).toBe(200);
+    expect(invitationService.getInvitationInfo).toHaveBeenLastCalledWith('token-1', expect.objectContaining({ tenantSlug: 'default', tenantId: expect.any(String) }));
+    expect((await request(app).post('/api/t/default/invitations/token-1/verify-otp').send({ oneTimePassword: 'RevealMe123!' })).status).toBe(200);
+    expect(invitationService.verifyOneTimePassword).toHaveBeenLastCalledWith('token-1', 'RevealMe123!', expect.objectContaining({ tenantSlug: 'default', tenantId: expect.any(String) }));
+    expect((await request(app).post('/api/t/default/invitations/token-1/redeem').send({})).status).toBe(200);
+    expect(invitationService.redeemEmailInvitation).toHaveBeenLastCalledWith('token-1', expect.objectContaining({ tenantSlug: 'default', tenantId: expect.any(String) }));
   });
 
   it('redeems an email invite and sets onboarding cookie', async () => {

@@ -284,7 +284,8 @@ describe('IdentityProvidersSettingsTab', () => {
 
     await waitFor(() => expect(unlink).toHaveBeenCalledWith({ key: 'demo-oidc', body: { subjectId: 'subject-1', userId: 'user-1', confirmation: 'UNLINK_EXTERNAL_IDENTITY' } }));
     expect(await screen.findByText('External identity unlinked: Demo OIDC')).toBeInTheDocument();
-    expect(screen.getByText(/A fresh verified sign-in is required to relink/)).toBeInTheDocument();
+    expect(screen.getByText(/Single-tenant recovery requires a fresh verified sign-in/)).toBeInTheDocument();
+    expect(screen.getByText(/contact your platform operator to resolve the account conflict/)).toBeInTheDocument();
   });
 
   it('collects the complete provider-neutral SAML runtime configuration', async () => {
@@ -306,6 +307,7 @@ describe('IdentityProvidersSettingsTab', () => {
     fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
     expect(await within(workflow).findByRole('heading', { name: 'Membership' })).toBeInTheDocument();
     expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
+    expect(screen.getByText(/In pooled deployments, this option never links an existing shared account by email/)).toBeInTheDocument();
   });
 
   it('exposes and submits the advanced OIDC and synchronization options shared with configuration bundles', async () => {

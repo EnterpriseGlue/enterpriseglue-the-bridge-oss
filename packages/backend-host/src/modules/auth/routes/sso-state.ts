@@ -2,6 +2,7 @@ import type { Request } from 'express';
 import { randomBytes } from 'node:crypto';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { signOidcState, signSamlRelayState, verifyOidcState, verifySamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
+import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/services/invitations.js';
 
 export interface SsoState {
   timestamp: number;
@@ -12,6 +13,7 @@ export interface SsoState {
   tenantSlug?: string;
   returnTo?: string;
   samlRequestId?: string;
+  enrollment?: InvitationEnrollmentContext;
 }
 
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -19,6 +21,19 @@ const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9._-]{1,160}$/;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const STATE_FUTURE_SKEW_MS = 60 * 1000;
 const SAML_REQUEST_ID_PATTERN = /^_[A-Za-z0-9_-]{32,160}$/;
+
+/** Server-derived invitation references only; never raw bearer credentials. */
+export function parseInvitationEnrollmentContext(value: unknown): InvitationEnrollmentContext | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const context = value as Record<string, unknown>;
+  const keys = ['invitationId', 'userId', 'tenantId', 'tenantSlug', 'authSessionVersion'];
+  if (Object.keys(context).length !== keys.length || !keys.every((key) => Object.prototype.hasOwnProperty.call(context, key))) return null;
+  if (!['invitationId', 'userId', 'tenantId'].every((key) => typeof context[key] === 'string' && PROVIDER_ID_PATTERN.test(context[key] as string))
+    || typeof context.tenantSlug !== 'string' || !TENANT_SLUG_PATTERN.test(context.tenantSlug)
+    || context.tenantSlug.length > 63 || context.authSessionVersion !== 0) return null;
+  return { invitationId: context.invitationId as string, userId: context.userId as string,
+    tenantId: context.tenantId as string, tenantSlug: context.tenantSlug, authSessionVersion: 0 };
+}
 
 function sanitizeTenantSlug(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -55,8 +70,13 @@ export function createSamlRequestId(): string {
   return `_${randomBytes(32).toString('base64url')}`;
 }
 
-export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }, samlRequestId?: string): string {
-  const tenantSlug = sanitizeTenantSlug(req.params?.tenantSlug)
+export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }, samlRequestId?: string, enrollment?: InvitationEnrollmentContext): string {
+  const verifiedEnrollment = enrollment === undefined ? undefined : parseInvitationEnrollmentContext(enrollment);
+  if (enrollment !== undefined && (!verifiedEnrollment || verifiedEnrollment.tenantId !== identityProvider?.tenantId
+    || !sanitizeProviderId(providerId) || !sanitizeProviderId(identityProvider?.key))) {
+    throw new Error('Invalid invitation enrollment state');
+  }
+  const tenantSlug = verifiedEnrollment?.tenantSlug || sanitizeTenantSlug(req.params?.tenantSlug)
     || sanitizeTenantSlug(req.query.tenantSlug)
     || sanitizeTenantSlug(req.tenant?.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
@@ -69,6 +89,7 @@ export function buildSsoState(req: Request, providerId?: string, identityProvide
     ...(tenantSlug ? { tenantSlug } : {}),
     ...(returnTo ? { returnTo } : {}),
     ...(samlRequestId && SAML_REQUEST_ID_PATTERN.test(samlRequestId) ? { samlRequestId } : {}),
+    ...(verifiedEnrollment ? { enrollment: verifiedEnrollment } : {}),
   };
 
   return Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -79,13 +100,13 @@ export function buildSsoState(req: Request, providerId?: string, identityProvide
  * cookie. The signed RelayState keeps provider/tenant/return-path binding
  * intact without relaxing the session cookie policy.
  */
-export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }, samlRequestId: string): string {
-  const state = buildSsoState(req, providerId, identityProvider, samlRequestId);
+export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }, samlRequestId: string, enrollment?: InvitationEnrollmentContext): string {
+  const state = buildSsoState(req, providerId, identityProvider, samlRequestId, enrollment);
   return signSamlRelayState(state);
 }
 
-export function buildSignedOidcState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }): string {
-  return signOidcState(buildSsoState(req, providerId, identityProvider));
+export function buildSignedOidcState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }, enrollment?: InvitationEnrollmentContext): string {
+  return signOidcState(buildSsoState(req, providerId, identityProvider, undefined, enrollment));
 }
 
 export function parseSsoState(rawState: unknown): SsoState | null {
@@ -104,6 +125,10 @@ export function parseSsoState(rawState: unknown): SsoState | null {
     const identityProviderTenantId = sanitizeProviderId(parsed.identityProviderTenantId);
     const returnTo = sanitizeReturnTo(parsed.returnTo, tenantSlug);
     const samlRequestId = typeof parsed.samlRequestId === 'string' && SAML_REQUEST_ID_PATTERN.test(parsed.samlRequestId) ? parsed.samlRequestId : undefined;
+    const hasEnrollment = Object.prototype.hasOwnProperty.call(parsed, 'enrollment');
+    const enrollment = hasEnrollment ? parseInvitationEnrollmentContext(parsed.enrollment) : undefined;
+    if (hasEnrollment && (!enrollment || !providerId || !identityProviderKey
+      || enrollment.tenantId !== identityProviderTenantId || enrollment.tenantSlug !== tenantSlug)) return null;
     return {
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,
@@ -113,6 +138,7 @@ export function parseSsoState(rawState: unknown): SsoState | null {
       ...(tenantSlug ? { tenantSlug } : {}),
       ...(returnTo ? { returnTo } : {}),
       ...(samlRequestId ? { samlRequestId } : {}),
+      ...(enrollment ? { enrollment } : {}),
     };
   } catch {
     return null;

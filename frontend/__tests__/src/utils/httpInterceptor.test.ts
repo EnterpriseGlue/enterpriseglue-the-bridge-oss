@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { interceptedFetch, getAuthHeaders } from '@src/utils/httpInterceptor';
 import { USER_KEY } from '@src/constants/storageKeys';
+import { getTenancyCapabilities } from '@src/services/tenancy';
+
+vi.mock('@src/services/tenancy', () => ({
+  getTenancyCapabilities: vi.fn(() => ({ mode: 'single' })),
+}));
 
 // Test fixture tokens — not real secrets (CWE-547)
 const TEST_REFRESHED_TOKEN = `test-refreshed-${Date.now()}`;
@@ -15,6 +20,7 @@ describe('httpInterceptor', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(getTenancyCapabilities).mockReturnValue({ mode: 'single' } as ReturnType<typeof getTenancyCapabilities>);
     originalLocation = window.location;
     delete (window as any).location;
     window.location = {
@@ -34,6 +40,12 @@ describe('httpInterceptor', () => {
   });
 
   describe('getAuthHeaders', () => {
+    it('does not invent a tenant hint on unprefixed pooled pages', () => {
+      vi.mocked(getTenancyCapabilities).mockReturnValue({ mode: 'pooled' } as ReturnType<typeof getTenancyCapabilities>);
+      expect(getAuthHeaders()['X-Tenant-Slug']).toBeUndefined();
+      window.location.pathname = '/t/alpha/dashboard';
+      expect(getAuthHeaders()['X-Tenant-Slug']).toBe('alpha');
+    });
     it('returns basic headers when no auth', () => {
       const headers = getAuthHeaders();
       expect(headers['Content-Type']).toBe('application/json');
@@ -180,6 +192,38 @@ describe('httpInterceptor', () => {
     });
 
     describe('token refresh on 401', () => {
+      it('keeps pooled hostname routing through refresh, CSRF recovery and retry', async () => {
+        vi.mocked(getTenancyCapabilities).mockReturnValue({ mode: 'pooled' } as ReturnType<typeof getTenancyCapabilities>);
+        const fetchMock = vi.spyOn(globalThis, 'fetch')
+          .mockResolvedValueOnce(new Response(null, { status: 401 }))
+          .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+          .mockResolvedValueOnce(new Response(null, { status: 200, headers: { 'X-CSRF-Token': 'host-csrf' } }))
+          .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+        const result = await interceptedFetch('/engines-api/engines', { headers: getAuthHeaders() });
+
+        expect(result.status).toBe(200);
+        expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+          '/engines-api/engines', '/api/auth/refresh', '/api/auth/me', '/engines-api/engines',
+        ]);
+        for (const [, init] of fetchMock.mock.calls) {
+          expect(new Headers(init?.headers).has('X-Tenant-Slug')).toBe(false);
+          expect(init?.credentials).toBe('include');
+        }
+        expect(new Headers(fetchMock.mock.calls[3]?.[1]?.headers).get('X-CSRF-Token')).toBe('host-csrf');
+      });
+
+      it('keeps the current pooled hostname login route after refresh rejection', async () => {
+        vi.mocked(getTenancyCapabilities).mockReturnValue({ mode: 'pooled' } as ReturnType<typeof getTenancyCapabilities>);
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(null, { status: 401 }));
+
+        await interceptedFetch('/api/data');
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).has('X-Tenant-Slug')).toBe(false);
+        expect(window.location.href).toBe('/login');
+      });
+
       it('refreshes token and retries request', async () => {
         window.location.pathname = '/t/alpha/dashboard';
         const first401 = new Response(null, { status: 401 });

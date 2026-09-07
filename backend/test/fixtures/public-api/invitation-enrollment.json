@@ -1,0 +1,26 @@
+{
+  "acknowledgment": {
+    "requiresPasswordSet": false,
+    "enrollmentMode": "provider",
+    "tenantSlug": "alpha",
+    "deliveryMethod": "email"
+  },
+  "methods": {
+    "localPassword": { "enabled": false },
+    "providers": [
+      {
+        "id": "organization-oidc",
+        "key": "organization",
+        "displayName": "Organization SSO",
+        "organization": null,
+        "protocol": "oidc",
+        "loginMethod": "redirect",
+        "preferred": false,
+        "loginDomains": []
+      }
+    ],
+    "providerSelection": "chooser",
+    "autoRedirectProviderId": null,
+    "configurationStatus": "ready"
+  }
+}

@@ -5,9 +5,9 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
-import type { JwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
-import { IsNull, type EntityManager } from 'typeorm';
+import { generateAccessToken, generateRefreshToken, normalizeUserJwtPayload, verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
+import type { JwtPayload, UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+import { IsNull, MoreThan, type EntityManager } from 'typeorm';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 export interface IssueAuthSessionInput {
@@ -48,6 +48,58 @@ export interface IssuedAuthSession {
 /** Issues a renewable user session with optional provider lineage for targeted revocation. */
 class AuthSessionService {
   async issue(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput = {}): Promise<IssuedAuthSession> {
+    return this.issueSession(user, input);
+  }
+
+  /** Caller must independently authorize the target tenant and its membership.
+   * The source is a signed, exact active session, never provider fields supplied
+   * by the request. Legacy sessions cannot safely infer lineage from token hashes.
+   */
+  async switchTenant(user: { id: string; email: string; authSessionVersion?: number }, input: {
+    principal: UserJwtPayload; refreshToken: unknown; tenantId: string; tenantSlug: string;
+    userAgent?: string | null; ipAddress?: string | null;
+  }): Promise<IssuedAuthSession> {
+    const denied = () => Errors.unauthorized('A current source session is required; sign in again');
+    if (typeof input.refreshToken !== 'string' || input.refreshToken.length > 16_384) throw denied();
+    let source: UserJwtPayload;
+    try { source = normalizeUserJwtPayload(verifyToken(input.refreshToken)); } catch { throw denied(); }
+    const principal = input.principal;
+    if (source.type !== 'refresh' || principal.type !== 'access' || !source.sessionId
+      || source.sessionId !== principal.sessionId || source.userId !== principal.userId || source.userId !== user.id
+      || source.tenantId !== principal.tenantId || source.tenantSlug !== principal.tenantSlug
+      || (source.authSessionVersion ?? 0) !== (principal.authSessionVersion ?? 0)
+      || (source.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)
+      || source.authenticationMethod !== principal.authenticationMethod
+      || source.recovery !== principal.recovery || (source.mfaVerified === true) !== (principal.mfaVerified === true)) throw denied();
+    const dataSource = await getDataSource();
+    const session = await dataSource.getRepository(RefreshToken).findOneBy({
+      id: source.sessionId, userId: source.userId, tenantId: source.tenantId || IsNull(),
+      revokedAt: IsNull(), expiresAt: MoreThan(Date.now()),
+    });
+    if (!session || !await bcrypt.compare(input.refreshToken, session.tokenHash)) throw denied();
+    const provider = session.identityProviderId
+      ? await dataSource.getRepository(IdentityProvider).findOneBy({ id: session.identityProviderId, isEnabled: true, authenticationMode: 'direct' })
+      : null;
+    const federated = ['oidc', 'saml', 'ldap'].includes(source.authenticationMethod || '');
+    if (session.identityProviderId && (!provider || !session.providerSubjectId || provider.protocol !== source.authenticationMethod)) throw denied();
+    if (federated && !provider) throw denied();
+    // Keep the signed source version. A concurrent logout may increment the
+    // user version; a derived token must never upgrade that stale authority.
+    return this.issueSession({ ...user, authSessionVersion: source.authSessionVersion ?? 0 }, {
+      tenantId: input.tenantId, tenantSlug: input.tenantSlug,
+      authenticationMethod: source.authenticationMethod, mfaVerified: source.mfaVerified === true,
+      administratorRecovery: source.recovery === 'platform_administrator',
+      userAgent: input.userAgent, ipAddress: input.ipAddress,
+      ...(provider ? {
+        identityProviderId: provider.id, identityProviderUpdatedAt: Number(provider.updatedAt),
+        identityProviderProtocol: provider.protocol, identityProviderAuthenticationMode: provider.authenticationMode,
+        identityProviderDirectoryTenantId: provider.directoryTenantId, identityProviderConfigurationJson: provider.configurationJson,
+        federationSession: { subjectId: session.providerSubjectId!, sessionId: session.providerSessionId, nameIdFormat: session.providerNameIdFormat },
+      } : {}),
+    }, session);
+  }
+
+  private async issueSession(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput, source?: RefreshToken): Promise<IssuedAuthSession> {
     const tenantId = input.tenantId?.trim()
       || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
     const tenantSlug = input.tenantSlug?.trim()
@@ -55,7 +107,9 @@ class AuthSessionService {
     if (config.tenancyMode === 'pooled' && !input.administratorRecovery && (!tenantId || !tenantSlug)) {
       throw Errors.unauthorized('A tenant-scoped login is required');
     }
+    const sessionId = generateId();
     const tokenOptions = {
+      sessionId,
       administratorRecovery: input.administratorRecovery === true,
       authenticationMethod: input.authenticationMethod,
       mfaVerified: input.mfaVerified === true,
@@ -66,7 +120,7 @@ class AuthSessionService {
     const refreshToken = generateRefreshToken(user, tokenOptions);
     const now = Date.now();
     const token = {
-      id: generateId(),
+      id: sessionId,
       userId: user.id,
       tenantId,
       identityProviderId: input.identityProviderId?.trim() || null,
@@ -93,6 +147,22 @@ class AuthSessionService {
       }),
     };
     const dataSource = await getDataSource();
+    const insertSession = async (manager: EntityManager) => {
+      if (source) {
+        const expiry = Number(source.expiresAt);
+        if (!Number.isSafeInteger(expiry) || expiry <= Date.now()) throw Errors.unauthorized('Source session is no longer active');
+        // Conditional no-op update serializes with revocation. Provider-backed
+        // derivation always takes the provider lock before this session lock.
+        const claimed = await manager.getRepository(RefreshToken).update({
+          id: source.id, userId: user.id, tenantId: source.tenantId || IsNull(), tokenHash: source.tokenHash,
+          identityProviderId: source.identityProviderId || IsNull(), providerSubjectId: source.providerSubjectId || IsNull(),
+          providerSessionId: source.providerSessionId || IsNull(), providerNameIdFormat: source.providerNameIdFormat || IsNull(),
+          revokedAt: IsNull(), expiresAt: MoreThan(Date.now()),
+        }, { tokenHash: source.tokenHash });
+        if (claimed.affected !== 1 || expiry <= Date.now()) throw Errors.unauthorized('Source session is no longer active');
+      }
+      await manager.getRepository(RefreshToken).insert(token);
+    };
     if (token.identityProviderId) {
       if (!Number.isSafeInteger(input.identityProviderUpdatedAt) || Number(input.identityProviderUpdatedAt) < 0) {
         throw Errors.unauthorized('Identity provider changed while sign-in was in progress');
@@ -113,10 +183,12 @@ class AuthSessionService {
           configurationJson: input.identityProviderConfigurationJson,
         }, { isEnabled: true });
         if (providerClaim.affected !== 1) throw Errors.unauthorized('Identity provider changed while sign-in was in progress');
-        await manager.getRepository(RefreshToken).insert(token);
+        await insertSession(manager);
       };
       if (input.store) await issueProviderSession(input.store);
       else await dataSource.transaction(issueProviderSession);
+    } else if (source) {
+      await dataSource.transaction(insertSession);
     } else {
       await (input.store || dataSource).getRepository(RefreshToken).insert(token);
     }

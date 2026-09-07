@@ -4,6 +4,7 @@ import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { expect, test, type APIResponse, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { captureManualScreenshot, manualScreenshotDirectory } from './utils/manualScreenshots';
+import { monitorBrowserDiagnostics } from './utils/browserDiagnostics';
 
 type JsonObject = Record<string, any>;
 
@@ -405,6 +406,86 @@ async function identityFixtureSecrets(): Promise<{
   };
 }
 
+async function enrollInvitedProviderUser(browser: Browser, admin: Page, input: {
+  tenant: { id: string; slug: string }; siblingSlug: string; foreignProviderId: string;
+  provider: JsonObject; protocol: 'oidc' | 'saml' | 'ldap'; email: string;
+}) {
+  const onboardingRoot = `/api/t/${encodeURIComponent(input.tenant.slug)}/auth/onboarding`;
+  await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: input.tenant.slug }), 200);
+  await admin.goto(`/t/${encodeURIComponent(input.tenant.slug)}/`);
+  await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  const invitation = await expectStatus(await post(admin, `/api/t/${input.tenant.slug}/invitations`, {
+    email: input.email, resourceType: 'tenant', deliveryMethod: 'email',
+  }), 201);
+  expect(invitation.inviteUrl).toBeTruthy();
+  // This owned fixture has no SMTP configuration: the authorized inviter gets
+  // the reveal-once link fallback. No email is sent to an external recipient.
+  expect(invitation.emailSent).toBe(false);
+  const context = await newAppContext(browser);
+  const page = await context.newPage();
+  const diagnostics = monitorBrowserDiagnostics(page);
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(invitation.inviteUrl);
+    await page.getByRole('button', { name: 'Continue to account setup' }).click();
+    const providerButton = page.getByRole('button', { name: `Continue with ${input.provider.displayName}`, exact: true });
+    await expect(providerButton).toBeVisible();
+    await expect(page.getByLabel('New password', { exact: true })).toHaveCount(0);
+    const onboardingCookie = (await context.cookies()).find((cookie) => cookie.name === 'onboardingToken');
+    expect(onboardingCookie?.value).toBeTruthy();
+    const methods = await expectStatus(await page.request.get(`${onboardingRoot}/login-methods`), 200);
+    expect(methods.localPassword.enabled).toBe(false);
+    expect(methods.providers.map((provider: JsonObject) => provider.id)).toEqual([input.provider.id]);
+    // Negative probes use the request context, not a deliberately broken page.
+    await expectStatus(await page.request.get(`${onboardingRoot}/providers/${input.foreignProviderId}/start`, { maxRedirects: 0 }), 404);
+    await expectStatus(await page.request.get(`/api/t/${input.siblingSlug}/auth/onboarding/login-methods`), 403);
+    await captureManualScreenshot(page, `06-${input.protocol}-invitation-provider-choice.jpg`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertNoHorizontalOverflow(page);
+    await expect(providerButton).toBeVisible();
+    await captureResponsiveScreenshot(page, `04-${input.protocol}-invitation-narrow.jpg`);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await providerButton.focus();
+    await expect(providerButton).toBeFocused();
+    const providerRedirect = input.protocol === 'ldap' ? undefined : page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `${onboardingRoot}/providers/${input.provider.id}/start`, { timeout: 15_000 });
+    await page.keyboard.press('Enter');
+    if (input.protocol === 'ldap') {
+      await page.getByLabel('Directory username').fill(ldapUsername);
+      await page.getByLabel('Directory password').fill(ldapPassword);
+      await page.getByRole('button', { name: 'Complete SSO enrollment' }).click();
+    } else {
+      expect((await providerRedirect!).status()).toBe(302);
+      await expect(page.locator('input[name="username"]')).toBeVisible();
+      await page.locator('input[name="username"]').fill(input.protocol === 'oidc' ? oidcUsername : samlUsername);
+      await page.locator('input[name="password"]').fill(input.protocol === 'oidc' ? oidcPassword : samlPassword);
+      await page.getByRole('button', { name: /sign in/i }).click();
+    }
+    await expect(page).toHaveURL(new RegExp(`/t/${input.tenant.slug}/(?:$|[?#])`));
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    await diagnostics.expectClean(`${input.protocol} fresh invitation enrollment`);
+    await assertTenantSession(context, input.tenant, input.siblingSlug);
+    const me = await expectStatus(await context.request.get('/api/auth/me'), 200);
+    expect(me.email).toBe(input.email);
+    expect((await context.cookies()).some((cookie) => cookie.name === 'onboardingToken')).toBe(false);
+    await expectStatus(await context.request.get(`${onboardingRoot}/login-methods`, {
+      headers: { Cookie: `onboardingToken=${onboardingCookie!.value}` },
+    }), 401);
+    await expectStatus(await post(page, '/api/auth/refresh'), 200);
+    await assertTenantSession(context, input.tenant, input.siblingSlug);
+    await captureManualScreenshot(page, `07-${input.protocol}-invitation-enrolled-dashboard.jpg`);
+    await diagnostics.expectClean(`${input.protocol} enrolled session and refresh`);
+    // This proves host logout/revocation, not completion of the optional IdP
+    // federatedLogoutUrl journey, which is a separate protocol assertion.
+    await expectStatus(await post(page, '/api/auth/logout', {}), 200);
+    await expectStatus(await context.request.get('/api/auth/me'), 401);
+    await expectStatus(await post(page, '/api/auth/refresh'), 401);
+  } finally {
+    diagnostics.dispose();
+    await context.close();
+  }
+}
+
 test.describe('Native pooled tenancy with segregated SSO', () => {
   test.skip(!enabled || !adminEmail || !adminPassword || !oidcIssuer || !oidcClientSecret || !ldapPassword
     || !postgresHost || !postgresPort || !postgresUser || !postgresPassword || !postgresDatabase
@@ -699,6 +780,20 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
 
       await assertOrganizationFinderResponsive(browser);
       await assertWorkspaceFallback(browser, 'bravo');
+      // Enroll the existing IdP fixture principals before ordinary sign-in.
+      // Subsequent helpers therefore exercise the exact established subject,
+      // not the old email-adoption behavior this security batch removes.
+      for (const [slug, siblingSlug, protocol, email] of [
+        ['alpha', 'bravo', 'oidc', 'oidc-operator@localhost.test'],
+        ['bravo', 'charlie', 'saml', 'saml-operator@localhost.test'],
+        ['charlie', 'alpha', 'ldap', ldapUsername],
+      ] as const) {
+        await enrollInvitedProviderUser(browser, admin, { tenant: tenants[slug], siblingSlug,
+          foreignProviderId: providers[siblingSlug].id, provider: providers[slug], protocol, email });
+      }
+      await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
+      await admin.goto('/t/alpha/');
+      await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible();
       const alphaContext = await oidcLoginFromOrganizationFinder(browser, 'alpha', 'Alpha OIDC', 'operator@alpha.example');
       const bravoContext = await samlLogin(browser, 'bravo', providers.bravo.id);
       const charlieContext = await ldapLogin(browser, 'charlie', providers.charlie.id, 'Charlie Directory');
@@ -946,6 +1041,27 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       expect(alphaBootstrap.plugins).toEqual([
         expect.objectContaining({ pluginId: referencePluginId }),
       ]);
+      const pluginPage = await alphaContext.newPage();
+      const pluginDiagnostics = monitorBrowserDiagnostics(pluginPage);
+      try {
+        await pluginPage.setViewportSize({ width: 1440, height: 900 });
+        const entryPath = `/t/alpha${alphaBootstrap.plugins[0].entryUrl}`;
+        const assetResponse = pluginPage.waitForResponse((response) => new URL(response.url()).pathname === entryPath);
+        await pluginPage.goto('/t/alpha/reference-plugin');
+        const asset = await assetResponse;
+        expect(asset.status()).toBe(200);
+        expect(asset.headers()['content-type']).toContain('text/javascript');
+        expect(asset.headers()['cache-control']).toBe('no-store');
+        await expect(pluginPage.getByRole('heading', { name: 'Reference plugin', exact: true })).toBeVisible();
+        await pluginPage.getByRole('button', { name: 'Check plugin status', exact: true }).click();
+        await expect(pluginPage.getByText('ready', { exact: true })).toBeVisible();
+        await expect(pluginPage.getByText(`${referencePluginId} ${referencePluginVersion} · API 1`, { exact: true })).toBeVisible();
+        await pluginDiagnostics.expectClean('Tenant-prefixed plugin module and real sidecar gateway');
+        await captureManualScreenshot(pluginPage, '08-alpha-plugin-release-route.jpg');
+      } finally {
+        pluginDiagnostics.dispose();
+        await pluginPage.close();
+      }
       const bravoBootstrap = await expectStatus(
         await bravoContext.request.get('/t/bravo/api/plugins/v1/frontend'),
         200,

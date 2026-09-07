@@ -4,6 +4,7 @@ import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
+import { isInvitationEnrollmentRoute } from '../utils/invitationRoute';
 import { permissionSnapshotMatchesSession } from './authSessionPermissions';
 import {
   hasAnyEnginePermission as snapshotHasAnyEnginePermission,
@@ -104,6 +105,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
    */
   useEffect(() => {
     const initAuth = async () => {
+      if (isInvitationEnrollmentRoute(window.location.pathname)) {
+        // An invitation does not establish a browser session. Completion
+        // reloads the authenticated shell after the server issues cookies.
+        clearAuth();
+        setIsLoading(false);
+        return;
+      }
       try {
         // Try to fetch user - httpOnly cookies are sent automatically
         const user = await authService.getMe();

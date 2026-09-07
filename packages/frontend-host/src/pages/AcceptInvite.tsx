@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Button,
   InlineLoading,
@@ -10,7 +10,6 @@ import {
 import { Checkmark } from '@carbon/icons-react';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
-import { useAuth } from '../shared/hooks/useAuth';
 import type { LoginResponse } from '../shared/types/auth';
 import type {
   CompleteOnboardingRequest,
@@ -19,6 +18,8 @@ import type {
   VerifyInvitationOtpRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
+import { redirectTo, replaceAndReloadToInternalPath } from '../utils/redirect';
+import type { PublicLoginMethodsResponse, PublicLoginProvider } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const PASSWORD_REQUIREMENTS = 'Use at least 8 characters with an uppercase letter, lowercase letter, number, and symbol (!@#$%^&*_+=).';
 
@@ -32,9 +33,8 @@ function validateInvitationPassword(password: string): string | null {
 }
 
 export default function AcceptInvite() {
-  const { token } = useParams<{ token: string }>();
-  const navigate = useNavigate();
-  const { setAuthenticatedUser } = useAuth();
+  const { token, tenantSlug } = useParams<{ token: string; tenantSlug: string }>();
+  const apiRoot = tenantSlug ? `/api/t/${encodeURIComponent(tenantSlug)}` : '/api';
   const onboardingStageKey = token ? `invite-onboarding-stage:${token}` : null;
 
   const [loading, setLoading] = useState(true);
@@ -43,6 +43,12 @@ export default function AcceptInvite() {
   const [completing, setCompleting] = useState(false);
   const [inviteInfo, setInviteInfo] = useState<InvitationInfo | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [methods, setMethods] = useState<PublicLoginMethodsResponse | null>(null);
+  const [methodsFailed, setMethodsFailed] = useState(false);
+  const [methodsAttempt, setMethodsAttempt] = useState(0);
+  const [directoryProvider, setDirectoryProvider] = useState<PublicLoginProvider | null>(null);
+  const [directoryUsername, setDirectoryUsername] = useState('');
+  const [directoryPassword, setDirectoryPassword] = useState('');
   const [stage, setStage] = useState<'redeem' | 'verify' | 'set-password'>('verify');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -58,7 +64,7 @@ export default function AcceptInvite() {
     if (token) {
       loadInviteInfo();
     }
-  }, [token]);
+  }, [token, apiRoot]);
 
   useEffect(() => {
     if (!onboardingStageKey) {
@@ -71,11 +77,56 @@ export default function AcceptInvite() {
     }
   }, [onboardingStageKey]);
 
+  useEffect(() => {
+    if (stage !== 'set-password') return;
+    let current = true;
+    setMethods(null);
+    setMethodsFailed(false);
+    apiClient.get<PublicLoginMethodsResponse>(`${apiRoot}/auth/onboarding/login-methods`)
+      .then((value) => { if (current) setMethods(value); })
+      .catch(() => { if (current) setMethodsFailed(true); });
+    return () => { current = false; };
+  }, [stage, methodsAttempt, apiRoot]);
+
+  const beginProviderEnrollment = (provider: PublicLoginProvider) => {
+    setFeedback(null);
+    if (provider.loginMethod === 'password') {
+      setDirectoryProvider(provider);
+      setDirectoryUsername(inviteInfo?.email || '');
+      setDirectoryPassword('');
+      return;
+    }
+    try {
+      setCompleting(true);
+      redirectTo(`${apiRoot}/auth/onboarding/providers/${encodeURIComponent(provider.id)}/start`);
+    } catch {
+      setCompleting(false);
+      setFeedback({ title: 'Unable to start SSO', subtitle: 'Please retry the organization sign-in method.' });
+    }
+  };
+
+  const completeDirectoryEnrollment = async () => {
+    if (!directoryProvider) return;
+    setCompleting(true);
+    setFeedback(null);
+    try {
+      await apiClient.post<LoginResponse>(`${apiRoot}/auth/onboarding/providers/${encodeURIComponent(directoryProvider.id)}/login`, {
+        username: directoryUsername, password: directoryPassword,
+      });
+      setDirectoryPassword('');
+      if (onboardingStageKey) window.sessionStorage.removeItem(onboardingStageKey);
+      replaceAndReloadToInternalPath(`/t/${encodeURIComponent(inviteInfo?.tenantSlug || 'default')}/`);
+    } catch (error) {
+      setDirectoryPassword('');
+      setFeedback({ title: 'Unable to complete SSO enrollment', subtitle: parseApiError(error, 'Check your directory sign-in and invitation.').message });
+    } finally { setCompleting(false); }
+  };
+
 
   const loadInviteInfo = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<InvitationInfo>(`/api/invitations/${token}`);
+      const data = await apiClient.get<InvitationInfo>(`${apiRoot}/invitations/${token}`);
       setInviteInfo(data);
       if (data.status === 'onboarding') {
         setStage('set-password');
@@ -97,7 +148,7 @@ export default function AcceptInvite() {
 
     try {
       setRedeeming(true);
-      await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/redeem`, {});
+      await apiClient.post<InvitationOnboardingResponse>(`${apiRoot}/invitations/${token}/redeem`, {});
       setFeedback(null);
       setStage('set-password');
       if (onboardingStageKey) {
@@ -118,7 +169,7 @@ export default function AcceptInvite() {
       setVerifying(true);
 
       const request: VerifyInvitationOtpRequest = { oneTimePassword };
-      await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/verify-otp`, request);
+      await apiClient.post<InvitationOnboardingResponse>(`${apiRoot}/invitations/${token}/verify-otp`, request);
       setFeedback(null);
       setStage('set-password');
       if (onboardingStageKey) {
@@ -148,15 +199,14 @@ export default function AcceptInvite() {
         lastName: lastName.trim(),
         newPassword: password,
       };
-      const response = await apiClient.post<LoginResponse>('/api/auth/complete-onboarding', request);
+      await apiClient.post<LoginResponse>(`${apiRoot}/auth/complete-onboarding`, request);
       setFeedback(null);
-      setAuthenticatedUser(response.user);
       setCompleted(true);
       if (onboardingStageKey) {
         window.sessionStorage.removeItem(onboardingStageKey);
       }
       setTimeout(() => {
-        navigate(`/t/${encodeURIComponent(inviteInfo?.tenantSlug || 'default')}/`, { replace: true });
+        replaceAndReloadToInternalPath(`/t/${encodeURIComponent(inviteInfo?.tenantSlug || 'default')}/`);
       }, 1200);
     } catch (err) {
       const parsed = parseApiError(err, 'Failed to complete onboarding');
@@ -191,8 +241,8 @@ export default function AcceptInvite() {
           kind: 'info' as const,
           title: 'Continue account setup',
           subtitle: inviteInfo.deliveryMethod === 'email'
-            ? 'Your email invite was already redeemed. Finish your profile and password setup below.'
-            : 'Your one-time password was already verified. Finish your profile and password setup below.',
+            ? 'Your email invite was redeemed. Finish setup with an available organization sign-in method.'
+            : 'Your one-time password was verified. Finish setup with an available organization sign-in method.',
         }
       : inviteInfo?.deliveryMethod === 'email' && stage === 'redeem'
         ? {
@@ -285,6 +335,24 @@ export default function AcceptInvite() {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gap: 'var(--spacing-4)', width: '100%' }}>
+                  {!methods ? methodsFailed ? (
+                    <>
+                      <InlineNotification kind="error" title="Sign-in methods unavailable" subtitle="Your invitation may need to be verified again. Password setup is unavailable until organization policy is loaded." hideCloseButton />
+                      <Button kind="secondary" onClick={() => setMethodsAttempt((attempt) => attempt + 1)}>Retry sign-in methods</Button>
+                    </>
+                  ) : <InlineLoading description="Loading organization sign-in methods..." /> : <>
+                  {methods.providers.map((provider) => (
+                    <Button key={provider.id} kind="tertiary" disabled={completing} onClick={() => beginProviderEnrollment(provider)}>
+                      Continue with {provider.displayName}
+                    </Button>
+                  ))}
+                  {directoryProvider ? <>
+                    <TextInput id="invite-directory-username" labelText="Directory username" value={directoryUsername} onChange={(event) => setDirectoryUsername(event.target.value)} disabled={completing} />
+                    <PasswordInput id="invite-directory-password" labelText="Directory password" value={directoryPassword} onChange={(event) => setDirectoryPassword(event.target.value)} disabled={completing} />
+                    <Button disabled={completing || !directoryUsername.trim() || !directoryPassword} onClick={completeDirectoryEnrollment}>Complete SSO enrollment</Button>
+                  </> : null}
+                  {!methods.localPassword.enabled && methods.providers.length === 0 ? <InlineNotification kind="warning" title="No enrollment method available" subtitle="Ask your organization administrator to configure sign-in before continuing." hideCloseButton /> : null}
+                  {methods.localPassword.enabled ? <>
                   <TextInput
                     id="invite-first-name"
                     labelText="First name"
@@ -335,6 +403,8 @@ export default function AcceptInvite() {
                   >
                     {completing ? 'Finishing setup...' : 'Finish account setup'}
                   </Button>
+                  </> : null}
+                  </>}
                 </div>
               )}
             </div>
@@ -349,9 +419,9 @@ export default function AcceptInvite() {
           )}
 
           {(inviteInfo?.status === 'expired' || !inviteInfo) && <p style={{ marginTop: 'var(--spacing-5)' }}>
-            <Link to={loginPath} style={{ color: 'var(--cds-link-01)' }}>
+            <a href={loginPath} style={{ color: 'var(--cds-link-01)' }}>
               Go to login
-            </Link>
+            </a>
           </p>}
       </>}
     </PublicAuthShell>

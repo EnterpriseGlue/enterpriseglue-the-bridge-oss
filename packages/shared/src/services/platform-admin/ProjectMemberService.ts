@@ -11,7 +11,7 @@ import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persist
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
-import { In } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { SYSTEM_ROLE_IDS } from './permissions.js';
 import {
@@ -165,12 +165,25 @@ export class ProjectMemberService {
     projectId: string,
     userId: string,
     roleOrRoles: ProjectRole | ProjectRole[],
-    invitedById: string
+    invitedById: string,
+    store?: EntityManager,
+    tenantId?: string,
   ): Promise<{ id: string; projectId: string; userId: string; role: ProjectRole; roles: ProjectRole[] }> {
-    const dataSource = await getDataSource();
+    const dataSource = store ?? await getDataSource();
+    if (tenantId && !store?.queryRunner?.isTransactionActive) {
+      return dataSource.transaction((manager) => this.addMember(projectId, userId, roleOrRoles, invitedById, manager, tenantId));
+    }
     const memberRepo = dataSource.getRepository(ProjectMember);
     const roleRepo = dataSource.getRepository(ProjectMemberRole);
     const now = Date.now();
+
+    // Retain ownership through the canonical assignment write. A plain read
+    // could pass in alpha and let the later helper reload the project in beta.
+    // The conditional update uses the existing transaction on every adapter.
+    if (tenantId) {
+      const claim = await dataSource.getRepository(Project).update({ id: projectId, tenantId }, { tenantId });
+      if (claim.affected !== 1) throw new Error('Project not found');
+    }
 
     const requestedRoles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
     const roles = normalizeRoles(requestedRoles);
@@ -181,7 +194,7 @@ export class ProjectMemberService {
       select: ['id']
     });
     if (existing) {
-      await this.updateRoles(projectId, userId, roles);
+      await this.updateRoles(projectId, userId, roles, store);
       return { id: String(existing.id), projectId, userId, role: effectiveRole, roles };
     }
 
@@ -224,8 +237,8 @@ export class ProjectMemberService {
     await this.updateRoles(projectId, userId, [newRole]);
   }
 
-  async updateRoles(projectId: string, userId: string, rolesInput: ProjectRole[]): Promise<void> {
-    const dataSource = await getDataSource();
+  async updateRoles(projectId: string, userId: string, rolesInput: ProjectRole[], store?: EntityManager): Promise<void> {
+    const dataSource = store ?? await getDataSource();
     const memberRepo = dataSource.getRepository(ProjectMember);
     const roleRepo = dataSource.getRepository(ProjectMemberRole);
     const roles = normalizeRoles(rolesInput);
@@ -316,7 +329,7 @@ export class ProjectMemberService {
   }
 
   private async writeProjectMemberAssignments(
-    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    dataSource: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
     input: { projectId: string; userId: string; roles: ProjectRole[]; createdById: string | null; createdAt: number },
   ): Promise<void> {
     const project = await dataSource.getRepository(Project).findOne({

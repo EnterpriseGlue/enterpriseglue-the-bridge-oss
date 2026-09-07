@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   activateNativePluginBootstrapV1,
+  loadInstalledNativePluginsV1,
   getNativePluginNavigationV1,
   getNativePluginRoutesV1,
   getNativePluginSettingsV1,
@@ -18,6 +19,25 @@ import {
   PluginFrontendFailureCircuitV1,
   type PluginFrontendFailureStorageV1,
 } from './frontendFailureCircuit';
+import { apiClient } from '../shared/api/client';
+
+it('defers protected plugin bootstrap on invitations without caching the anonymous result', async () => {
+  const get = vi.spyOn(apiClient, 'get').mockResolvedValue({});
+  const originalPath = window.location.pathname;
+  try {
+    for (const path of ['/invite/token', '/t/alpha/invite/token']) {
+      window.history.replaceState({}, '', path);
+      expect(await loadInstalledNativePluginsV1()).toEqual({ revision: 0, activePluginIds: [], failures: [] });
+    }
+    expect(get).not.toHaveBeenCalled();
+    window.history.replaceState({}, '', '/t/alpha/');
+    await loadInstalledNativePluginsV1();
+    expect(get).toHaveBeenCalledWith('/t/alpha/api/plugins/v1/frontend', undefined, { credentials: 'include' });
+  } finally {
+    get.mockRestore();
+    window.history.replaceState({}, '', originalPath);
+  }
+});
 
 const pluginId = 'io.enterpriseglue.reference';
 const version = '1.0.0';
@@ -163,6 +183,27 @@ class MemoryFailureStorage implements PluginFrontendFailureStorageV1 {
 }
 
 describe('native plugin frontend host', () => {
+  it('imports validated entry URLs through the current tenant path, retaining relative chunk routing', async () => {
+    const originalPath = window.location.pathname;
+    const entryUrl = `/_enterpriseglue/plugins/${pluginId}/${version}/frontend/index.js`;
+    const bootstrap = { apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 3, issues: [],
+      plugins: [{ pluginId, version, displayName: 'Reference', manifest: manifest(), entryUrl }] };
+    try {
+      for (const prefix of ['', '/t/alpha', '/t/bravo']) {
+        window.history.replaceState({}, '', `${prefix}/dashboard`);
+        const importer = vi.fn(async () => ({ default: { apiVersion: 'frontend.plugin.enterpriseglue.io/v1', pluginId, version, activate: () => ({}) } }));
+        await activateNativePluginBootstrapV1(bootstrap, importer, new PluginFrontendFailureCircuitV1({ storage: new MemoryFailureStorage() }));
+        expect(importer).toHaveBeenCalledWith(`${prefix}${entryUrl}`);
+        expect(new URL('./chunk.js', `https://app.example.test${prefix}${entryUrl}`).pathname)
+          .toBe(`${prefix}/_enterpriseglue/plugins/${pluginId}/${version}/frontend/chunk.js`);
+      }
+      const importer = vi.fn();
+      await activateNativePluginBootstrapV1({ ...bootstrap, plugins: [{ ...bootstrap.plugins[0], entryUrl: `/t/alpha${entryUrl}` }] }, importer,
+        new PluginFrontendFailureCircuitV1({ storage: new MemoryFailureStorage() }));
+      expect(importer).not.toHaveBeenCalled();
+    } finally { window.history.replaceState({}, '', originalPath); }
+  });
+
   it('preserves non-path contribution parameters as encoded query state', () => {
     expect(
       __nativePluginRuntimeTestUtils.contributionNavigationPath(

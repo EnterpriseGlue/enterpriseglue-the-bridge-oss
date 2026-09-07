@@ -80,7 +80,7 @@ const IdentityProviderAuthorizationConfigurationSchema = z.object({
   // it at the provider root and apply it when persisting the provider.  A
   // default here would add the key back to exported nested protocol settings
   // and make an export/diff round trip report a spurious update.
-  allowVerifiedEmailLinking: z.boolean().optional(),
+  allowVerifiedEmailLinking: z.boolean().optional().describe('Single-tenant compatibility option. In pooled mode, verified email alone never links an existing shared account; independent account-control verification is required.'),
   authorizationAttributeKeys: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/)).max(20).optional(),
 });
 

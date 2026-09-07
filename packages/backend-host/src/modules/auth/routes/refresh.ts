@@ -40,6 +40,9 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   if (payload.type !== 'refresh') {
     throw Errors.unauthorized('Invalid token type');
   }
+  if (config.tenancyMode === 'pooled' && !payload.sessionId) {
+    throw Errors.unauthorized('Sign in again to establish a current browser session');
+  }
 
   const tenantId = payload.tenantId || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
   const tenantSlug = payload.tenantSlug || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_SLUG : null);
@@ -75,20 +78,23 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   // Verify refresh token exists and is not revoked
   const tokenResult = await refreshTokenRepo.find({
     where: config.tenancyMode !== 'pooled' ? [{
+      ...(payload.sessionId ? { id: payload.sessionId } : {}),
       userId: user.id,
       revokedAt: IsNull(),
       expiresAt: MoreThan(Date.now()),
       tenantId: tenantId || IsNull(),
     }, {
+      ...(payload.sessionId ? { id: payload.sessionId } : {}),
       userId: user.id,
       revokedAt: IsNull(),
       expiresAt: MoreThan(Date.now()),
       tenantId: IsNull(),
     }] : {
+      ...(payload.sessionId ? { id: payload.sessionId } : {}),
       userId: user.id,
       revokedAt: IsNull(),
       expiresAt: MoreThan(Date.now()),
-      tenantId: tenantId!,
+      tenantId: tenantId || IsNull(),
     },
     select: ['tokenHash', 'tenantId'],
   });
@@ -109,6 +115,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
 
   // Generate new access token
   const accessToken = generateAccessToken(user, {
+    ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
     administratorRecovery: payload.recovery === 'platform_administrator',
     authenticationMethod: payload.authenticationMethod,
     mfaVerified: payload.mfaVerified === true,

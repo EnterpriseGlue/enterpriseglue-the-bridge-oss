@@ -35,7 +35,7 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  location ~ ^/t/[^/]+/(api|engines-api|starbase-api|mission-control-api|git-api|vcs-api|health)(/|$) {
+  location ~ ^/t/[^/]+/(api|engines-api|starbase-api|mission-control-api|git-api|vcs-api|health|_enterpriseglue/plugins)(/|$) {
     proxy_pass http://BACKEND_UPSTREAM;
     proxy_http_version 1.1;
     proxy_set_header Host $host;

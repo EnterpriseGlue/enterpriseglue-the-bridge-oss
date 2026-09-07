@@ -36,8 +36,22 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 
 describe('AuthProvider', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     localStorage.clear();
     vi.clearAllMocks();
+  });
+
+  it.each(['/invite/token', '/t/alpha/invite/token'])('does not restore a user session on invitation route %s', async (path) => {
+    const { authService } = await import('@src/services/auth');
+    window.history.replaceState({}, '', path);
+    localStorage.setItem(USER_KEY, JSON.stringify({ id: 'stale-user' }));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(authService.getMe).not.toHaveBeenCalled();
+    expect(authService.refreshToken).not.toHaveBeenCalled();
+    expect(authService.getMyPermissions).not.toHaveBeenCalled();
+    expect(localStorage.getItem(USER_KEY)).toBeNull();
   });
 
   it('initializes without error', async () => {

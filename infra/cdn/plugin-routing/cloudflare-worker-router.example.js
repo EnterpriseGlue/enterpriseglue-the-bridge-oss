@@ -11,7 +11,7 @@ const BACKEND_PREFIXES = [
 
 function usesBackend(pathname) {
   if (BACKEND_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
-  return /^\/t\/[^/]+\/(api|engines-api|starbase-api|mission-control-api|git-api|vcs-api|health)(\/|$)/.test(
+  return /^\/t\/[^/]+\/(api|engines-api|starbase-api|mission-control-api|git-api|vcs-api|health|_enterpriseglue\/plugins)(\/|$)/.test(
     pathname,
   );
 }

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation, type InvitationDeliveryMethod, type InvitationResourceType } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
@@ -12,7 +13,7 @@ import { engineService } from './platform-admin/EngineService.js';
 import { getAccessAuthorityDecision } from './platform-admin/AccessAuthorityService.js';
 import type { User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
 import { getActivePlatformAdministratorUserIds } from './platform-admin/PlatformAdministratorMembershipService.js';
-import type { Repository } from 'typeorm';
+import { IsNull, MoreThan, type Repository, type EntityManager } from 'typeorm';
 import { loginMethodService } from './platform-admin/LoginMethodService.js';
 import { permissionService } from './platform-admin/permissions.js';
 import { NATIVE_TENANT_ROLE_IDS } from '@enterpriseglue/shared/authz/native-tenant-roles.js';
@@ -64,6 +65,15 @@ export interface VerifiedInvitationResult {
   userId: string;
   tenantSlug: string;
   tenantId: string;
+}
+
+/** Server-verified onboarding context, never an arbitrary account-link request. */
+export interface InvitationEnrollmentContext {
+  invitationId: string;
+  userId: string;
+  tenantId: string;
+  tenantSlug: string;
+  authSessionVersion: 0;
 }
 
 function hashOpaqueToken(value: string): string {
@@ -179,7 +189,21 @@ function assertLocalLoginAllowed(localLoginDisabled: boolean): void {
   }
 }
 
+function assertPendingInvitationAccount(user: User | null, email: string, inviterId: string | null): asserts user is User {
+  // Inviter-visible links/OTPs are enrollment credentials, not proof of control
+  // of an established account. Only that inviter's unused pending user qualifies.
+  if (!user || !inviterId || user.createdByUserId !== inviterId || user.email.toLowerCase() !== email.toLowerCase()
+    || user.authProvider !== 'local' || user.passwordHash !== null || user.isActive !== true
+    || user.isEmailVerified !== false || user.lastLoginAt !== null || (user.authSessionVersion ?? 0) !== 0) {
+    throw Errors.conflict('An invitation cannot initialize an existing account; sign in to that account first');
+  }
+}
+
 export class InvitationService {
+  private assertRoutedTenant(invitation: Invitation | null, expected?: { tenantId: string; tenantSlug: string }): void {
+    if (expected && (!invitation || (invitation.tenantId || OSS_DEFAULT_TENANT_ID) !== expected.tenantId
+      || invitation.tenantSlug !== expected.tenantSlug)) throw Errors.notFound('Invitation');
+  }
   async revokeOutstandingInvitations(scope: {
     userId: string;
     resourceType: InvitationResourceType;
@@ -207,6 +231,13 @@ export class InvitationService {
     const tenantSlug = normalizeTenantSlug(input.tenantSlug);
     const tenantId = input.tenantId?.trim() || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
     if (!tenantId) throw Errors.validation('Tenant context is required for invitations');
+    if (config.tenancyMode === 'pooled') {
+      const pendingUser = await dataSource.getRepository(User).findOneBy({ id: input.userId });
+      assertPendingInvitationAccount(pendingUser, input.email, input.createdByUserId);
+      if (await dataSource.getRepository(ExternalIdentity).existsBy({ userId: input.userId })) {
+        throw Errors.conflict('An invitation cannot initialize an existing account; sign in to that account first');
+      }
+    }
     const inviteToken = randomBytes(32).toString('hex');
     const inviteTokenHash = hashOpaqueToken(inviteToken);
     const oneTimePassword = generatePassword();
@@ -279,8 +310,9 @@ export class InvitationService {
     };
   }
 
-  async getInvitationInfo(token: string): Promise<InvitationInfo> {
+  async getInvitationInfo(token: string, expectedTenant?: { tenantId: string; tenantSlug: string }): Promise<InvitationInfo> {
     const invitation = await getInvitationByTokenValue(token);
+    this.assertRoutedTenant(invitation, expectedTenant);
     const now = Date.now();
 
     if (!invitation || invitation.revokedAt || invitation.completedAt) {
@@ -290,10 +322,11 @@ export class InvitationService {
     return toInvitationInfo(invitation, now);
   }
 
-  async verifyOneTimePassword(token: string, oneTimePassword: string): Promise<VerifiedInvitationResult> {
+  async verifyOneTimePassword(token: string, oneTimePassword: string, expectedTenant?: { tenantId: string; tenantSlug: string }): Promise<VerifiedInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
     const invitation = await getInvitationByTokenValue(token);
+    this.assertRoutedTenant(invitation, expectedTenant);
     const now = Date.now();
 
     if (!invitation || invitation.revokedAt || invitation.completedAt) {
@@ -352,10 +385,11 @@ export class InvitationService {
     };
   }
 
-  async redeemEmailInvitation(token: string): Promise<VerifiedInvitationResult> {
+  async redeemEmailInvitation(token: string, expectedTenant?: { tenantId: string; tenantSlug: string }): Promise<VerifiedInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
     const invitation = await getInvitationByTokenValue(token);
+    this.assertRoutedTenant(invitation, expectedTenant);
     const now = Date.now();
 
     if (!invitation || invitation.revokedAt || invitation.completedAt) {
@@ -424,6 +458,10 @@ export class InvitationService {
       throw Errors.validation('One-time password verification is required before setting a password');
     }
 
+    if (config.tenancyMode === 'pooled' && !await loginMethodService.ordinaryLocalPasswordEnabled(invitation.tenantId)) {
+      throw Errors.forbidden('Use the organization identity provider to complete this invitation');
+    }
+
     if (invitation.resourceType === 'project' || invitation.resourceType === 'engine') {
       const authority = await getAccessAuthorityDecision(invitation.resourceType);
       if (authority && !authority.manualMutationsAllowed) {
@@ -439,11 +477,26 @@ export class InvitationService {
       throw Errors.validation('Invitation user could not be found');
     }
 
+    if (config.tenancyMode === 'pooled') {
+      assertPendingInvitationAccount(user, invitation.email, invitation.createdByUserId);
+      if (await dataSource.getRepository(ExternalIdentity).existsBy({ userId: user.id })) {
+        throw Errors.conflict('An invitation cannot initialize an existing account; sign in to that account first');
+      }
+    }
+
     const passwordHash = await hashPassword(newPassword);
 
     await dataSource.transaction(async (manager) => {
-      await manager.getRepository(User).update({ id: user.id }, {
+      if (config.tenancyMode === 'pooled') {
+        await this.claimInvitation(manager, invitation, user, now);
+      }
+      const initialized = await manager.getRepository(User).update(config.tenancyMode === 'pooled' ? {
+        id: user.id, email: user.email, createdByUserId: invitation.createdByUserId!,
+        authProvider: 'local', passwordHash: IsNull(), isActive: true, isEmailVerified: false,
+        lastLoginAt: IsNull(), authSessionVersion: 0,
+      } : { id: user.id }, {
         passwordHash,
+        ...(config.tenancyMode === 'pooled' ? { authSessionVersion: 1 } : {}),
         firstName: firstName || user.firstName || null,
         lastName: lastName || user.lastName || null,
         mustResetPassword: false,
@@ -454,60 +507,11 @@ export class InvitationService {
         lockedUntil: null,
         updatedAt: now,
       });
-
-      if (invitation.resourceType === 'project' && invitation.resourceId) {
-        const roles = parseRoles(invitation.resourceRolesJson);
-        await projectMemberService.addMember(
-          invitation.resourceId,
-          user.id,
-          roles.length > 0 ? (roles as Array<'delegate' | 'developer' | 'editor' | 'viewer' | 'owner'>) : [String(invitation.resourceRole || 'viewer') as 'delegate' | 'developer' | 'editor' | 'viewer' | 'owner'],
-          invitation.createdByUserId || user.createdByUserId || user.id,
-        );
+      if (config.tenancyMode === 'pooled' && initialized.affected !== 1) {
+        throw Errors.conflict('An invitation cannot initialize an existing account; sign in to that account first');
       }
 
-      if (invitation.resourceType === 'engine' && invitation.resourceId) {
-        await engineService.addEngineMember(
-          invitation.resourceId,
-          user.id,
-          String(invitation.resourceRole || 'operator') as 'operator' | 'deployer',
-          invitation.createdByUserId || user.createdByUserId || user.id,
-        );
-      }
-
-      const tenantId = invitation.tenantId || OSS_DEFAULT_TENANT_ID;
-      // In pooled mode the invitation must establish tenant membership before
-      // resource access can be used. A legacy single-mode project or engine
-      // invitation must retain its historical resource-only scope instead of
-      // implicitly granting tenant-wide Viewer access.
-      if (config.tenancyMode === 'pooled' || invitation.resourceType === 'tenant') {
-        await permissionService.assignRole({
-          tenantId,
-          principalType: 'user',
-          principalId: user.id,
-          roleId: invitation.resourceType === 'tenant' && invitation.resourceRole === 'admin'
-            ? NATIVE_TENANT_ROLE_IDS.ADMIN
-            : NATIVE_TENANT_ROLE_IDS.VIEWER,
-          scopeType: 'tenant',
-          scopeId: tenantId,
-          source: 'manual',
-          sourceRef: invitation.id,
-          createdById: invitation.createdByUserId || user.id,
-        }, manager);
-      }
-
-      await revokeOutstandingInvitations(manager.getRepository(Invitation), now, {
-        userId: invitation.userId,
-        tenantId: invitation.tenantId,
-        resourceType: invitation.resourceType,
-        resourceId: invitation.resourceId || null,
-        excludeInvitationId: invitation.id,
-      });
-
-      await manager.getRepository(Invitation).update({ id: invitation.id }, {
-        status: 'completed',
-        completedAt: now,
-        updatedAt: now,
-      });
+      await this.grantInvitationResources(manager, invitation, user, now);
     });
 
     const updatedUser = await userRepo.findOneByOrFail({ id: user.id });
@@ -529,6 +533,125 @@ export class InvitationService {
       tenantId: invitation.tenantId || OSS_DEFAULT_TENANT_ID,
       tenantSlug: invitation.tenantSlug,
     };
+  }
+
+  /** Caller verifies the provider and holds its trust row before this operation. */
+  async enrollSsoAccountWithManager(manager: EntityManager, context: InvitationEnrollmentContext, identity: {
+    email: string; emailVerified: boolean; authProvider: 'oidc' | 'saml' | 'ldap';
+    firstName?: string | null; lastName?: string | null;
+  }): Promise<User> {
+    if (config.tenancyMode !== 'pooled' || !manager.queryRunner?.isTransactionActive || context.authSessionVersion !== 0
+      || [context.invitationId, context.userId, context.tenantId, context.tenantSlug].some((value) => typeof value !== 'string' || !value.trim())) {
+      throw Errors.unauthorized('Verified transactional invitation enrollment is required');
+    }
+    const invitation = await manager.getRepository(Invitation).findOneBy({
+      id: context.invitationId, userId: context.userId, tenantId: context.tenantId, tenantSlug: context.tenantSlug,
+    });
+    if (!context.tenantId || !context.tenantSlug || !invitation || invitation.status !== 'otp_verified'
+      || !invitation.otpVerifiedAt || invitation.revokedAt || invitation.completedAt
+      || !identity.emailVerified || invitation.email.toLowerCase() !== identity.email.trim().toLowerCase()) {
+      throw Errors.conflict('Invitation does not match the verified identity');
+    }
+    const userRepo = manager.getRepository(User);
+    const user = await userRepo.findOneBy({ id: context.userId });
+    assertPendingInvitationAccount(user, invitation.email, invitation.createdByUserId);
+    if (await manager.getRepository(ExternalIdentity).existsBy({ userId: user.id })) {
+      throw Errors.conflict('An invitation cannot initialize an existing account; sign in to that account first');
+    }
+    if (invitation.resourceType === 'project' || invitation.resourceType === 'engine') {
+      const authority = await getAccessAuthorityDecision(invitation.resourceType);
+      if (authority && !authority.manualMutationsAllowed) throw Errors.forbidden(authority.reason || 'Manual resource access changes are disabled');
+    }
+    const now = Date.now();
+    await this.claimInvitation(manager, invitation, user, now);
+    const initialized = await userRepo.update({
+      id: user.id, email: user.email, createdByUserId: invitation.createdByUserId!,
+      authProvider: 'local', passwordHash: IsNull(), isActive: true, isEmailVerified: false,
+      lastLoginAt: IsNull(), authSessionVersion: 0,
+    }, {
+      authProvider: identity.authProvider, authSessionVersion: 1, isEmailVerified: true,
+      firstName: identity.firstName || user.firstName || null, lastName: identity.lastName || user.lastName || null,
+      mustResetPassword: false, emailVerificationToken: null, emailVerificationTokenExpiry: null,
+      failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: now, updatedAt: now,
+    });
+    if (initialized.affected !== 1) throw Errors.conflict('Invitation account is no longer available for enrollment');
+    await this.grantInvitationResources(manager, invitation, user, now);
+    return userRepo.findOneByOrFail({ id: user.id });
+  }
+
+  private async claimInvitation(manager: EntityManager, invitation: Invitation, user: User, now: number): Promise<void> {
+    const expiresAt = Number(invitation.expiresAt);
+    if (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) throw Errors.conflict('Invitation is no longer available for enrollment');
+    const claim = await manager.getRepository(Invitation).update({
+      id: invitation.id, tenantId: invitation.tenantId || IsNull(), tenantSlug: invitation.tenantSlug,
+      userId: user.id, email: invitation.email, createdByUserId: invitation.createdByUserId || IsNull(),
+      resourceType: invitation.resourceType, resourceId: invitation.resourceId || IsNull(),
+      resourceRole: invitation.resourceRole || IsNull(), resourceRolesJson: invitation.resourceRolesJson || IsNull(),
+      status: 'otp_verified', otpVerifiedAt: Number(invitation.otpVerifiedAt),
+      revokedAt: IsNull(), completedAt: IsNull(), expiresAt: MoreThan(Date.now()),
+    }, { status: 'completed', completedAt: now, updatedAt: now });
+    if (claim.affected !== 1 || expiresAt <= Date.now()) throw Errors.conflict('Invitation is no longer available for enrollment');
+  }
+
+  private async grantInvitationResources(manager: EntityManager, invitation: Invitation, user: User, now: number): Promise<void> {
+    // Resource grants and consumption remain in the caller's enrollment transaction.
+    if (invitation.resourceType === 'project' && invitation.resourceId) {
+      const roles = parseRoles(invitation.resourceRolesJson);
+      await projectMemberService.addMember(
+        invitation.resourceId,
+        user.id,
+        roles.length > 0 ? (roles as Array<'delegate' | 'developer' | 'editor' | 'viewer' | 'owner'>) : [String(invitation.resourceRole || 'viewer') as 'delegate' | 'developer' | 'editor' | 'viewer' | 'owner'],
+        invitation.createdByUserId || user.createdByUserId || user.id,
+        manager,
+        config.tenancyMode === 'pooled' ? invitation.tenantId || OSS_DEFAULT_TENANT_ID : undefined,
+      );
+    }
+
+    if (invitation.resourceType === 'engine' && invitation.resourceId) {
+      await engineService.addEngineMember(
+        invitation.resourceId,
+        user.id,
+        String(invitation.resourceRole || 'operator') as 'operator' | 'deployer',
+        invitation.createdByUserId || user.createdByUserId || user.id,
+        manager,
+        config.tenancyMode === 'pooled' ? invitation.tenantId || OSS_DEFAULT_TENANT_ID : undefined,
+      );
+    }
+
+    const tenantId = invitation.tenantId || OSS_DEFAULT_TENANT_ID;
+    // In pooled mode the invitation must establish tenant membership before
+    // resource access can be used. A legacy single-mode project or engine
+    // invitation must retain its historical resource-only scope instead of
+    // implicitly granting tenant-wide Viewer access.
+    if (config.tenancyMode === 'pooled' || invitation.resourceType === 'tenant') {
+      await permissionService.assignRole({
+        tenantId,
+        principalType: 'user',
+        principalId: user.id,
+        roleId: invitation.resourceType === 'tenant' && invitation.resourceRole === 'admin'
+          ? NATIVE_TENANT_ROLE_IDS.ADMIN
+          : NATIVE_TENANT_ROLE_IDS.VIEWER,
+        scopeType: 'tenant',
+        scopeId: tenantId,
+        source: 'manual',
+        sourceRef: invitation.id,
+        createdById: invitation.createdByUserId || user.id,
+      }, manager);
+    }
+
+    await revokeOutstandingInvitations(manager.getRepository(Invitation), now, {
+      userId: invitation.userId,
+      tenantId: invitation.tenantId,
+      resourceType: invitation.resourceType,
+      resourceId: invitation.resourceId || null,
+      excludeInvitationId: invitation.id,
+    });
+
+    if (config.tenancyMode !== 'pooled') await manager.getRepository(Invitation).update({ id: invitation.id }, {
+      status: 'completed',
+      completedAt: now,
+      updatedAt: now,
+    });
   }
 }
 

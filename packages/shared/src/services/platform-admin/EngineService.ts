@@ -462,9 +462,12 @@ export class EngineService {
     engineId: string,
     userId: string,
     role: 'operator' | 'deployer',
-    grantedById: string
+    grantedById: string,
+    store?: EntityManager,
+    tenantId?: string,
   ): Promise<{ id: string }> {
     return permissionService.assignRole({
+      ...(tenantId ? { tenantId } : {}),
       principalType: 'user',
       principalId: userId,
       roleId: ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[role],
@@ -472,7 +475,7 @@ export class EngineService {
       resourceId: engineId,
       source: 'manual',
       createdById: grantedById,
-    });
+    }, store);
   }
 
   /**

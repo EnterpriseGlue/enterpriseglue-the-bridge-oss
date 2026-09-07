@@ -43,7 +43,10 @@ const PLATFORM_API_PREFIXES = [
 
 function getTenantSlugFromPathname(pathname: string): string {
   const m = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
-  if (!m?.[1]) return DEFAULT_TENANT_SLUG;
+  // On unprefixed pooled pages, routing belongs to the verified hostname.
+  // Inventing `default` conflicts with that host at the edge and also redirects
+  // failed refreshes to the wrong tenant. A neutral hostname still fails closed.
+  if (!m?.[1]) return getTenancyCapabilities().mode === 'pooled' ? '' : DEFAULT_TENANT_SLUG;
   try {
     return decodeURIComponent(m[1]);
   } catch {

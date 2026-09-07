@@ -995,7 +995,18 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run pooled tenancy, RLS, and segregated SSO qualification
+      - name: Verify pooled evidence and disposable database runner contracts
+        run: node --test scripts/pooled-tenancy-evidence.test.mjs scripts/native-tenancy-postgres-runner.test.mjs
+
+      - name: Run pooled RLS and session-race qualification
+        id: pooled-database
+        run: pnpm run test:native-tenancy:postgres-rls
+
+      - name: Record failed database prerequisite without raw diagnostics
+        if: failure() && steps.pooled-database.outcome == 'failure'
+        run: node scripts/pooled-tenancy-evidence.mjs .artifacts/pooled-tenancy-e2e/public/receipt.json failed database 1
+
+      - name: Run pooled tenancy and segregated SSO browser qualification
         env:
           CI: "true"
           PLAYWRIGHT_BROWSERS: chromium
@@ -1006,7 +1017,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-pooled-tenancy-${{ github.run_id }}
-          path: .artifacts/pooled-tenancy-e2e
+          path: .artifacts/pooled-tenancy-e2e/public/receipt.json
           if-no-files-found: error
           retention-days: 14
 

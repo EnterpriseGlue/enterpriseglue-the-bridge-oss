@@ -80,12 +80,67 @@ test('Mission Control engine, database, and diagram regressions remain explicit 
 });
 
 test('native tenancy changes select the pooled RLS and segregated SSO lane', () => {
+  for (const assetSource of ['packages/backend-host/src/plugins/pluginRuntime.ts', 'packages/backend-host/src/plugins/pluginRuntime.test.ts', 'packages/frontend-host/proxy-routes.json', 'frontend/vite.config.ts', 'infra/cdn/plugin-routing/routing-contract.json']) {
+    assert.equal(classifyChangedFiles([assetSource]).run_native_tenancy, true, assetSource);
+  }
+  for (const source of ['contexts/AuthContext.tsx', 'plugins/nativePluginRuntime.tsx', 'utils/invitationRoute.ts', 'utils/httpInterceptor.ts']) {
+    assert.equal(classifyChangedFiles([`packages/frontend-host/src/${source}`]).run_native_tenancy, true);
+  }
+  assert.equal(classifyChangedFiles(['frontend/__tests__/src/utils/httpInterceptor.test.ts']).run_native_tenancy, true);
   const result = classifyChangedFiles(['test/e2e/pooled-tenancy-segregated-sso.spec.ts']);
   assert.equal(result.run_native_tenancy, true);
+  for (const proxy of ['frontend/nginx.conf', 'infra/docker/keycloak/local-tls-frontend.nginx.conf', 'infra/docker/compose/docker-compose.keycloak-tls.yml']) {
+    assert.equal(classifyChangedFiles([proxy]).run_native_tenancy, true, `${proxy} must qualify SSO redirects`);
+  }
   assert.match(ciWorkflow, /^  native-tenancy-pooled-e2e:/m);
-  assert.match(ciWorkflow, /run: pnpm run test:native-tenancy:pooled-e2e/);
+  const pooledJob = ciWorkflow.split('\n  native-tenancy-pooled-e2e:')[1].split('\n  saas-upgrade-restore-rollback:')[0];
+  const steps = pooledJob.split(/^      - name: /m).slice(1);
+  const databaseSteps = steps.filter((step) => step.includes('run: pnpm run test:native-tenancy:postgres-rls'));
+  const browserSteps = steps.filter((step) => step.includes('run: pnpm run test:native-tenancy:pooled-e2e'));
+  assert.equal(databaseSteps.length, 1);
+  assert.equal(browserSteps.length, 1);
+  assert.ok(steps.indexOf(databaseSteps[0]) < steps.indexOf(browserSteps[0]));
+  for (const step of [...databaseSteps, ...browserSteps]) {
+    assert.doesNotMatch(step, /^\s+(?:if|continue-on-error):/m, 'both qualifications must retain default success gating and propagate failure');
+  }
   assert.match(ciWorkflow, /^  saas-upgrade-restore-rollback:/m);
   assert.match(ciWorkflow, /run: pnpm run test:saas:upgrade-restore-rollback/);
+});
+
+test('session security changes cannot miss pooled session-race qualification', () => {
+  for (const file of [
+    'packages/shared/src/services/AuthSessionService.ts',
+    'packages/shared/src/services/invitations.ts',
+    'packages/shared/src/services/platform-admin/IdentityProviderProvisioningService.ts',
+    'packages/shared/src/services/platform-admin/ProjectMemberService.ts',
+    'packages/shared/src/services/platform-admin/EngineService.ts',
+    'packages/shared/src/services/platform-admin/project-member-role-assignments.ts',
+    'packages/shared/src/services/platform-admin/legacy-project-role-assignments.ts',
+    'packages/shared/src/services/platform-admin/permissions.ts',
+    'packages/shared/src/middleware/auth.ts', 'packages/shared/src/utils/jwt.ts',
+    'packages/shared/src/infrastructure/persistence/entities/RefreshToken.ts',
+    'packages/shared/src/infrastructure/persistence/entities/User.ts',
+    'packages/shared/src/infrastructure/persistence/entities/IdentityProvider.ts',
+    'packages/shared/src/infrastructure/persistence/entities/Invitation.ts',
+    'packages/backend-host/src/modules/auth/routes/refresh.ts',
+    'packages/backend-host/src/modules/auth/routes/logout.ts',
+    'packages/backend-host/src/modules/auth/routes/identity-oidc.ts',
+    'packages/backend-host/src/modules/auth/routes/onboarding.ts',
+    'packages/backend-host/src/modules/auth/routes/sso-state.ts',
+    'packages/backend-host/src/modules/invitations/routes/invitations.ts',
+    'packages/shared/src/schemas/platform-admin/invitation.ts',
+    'packages/frontend-host/src/pages/AcceptInvite.tsx',
+    'frontend/__tests__/src/pages/AcceptInvite.test.tsx',
+    'packages/backend-host/src/modules/tenancy/routes/tenants.ts',
+    'backend/test/qualification/sessionRevocationRace.test.ts',
+    'backend/__tests__/shared/services/authSessionLineage.test.ts',
+    'backend/__tests__/shared/services/pooledInvitationEnrollment.test.ts',
+    'backend/__tests__/shared/services/platform-admin/pooledIdentityLinking.test.ts',
+    'scripts/native-tenancy-postgres-runner.test.mjs',
+  ]) assert.equal(classifyChangedFiles([file]).run_native_tenancy, true, file);
+  const runner = readFileSync(new URL('./run-native-tenancy-postgres-rls.sh', import.meta.url), 'utf8');
+  assert.match(runner, /SESSION_RACE_DISPOSABLE_POSTGRES=true/);
+  assert.match(runner, /test\/qualification\/sessionRevocationRace\.test\.ts/);
 });
 
 test('image and plugin work is independently gated from application tests', () => {

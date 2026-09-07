@@ -5,9 +5,13 @@ import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { Request, Response, NextFunction } from 'express';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 
 const bpmnRequestContext = vi.hoisted(() => ({
   updateBpmnEngineRequestContext: vi.fn(),
@@ -61,6 +65,31 @@ describe('auth middleware', () => {
     next = vi.fn();
     vi.clearAllMocks();
     (permissionService.hasPermission as any).mockResolvedValue(false);
+  });
+
+  describe.each([['required', requireAuth], ['optional', optionalAuth]] as const)('%s exact-session authentication', (_label, middleware) => {
+    it.each([true, false])('establishes identity only when its durable session is active (%s)', async (active) => {
+      const sessionId = '00000000-0000-0000-0000-000000000001';
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      vi.mocked(jwt.verifyToken).mockReturnValue({ userId: 'user-1', type: 'access', sessionId });
+      const findSession = vi.fn().mockResolvedValue(active ? { id: sessionId } : null);
+      vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+        if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ isActive: true, isEmailVerified: true, email: 'user@example.test' }) };
+        if (entity === RefreshToken) return { findOneBy: findSession };
+        throw new Error('Unexpected repository');
+      } } as any);
+      await middleware(req as Request, res as Response, next);
+      expect(findSession).toHaveBeenCalledWith({ id: sessionId, userId: 'user-1', tenantId: expect.objectContaining({ _type: 'isNull' }), revokedAt: expect.objectContaining({ _type: 'isNull' }), expiresAt: expect.objectContaining({ _type: 'moreThan' }) });
+      if (active) {
+        expect(req.user).toMatchObject({ userId: 'user-1', sessionId });
+        expect(next).toHaveBeenCalledWith();
+      } else {
+        expect(req.user).toBeUndefined();
+        expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+        if (middleware === requireAuth) expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+        else expect(next).toHaveBeenCalledWith();
+      }
+    });
   });
 
   describe('requireAuth', () => {
@@ -290,6 +319,62 @@ describe('auth middleware', () => {
   });
 
   describe('requireOnboarding', () => {
+    async function withPooledOnboarding(work: () => Promise<void>) {
+      const originalMode = config.tenancyMode;
+      config.tenancyMode = 'pooled';
+      req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
+      vi.mocked(jwt.verifyToken).mockReturnValue({ userId: 'user-1', type: 'onboarding', invitationId: 'invite-1',
+        tenantId: 'alpha-id', tenantSlug: 'alpha', authSessionVersion: 0 });
+      vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({
+        id: 'user-1', isActive: true, authSessionVersion: 0,
+      }) }) } as any);
+      const tenantRead = vi.spyOn(tenantService, 'getById').mockResolvedValue({ id: 'alpha-id', slug: 'alpha',
+        status: 'active', placementKey: 'shard-a', placementEpoch: 7 } as any);
+      try { await work(); } finally { tenantRead.mockRestore(); config.tenancyMode = originalMode; }
+    }
+
+    it.each([{ tenantId: 'beta-id', tenantSlug: 'beta' }, { tenantId: 'alpha-id', tenantSlug: 'beta' }])('rejects sibling routed context without overwriting it (%j)', async (routed) => {
+      await withPooledOnboarding(async () => {
+        req.tenant = routed;
+        await requireOnboarding(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+        expect(req.tenant).toBe(routed);
+        expect(req.onboarding).toBeUndefined();
+        expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+      });
+    });
+
+    it('preserves verified placement and release metadata in the active database context', async () => {
+      await withPooledOnboarding(async () => {
+        const routed = { tenantId: 'alpha-id', tenantSlug: 'alpha', placementKey: 'shard-a', placementEpoch: 7,
+          placementAssertionVersion: 'v3' as const, placementCorrelationId: 'route-correlation', releaseId: 'release-a', assignmentEpoch: 9 };
+        req.tenant = routed;
+        next = vi.fn(() => expect(getTenantDatabaseContext()).toBe(routed));
+        await requireOnboarding(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+        expect(req.tenant).toBe(routed);
+        expect(req.onboarding).toMatchObject({ tenantId: 'alpha-id', invitationId: 'invite-1' });
+      });
+    });
+
+    it.each([{ placementKey: 'old-shard', placementEpoch: 7 }, { placementKey: 'shard-a', placementEpoch: 6 }])('rejects changed placement after route resolution (%j)', async (placement) => {
+      await withPooledOnboarding(async () => {
+        req.tenant = { tenantId: 'alpha-id', tenantSlug: 'alpha', ...placement };
+        await requireOnboarding(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+        expect(req.onboarding).toBeUndefined();
+        expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+      });
+    });
+
+    it('retains root compatibility by resolving an unrouted pooled onboarding context', async () => {
+      await withPooledOnboarding(async () => {
+        await requireOnboarding(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith();
+        expect(req.tenant).toEqual({ tenantId: 'alpha-id', tenantSlug: 'alpha', placementKey: 'shard-a', placementEpoch: 7 });
+      });
+    });
+
     it('accepts a compatible legacy onboarding token without principal fields', async () => {
       req.cookies = { onboardingToken: TEST_COOKIE_TOKEN };
       (jwt.verifyToken as any).mockReturnValue({

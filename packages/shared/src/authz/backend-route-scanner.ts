@@ -15,6 +15,7 @@ const AUTH_MIDDLEWARE_PATTERNS = [
   'requireEngineDeployer',
   'requireEngineReadOrWrite',
   'requireInvitationCreateAction',
+  'requireOnboarding',
   'requirePermission',
   'requirePlatformAdmin',
   'requireProjectAccess',

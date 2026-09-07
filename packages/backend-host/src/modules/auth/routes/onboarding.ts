@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
+import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validatePassword } from '@enterpriseglue/shared/utils/password.js';
@@ -21,7 +22,7 @@ import { AuthenticatedSessionOnboardingResponseSchema } from '@enterpriseglue/sh
 
 const router = Router();
 
-router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, validateBody(CompleteOnboardingRequestSchema), asyncHandler(async (req, res) => {
+const completeOnboarding = asyncHandler(async (req, res) => {
   const { firstName, lastName, newPassword } = req.body as CompleteOnboardingRequest;
   const validation = validatePassword(newPassword);
   if (!validation.valid) {
@@ -92,6 +93,9 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: false,
   }));
-}));
+});
+
+router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, validateBody(CompleteOnboardingRequestSchema), completeOnboarding);
+router.post('/api/t/:tenantSlug/auth/complete-onboarding', apiLimiter, resolveTenantContext({ required: true }), requireOnboarding, validateBody(CompleteOnboardingRequestSchema), completeOnboarding);
 
 export default router;

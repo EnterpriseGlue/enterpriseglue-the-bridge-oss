@@ -1226,7 +1226,7 @@ const CommonIdentityProviderSchema = z.object({
   loginDomains: z.array(IdentityProviderLoginDomainSchema).max(20).default([]),
   enabled: z.boolean().default(true),
   authenticationMode: z.enum(['direct', 'claims_only']).default('claims_only'),
-  allowVerifiedEmailLinking: z.boolean().default(false),
+  allowVerifiedEmailLinking: z.boolean().default(false).describe('Single-tenant compatibility option. In pooled mode, verified email alone never links an existing shared account; independent account-control verification is required.'),
   authorizationAttributeKeys: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/)).max(20).optional(),
   directoryTenantId: z.string().min(1).max(255).optional(),
   sync: IdentityProviderSyncConfigurationSchema,
