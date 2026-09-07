@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.21.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.0...v0.21.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* synchronize BPMN marker readiness with release qualification ([ef2ea20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ef2ea20b12a2d885ed260a1e461e9672f5787ef8))
+
 ## [0.21.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.9...v0.21.0) (2026-09-07)
 
 
