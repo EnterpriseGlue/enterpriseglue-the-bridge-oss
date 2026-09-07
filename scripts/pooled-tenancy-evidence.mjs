@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, realpathSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -12,16 +12,31 @@ export function writeReceipt({ output, status, stage, exitCode, isolationFile })
     throw new Error('invalid receipt control fields');
   }
   let isolation = null;
+  let isolationFd;
   try {
-    const stat = lstatSync(isolationFile);
+    // Check and read the same opened file, never a path that can be replaced
+    // between lstat and read. Nonblocking open also prevents FIFO input hangs.
+    if (typeof constants.O_NOFOLLOW !== 'number') throw new Error('no safe open');
+    isolationFd = openSync(isolationFile, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stat = fstatSync(isolationFd);
     if (!stat.isFile() || stat.size > 4096) throw new Error('invalid isolation input');
-    const data = JSON.parse(readFileSync(isolationFile, 'utf8'));
+    // Bound the read even if a writer grows the file after fstat.
+    const bytes = Buffer.alloc(4097);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(isolationFd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length > 4096) throw new Error('invalid isolation input');
+    const data = JSON.parse(bytes.subarray(0, length).toString('utf8'));
     if (data.superuser === false && data.bypass_rls === false
         && Number.isSafeInteger(data.forced_tenant_policy_tables)
         && data.forced_tenant_policy_tables > 0 && data.forced_tenant_policy_tables <= 10000) {
       isolation = { superuser: false, bypassRls: false, forcedTenantPolicyTables: data.forced_tenant_policy_tables };
     }
   } catch { /* Missing or malformed evidence cannot qualify a passing run. */ }
+  finally { if (isolationFd !== undefined) closeSync(isolationFd); }
   const passed = status === 'passed' && stage === 'complete' && exitCode === 0 && isolation !== null;
   const receipt = {
     schemaVersion: 1,

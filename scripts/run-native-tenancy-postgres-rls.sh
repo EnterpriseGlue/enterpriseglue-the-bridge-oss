@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 container_name="enterpriseglue-native-tenancy-rls-${RANDOM}${RANDOM}"
+container_id=''
 postgres_port="$(node --input-type=module <<'NODE'
 import net from 'node:net';
 const server = net.createServer();
@@ -16,23 +17,39 @@ NODE
 )"
 
 cleanup() {
-  docker rm -f "$container_name" >/dev/null 2>&1 || true
+  local status=$?
+  trap - EXIT INT TERM
+  if [[ -n "$container_id" ]] && ! docker rm -f -v "$container_id" >/dev/null 2>&1; then
+    echo '[native-tenancy-rls] Owned PostgreSQL fixture cleanup failed.' >&2
+    if [[ "$status" -eq 0 ]]; then status=1; fi
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-docker run --name "$container_name" \
+container_id="$(docker create --name "$container_name" \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=postgres \
   -p "127.0.0.1:${postgres_port}:5432" \
-  -d postgres:17-alpine >/dev/null
+  postgres:17-alpine)"
+docker start "$container_id" >/dev/null
 
+ready=false
 for _ in $(seq 1 60); do
-  if docker exec "$container_name" pg_isready -U postgres -d postgres >/dev/null 2>&1; then
+  # The image starts a socket-only initialization server, then stops it.
+  # Only the final TCP listener can admit the host-side TypeORM tests.
+  if docker exec "$container_id" pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres >/dev/null 2>&1; then
+    ready=true
     break
   fi
   sleep 1
 done
-docker exec "$container_name" pg_isready -U postgres -d postgres >/dev/null
+if [[ "$ready" != true ]]; then
+  echo '[native-tenancy-rls] PostgreSQL TCP readiness timed out; tests were not started.' >&2
+  exit 1
+fi
 
 cd "$root_dir"
 SESSION_RACE_DISPOSABLE_POSTGRES=true \

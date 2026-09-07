@@ -5,6 +5,8 @@ import { DataSource, type EntityManager } from 'typeorm';
 import { Pool } from 'pg';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import { doubleCsrf } from 'csrf-csrf';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -89,6 +91,7 @@ describe('physical PostgreSQL session derivation and logout', () => {
   let admin: Pool;
   let db: DataSource;
   let app: express.Express;
+  const probeRateLimitStore = new MemoryStore();
   const user = { id: 'user-a', email: 'user-a@example.test', authSessionVersion: 3 };
   const provider = {
     id: 'provider-a', tenantId: 'alpha', key: 'oidc-a', displayName: 'Fixture',
@@ -119,9 +122,30 @@ describe('physical PostgreSQL session derivation and logout', () => {
     await db.synchronize();
     vi.mocked(getDataSource).mockResolvedValue(db);
     app = express(); app.use(express.json()); app.use(express.urlencoded({ extended: false })); app.use(cookieParser());
+    // Real production-equivalent CSRF admission, including credential-only
+    // refresh and Bearer requests. No blanket exemption for protocol paths.
+    const csrfSecret = randomUUID();
+    const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
+      getSecret: () => csrfSecret,
+      getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
+      cookieName: 'csrf_secret',
+      cookieOptions: { httpOnly: true, secure: false, sameSite: 'lax', path: '/' },
+      getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
+      skipCsrfProtection: (req) => {
+        if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
+        const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
+        return hasBearer || !req.cookies?.accessToken;
+      },
+    });
+    app.use(doubleCsrfProtection);
+    app.get('/api/csrf-token', (req, res) => res.json({ csrfToken: generateCsrfToken(req, res) }));
     app.use(identityRoutes); app.use(refreshRoutes); app.use(logoutRoutes); app.use(tenantRoutes); app.use(onboardingRoutes);
-    app.get('/private', requireAuth, (_req, res) => res.json({ authenticated: true }));
-    app.get('/optional', optionalAuth, (req, res) => res.json({ authenticated: Boolean(req.user) }));
+    // These fixture-only auth probes are not production routes. Bound them
+    // with the real limiter, independently of the shared unit setup's mocks.
+    const probeLimiter = rateLimit({ windowMs: 60_000, limit: 20, store: probeRateLimitStore,
+      standardHeaders: true, legacyHeaders: false, message: { error: 'Too many fixture auth probes' } });
+    app.get('/private', probeLimiter, requireAuth, (_req, res) => res.json({ authenticated: true }));
+    app.get('/optional', probeLimiter, optionalAuth, (req, res) => res.json({ authenticated: Boolean(req.user) }));
     app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || 500).json({ error: error.message }));
   }, 20000);
 
@@ -134,6 +158,7 @@ describe('physical PostgreSQL session derivation and logout', () => {
     }
   });
   beforeEach(async () => {
+    await probeRateLimitStore.resetAll();
     vi.spyOn(loginMethodService, 'ordinaryLocalPasswordEnabled').mockResolvedValue(true);
     vi.mocked(tenantService.hasMembership).mockResolvedValue(true);
     // This suite proves enrollment credential persistence, not the separate FGA
@@ -190,6 +215,36 @@ describe('physical PostgreSQL session derivation and logout', () => {
     expect(cookie, `${name} cookie`).toBeDefined();
     return decodeURIComponent(cookie!.split(';')[0]!.slice(name.length + 1));
   }
+
+  it.each(['/private', '/optional'])('rate-limits the real fixture auth probe %s', async (path) => {
+    for (let index = 0; index < 20; index++) {
+      expect((await request(app).get(path)).status).toBe(path === '/private' ? 401 : 200);
+    }
+    const blocked = await request(app).get(path);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({ error: 'Too many fixture auth probes' });
+    expect(blocked.headers['retry-after']).toBeDefined();
+  });
+
+  it('requires valid cookie-session CSRF proof before committing logout revocation', async () => {
+    const source = await issue('local');
+    const browserCookies = [`accessToken=${source.accessToken}`, `refreshToken=${source.refreshToken}`];
+    const tokenResponse = await request(app).get('/api/csrf-token').set('Cookie', browserCookies);
+    expect(tokenResponse.status).toBe(200);
+    const rawCookies = tokenResponse.headers['set-cookie'];
+    const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
+    for (const token of [undefined, 'invalid-token']) {
+      const logout = request(app).post('/api/auth/logout').set('Cookie', [...browserCookies, ...csrfCookies]);
+      if (token) logout.set('X-CSRF-Token', token);
+      expect((await logout.send({})).status).toBe(403);
+      expect((await db.getRepository(User).findOneByOrFail({ id: user.id })).authSessionVersion).toBe(user.authSessionVersion);
+      expect((await db.getRepository(RefreshToken).findOneByOrFail({ id: verifyToken(source.accessToken).sessionId! })).revokedAt).toBeNull();
+    }
+    const logout = await request(app).post('/api/auth/logout').set('Cookie', [...browserCookies, ...csrfCookies])
+      .set('X-CSRF-Token', tokenResponse.body.csrfToken).send({});
+    expect(logout.status).toBe(200);
+    await assertDead(source);
+  });
 
   it.each(['local', 'oidc'] as const)('requires fresh pooled sign-in for a persisted legacy %s session', async (authenticationMethod) => {
     const current = await issue(authenticationMethod);

@@ -93,7 +93,16 @@ test('native tenancy changes select the pooled RLS and segregated SSO lane', () 
     assert.equal(classifyChangedFiles([proxy]).run_native_tenancy, true, `${proxy} must qualify SSO redirects`);
   }
   assert.match(ciWorkflow, /^  native-tenancy-pooled-e2e:/m);
-  assert.match(ciWorkflow, /pnpm run test:native-tenancy:postgres-rls\s+pnpm run test:native-tenancy:pooled-e2e/);
+  const pooledJob = ciWorkflow.split('\n  native-tenancy-pooled-e2e:')[1].split('\n  saas-upgrade-restore-rollback:')[0];
+  const steps = pooledJob.split(/^      - name: /m).slice(1);
+  const databaseSteps = steps.filter((step) => step.includes('run: pnpm run test:native-tenancy:postgres-rls'));
+  const browserSteps = steps.filter((step) => step.includes('run: pnpm run test:native-tenancy:pooled-e2e'));
+  assert.equal(databaseSteps.length, 1);
+  assert.equal(browserSteps.length, 1);
+  assert.ok(steps.indexOf(databaseSteps[0]) < steps.indexOf(browserSteps[0]));
+  for (const step of [...databaseSteps, ...browserSteps]) {
+    assert.doesNotMatch(step, /^\s+(?:if|continue-on-error):/m, 'both qualifications must retain default success gating and propagate failure');
+  }
   assert.match(ciWorkflow, /^  saas-upgrade-restore-rollback:/m);
   assert.match(ciWorkflow, /run: pnpm run test:saas:upgrade-restore-rollback/);
 });
@@ -127,6 +136,7 @@ test('session security changes cannot miss pooled session-race qualification', (
     'backend/__tests__/shared/services/authSessionLineage.test.ts',
     'backend/__tests__/shared/services/pooledInvitationEnrollment.test.ts',
     'backend/__tests__/shared/services/platform-admin/pooledIdentityLinking.test.ts',
+    'scripts/native-tenancy-postgres-runner.test.mjs',
   ]) assert.equal(classifyChangedFiles([file]).run_native_tenancy, true, file);
   const runner = readFileSync(new URL('./run-native-tenancy-postgres-rls.sh', import.meta.url), 'utf8');
   assert.match(runner, /SESSION_RACE_DISPOSABLE_POSTGRES=true/);

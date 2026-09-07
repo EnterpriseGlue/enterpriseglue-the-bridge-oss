@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cookieParser from 'cookie-parser';
+import { randomUUID } from 'node:crypto';
+import { doubleCsrf } from 'csrf-csrf';
 import express from 'express';
 import request from 'supertest';
 import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -108,6 +110,24 @@ describe('provider-neutral OIDC routes', () => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
     app.use(cookieParser());
+    // Match the production cookie-session boundary. Protocol state/correlation
+    // cookies alone are not access cookies; their routes still verify the IdP
+    // evidence rather than receiving a blanket callback-path exemption here.
+    const csrfSecret = randomUUID();
+    const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
+      getSecret: () => csrfSecret,
+      getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
+      cookieName: 'csrf_secret',
+      cookieOptions: { httpOnly: true, secure: false, sameSite: 'lax', path: '/' },
+      getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
+      skipCsrfProtection: (req) => {
+        if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
+        const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
+        return hasBearer || !req.cookies?.accessToken;
+      },
+    });
+    app.use(doubleCsrfProtection);
+    app.get('/api/csrf-token', (req, res) => res.json({ csrfToken: generateCsrfToken(req, res) }));
     app.use(identityOidcRoute);
     app.use(onboardingRoute);
     app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || 500).json({ error: error.message }));
@@ -141,6 +161,40 @@ describe('provider-neutral OIDC routes', () => {
       expect.stringContaining('refreshToken=enrolled-refresh'), expect.stringContaining('onboardingToken=;')]));
     expect(cookies.filter((cookie) => cookie.startsWith('accessToken='))).toHaveLength(1);
   }
+
+  it.each(['missing', 'mismatched', 'foreign-session'])('rejects %s CSRF proof before cookie-authenticated enrollment', async (proof) => {
+    const browserCookies = ['accessToken=existing-browser-session', onboardingCookie()];
+    const tokenResponse = await request(app).get('/api/csrf-token')
+      .set('Cookie', proof === 'foreign-session' ? ['accessToken=other-browser-session'] : browserCookies);
+    expect(tokenResponse.status).toBe(200);
+    const rawCookies = tokenResponse.headers['set-cookie'];
+    const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
+    const enrollmentRequest = request(app).post('/api/auth/onboarding/providers/provider-1/login')
+      .set('Cookie', [...browserCookies, ...csrfCookies]);
+    if (proof !== 'missing') enrollmentRequest.set('X-CSRF-Token', proof === 'mismatched' ? 'invalid-token' : tokenResponse.body.csrfToken);
+    const response = await enrollmentRequest.send({ username: 'person', password: 'directory-password' });
+    expect(response.status).toBe(403);
+    expect(identityProviderService.getDirectLoginProviderById).not.toHaveBeenCalled();
+    expect(directLdapIdentityService.authenticate).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.enrollLdapInvitation).not.toHaveBeenCalled();
+    expectNoOutsideEnrollmentWrites();
+  });
+
+  it('accepts a generated session-bound CSRF token before cookie-authenticated LDAP enrollment', async () => {
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue({ ...provider, tenantId: enrollment.tenantId, protocol: 'ldap' });
+    const browserCookies = ['accessToken=existing-browser-session', onboardingCookie()];
+    const tokenResponse = await request(app).get('/api/csrf-token').set('Cookie', browserCookies);
+    expect(tokenResponse.status).toBe(200);
+    const rawCookies = tokenResponse.headers['set-cookie'];
+    const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
+    const response = await request(app).post('/api/auth/onboarding/providers/provider-1/login')
+      .set('Cookie', [...browserCookies, ...csrfCookies]).set('X-CSRF-Token', tokenResponse.body.csrfToken)
+      .send({ username: 'person', password: 'directory-password' });
+    expect(response.status).toBe(200);
+    expect(identityProviderProvisioningService.enrollLdapInvitation).toHaveBeenCalledOnce();
+    expectEnrollmentCookies(response);
+    expectNoOutsideEnrollmentWrites();
+  });
 
   it('returns onboarding login methods only for the verified invitation tenant', async () => {
     const originalMode = config.tenancyMode;

@@ -174,7 +174,7 @@ const classifiers = {
     /^backend\/(?:__tests__|test)\/.*(?:nativeTenan|pooled-tenan|tenant-database)/i,
     /^frontend\/__tests__\/.*(?:NativeTenant|pooled-tenan|tenant.*Login)/i,
     /^test\/e2e\/pooled-tenancy/,
-    /^scripts\/(?:run-native-tenancy|run-pooled-tenancy|pooled-tenancy-evidence|saas-upgrade-restore-rollback)/,
+    /^scripts\/(?:run-native-tenancy|native-tenancy-postgres-runner|run-pooled-tenancy|pooled-tenancy-evidence|saas-upgrade-restore-rollback)/,
   ],
   adapter_backstop: [
     /^test\/e2e\/(?:operaton|camunda7-container)/,

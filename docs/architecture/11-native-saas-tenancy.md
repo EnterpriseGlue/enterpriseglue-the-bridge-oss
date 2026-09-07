@@ -480,6 +480,10 @@ log text, provider claims, URLs, role names, screenshots, traces, videos, or
 Playwright reports are copied into this receipt. Missing or malformed database
 evidence cannot qualify a passing run. Every invocation replaces stale receipt
 content before setup; failure and cancellation receipts cannot report a pass.
+The isolation input is opened without following symlinks, checked and read from
+the same file descriptor, and limited to 4 KiB even if it grows during reading.
+If the prerequisite PostgreSQL session/RLS gate fails before the browser runner
+starts, CI emits a failed `database`-stage receipt and does not run the browser.
 
 Raw diagnostics can contain passwords, session cookies, signed state, and SQL
 parameters even when fixtures are disposable. By default, the runner captures

@@ -211,6 +211,10 @@ equivalent behavior for every supported database engine.
 Run `pnpm run test:native-tenancy:postgres-rls` for an owned disposable PostgreSQL
 container. It combines restricted-role RLS qualification with session tests using
 real TypeORM entities, JWTs, bcrypt, authentication middleware, and HTTP routes.
+The fixture waits for the final TCP listener rather than the image's temporary
+socket-only initialization server. A readiness timeout prevents test execution;
+cleanup removes only the owned container and its anonymous database volume,
+and a cleanup failure prevents a passing result.
 The race tests wait for a real PostgreSQL lock before releasing the competing
 transaction; they cover both provider orderings and logout-all's source-first
 ordering. The fixture database is unique to the test and is removed afterward.

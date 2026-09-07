@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -53,6 +55,50 @@ test('malformed, unsafe or absent database evidence cannot qualify a passing run
   const link = join(root, 'linked-input.json');
   symlinkSync(target, link);
   assert.equal(writeReceipt({ output: join(root, 'receipt.json'), status: 'passed', stage: 'complete', exitCode: 0, isolationFile: link }).status, 'failed');
+});
+
+test('a path swapped after validation cannot redirect the isolation read', (t) => {
+  const { root, put } = fixture(t);
+  const input = put('isolation.json', JSON.stringify(goodIsolation));
+  const replacement = put('replacement.json', JSON.stringify({ ...goodIsolation, superuser: true }));
+  let swapped = false;
+  const swap = () => {
+    if (swapped) return;
+    swapped = true;
+    fs.renameSync(input, `${input}.opened`);
+    symlinkSync(replacement, input);
+  };
+  // Exercise the replacement window for both descriptor-based reads and the
+  // former lstat(path)/readFile(path) implementation; the latter must fail.
+  for (const method of ['openSync', 'lstatSync']) {
+    const original = fs[method];
+    t.mock.method(fs, method, (...args) => {
+      const result = original(...args);
+      if (args[0] === input) swap();
+      return result;
+    });
+  }
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const receipt = writeReceipt({ output: join(root, 'receipt.json'), status: 'passed', stage: 'complete', exitCode: 0, isolationFile: input });
+  assert.equal(swapped, true);
+  assert.equal(receipt.status, 'passed', 'must read the originally opened regular file');
+});
+
+test('growth after stat cannot evade the bounded isolation input limit', (t) => {
+  const { root, put } = fixture(t);
+  const input = put('isolation.json', JSON.stringify(goodIsolation));
+  for (const method of ['fstatSync', 'lstatSync']) {
+    const original = fs[method];
+    t.mock.method(fs, method, (...args) => {
+      const stat = original(...args);
+      writeFileSync(input, `${JSON.stringify(goodIsolation)}${' '.repeat(5000)}`);
+      return stat;
+    });
+  }
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  assert.equal(writeReceipt({ output: join(root, 'receipt.json'), status: 'passed', stage: 'complete', exitCode: 0, isolationFile: input }).status, 'failed');
 });
 
 test('new runs replace stale receipts and output symlinks without following them', (t) => {
@@ -162,6 +208,9 @@ test('protected CI uploads precisely the receipt and runs this regression gate',
   const job = workflow.split('\n  native-tenancy-pooled-e2e:')[1].split('\n  saas-upgrade-restore-rollback:')[0];
   assert.deepEqual([...job.matchAll(/^\s+path: (.+)$/gm)].map((match) => match[1]), ['.artifacts/pooled-tenancy-e2e/public/receipt.json']);
   assert.match(job, /node --test scripts\/pooled-tenancy-evidence\.test\.mjs/);
+  assert.match(job, /scripts\/native-tenancy-postgres-runner\.test\.mjs/);
+  assert.match(job, /id: pooled-database\s+run: pnpm run test:native-tenancy:postgres-rls/);
+  assert.match(job, /if: failure\(\) && steps\.pooled-database\.outcome == 'failure'\s+run: node scripts\/pooled-tenancy-evidence\.mjs \.artifacts\/pooled-tenancy-e2e\/public\/receipt\.json failed database 1/);
   for (const file of ['scripts/pooled-tenancy-evidence.mjs', 'scripts/pooled-tenancy-evidence.test.mjs']) {
     assert.equal(classifyChangedFiles([file]).run_native_tenancy, true);
   }
