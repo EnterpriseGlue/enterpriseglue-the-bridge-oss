@@ -114,19 +114,29 @@ describe('provider-neutral OIDC routes', () => {
     // cookies alone are not access cookies; their routes still verify the IdP
     // evidence rather than receiving a blanket callback-path exemption here.
     const csrfSecret = randomUUID();
+    const skipCsrfProtection = (req: express.Request) => {
+      if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
+      const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
+      return hasBearer || !req.cookies?.accessToken;
+    };
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => csrfSecret,
       getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
       cookieName: 'csrf_secret',
       cookieOptions: { httpOnly: true, secure: false, sameSite: 'lax', path: '/' },
       getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
-      skipCsrfProtection: (req) => {
-        if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
-        const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
-        return hasBearer || !req.cookies?.accessToken;
-      },
+      skipCsrfProtection,
     });
-    app.use(doubleCsrfProtection);
+    app.use((req, res, next) => {
+      // Fail closed on a missing double-submit cookie. Keep the full library
+      // check for the HMAC, header, and session binding on every admitted request.
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !skipCsrfProtection(req)
+        && req.cookies?.csrf_secret === undefined) {
+        res.status(403).json({ error: 'CSRF cookie required' });
+        return;
+      }
+      doubleCsrfProtection(req, res, next);
+    });
     app.get('/api/csrf-token', (req, res) => res.json({ csrfToken: generateCsrfToken(req, res) }));
     app.use(identityOidcRoute);
     app.use(onboardingRoute);
@@ -162,7 +172,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(cookies.filter((cookie) => cookie.startsWith('accessToken='))).toHaveLength(1);
   }
 
-  it.each(['missing', 'mismatched', 'foreign-session'])('rejects %s CSRF proof before cookie-authenticated enrollment', async (proof) => {
+  it.each(['missing', 'missing-cookie', 'mismatched', 'foreign-session'])('rejects %s CSRF proof before cookie-authenticated enrollment', async (proof) => {
     const browserCookies = ['accessToken=existing-browser-session', onboardingCookie()];
     const tokenResponse = await request(app).get('/api/csrf-token')
       .set('Cookie', proof === 'foreign-session' ? ['accessToken=other-browser-session'] : browserCookies);
@@ -170,7 +180,7 @@ describe('provider-neutral OIDC routes', () => {
     const rawCookies = tokenResponse.headers['set-cookie'];
     const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
     const enrollmentRequest = request(app).post('/api/auth/onboarding/providers/provider-1/login')
-      .set('Cookie', [...browserCookies, ...csrfCookies]);
+      .set('Cookie', [...browserCookies, ...(proof === 'missing-cookie' ? [] : csrfCookies)]);
     if (proof !== 'missing') enrollmentRequest.set('X-CSRF-Token', proof === 'mismatched' ? 'invalid-token' : tokenResponse.body.csrfToken);
     const response = await enrollmentRequest.send({ username: 'person', password: 'directory-password' });
     expect(response.status).toBe(403);

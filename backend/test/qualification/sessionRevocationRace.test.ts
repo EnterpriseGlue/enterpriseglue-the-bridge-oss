@@ -125,19 +125,29 @@ describe('physical PostgreSQL session derivation and logout', () => {
     // Real production-equivalent CSRF admission, including credential-only
     // refresh and Bearer requests. No blanket exemption for protocol paths.
     const csrfSecret = randomUUID();
+    const skipCsrfProtection = (req: express.Request) => {
+      if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
+      const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
+      return hasBearer || !req.cookies?.accessToken;
+    };
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => csrfSecret,
       getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
       cookieName: 'csrf_secret',
       cookieOptions: { httpOnly: true, secure: false, sameSite: 'lax', path: '/' },
       getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
-      skipCsrfProtection: (req) => {
-        if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
-        const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
-        return hasBearer || !req.cookies?.accessToken;
-      },
+      skipCsrfProtection,
     });
-    app.use(doubleCsrfProtection);
+    app.use((req, res, next) => {
+      // Fail closed on a missing double-submit cookie. Keep the full library
+      // check for the HMAC, header, and session binding on every admitted request.
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !skipCsrfProtection(req)
+        && req.cookies?.csrf_secret === undefined) {
+        res.status(403).json({ error: 'CSRF cookie required' });
+        return;
+      }
+      doubleCsrfProtection(req, res, next);
+    });
     app.get('/api/csrf-token', (req, res) => res.json({ csrfToken: generateCsrfToken(req, res) }));
     app.use(identityRoutes); app.use(refreshRoutes); app.use(logoutRoutes); app.use(tenantRoutes); app.use(onboardingRoutes);
     // These fixture-only auth probes are not production routes. Bound them
@@ -233,8 +243,12 @@ describe('physical PostgreSQL session derivation and logout', () => {
     expect(tokenResponse.status).toBe(200);
     const rawCookies = tokenResponse.headers['set-cookie'];
     const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
-    for (const token of [undefined, 'invalid-token']) {
-      const logout = request(app).post('/api/auth/logout').set('Cookie', [...browserCookies, ...csrfCookies]);
+    for (const { token, cookies } of [
+      { token: undefined, cookies: [...browserCookies, ...csrfCookies] },
+      { token: 'invalid-token', cookies: [...browserCookies, ...csrfCookies] },
+      { token: tokenResponse.body.csrfToken, cookies: browserCookies },
+    ]) {
+      const logout = request(app).post('/api/auth/logout').set('Cookie', cookies);
       if (token) logout.set('X-CSRF-Token', token);
       expect((await logout.send({})).status).toBe(403);
       expect((await db.getRepository(User).findOneByOrFail({ id: user.id })).authSessionVersion).toBe(user.authSessionVersion);
