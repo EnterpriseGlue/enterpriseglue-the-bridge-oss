@@ -14,7 +14,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Features
 
 * **tenancy:** add durable release activation receipts ([d6114c1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d6114c105cf429724f6bd24836d2a23292025553))
-* **tenancy:** add durable release activation receipts ([b382575](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b38257506947f1fc76222b4fe3ae3da5fef7bf6d))
 
 
 ### Bug Fixes
