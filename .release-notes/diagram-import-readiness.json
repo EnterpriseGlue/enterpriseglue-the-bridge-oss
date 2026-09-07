@@ -1,0 +1,57 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "diagram-import-readiness",
+  "type": "fix",
+  "scope": "mission-control-and-release-qualification",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers"
+  ],
+  "summary": "Keeps Mission Control execution markers synchronized with each imported BPMN diagram and qualifies the browser journey before image publication.",
+  "userImpact": [
+    "Execution Trail loop and multi-instance markers appear reliably after navigating between process-instance detail pages.",
+    "Release operators receive the full Mission Control image-browser result before a release tag is created instead of discovering the same failure during public image publication."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Upgrade the frontend and backend images together to the patch release containing this fix."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This fix does not change the TypeORM schema or migration sequence; candidate qualification continues to require equivalent behavior on PostgreSQL, MySQL, SQL Server, Oracle, and Spanner."
+    ]
+  },
+  "security": [],
+  "documentation": [
+    "The versioned release notes describe the BPMN import-readiness fix and the earlier image-browser qualification boundary."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert to the preceding matching frontend and backend images if necessary; execution markers may again render only after another unrelated detail-page update."
+  ],
+  "validation": [
+    "Run the focused frontend regression for a BPMN element registry that becomes available after diagram import.",
+    "Run the Mission Control mock-engine browser journey against exact candidate PostgreSQL images and verify process overview, detail, BPMN, variables, execution markers, API responses, and browser console.",
+    "Run release workflow contract, classifier, and candidate-readiness checks before protected CI."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.16.1",
+      "newVersion": "0.16.2",
+      "impact": "patch"
+    }
+  ]
+}

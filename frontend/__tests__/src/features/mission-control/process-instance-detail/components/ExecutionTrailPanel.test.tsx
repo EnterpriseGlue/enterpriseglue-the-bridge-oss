@@ -13,11 +13,13 @@ function renderExecutionTrail({
   executionDetailsAllowed = true,
   historyTasksAllowed = true,
   historyUserOperationsAllowed = true,
+  resolveBpmnLoopMarkerVisual = () => null,
 }: {
   onActivityClick?: (activityId: string) => void;
   executionDetailsAllowed?: boolean;
   historyTasksAllowed?: boolean;
   historyUserOperationsAllowed?: boolean;
+  resolveBpmnLoopMarkerVisual?: (activityId: string) => { iconClass: string; label: string } | null;
 } = {}) {
   const sortedActs = [
     {
@@ -68,7 +70,7 @@ function renderExecutionTrail({
         setShowTokenPassCounts={() => {}}
         execGroups={execGroups}
         resolveBpmnIconVisual={() => ({ iconClass: '', kind: 'shape' })}
-        resolveBpmnLoopMarkerVisual={() => null}
+        resolveBpmnLoopMarkerVisual={resolveBpmnLoopMarkerVisual}
         buildHistoryContext={buildHistoryContext}
         onActivityClick={onActivityClick}
         executionDetailsReadDecision={{
@@ -198,6 +200,16 @@ describe('ExecutionTrailPanel', () => {
     await user.click(screen.getByText('5 sec'));
 
     expect(onActivityClick).toHaveBeenCalledWith('approveTask');
+  });
+
+  it('exposes a resolved BPMN loop marker to assistive technology and browser smoke tests', () => {
+    renderExecutionTrail({
+      resolveBpmnLoopMarkerVisual: (activityId) => activityId === 'approveTask'
+        ? { iconClass: 'bpmn-icon-loop-marker', label: 'Loop' }
+        : null,
+    });
+
+    expect(screen.getByTitle('Loop')).toHaveAttribute('aria-label', 'Loop');
   });
 
   it('keeps execution drilldown visible but disabled when the read action is denied', async () => {

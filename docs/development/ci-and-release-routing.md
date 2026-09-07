@@ -51,9 +51,10 @@ pipeline contracts themselves change. Release Please heads and merge groups do
 not repeat application, database, identity, authorization, browser, package,
 chart, or image suites already qualified on the source changes. The release
 merge group still stages and qualifies the signed candidate across all five
-TypeORM adapters, the pinned Operaton browser journey, packages, charts, and
-multi-platform images before publication. The required `Release candidate
-staged` status cannot pass until that exact-SHA qualification completes.
+TypeORM adapters, the pinned Operaton browser journey, the full mock-engine
+browser journey on exact PostgreSQL images, packages, charts, and multi-platform
+images before publication. The required `Release candidate staged` status
+cannot pass until that exact-SHA qualification completes.
 
 ## Expensive evidence
 
@@ -113,7 +114,11 @@ Release Please-only change set.
 The publish job assembles the two architecture digests into one manifest per
 component, verifies the resolved digest and OCI metadata, then signs and
 attests the manifest. Release publication promotes the exact qualified
-candidate digest; it does not rebuild source bytes after qualification.
+candidate digest; it does not rebuild source bytes or repeat the database,
+browser, or vulnerability qualification after the signed candidate passes.
+Public aliases advance only after the semantic release tags are verified to
+resolve to those exact candidate digests. Explicit non-candidate image builds
+continue to run the full post-build gates.
 
 The signed candidate also carries the exact shared, backend-host, and
 frontend-host package tarballs. These packages no longer publish merely
