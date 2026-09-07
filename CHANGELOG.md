@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.21.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.1...v0.21.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **frontend:** scope notifications to tenant routes ([f86a3e0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f86a3e0b555b20a14dd738c786b521181d333d43))
+* **frontend:** scope tenant shell data to tenant routes ([8b38c78](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8b38c7849236a7761459d40a93189764471f04c7))
+
 ## [0.21.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.0...v0.21.1) (2026-09-07)
 
 
