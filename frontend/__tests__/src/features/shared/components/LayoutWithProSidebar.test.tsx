@@ -206,6 +206,19 @@ describe('LayoutWithProSidebar', () => {
     expect(await screen.findByText('Acme')).toBeInTheDocument();
   });
 
+  it('does not request or render tenant notifications on the pooled platform root', async () => {
+    tenancyState.enabled = true;
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(screen.getByRole('banner', { name: 'EnterpriseGlue application header' })).toBeInTheDocument();
+    });
+
+    expect(vi.mocked(apiClient.get).mock.calls.some(([url]) => url === '/api/notifications')).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull();
+  });
+
   it('shows the Engines nav item when the user can create engines', async () => {
     renderLayout();
 

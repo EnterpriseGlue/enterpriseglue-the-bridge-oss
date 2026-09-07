@@ -109,6 +109,30 @@ describe('EngineSelector', () => {
     expect(result.current.error).toEqual(expect.objectContaining({ message: 'inventory unavailable' }));
   });
 
+  it('does not request tenant engines when its route context is unavailable', async () => {
+    const { result } = renderHook(() => useEngineSelection(false), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isResolving).toBe(false));
+    expect(getAccessibleEngines).not.toHaveBeenCalled();
+    expect(result.current.selectedEngineId).toBeUndefined();
+    expect(result.current.isEmpty).toBe(false);
+  });
+
+  it('hides cached tenant engine data when the route context becomes unavailable', async () => {
+    vi.mocked(getAccessibleEngines).mockResolvedValue(engines);
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useEngineSelection(enabled),
+      { wrapper: createWrapper(), initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.selectedEngineId).toBe('engine-a'));
+    rerender({ enabled: false });
+
+    expect(result.current.engines).toEqual([]);
+    expect(result.current.selectedEngineId).toBeUndefined();
+    expect(result.current.isEmpty).toBe(false);
+  });
+
   it('renders the dropdown from the same resolved inventory', async () => {
     vi.mocked(getAccessibleEngines).mockResolvedValue(engines);
 

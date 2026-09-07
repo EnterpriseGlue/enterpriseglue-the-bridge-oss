@@ -1,0 +1,59 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "platform-admin-notification-context",
+  "type": "fix",
+  "scope": "frontend-host",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Stops the pooled SaaS platform-admin shell from requesting tenant-scoped notifications and engine inventory when no tenant route is active.",
+  "userImpact": [
+    "Platform administrators can open root administration pages without failing tenant notification or engine-inventory requests and their associated browser-console errors.",
+    "Notifications and engine selection remain available in OSS mode and on explicit tenant routes in pooled SaaS mode."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Upgrade the frontend image; no backend, configuration, or data changes are required."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This frontend-only fix does not change TypeORM entities, migrations, or supported database behavior."
+    ]
+  },
+  "security": [
+    "Tenant notification and engine-inventory data continue to be requested only through an explicit tenant context in pooled mode."
+  ],
+  "documentation": [
+    "The versioned release notes describe the platform-admin notification-context correction."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the preceding frontend image; no database or configuration rollback is required."
+  ],
+  "validation": [
+    "Frontend component tests cover the pooled platform root, explicit tenant routes, unchanged OSS notification behavior, disabled engine inventory loading, and cached tenant engine data becoming unavailable outside a tenant context.",
+    "The frontend-host TypeScript build check passes for the changed component."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.16.2",
+      "newVersion": "0.16.3",
+      "impact": "patch"
+    }
+  ]
+}

@@ -90,6 +90,7 @@ export default function ProSidebar() {
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
+  const engineContextAvailable = !isMultiTenant || tenantSlug !== null
   const missionControlPluginNavItems = getNativePluginNavigationV1()
     .filter((item) => item.parentDestination === 'mission-control')
     .sort((left, right) =>
@@ -208,7 +209,7 @@ export default function ProSidebar() {
     reset: resetDecisionFilters,
   } = useDecisionsFilterStore()
 
-  const selectedEngineId = useSelectedEngine()
+  const selectedEngineId = useSelectedEngine(engineContextAvailable)
 
   // Fetch process definitions for the dropdown
   const defsQ = useQuery({ 
@@ -505,7 +506,7 @@ export default function ProSidebar() {
             <span style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', display: 'block', marginBottom: '4px' }}>
               Engine
             </span>
-            <EngineSelector size="sm" label="" style={{ width: '100%' }} />
+            <EngineSelector enabled={engineContextAvailable} size="sm" label="" style={{ width: '100%' }} />
           </div>
 
           {/* Process Dropdown - g10 light variant on dark sidebar */}
@@ -720,7 +721,7 @@ export default function ProSidebar() {
             <span style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', display: 'block', marginBottom: '4px' }}>
               Engine
             </span>
-            <EngineSelector size="sm" label="" style={{ width: '100%' }} />
+            <EngineSelector enabled={engineContextAvailable} size="sm" label="" style={{ width: '100%' }} />
           </div>
 
           {/* Decision Dropdown */}
@@ -866,7 +867,7 @@ export default function ProSidebar() {
             <span style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', display: 'block', marginBottom: '4px' }}>
               Engine
             </span>
-            <EngineSelector size="sm" label="" style={{ width: '100%' }} />
+            <EngineSelector enabled={engineContextAvailable} size="sm" label="" style={{ width: '100%' }} />
           </div>
         </div>
         </>

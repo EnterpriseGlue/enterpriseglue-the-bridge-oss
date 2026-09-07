@@ -174,6 +174,15 @@ function writeCachedBranding(branding: PlatformBranding): void {
   }
 }
 
+export function notificationContextEnabled(
+  featureEnabled: boolean,
+  authenticated: boolean,
+  multiTenant: boolean,
+  tenantSlug: string | null
+): boolean {
+  return featureEnabled && authenticated && (!multiTenant || tenantSlug !== null)
+}
+
 export default function LayoutWithProSidebar() {
   // The EE plugin or the native OSS capability bootstrap may enable pooled
   // mode before the router renders. Resolve it here instead of caching the
@@ -195,7 +204,15 @@ export default function LayoutWithProSidebar() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState('')
 
+  const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
+  const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
+  const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null
+  const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
+  const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
+  const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
+
   const isNotificationsEnabled = useFeatureFlag('notifications')
+  const notificationsAvailable = notificationContextEnabled(isNotificationsEnabled, Boolean(user), isMultiTenant, tenantSlug)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationFilters, setNotificationFilters] = useState<NotificationFilterItem[]>([])
   const notificationPanelRef = React.useRef<HTMLDivElement | null>(null)
@@ -211,7 +228,7 @@ export default function LayoutWithProSidebar() {
       },
       { credentials: 'include' }
     ),
-    enabled: isNotificationsEnabled && !!user,
+    enabled: notificationsAvailable,
     staleTime: 15000,
   })
 
@@ -267,12 +284,6 @@ export default function LayoutWithProSidebar() {
 
   const [enterpriseNavItems, setEnterpriseNavItems] = useState<NavExtension[]>([])
 
-  const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
-  const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
-  const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null
-  const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
-  const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
-  const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
   const extensionItemPath = (item: ScopedNavigationItem) =>
     item.scope === 'root' ? item.path : toTenantPath(item.path)
   const isExtensionItemCurrent = (item: ScopedNavigationItem) => {
@@ -427,7 +438,7 @@ export default function LayoutWithProSidebar() {
   }
 
   const handleToggleNotifications = () => {
-    if (!isNotificationsEnabled) return
+    if (!notificationsAvailable) return
     setNotificationsOpen((prev) => !prev)
   }
 
@@ -1195,28 +1206,30 @@ export default function LayoutWithProSidebar() {
                     theme: 'g100',
                   }}
                 />
-                <HeaderGlobalAction
-                  aria-label="Notifications"
-                  tooltipAlignment="center"
-                  onClick={handleToggleNotifications}
-                >
-                  <span ref={notificationButtonRef} style={{ position: 'relative', display: 'inline-flex' }}>
-                    <Notification size={20} />
-                    {notificationUnreadCount > 0 && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: -2,
-                          right: -2,
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: 'var(--cds-support-error)',
-                        }}
-                      />
-                    )}
-                  </span>
-                </HeaderGlobalAction>
+                {notificationsAvailable && (
+                  <HeaderGlobalAction
+                    aria-label="Notifications"
+                    tooltipAlignment="center"
+                    onClick={handleToggleNotifications}
+                  >
+                    <span ref={notificationButtonRef} style={{ position: 'relative', display: 'inline-flex' }}>
+                      <Notification size={20} />
+                      {notificationUnreadCount > 0 && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: -2,
+                            right: -2,
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: 'var(--cds-support-error)',
+                          }}
+                        />
+                      )}
+                    </span>
+                  </HeaderGlobalAction>
+                )}
                 <HeaderGlobalAction aria-label="User" tooltipAlignment="end" onClick={handleOpenProfile}>
                   <UserAvatar size={20} />
                 </HeaderGlobalAction>
@@ -1228,7 +1241,7 @@ export default function LayoutWithProSidebar() {
                   <Logout size={20} />
                 </HeaderGlobalAction>
               </HeaderGlobalBar>
-              {notificationsOpen && (
+              {notificationsAvailable && notificationsOpen && (
                 <div
                   ref={notificationPanelRef}
                   style={{

@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { server } from '@test/mocks/server'
-import LayoutWithProSidebar from '@src/features/shared/components/LayoutWithProSidebar'
+import LayoutWithProSidebar, { notificationContextEnabled } from '@src/features/shared/components/LayoutWithProSidebar'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 
@@ -92,6 +92,14 @@ describe('LayoutWithProSidebar notifications', () => {
   beforeEach(() => {
     window.localStorage.clear()
     document.title = 'EnterpriseGlue'
+  })
+
+  it('requires an explicit tenant route only when multi-tenant mode is active', () => {
+    expect(notificationContextEnabled(true, true, true, null)).toBe(false)
+    expect(notificationContextEnabled(true, true, true, 'default')).toBe(true)
+    expect(notificationContextEnabled(true, true, false, null)).toBe(true)
+    expect(notificationContextEnabled(false, true, true, 'default')).toBe(false)
+    expect(notificationContextEnabled(true, false, true, 'default')).toBe(false)
   })
 
   it('uses the branded header title text for the browser page title', async () => {

@@ -35,23 +35,24 @@ export function resolveSelectedEngineId(
   return engines[0].id
 }
 
-export function useEngineSelection() {
+export function useEngineSelection(enabled = true) {
   const { selectedEngineId: persistedEngineId, setSelectedEngineId } = useEngineSelectorStore()
   const enginesQuery = useQuery({
     queryKey: ENGINE_SELECTOR_QUERY_KEY,
     queryFn: getAccessibleEngines,
+    enabled,
     staleTime: 60000,
     retry: false,
   })
 
   const engines = React.useMemo(
-    () => sortAccessibleEngines(enginesQuery.data || []),
-    [enginesQuery.data],
+    () => enabled ? sortAccessibleEngines(enginesQuery.data || []) : [],
+    [enabled, enginesQuery.data],
   )
   const requestedEngineId = typeof window === 'undefined'
     ? undefined
     : new URLSearchParams(window.location.search).get('engineId') || undefined
-  const selectedEngineId = enginesQuery.isSuccess
+  const selectedEngineId = enabled && enginesQuery.isSuccess
     ? resolveSelectedEngineId(engines, persistedEngineId, requestedEngineId)
     : undefined
 
@@ -63,10 +64,10 @@ export function useEngineSelection() {
   return {
     engines,
     selectedEngineId,
-    isResolving: enginesQuery.isPending,
-    isEmpty: enginesQuery.isSuccess && engines.length === 0,
-    isError: enginesQuery.isError,
-    error: enginesQuery.error,
+    isResolving: enabled && enginesQuery.isPending,
+    isEmpty: enabled && enginesQuery.isSuccess && engines.length === 0,
+    isError: enabled && enginesQuery.isError,
+    error: enabled ? enginesQuery.error : null,
     refetch: enginesQuery.refetch,
   }
 }
@@ -75,11 +76,12 @@ interface EngineSelectorProps {
   style?: React.CSSProperties
   size?: 'sm' | 'md' | 'lg'
   label?: string
+  enabled?: boolean
 }
 
-export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineSelectorProps) {
+export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled = true }: EngineSelectorProps) {
   const { setSelectedEngineId } = useEngineSelectorStore()
-  const { engines, selectedEngineId, isResolving, isError } = useEngineSelection()
+  const { engines, selectedEngineId, isResolving, isError } = useEngineSelection(enabled)
 
   // Build items list (no "All Engines" option)
   const items = React.useMemo(() => {
@@ -99,7 +101,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
   }, [items, selectedEngineId])
 
   // Don't render if loading or no engines - but keep hook count stable
-  if (isResolving || isError || engines.length === 0) {
+  if (!enabled || isResolving || isError || engines.length === 0) {
     return null
   }
 
@@ -132,6 +134,6 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
 }
 
 // Hook to get the current engine filter for queries
-export function useSelectedEngine() {
-  return useEngineSelection().selectedEngineId
+export function useSelectedEngine(enabled = true) {
+  return useEngineSelection(enabled).selectedEngineId
 }
