@@ -101,6 +101,10 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
     reason: 'A private release-controller bearer credential may move only queued plugin work to the release and monotonically increasing assignment epoch configured on the target host.',
   },
   publicRoute('POST', '/api/auth/forgot-password', 'medium', 'platform-auth', 'Password recovery initiation must be reachable before authentication and returns a non-enumerating response.'),
+  {
+    method: 'POST', route: '/api/workloads/tenants/:tenantId/release-assignment-operations', kind: 'auth-only', risk: 'critical', owner: 'native-tenancy',
+    reason: 'Only the private release-controller credential can reserve an immutable activation intent; conditional tenant/placement fencing and a retained signed operation receipt prevent duplicate mutations.',
+  },
   publicRoute('POST', '/api/auth/reset-password-with-token', 'high', 'platform-auth', 'A single-use reset token authorizes password replacement before a session exists.'),
   publicRoute('GET', '/api/auth/verify-reset-token', 'low', 'platform-auth', 'The recovery UI may validate an opaque reset token without exposing account details.'),
   publicRoute('POST', '/api/auth/resend-verification', 'medium', 'platform-auth', 'Email verification delivery must be available before login and uses a non-enumerating response.'),

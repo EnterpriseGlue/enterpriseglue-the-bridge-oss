@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +71,9 @@ import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { TenantReleaseWorkAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import { TenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
+import { TenantLifecycleOperation } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLifecycleOperation.js';
+import { TenantReleaseActivationService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseActivationService.js';
+import { canonicalizeConfigJson } from '@enterpriseglue/shared/services/platform-admin/config-bundle-hash.js';
 import { TenantDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDomain.js';
 import { TenantDiscoveryDomain } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryDomain.js';
 import { TenantDiscoveryChallenge } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantDiscoveryChallenge.js';
@@ -765,6 +768,7 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
 
 async function qualifyServiceBehavior(dataSource) {
   await qualifyConditionalReleaseActivation(dataSource);
+  await qualifyDurableReleaseActivation(dataSource);
   await dataSource.getRepository(Engine).insert(engineRow(ids.serviceEngine, {
     runtimeAccessScope: 'resource_aware',
     tenancyMode: 'shared',
@@ -863,6 +867,70 @@ async function qualifyServiceBehavior(dataSource) {
       'engine health BIGINT timestamps hydrate as safe JavaScript numbers',
     ],
   };
+}
+
+async function qualifyDurableReleaseActivation(dataSource) {
+  const tenantId = `${runId}-activation-receipt`;
+  const rollbackTenantId = `${runId}-activation-rollback`;
+  const tenants = dataSource.getRepository(Tenant);
+  const assignments = dataSource.getRepository(TenantReleaseWorkAssignment);
+  const operations = dataSource.getRepository(TenantLifecycleOperation);
+  const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const previous = {
+    release: config.tenantPlacementReleaseId, mode: config.tenancyMode,
+    key: config.tenantWorkloadReceiptPrivateKey, keyId: config.tenantWorkloadReceiptKeyId,
+    issuer: config.tenantWorkloadReceiptIssuer, audience: config.tenantPlacementV2Audience,
+  };
+  const input = {
+    tenantId, releaseId: 'dbq-durable-release', assignmentEpoch: 1, expectedPlacementEpoch: 7,
+    idempotencyKey: `${runId}-durable-activation`, correlationId: `${runId}-activation`,
+  };
+  config.tenancyMode = 'pooled';
+  config.tenantPlacementReleaseId = input.releaseId;
+  config.tenantWorkloadReceiptPrivateKey = pair.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+  config.tenantWorkloadReceiptKeyId = 'database-qualification-key';
+  config.tenantWorkloadReceiptIssuer = 'database-qualification-shard';
+  config.tenantPlacementV2Audience = 'database-qualification-control-plane';
+  try {
+    for (const id of [tenantId, rollbackTenantId]) {
+      await tenants.insert({ id, name: 'Disposable receipt qualification', slug: id, status: 'active',
+        placementKey: 'dbq-shard', placementEpoch: 7, createdByUserId: null,
+        createdAt: 1700000000000, updatedAt: 1700000000000 });
+    }
+    const service = new TenantReleaseActivationService(async () => dataSource);
+    const concurrent = await Promise.all(Array.from({ length: 4 }, () => service.execute(input)));
+    const canonical = concurrent.map((receipt) => canonicalizeConfigJson(receipt));
+    assert.equal(new Set(canonical).size, 1, `${database}: concurrent activation must return one receipt`);
+    assert.equal(await operations.countBy({ tenantId, command: 'assign_release' }), 1);
+    assert.equal(await assignments.countBy({ tenantRef: tenantId }), 1);
+    await assert.rejects(service.execute({ ...input, correlationId: `${runId}-changed` }), (error) => error.statusCode === 409);
+
+    const historical = concurrent[0];
+    await tenants.update({ id: tenantId }, { status: 'suspended', placementEpoch: 8 });
+    await assignments.update({ tenantRef: tenantId }, { releaseId: 'dbq-later-release', assignmentEpoch: 2, updatedAt: 2 });
+    assert.equal(canonicalizeConfigJson(await service.execute(input)), canonicalizeConfigJson(historical));
+    assert.deepEqual(await tenants.findOneByOrFail({ id: tenantId }).then((row) => [row.status, Number(row.placementEpoch)]), ['suspended', 8]);
+    assert.deepEqual(await assignments.findOneByOrFail({ tenantRef: tenantId }).then((row) => [row.releaseId, Number(row.assignmentEpoch)]), ['dbq-later-release', 2]);
+
+    config.tenantWorkloadReceiptPrivateKey = 'invalid-signing-key';
+    await assert.rejects(service.execute({ ...input, tenantId: rollbackTenantId,
+      idempotencyKey: `${runId}-rollback-activation`, correlationId: `${runId}-rollback` }));
+    assert.equal(await operations.countBy({ tenantId: rollbackTenantId, command: 'assign_release' }), 0);
+    assert.equal(await assignments.countBy({ tenantRef: rollbackTenantId }), 0);
+  } finally {
+    config.tenantPlacementReleaseId = previous.release;
+    config.tenancyMode = previous.mode;
+    config.tenantWorkloadReceiptPrivateKey = previous.key;
+    config.tenantWorkloadReceiptKeyId = previous.keyId;
+    config.tenantWorkloadReceiptIssuer = previous.issuer;
+    config.tenantPlacementV2Audience = previous.audience;
+    await assignments.delete({ tenantRef: tenantId });
+    await assignments.delete({ tenantRef: rollbackTenantId });
+    await operations.delete({ tenantId });
+    await operations.delete({ tenantId: rollbackTenantId });
+    await tenants.delete({ id: tenantId });
+    await tenants.delete({ id: rollbackTenantId });
+  }
 }
 
 async function qualifyConditionalReleaseActivation(dataSource) {

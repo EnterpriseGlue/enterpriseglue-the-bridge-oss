@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/workloads/tenants/tenant-a/release-assignment-operations",
+    "headers": {
+      "idempotency-key": "release-activation-request-001",
+      "x-correlation-id": "activation-001"
+    },
+    "body": {
+      "releaseId": "saas-2026-09",
+      "assignmentEpoch": 12,
+      "expectedPlacementEpoch": 7
+    }
+  },
+  "response": {
+    "payload": {
+      "schemaVersion": "tenant-release-activation-receipt.enterpriseglue.io/v1",
+      "issuer": "https://shard-a.example.internal",
+      "audience": "enterpriseglue-control-plane",
+      "operationId": "00000000-0000-4000-8000-000000000001",
+      "command": "assign_release",
+      "actorId": "tenant-release-controller",
+      "tenantId": "tenant-a",
+      "releaseId": "saas-2026-09",
+      "assignmentEpoch": 12,
+      "placementEpoch": 7,
+      "correlationId": "activation-001",
+      "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "idempotencyKeyHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "issuedAt": 1788710400
+    },
+    "signature": {
+      "algorithm": "ES256",
+      "keyId": "workload-receipt-key-2026-09",
+      "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  }
+}

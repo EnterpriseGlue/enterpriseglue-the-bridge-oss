@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "release-activation-operation-receipts",
+  "type": "feature",
+  "scope": "tenancy",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Add durable signed release-activation operation receipts so an exact retry cannot repeat a committed activation.",
+  "userImpact": [],
+  "upgrade": {"required": false, "instructions": ["Existing release-assignment v1/v2 clients remain unchanged."]},
+  "configuration": ["Uses existing pooled-tenancy release-controller authorization and workload receipt signing configuration."],
+  "api": {"compatibility": "additive", "changes": ["Add a controller-only release-assignment-operations endpoint with mandatory placement and immutable idempotency binding."]},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["Reuses the existing text-command lifecycle operation ledger; retain completed activation records to fence late duplicates."]},
+  "security": ["Historical receipts certify one committed activation, not current tenant state, plugin quiescence, or worker termination."],
+  "documentation": ["docs/reference/tenant-workload-lifecycle-api.md", "docs/examples/tenant-release-activation-operation.json"],
+  "knownLimitations": ["Cloud recovery integration remains pending; a historical activation receipt does not prove current worker or plugin quiescence."],
+  "rollback": ["Disable the new consumer before reverting the host; preserve operation records and receipt verification keys."],
+  "validation": ["Focused schema, route, service, authorization and OpenAPI tests pass.", "The physical PostgreSQL, MySQL, SQL Server, Oracle and Spanner qualification matrix passes locally; protected exact-commit qualification remains CI evidence."],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.16.0", "newVersion": "0.17.0", "impact": "minor"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.14.0", "newVersion": "0.15.0", "impact": "minor"}
+  ]
+}
