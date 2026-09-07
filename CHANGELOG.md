@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * synchronize BPMN marker readiness with release qualification ([ef2ea20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ef2ea20b12a2d885ed260a1e461e9672f5787ef8))
-* synchronize BPMN marker readiness with release qualification ([7a1e67a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7a1e67a703dceed93fe7777950ba5bbdc773d751))
 
 ## [0.21.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.9...v0.21.0) (2026-09-07)
 
