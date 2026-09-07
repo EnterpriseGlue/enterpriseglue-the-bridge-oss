@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.21.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.9...v0.21.0) (2026-09-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **identity:** preserve pooled account and browser-session boundaries
+
+### Features
+
+* **tenancy:** add durable release activation receipts ([d6114c1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d6114c105cf429724f6bd24836d2a23292025553))
+
+
+### Bug Fixes
+
+* **ci:** align activation package release metadata ([2947a0c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2947a0c840f4704e66eb9ef57f427ee36a3ca970))
+* **ci:** harden pooled qualification fixtures and evidence reads ([5720559](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5720559b18610b6438aa7ea1ce2dce15457fa8f1))
+* **identity:** preserve pooled account and browser-session boundaries ([3b7600e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3b7600eee2561b158eda53116375732670329bcb))
+
 ## [0.20.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.20.8...v0.20.9) (2026-09-05)
 
 
