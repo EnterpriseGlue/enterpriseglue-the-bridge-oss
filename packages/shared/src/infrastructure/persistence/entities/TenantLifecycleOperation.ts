@@ -2,6 +2,9 @@ import { Column, Entity, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
 export type TenantLifecycleCommand = 'create' | 'suspend' | 'resume' | 'reconcile_aliases' | 'set_secret_reference_break_glass';
+// Keep lifecycle v1 input/receipt commands closed; this is the broader storage
+// namespace only. Completed activation fences must not be removed by a TTL.
+export type TenantOperationLedgerCommand = TenantLifecycleCommand | 'assign_release';
 export type TenantLifecycleOperationStatus = 'pending' | 'completed' | 'failed';
 
 /** Secret-free idempotency and signed receipt ledger for workload tenant commands. */
@@ -13,7 +16,7 @@ export class TenantLifecycleOperation extends AppBaseEntity {
   actorId!: string;
 
   @Column({ type: 'text' })
-  command!: TenantLifecycleCommand;
+  command!: TenantOperationLedgerCommand;
 
   @Column({ name: 'idempotency_key_hash', type: 'text' })
   idempotencyKeyHash!: string;

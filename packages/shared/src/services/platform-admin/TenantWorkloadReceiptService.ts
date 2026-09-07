@@ -3,6 +3,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { canonicalizeConfigJson } from './config-bundle-hash.js';
 import type { TenantLifecycleCommand } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLifecycleOperation.js';
+import { SignedTenantReleaseActivationReceiptSchema, type SignedTenantReleaseActivationReceipt, type TenantReleaseActivationReceiptPayload } from '@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js';
 
 export const TENANT_WORKLOAD_RECEIPT_V1_SCHEMA = 'tenant-workload-receipt.enterpriseglue.io/v1' as const;
 
@@ -36,6 +37,14 @@ export interface SignedTenantWorkloadReceiptV1 {
 
 export class TenantWorkloadReceiptService {
   sign(payload: TenantWorkloadReceiptPayloadV1): SignedTenantWorkloadReceiptV1 {
+    return { payload, signature: this.signature(payload), idempotent: false };
+  }
+
+  signReleaseActivation(payload: TenantReleaseActivationReceiptPayload): SignedTenantReleaseActivationReceipt {
+    return SignedTenantReleaseActivationReceiptSchema.parse({ payload, signature: this.signature(payload) });
+  }
+
+  private signature(payload: TenantWorkloadReceiptPayloadV1 | TenantReleaseActivationReceiptPayload): SignedTenantWorkloadReceiptV1['signature'] {
     const privateKeyPem = config.tenantWorkloadReceiptPrivateKey;
     const keyId = config.tenantWorkloadReceiptKeyId;
     if (!privateKeyPem || !keyId || !config.tenantWorkloadReceiptIssuer || !config.tenantPlacementV2Audience) {
@@ -55,11 +64,7 @@ export class TenantWorkloadReceiptService {
       Buffer.from(canonicalizeConfigJson(payload), 'utf8'),
       { key: privateKey, dsaEncoding: 'ieee-p1363' },
     );
-    return {
-      payload,
-      signature: { algorithm: 'ES256', keyId, value: signature.toString('base64url') },
-      idempotent: false,
-    };
+    return { algorithm: 'ES256', keyId, value: signature.toString('base64url') };
   }
 }
 

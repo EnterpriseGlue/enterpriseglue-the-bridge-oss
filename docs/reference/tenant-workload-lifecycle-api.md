@@ -15,8 +15,9 @@ Audience: Developers, operators, architects, and security reviewers.
 
 ## Authentication boundary
 
-Create a service account with only the `tenant:lifecycle` scope. Every route in
-this document requires its `egsa_...` bearer token. User access tokens, browser
+Create a service account with only the `tenant:lifecycle` scope. Lifecycle routes
+require its `egsa_...` bearer token; the release-assignment controller routes
+below instead require the dedicated controller credential. User access tokens, browser
 cookies, API-client tokens, plugin invocation tokens, and tenant placement
 assertions are not accepted as workload identity.
 
@@ -27,7 +28,7 @@ revoke it with the existing service-account administration contract.
 
 ## Required mutation headers
 
-Every mutation requires:
+Lifecycle mutations require:
 
 ```http
 Authorization: Bearer egsa_<account>_<secret>
@@ -130,6 +131,49 @@ A subsequent suspension, deletion, or placement change can invalidate it;
 normal host request-time placement/status enforcement remains mandatory. An
 old signed creation receipt alone is not a current-state proof, and resume must
 not be used merely to obtain a newer receipt.
+
+### Durable activation operation receipts
+
+`POST /api/workloads/tenants/<tenant-id>/release-assignment-operations` is an
+additive pooled-mode controller endpoint. Use the same dedicated release-controller
+bearer as assignment v1/v2, an immutable `Idempotency-Key` (16–200 printable
+non-whitespace ASCII characters) and `X-Correlation-ID` (8–160 characters, letters,
+digits, dot, underscore, colon or hyphen, starting with a letter or digit).
+Query parameters and unknown body fields are rejected. Example body:
+
+```json
+{"releaseId":"saas-2026-09","assignmentEpoch":12,"expectedPlacementEpoch":7}
+```
+
+Both epochs are required positive safe JSON integers. The signed
+`tenant-release-activation-receipt.enterpriseglue.io/v1` payload binds the
+fixed authenticated actor `tenant-release-controller`, operation ID, issuer,
+audience, tenant, release, assignment/placement epochs, original correlation ID,
+canonical request hash, idempotency-key hash and issue time. It uses the existing
+workload ES256 signing configuration and has no mutable `idempotent` flag.
+
+One transaction reserves the unique operation, checks the active tenant and
+placement, assigns queued work, signs and stores the receipt, then commits.
+Signing or persistence failure rolls back all those changes. The operation
+ledger's command namespace is broader than the unchanged lifecycle v1 API.
+The new `assign_release` command is not accepted by lifecycle v1 receipts.
+
+An exact retry returns the original signed envelope before changing Tenant,
+assignment, event or schedule rows. A changed tenant, release, epoch or correlation
+under the same key fails with HTTP 409. A concurrent loser or lost commit acknowledgement
+can resolve only by reading the exact completed receipt, never by assuming a
+duplicate database error means success or blindly retrying the mutation. A pending
+operation is not taken over by age. Retain completed ledger records permanently
+until a separately reviewed duplicate-fencing replacement exists.
+
+This is historical transaction completion, not a current-state snapshot. Replay
+after subsequent suspension or release movement still returns that original
+receipt without undoing the later change. Consumers must verify its signature,
+trusted issuer/audience/key and exact original request binding, retain historical
+verification keys, and separately check current placement/readiness. It proves
+neither original worker termination nor plugin/global work quiescence. Existing
+v1/v2 routes and their snapshot semantics are unchanged. Before rollback, disable
+the new consumer; preserve ledger records and verification keys.
 
 ## Provision a tenant
 

@@ -83,6 +83,8 @@ const {
   TenantWorkloadAliasReconcileRequestSchema,
   SignedTenantWorkloadReceiptSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/tenant.js');
+const { TenantReleaseActivationRequestSchema, TenantReleaseActivationInputSchema, SignedTenantReleaseActivationReceiptSchema } =
+  await import('@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js');
 
 const {
   EngineSchema,
@@ -2778,6 +2780,24 @@ registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
 registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
 registry.register('TenantCloudIdentityResponse', TenantCloudIdentityResponseSchema);
 registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
+registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/release-assignment-operations',
+  ...authzExemption('POST', '/api/workloads/tenants/{tenantId}/release-assignment-operations'),
+  request: {
+    params: z.object({ tenantId: TenantReleaseActivationInputSchema.shape.tenantId }),
+    headers: z.object({ 'idempotency-key': TenantReleaseActivationInputSchema.shape.idempotencyKey,
+      'x-correlation-id': TenantReleaseActivationInputSchema.shape.correlationId }),
+    body: { content: { 'application/json': { schema: TenantReleaseActivationRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Original signed historical activation receipt, unchanged on exact replay; not current readiness or worker quiescence', content: { 'application/json': { schema: SignedTenantReleaseActivationReceiptSchema } } },
+    400: { description: 'Malformed input, missing binding headers or forbidden query parameters' },
+    401: { description: 'Dedicated release-controller bearer credential required' },
+    409: { description: 'Changed intent under the same idempotency key, tenant/placement/assignment conflict or in-flight work' },
+    503: { description: 'Unresolved operation, unavailable signing or invalid stored receipt' },
+  },
+});
 const TenantWorkloadHeadersSchema = z.object({
   'idempotency-key': z.string().min(16).max(200),
   'x-correlation-id': z.string().min(8).max(160),

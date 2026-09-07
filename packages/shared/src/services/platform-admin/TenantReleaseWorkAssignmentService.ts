@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { In, Not } from 'typeorm';
+import { In, Not, type EntityManager } from 'typeorm';
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
@@ -38,13 +38,12 @@ export type TenantReleaseWorkAssignmentResult = AssignmentState & {
 export class TenantReleaseWorkAssignmentService {
   constructor(private readonly dataSourceProvider = getDataSource) {}
 
-  async assign(input: AssignmentInput): Promise<TenantReleaseWorkAssignmentResult> {
+  async assign(input: AssignmentInput, transactionManager?: EntityManager): Promise<TenantReleaseWorkAssignmentResult> {
     if (!config.tenantPlacementReleaseId) throw Errors.serviceUnavailable('Release-aware plugin work is not configured');
     if (config.tenantPlacementReleaseId !== input.releaseId) {
       throw Errors.conflict('Release assignment must be applied through its target host release');
     }
-    const dataSource = await this.dataSourceProvider();
-    return dataSource.transaction(async (manager) => {
+    const apply = async (manager: EntityManager, databaseType: string) => {
       if (input.expectedPlacementEpoch !== undefined) {
         // Acquire the Tenant write fence BEFORE assignment/event/schedule locks.
         // Same-value conditional DML also works on Spanner and SQLite, where
@@ -61,14 +60,14 @@ export class TenantReleaseWorkAssignmentService {
       const assignmentRepository = manager.getRepository(TenantReleaseWorkAssignment);
       // Oracle rejects FOR UPDATE on the row-limited view that findOne adds.
       // tenantRef is unique, so getOne needs no limiting wrapper here.
-      const current = dataSource.options.type === 'oracle'
+      const current = databaseType === 'oracle'
         ? await assignmentRepository.createQueryBuilder('assignment')
           .where({ tenantRef: input.tenantId })
           .setLock('pessimistic_write')
           .getOne()
         : await assignmentRepository.findOne({
           where: { tenantRef: input.tenantId },
-          lock: ['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(dataSource.options.type)
+          lock: ['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(databaseType)
             ? undefined : { mode: 'pessimistic_write' },
         });
       if (current && Number(current.assignmentEpoch) > input.assignmentEpoch) {
@@ -104,7 +103,13 @@ export class TenantReleaseWorkAssignmentService {
         { releaseId: input.releaseId, assignmentEpoch: input.assignmentEpoch, updatedAt: now },
       );
       return response(input, eventResult.affected || 0, scheduleResult.affected || 0, false);
-    });
+    };
+    if (transactionManager) {
+      if (!transactionManager.queryRunner?.isTransactionActive) throw Errors.conflict('Release assignment requires an active transaction');
+      return apply(transactionManager, String(transactionManager.connection.options.type));
+    }
+    const dataSource = await this.dataSourceProvider();
+    return dataSource.transaction((manager) => apply(manager, String(dataSource.options.type)));
   }
 }
 

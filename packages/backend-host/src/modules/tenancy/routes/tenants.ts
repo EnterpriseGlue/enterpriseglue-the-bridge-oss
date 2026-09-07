@@ -15,6 +15,8 @@ import { tenantService } from '@enterpriseglue/shared/services/platform-admin/Te
 import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/platform-admin/TenantWorkloadLifecycleService.js';
 import { tenantCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/TenantCloudIdentityService.js';
 import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
+import { tenantReleaseActivationService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseActivationService.js';
+import { TenantReleaseActivationRequestSchema, SignedTenantReleaseActivationReceiptSchema } from '@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js';
 import { tenantIdentityProviderSecretService } from '@enterpriseglue/shared/services/platform-admin/TenantIdentityProviderSecretService.js';
 import { ServiceAccountScopes } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
@@ -201,6 +203,17 @@ router.put('/api/workloads/tenants/:tenantId/release-assignment', requireTenantR
     assignmentEpoch: req.body.assignmentEpoch,
     expectedPlacementEpoch: req.body.expectedPlacementEpoch,
   })));
+}));
+
+router.post('/api/workloads/tenants/:tenantId/release-assignment-operations', requireTenantReleaseController, validateBody(TenantReleaseActivationRequestSchema), asyncHandler(async (req, res) => {
+  if (Object.keys(req.query).length) throw Errors.validation('Release activation operations do not accept query parameters');
+  const receipt = await tenantReleaseActivationService.execute({
+    tenantId: tenantIdSchema.parse(req.params.tenantId), ...req.body,
+    idempotencyKey: requiredHeader(req, 'idempotency-key'),
+    correlationId: requiredHeader(req, 'x-correlation-id'),
+  });
+  res.setHeader('cache-control', 'no-store');
+  res.json(SignedTenantReleaseActivationReceiptSchema.parse(receipt));
 }));
 
 router.put('/api/workloads/tenants/:tenantId/routing-aliases', workloadScope, validateBody(TenantWorkloadAliasReconcileRequestSchema), asyncHandler(async (req, res) => {
