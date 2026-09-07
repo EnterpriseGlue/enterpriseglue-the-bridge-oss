@@ -18,6 +18,7 @@
   "validation": ["Focused schema, route, service, authorization and OpenAPI tests pass.", "The physical PostgreSQL, MySQL, SQL Server, Oracle and Spanner qualification matrix passes locally; protected exact-commit qualification remains CI evidence."],
   "packages": [
     {"name": "@enterpriseglue/shared", "previousVersion": "0.16.0", "newVersion": "0.17.0", "impact": "minor"},
-    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.14.0", "newVersion": "0.15.0", "impact": "minor"}
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.14.0", "newVersion": "0.15.0", "impact": "minor"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.16.0", "newVersion": "0.16.1", "impact": "patch"}
   ]
 }

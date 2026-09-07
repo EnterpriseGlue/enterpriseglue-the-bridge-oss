@@ -6,10 +6,15 @@ const shouldSkip = !hasE2ECredentials();
 async function login(page: Page) {
   const { email, password } = getE2ECredentials();
   if (!email || !password) throw new Error('Missing E2E credentials');
-  await page.goto('/login');
+  await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
+  const loginResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/auth/login',
+  );
   await page.getByRole('button', { name: 'Log in', exact: true }).click();
+  expect((await loginResponse).status()).toBe(200);
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
