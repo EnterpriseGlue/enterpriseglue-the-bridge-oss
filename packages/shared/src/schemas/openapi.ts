@@ -3891,6 +3891,20 @@ registry.registerPath({
 });
 
 // POST /api/auth/complete-onboarding
+registry.registerPath({ method: 'get', path: '/api/auth/onboarding/login-methods', ...authzExemption('GET', '/api/auth/onboarding/login-methods'), responses: {
+  200: { description: 'Enrollment methods for the verified invitation tenant; requires the onboarding cookie', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } },
+  401: { description: 'Missing, stale or invalid onboarding context' },
+} });
+registry.registerPath({ method: 'get', path: '/api/auth/onboarding/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/onboarding/providers/:providerId/start'), request: { params: z.object({ providerId: z.string() }) }, responses: {
+  302: { description: 'Start invitation-bound OIDC or SAML enrollment using the onboarding cookie; no account ID or invitation credential is accepted as input' },
+  401: { description: 'Missing, stale or invalid onboarding context' }, 404: { description: 'Provider unavailable in the invitation tenant' },
+} });
+registry.registerPath({ method: 'post', path: '/api/auth/onboarding/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/onboarding/providers/:providerId/login'), request: {
+  params: z.object({ providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string().min(1).max(320), password: z.string().min(1).max(4096) }).strict() } } },
+}, responses: {
+  200: { description: 'LDAP invitation enrollment committed with provider-bound session cookies', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
+  401: { description: 'Invalid onboarding or directory credentials' }, 403: { description: 'Enrollment forbidden' }, 404: { description: 'Provider unavailable in the invitation tenant' },
+} });
 registry.registerPath({
   method: 'post',
   path: '/api/auth/complete-onboarding',
@@ -3929,6 +3943,54 @@ registry.registerPath({
   path: '/api/invitations/{token}/redeem',
   ...authzExemption('POST', '/api/invitations/:token/redeem'),
   request: { params: InvitationTokenParamsSchema },
+  responses: { 200: { description: 'Email invitation redeemed for onboarding', content: { 'application/json': { schema: InvitationOnboardingResponseSchema } } }, 400: { description: 'Invalid or expired invitation' } },
+});
+
+// Canonical tenant-bound onboarding and invitation routes.
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/onboarding/login-methods', ...authzExemption('GET', '/api/t/:tenantSlug/auth/onboarding/login-methods'), request: { params: TenantPathSchema }, responses: {
+  200: { description: 'Enrollment methods for the verified invitation tenant; requires the onboarding cookie', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } },
+  401: { description: 'Missing, stale or invalid onboarding context' },
+} });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/onboarding/providers/{providerId}/start', ...authzExemption('GET', '/api/t/:tenantSlug/auth/onboarding/providers/:providerId/start'), request: { params: z.object({ tenantSlug: TenantSlugSchema, providerId: z.string() }) }, responses: {
+  302: { description: 'Start invitation-bound OIDC or SAML enrollment using the onboarding cookie; no account ID or invitation credential is accepted as input' },
+  401: { description: 'Missing, stale or invalid onboarding context' }, 404: { description: 'Provider unavailable in the invitation tenant' },
+} });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/onboarding/providers/{providerId}/login', ...authzExemption('POST', '/api/t/:tenantSlug/auth/onboarding/providers/:providerId/login'), request: {
+  params: z.object({ tenantSlug: TenantSlugSchema, providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string().min(1).max(320), password: z.string().min(1).max(4096) }).strict() } } },
+}, responses: {
+  200: { description: 'LDAP invitation enrollment committed with provider-bound session cookies', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
+  401: { description: 'Invalid onboarding or directory credentials' }, 403: { description: 'Enrollment forbidden' }, 404: { description: 'Provider unavailable in the invitation tenant' },
+} });
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/auth/complete-onboarding',
+  ...authzExemption('POST', '/api/t/:tenantSlug/auth/complete-onboarding'),
+  request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: CompleteOnboardingRequestSchema } } } },
+  responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: AuthenticatedSessionOnboardingResponseSchema } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' }, 403: { description: 'The invitation targets an engine or project whose access became SSO-managed' } },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/t/{tenantSlug}/invitations/{token}',
+  ...authzExemption('GET', '/api/t/:tenantSlug/invitations/:token'),
+  request: { params: InvitationTokenParamsSchema.extend({ tenantSlug: TenantSlugSchema }) },
+  responses: { 200: { description: 'Public invitation status', content: { 'application/json': { schema: InvitationInfoSchema } } }, 404: { description: 'Invitation not found' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/invitations/{token}/verify-otp',
+  ...authzExemption('POST', '/api/t/:tenantSlug/invitations/:token/verify-otp'),
+  request: {
+    params: InvitationTokenParamsSchema.extend({ tenantSlug: TenantSlugSchema }),
+    body: { content: { 'application/json': { schema: VerifyInvitationOtpRequestSchema } } },
+  },
+  responses: { 200: { description: 'Manual invitation verified for onboarding', content: { 'application/json': { schema: InvitationOnboardingResponseSchema } } }, 400: { description: 'Invalid or expired invitation' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/t/{tenantSlug}/invitations/{token}/redeem',
+  ...authzExemption('POST', '/api/t/:tenantSlug/invitations/:token/redeem'),
+  request: { params: InvitationTokenParamsSchema.extend({ tenantSlug: TenantSlugSchema }) },
   responses: { 200: { description: 'Email invitation redeemed for onboarding', content: { 'application/json': { schema: InvitationOnboardingResponseSchema } } }, 400: { description: 'Invalid or expired invitation' } },
 });
 

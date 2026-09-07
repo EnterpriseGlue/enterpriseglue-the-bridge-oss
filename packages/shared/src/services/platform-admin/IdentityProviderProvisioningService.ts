@@ -12,6 +12,10 @@ import type { IdentityProviderType } from './IdentityProviderAdapter.js';
 import { hasIncompleteOidcGroupClaims } from './IdentityProviderAdapter.js';
 import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
 import { IsNull, MoreThan } from 'typeorm';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { invitationService, type InvitationEnrollmentContext } from '../invitations.js';
+import { authSessionService, type IssueAuthSessionInput, type IssuedAuthSession } from '../AuthSessionService.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 
 /** The canonical user snapshot returned after external identity reconciliation. */
 export interface ProvisionedIdentityUser {
@@ -31,6 +35,12 @@ interface ProvisioningResult {
   user: ProvisionedIdentityUser;
   groupMembershipsCreated: number;
   groupMembershipsRemoved: number;
+  session?: IssuedAuthSession;
+}
+type InvitationSessionEvidence = Pick<IssueAuthSessionInput, 'mfaVerified' | 'federationSession' | 'userAgent' | 'ipAddress'>;
+interface InvitationEnrollment {
+  context: InvitationEnrollmentContext;
+  evidence: InvitationSessionEvidence;
 }
 interface ReconciliationLeaseFence {
   providerId: string;
@@ -93,6 +103,30 @@ function isUniqueConstraintError(error: unknown): boolean {
 }
 
 class IdentityProviderProvisioningService {
+  async enrollOidcInvitation(provider: IdentityProvider, claims: OidcIdentityClaims, context: InvitationEnrollmentContext, evidence: InvitationSessionEvidence) {
+    return this.enrollInvitation(provider, this.oidcInput(provider, claims), context, evidence);
+  }
+
+  async enrollSamlInvitation(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>, context: InvitationEnrollmentContext, evidence: InvitationSessionEvidence) {
+    return this.enrollInvitation(provider, { ...input, providerType: 'saml', emailVerified: true }, context, evidence);
+  }
+
+  async enrollLdapInvitation(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>, context: InvitationEnrollmentContext, evidence: InvitationSessionEvidence) {
+    return this.enrollInvitation(provider, { ...input, providerType: 'ldap', emailVerified: true }, context, evidence);
+  }
+
+  private async enrollInvitation(provider: IdentityProvider, input: ProvisionIdentityInput, context: InvitationEnrollmentContext, evidence: InvitationSessionEvidence): Promise<{ user: ProvisionedIdentityUser; session: IssuedAuthSession }> {
+    if (config.tenancyMode !== 'pooled' || !provider.isEnabled || provider.authenticationMode !== 'direct'
+      || provider.tenantId !== context.tenantId || provider.protocol !== input.providerType
+      || !context.tenantId || context.authSessionVersion !== 0 || !input.subjectId
+      || evidence.federationSession?.subjectId !== input.subjectId) {
+      throw new Error('Invitation provider does not match the verified enrollment context');
+    }
+    const result = await this.provisionOnce(provider, input, undefined, { context, evidence });
+    if (!result.session) throw new Error('Invitation enrollment did not create a session');
+    return { user: result.user, session: result.session };
+  }
+
   async provisionOidcUser(provider: IdentityProvider, claims: OidcIdentityClaims): Promise<ProvisionedIdentityUser> {
     return (await this.provision(provider, this.oidcInput(provider, claims))).user;
   }
@@ -163,7 +197,7 @@ class IdentityProviderProvisioningService {
     throw new Error('Identity provisioning retry exhausted');
   }
 
-  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput, leaseFence?: ReconciliationLeaseFence): Promise<ProvisioningResult> {
+  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput, leaseFence?: ReconciliationLeaseFence, enrollment?: InvitationEnrollment): Promise<ProvisioningResult> {
     // A group-overage marker means the provider did not supply a complete group
     // result. Reject it before creating or updating any local identity state so
     // an authoritative mapping can never interpret it as an empty entitlement set.
@@ -178,6 +212,7 @@ class IdentityProviderProvisioningService {
     return dataSource.transaction(async (manager) => {
       const providerWhere = {
         id: provider.id,
+        ...(enrollment ? { tenantId: enrollment.context.tenantId } : {}),
         isEnabled: true,
         protocol: provider.protocol,
         authenticationMode: provider.authenticationMode,
@@ -191,6 +226,9 @@ class IdentityProviderProvisioningService {
       const providerClaim = await manager.getRepository(IdentityProvider).update(providerWhere, { isEnabled: true });
       if (providerClaim.affected !== 1) {
         throw new Error('Identity provider changed or was disabled while sign-in was in progress');
+      }
+      if (enrollment && !await manager.getRepository(Tenant).existsBy({ id: enrollment.context.tenantId, slug: enrollment.context.tenantSlug, status: 'active' })) {
+        throw new Error('Invitation tenant is no longer active');
       }
       if (leaseFence) {
         if (leaseFence.providerId !== provider.id) throw new Error('LDAP reconciliation lease does not match the identity provider');
@@ -207,6 +245,7 @@ class IdentityProviderProvisioningService {
       const externalIdentityRepo = manager.getRepository(ExternalIdentity);
       const identityKey = externalIdentityKey({ tenantId: provider.tenantId, providerId: provider.id, subjectId: input.subjectId });
       const externalIdentity = await externalIdentityRepo.findOne({ where: { identityKey } });
+      if (enrollment && externalIdentity) throw new Error('Invitation cannot replace an existing external identity');
       let recoveredUnlinkedIdentity = false;
       if (externalIdentity?.status === 'unlinked') {
         // An administrator must first explicitly unlink the conflict. Recovery
@@ -218,11 +257,22 @@ class IdentityProviderProvisioningService {
         }
         recoveredUnlinkedIdentity = true;
       }
-      let user = externalIdentity && !recoveredUnlinkedIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
+      let user = enrollment
+        ? await invitationService.enrollSsoAccountWithManager(manager, enrollment.context, {
+          email, emailVerified, authProvider: input.providerType, firstName: input.firstName, lastName: input.lastName,
+        })
+        : externalIdentity && !recoveredUnlinkedIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
       if (externalIdentity && !recoveredUnlinkedIdentity && !user) throw new Error('External identity references a missing user account');
-      if (!externalIdentity || recoveredUnlinkedIdentity) {
+      if (!enrollment && (!externalIdentity || recoveredUnlinkedIdentity)) {
         if (!emailVerified) throw new Error('Identity provider email must be verified before a new identity can be linked');
         const matchingEmailUser = await userRepo.findOneBy({ email });
+        // A pooled provider is controlled by one tenant, not by the owner of
+        // a shared account. Its email assertion (even with provider opt-in or
+        // tenant membership) cannot authorize adopting that account. This also
+        // fences the unlinked-identity recovery path below.
+        if (matchingEmailUser && config.tenancyMode === 'pooled') {
+          throw new Error('Existing account control is required for pooled identity linking');
+        }
         if (matchingEmailUser && !allowsVerifiedEmailLinking(provider)) {
           throw new Error('Verified email account linking is disabled for this identity provider');
         }
@@ -242,6 +292,11 @@ class IdentityProviderProvisioningService {
           isActive: true,
           authSessionVersion: 0,
         } as User;
+      } else if (config.tenancyMode === 'pooled') {
+        // Keep the exact established subject binding, but do not let one
+        // tenant's IdP overwrite a shared account's email/profile/credentials.
+        // Claimed attributes remain in the tenant-scoped normalized identity.
+        await userRepo.update({ id: user.id }, { lastLoginAt: now, updatedAt: now });
       } else {
         if (emailVerified && user.email !== email) {
           const matchingEmailUser = await userRepo.findOneBy({ email });
@@ -275,7 +330,17 @@ class IdentityProviderProvisioningService {
         tenantId: provider.tenantId, providerId: provider.id, providerType: input.providerType, providerSubject: input.subjectId, subjectClaim: input.providerType === 'ldap' ? 'directory_id' : 'sub', providerTenantId: input.directoryTenantId || provider.directoryTenantId, userId: user.id, email, displayName: input.displayName || null, firstName: input.firstName || null, lastName: input.lastName || null, claims: input.claims, authorizationAttributeKeys: authorizationAttributeKeys(provider), now,
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
+      const session = enrollment ? await authSessionService.issue(user, {
+        ...enrollment.evidence,
+        tenantId: enrollment.context.tenantId, tenantSlug: enrollment.context.tenantSlug,
+        authenticationMethod: provider.protocol,
+        identityProviderId: provider.id, identityProviderUpdatedAt: Number(provider.updatedAt),
+        identityProviderProtocol: provider.protocol, identityProviderAuthenticationMode: provider.authenticationMode,
+        identityProviderDirectoryTenantId: provider.directoryTenantId, identityProviderConfigurationJson: provider.configurationJson,
+        store: manager,
+      }) : undefined;
       return {
+        ...(session ? { session } : {}),
         user: {
           id: user.id,
           email: user.email,

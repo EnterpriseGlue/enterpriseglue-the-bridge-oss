@@ -272,6 +272,35 @@ async function fixture() {
 }
 
 describe('PluginHostRuntimeV1', () => {
+  it('serves the same verified public assets through a non-cacheable tenant alias', async () => {
+    const files = await fixture();
+    const runtime = new PluginHostRuntimeV1({ stateFile: files.stateFile, assetRoot: files.assetRoot, hostCapabilities: hostCapabilities() });
+    const control = new PluginControlPlaneV1(runtime, new MemoryPluginControlStoreV1(), { defaultTenantRef: 'default-tenant-id' });
+    const app = express();
+    registerPluginPlatformRoutes(app, runtime, control);
+    await withServer(app, async (baseUrl) => {
+      const rootPath = `/_enterpriseglue/plugins/${pluginId}/${version}/frontend/index.js`;
+      for (const prefix of ['', '/t/alpha', '/t/bravo']) {
+        const response = await fetch(`${baseUrl}${prefix}${rootPath}`);
+        expect(response.status).toBe(200);
+        expect(Buffer.from(await response.arrayBuffer())).toEqual(files.entryBytes);
+        expect(response.headers.get('content-type')).toContain('text/javascript');
+        expect(response.headers.get('cache-control')).toBe(prefix ? 'no-store' : 'public, max-age=31536000, immutable');
+      }
+      const head = await fetch(`${baseUrl}/t/alpha${rootPath}`, { method: 'HEAD' });
+      expect(head.status).toBe(200);
+      expect(await head.text()).toBe('');
+      expect(head.headers.get('cache-control')).toBe('no-store');
+      for (const suffix of ['frontend/missing.js', 'frontend/unsigned.js', 'schemas/request.json']) {
+        const response = await fetch(`${baseUrl}/t/alpha/_enterpriseglue/plugins/${pluginId}/${version}/${suffix}`);
+        expect(response.status).toBe(404);
+        expect(response.headers.get('cache-control')).toBe('no-store');
+      }
+      const write = await fetch(`${baseUrl}/t/alpha${rootPath}`, { method: 'POST', body: '{}' });
+      expect(write.status).toBe(404);
+    });
+  });
+
   it('keeps host-owned delivery operations off the interactive gateway', () => {
     const value = manifest(
       Buffer.from('frontend'),

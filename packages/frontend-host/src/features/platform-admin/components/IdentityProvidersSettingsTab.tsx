@@ -591,7 +591,7 @@ export default function IdentityProvidersSettingsTab({
       title: 'Membership and ownership',
       items: [
         ['Directory tenant ID', configuredValue(form.directoryTenantId, 'None')],
-        ['Verified email account linking', form.allowVerifiedEmailLinking ? 'Enabled' : 'Disabled'],
+        ['Verified email account linking (single-tenant only)', form.allowVerifiedEmailLinking ? 'Enabled' : 'Disabled'],
         ['Authorization attribute allowlist', configuredValue(form.authorizationAttributeKeys, 'None')],
         ['Membership source', form.syncConnectorCapability === 'ldap_directory' ? 'LDAP directory query' : 'Sign-in claims'],
         ['Manual membership refresh', form.syncOnManual ? 'Enabled' : 'Disabled'],
@@ -672,7 +672,7 @@ export default function IdentityProvidersSettingsTab({
         hideCloseButton
         style={{ marginBottom: 'var(--spacing-5)' }}
       />}
-      {externalIdentityUnlinkResult && <InlineNotification kind="success" title={`External identity unlinked: ${identityProviderName(rows.find((provider) => provider.key === externalIdentityUnlinkResult.providerKey))}`} subtitle={`Provider link revoked: ${countPhrase(externalIdentityUnlinkResult.result.providerManagedMembershipsRemoved, 'membership')} and ${countPhrase(externalIdentityUnlinkResult.result.providerRefreshSessionsRevoked, 'saved sign-in session')} removed. A fresh verified sign-in is required to relink.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {externalIdentityUnlinkResult && <InlineNotification kind="success" title={`External identity unlinked: ${identityProviderName(rows.find((provider) => provider.key === externalIdentityUnlinkResult.providerKey))}`} subtitle={`Provider link revoked: ${countPhrase(externalIdentityUnlinkResult.result.providerManagedMembershipsRemoved, 'membership')} and ${countPhrase(externalIdentityUnlinkResult.result.providerRefreshSessionsRevoked, 'saved sign-in session')} removed. Single-tenant recovery requires a fresh verified sign-in. In pooled deployments, signing in again cannot relink by email; contact your platform operator to resolve the account conflict.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {rows.length === 0 ? <div className="eg-identity-provider-empty-state">
         <h4>No identity providers yet</h4>
         <p>Create an OIDC, SAML, or LDAP provider to enable organization sign-in and identity mappings.</p>
@@ -822,7 +822,7 @@ export default function IdentityProvidersSettingsTab({
           {providerStep === 3 && <section className="eg-settings-form-column" aria-labelledby="identity-provider-step-heading">
             <div className="eg-settings-step-introduction"><h3 id="identity-provider-step-heading" tabIndex={-1}>Membership</h3><p>Choose how identities link to accounts and how provider-managed access is refreshed.</p></div>
             <TextInput id="identity-provider-directory-tenant" labelText="Directory tenant ID (optional)" value={form.directoryTenantId} onChange={(event) => update('directoryTenantId', event.target.value)} />
-            <div><Toggle id="identity-provider-email-linking" aria-label="Allow verified email account linking" aria-describedby="identity-provider-email-linking-help" labelText="Allow verified email account linking" labelA="Disabled" labelB="Enabled" toggled={form.allowVerifiedEmailLinking} onToggle={(checked) => update('allowVerifiedEmailLinking', checked)} /><p id="identity-provider-email-linking-help" className="eg-settings-field-description">Enable only for trusted domains and providers that verify email ownership.</p></div>
+            <div><Toggle id="identity-provider-email-linking" aria-label="Allow verified email account linking" aria-describedby="identity-provider-email-linking-help" labelText="Allow verified email account linking" labelA="Disabled" labelB="Enabled" toggled={form.allowVerifiedEmailLinking} onToggle={(checked) => update('allowVerifiedEmailLinking', checked)} /><p id="identity-provider-email-linking-help" className="eg-settings-field-description">Single-tenant deployments only: enable only for trusted providers that verify email ownership. In pooled deployments, this option never links an existing shared account by email; independent account-control verification is required.</p></div>
             <TextInput id="identity-provider-authorization-attributes" labelText="Authorization attribute allowlist (optional)" value={form.authorizationAttributeKeys} onChange={(event) => update('authorizationAttributeKeys', event.target.value)} helperText="Comma-separated claim names retained for attribute-based mappings." />
             <Callout kind="info" lowContrast title="Memberships refresh at every sign-in" subtitle="EnterpriseGlue refreshes external groups, roles, and attributes before creating a session. Sign-in fails closed when refresh cannot complete." />
             <Toggle id="identity-provider-sync-manual" labelText="Allow manual membership refresh" labelA="Disabled" labelB="Enabled" toggled={form.syncOnManual} onToggle={(checked) => update('syncOnManual', checked)} />
@@ -863,7 +863,7 @@ export default function IdentityProvidersSettingsTab({
       <p>This revokes the selected provider subject from the account currently linked to it. It does not transfer the identity to another account. Provider-managed memberships and provider refresh sessions for that account are revoked, and the action is audited.</p>
       <TextInput id="external-identity-subject" labelText="External provider subject ID" value={externalIdentityConflict?.subjectId || ''} onChange={(event) => setExternalIdentityConflict((current) => current ? { ...current, subjectId: event.target.value } : current)} helperText="Use the immutable subject identifier from the provider conflict or sign-in diagnostics, not an email address." />
       <TextInput id="external-identity-user" labelText="Currently linked account ID" value={externalIdentityConflict?.userId || ''} onChange={(event) => setExternalIdentityConflict((current) => current ? { ...current, userId: event.target.value } : current)} helperText="Confirm the affected local account ID before unlinking." />
-      <p style={{ color: 'var(--cds-text-secondary)' }}>Afterward, recovery is permitted only through a fresh verified sign-in for the same recorded provider email when this provider allows verified-email linking. Any other sign-in remains blocked.</p>
+      <p style={{ color: 'var(--cds-text-secondary)' }}>In single-tenant deployments, recovery requires a fresh verified sign-in for the same recorded provider email when this provider allows verified-email linking. In pooled deployments, signing in again cannot relink by email; independent account-control verification is required.</p>
     </Modal>
     <Modal
       open={Boolean(replayTarget)}

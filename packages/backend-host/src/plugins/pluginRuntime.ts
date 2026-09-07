@@ -1848,8 +1848,12 @@ export function registerPluginPlatformRoutes(
   );
 
   app.get(
-    '/_enterpriseglue/plugins/:pluginId/:version/*assetPath',
+    [
+      '/_enterpriseglue/plugins/:pluginId/:version/*assetPath',
+      '/t/:tenantSlug/_enterpriseglue/plugins/:pluginId/:version/*assetPath',
+    ],
     async (req: Request, res: Response, next: NextFunction) => {
+      if (req.params.tenantSlug) res.setHeader('Cache-Control', 'no-store');
       try {
         const rawAssetPath = (req.params as Record<string, string | string[]>)
           .assetPath;
@@ -1866,7 +1870,12 @@ export function registerPluginPlatformRoutes(
           return;
         }
         res.setHeader('Content-Type', asset.contentType);
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        // Both routes expose only the existing public, digest-verified installed
+        // assets, never tenant data or operation authority. The tenant alias
+        // selects a release at the edge and must not outlive its assignment.
+        res.setHeader('Cache-Control', req.params.tenantSlug
+          ? 'no-store'
+          : 'public, max-age=31536000, immutable');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
         res.send(asset.bytes);

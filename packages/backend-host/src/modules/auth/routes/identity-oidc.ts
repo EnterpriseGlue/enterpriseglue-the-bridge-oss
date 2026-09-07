@@ -7,13 +7,15 @@ import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimit
 import { AppError, asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
+import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/services/invitations.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
 import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
-import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
+import { authSessionService, type IssuedAuthSession, type IssueAuthSessionInput } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
@@ -29,7 +31,7 @@ import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/
 import { PublicLoginMethodsResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
 import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
-import { buildSignedOidcState, buildSignedSamlState, createSamlRequestId, getSsoRedirectUrl, parseSignedOidcState, parseSignedSamlState, type SsoState } from './sso-state.js';
+import { buildSignedOidcState, buildSignedSamlState, createSamlRequestId, getSsoRedirectUrl, parseSignedOidcState, parseSignedSamlState, parseInvitationEnrollmentContext, type SsoState } from './sso-state.js';
 
 const router = Router();
 const stateCookie = 'identity_oidc_state';
@@ -61,16 +63,27 @@ async function directProviderById(providerId: string): Promise<IdentityProvider>
   return provider;
 }
 
-async function revokeFederatedSessions(providerId: string, input: { subjectId?: string; sessionId?: string }): Promise<number> {
+async function revokeFederatedSessions(provider: IdentityProvider, input: { subjectId?: string; sessionId?: string }): Promise<number> {
   if (!input.subjectId && !input.sessionId) throw Errors.validation('Federated logout did not identify a subject or session');
   const where: FindOptionsWhere<RefreshToken> = {
-    identityProviderId: providerId,
+    identityProviderId: provider.id,
     revokedAt: IsNull(),
     ...(input.subjectId ? { providerSubjectId: input.subjectId } : {}),
     ...(input.sessionId ? { providerSessionId: input.sessionId } : {}),
   };
-  const result = await (await getDataSource()).getRepository(RefreshToken).update(where, { revokedAt: Date.now() });
-  return result.affected || 0;
+  return (await getDataSource()).transaction(async (manager) => {
+    // Match issuance's provider -> session lock order. A bulk token UPDATE
+    // alone can miss a switched child inserted after its statement snapshot.
+    const claim = await manager.getRepository(IdentityProvider).update({
+      id: provider.id, isEnabled: true, authenticationMode: 'direct',
+      updatedAt: Number(provider.updatedAt), protocol: provider.protocol,
+      directoryTenantId: provider.directoryTenantId?.trim() || IsNull(),
+      configurationJson: provider.configurationJson,
+    }, { isEnabled: true });
+    if (claim.affected !== 1) throw Errors.unauthorized('Identity provider changed while logout was in progress');
+    const result = await manager.getRepository(RefreshToken).update(where, { revokedAt: Date.now() });
+    return result.affected || 0;
+  });
 }
 
 function providerLogoutConfiguration(provider: IdentityProvider): Record<string, unknown> {
@@ -162,9 +175,9 @@ async function runInSsoCallbackTenantContext<T>(
   return runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, callback);
 }
 
-async function startOidcLogin(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+async function startOidcLogin(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
   requireDirectOidc(provider);
-  const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId });
+  const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, enrollment);
   const parsed = parseSignedOidcState(state);
   if (!parsed) throw Errors.internal('Unable to initialize identity provider state');
   const request = await genericOidcService.createAuthorizationRequest(configuration(provider), state, parsed.nonce);
@@ -174,10 +187,10 @@ async function startOidcLogin(req: Request, res: Response, provider: IdentityPro
   res.redirect(request.url);
 }
 
-async function startSamlLogin(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+async function startSamlLogin(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
   requireDirectSaml(provider);
   const requestId = createSamlRequestId();
-  const relayState = buildSignedSamlState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, requestId);
+  const relayState = buildSignedSamlState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, requestId, enrollment);
   const request = await genericSamlService.createAuthorizationRequest(configuration(provider), relayState, requestId, providerSecretContext(req, provider));
   const authorizationUrl = new URL(request.url);
   const entryPoint = new URL(request.entryPoint);
@@ -239,22 +252,37 @@ async function setProviderSession(
       nameIdFormat: evidence.nameIdFormat,
     },
   });
-  const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: session.expiresIn * 1000, path: '/' };
-  res.cookie('accessToken', session.accessToken, cookieOptions);
-  res.cookie('refreshToken', session.refreshToken, { ...cookieOptions, maxAge: config.jwtRefreshTokenExpires * 1000 });
+  setSessionCookies(res, session);
   return session;
 }
 
-async function authenticateDirectLdap(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+function setSessionCookies(res: Response, session: IssuedAuthSession, enrolled = false): void {
+  const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: session.expiresIn * 1000, path: '/' };
+  res.cookie('accessToken', session.accessToken, cookieOptions);
+  res.cookie('refreshToken', session.refreshToken, { ...cookieOptions, maxAge: config.jwtRefreshTokenExpires * 1000 });
+  if (enrolled) res.clearCookie('onboardingToken', { path: '/' });
+}
+
+function enrollmentEvidence(req: Request, federationSession: NonNullable<IssueAuthSessionInput['federationSession']>, mfaVerified: boolean) {
+  return { federationSession, mfaVerified,
+    userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+    ipAddress: req.ip };
+}
+
+async function authenticateDirectLdap(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
   if (provider.protocol !== 'ldap' || !provider.isEnabled || provider.authenticationMode !== 'direct') throw Errors.unauthorized('Invalid directory credentials');
   try {
     const identity = await directLdapIdentityService.authenticate(provider, req.body.username, req.body.password);
-    const user = await identityProviderProvisioningService.reconcileLdapLogin(provider, { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } });
+    const input = { subjectId: identity.subjectId, email: identity.email, displayName: identity.displayName, firstName: identity.firstName, lastName: identity.lastName, claims: { sub: identity.subjectId, email: identity.email, groups: identity.groups } };
+    const enrolled = enrollment ? await identityProviderProvisioningService.enrollLdapInvitation(provider, input, enrollment,
+      enrollmentEvidence(req, { subjectId: identity.subjectId }, false)) : null;
+    const user = enrolled ? enrolled.user : await identityProviderProvisioningService.reconcileLdapLogin(provider, input);
     if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-    const session = await setProviderSession(req, res, user, provider, {
+    const session = enrolled ? enrolled.session : await setProviderSession(req, res, user, provider, {
       mfaVerified: false,
       subjectId: identity.subjectId,
     });
+    if (enrolled) setSessionCookies(res, session, true);
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
     const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id]);
     res.json(AuthenticatedSessionLoginResponseSchema.parse({
@@ -275,24 +303,24 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
   }
 }
 
-async function startMeasuredProviderLogin(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+async function startMeasuredProviderLogin(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
   const method: LoginExperienceMethod = provider.protocol === 'saml' ? 'saml' : 'oidc';
   const startedAt = Date.now();
   recordLoginExperienceMetric({ method, event: 'selected' });
   try {
-    if (provider.protocol === 'saml') await startSamlLogin(req, res, provider);
-    else await startOidcLogin(req, res, provider);
+    if (provider.protocol === 'saml') await startSamlLogin(req, res, provider, enrollment);
+    else await startOidcLogin(req, res, provider, enrollment);
   } catch (error) {
     recordLoginExperienceMetric({ method, event: 'redirect_failed', durationMs: Date.now() - startedAt });
     throw error;
   }
 }
 
-async function authenticateMeasuredDirectLdap(req: Request, res: Response, provider: IdentityProvider): Promise<void> {
+async function authenticateMeasuredDirectLdap(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
   const startedAt = Date.now();
   recordLoginExperienceMetric({ method: 'ldap', event: 'selected' });
   try {
-    await authenticateDirectLdap(req, res, provider);
+    await authenticateDirectLdap(req, res, provider, enrollment);
     recordLoginExperienceMetric({
       method: 'ldap',
       event: res.statusCode >= 400 ? 'failed' : 'succeeded',
@@ -339,6 +367,51 @@ async function loginProviderById(req: Request, res: Response): Promise<void> {
   await authenticateMeasuredDirectLdap(req, res, provider);
 }
 
+function onboardingEnrollment(req: Request): InvitationEnrollmentContext {
+  const onboarding = req.onboarding;
+  const enrollment = parseInvitationEnrollmentContext({ invitationId: onboarding?.invitationId, userId: onboarding?.userId,
+    tenantId: onboarding?.tenantId, tenantSlug: onboarding?.tenantSlug, authSessionVersion: onboarding?.authSessionVersion });
+  if (!enrollment) throw Errors.unauthorized('A fresh invitation is required for enrollment');
+  return enrollment;
+}
+
+async function onboardingProvider(req: Request): Promise<{ provider: IdentityProvider; enrollment: InvitationEnrollmentContext }> {
+  const enrollment = onboardingEnrollment(req);
+  const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), enrollment.tenantId);
+  if (!provider || provider.id !== req.params.providerId || provider.tenantId !== enrollment.tenantId
+    || !provider.isEnabled || provider.authenticationMode !== 'direct') throw Errors.notFound('Identity provider not found');
+  return { provider, enrollment };
+}
+
+// Only authenticated onboarding context can initiate enrollment. General login
+// routes never read enrollment references from query/body/cookies into state.
+const onboardingLoginMethods = asyncHandler(async (req, res) => {
+  // Provider enrollment is a pooled capability. Preserve the historical
+  // single-mode invitation password flow instead of advertising an unsupported
+  // enrollment endpoint or applying the pooled fresh-account parser there.
+  if (config.tenancyMode !== 'pooled') {
+    res.json(PublicLoginMethodsResponseSchema.parse({ localPassword: { enabled: true }, providers: [],
+      autoRedirectProviderId: null, providerSelection: 'chooser', configurationStatus: 'ready' }));
+    return;
+  }
+  const enrollment = onboardingEnrollment(req);
+  res.json(PublicLoginMethodsResponseSchema.parse(await loginMethodService.get(enrollment.tenantId)));
+});
+const startOnboardingProvider = asyncHandler(async (req, res) => {
+  const { provider, enrollment } = await onboardingProvider(req);
+  await startMeasuredProviderLogin(req, res, provider, enrollment);
+});
+const loginOnboardingProvider = asyncHandler(async (req, res) => {
+  const { provider, enrollment } = await onboardingProvider(req);
+  await authenticateMeasuredDirectLdap(req, res, provider, enrollment);
+});
+router.get('/api/auth/onboarding/login-methods', apiLimiter, identityFlowLimiter, requireOnboarding, onboardingLoginMethods);
+router.get('/api/auth/onboarding/providers/:providerId/start', apiLimiter, identityFlowLimiter, requireOnboarding, startOnboardingProvider);
+router.post('/api/auth/onboarding/providers/:providerId/login', apiLimiter, identityFlowLimiter, authLimiter, requireOnboarding, validateBody(ldapLoginSchema.strict()), loginOnboardingProvider);
+router.get('/api/t/:tenantSlug/auth/onboarding/login-methods', apiLimiter, identityFlowLimiter, resolveTenantContext({ required: true }), requireOnboarding, onboardingLoginMethods);
+router.get('/api/t/:tenantSlug/auth/onboarding/providers/:providerId/start', apiLimiter, identityFlowLimiter, resolveTenantContext({ required: true }), requireOnboarding, startOnboardingProvider);
+router.post('/api/t/:tenantSlug/auth/onboarding/providers/:providerId/login', apiLimiter, identityFlowLimiter, authLimiter, resolveTenantContext({ required: true }), requireOnboarding, validateBody(ldapLoginSchema.strict()), loginOnboardingProvider);
+
 // Tenant-scoped pre-authentication routes are the canonical browser and
 // headless interfaces. Global routes remain as compatibility aliases for the
 // OSS default tenant and older clients.
@@ -379,14 +452,18 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
       const rawConfiguration = configuration(provider);
       const claims = await genericOidcService.exchangeCode(rawConfiguration, { code: req.query.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider));
-      const user = await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
-      if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
       const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
-      await setProviderSession(req, res, user, provider, {
+      const evidence = {
         mfaVerified: assurance.mfaVerified,
         subjectId: claims.sub,
         sessionId: typeof claims.sid === 'string' ? claims.sid : null,
-      });
+      };
+      const enrolled = parsed.enrollment ? await identityProviderProvisioningService.enrollOidcInvitation(provider, claims, parsed.enrollment,
+        enrollmentEvidence(req, { subjectId: evidence.subjectId, sessionId: evidence.sessionId }, evidence.mfaVerified)) : null;
+      const user = enrolled ? enrolled.user : await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
+      if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+      if (enrolled) setSessionCookies(res, enrolled.session, true);
+      else await setProviderSession(req, res, user, provider, evidence);
       await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
       recordLoginExperienceMetric({ method: 'oidc', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
       res.redirect(getSsoRedirectUrl(parsed));
@@ -426,7 +503,7 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
       const profile = await genericSamlService.validatePostResponse(rawConfiguration, samlResponse, parsed.samlRequestId!, providerSecretContext(req, provider));
       await samlAssertionReplayService.consume({ providerId: provider.id, tenantId: provider.tenantId, requestId: parsed.samlRequestId! });
       const identity = genericSamlService.extractUserClaims(rawConfiguration, profile);
-      const user = await identityProviderProvisioningService.reconcileSamlLogin(provider, {
+      const input = {
         subjectId: identity.subjectId,
         email: identity.email,
         displayName: identity.displayName,
@@ -434,15 +511,20 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
         lastName: identity.lastName,
         directoryTenantId: identity.directoryTenantId || provider.directoryTenantId,
         claims: identity.claims,
-      });
-      if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+      };
       const assurance = genericSamlService.authenticationAssurance(rawConfiguration, profile);
-      await setProviderSession(req, res, user, provider, {
+      const evidence = {
         mfaVerified: assurance.mfaVerified,
         subjectId: identity.subjectId,
         sessionId: typeof profile.sessionIndex === 'string' ? profile.sessionIndex : null,
         nameIdFormat: typeof profile.nameIDFormat === 'string' ? profile.nameIDFormat : null,
-      });
+      };
+      const enrolled = parsed.enrollment ? await identityProviderProvisioningService.enrollSamlInvitation(provider, input, parsed.enrollment,
+        enrollmentEvidence(req, { subjectId: evidence.subjectId, sessionId: evidence.sessionId, nameIdFormat: evidence.nameIdFormat }, evidence.mfaVerified)) : null;
+      const user = enrolled ? enrolled.user : await identityProviderProvisioningService.reconcileSamlLogin(provider, input);
+      if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+      if (enrolled) setSessionCookies(res, enrolled.session, true);
+      else await setProviderSession(req, res, user, provider, evidence);
       await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'saml' } }));
       recordLoginExperienceMetric({ method: 'saml', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
       res.redirect(getSsoRedirectUrl(parsed));
@@ -480,7 +562,7 @@ router.post('/api/auth/providers/:providerId/oidc/backchannel-logout', apiLimite
   const provider = await directProviderById(String(req.params.providerId || ''));
   requireDirectOidc(provider);
   const claims = await genericOidcService.verifyBackChannelLogoutToken(providerLogoutConfiguration(provider), parsed.data.logout_token);
-  const revoked = await revokeFederatedSessions(provider.id, {
+  const revoked = await revokeFederatedSessions(provider, {
     ...(claims.sub ? { subjectId: claims.sub } : {}),
     ...(claims.sid ? { sessionId: claims.sid } : {}),
   });
@@ -538,7 +620,7 @@ router.post('/api/auth/identity/:providerKey/saml/logout', apiLimiter, identityF
   const { provider, configuration: rawConfiguration, request } = verified;
   const subjectId = typeof request.nameID === 'string' ? request.nameID : '';
   const sessionId = typeof request.sessionIndex === 'string' ? request.sessionIndex : undefined;
-  const revoked = await revokeFederatedSessions(provider.id, { subjectId, ...(sessionId ? { sessionId } : {}) });
+  const revoked = await revokeFederatedSessions(provider, { subjectId, ...(sessionId ? { sessionId } : {}) });
   await logAudit(auditFromRequest(req, {
     action: AuditActions.LOGOUT,
     resourceType: 'identity_provider',

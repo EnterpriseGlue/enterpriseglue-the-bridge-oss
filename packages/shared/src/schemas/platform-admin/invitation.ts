@@ -66,7 +66,8 @@ export const CompleteOnboardingRequestSchema = z.object({
 });
 
 export const InvitationOnboardingResponseSchema = z.object({
-  requiresPasswordSet: z.literal(true),
+  requiresPasswordSet: z.boolean(),
+  enrollmentMode: z.enum(['password', 'provider', 'choice', 'unavailable']).optional(),
   tenantSlug: z.string(),
   deliveryMethod: InvitationDeliveryMethodSchema,
 });

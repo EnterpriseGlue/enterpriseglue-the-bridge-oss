@@ -27,6 +27,7 @@ import {
 } from 'react-router-dom';
 
 import { apiClient } from '../shared/api/client';
+import { isInvitationEnrollmentRoute } from '../utils/invitationRoute';
 import {
   pluginUiPreferencesV1,
   pluginUiPrimitivesV1,
@@ -500,6 +501,12 @@ export async function activateNativePluginBootstrapV1(
   importer: PluginImporter = defaultImporter,
   circuit: PluginFrontendFailureCircuitV1 = failureCircuit,
 ): Promise<NativePluginLoadResultV1> {
+  // Native module imports cannot carry our API routing headers. Keep entry and
+  // relative chunk requests on the canonical tenant path for the edge router.
+  const tenantMatch = typeof window !== 'undefined'
+    ? window.location.pathname.match(/^\/t\/([A-Za-z0-9_-]+)(?:\/|$)/)
+    : null;
+  const assetPrefix = tenantMatch?.[1] ? `/t/${encodeURIComponent(tenantMatch[1])}` : '';
   if (!isBootstrap(input)) {
     return {
       revision: 0,
@@ -557,7 +564,7 @@ export async function activateNativePluginBootstrapV1(
         );
         continue;
       }
-      module = resolveModule(await importer(record.entryUrl));
+      module = resolveModule(await importer(`${assetPrefix}${record.entryUrl}`));
       if (
         !module ||
         module.pluginId !== record.pluginId ||
@@ -625,6 +632,11 @@ function recordFrontendFailure(
 }
 
 export function loadInstalledNativePluginsV1(): Promise<NativePluginLoadResultV1> {
+  if (typeof window !== 'undefined' && isInvitationEnrollmentRoute(window.location.pathname)) {
+    // Do not query protected plugin inventory with an onboarding credential,
+    // or cache an anonymous result as the later authenticated bootstrap.
+    return Promise.resolve({ revision: 0, activePluginIds: [], failures: [] });
+  }
   if (!loadPromise) {
     const tenantMatch =
       typeof window !== 'undefined'

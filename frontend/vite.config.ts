@@ -136,6 +136,7 @@ export default defineConfig(({ mode }) => {
   const packageDir = (specifier: string, resolver = require) => path.dirname(resolver.resolve(`${specifier}/package.json`))
   const infernoRequire = createRequire(require.resolve('inferno/package.json'))
   let proxyPatterns = [
+    '^/t/[^/]+/_enterpriseglue/plugins/',
     '^/t/[^/]+/api',
     '^/t/[^/]+/engines-api',
     '^/t/[^/]+/starbase-api',
@@ -150,6 +151,7 @@ export default defineConfig(({ mode }) => {
     '/git-api',
     '/vcs-api',
     '/health',
+    '/_enterpriseglue/plugins',
   ]
   try {
     const proxyConfig = require('@enterpriseglue/frontend-host/proxy-routes.json') as {

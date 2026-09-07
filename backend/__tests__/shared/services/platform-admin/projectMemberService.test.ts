@@ -7,6 +7,7 @@ import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/db/entities/RbacRoleAssignment.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import type { EntityManager } from 'typeorm';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -17,6 +18,27 @@ describe('ProjectMemberService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each(['missing', 'inactive'] as const)('opens a transaction for tenant-scoped enrollment with a %s manager', async (kind) => {
+    const claim = vi.fn().mockResolvedValue({ affected: 1 });
+    const findMember = vi.fn().mockResolvedValue({ id: 'member-a' });
+    const manager = { queryRunner: { isTransactionActive: true }, getRepository: (entity: unknown) => {
+      if (entity === Project) return { update: claim };
+      if (entity === ProjectMember) return { findOne: findMember };
+      if (entity === ProjectMemberRole) return {};
+      throw new Error('Unexpected repository');
+    } } as unknown as EntityManager;
+    const transaction = vi.fn(async (work: (store: EntityManager) => unknown) => work(manager));
+    const inactive = { transaction, getRepository: () => { throw new Error('Write outside transaction'); } } as unknown as EntityManager;
+    vi.mocked(getDataSource).mockResolvedValue(inactive as any);
+    const scopedService = new ProjectMemberService();
+    const update = vi.spyOn(scopedService, 'updateRoles').mockResolvedValue();
+    await expect(scopedService.addMember('project-a', 'user-a', ['viewer'], 'inviter-a', kind === 'inactive' ? inactive : undefined, 'alpha')).resolves.toMatchObject({ id: 'member-a' });
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(claim).toHaveBeenCalledWith({ id: 'project-a', tenantId: 'alpha' }, { tenantId: 'alpha' });
+    expect(update).toHaveBeenCalledWith('project-a', 'user-a', ['viewer'], manager);
+    expect(claim.mock.invocationCallOrder[0]).toBeLessThan(findMember.mock.invocationCallOrder[0]);
   });
 
   it('returns empty list when no members', async () => {

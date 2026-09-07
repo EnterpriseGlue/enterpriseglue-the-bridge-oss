@@ -2,6 +2,13 @@
   "comment": "Create these routes before the static SPA fallback and replace endpoint/origin group IDs.",
   "routes": [
     {
+      "name": "enterpriseglue-tenant-plugin-assets",
+      "patternsToMatch": ["/t/*/_enterpriseglue/plugins/*"],
+      "originGroup": "ENTERPRISEGLUE_BACKEND_ORIGIN_GROUP",
+      "forwardingProtocol": "HttpsOnly",
+      "cache": "disabled"
+    },
+    {
       "name": "enterpriseglue-plugin-assets",
       "patternsToMatch": ["/_enterpriseglue/plugins/*"],
       "originGroup": "ENTERPRISEGLUE_BACKEND_ORIGIN_GROUP",

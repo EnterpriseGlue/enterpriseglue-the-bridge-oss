@@ -169,6 +169,14 @@ surface from becoming a tenant-enumeration endpoint. Canonical `/t/{slug}`
 routes remain available, and single mode retains its root compatibility
 aliases.
 
+The browser sends `X-Tenant-Slug` as a routing-only hint on canonical tenant
+pages. On unprefixed pooled pages it omits that hint, leaving tenant resolution
+to the verified hostname; it must not synthesize `default`. Refresh, CSRF
+recovery and retries follow the same rule, and rejected refreshes redirect to
+the current hostname's `/login`. Single mode retains its `default` alias.
+Neither this hint nor its absence grants tenant membership or overrides the
+backend's host/path conflict checks.
+
 ## Neutral organization discovery
 
 In pooled mode the platform `/login` page is an organization finder; it does
@@ -465,18 +473,40 @@ the host rejects interactive access. Deactivation removes frontend and gateway
 availability while retaining tenant plugin data. Host-owned schedule and event
 delivery operations cannot be reached through the interactive gateway.
 
-Sanitized diagnostics are written to
-`.artifacts/pooled-tenancy-e2e/`; secrets are never copied there. Deterministic desktop screenshots are retained under
-`playwright-results/ui-evidence/standard`, with narrow-screen and zoom evidence
-in the adjacent `responsive` directory. Keycloak and OpenLDAP are high-fidelity
+The only CI-exportable evidence is
+`.artifacts/pooled-tenancy-e2e/public/receipt.json`: a fixed-schema result, stage,
+exit code, and validated boolean/numeric database-isolation projection. No raw
+log text, provider claims, URLs, role names, screenshots, traces, videos, or
+Playwright reports are copied into this receipt. Missing or malformed database
+evidence cannot qualify a passing run. Every invocation replaces stale receipt
+content before setup; failure and cancellation receipts cannot report a pass.
+
+Raw diagnostics can contain passwords, session cookies, signed state, and SQL
+parameters even when fixtures are disposable. By default, the runner captures
+them privately and removes them with its temporary directory, including on
+failure. For a local debugging run only, set
+`POOLED_TENANCY_E2E_KEEP_RAW=true`. The runner then prints a private temporary
+directory location; do not upload that directory. This option is rejected when
+`CI` or `GITHUB_ACTIONS` is set. Deterministic desktop screenshots in a retained
+local run are under `playwright-results/ui-evidence/standard`, with narrow-screen
+and zoom evidence in the adjacent `responsive` directory. Review any proposed
+image publication separately; raw screenshots are not automatically sanitized.
+Hard termination or host failure may prevent cleanup and requires checking the
+owned temporary directories and disposable Compose project before reuse.
+
+Keycloak and OpenLDAP are high-fidelity
 disposable protocol emulators. This lane proves the EnterpriseGlue protocol and tenant
 isolation paths, but it does not replace pre-production certification against
 the specific external identity providers a SaaS customer will use.
 
 Standard CI runs this lane automatically when native tenancy, tenant SSO,
 organization discovery, pooled routing, or their browser fixtures change. The
-pooled result and sanitized UI evidence are uploaded as a 14-day CI artifact,
+allowlisted receipt alone is uploaded as a 14-day CI artifact,
 and the aggregate CI check cannot pass when this lane fails.
+The same job runs artifact-boundary regression tests covering injected sensitive
+data, stale receipts, invalid isolation evidence, failure/cancellation cleanup,
+and attempted raw-log retention in CI. These mocked runner-control tests do not
+replace the separate real-container browser journey.
 
 ## Populated upgrade, restore, and application rollback qualification
 

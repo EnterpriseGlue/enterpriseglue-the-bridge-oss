@@ -187,6 +187,23 @@ describe('POST /api/auth/refresh', () => {
     expect(response.body.error).toBe('No refresh token provided');
   });
 
+  it('keeps exact durable session identity in both lookup alternatives and renewed access tokens', async () => {
+    const sessionId = '00000000-0000-0000-0000-000000000001';
+    const mockUser = { id: 'user-1', email: 'test@example.test', isActive: true, authSessionVersion: 2 };
+    const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 4);
+    const tokens = { find: vi.fn().mockResolvedValue([{ tokenHash }]) };
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => entity === User
+      ? { findOneBy: vi.fn().mockResolvedValue(mockUser) } : tokens } as any);
+    vi.mocked(jwt.verifyToken).mockReturnValue({ principalId: 'user-1', type: 'refresh', authSessionVersion: 2, sessionId });
+    vi.mocked(jwt.generateAccessToken).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
+    expect((await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN })).status).toBe(200);
+    expect(tokens.find.mock.calls[0][0].where).toEqual([
+      expect.objectContaining({ id: sessionId, userId: 'user-1', tenantId: 'tenant-default' }),
+      expect.objectContaining({ id: sessionId, userId: 'user-1', tenantId: expect.objectContaining({ _type: 'isNull' }) }),
+    ]);
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, expect.objectContaining({ sessionId }));
+  });
+
   it('rejects invalid token type', async () => {
     (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access' });
 

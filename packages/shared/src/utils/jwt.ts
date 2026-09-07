@@ -20,6 +20,8 @@ export interface JwtPayload {
   principalType?: 'user';
   principalId?: string;
   authSessionVersion?: number;
+  /** Exact durable RefreshToken row; absent only on pre-session-ID tokens. */
+  sessionId?: string;
   /** Marks a break-glass session that must retain live platform-administrator membership. */
   recovery?: 'platform_administrator';
   /** Verified authentication method and assurance carried across refreshes. */
@@ -33,6 +35,7 @@ export interface JwtPayload {
 }
 
 export interface SessionAssuranceOptions {
+  sessionId?: string;
   administratorRecovery?: boolean;
   authenticationMethod?: JwtPayload['authenticationMethod'];
   mfaVerified?: boolean;
@@ -65,6 +68,10 @@ export function normalizeUserJwtPayload(payload: JwtPayload): UserJwtPayload {
   ) {
     throw new Error('Invalid user principal');
   }
+  if (payload.sessionId !== undefined && (typeof payload.sessionId !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.sessionId))) {
+    throw new Error('Invalid session identity');
+  }
 
   return { ...payload, userId: principalId, principalType, principalId };
 }
@@ -77,6 +84,7 @@ export function generateAccessToken(user: User | any, options: SessionAssuranceO
     principalType: 'user',
     principalId: user.id,
     authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
+    ...(options.sessionId ? { sessionId: options.sessionId } : {}),
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
@@ -98,6 +106,7 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
     principalType: 'user',
     principalId: user.id,
     authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
+    ...(options.sessionId ? { sessionId: options.sessionId } : {}),
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),

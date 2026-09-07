@@ -300,11 +300,11 @@ router.post('/api/auth/switch-tenant', requireAuth, validateBody(z.object({ tena
   if (!tenant || tenant.status !== 'active') throw Errors.notFound('Tenant');
   if (!await tenantService.hasMembership(req.user!.userId, tenant.id)) throw Errors.forbidden('Tenant membership is required');
   const user = await (await getDataSource()).getRepository(User).findOneByOrFail({ id: req.user!.userId, isActive: true });
-  const session = await authSessionService.issue(user, {
+  const session = await authSessionService.switchTenant(user, {
+    principal: req.user!,
+    refreshToken: req.cookies?.refreshToken,
     tenantId: tenant.id,
     tenantSlug: tenant.slug,
-    authenticationMethod: req.user!.authenticationMethod,
-    mfaVerified: req.user!.mfaVerified === true,
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
   });

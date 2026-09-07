@@ -35,6 +35,7 @@ done
 docker exec "$container_name" pg_isready -U postgres -d postgres >/dev/null
 
 cd "$root_dir"
+SESSION_RACE_DISPOSABLE_POSTGRES=true \
 MIGRATION_TEST_POSTGRES_HOST=127.0.0.1 \
 MIGRATION_TEST_POSTGRES_PORT="$postgres_port" \
 MIGRATION_TEST_POSTGRES_USER=postgres \
@@ -42,6 +43,7 @@ MIGRATION_TEST_POSTGRES_PASSWORD=postgres \
 MIGRATION_TEST_POSTGRES_DATABASE=postgres \
   corepack pnpm --dir backend exec vitest run \
     test/integration/nativeTenantRls.test.ts \
+    test/qualification/sessionRevocationRace.test.ts \
     --config vitest.config.ts \
     --reporter=dot \
     --maxWorkers=1 \

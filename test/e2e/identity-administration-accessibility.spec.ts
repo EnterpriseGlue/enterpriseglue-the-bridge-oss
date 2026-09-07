@@ -272,7 +272,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await issuer.blur();
     await expect(providerWorkflow.getByText(/Enter an HTTPS issuer URL/)).toBeVisible();
     await scopes.scrollIntoViewIfNeeded();
-    await captureManualScreenshot(page, '45-provider-validation-oidc.jpg');
+    await captureManualScreenshot(page, '45-provider-validation-oidc.jpg', { stabilize: false });
 
     const layout = await scopes.evaluate((element) => {
       const workflow = element.closest('.eg-settings-workflow');

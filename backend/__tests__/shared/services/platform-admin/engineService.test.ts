@@ -16,6 +16,7 @@ import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/db/ent
 import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/db/entities/EngineBackstopGroupMapping.js';
 import { EngineBackstopSyncRun } from '@enterpriseglue/shared/db/entities/EngineBackstopSyncRun.js';
 import { EngineBackstopSyncTask } from '@enterpriseglue/shared/db/entities/EngineBackstopSyncTask.js';
+import type { EntityManager } from 'typeorm';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -27,6 +28,14 @@ describe('EngineService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it('keeps invitation engine grants inside the supplied transaction', async () => {
+    const manager = { getRepository: vi.fn() } as unknown as EntityManager;
+    const assignRole = vi.spyOn(permissionService, 'assignRole').mockResolvedValue({ id: 'grant-a', warnings: [] });
+    await expect(service.addEngineMember('engine-a', 'invitee-a', 'operator', 'inviter-a', manager, 'alpha')).resolves.toMatchObject({ id: 'grant-a' });
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'alpha', principalId: 'invitee-a', resourceType: 'engine', resourceId: 'engine-a' }), manager);
+    expect(getDataSource).not.toHaveBeenCalled();
   });
 
   it('returns the canonical owner role for an engine', async () => {

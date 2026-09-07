@@ -27,8 +27,18 @@ import {
   type VerifyInvitationOtpRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 
 const router = Router();
+
+async function onboardingOptions(tenantId: string) {
+  if (config.tenancyMode !== 'pooled') return { requiresPasswordSet: true };
+  const methods = await loginMethodService.get(tenantId);
+  const password = methods.localPassword.enabled;
+  const provider = methods.providers.length > 0;
+  return { requiresPasswordSet: password && !provider,
+    enrollmentMode: password ? provider ? 'choice' : 'password' : provider ? 'provider' : 'unavailable' };
+}
 
 function setOnboardingCookie(res: ExpressResponse, payload: {
   userId: string;
@@ -154,16 +164,18 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, resolveTenantContext({
   }));
 }));
 
-router.get('/api/invitations/:token', apiLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
-  const info = await invitationService.getInvitationInfo(String(req.params.token));
+const showInvitation = asyncHandler(async (req, res) => {
+  const info = await invitationService.getInvitationInfo(String(req.params.token), ...(req.tenant ? [req.tenant] as const : []));
   res.json(InvitationInfoSchema.parse(info));
-}));
+});
+router.get('/api/invitations/:token', apiLimiter, validateParams(InvitationTokenParamsSchema), showInvitation);
+router.get('/api/t/:tenantSlug/invitations/:token', apiLimiter, resolveTenantContext({ required: true }), validateParams(InvitationTokenParamsSchema), showInvitation);
 
-router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), validateBody(VerifyInvitationOtpRequestSchema), asyncHandler(async (req, res) => {
+const verifyInvitation = asyncHandler(async (req, res) => {
   const token = String(req.params.token);
   const { oneTimePassword } = req.body as VerifyInvitationOtpRequest;
-  const invitationInfo = await invitationService.getInvitationInfo(token);
-  const verified = await invitationService.verifyOneTimePassword(token, oneTimePassword);
+  const invitationInfo = await invitationService.getInvitationInfo(token, ...(req.tenant ? [req.tenant] as const : []));
+  const verified = await invitationService.verifyOneTimePassword(token, oneTimePassword, ...(req.tenant ? [req.tenant] as const : []));
   const dataSource = await getDataSource();
   const user = await dataSource.getRepository(User).findOneBy({ id: verified.userId });
 
@@ -195,13 +207,15 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
     },
   });
 
-  res.json(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'manual' }));
-}));
+  res.json(InvitationOnboardingResponseSchema.parse({ ...await onboardingOptions(verified.tenantId), tenantSlug: verified.tenantSlug, deliveryMethod: 'manual' }));
+});
+router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), validateBody(VerifyInvitationOtpRequestSchema), verifyInvitation);
+router.post('/api/t/:tenantSlug/invitations/:token/verify-otp', apiLimiter, resolveTenantContext({ required: true }), passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), validateBody(VerifyInvitationOtpRequestSchema), verifyInvitation);
 
-router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
+const redeemInvitation = asyncHandler(async (req, res) => {
   const token = String(req.params.token);
-  const invitationInfo = await invitationService.getInvitationInfo(token);
-  const verified = await invitationService.redeemEmailInvitation(token);
+  const invitationInfo = await invitationService.getInvitationInfo(token, ...(req.tenant ? [req.tenant] as const : []));
+  const verified = await invitationService.redeemEmailInvitation(token, ...(req.tenant ? [req.tenant] as const : []));
   const dataSource = await getDataSource();
   const user = await dataSource.getRepository(User).findOneBy({ id: verified.userId });
 
@@ -233,7 +247,9 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
     },
   });
 
-  res.json(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'email' }));
-}));
+  res.json(InvitationOnboardingResponseSchema.parse({ ...await onboardingOptions(verified.tenantId), tenantSlug: verified.tenantSlug, deliveryMethod: 'email' }));
+});
+router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), redeemInvitation);
+router.post('/api/t/:tenantSlug/invitations/:token/redeem', apiLimiter, resolveTenantContext({ required: true }), passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), redeemInvitation);
 
 export default router;

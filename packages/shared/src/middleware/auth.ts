@@ -3,6 +3,8 @@ import { normalizeUserJwtPayload, verifyToken, type AuthenticatedUserJwtPayload,
 import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { IsNull, MoreThan, type DataSource } from 'typeorm';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -128,6 +130,20 @@ function continueWithTenantContext(req: Request, next: NextFunction): void {
   runWithTenantDatabaseContext(req.tenant, () => next());
 }
 
+async function requireCurrentBrowserSession(payload: UserJwtPayload, dataSource: DataSource): Promise<void> {
+  // A pooled upgrade must not leave renewable legacy credentials outside the
+  // exact-session revocation boundary. Single-tenant compatibility is retained.
+  if (!payload.sessionId) {
+    if (config.tenancyMode === 'pooled') throw Errors.unauthorized('Sign in again to establish a current browser session');
+    return;
+  }
+  const session = await dataSource.getRepository(RefreshToken).findOneBy({
+    id: payload.sessionId, userId: payload.userId, tenantId: payload.tenantId || IsNull(),
+    revokedAt: IsNull(), expiresAt: MoreThan(Date.now()),
+  });
+  if (!session) throw Errors.unauthorized('Session has been revoked');
+}
+
 /**
  * Middleware to require authentication
  * Verifies JWT token from Authorization header OR cookies
@@ -151,6 +167,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
       throw Errors.unauthorized('Session has been revoked');
     }
+    await requireCurrentBrowserSession(payload, dataSource);
     if (payload.recovery === 'platform_administrator'
       && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
       throw Errors.unauthorized('Session has been revoked');
@@ -237,15 +254,26 @@ export async function requireOnboarding(req: Request, res: Response, next: NextF
       }
     }
 
-    req.onboarding = payload;
+    const routedTenant = req.tenant;
+    if (routedTenant && ((payload.tenantId && routedTenant.tenantId !== payload.tenantId)
+      || (payload.tenantSlug && routedTenant.tenantSlug !== payload.tenantSlug))) {
+      return next(Errors.forbidden('Invitation tenant does not match the routed tenant context'));
+    }
     if (config.tenancyMode === 'pooled') {
       if (!payload.tenantId || !payload.tenantSlug) return next(Errors.unauthorized('Tenant-scoped onboarding required'));
       const tenant = await tenantService.getById(payload.tenantId);
       if (!tenant || tenant.status !== 'active' || tenant.slug !== payload.tenantSlug) {
         return next(Errors.unauthorized('Invitation tenant is no longer active'));
       }
-      req.tenant = { tenantId: tenant.id, tenantSlug: tenant.slug, placementKey: tenant.placementKey, placementEpoch: Number(tenant.placementEpoch) };
+      if (routedTenant && ((routedTenant.placementKey !== undefined && routedTenant.placementKey !== tenant.placementKey)
+        || (routedTenant.placementEpoch !== undefined && routedTenant.placementEpoch !== Number(tenant.placementEpoch)))) {
+        return next(Errors.unauthorized('Invitation tenant placement is no longer current'));
+      }
+      // The route resolver owns verified placement/release assertions. Retain
+      // that context instead of replacing it with a token-derived projection.
+      req.tenant = routedTenant || { tenantId: tenant.id, tenantSlug: tenant.slug, placementKey: tenant.placementKey, placementEpoch: Number(tenant.placementEpoch) };
     }
+    req.onboarding = payload;
     return continueWithTenantContext(req, next);
   } catch (error) {
     if (error instanceof AppError) {
@@ -275,6 +303,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       const recoveryIsCurrent = payload.recovery !== 'platform_administrator'
         || (await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId);
       if (user && recoveryIsCurrent && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
+        await requireCurrentBrowserSession(payload, dataSource);
         req.user = { ...payload, email: user.email };
         // Optional authentication must establish the same tenant-aware request
         // context as required authentication. If the enterprise resolver cannot

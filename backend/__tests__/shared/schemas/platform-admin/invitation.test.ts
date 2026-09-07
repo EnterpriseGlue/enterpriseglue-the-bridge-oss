@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   CreateInvitationRequestSchema,
   CreateInvitationResponseSchema,
@@ -9,6 +10,35 @@ import {
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 
 describe('generic invitation contracts', () => {
+  it('publishes tenant-bound aliases with the same payloads as root compatibility routes', () => {
+    const document = generateOpenApi();
+    for (const [suffix, method] of [
+      ['auth/onboarding/login-methods', 'get'],
+      ['auth/onboarding/providers/{providerId}/start', 'get'],
+      ['auth/onboarding/providers/{providerId}/login', 'post'],
+      ['auth/complete-onboarding', 'post'],
+      ['invitations/{token}', 'get'],
+      ['invitations/{token}/verify-otp', 'post'],
+      ['invitations/{token}/redeem', 'post'],
+    ]) {
+      const root = document.paths?.[`/api/${suffix}`]?.[method];
+      const scoped = document.paths?.[`/api/t/{tenantSlug}/${suffix}`]?.[method];
+      expect(scoped).toBeDefined();
+      expect(scoped?.parameters).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: 'tenantSlug', in: 'path', required: true }),
+      ]));
+      expect(scoped?.requestBody).toEqual(root?.requestBody);
+      expect(scoped?.responses?.['200'] || scoped?.responses?.['302'])
+        .toEqual(root?.responses?.['200'] || root?.responses?.['302']);
+    }
+  });
+  it('keeps the public SSO enrollment example aligned with canonical response schemas', async () => {
+    // OpenAPI initializes Zod's extension before loading its schema graph.
+    const { PublicLoginMethodsResponseSchema } = await import('@enterpriseglue/shared/schemas/platform-admin/authz.js');
+    const example = JSON.parse(readFileSync(new URL('../../../../test/fixtures/public-api/invitation-enrollment.json', import.meta.url), 'utf8'));
+    expect(InvitationOnboardingResponseSchema.parse(example.acknowledgment)).toEqual(example.acknowledgment);
+    expect(PublicLoginMethodsResponseSchema.parse(example.methods)).toEqual(example.methods);
+  });
   it('shares the tenant invitation request and reveal-once response across the route and UI', () => {
     expect(CreateInvitationRequestSchema.parse({
       email: 'invitee@example.com',
@@ -26,6 +56,8 @@ describe('generic invitation contracts', () => {
   });
 
   it('keeps invitation readiness and onboarding acknowledgements explicit', () => {
+    expect(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: false, enrollmentMode: 'provider', tenantSlug: 'alpha', deliveryMethod: 'email' }))
+      .toMatchObject({ requiresPasswordSet: false, enrollmentMode: 'provider' });
     expect(InvitationCapabilitiesResponseSchema.parse({ ssoRequired: true, emailConfigured: false }))
       .toEqual({ ssoRequired: true, emailConfigured: false });
     expect(InvitationOnboardingResponseSchema.parse({
@@ -52,6 +84,11 @@ describe('generic invitation contracts', () => {
 
   it('publishes the same invitation contracts through OpenAPI', () => {
     const document = generateOpenApi();
+    for (const [path, method] of [
+      ['/api/auth/onboarding/login-methods', 'get'],
+      ['/api/auth/onboarding/providers/{providerId}/start', 'get'],
+      ['/api/auth/onboarding/providers/{providerId}/login', 'post'],
+    ]) expect(document.paths?.[path]?.[method]).toBeDefined();
     const capabilities = document.paths?.['/api/t/{tenantSlug}/invitations/capabilities']?.get
       ?.responses?.['200']?.content?.['application/json']?.schema;
     const create = document.paths?.['/api/t/{tenantSlug}/invitations']?.post;

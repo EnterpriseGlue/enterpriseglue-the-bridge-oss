@@ -9,6 +9,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { IsNull } from 'typeorm';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
@@ -17,6 +18,7 @@ import { createSamlRequestId } from './sso-state.js';
 import { signFederatedLogoutState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 import { LogoutResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { auditFromRequest, AuditActions, logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { normalizeUserJwtPayload, verifyToken, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 
 const router = Router();
 
@@ -33,14 +35,17 @@ function providerConfiguration(provider: IdentityProvider): Record<string, unkno
 async function currentProviderSession(
   sessions: RefreshToken[],
   presentedRefreshToken: string | undefined,
+  principal: UserJwtPayload,
 ): Promise<RefreshToken | null> {
-  if (!presentedRefreshToken) return null;
-  // Bound expensive bcrypt comparisons while still covering an unusually high
-  // number of concurrently signed-in browsers for one account.
-  for (const session of sessions.slice(0, 200)) {
-    if (await bcrypt.compare(presentedRefreshToken, session.tokenHash)) return session;
-  }
-  return null;
+  if (!presentedRefreshToken || !principal.sessionId) return null;
+  try {
+    const payload = normalizeUserJwtPayload(verifyToken(presentedRefreshToken));
+    if (payload.type !== 'refresh' || payload.sessionId !== principal.sessionId
+      || payload.userId !== principal.userId || payload.tenantId !== principal.tenantId
+      || (payload.authSessionVersion ?? 0) !== (principal.authSessionVersion ?? 0)) return null;
+    const session = sessions.find((candidate) => candidate.id === payload.sessionId);
+    return session && await bcrypt.compare(presentedRefreshToken, session.tokenHash) ? session : null;
+  } catch { return null; }
 }
 
 /**
@@ -57,7 +62,14 @@ router.post('/api/auth/logout', apiLimiter, requireAuth, validateBody(logoutSche
     order: { createdAt: 'DESC' },
     take: 200,
   });
-  const providerSession = await currentProviderSession(activeSessions, refreshToken);
+  const providerSession = await currentProviderSession(activeSessions, refreshToken, req.user!);
+
+  // Logout already revokes every browser session for this user. Advance the
+  // version first so a concurrent tenant switch cannot escape the bulk UPDATE
+  // snapshot with a new child row. Deliberately commit this separately: existing
+  // provider revokers acquire session locks before user locks. If cleanup fails,
+  // the committed version still invalidates all old access/refresh tokens.
+  await dataSource.getRepository(User).increment({ id: req.user!.userId }, 'authSessionVersion', 1);
 
   if (refreshToken) {
     // Revoke specific refresh token (actually revokes all non-revoked tokens for user)

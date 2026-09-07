@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 # Boots a disposable pooled EnterpriseGlue deployment with a restricted
 # PostgreSQL application role, forced tenant RLS, TLS, Keycloak, and OpenLDAP.
-# Only diagnostics are retained; credentials, containers, and volumes are
-# destroyed at the end of every invocation.
+# Only a fixed-schema receipt is exportable. Raw authentication diagnostics
+# require explicit local opt-in and must never be uploaded to CI artifacts.
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 artifact_dir="${POOLED_TENANCY_E2E_ARTIFACT_DIR:-$root_dir/.artifacts/pooled-tenancy-e2e}"
@@ -16,6 +16,64 @@ realm_import_file="$temp_dir/enterpriseglue-pooled-realm.json"
 postgres_init_file="$temp_dir/10-pooled-tenancy-app-role.sql"
 playwright_output_dir="$temp_dir/playwright-results"
 project_name="enterpriseglue-pooled-tenancy-${RANDOM}${RANDOM}"
+raw_dir="$temp_dir/raw-diagnostics"
+receipt_file="$artifact_dir/public/receipt.json"
+stage=preflight
+journey_passed=false
+stack_started=false
+mkdir -p "$raw_dir"
+exec 3>&1 4>&2
+
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  set +e
+  if [[ "$stack_started" == true ]]; then
+    run_compose ps --all > "$raw_dir/compose-status.txt" 2>&1
+    for service in db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
+      run_compose logs --no-color --tail=700 "$service" > "$raw_dir/${service}.log" 2>&1
+    done
+    run_compose down --volumes --remove-orphans >> "$raw_dir/runner.log" 2>&1
+    if [[ $? -ne 0 ]]; then status=1; stage=cleanup; fi
+  fi
+  local result=failed
+  if [[ "$status" -eq 0 && "$journey_passed" == true ]]; then result=passed; fi
+  node "$root_dir/scripts/pooled-tenancy-evidence.mjs" "$receipt_file" "$result" "$stage" "$status" "$raw_dir/database-isolation.json"
+  if [[ $? -ne 0 || "$result" != passed ]]; then
+    if [[ "$status" -eq 0 ]]; then status=1; fi
+  fi
+  if [[ "${POOLED_TENANCY_E2E_KEEP_RAW:-false}" == true && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+    local debug_dir
+    debug_dir="$(mktemp -d "${TMPDIR:-/tmp}/enterpriseglue-pooled-private-debug.XXXXXX")"
+    cp -R "$raw_dir" "$debug_dir/"
+    if [[ -d "$playwright_output_dir" ]]; then cp -R "$playwright_output_dir" "$debug_dir/"; fi
+    chmod -R go-rwx "$debug_dir"
+    printf '[pooled-tenancy-e2e] Sensitive local-only diagnostics retained at %s; do not upload.\n' "$debug_dir" >&3
+  fi
+  if ! rm -rf "$temp_dir"; then
+    status=1
+    stage=cleanup
+    node "$root_dir/scripts/pooled-tenancy-evidence.mjs" "$receipt_file" failed "$stage" "$status"
+    echo '[pooled-tenancy-e2e] Sensitive scratch cleanup failed; inspect owned local resources. Do not upload raw diagnostics.' >&4
+  fi
+  if [[ "$status" -eq 0 ]]; then
+    echo '[pooled-tenancy-e2e] Passed; exportable receipt written; disposable stack removed.' >&3
+  else
+    echo '[pooled-tenancy-e2e] Failed; see receipt stage. Raw diagnostics are not exported.' >&4
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Capture ALL setup, database, proxy, IdP and browser output, including failures.
+# A reporter/trace can contain cookies, passwords, SQL parameters and signed URLs.
+exec > "$raw_dir/runner.log" 2>&1
+node "$root_dir/scripts/pooled-tenancy-evidence.mjs" "$receipt_file" running "$stage" 0
+if [[ "${POOLED_TENANCY_E2E_KEEP_RAW:-false}" == true && ( -n "${CI:-}" || -n "${GITHUB_ACTIONS:-}" ) ]]; then
+  exit 2
+fi
 
 free_loopback_port() {
   node --input-type=module <<'NODE'
@@ -226,30 +284,10 @@ run_compose() {
   EG_BACKEND_ENV_FILE="$env_file" "${compose[@]}" "$@"
 }
 
-capture_diagnostics() {
-  run_compose ps --all > "$artifact_dir/compose-status.txt" 2>&1 || true
-  for service in db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
-    run_compose logs --no-color --tail=700 "$service" > "$artifact_dir/${service}.log" 2>&1 || true
-  done
-  if [[ -d "$playwright_output_dir" ]]; then
-    rm -rf "$artifact_dir/playwright-results"
-    cp -R "$playwright_output_dir" "$artifact_dir/playwright-results"
-  fi
-}
-
-cleanup() {
-  local status=$?
-  trap - EXIT
-  capture_diagnostics
-  run_compose down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$temp_dir"
-  exit "$status"
-}
-trap cleanup EXIT
-
 cd "$root_dir"
+stage=build
 pnpm exec playwright install chromium --dry-run >/dev/null
-echo '[pooled-tenancy-e2e] Compiling the backend and SPA from installed workspace dependencies.'
+echo '[pooled-tenancy-e2e] Compiling the backend and SPA from installed workspace dependencies.' >&3
 pnpm --filter webmodeler-backend run build
 pnpm run build:frontend-host
 pnpm --filter webmodeler-frontend run build
@@ -293,7 +331,9 @@ KEYCLOAK_TLS_DIR="$tls_dir" ./infra/docker/keycloak/generate-local-tls.sh
 chmod 755 "$tls_dir"
 chmod 644 "$tls_dir/ca.crt" "$tls_dir/server.crt" "$tls_dir/server.key"
 
-echo "[pooled-tenancy-e2e] Starting disposable pooled stack ($project_name)."
+stage=startup
+stack_started=true
+echo '[pooled-tenancy-e2e] Starting disposable pooled stack.' >&3
 run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health
 
 curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" "https://localhost:${tls_frontend_port}/login" >/dev/null
@@ -308,7 +348,8 @@ chmod 644 "$identity_secret_dir/keycloak-saml-signing.crt"
 chmod 711 "$identity_secret_dir"
 run_compose exec -T backend node -e "require('node:fs').accessSync('/etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt')"
 
-run_compose exec -T backend node - <<'NODE' > "$artifact_dir/database-isolation.json"
+stage=database
+run_compose exec -T backend node - <<'NODE' > "$raw_dir/database-isolation.json"
 const { Client } = require('pg');
 (async () => {
   const client = new Client({
@@ -350,7 +391,8 @@ common_env=(
   LOCAL_IDENTITY_SECRET_DIR="$identity_secret_dir"
 )
 
-echo '[pooled-tenancy-e2e] Running organization discovery plus segregated OIDC, SAML, and LDAP tenant journeys.'
+stage=browser
+echo '[pooled-tenancy-e2e] Running organization discovery plus segregated OIDC, SAML, and LDAP tenant journeys.' >&3
 EG_LDAP_TEST_DOCKER_NETWORK="${project_name}_enterpriseglue-network" \
 LOCAL_LDAP_DIRECTORY_HOST=openldap \
 LOCAL_LDAP_DIRECTORY_PORT=636 \
@@ -358,9 +400,9 @@ LOCAL_LDAP_DIRECTORY_PORT=636 \
   env "${common_env[@]}" pnpm exec playwright test \
     test/e2e/pooled-tenancy-segregated-sso.spec.ts \
     --config test/e2e/playwright.config.ts \
-  2>&1 | tee "$artifact_dir/pooled-tenancy-segregated-sso.log"
+  > "$raw_dir/pooled-tenancy-segregated-sso.log" 2>&1
 
-node - "$artifact_dir/summary.txt" <<'NODE'
+node - "$raw_dir/summary.txt" <<'NODE'
 const { writeFileSync } = require('node:fs');
 writeFileSync(process.argv[2], [
   'status=passed',
@@ -371,9 +413,10 @@ writeFileSync(process.argv[2], [
   'plugin_evidence=real-reference-sidecar-with-exactly-once-schedule-and-event-receipts',
   'ui_evidence=deterministic-desktop-responsive-and-zoom-screenshots',
   'identity_evidence=disposable-keycloak-openldap-and-private-tenant-secret-broker-emulators',
-  'credentials=ephemeral-and-not-retained',
+  'credentials=ephemeral;raw-diagnostics-sensitive;export-receipt-only',
   '',
 ].join('\n'));
 NODE
 
-echo '[pooled-tenancy-e2e] Passed; diagnostics are retained and the disposable stack will now be removed.'
+stage=complete
+journey_passed=true

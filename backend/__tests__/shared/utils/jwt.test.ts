@@ -72,4 +72,8 @@ describe('jwt utils', () => {
   it('verifyToken throws for invalid tokens', () => {
     expect(() => verifyToken('not-a-token')).toThrow('Invalid token');
   });
+
+  it.each(['', 'not-a-uuid', 42, null, {}, '00000000-0000-0000-0000-000000000001-extra'])('rejects a malformed durable session claim (%j)', (sessionId) => {
+    expect(() => normalizeUserJwtPayload({ principalId: user.id, type: 'access', sessionId } as any)).toThrow('Invalid session identity');
+  });
 });
