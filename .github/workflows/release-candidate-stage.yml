@@ -611,6 +611,63 @@ jobs:
           --oracle-env .artifacts/release-candidate-smoke/oracle.env
           --force-oracle
 
+      - name: Set up Node.js for candidate browser qualification
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Set up pnpm for candidate browser qualification
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.0.8
+
+      - name: Resolve pnpm store for candidate browser qualification
+        id: candidate-browser-pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store for candidate browser qualification
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.candidate-browser-pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install candidate browser qualification dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+        run: pnpm install --frozen-lockfile
+
+      - name: Build candidate browser qualification dependencies
+        run: pnpm run build:shared
+
+      - name: Resolve candidate Playwright runner image
+        id: candidate-playwright-runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
+          echo "image=mcr.microsoft.com/playwright:v${version}-jammy" >> "$GITHUB_OUTPUT"
+
+      - name: Run Mission Control browser journey on exact candidate images
+        env:
+          EG_POSTGRES_IMAGE_ENV_FILE: .artifacts/release-candidate-smoke/postgres.env
+          PLAYWRIGHT_RUNNER_IMAGE: ${{ steps.candidate-playwright-runner.outputs.image }}
+        run: >-
+          pnpm run test:e2e:smoke:postgres:images --
+          --env-file .artifacts/release-candidate-smoke/postgres.env
+          --project-name enterpriseglue-release-candidate-browser
+
+      - name: Retain candidate browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-image-browser-${{ needs.resolve.outputs.source_ref }}
+          path: test/results/
+          if-no-files-found: warn
+          retention-days: 90
+
       - name: Scan exact candidate image digests
         shell: bash
         env:

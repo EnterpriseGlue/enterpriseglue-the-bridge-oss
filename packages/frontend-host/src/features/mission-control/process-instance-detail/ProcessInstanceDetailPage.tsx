@@ -245,6 +245,7 @@ export default function ProcessInstanceDetailPage() {
   // 2. Diagram Overlays Hook
   // Check if process instance is suspended (from runtime data)
   const isSuspended = !!(runtimeQ.data as any)?.suspended
+  const [diagramImportRevision, setDiagramImportRevision] = React.useState(0)
   const [showTokenPassCounts, setShowTokenPassCounts] = React.useState(() => {
     try {
       if (typeof window === 'undefined') return false
@@ -260,6 +261,10 @@ export default function ProcessInstanceDetailPage() {
     } catch {}
   }, [showTokenPassCounts])
   const { viewerApi, setViewerApi, bpmnRef, applyOverlays } = useDiagramOverlays(activityOverlayQ, incidentsQ, { isSuspended, showTokenPassCounts })
+  const handleDiagramImported = React.useCallback(() => {
+    applyOverlays()
+    setDiagramImportRevision((revision) => revision + 1)
+  }, [applyOverlays])
 
   // 3. Variable Editor Hook
   const variableEditor = useVariableEditor({
@@ -1061,7 +1066,7 @@ export default function ProcessInstanceDetailPage() {
           isLoading={xmlQ.isLoading}
           error={xmlQ.error}
           onReady={setViewerApi}
-          onDiagramReset={applyOverlays}
+          onDiagramReset={handleDiagramImported}
           onElementNavigate={handleElementNavigate}
         />
         </Pane>
@@ -1128,6 +1133,7 @@ export default function ProcessInstanceDetailPage() {
             incidentActivityIds,
             clickableActivityIds,
             bpmnRef,
+            diagramImportRevision,
             selectedActivityId,
             setSelectedActivityId,
             selectedActivityInstanceId,

@@ -18,6 +18,10 @@ const dockerImages = readFileSync(
   new URL('../.github/workflows/docker-images.yml', import.meta.url),
   'utf8',
 );
+const releaseCandidate = readFileSync(
+  new URL('../.github/workflows/release-candidate-stage.yml', import.meta.url),
+  'utf8',
+);
 const postgresImageSmoke = readFileSync(
   new URL('./e2e-smoke-postgres-images.sh', import.meta.url),
   'utf8',
@@ -87,20 +91,19 @@ test('multi-architecture image publishing allows both native platform builds to 
   assert.doesNotMatch(buildJob, /timeout-minutes: (?:30|90)/);
 });
 
-test('published Postgres image smoke compiles test dependencies and preserves fail-closed engine policy', () => {
-  const install = dockerImages.indexOf('- name: Install dependencies');
-  const buildShared = dockerImages.indexOf('- name: Build shared test dependencies');
-  const smoke = dockerImages.indexOf('- name: Run Mission Control Playwright smoke on Postgres images');
+test('candidate Postgres image smoke compiles test dependencies before the browser journey', () => {
+  const install = releaseCandidate.indexOf('- name: Install candidate browser qualification dependencies');
+  const buildShared = releaseCandidate.indexOf('- name: Build candidate browser qualification dependencies');
+  const smoke = releaseCandidate.indexOf('- name: Run Mission Control browser journey on exact candidate images');
   assert.ok(install >= 0 && install < buildShared, 'shared test dependencies must build after install');
   assert.ok(buildShared < smoke, 'shared test dependencies must build before Playwright starts');
-  assert.match(dockerImages, /run: pnpm run build:shared/);
-  assert.match(dockerImages, /echo "EG_ENGINE_ALLOWED_HOSTS=camunda-mock"/);
-  assert.match(dockerImages, /echo "EG_ENGINE_ALLOW_PRIVATE_HOSTS=true"/);
-  assert.match(dockerImages, /echo "EG_ALLOW_INSECURE_ENGINE_HTTP=true"/);
-  assert.match(dockerImages, /echo "EG_ENFORCE_ENGINE_ENDPOINT_POLICY=true"/);
+  assert.match(releaseCandidate, /run: pnpm run build:shared/);
+  assert.match(releaseCandidate, /test:e2e:smoke:postgres:images/);
+  assert.match(releaseCandidate, /release-candidate-image-browser-/);
+  assert.match(postgresImageSmoke, /CAMUNDA_BASE_URL="http:\/\/camunda-mock:9080\/engine-rest"/);
 });
 
-test('published Postgres image smoke passes the configured encryption boundary into Playwright', () => {
+test('candidate Postgres image smoke passes the configured encryption boundary into Playwright', () => {
   assert.match(postgresImageSmoke, /encryption_key="\$\(env_first ENCRYPTION_KEY\)"/);
   assert.match(postgresImageSmoke, /\[\[ -n "\$encryption_key" \]\] \|\| error "ENCRYPTION_KEY missing in \$ENV_FILE"/);
   assert.match(postgresImageSmoke, /-e ENCRYPTION_KEY \\/);

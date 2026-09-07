@@ -173,6 +173,31 @@ test('frontend source changes select application tests but not Oracle or image b
   assert.equal(result.run_package_discipline, true);
 });
 
+test('diagram-readiness release fixes select focused UI, engine-browser, and image contracts', () => {
+  const result = classifyChangedFiles([
+    'packages/frontend-host/src/features/mission-control/process-instance-detail/ProcessInstanceDetailPage.tsx',
+    'frontend/__tests__/src/features/mission-control/process-instance-detail/components/ExecutionTrailPanel.test.tsx',
+    '.github/workflows/release-candidate-stage.yml',
+    '.github/workflows/docker-images.yml',
+    'scripts/release-candidate-workflow.test.mjs',
+    'scripts/security-workflow-contract.test.mjs',
+    '.release-notes/diagram-import-readiness.json',
+  ]);
+
+  assert.equal(result.frontend, true);
+  assert.equal(result.engine_integration, true);
+  assert.equal(result.application_container, true);
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.run_tests, true);
+  assert.equal(result.run_postgres, true);
+  assert.equal(result.run_engine_browser, true);
+  assert.equal(result.run_ci_images, true);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_oracle, false);
+  assert.equal(result.run_database_matrix, false);
+  assert.equal(result.unknown_high_risk, false);
+});
+
 test('published package source changes require same-PR package version discipline', () => {
   for (const path of [
     'packages/shared/src/db/bootstrap.ts',

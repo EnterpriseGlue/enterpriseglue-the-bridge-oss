@@ -37,7 +37,10 @@ to create another patch version.
    TypeORM qualification shards. The aggregate requires all five observations,
    matching canonical schema fingerprints, and passing service behavior.
    Exposed-backend, authentication, vulnerability, package, chart, and
-   plugin-toolchain checks run against the staged payload as well.
+   plugin-toolchain checks run against the staged payload as well. The exact
+   PostgreSQL candidate images also run the Mission Control mock-engine browser
+   journey, including process overview, detail, BPMN, variables, execution
+   markers, API responses, and strict console diagnostics.
 5. A pinned supported Operaton image qualifies engine version and health,
    process overview, completed process detail, BPMN rendering, final variables,
    and strict browser console/page/network diagnostics against the candidate
@@ -50,20 +53,20 @@ to create another patch version.
    succeeds. Release Please then creates the tag and GitHub release at the same
    commit.
 8. `Docker Images` verifies the signed receipt and adds the immutable release
-   tags to the already-qualified image digests. It does not rebuild them.
-9. The published image smokes and vulnerability scan run again through the
-   public tags. Only after all four jobs pass are GHCR `latest` and the Docker
-   Hub release and `latest` tags advanced.
-10. The protected host-chart and plugin-toolchain workflows copy the signed
+   tags to the already-qualified image digests. It does not rebuild them. The
+   workflow verifies that both public release tags still resolve to the signed
+   candidate digests, then advances GHCR `latest` and the Docker Hub release
+   and `latest` tags without repeating candidate qualification.
+9. The protected host-chart and plugin-toolchain workflows copy the signed
    candidate chart manifests into their production repositories, sign the
    production subjects, and verify the exact archives. The plugin-toolchain
    workflow also publishes the distribution lock at
    `ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution:<release-tag>`,
    verifies its bytes, and signs its immutable digest for Cloud release-manifest
    consumption.
-11. The workflow attaches the signed lock blob, receipts, deployment kit,
+10. The workflow attaches the signed lock blob, receipts, deployment kit,
     static frontend, and offline archive to the existing GitHub release.
-12. `Publish Plugin/API Packages` and `Publish Host Packages` automatically
+11. `Publish Plugin/API Packages` and `Publish Host Packages` automatically
     consume their exact signed candidate tarballs on the release event. Host
     publication waits until every plugin/API dependency version is visible in
     the registry. The host publisher verifies canonical registry payload
@@ -127,7 +130,8 @@ move or recreate the tag.
   execute code from an arbitrary revision.
 - If `Docker Images` failed after the release was created, dispatch it with the
   same `source_ref` and `release_tag`. It re-verifies the signed candidate and
-  promotes the same digests.
+  promotes the same digests. A product or browser failure in the signed
+  candidate requires a forward patch release; do not move the published tag.
 - If the host-chart or plugin-toolchain workflow failed, dispatch the failed
   workflow with the same `source_ref` and `release_tag`. Existing production
   versions and the distribution-lock OCI subject must match the release
@@ -155,7 +159,9 @@ is absent or does not match.
 
 An explicit `security_rebuild=true` Docker Images dispatch remains available
 for a non-release, commit-tagged rebuild. It cannot be combined with semantic
-candidate promotion and does not advance public release aliases.
+candidate promotion and does not advance public release aliases. Explicit
+builds retain the PostgreSQL browser, exposed-backend, Oracle, and vulnerability
+gates because they do not carry a signed, pre-qualified candidate receipt.
 
 For classifier policy, selected CI lanes, browser diagnostics, and weekly
 queue/runtime/cancellation metrics, see

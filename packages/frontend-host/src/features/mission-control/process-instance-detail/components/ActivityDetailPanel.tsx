@@ -17,6 +17,7 @@ interface ActivityDetailPanelProps {
   incidentActivityIds: Set<string>
   clickableActivityIds: Set<string>
   bpmnRef?: React.MutableRefObject<any>
+  diagramImportRevision: number
   selectedActivityId: string | null
   setSelectedActivityId: (id: string | null) => void
   selectedActivityInstanceId: string | null
@@ -100,6 +101,7 @@ export function ActivityDetailPanel({
   incidentActivityIds,
   clickableActivityIds,
   bpmnRef,
+  diagramImportRevision,
   selectedActivityId,
   setSelectedActivityId,
   selectedActivityInstanceId,
@@ -161,7 +163,7 @@ export function ActivityDetailPanel({
   const getBpmnElementById = React.useCallback((activityId: string) => {
     const reg = bpmnRef?.current?.get?.('elementRegistry')
     return reg?.get?.(activityId)
-  }, [bpmnRef])
+  }, [bpmnRef, diagramImportRevision])
 
   const resolveBpmnIconVisual = React.useMemo(() => {
     return createBpmnIconVisualResolver(getBpmnElementById)
@@ -179,7 +181,7 @@ export function ActivityDetailPanel({
       selectedActivityId,
       bpmnRef,
     }),
-    [sortedActs, incidentActivityIds, clickableActivityIds, selectedActivityId, bpmnRef]
+    [sortedActs, incidentActivityIds, clickableActivityIds, selectedActivityId, bpmnRef, diagramImportRevision]
   )
 
   return [

@@ -52,6 +52,7 @@ interface ProcessInstanceBottomPaneProps {
     incidentActivityIds: Set<string>
     clickableActivityIds: Set<string>
     bpmnRef?: React.MutableRefObject<any>
+    diagramImportRevision: number
     selectedActivityId: string | null
     setSelectedActivityId: (id: string | null) => void
     selectedActivityInstanceId: string | null
