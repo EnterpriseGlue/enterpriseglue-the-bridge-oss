@@ -103,6 +103,11 @@ rollback qualification gates pass for the intended deployment.
 - `EG_TENANT_CLOUD_IDENTITY_AUDIENCE`: Exact release-neutral Cloud API audience
   used for the short-lived tenant identity issued by the host. It is required
   when a managed release ID is configured.
+- `EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE`: Exact Cloud API audience used for
+  short-lived platform tenant-list or tenant-lifecycle identity issued by the
+  host. It is required in cloud-required mode and must be distinct from the
+  workload receipt issuer and tenant identity audience so issuer and audience
+  roles cannot collide and neither token class can be substituted for the other.
 - `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
   `PUT /api/workloads/tenants/{tenantId}/release-assignment`. Do not reuse a
   service-account token or expose it in frontend runtime configuration.
@@ -110,7 +115,10 @@ rollback qualification gates pass for the intended deployment.
   default `5`, maximum `60`.
 - `EG_TENANCY_CLOUD_REQUIRED`: When `true`, startup requires placement v2,
   workload receipt signing, forced RLS, the tenant secret broker, and signed
-  tenant application eligibility settings. The default is `false`.
+  tenant application eligibility settings. It also rejects direct shard-local
+  `POST /api/platform/tenants` and `PATCH /api/platform/tenants/{tenantId}`
+  calls; authenticated tenant reads and workload lifecycle routes remain
+  available. The default is `false`.
 - `EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY`,
   `EG_TENANT_WORKLOAD_RECEIPT_KEY_ID`, and
   `EG_TENANT_WORKLOAD_RECEIPT_ISSUER`: ES256 signing identity for safe tenant

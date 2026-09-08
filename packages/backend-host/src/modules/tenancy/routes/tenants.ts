@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { config } from '@enterpriseglue/shared/config/index.js';
@@ -14,6 +14,7 @@ import { tenantDiscoveryService } from '@enterpriseglue/shared/services/platform
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/platform-admin/TenantWorkloadLifecycleService.js';
 import { tenantCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/TenantCloudIdentityService.js';
+import { platformCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/PlatformCloudIdentityService.js';
 import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import { tenantReleaseActivationService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseActivationService.js';
 import { TenantReleaseActivationRequestSchema, SignedTenantReleaseActivationReceiptSchema } from '@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js';
@@ -42,6 +43,9 @@ import {
   TenantMemberUpsertRequestSchema,
   NativeTenantMembershipSchema,
   NativeTenantSchema,
+  PlatformCloudIdentityActionSchema,
+  PlatformCloudIdentityRequestSchema,
+  PlatformCloudIdentityResponseSchema,
   TenantCloudIdentityResponseSchema,
   TenancyCapabilitiesSchema,
   TenantUpdateRequestSchema,
@@ -56,6 +60,22 @@ import {
 
 const router = Router();
 const tenantIdSchema = z.string().min(1).max(160);
+
+const requireRequestedPlatformCloudAction: RequestHandler = (req, res, next) => {
+  const action = PlatformCloudIdentityActionSchema.parse(req.body.action);
+  return requireAction(action)(req, res, next);
+};
+
+const requireDirectPlatformTenantMutation: RequestHandler = (_req, _res, next) => {
+  if (config.tenancyCloudRequired) {
+    return next(Errors.withCode(
+      'CLOUD_CONTROL_PLANE_REQUIRED',
+      'Direct platform tenant mutation is disabled in cloud-required mode',
+      503,
+    ));
+  }
+  return next();
+};
 
 function requiredHeader(req: { headers: Record<string, unknown> }, name: string): string {
   const value = req.headers[name];
@@ -331,14 +351,25 @@ router.get('/api/platform/tenants', requireAuth, requireAdmin, requireAction('pl
   res.json(z.array(NativeTenantSchema).parse(await tenantService.list()));
 }));
 
-router.post('/api/platform/tenants', requireAuth, requireAdmin, requireAction('platform.tenants.manage'), validateBody(TenantCreateRequestSchema), asyncHandler(async (req, res) => {
+router.post('/api/platform/tenants', requireAuth, requireAdmin, requireAction('platform.tenants.manage'), requireDirectPlatformTenantMutation, validateBody(TenantCreateRequestSchema), asyncHandler(async (req, res) => {
   const tenant = await tenantService.create(req.body);
   res.status(201).json(NativeTenantSchema.parse(tenant));
 }));
 
-router.patch('/api/platform/tenants/:tenantId', requireAuth, requireAdmin, requireAction('platform.tenants.manage'), validateBody(TenantUpdateRequestSchema), asyncHandler(async (req, res) => {
+router.patch('/api/platform/tenants/:tenantId', requireAuth, requireAdmin, requireAction('platform.tenants.manage'), requireDirectPlatformTenantMutation, validateBody(TenantUpdateRequestSchema), asyncHandler(async (req, res) => {
   const tenant = await tenantService.update(tenantIdSchema.parse(req.params.tenantId), req.body);
   res.json(NativeTenantSchema.parse(tenant));
+}));
+
+router.post('/api/platform/cloud-identity', requireAuth, validateBody(PlatformCloudIdentityRequestSchema), requireRequestedPlatformCloudAction, asyncHandler(async (req, res) => {
+  const shardId = config.tenantPlacementV2ShardId;
+  if (!shardId) throw Errors.serviceUnavailable('Platform cloud identity signing');
+  const action = PlatformCloudIdentityActionSchema.parse(req.body.action);
+  res.setHeader('cache-control', 'no-store');
+  res.json(PlatformCloudIdentityResponseSchema.parse({
+    ...platformCloudIdentityService.issue({ userId: req.user!.userId, shardId, action }),
+    action,
+  }));
 }));
 
 const tenantScope = [resolveTenantContext({ required: true }), requireAuth] as const;

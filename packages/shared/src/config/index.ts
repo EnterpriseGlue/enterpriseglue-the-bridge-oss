@@ -62,6 +62,7 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantPlacementV2ShardId: z.string().min(1).max(160).optional(),
   tenantPlacementReleaseId: z.string().min(1).max(256).optional(),
   tenantCloudIdentityAudience: z.string().min(1).max(256).optional(),
+  platformCloudIdentityAudience: z.string().min(1).max(256).optional(),
   tenantReleaseControllerToken: z.string().min(32).max(512).optional(),
   tenantPlacementV2ClockSkewSeconds: z.number().int().nonnegative().max(60).default(5),
   tenancyCloudRequired: z.boolean().default(false),
@@ -221,6 +222,7 @@ function loadConfig(): Config {
     tenantPlacementV2ShardId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_SHARD_ID),
     tenantPlacementReleaseId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_RELEASE_ID),
     tenantCloudIdentityAudience: envOrUndefined(process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE),
+    platformCloudIdentityAudience: envOrUndefined(process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE),
     tenantReleaseControllerToken: envOrUndefined(process.env.EG_TENANT_RELEASE_CONTROLLER_TOKEN),
     tenantPlacementV2ClockSkewSeconds: process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS
       ? Number(process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS)
@@ -428,6 +430,15 @@ if (config.tenantSecretBrokerTokenRef?.includes('tenant-secret://')) {
   throw new Error('EG_TENANT_SECRET_BROKER_TOKEN_REF cannot use a tenant-secret reference.');
 }
 
+if (config.platformCloudIdentityAudience
+  && config.platformCloudIdentityAudience === config.tenantCloudIdentityAudience) {
+  throw new Error('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_CLOUD_IDENTITY_AUDIENCE.');
+}
+if (config.platformCloudIdentityAudience
+  && config.platformCloudIdentityAudience === config.tenantWorkloadReceiptIssuer) {
+  throw new Error('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_WORKLOAD_RECEIPT_ISSUER.');
+}
+
 if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
   throw new Error('EG_TENANCY_CLOUD_REQUIRED=true requires EG_TENANCY_MODE=pooled.');
 }
@@ -455,6 +466,7 @@ if (config.tenancyMode === 'pooled') {
       ['EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY', config.tenantWorkloadReceiptPrivateKey],
       ['EG_TENANT_WORKLOAD_RECEIPT_KEY_ID', config.tenantWorkloadReceiptKeyId],
       ['EG_TENANT_WORKLOAD_RECEIPT_ISSUER', config.tenantWorkloadReceiptIssuer],
+      ['EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE', config.platformCloudIdentityAudience],
       ['EG_TENANT_SECRET_BROKER_REQUIRED=true', config.tenantSecretBrokerRequired ? 'true' : undefined],
       ['EG_TENANT_SECRET_BROKER_URL', config.tenantSecretBrokerUrl],
       ['EG_TENANT_SECRET_BROKER_TOKEN_REF', config.tenantSecretBrokerTokenRef],

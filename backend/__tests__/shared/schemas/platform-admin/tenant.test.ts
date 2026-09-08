@@ -5,6 +5,9 @@ import {
   TenantDiscoveryResponseSchema,
   TenantLoginPolicySchema,
   TenantMembershipSchema,
+  PlatformCloudIdentityClaimsSchema,
+  PlatformCloudIdentityRequestSchema,
+  PlatformCloudIdentityResponseSchema,
   TenantSchema,
   TenantSettingsSchema,
   TenancyCapabilitiesSchema,
@@ -44,6 +47,34 @@ describe('native tenant contracts', () => {
       providerKey: 'alpha-oidc', purpose: 'oidc.client_secret', reference: 'ref:env://EG_ALPHA_OIDC_CLIENT_SECRET',
       expectedPlacementEpoch: 7, confirmation: 'YES',
     })).toThrow();
+  });
+
+  it('keeps platform Cloud identity requests action-specific and assertions short lived', () => {
+    expect(PlatformCloudIdentityRequestSchema.parse({ action: 'platform.tenants.read' }))
+      .toEqual({ action: 'platform.tenants.read' });
+    expect(PlatformCloudIdentityResponseSchema.parse({
+      token: 'a'.repeat(32), expiresIn: 90, action: 'platform.tenants.manage',
+    }).expiresIn).toBe(90);
+    expect(PlatformCloudIdentityClaimsSchema.parse({
+      schemaVersion: 'platform-cloud-identity.enterpriseglue.io/v1',
+      iss: 'regional-shard-01', aud: 'enterpriseglue-cloud-platform', sub: 'user:user-1',
+      jti: `pci_${'a'.repeat(32)}`, shardId: 'regional-shard-01', action: 'platform.tenants.read',
+      iat: 1_800_000_000, nbf: 1_799_999_998, exp: 1_800_000_090,
+    }).action).toBe('platform.tenants.read');
+    expect(() => PlatformCloudIdentityRequestSchema.parse({ action: 'platform.tenants.manage', tenantId: 'tenant-a' })).toThrow();
+    expect(() => PlatformCloudIdentityRequestSchema.parse({ action: 'platform.authz.roles.manage' })).toThrow();
+    expect(() => PlatformCloudIdentityClaimsSchema.parse({
+      schemaVersion: 'platform-cloud-identity.enterpriseglue.io/v1',
+      iss: 'regional-shard-01', aud: 'enterpriseglue-cloud-platform', sub: 'user:user-1',
+      jti: `pci_${'a'.repeat(32)}`, shardId: 'regional-shard-01', action: 'platform.tenants.read',
+      iat: 1_800_000_000, nbf: 1_799_999_998, exp: 1_800_000_091,
+    })).toThrow('exp must be exactly 90 seconds after iat');
+    expect(() => PlatformCloudIdentityClaimsSchema.parse({
+      schemaVersion: 'platform-cloud-identity.enterpriseglue.io/v1',
+      iss: 'regional-shard-01', aud: 'enterpriseglue-cloud-platform', sub: 'user:user-1',
+      jti: `pci_${'a'.repeat(32)}`, shardId: 'regional-shard-01', action: 'platform.tenants.read',
+      iat: 1_800_000_000, nbf: 1_799_999_999, exp: 1_800_000_090,
+    })).toThrow('nbf must be exactly two seconds before iat');
   });
 
   it('keeps work-email discovery separate from tenant authority', () => {

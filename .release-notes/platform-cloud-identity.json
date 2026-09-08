@@ -1,0 +1,83 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "platform-cloud-identity",
+  "type": "feature",
+  "scope": "tenancy",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds a short-lived platform identity contract for authorized tenant lifecycle control-plane calls and closes direct shard mutations in managed mode.",
+  "userImpact": [
+    "Authorized platform operators can exchange their current host session for a short-lived identity limited to tenant read or tenant management operations.",
+    "Self-hosted deployments keep the existing direct tenant lifecycle routes unless cloud-required mode is enabled."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Managed pooled shards configure a distinct platform Cloud identity audience before enabling cloud-required mode.",
+      "Control-plane consumers must verify the exact issuer, audience, key ID, platform action, shard ID, lifetime, and signature before accepting an assertion."
+    ]
+  },
+  "configuration": [
+    "Adds EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE for a distinct platform control-plane audience; cloud-required startup fails when it is absent.",
+    "EG_TENANCY_CLOUD_REQUIRED=true rejects direct POST and PATCH /api/platform/tenants mutations while retaining authenticated tenant reads and workload lifecycle routes."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds POST /api/platform/cloud-identity with a strict platform.tenants.read or platform.tenants.manage request action and a short-lived ES256 response.",
+      "Direct platform tenant mutations return 503 in cloud-required mode so managed control-plane orchestration cannot be bypassed through a shard-local browser session."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema change is required; identity issuance is stateless and the existing TypeORM tenant lifecycle remains authoritative outside cloud-required direct-user mutation paths."
+    ]
+  },
+  "security": [
+    "The host authenticates the current user and evaluates the exact requested platform.tenants.read or platform.tenants.manage authorization action before signing.",
+    "Assertions expire after 90 seconds, use a platform-specific audience and schema, and contain no tenant record, SSO configuration, provider assertion, secret, or browser credential.",
+    "Cloud-required mode fails closed before invoking direct shard-local tenant create or update services."
+  ],
+  "documentation": [
+    "Documents the platform Cloud identity claims, authorization boundary, managed-mode mutation fence, verifier requirements, configuration, rollback, and cloud-neutral ownership boundary."
+  ],
+  "knownLimitations": [
+    "OSS issues and documents the neutral assertion but does not implement a cloud control-plane endpoint or vendor-specific identity exchange."
+  ],
+  "rollback": [
+    "Disable managed control-plane callers before removing the platform audience or rolling back the host.",
+    "Turn off cloud-required mode only when operators intentionally accept restored direct shard-local tenant mutation."
+  ],
+  "validation": [
+    "Focused schema, signing, route authorization, OpenAPI, configuration, and fail-closed mutation tests cover the additive contract.",
+    "PostgreSQL remains the primary pooled-mode feedback lane; all supported database adapters require candidate portability qualification even though this change adds no migration."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.17.0",
+      "newVersion": "0.18.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.15.0",
+      "newVersion": "0.16.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.16.3",
+      "newVersion": "0.16.4",
+      "impact": "patch"
+    }
+  ]
+}

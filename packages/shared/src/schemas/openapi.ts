@@ -60,6 +60,9 @@ const {
   TenantUpdateRequestSchema,
   NativeTenantMembershipSchema,
   TenantCloudIdentityResponseSchema,
+  PlatformCloudIdentityClaimsSchema,
+  PlatformCloudIdentityRequestSchema,
+  PlatformCloudIdentityResponseSchema,
   TenantMemberSchema,
   TenantMemberUpsertRequestSchema,
   TenantLoginPolicySchema,
@@ -2779,6 +2782,9 @@ registry.register('TenantDiscoveryResponse', TenantDiscoveryResponseSchema);
 registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
 registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
 registry.register('TenantCloudIdentityResponse', TenantCloudIdentityResponseSchema);
+registry.register('PlatformCloudIdentityClaims', PlatformCloudIdentityClaimsSchema);
+registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityRequestSchema);
+registry.register('PlatformCloudIdentityResponse', PlatformCloudIdentityResponseSchema);
 registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
 registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
 registry.registerPath({
@@ -2904,13 +2910,25 @@ registry.registerPath({
   method: 'post', path: '/api/platform/tenants',
   ...authzExtension('platform.tenants.manage', 'POST', '/api/platform/tenants'),
   request: { body: { content: { 'application/json': { schema: TenantCreateRequestSchema } } } },
-  responses: { 201: { description: 'Tenant created with its first administrator', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Slug already exists or deployment is in single mode' } },
+  responses: { 201: { description: 'Tenant created with its first administrator', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Slug already exists or deployment is in single mode' }, 503: { description: 'Direct mutation is disabled because the cloud control plane is required' } },
 });
 registry.registerPath({
   method: 'patch', path: '/api/platform/tenants/{tenantId}',
   ...authzExtension('platform.tenants.manage', 'PATCH', '/api/platform/tenants/{tenantId}'),
   request: { params: TenantIdPathSchema, body: { content: { 'application/json': { schema: TenantUpdateRequestSchema } } } },
-  responses: { 200: { description: 'Tenant lifecycle or placement state updated', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Placement epoch conflict or protected default-tenant transition' } },
+  responses: { 200: { description: 'Tenant lifecycle or placement state updated', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Placement epoch conflict or protected default-tenant transition' }, 503: { description: 'Direct mutation is disabled because the cloud control plane is required' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/platform/cloud-identity',
+  ...authzExtension('platform.tenants.read', 'POST', '/api/platform/cloud-identity'),
+  request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityRequestSchema } } } },
+  responses: {
+    200: { description: 'Short-lived identity for exactly one authorized platform tenant action', content: { 'application/json': { schema: PlatformCloudIdentityResponseSchema } } },
+    400: { description: 'The requested action is missing, unsupported, or malformed' },
+    401: { description: 'A current authenticated user session is required' },
+    403: { description: 'The user is not authorized for the exact requested platform action' },
+    503: { description: 'Shard identity or platform Cloud identity signing is unavailable' },
+  },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant/cloud-identity',

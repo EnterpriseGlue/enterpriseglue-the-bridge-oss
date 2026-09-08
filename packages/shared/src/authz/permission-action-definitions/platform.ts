@@ -11,7 +11,15 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       category: 'Tenants',
       description: 'Read native tenant lifecycle and placement metadata.',
       ui: [{ surfaceId: 'admin.tenants', behavior: 'hide' }],
-      routes: [{ method: 'GET', route: '/api/platform/tenants', resourceResolver: 'platform.self' }],
+      routes: [
+        { method: 'GET', route: '/api/platform/tenants', resourceResolver: 'platform.self' },
+        {
+          method: 'POST',
+          route: '/api/platform/cloud-identity',
+          resourceResolver: 'platform.self',
+          additionalChecks: ['Request action must equal platform.tenants.read'],
+        },
+      ],
     },
   {
       actionId: 'platform.tenants.manage',
@@ -26,6 +34,12 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       routes: [
         { method: 'POST', route: '/api/platform/tenants', resourceResolver: 'platform.self' },
         { method: 'PATCH', route: '/api/platform/tenants/{tenantId}', resourceResolver: 'platform.self' },
+        {
+          method: 'POST',
+          route: '/api/platform/cloud-identity',
+          resourceResolver: 'platform.self',
+          additionalChecks: ['Request action must equal platform.tenants.manage'],
+        },
       ],
     },
   {

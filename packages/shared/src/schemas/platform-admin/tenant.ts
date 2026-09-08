@@ -216,6 +216,41 @@ export const TenantCloudIdentityResponseSchema = z.object({
   tenantRole: z.enum(['tenant_admin', 'member']),
 }).strict();
 
+export const PlatformCloudIdentityActionSchema = z.enum([
+  'platform.tenants.read',
+  'platform.tenants.manage',
+]).describe('Exact platform tenant action authorized before this identity is issued');
+
+export const PlatformCloudIdentityRequestSchema = z.object({
+  action: PlatformCloudIdentityActionSchema,
+}).strict();
+
+export const PlatformCloudIdentityClaimsSchema = z.object({
+  schemaVersion: z.literal('platform-cloud-identity.enterpriseglue.io/v1'),
+  iss: z.string().min(1).max(255),
+  aud: z.string().min(1).max(256),
+  sub: z.string().regex(/^user:[A-Za-z0-9][A-Za-z0-9._:-]{0,249}$/),
+  jti: z.string().regex(/^pci_[a-f0-9]{32}$/),
+  shardId: z.string().min(1).max(160),
+  action: PlatformCloudIdentityActionSchema,
+  iat: z.number().int().nonnegative(),
+  nbf: z.number().int().nonnegative(),
+  exp: z.number().int().positive(),
+}).strict().superRefine((claims, ctx) => {
+  if (claims.nbf !== Math.max(0, claims.iat - 2)) {
+    ctx.addIssue({ code: 'custom', path: ['nbf'], message: 'nbf must be exactly two seconds before iat, bounded at zero' });
+  }
+  if (claims.exp !== claims.iat + 90) {
+    ctx.addIssue({ code: 'custom', path: ['exp'], message: 'exp must be exactly 90 seconds after iat' });
+  }
+});
+
+export const PlatformCloudIdentityResponseSchema = z.object({
+  token: z.string().min(32),
+  expiresIn: z.literal(90),
+  action: PlatformCloudIdentityActionSchema,
+}).strict();
+
 export const TenantMemberSchema = z.object({
   userId: z.string().min(1),
   email: z.string().email(),
@@ -318,6 +353,10 @@ export type NativeTenantContract = z.infer<typeof NativeTenantSchema>;
 export type TenantCreateRequest = z.infer<typeof TenantCreateRequestSchema>;
 export type TenantUpdateRequest = z.infer<typeof TenantUpdateRequestSchema>;
 export type NativeTenantMembership = z.infer<typeof NativeTenantMembershipSchema>;
+export type PlatformCloudIdentityAction = z.infer<typeof PlatformCloudIdentityActionSchema>;
+export type PlatformCloudIdentityClaims = z.infer<typeof PlatformCloudIdentityClaimsSchema>;
+export type PlatformCloudIdentityRequest = z.infer<typeof PlatformCloudIdentityRequestSchema>;
+export type PlatformCloudIdentityResponse = z.infer<typeof PlatformCloudIdentityResponseSchema>;
 export type TenantLoginPolicyContract = z.infer<typeof TenantLoginPolicySchema>;
 export type TenantDiscoveryDomainContract = z.infer<typeof TenantDiscoveryDomainSchema>;
 export type TenantDiscoveryResponse = z.infer<typeof TenantDiscoveryResponseSchema>;

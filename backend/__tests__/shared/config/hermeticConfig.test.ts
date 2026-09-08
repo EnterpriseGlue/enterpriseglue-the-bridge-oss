@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { generateKeyPairSync } from 'node:crypto';
 
 const dotenvConfig = vi.hoisted(() => vi.fn());
 const originalDatabaseType = process.env.DATABASE_TYPE;
@@ -25,6 +26,21 @@ const eligibilityEnvironmentNames = [
 const originalEligibilityEnvironment = new Map(
   eligibilityEnvironmentNames.map((name) => [name, process.env[name]]),
 );
+const cloudIdentityEnvironmentNames = [
+  'EG_TENANCY_CLOUD_REQUIRED',
+  'EG_TENANT_PLACEMENT_V2_JWKS_JSON',
+  'EG_TENANT_PLACEMENT_V2_ISSUER',
+  'EG_TENANT_PLACEMENT_V2_AUDIENCE',
+  'EG_TENANT_PLACEMENT_V2_SHARD_ID',
+  'EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY',
+  'EG_TENANT_WORKLOAD_RECEIPT_KEY_ID',
+  'EG_TENANT_WORKLOAD_RECEIPT_ISSUER',
+  'EG_TENANT_CLOUD_IDENTITY_AUDIENCE',
+  'EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE',
+] as const;
+const originalCloudIdentityEnvironment = new Map(
+  cloudIdentityEnvironmentNames.map((name) => [name, process.env[name]]),
+);
 
 vi.mock('dotenv', () => ({
   default: { config: dotenvConfig },
@@ -41,6 +57,7 @@ describe('hermetic test configuration', () => {
     delete process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF;
     delete process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
     for (const name of eligibilityEnvironmentNames) delete process.env[name];
+    for (const name of cloudIdentityEnvironmentNames) delete process.env[name];
     for (const name of runtimeEnvironmentNames) delete process.env[name];
   });
 
@@ -59,6 +76,11 @@ describe('hermetic test configuration', () => {
     else process.env.EG_TENANT_SECRET_BROKER_REQUIRED = originalTenantSecretBrokerRequired;
     for (const name of eligibilityEnvironmentNames) {
       const value = originalEligibilityEnvironment.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    for (const name of cloudIdentityEnvironmentNames) {
+      const value = originalCloudIdentityEnvironment.get(name);
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }
@@ -147,6 +169,49 @@ describe('hermetic test configuration', () => {
 
     await expect(import('@enterpriseglue/shared/config/index.js'))
       .rejects.toThrow('Signed tenant application eligibility requires');
+  });
+
+  it('requires a distinct platform identity audience in cloud-required mode', async () => {
+    const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const jwk = pair.publicKey.export({ format: 'jwk' });
+    const jwks = JSON.stringify({ keys: [{ ...jwk, kid: 'control-key-1', alg: 'ES256', use: 'sig' }] });
+    process.env.DATABASE_TYPE = 'postgres';
+    process.env.EG_TENANCY_MODE = 'pooled';
+    process.env.EG_TENANT_RLS_ENFORCED = 'true';
+    process.env.EG_TENANCY_CLOUD_REQUIRED = 'true';
+    process.env.EG_TENANT_PLACEMENT_V2_JWKS_JSON = jwks;
+    process.env.EG_TENANT_PLACEMENT_V2_ISSUER = 'https://control.example';
+    process.env.EG_TENANT_PLACEMENT_V2_AUDIENCE = 'enterpriseglue-shard';
+    process.env.EG_TENANT_PLACEMENT_V2_SHARD_ID = 'regional-shard-01';
+    process.env.EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY = pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+    process.env.EG_TENANT_WORKLOAD_RECEIPT_KEY_ID = 'regional-shard-01-receipt';
+    process.env.EG_TENANT_WORKLOAD_RECEIPT_ISSUER = 'regional-shard-01';
+    process.env.EG_TENANT_SECRET_BROKER_REQUIRED = 'true';
+    process.env.EG_TENANT_SECRET_BROKER_URL = 'https://broker.internal.example';
+    process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF = 'env://EG_TENANT_SECRET_BROKER_TOKEN';
+    process.env.EG_TENANT_APP_ELIGIBILITY_REQUIRED = 'true';
+    process.env.EG_TENANT_APP_ELIGIBILITY_JWKS_JSON = jwks;
+    process.env.EG_TENANT_APP_ELIGIBILITY_ISSUER = 'https://control.example';
+    process.env.EG_TENANT_APP_ELIGIBILITY_AUDIENCE = 'enterpriseglue-shard';
+
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('EG_TENANCY_CLOUD_REQUIRED=true requires EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE.');
+  });
+
+  it('rejects a platform identity audience shared with tenant assertions', async () => {
+    process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE = 'shared-control-plane';
+    process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE = 'shared-control-plane';
+
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_CLOUD_IDENTITY_AUDIENCE.');
+  });
+
+  it('rejects a platform identity issuer and audience collision', async () => {
+    process.env.EG_TENANT_WORKLOAD_RECEIPT_ISSUER = 'regional-shard-01';
+    process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE = 'regional-shard-01';
+
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_WORKLOAD_RECEIPT_ISSUER.');
   });
 
   it('rejects private or non-ES256 eligibility keys', async () => {
