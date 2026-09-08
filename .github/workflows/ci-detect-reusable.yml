@@ -42,6 +42,8 @@ on:
         value: ${{ jobs.detect.outputs.unknown_high_risk }}
       run_tests:
         value: ${{ jobs.detect.outputs.run_tests }}
+      run_frontend_tests:
+        value: ${{ jobs.detect.outputs.run_frontend_tests }}
       current_sha:
         value: ${{ jobs.detect.outputs.current_sha }}
       run_postgres:
@@ -111,6 +113,7 @@ jobs:
       workflow_or_release: ${{ steps.classify.outputs.workflow_or_release }}
       unknown_high_risk: ${{ steps.classify.outputs.unknown_high_risk }}
       run_tests: ${{ steps.classify.outputs.run_tests }}
+      run_frontend_tests: ${{ steps.classify.outputs.run_frontend_tests }}
       current_sha: ${{ steps.source.outputs.current_sha }}
       run_postgres: ${{ steps.classify.outputs.run_postgres }}
       run_oracle: ${{ steps.classify.outputs.run_oracle }}

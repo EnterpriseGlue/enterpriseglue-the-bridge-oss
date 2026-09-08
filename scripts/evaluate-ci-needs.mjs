@@ -14,6 +14,7 @@ const selectedJobMap = new Map([
   ['run_package_discipline', ['published-package-version-discipline']],
   ['run_plugin_package', ['plugin-api-package']],
   ['run_compose_render', ['compose-render']],
+  ['run_frontend_tests', ['frontend-tests']],
   ['run_tests', ['test']],
   ['run_ci_images', ['build-ci-images']],
   ['run_smoke', ['smoke-postgres-image-deploy']],

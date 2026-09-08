@@ -18,6 +18,7 @@ const booleanOutputs = [
   'helm',
   'workflow_or_release',
   'unknown_high_risk',
+  'run_frontend_tests',
   'run_tests',
   'run_postgres',
   'run_oracle',
@@ -201,6 +202,9 @@ function fullClassification({ enablePluginPackage }) {
   );
   return {
     ...result,
+    // The focused frontend lane is an alternative to the aggregate application
+    // suite. A forced full run already includes those tests through run_tests.
+    run_frontend_tests: false,
     run_plugin_package: enablePluginPackage,
     test_databases: ['postgres', 'oracle'],
     changed_files_count: 'all',
@@ -230,7 +234,10 @@ export function classifyChangedFiles(rawPaths, {
   const unknownHighRisk = paths.some((path) => !known(path));
   const runTests = raw.backend || raw.frontend || raw.persistence || raw.engine_integration
     || raw.authorization || unknownHighRisk;
-  const runPostgres = runTests;
+  const runFrontendTests = raw.frontend && !(
+    raw.backend || raw.persistence || raw.engine_integration || raw.authorization || unknownHighRisk
+  );
+  const runPostgres = runTests && !runFrontendTests;
   const runOracle = raw.persistence || unknownHighRisk;
   const runCiImages = raw.application_container || unknownHighRisk;
   const runSmoke = runCiImages;
@@ -262,7 +269,8 @@ export function classifyChangedFiles(rawPaths, {
     helm: raw.helm,
     workflow_or_release: raw.workflow_or_release,
     unknown_high_risk: unknownHighRisk,
-    run_tests: runTests,
+    run_frontend_tests: runFrontendTests,
+    run_tests: runTests && !runFrontendTests,
     run_postgres: runPostgres,
     run_oracle: runOracle,
     run_smoke: runSmoke,

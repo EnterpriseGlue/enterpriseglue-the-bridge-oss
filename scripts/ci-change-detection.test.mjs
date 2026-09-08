@@ -144,6 +144,18 @@ test('session security changes cannot miss pooled session-race qualification', (
 });
 
 test('image and plugin work is independently gated from application tests', () => {
+  assert.match(ciWorkflow, /frontend-tests:[\s\S]*?if: needs\.detect\.outputs\.run_frontend_tests == 'true'/);
+  const focusedFrontendJob = ciWorkflow
+    .split('\n  frontend-tests:')[1]
+    .split('\n  test:')[0];
+  for (const command of [
+    'pnpm --filter frontend-host run typecheck',
+    'pnpm --filter webmodeler-frontend run typecheck',
+    'pnpm --filter webmodeler-frontend run test:unit',
+    'pnpm --dir packages/frontend-host exec vitest run --config vitest.config.ts',
+    'pnpm exec eslint frontend packages/frontend-host --max-warnings=0',
+  ]) assert.match(focusedFrontendJob, new RegExp(command.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(focusedFrontendJob, /postgres|oracle|webmodeler-backend|DATABASE_TYPE/i);
   assert.match(ciWorkflow, /plugin-platform:[\s\S]*?if: needs\.detect\.outputs\.run_plugin_checks == 'true'/);
   assert.match(ciWorkflow, /plugin-platform-images:[\s\S]*?if: needs\.detect\.outputs\.run_plugin_images == 'true'/);
   assert.match(ciWorkflow, /published-package-version-discipline:[\s\S]*?if: needs\.detect\.outputs\.run_package_discipline == 'true'/);
