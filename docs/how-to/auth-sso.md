@@ -760,16 +760,31 @@ Apple documents this setup in
 
 Configure the provider as direct OIDC with these Apple-specific fields:
 
+<!-- enterpriseglue-config-schema: ConfigIdentityProviderSchema -->
 ```json
 {
-  "issuerUrl": "https://appleid.apple.com",
-  "clientId": "com.example.enterpriseglue.web",
-  "clientAuthentication": "apple_private_key_jwt",
-  "appleTeamId": "TEAMID1234",
-  "appleKeyId": "KEYID12345",
-  "applePrivateKeyRef": "ref:tenant-secret://v1/<tenant-id>/oidc.apple_private_key/<opaque-id>",
-  "callbackUrl": "https://app.example.com/api/t/<tenant-slug>/auth/identity/callback",
-  "scopes": ["name", "email"]
+  "key": "identity.apple",
+  "displayName": "Apple",
+  "type": "oidc",
+  "enabled": true,
+  "authenticationMode": "direct",
+  "sync": {
+    "triggers": ["login"],
+    "requiredForLogin": true,
+    "incompleteEntitlements": "fail_closed",
+    "connectorCapability": "claim_only",
+    "scheduled": false
+  },
+  "oidc": {
+    "issuerUrl": "https://appleid.apple.com",
+    "clientId": "com.example.enterpriseglue.web",
+    "clientAuthentication": "apple_private_key_jwt",
+    "appleTeamId": "TEAMID1234",
+    "appleKeyId": "KEYID12345",
+    "applePrivateKeyRef": "ref:tenant-secret://v1/example-tenant/oidc.apple_private_key/example-key",
+    "callbackUrl": "https://app.example.com/api/t/example/auth/identity/callback",
+    "scopes": ["name", "email"]
+  }
 }
 ```
 
