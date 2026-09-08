@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import cookieParser from 'cookie-parser';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 
@@ -153,6 +154,7 @@ describePostgres('managed Cloud account session with PostgreSQL', () => {
     expect(JSON.parse(persisted.deviceInfo!)).toMatchObject({ sessionClass: 'cloud_account' });
 
     const app = express();
+    app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
     app.use(express.json(), cookieParser());
     app.get('/account', requireCloudAccountOrTenantAuth, (_req, res) => res.json({ admitted: true }));
     app.get('/tenant', requireAuth, (_req, res) => res.json({ admitted: true }));
