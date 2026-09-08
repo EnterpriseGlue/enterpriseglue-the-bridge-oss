@@ -1,13 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { getE2ECredentials, hasE2ECredentials } from '../utils/credentials';
+import { getE2EAdminCredentials, hasE2EAdminCredentials } from '../utils/credentials';
 
-const shouldSkip = !hasE2ECredentials();
+const shouldSkip = !hasE2EAdminCredentials();
 
 test.describe('Smoke: auth cookie flow', () => {
   test.skip(shouldSkip, 'E2E_USER/E2E_PASSWORD not set');
 
   test('login/me/refresh/csrf-logout flow works via nginx proxy @smoke', async ({ request }) => {
-    const { email, password } = getE2ECredentials();
+    // Logout intentionally revokes every session for this user. Use the
+    // separately seeded administrator so this test cannot invalidate browser
+    // sessions owned by parallel smoke specs.
+    const { email, password } = getE2EAdminCredentials();
     if (!email || !password) throw new Error('Missing E2E credentials');
 
     const loginRes = await request.post('/api/auth/login', {
@@ -43,7 +46,7 @@ test.describe('Smoke: auth cookie flow', () => {
   });
 
   test('invalid password is rejected @smoke', async ({ request }) => {
-    const { email } = getE2ECredentials();
+    const { email } = getE2EAdminCredentials();
     if (!email) throw new Error('Missing E2E credentials');
 
     const badLoginRes = await request.post('/api/auth/login', {
