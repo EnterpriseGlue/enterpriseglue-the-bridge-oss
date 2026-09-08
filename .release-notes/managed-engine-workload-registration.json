@@ -54,7 +54,8 @@
   "validation": [
     "Focused unit and contract tests cover schemas, workload authorization, route inventory, idempotency, literal encryption, endpoint policy, runtime decommission denial, and signed absent decommission recovery.",
     "PostgreSQL integration: 1 test passed for real TypeORM registration, exact replay, encrypted persistence, decommission, credential clearing, signed absence recovery, terminal recreation denial, and concurrent serialization.",
-    "Shared TypeScript no-emit validation passed."
+    "Shared TypeScript no-emit validation passed.",
+    "Pooled-tenancy harness regressions cover bounded CA-verified HTTPS startup, recovery from an interrupted TLS handshake, and fail-closed cleanup. Protected pooled browser qualification remains required."
   ],
   "packages": [
     {

@@ -4,7 +4,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { createServer } from 'node:https';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import { writeReceipt } from './pooled-tenancy-evidence.mjs';
 import { classifyChangedFiles } from './ci-change-classifier.mjs';
@@ -139,7 +141,7 @@ function runnerFixture(t) {
   executable('scripts/prepare-local-keycloak-saml-certificate.sh', 'touch "$LOCAL_SAML_SIGNING_CERT_FILE"');
   executable('scripts/run-ldap-protocol-mock.sh', `echo '${secret}'\ncase "$SCENARIO" in browser-failure) exit 17;; signal) kill -TERM "$PPID";; esac`);
   executable('bin/pnpm', `echo '${secret}'\nif [ "$SCENARIO" = build-failure ]; then exit 23; fi`);
-  executable('bin/curl', `echo '${secret}'`);
+  executable('bin/curl', `printf '%s\\n' "$@" >> "$HARNESS_CURL_ARGS"\necho '${secret}'\nif [ "$SCENARIO" = tls-startup-failure ]; then exit 35; fi`);
   executable('bin/rm', 'if [ "$SCENARIO" = scratch-cleanup-failure ]; then exit 1; fi\nexec /bin/rm "$@"');
   executable('bin/docker', `
 case "$*" in
@@ -153,7 +155,7 @@ esac`);
   mkdirSync(scratch);
   const run = (scenario, overrides = {}) => spawnSync('bash', [join(root, 'scripts/run-pooled-tenancy-e2e.sh')], {
     env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}`, CI: 'true', GITHUB_ACTIONS: '',
-      POOLED_TENANCY_E2E_KEEP_RAW: 'false', TMPDIR: scratch, HARNESS_CLEANUP: join(root, 'cleaned'), SCENARIO: scenario,
+      POOLED_TENANCY_E2E_KEEP_RAW: 'false', TMPDIR: scratch, HARNESS_CLEANUP: join(root, 'cleaned'), HARNESS_CURL_ARGS: join(root, 'curl-args'), SCENARIO: scenario,
       POOLED_TENANCY_E2E_ARTIFACT_DIR: join(root, 'artifacts'),
       POOLED_TENANCY_E2E_BACKEND_PORT: '18787', POOLED_TENANCY_E2E_FRONTEND_PORT: '18080',
       POOLED_TENANCY_E2E_KEYCLOAK_PORT: '18443', POOLED_TENANCY_E2E_TLS_FRONTEND_PORT: '18444',
@@ -165,6 +167,7 @@ esac`);
 
 for (const [scenario, code, stage] of [
   ['success', 0, 'complete'], ['preflight-failure', 2, 'preflight'], ['build-failure', 23, 'build'],
+  ['tls-startup-failure', 35, 'startup'],
   ['browser-failure', 17, 'browser'], ['signal', 143, 'browser'], ['invalid-isolation', 1, 'complete'],
   ['cleanup-failure', 1, 'cleanup'], ['scratch-cleanup-failure', 1, 'cleanup'],
 ]) test(`actual runner control flow: ${scenario}; credentials never reach console/export`, (t) => {
@@ -185,6 +188,44 @@ for (const [scenario, code, stage] of [
     assert.deepEqual(readdirSync(scratch), [], 'owned scratch and raw authentication logs must be removed');
   }
   assert.equal(existsSync(join(root, 'cleaned')), !['preflight-failure', 'build-failure'].includes(scenario));
+});
+
+test('TLS startup requires bounded CA-verified GETs and never bypasses certificate errors', (t) => {
+  const { root, run } = runnerFixture(t);
+  assert.equal(run('success').status, 0);
+  const args = readFileSync(join(root, 'curl-args'), 'utf8').trim().split('\n');
+  for (const flag of ['--fail', '--retry-all-errors', '--cacert']) assert.equal(args.filter(arg => arg === flag).length, 2);
+  for (const [flag, value] of [['--connect-timeout','2'], ['--max-time','5'], ['--retry','10'], ['--retry-delay','1'], ['--retry-max-time','30']]) {
+    const positions = args.flatMap((arg, index) => arg === flag ? [index] : []);
+    assert.equal(positions.length, 2);
+    for (const index of positions) assert.equal(args[index + 1], value);
+  }
+  assert.ok(args.includes('https://localhost:18444/login'));
+  assert.ok(args.includes('https://localhost:18443/realms/enterpriseglue-local/.well-known/openid-configuration'));
+  for (const unsafe of ['-k', '--insecure', '--location', '-L']) assert.ok(!args.includes(unsafe));
+});
+
+test('actual verified HTTPS readiness recovers from an interrupted first TLS handshake', async (t) => {
+  const { root } = fixture(t);
+  const key = join(root, 'server.key'); const cert = join(root, 'ca.crt');
+  const generated = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert,
+    '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { encoding: 'utf8' });
+  assert.equal(generated.status, 0, generated.stderr);
+  let connections = 0; let verifiedRequests = 0;
+  const server = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (_request, response) => {
+    verifiedRequests += 1; response.end('ready');
+  });
+  server.on('connection', socket => { connections += 1; if (connections === 1) socket.destroy(); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const port = server.address().port;
+  const source = readFileSync(new URL('./run-pooled-tenancy-e2e.sh', import.meta.url), 'utf8');
+  const waitFunction = source.match(/^wait_for_local_https\(\) \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(waitFunction);
+  await promisify(execFile)('bash', ['-c', `tls_dir="$1"; ${waitFunction}; wait_for_local_https "$2"`,
+    'readiness-test', root, `https://localhost:${port}/ready`], { timeout: 15000 });
+  assert.ok(connections >= 2);
+  assert.equal(verifiedRequests, 1);
 });
 
 test('raw retention is explicit, private and prohibited on CI', (t) => {
