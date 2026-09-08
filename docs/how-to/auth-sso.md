@@ -45,8 +45,9 @@ SaaS uses `/api/t/{tenantSlug}/auth/identity/callback` for OIDC and
 `/api/t/{tenantSlug}/auth/providers/saml/callback` for SAML; self-hosted and
 single-release deployments may keep the global compatibility callbacks. OIDC
 binds provider, tenant, and return path
-through exact HttpOnly cookie equality plus a cryptographic state nonce, PKCE,
-and ID-token nonce; SAML carries the same context in signed, expiring
+through exact HttpOnly cookie equality plus a cryptographic state nonce and
+ID-token nonce. Standard OIDC providers also use PKCE. Apple uses its documented
+form-post and signed-client-secret exchange; SAML carries the same context in signed, expiring
 RelayState plus a short-lived HttpOnly browser transaction cookie. Production
 uses `SameSite=None; Secure` so the IdP's cross-site POST can return it; the
 callback clears and verifies it before parsing the assertion. The global
@@ -747,6 +748,70 @@ Entra-compatible and optional real-tenant rehearsals are documented in
 [Identity Protocol Rehearsal and LDAP Test Harness](./ldap-protocol-test-harness.md).
 An Entra group or app-role change takes effect on the user's next successful
 sign-in, when its fresh token claims complete the mandatory reconciliation.
+
+### Sign in with Apple
+
+For a web tenant, first configure Sign in with Apple in the Apple Developer
+account: enable a primary App ID, associate a Services ID with that primary app,
+register the web domain and exact HTTPS return URL, then create a Sign in with
+Apple key. Use the Services ID as `clientId`; do not prefix it with the Team ID.
+Apple documents this setup in
+[Configuring your environment for Sign in with Apple](https://developer.apple.com/documentation/signinwithapple/configuring-your-environment-for-sign-in-with-apple).
+
+Configure the provider as direct OIDC with these Apple-specific fields:
+
+<!-- enterpriseglue-config-schema: ConfigIdentityProviderSchema -->
+```json
+{
+  "key": "identity.apple",
+  "displayName": "Apple",
+  "type": "oidc",
+  "enabled": true,
+  "authenticationMode": "direct",
+  "sync": {
+    "triggers": ["login"],
+    "requiredForLogin": true,
+    "incompleteEntitlements": "fail_closed",
+    "connectorCapability": "claim_only",
+    "scheduled": false
+  },
+  "oidc": {
+    "issuerUrl": "https://appleid.apple.com",
+    "clientId": "com.example.enterpriseglue.web",
+    "clientAuthentication": "apple_private_key_jwt",
+    "appleTeamId": "TEAMID1234",
+    "appleKeyId": "KEYID12345",
+    "applePrivateKeyRef": "ref:tenant-secret://v1/example-tenant/oidc.apple_private_key/example-key",
+    "callbackUrl": "https://app.example.com/api/t/example/auth/identity/callback",
+    "scopes": ["name", "email"]
+  }
+}
+```
+
+Upload the downloaded `.p8` value through the tenant provider-secret API or the
+portal's write-only Apple key field. Never place it in provider JSON, a config
+bundle, source control, logs, or support messages. EnterpriseGlue resolves it
+only during token exchange and creates a five-minute ES256 client-secret JWT
+with the configured Team ID, Key ID, and Services ID.
+
+Apple requires `response_mode=form_post` whenever `name` or `email` is
+requested. EnterpriseGlue therefore accepts the callback as bounded
+`application/x-www-form-urlencoded` data and uses `SameSite=None; Secure` for
+the short-lived state cookies. Apple does not advertise PKCE in this web token
+exchange, so this profile relies on the signed state, initiating-browser cookie,
+nonce, one-time authorization code, and Apple client authentication. Generic
+OIDC providers continue to use PKCE. See Apple's
+[authorization request](https://developer.apple.com/documentation/signinwithapplerestapi/request-an-authorization-to-the-sign-in-with-apple-server.)
+and [token validation](https://developer.apple.com/documentation/signinwithapplerestapi/generate-and-validate-tokens)
+contracts for the provider-side requirements.
+
+Apple may relay a private address ending in `privaterelay.appleid.com`; treat the
+verified Apple subject as the durable external identity. The user's name is
+available only on the first authorization. EnterpriseGlue accepts it only when
+the callback email matches the verified ID-token email, normalizes and bounds
+the name fields, and uses them only as profile data, never as authorization input.
+Apple does not publish an OIDC end-session endpoint, so EnterpriseGlue logout
+still revokes the local session and ends without a provider redirect.
 
 ### Authoritative SCIM provisioning
 

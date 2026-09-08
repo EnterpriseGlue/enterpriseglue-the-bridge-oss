@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, randomBytes } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { secretResolver } from './SecretResolver.js';
 import { IdentityProviderFailure, classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
@@ -7,7 +7,11 @@ import { readBoundedIdentityProviderJson, validateIdentityProviderCallbackUrl, v
 export interface GenericOidcProviderConfiguration {
   issuerUrl: string;
   clientId: string;
+  clientAuthentication: 'client_secret_post' | 'apple_private_key_jwt';
   clientSecretRef?: string;
+  appleTeamId?: string;
+  appleKeyId?: string;
+  applePrivateKeyRef?: string;
   callbackUrl: string;
   scopes: string[];
   expectedAudience?: string;
@@ -28,12 +32,13 @@ interface OidcDiscoveryDocument {
 export interface OidcAuthorizationRequest {
   url: string;
   codeVerifier: string;
+  responseMode?: 'query' | 'form_post';
 }
 
 export interface OidcIdentityClaims extends JwtPayload {
   sub: string;
   email?: string;
-  email_verified?: boolean;
+  email_verified?: boolean | 'true' | 'false';
   preferred_username?: string;
   name?: string;
   given_name?: string;
@@ -72,7 +77,22 @@ function config(input: Record<string, unknown>): GenericOidcProviderConfiguratio
   if (typeof input.expectedAudience === 'string' && input.expectedAudience.trim() !== clientId.trim()) {
     throw new Error('OIDC expectedAudience must equal clientId; ID tokens are always audience-bound to this client');
   }
-  if (!scopes.includes('openid')) throw new Error('OIDC scopes must include openid');
+  const clientAuthentication = input.clientAuthentication === 'apple_private_key_jwt'
+    ? 'apple_private_key_jwt'
+    : 'client_secret_post';
+  const appleTeamId = typeof input.appleTeamId === 'string' ? input.appleTeamId.trim() : undefined;
+  const appleKeyId = typeof input.appleKeyId === 'string' ? input.appleKeyId.trim() : undefined;
+  const applePrivateKeyRef = typeof input.applePrivateKeyRef === 'string' ? input.applePrivateKeyRef.trim() : undefined;
+  if (clientAuthentication === 'apple_private_key_jwt') {
+    if (normalizeIssuer(issuerUrl) !== 'https://appleid.apple.com') throw new Error('Apple private-key authentication requires the Apple issuer');
+    if (!appleTeamId || !/^[A-Z0-9]{10}$/.test(appleTeamId)) throw new Error('Apple Team ID must be a 10-character identifier');
+    if (!appleKeyId || !/^[A-Z0-9]{10}$/.test(appleKeyId)) throw new Error('Apple Key ID must be a 10-character identifier');
+    if (!applePrivateKeyRef) throw new Error('Apple private key reference is required');
+    if (typeof input.clientSecretRef === 'string' && input.clientSecretRef.trim()) throw new Error('Apple client secrets are generated from the private key');
+    if (scopes.some((scope) => !['name', 'email'].includes(scope))) throw new Error('Apple scopes may contain only name and email');
+  } else if (!scopes.includes('openid')) {
+    throw new Error('OIDC scopes must include openid');
+  }
   const strings = (value: unknown, max: number) => Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim())).slice(0, max).map((entry) => entry.trim())
     : [];
@@ -80,8 +100,9 @@ function config(input: Record<string, unknown>): GenericOidcProviderConfiguratio
     ? validateIdentityProviderLogoutRedirectUrl(input.postLogoutRedirectUrl).toString()
     : undefined;
   return {
-    issuerUrl: normalizeIssuer(issuerUrl), clientId: clientId.trim(), callbackUrl,
+    issuerUrl: normalizeIssuer(issuerUrl), clientId: clientId.trim(), callbackUrl, clientAuthentication,
     scopes, clientSecretRef: typeof input.clientSecretRef === 'string' ? input.clientSecretRef : undefined,
+    appleTeamId, appleKeyId, applePrivateKeyRef,
     expectedAudience: typeof input.expectedAudience === 'string' ? input.expectedAudience : undefined,
     requestedAcrValues: strings(input.requestedAcrValues, 20),
     mfaAmrValues: strings(input.mfaAmrValues, 20),
@@ -120,6 +141,7 @@ async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
 async function resolveSecretReference(
   reference?: string,
   context?: { tenantId?: string | null; correlationId?: string },
+  purpose: 'oidc.client_secret' | 'oidc.apple_private_key' = 'oidc.client_secret',
 ): Promise<string | null> {
   if (!reference?.trim()) return null;
   const stored = reference.startsWith('ref:') ? reference : `ref:${reference}`;
@@ -127,12 +149,69 @@ async function resolveSecretReference(
   if (!context?.tenantId) throw new Error('OIDC tenant secret context is unavailable');
   return secretResolver.resolveTenantStored(stored, {
     tenantId: context.tenantId,
-    purpose: 'oidc.client_secret',
+    purpose,
     ...(context.correlationId ? { correlationId: context.correlationId } : {}),
   });
 }
 
+async function appleClientSecret(
+  provider: GenericOidcProviderConfiguration,
+  context?: { tenantId?: string | null; correlationId?: string },
+): Promise<string> {
+  const privateKeyPem = await resolveSecretReference(provider.applePrivateKeyRef, context, 'oidc.apple_private_key');
+  if (!privateKeyPem) throw new Error('Apple private key is unavailable');
+  let privateKey;
+  try {
+    privateKey = createPrivateKey(privateKeyPem);
+  } catch {
+    throw new Error('Apple private key is invalid');
+  }
+  if (privateKey.asymmetricKeyType !== 'ec' || privateKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+    throw new Error('Apple private key must use the P-256 elliptic curve');
+  }
+  return jwt.sign({}, privateKey, {
+    algorithm: 'ES256',
+    keyid: provider.appleKeyId!,
+    issuer: provider.appleTeamId!,
+    subject: provider.clientId,
+    audience: 'https://appleid.apple.com',
+    expiresIn: 5 * 60,
+  });
+}
+
 export class GenericOidcService {
+  withCallbackUser(rawConfiguration: Record<string, unknown>, claims: OidcIdentityClaims, value: unknown): OidcIdentityClaims {
+    const provider = config(rawConfiguration);
+    if (provider.clientAuthentication !== 'apple_private_key_jwt' || value === undefined) return claims;
+    if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 4096) throw new Error('Apple callback user data is invalid');
+    let parsed: unknown;
+    try { parsed = JSON.parse(value); } catch { throw new Error('Apple callback user data is invalid'); }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Apple callback user data is invalid');
+    const user = parsed as Record<string, unknown>;
+    if (typeof user.email !== 'string' || typeof claims.email !== 'string'
+      || user.email.trim().toLowerCase() !== claims.email.trim().toLowerCase()) {
+      throw new Error('Apple callback email does not match the verified ID token');
+    }
+    const name = user.name;
+    if (!name || Array.isArray(name) || typeof name !== 'object') return claims;
+    const profileName = (entry: unknown): string | undefined => {
+      if (typeof entry !== 'string') return undefined;
+      const normalized = entry.normalize('NFKC').trim();
+      if (!normalized || normalized.length > 100 || /[\u0000-\u001f\u007f<>]/.test(normalized)) {
+        throw new Error('Apple callback user name is invalid');
+      }
+      return normalized;
+    };
+    const firstName = profileName((name as Record<string, unknown>).firstName);
+    const lastName = profileName((name as Record<string, unknown>).lastName);
+    return {
+      ...claims,
+      ...(firstName ? { given_name: firstName } : {}),
+      ...(lastName ? { family_name: lastName } : {}),
+      ...(firstName || lastName ? { name: [firstName, lastName].filter(Boolean).join(' ') } : {}),
+    };
+  }
+
   async testConnection(rawConfiguration: Record<string, unknown>): Promise<{ issuer: string; authorizationEndpoint: string; tokenEndpoint: string; jwksUri: string }> {
     try {
       const provider = config(rawConfiguration);
@@ -153,10 +232,15 @@ export class GenericOidcService {
       url.searchParams.set('scope', provider.scopes.join(' '));
       url.searchParams.set('state', state);
       url.searchParams.set('nonce', nonce);
-      url.searchParams.set('code_challenge_method', 'S256');
-      url.searchParams.set('code_challenge', base64Url(createHash('sha256').update(codeVerifier).digest()));
+      const responseMode = provider.clientAuthentication === 'apple_private_key_jwt' ? 'form_post' : 'query';
+      if (responseMode === 'form_post') {
+        url.searchParams.set('response_mode', responseMode);
+      } else {
+        url.searchParams.set('code_challenge_method', 'S256');
+        url.searchParams.set('code_challenge', base64Url(createHash('sha256').update(codeVerifier).digest()));
+      }
       if (provider.requestedAcrValues.length > 0) url.searchParams.set('acr_values', provider.requestedAcrValues.join(' '));
-      return { url: url.toString(), codeVerifier };
+      return { url: url.toString(), codeVerifier, responseMode };
     } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
@@ -196,8 +280,11 @@ export class GenericOidcService {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);
       const body = new URLSearchParams({ grant_type: 'authorization_code', code: input.code, redirect_uri: provider.callbackUrl, client_id: provider.clientId, code_verifier: input.codeVerifier });
-      const clientSecret = await resolveSecretReference(provider.clientSecretRef, secretContext);
+      const clientSecret = provider.clientAuthentication === 'apple_private_key_jwt'
+        ? await appleClientSecret(provider, secretContext)
+        : await resolveSecretReference(provider.clientSecretRef, secretContext);
       if (clientSecret) body.set('client_secret', clientSecret);
+      if (provider.clientAuthentication === 'apple_private_key_jwt') body.delete('code_verifier');
       const response = await fetch(metadata.token_endpoint, {
         method: 'POST', redirect: 'error', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),
       });
@@ -240,6 +327,9 @@ export class GenericOidcService {
     const claims = await this.verifySignedToken(token, metadata, provider, 'OIDC ID token') as OidcIdentityClaims;
     if (!claims.sub) throw new IdentityProviderFailure('missing_subject', 'OIDC ID token subject is invalid');
     if (claims.nonce !== nonce) throw new IdentityProviderFailure('invalid_signature', 'OIDC ID token nonce is invalid');
+    if (provider.clientAuthentication === 'apple_private_key_jwt' && typeof claims.email_verified === 'string') {
+      return { ...claims, email_verified: claims.email_verified === 'true' };
+    }
     return claims;
   }
 

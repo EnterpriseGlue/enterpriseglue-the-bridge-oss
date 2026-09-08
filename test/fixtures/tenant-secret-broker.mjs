@@ -6,6 +6,7 @@ const port = 8791;
 const expectedToken = process.env.EG_TENANT_SECRET_BROKER_TOKEN || '';
 const purposes = new Set([
   'oidc.client_secret',
+  'oidc.apple_private_key',
   'saml.metadata_xml',
   'saml.idp_signing_certificate',
   'saml.request_signing_private_key',

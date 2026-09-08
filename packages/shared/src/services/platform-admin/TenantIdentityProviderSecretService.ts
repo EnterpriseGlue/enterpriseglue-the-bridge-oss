@@ -13,6 +13,7 @@ type SecretFieldContract = {
 
 const SECRET_FIELDS: Record<TenantSecretPurpose, SecretFieldContract> = {
   'oidc.client_secret': { protocol: 'oidc', configurationField: 'clientSecretRef' },
+  'oidc.apple_private_key': { protocol: 'oidc', configurationField: 'applePrivateKeyRef' },
   'saml.metadata_xml': { protocol: 'saml', configurationField: 'metadataXmlRef' },
   'saml.idp_signing_certificate': { protocol: 'saml', configurationField: 'signingCertificateRef' },
   'saml.request_signing_private_key': { protocol: 'saml', configurationField: 'requestSigningPrivateKeyRef' },

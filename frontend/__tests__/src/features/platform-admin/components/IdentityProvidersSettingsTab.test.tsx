@@ -385,6 +385,56 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(JSON.stringify(providerBody)).not.toContain('tenant-secret-value-sentinel');
   });
 
+  it('configures Sign in with Apple and stores only the broker reference to the p8 key', async () => {
+    authState.permissions = {
+      userId: 'tenant-admin-1', tenantId: 'tenant-alpha', platform: [],
+      tenant: { resourceId: 'tenant-alpha', permissions: ['tenant:sso-providers:view', 'tenant:sso-providers:manage'] },
+      projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
+    };
+    const provision = vi.fn();
+    const create = vi.fn();
+    server.use(
+      http.get('/api/t/tenant-alpha/identity/providers', () => HttpResponse.json([identityProviderFixture])),
+      http.post('/api/t/tenant-alpha/identity/provider-secrets', async ({ request }) => {
+        provision(await request.json());
+        return HttpResponse.json({
+          purpose: 'oidc.apple_private_key',
+          reference: 'ref:tenant-secret://v1/tenant-alpha/oidc.apple_private_key/version-1',
+          version: '1', updatedAt: 10, previousRetired: false,
+        }, { status: 201 });
+      }),
+      http.post('/api/t/tenant-alpha/identity/providers', async ({ request }) => {
+        create(await request.json());
+        return HttpResponse.json(identityProviderFixture, { status: 201 });
+      }),
+    );
+    window.history.replaceState({}, '', '/t/tenant-alpha/admin/settings/identity-providers');
+    renderTab({ tenantAdminMode: true, tenantId: 'tenant-alpha' });
+    await screen.findByText('demo-oidc');
+    const workflow = await startProviderCreation('oidc', 'Apple', 'apple');
+    fireEvent.change(within(workflow).getByLabelText('Client authentication'), { target: { value: 'apple_private_key_jwt' } });
+    expect(within(workflow).getByLabelText('Issuer URL')).toHaveValue('https://appleid.apple.com');
+    expect(within(workflow).getByLabelText('Scopes')).toHaveValue('name email');
+    fireEvent.change(within(workflow).getByLabelText('Client ID'), { target: { value: 'ai.enterpriseglue.web' } });
+    fireEvent.change(within(workflow).getByLabelText('Apple Team ID'), { target: { value: 'teamid1234' } });
+    fireEvent.change(within(workflow).getByLabelText('Apple Key ID'), { target: { value: 'keyid12345' } });
+    fireEvent.change(within(workflow).getByLabelText('Apple .p8 private key'), { target: { value: 'apple-private-key-sentinel' } });
+    fireEvent.change(within(workflow).getByLabelText('Callback URL'), { target: { value: 'https://app.example.test/api/t/tenant-alpha/auth/identity/callback' } });
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Continue' }));
+    fireEvent.click(within(workflow).getByRole('button', { name: 'Create provider' }));
+
+    await waitFor(() => expect(provision).toHaveBeenCalledWith({ purpose: 'oidc.apple_private_key', value: 'apple-private-key-sentinel' }));
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    const providerBody = create.mock.calls[0][0];
+    expect(providerBody.configuration).toMatchObject({
+      issuerUrl: 'https://appleid.apple.com', clientId: 'ai.enterpriseglue.web', clientAuthentication: 'apple_private_key_jwt',
+      appleTeamId: 'TEAMID1234', appleKeyId: 'KEYID12345',
+      applePrivateKeyRef: 'ref:tenant-secret://v1/tenant-alpha/oidc.apple_private_key/version-1', scopes: ['name', 'email'],
+    });
+    expect(JSON.stringify(providerBody)).not.toContain('apple-private-key-sentinel');
+  });
+
   it('exposes LDAP identity and TLS trust fields that are available to headless configuration', async () => {
     renderTab();
     await screen.findByText('demo-oidc');
