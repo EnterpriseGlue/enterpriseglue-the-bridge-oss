@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.24.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.23.0...v0.24.0) (2026-09-08)
+
+
+### Features
+
+* **engines:** add tenant-managed workload registration ([c83ba31](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c83ba31ea363bfd01dacd542760071df0b6b774b))
+
+
+### Bug Fixes
+
+* **ci:** wait for verified pooled fixture TLS readiness ([0ad4b10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0ad4b10ad9626f11eb28b903fad6773c521cf5d8))
+* **engines:** authenticate replay intents with one keyed MAC ([e87a22a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e87a22a82fba05992b94a1ecca8db2b3778294f1))
+
 ## [0.23.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.22.0...v0.23.0) (2026-09-08)
 
 
