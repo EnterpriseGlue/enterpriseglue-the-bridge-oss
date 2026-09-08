@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Performance Improvements
 
 * **ci:** add focused frontend verification ([8fbf7b4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8fbf7b4933119a1ef2cd5686168389c49fadae92))
-* **ci:** add focused frontend verification ([0fe91df](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0fe91df6b57ee3d896c25b2335bcce4aa7414e69))
 
 ## [0.21.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.1...v0.21.2) (2026-09-07)
 
