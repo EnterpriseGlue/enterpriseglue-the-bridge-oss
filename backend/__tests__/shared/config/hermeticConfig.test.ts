@@ -171,7 +171,7 @@ describe('hermetic test configuration', () => {
       .rejects.toThrow('Signed tenant application eligibility requires');
   });
 
-  it('requires a distinct platform identity audience in cloud-required mode', async () => {
+  it('allows a cloud-required host to start before the platform identity audience is configured', async () => {
     const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
     const jwk = pair.publicKey.export({ format: 'jwk' });
     const jwks = JSON.stringify({ keys: [{ ...jwk, kid: 'control-key-1', alg: 'ES256', use: 'sig' }] });
@@ -194,8 +194,9 @@ describe('hermetic test configuration', () => {
     process.env.EG_TENANT_APP_ELIGIBILITY_ISSUER = 'https://control.example';
     process.env.EG_TENANT_APP_ELIGIBILITY_AUDIENCE = 'enterpriseglue-shard';
 
-    await expect(import('@enterpriseglue/shared/config/index.js'))
-      .rejects.toThrow('EG_TENANCY_CLOUD_REQUIRED=true requires EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE.');
+    const module = await import('@enterpriseglue/shared/config/index.js');
+    expect(module.config.tenancyCloudRequired).toBe(true);
+    expect(module.config.platformCloudIdentityAudience).toBeUndefined();
   });
 
   it('rejects a platform identity audience shared with tenant assertions', async () => {

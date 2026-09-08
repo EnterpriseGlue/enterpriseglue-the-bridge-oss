@@ -105,9 +105,10 @@ rollback qualification gates pass for the intended deployment.
   when a managed release ID is configured.
 - `EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE`: Exact Cloud API audience used for
   short-lived platform tenant-list or tenant-lifecycle identity issued by the
-  host. It is required in cloud-required mode and must be distinct from the
+  host. It is required before using that exchange and must be distinct from the
   workload receipt issuer and tenant identity audience so issuer and audience
   roles cannot collide and neither token class can be substituted for the other.
+  The host continues to start and the exchange returns HTTP 503 while it is unset.
 - `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
   `PUT /api/workloads/tenants/{tenantId}/release-assignment`. Do not reuse a
   service-account token or expose it in frontend runtime configuration.

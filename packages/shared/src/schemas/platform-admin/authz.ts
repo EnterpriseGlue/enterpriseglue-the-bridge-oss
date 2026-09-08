@@ -43,7 +43,7 @@ const PersistedTimestampSchema = z.union([
   z.string().regex(/^\d+$/).transform(Number),
 ]);
 
-export const AuthzOpenApiExtensionSchema = z.object({
+export const AuthzStaticOpenApiExtensionSchema = z.object({
   actionId: z.string().min(1),
   permission: z.string().min(1),
   resourceResolver: z.string().min(1),
@@ -52,6 +52,22 @@ export const AuthzOpenApiExtensionSchema = z.object({
   audit: z.boolean(),
   uiBehavior: AuthzUiBehaviorSchema,
 });
+
+export const AuthzRequestActionOpenApiExtensionSchema = z.object({
+  mode: z.literal('request-action'),
+  selector: z.object({
+    location: z.literal('body'),
+    field: z.string().min(1),
+  }),
+  alternatives: z.array(AuthzStaticOpenApiExtensionSchema.extend({
+    value: z.string().min(1),
+  })).min(2),
+});
+
+export const AuthzOpenApiExtensionSchema = z.union([
+  AuthzStaticOpenApiExtensionSchema,
+  AuthzRequestActionOpenApiExtensionSchema,
+]);
 
 export const AuthzOpenApiExemptionSchema = z.object({
   kind: z.enum(AUTHZ_ROUTE_EXEMPTION_KINDS),

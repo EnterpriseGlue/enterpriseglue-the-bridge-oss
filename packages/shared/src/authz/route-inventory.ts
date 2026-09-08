@@ -5,7 +5,9 @@ import {
   listAuthzActions,
   toOpenApiAuthzExtension,
   type AuthzOpenApiExtension,
+  type AuthzRequestActionOpenApiExtension,
   type AuthzRouteMetadata,
+  type AuthzStaticOpenApiExtension,
 } from './permission-actions.js';
 import {
   AUTHZ_OPENAPI_EXEMPTION_KEY,
@@ -29,6 +31,9 @@ export type AuthzRouteInventoryIssueCode =
   | 'openapi.unknown-action'
   | 'openapi.route-not-registered'
   | 'openapi.extension-mismatch'
+  | 'openapi.ambiguous-authz-classification'
+  | 'openapi.request-action-selector-mismatch'
+  | 'openapi.request-action-alternatives-mismatch'
   | 'openapi.unknown-exemption'
   | 'openapi.exemption-mismatch'
   | 'openapi.authz-conflict'
@@ -110,7 +115,7 @@ function addMismatch(
     actionId: string;
     method: string;
     openApiPath: string;
-    field: keyof AuthzOpenApiExtension;
+    field: string;
     expected: unknown;
     actual: unknown;
   }
@@ -126,6 +131,56 @@ function addMismatch(
     expected: input.expected,
     actual: input.actual,
   });
+}
+
+function isRequestActionExtension(
+  extension: Partial<AuthzOpenApiExtension>,
+): extension is Partial<AuthzRequestActionOpenApiExtension> & { mode: 'request-action' } {
+  return (extension as { mode?: unknown }).mode === 'request-action';
+}
+
+function selectorEnumValues(operation: OpenApiOperation, field: string): string[] | null {
+  const requestBody = operation.requestBody as {
+    content?: Record<string, { schema?: { properties?: Record<string, { enum?: unknown }> } }>;
+  } | undefined;
+  const values = requestBody?.content?.['application/json']?.schema?.properties?.[field]?.enum;
+  return Array.isArray(values) && values.every((value) => typeof value === 'string')
+    ? values as string[]
+    : null;
+}
+
+function sortedUnique(values: string[]): string[] {
+  return Array.from(new Set(values)).sort();
+}
+
+function addStaticExtensionMismatches(
+  issues: AuthzRouteInventoryIssue[],
+  input: {
+    actionId: string;
+    method: string;
+    openApiPath: string;
+    expected: AuthzStaticOpenApiExtension;
+    actual: Partial<AuthzStaticOpenApiExtension>;
+  },
+): void {
+  for (const field of [
+    'actionId',
+    'permission',
+    'resourceResolver',
+    'additionalChecks',
+    'risk',
+    'audit',
+    'uiBehavior',
+  ] as const) {
+    addMismatch(issues, {
+      actionId: input.actionId,
+      method: input.method,
+      openApiPath: input.openApiPath,
+      field,
+      expected: input.expected[field],
+      actual: input.actual[field],
+    });
+  }
 }
 
 function addExemptionMismatch(
@@ -190,6 +245,20 @@ function buildActionRouteIndex(issues: AuthzRouteInventoryIssue[]): Map<string, 
         issues.push({
           code: 'action.route.unknown-resolver',
           message: `Authorization route references unknown resolver: ${route.resourceResolver}`,
+          actionId: action.actionId,
+          method,
+          route: route.route,
+        });
+      }
+
+      if (route.requestAction && (
+        route.requestAction.location !== 'body'
+        || !route.requestAction.field.trim()
+        || !route.requestAction.value.trim()
+      )) {
+        issues.push({
+          code: 'action.route.invalid',
+          message: `Authorization request-action metadata is invalid for action ${action.actionId}`,
           actionId: action.actionId,
           method,
           route: route.route,
@@ -305,7 +374,9 @@ export function validateAuthzRouteInventory(
       issues.push({
         code: 'openapi.authz-conflict',
         message: `OpenAPI operation cannot declare both authz action metadata and authz exemption metadata: ${method} ${openApiPath}`,
-        actionId: String(extension.actionId || ''),
+        actionId: isRequestActionExtension(extension)
+          ? undefined
+          : String((extension as Partial<AuthzStaticOpenApiExtension>).actionId || ''),
         method,
         openApiPath,
       });
@@ -321,35 +392,158 @@ export function validateAuthzRouteInventory(
     }
 
     if (extension) {
-      const actionId = String(extension.actionId || '');
-      const action = getAuthzActionDefinition(actionId);
-      if (!action) {
-        issues.push({
-          code: 'openapi.unknown-action',
-          message: `OpenAPI authz metadata references unknown action id: ${actionId}`,
-          actionId,
-          method,
-          openApiPath,
-        });
-      } else {
-        const candidateRoutes = actionRoutes.get(key)?.filter((entry) => entry.actionId === actionId) || [];
-        if (candidateRoutes.length === 0) {
+      const registeredEntries = (actionRoutes.get(key) || [])
+        .filter((entry) => entry.route.openApi !== false);
+      const registeredActionIds = sortedUnique(registeredEntries.map((entry) => entry.actionId));
+      const requestActionEntries = registeredEntries.filter((entry) => entry.route.requestAction);
+      const requestActionIds = sortedUnique(requestActionEntries.map((entry) => entry.actionId));
+
+      if (isRequestActionExtension(extension)) {
+        const selector = extension.selector;
+        const alternatives = Array.isArray(extension.alternatives) ? extension.alternatives : [];
+        const declaredSelectors = sortedUnique(requestActionEntries.map((entry) =>
+          `${entry.route.requestAction!.location}:${entry.route.requestAction!.field}`));
+        const expectedSelector = declaredSelectors.length === 1
+          ? declaredSelectors[0]
+          : null;
+        const actualSelector = selector?.location === 'body' && typeof selector.field === 'string'
+          ? `${selector.location}:${selector.field}`
+          : null;
+        const selectorValid = selector?.location === 'body'
+          && typeof selector.field === 'string'
+          && selector.field.length > 0
+          && actualSelector === expectedSelector;
+        if (!selectorValid) {
           issues.push({
-            code: 'openapi.route-not-registered',
-            message: `OpenAPI authz metadata is not registered in the action route inventory: ${method} ${openApiPath}`,
+            code: 'openapi.request-action-selector-mismatch',
+            message: `Request-action authz selector must match the registered body field: ${method} ${openApiPath}`,
+            method,
+            openApiPath,
+            field: 'selector',
+            expected: expectedSelector,
+            actual: actualSelector,
+          });
+        }
+
+        const alternativeActionIds = alternatives
+          .map((alternative) => String(alternative?.actionId || ''));
+        const alternativeValues = alternatives
+          .map((alternative) => String(alternative?.value || ''));
+        if (
+          alternatives.length < 2
+          || requestActionEntries.length !== registeredEntries.length
+          || sortedUnique(alternativeActionIds).length !== alternativeActionIds.length
+          || sortedUnique(alternativeValues).length !== alternativeValues.length
+          || !valuesEqual(requestActionIds, sortedUnique(alternativeActionIds))
+        ) {
+          issues.push({
+            code: 'openapi.request-action-alternatives-mismatch',
+            message: `Request-action authz alternatives must exactly cover registered actions: ${method} ${openApiPath}`,
+            method,
+            openApiPath,
+            field: 'alternatives',
+            expected: requestActionIds,
+            actual: alternativeActionIds,
+          });
+        }
+
+        if (selectorValid) {
+          const requestValues = selectorEnumValues(operation, selector.field!);
+          if (!requestValues || !valuesEqual(sortedUnique(alternativeValues), sortedUnique(requestValues))) {
+            issues.push({
+              code: 'openapi.request-action-selector-mismatch',
+              message: `Request-action authz alternatives must equal the request selector enum: ${method} ${openApiPath}`,
+              method,
+              openApiPath,
+              field: `requestBody.${selector.field}`,
+              expected: sortedUnique(alternativeValues),
+              actual: requestValues ? sortedUnique(requestValues) : null,
+            });
+          }
+        }
+
+        for (const alternative of alternatives) {
+          const actionId = String(alternative?.actionId || '');
+          const action = getAuthzActionDefinition(actionId);
+          if (!action) {
+            issues.push({
+              code: 'openapi.unknown-action',
+              message: `OpenAPI request-action metadata references unknown action id: ${actionId}`,
+              actionId,
+              method,
+              openApiPath,
+            });
+            continue;
+          }
+          const candidateRoute = requestActionEntries.find((entry) => entry.actionId === actionId)?.route;
+          if (!candidateRoute) {
+            issues.push({
+              code: 'openapi.route-not-registered',
+              message: `OpenAPI request-action metadata is not registered in the action route inventory: ${method} ${openApiPath}`,
+              actionId,
+              method,
+              openApiPath,
+            });
+            continue;
+          }
+          addStaticExtensionMismatches(issues, {
+            actionId,
+            method,
+            openApiPath,
+            expected: toOpenApiAuthzExtension(action, candidateRoute),
+            actual: alternative,
+          });
+          addMismatch(issues, {
+            actionId,
+            method,
+            openApiPath,
+            field: 'value',
+            expected: candidateRoute.requestAction!.value,
+            actual: alternative.value,
+          });
+        }
+      } else {
+        const staticExtension = extension as Partial<AuthzStaticOpenApiExtension>;
+        const actionId = String(staticExtension.actionId || '');
+        if (requestActionEntries.length > 0) {
+          issues.push({
+            code: 'openapi.ambiguous-authz-classification',
+            message: `Static OpenAPI authz metadata cannot represent request-selected registered actions: ${method} ${openApiPath}`,
+            actionId,
+            method,
+            openApiPath,
+            expected: registeredActionIds,
+            actual: actionId,
+          });
+        }
+        const action = getAuthzActionDefinition(actionId);
+        if (!action) {
+          issues.push({
+            code: 'openapi.unknown-action',
+            message: `OpenAPI authz metadata references unknown action id: ${actionId}`,
             actionId,
             method,
             openApiPath,
           });
         } else {
-          const expected = toOpenApiAuthzExtension(action, candidateRoutes[0].route);
-          addMismatch(issues, { actionId, method, openApiPath, field: 'actionId', expected: expected.actionId, actual: extension.actionId });
-          addMismatch(issues, { actionId, method, openApiPath, field: 'permission', expected: expected.permission, actual: extension.permission });
-          addMismatch(issues, { actionId, method, openApiPath, field: 'resourceResolver', expected: expected.resourceResolver, actual: extension.resourceResolver });
-          addMismatch(issues, { actionId, method, openApiPath, field: 'additionalChecks', expected: expected.additionalChecks, actual: extension.additionalChecks });
-          addMismatch(issues, { actionId, method, openApiPath, field: 'risk', expected: expected.risk, actual: extension.risk });
-          addMismatch(issues, { actionId, method, openApiPath, field: 'audit', expected: expected.audit, actual: extension.audit });
-          addMismatch(issues, { actionId, method, openApiPath, field: 'uiBehavior', expected: expected.uiBehavior, actual: extension.uiBehavior });
+          const candidateRoute = registeredEntries.find((entry) => entry.actionId === actionId)?.route;
+          if (!candidateRoute) {
+            issues.push({
+              code: 'openapi.route-not-registered',
+              message: `OpenAPI authz metadata is not registered in the action route inventory: ${method} ${openApiPath}`,
+              actionId,
+              method,
+              openApiPath,
+            });
+          } else {
+            addStaticExtensionMismatches(issues, {
+              actionId,
+              method,
+              openApiPath,
+              expected: toOpenApiAuthzExtension(action, candidateRoute),
+              actual: staticExtension,
+            });
+          }
         }
       }
     }

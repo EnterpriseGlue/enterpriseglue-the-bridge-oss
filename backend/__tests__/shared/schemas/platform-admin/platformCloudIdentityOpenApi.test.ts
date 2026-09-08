@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { AuthzOpenApiExtensionSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('platform Cloud identity OpenAPI', () => {
   it('publishes the strict exchange schemas, exact action authorization, and mutation fence', () => {
@@ -9,11 +10,32 @@ describe('platform Cloud identity OpenAPI', () => {
     const requestSchema = exchange?.requestBody?.content?.['application/json']?.schema;
     const responseSchema = exchange?.responses?.['200']?.content?.['application/json']?.schema;
 
-    expect(exchange?.['x-enterpriseglue-authz']).toMatchObject({
-      actionId: 'platform.tenants.read',
-      permission: 'platform:tenants:view',
-      resourceResolver: 'platform.self',
-      additionalChecks: ['Request action must equal platform.tenants.read'],
+    const authz = AuthzOpenApiExtensionSchema.parse(exchange?.['x-enterpriseglue-authz']);
+    expect(authz).toEqual({
+      mode: 'request-action',
+      selector: { location: 'body', field: 'action' },
+      alternatives: [
+        {
+          value: 'platform.tenants.read',
+          actionId: 'platform.tenants.read',
+          permission: 'platform:tenants:view',
+          resourceResolver: 'platform.self',
+          additionalChecks: ['Request action must equal platform.tenants.read'],
+          risk: 'high',
+          audit: false,
+          uiBehavior: 'hide',
+        },
+        {
+          value: 'platform.tenants.manage',
+          actionId: 'platform.tenants.manage',
+          permission: 'platform:tenants:manage',
+          resourceResolver: 'platform.self',
+          additionalChecks: ['Request action must equal platform.tenants.manage'],
+          risk: 'critical',
+          audit: true,
+          uiBehavior: 'disable',
+        },
+      ],
     });
     expect(requestSchema).toMatchObject({
       type: 'object',

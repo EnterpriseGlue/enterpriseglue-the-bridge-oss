@@ -334,6 +334,40 @@ function authzExtension(actionId: string, method: string, path: string): Record<
   return { [AUTHZ_OPENAPI_EXTENSION_KEY]: toOpenApiAuthzExtension(action, route) };
 }
 
+function requestActionAuthzExtension(
+  actionIds: string[],
+  method: string,
+  path: string,
+): Record<string, unknown> {
+  let selector: { location: 'body'; field: string } | undefined;
+  const alternatives = actionIds.map((actionId) => {
+    const action = getAuthzActionDefinition(actionId);
+    const route = action?.routes?.find((candidate) =>
+      candidate.method.toUpperCase() === method.toUpperCase() && candidate.route === path
+    );
+    if (!action || !route?.requestAction) {
+      throw new Error(`Request-selected authorization action is not registered for ${method} ${path}: ${actionId}`);
+    }
+    const routeSelector = {
+      location: route.requestAction.location,
+      field: route.requestAction.field,
+    };
+    if (selector && (selector.location !== routeSelector.location || selector.field !== routeSelector.field)) {
+      throw new Error(`Request-selected authorization actions disagree on their selector for ${method} ${path}`);
+    }
+    selector = routeSelector;
+    return { value: route.requestAction.value, ...toOpenApiAuthzExtension(action, route) };
+  });
+  if (!selector) throw new Error(`Request-selected authorization operation has no alternatives: ${method} ${path}`);
+  return {
+    [AUTHZ_OPENAPI_EXTENSION_KEY]: {
+      mode: 'request-action',
+      selector,
+      alternatives,
+    },
+  };
+}
+
 function authzExemption(method: string, path: string): Record<string, unknown> {
   const exemption = getAuthzRouteExemption(method, path);
   if (!exemption) return {};
@@ -2920,7 +2954,10 @@ registry.registerPath({
 });
 registry.registerPath({
   method: 'post', path: '/api/platform/cloud-identity',
-  ...authzExtension('platform.tenants.read', 'POST', '/api/platform/cloud-identity'),
+  ...requestActionAuthzExtension([
+    'platform.tenants.read',
+    'platform.tenants.manage',
+  ], 'POST', '/api/platform/cloud-identity'),
   request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityRequestSchema } } } },
   responses: {
     200: { description: 'Short-lived identity for exactly one authorized platform tenant action', content: { 'application/json': { schema: PlatformCloudIdentityResponseSchema } } },

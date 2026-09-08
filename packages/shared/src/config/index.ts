@@ -466,7 +466,6 @@ if (config.tenancyMode === 'pooled') {
       ['EG_TENANT_WORKLOAD_RECEIPT_PRIVATE_KEY', config.tenantWorkloadReceiptPrivateKey],
       ['EG_TENANT_WORKLOAD_RECEIPT_KEY_ID', config.tenantWorkloadReceiptKeyId],
       ['EG_TENANT_WORKLOAD_RECEIPT_ISSUER', config.tenantWorkloadReceiptIssuer],
-      ['EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE', config.platformCloudIdentityAudience],
       ['EG_TENANT_SECRET_BROKER_REQUIRED=true', config.tenantSecretBrokerRequired ? 'true' : undefined],
       ['EG_TENANT_SECRET_BROKER_URL', config.tenantSecretBrokerUrl],
       ['EG_TENANT_SECRET_BROKER_TOKEN_REF', config.tenantSecretBrokerTokenRef],

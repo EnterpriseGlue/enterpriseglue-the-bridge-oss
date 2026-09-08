@@ -37,6 +37,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformCloudIdentitySer
 }));
 
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { Tenant as TenantEntity } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import router from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.js';
@@ -142,6 +143,41 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
     expect(list).toHaveBeenCalledOnce();
+  });
+
+  it('keeps direct TypeORM-backed tenant mutations available outside cloud-required mode', async () => {
+    const tenant = Object.assign(new TenantEntity(), {
+      id: 'tenant-a',
+      name: 'Tenant A',
+      slug: 'tenant-a',
+      status: 'active' as const,
+      placementKey: null,
+      placementEpoch: 1,
+      createdByUserId: 'operator-1',
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const create = vi.spyOn(tenantService, 'create').mockResolvedValue(tenant);
+    const update = vi.spyOn(tenantService, 'update').mockResolvedValue(Object.assign(new TenantEntity(), {
+      ...tenant,
+      name: 'Tenant A updated',
+      updatedAt: 2,
+    }));
+
+    const created = await request(app).post('/api/platform/tenants').send({
+      name: 'Tenant A',
+      slug: 'tenant-a',
+      ownerUserId: 'operator-1',
+    });
+    const updated = await request(app).patch('/api/platform/tenants/tenant-a').send({
+      name: 'Tenant A updated',
+    });
+
+    expect(created.status).toBe(201);
+    expect(updated.status).toBe(200);
+    expect(create).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledOnce();
+    expect(authz.evaluated).toEqual(['platform.tenants.manage', 'platform.tenants.manage']);
   });
 
   it('authenticates and authorizes before applying the cloud-required mutation fence', async () => {

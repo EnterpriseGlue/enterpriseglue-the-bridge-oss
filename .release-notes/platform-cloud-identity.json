@@ -19,12 +19,12 @@
   "upgrade": {
     "required": false,
     "instructions": [
-      "Managed pooled shards configure a distinct platform Cloud identity audience before enabling cloud-required mode.",
+      "Managed pooled shards configure a distinct platform Cloud identity audience before a control-plane consumer uses the exchange; hosts continue to start and the exchange returns 503 until it is configured.",
       "Control-plane consumers must verify the exact issuer, audience, key ID, platform action, shard ID, lifetime, and signature before accepting an assertion."
     ]
   },
   "configuration": [
-    "Adds EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE for a distinct platform control-plane audience; cloud-required startup fails when it is absent.",
+    "Adds optional EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE for a distinct platform control-plane audience; identity issuance fails closed with 503 when it is absent.",
     "EG_TENANCY_CLOUD_REQUIRED=true rejects direct POST and PATCH /api/platform/tenants mutations while retaining authenticated tenant reads and workload lifecycle routes."
   ],
   "api": {

@@ -1,6 +1,6 @@
 ---
 doc_class: technical
-audience: developer, operator, architect, security
+audience: developer, operator, architect
 publication: github
 lifecycle: as-built
 ---
@@ -43,6 +43,12 @@ Unsupported actions and unknown fields are rejected. Successful responses set
 }
 ```
 
+The operation's `x-enterpriseglue-authz` OpenAPI extension uses
+`mode: request-action`, identifies the validated body field, and publishes both
+action alternatives with their own permission, risk, audit, resolver, and UI
+metadata. Consumers must select the alternative whose `value` exactly matches
+the request action; they must not treat the operation as a static read action.
+
 The token is an identity assertion for a control-plane adapter. It is not an
 EnterpriseGlue access token, refresh token, API-client credential, service
 account token, placement assertion, or tenant membership credential.
@@ -66,6 +72,11 @@ The JWT header is `{alg: ES256, typ: JWT, kid}`. The payload follows the public
 No tenant record, tenant membership, SSO provider configuration, external
 identity assertion, secret reference, secret value, browser cookie, access
 token, or refresh token is included.
+
+`EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE` is optional at host startup so a managed
+deployment can roll out the host and Cloud configuration in either order. The
+exchange fails closed with HTTP 503 until the audience is configured; a Cloud
+consumer must not call it before deploying that configuration.
 
 ## Verifier requirements
 
