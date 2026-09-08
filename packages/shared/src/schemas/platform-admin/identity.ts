@@ -4,6 +4,7 @@ import { z } from 'zod';
 export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
 export const TENANT_IDENTITY_SECRET_PURPOSES = [
   'oidc.client_secret',
+  'oidc.apple_private_key',
   'saml.metadata_xml',
   'saml.idp_signing_certificate',
   'saml.request_signing_private_key',
@@ -87,7 +88,11 @@ const IdentityProviderAuthorizationConfigurationSchema = z.object({
 export const OidcIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
   issuerUrl: z.string().url(),
   clientId: z.string().min(1).max(255),
+  clientAuthentication: z.enum(['client_secret_post', 'apple_private_key_jwt']).optional(),
   clientSecretRef: IdentityProviderSecretReferenceSchema.optional(),
+  appleTeamId: z.string().regex(/^[A-Z0-9]{10}$/).optional(),
+  appleKeyId: z.string().regex(/^[A-Z0-9]{10}$/).optional(),
+  applePrivateKeyRef: IdentityProviderSecretReferenceSchema.optional(),
   callbackUrl: z.string().url(),
   scopes: z.array(z.string().min(1).max(255)).min(1),
   groupClaim: z.string().min(1).max(255).optional(),
@@ -96,7 +101,22 @@ export const OidcIdentityProviderConfigurationSchema = IdentityProviderAuthoriza
   mfaAmrValues: z.array(z.string().trim().min(1).max(128)).max(20).optional(),
   mfaAcrValues: z.array(z.string().trim().min(1).max(512)).max(20).optional(),
   postLogoutRedirectUrl: z.string().url().optional(),
-}).strict();
+}).strict().superRefine((provider, context) => {
+  if (provider.clientAuthentication === 'apple_private_key_jwt') {
+    if (provider.issuerUrl.replace(/\/$/, '') !== 'https://appleid.apple.com') {
+      context.addIssue({ code: 'custom', path: ['issuerUrl'], message: 'Apple private-key authentication requires the Apple issuer' });
+    }
+    if (!provider.appleTeamId) context.addIssue({ code: 'custom', path: ['appleTeamId'], message: 'Apple Team ID is required' });
+    if (!provider.appleKeyId) context.addIssue({ code: 'custom', path: ['appleKeyId'], message: 'Apple Key ID is required' });
+    if (!provider.applePrivateKeyRef) context.addIssue({ code: 'custom', path: ['applePrivateKeyRef'], message: 'Apple private key reference is required' });
+    if (provider.clientSecretRef) context.addIssue({ code: 'custom', path: ['clientSecretRef'], message: 'Apple client secrets are generated from the private key' });
+    if (provider.scopes.some((scope) => !['name', 'email'].includes(scope))) {
+      context.addIssue({ code: 'custom', path: ['scopes'], message: 'Apple scopes may contain only name and email' });
+    }
+  } else if (!provider.scopes.includes('openid')) {
+    context.addIssue({ code: 'custom', path: ['scopes'], message: 'OIDC scopes must include openid' });
+  }
+});
 
 export const SamlIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
   metadataUrl: z.string().url().optional(),

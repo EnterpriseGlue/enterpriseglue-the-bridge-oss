@@ -13,7 +13,7 @@ import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant
 import { config } from '@enterpriseglue/shared/config/index.js';
 
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), getDirectLoginProviderByKey: vi.fn(), getDirectLoginProviderById: vi.fn(), listEnabledDirectLoginProviders: vi.fn(), listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn() }));
-const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), authenticationAssurance: vi.fn(), verifyBackChannelLogoutToken: vi.fn() }));
+const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), withCallbackUser: vi.fn(), authenticationAssurance: vi.fn(), verifyBackChannelLogoutToken: vi.fn() }));
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn(), authenticationAssurance: vi.fn(), validatePostLogoutRequest: vi.fn(), createLogoutResponse: vi.fn(), validatePostLogoutResponse: vi.fn(), validateRedirectLogoutResponse: vi.fn() }));
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn(), enrollOidcInvitation: vi.fn(), enrollSamlInvitation: vi.fn(), enrollLdapInvitation: vi.fn() }));
@@ -76,6 +76,7 @@ describe('provider-neutral OIDC routes', () => {
     });
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
+    genericOidcService.withCallbackUser.mockImplementation((_configuration, claims) => claims);
     genericOidcService.authenticationAssurance.mockReturnValue({ mfaVerified: false });
     genericOidcService.verifyBackChannelLogoutToken.mockResolvedValue({ sub: 'subject-1', sid: 'session-1', events: {} });
     identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
@@ -111,11 +112,12 @@ describe('provider-neutral OIDC routes', () => {
     app.use(express.urlencoded({ extended: false }));
     app.use(cookieParser());
     // Match the production cookie-session boundary. Protocol state/correlation
-    // cookies alone are not access cookies; their routes still verify the IdP
-    // evidence rather than receiving a blanket callback-path exemption here.
+    // cookies alone are not access cookies. Form-post OIDC callbacks bypass SPA
+    // CSRF because they enforce their own signed state and browser-cookie proof.
     const csrfSecret = randomUUID();
     const skipCsrfProtection = (req: express.Request) => {
       if (['/api/auth/login', '/api/auth/refresh', '/api/csrf-token'].includes(req.path)) return true;
+      if (req.method === 'POST' && /^\/api\/(?:t\/[^/]+\/)?auth\/identity\/callback$/.test(req.path)) return true;
       const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
       return hasBearer || !req.cookies?.accessToken;
     };
@@ -233,6 +235,22 @@ describe('provider-neutral OIDC routes', () => {
       }
       expect(genericOidcService.createAuthorizationRequest).not.toHaveBeenCalled();
     } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
+  });
+
+  it('uses cross-site-capable state cookies for an HTTPS OIDC form-post flow', async () => {
+    const originalFrontendUrl = config.frontendUrl;
+    config.frontendUrl = 'https://app.example.test';
+    genericOidcService.createAuthorizationRequest.mockResolvedValueOnce({
+      url: 'https://appleid.apple.com/auth/authorize', codeVerifier: 'verifier', responseMode: 'form_post',
+    });
+    try {
+      const response = await request(app).get('/api/auth/identity/identity.oidc.main/start').redirects(0);
+      const cookies = Array.isArray(response.headers['set-cookie']) ? response.headers['set-cookie'] : [response.headers['set-cookie']];
+      expect(cookies.join(';')).toContain('SameSite=None');
+      expect(cookies.join(';')).toContain('Secure');
+    } finally {
+      config.frontendUrl = originalFrontendUrl;
+    }
   });
 
   const enrollment = { invitationId: 'invite-1', userId: 'pending-user', tenantId: 'tenant-default', tenantSlug: 'default', authSessionVersion: 0 as const };
@@ -551,7 +569,7 @@ describe('provider-neutral OIDC routes', () => {
     const state = buildSignedOidcState({ params: {}, query: {} } as any, 'provider-1', { key: 'identity.oidc.main', tenantId: null });
     const response = await request(app)
       .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
-      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier', 'accessToken=existing-session'])
       .redirects(0);
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
@@ -564,6 +582,37 @@ describe('provider-neutral OIDC routes', () => {
     expect(identityProviderProvisioningService.reconcileOidcLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1', identityProviderUpdatedAt: 1234 }));
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'oidc', event: 'succeeded' }));
+  });
+
+  it.each(['/api/auth/identity/callback', '/api/t/default/auth/identity/callback'])('accepts a form-urlencoded OIDC callback through %s', async (path) => {
+    const tenantId = path.includes('/api/t/') ? 'tenant-default' : null;
+    const selectedProvider = { ...provider, tenantId };
+    identityProviderService.getByKey.mockResolvedValue(selectedProvider);
+    const state = buildSignedOidcState(
+      { params: tenantId ? { tenantSlug: 'default' } : {}, query: {} } as any,
+      selectedProvider.id,
+      { key: selectedProvider.key, tenantId },
+    );
+    const response = await request(app)
+      .post(path)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier', 'accessToken=existing-session'])
+      .type('form')
+      .send({ code: 'apple-code', state, user: JSON.stringify({ email: 'ignored@example.test' }) })
+      .redirects(0);
+    expect(response.status).toBe(302);
+    expect(genericOidcService.exchangeCode).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      { code: 'apple-code', codeVerifier: 'verifier', nonce: expect.any(String) },
+      { tenantId },
+    );
+  });
+
+  it('rejects non-form and oversized OIDC POST callbacks before token exchange', async () => {
+    const nonForm = await request(app).post('/api/auth/identity/callback').send({ code: 'code', state: 'state' });
+    expect(nonForm.status).toBe(400);
+    const oversized = await request(app).post('/api/auth/identity/callback').type('form').send({ state: 'x'.repeat(17 * 1024) });
+    expect(oversized.status).toBe(413);
+    expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
   });
 
   it('preserves the legacy single-mode root callback after default-tenant ownership backfill', async () => {

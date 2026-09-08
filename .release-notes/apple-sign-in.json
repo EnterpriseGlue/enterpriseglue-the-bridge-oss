@@ -1,0 +1,80 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "apple-sign-in",
+  "type": "feature",
+  "scope": "identity-and-access-governance",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds tenant-aware Sign in with Apple support with form-post callbacks and dynamically signed, broker-backed Apple client secrets.",
+  "userImpact": [
+    "Users can sign in to an enabled EnterpriseGlue tenant with their Apple ID.",
+    "Administrators can configure Apple Team ID, Key ID, Services ID, and a broker-managed private-key reference on an OIDC provider."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Apple OIDC providers set clientAuthentication to apple_private_key_jwt, clientId to the Apple Services ID, appleTeamId and appleKeyId to the Developer account values, and applePrivateKeyRef to a tenant-secret-backed .p8 key reference.",
+    "Register the exact HTTPS tenant callback URL with the Apple Services ID and keep the provider disabled until its private key is available through the tenant secret broker."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "OIDC provider configuration accepts Apple client-authentication metadata and a private-key secret reference.",
+      "The global and tenant-qualified OIDC callback routes also accept bounded application/x-www-form-urlencoded POST responses."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Apple client secrets are generated just in time as short-lived ES256 JWTs; the Apple .p8 private key remains behind the tenant secret broker and is never persisted in provider configuration.",
+    "Apple POST callbacks retain signed-state, browser-cookie, nonce, tenant-routing, reconciliation, and session-issuance checks; generic OIDC providers continue to use PKCE.",
+    "Apple first-authorization profile names are accepted only after the callback email matches the signed ID-token email and after bounded character validation; they never affect authorization.",
+    "POST callback bodies are content-type checked and size bounded before provider state is consumed."
+  ],
+  "documentation": [
+    "Operator configuration and Apple Developer registration guidance in docs/how-to/auth-sso.md"
+  ],
+  "knownLimitations": [
+    "Apple Developer Services ID, domain, return URL, and signing-key registration must be completed in the customer's Apple Developer account before the provider can be enabled."
+  ],
+  "rollback": [
+    "Disable the Apple identity provider, revoke its active EnterpriseGlue sessions, and retire the broker-managed Apple private key before rolling back the application images."
+  ],
+  "validation": [
+    "OIDC service tests for Apple authorization parameters, ES256 client-secret claims and headers, broker-backed key resolution, and token exchange.",
+    "Backend route tests for tenant-qualified and compatibility POST callbacks, callback rejection, state binding, and payload limits.",
+    "Schema, API, frontend, typecheck, and release-note preflight checks."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.17.0",
+      "newVersion": "0.17.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.15.0",
+      "newVersion": "0.15.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.16.3",
+      "newVersion": "0.16.4",
+      "impact": "patch"
+    }
+  ]
+}

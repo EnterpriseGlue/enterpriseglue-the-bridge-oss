@@ -6,6 +6,7 @@ import { authLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { AppError, asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
+import { enforceParsedPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
 import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/services/invitations.js';
@@ -37,6 +38,7 @@ const router = Router();
 const stateCookie = 'identity_oidc_state';
 const verifierCookie = 'identity_oidc_verifier';
 const samlRequestCookie = 'identity_saml_request';
+const oidcCallbackFormPayloadLimit = enforceParsedPayloadLimit(16 * 1024);
 const ldapLoginSchema = z.object({ username: z.string().min(1).max(320), password: z.string().min(1).max(4096) });
 const oidcBackChannelLogoutSchema = z.object({ logout_token: z.string().min(1).max(64 * 1024) }).strict();
 const samlLogoutPostSchema = z.object({
@@ -183,7 +185,14 @@ async function startOidcLogin(req: Request, res: Response, provider: IdentityPro
   const parsed = parseSignedOidcState(state);
   if (!parsed) throw Errors.internal('Unable to initialize identity provider state');
   const request = await genericOidcService.createAuthorizationRequest(configuration(provider), state, parsed.nonce);
-  const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: 10 * 60 * 1000, path: '/' };
+  const secure = shouldUseSecureCookies();
+  const cookieOptions = {
+    httpOnly: true,
+    secure,
+    sameSite: request.responseMode === 'form_post' && secure ? 'none' as const : 'lax' as const,
+    maxAge: 10 * 60 * 1000,
+    path: '/',
+  };
   res.cookie(stateCookie, state, cookieOptions);
   res.cookie(verifierCookie, request.codeVerifier, cookieOptions);
   res.redirect(request.url);
@@ -463,13 +472,17 @@ router.get('/api/auth/identity/:key/start', apiLimiter, identityFlowLimiter, res
 }));
 
 async function completeOidcLogin(req: Request, res: Response): Promise<void> {
-  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  if (req.method === 'POST' && !req.is('application/x-www-form-urlencoded')) {
+    throw Errors.validation('OIDC POST callback requires form-urlencoded content');
+  }
+  const callback = req.method === 'POST' ? req.body : req.query;
+  const state = typeof callback?.state === 'string' ? callback.state : '';
   const parsed = parseSignedOidcState(state);
-  const redirectRejected = typeof req.query.error === 'string';
+  const redirectRejected = typeof callback?.error === 'string';
   const selectedProvider = { current: null as IdentityProvider | null };
   try {
     if (redirectRejected) throw Errors.unauthorized('Identity provider authentication was rejected');
-    if (typeof req.query.code !== 'string') throw Errors.validation('Missing authorization code');
+    if (typeof callback?.code !== 'string') throw Errors.validation('Missing authorization code');
     if (!state || req.cookies?.[stateCookie] !== state) throw Errors.unauthorized('Invalid identity provider state');
     const verifier = typeof req.cookies?.[verifierCookie] === 'string' ? req.cookies[verifierCookie] : '';
     res.clearCookie(stateCookie, { path: '/' });
@@ -482,7 +495,8 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       selectedProvider.current = provider;
       if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
       const rawConfiguration = configuration(provider);
-      const claims = await genericOidcService.exchangeCode(rawConfiguration, { code: req.query.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider));
+      const verifiedClaims = await genericOidcService.exchangeCode(rawConfiguration, { code: callback.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider));
+      const claims = genericOidcService.withCallbackUser(rawConfiguration, verifiedClaims, callback?.user);
       const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
       const evidence = {
         mfaVerified: assurance.mfaVerified,
@@ -573,8 +587,10 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
 // the edge can select the tenant's assigned host release before any provider
 // state is consumed. The global callbacks remain backward-compatible aliases.
 router.get('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, asyncHandler(completeOidcLogin));
+router.post('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, oidcCallbackFormPayloadLimit, asyncHandler(completeOidcLogin));
 router.post('/api/t/:tenantSlug/auth/providers/saml/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, asyncHandler(completeSamlLogin));
 router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, asyncHandler(completeOidcLogin));
+router.post('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, oidcCallbackFormPayloadLimit, asyncHandler(completeOidcLogin));
 router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter, asyncHandler(completeSamlLogin));
 
 router.post('/api/auth/identity/:key/ldap/login', apiLimiter, identityFlowLimiter, authLimiter, resolveRootLoginTenant, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {

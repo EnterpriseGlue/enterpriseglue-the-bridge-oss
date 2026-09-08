@@ -161,6 +161,7 @@ export const TenantWorkloadSecretBreakGlassRequestSchema = z.object({
   providerKey: z.string().min(1).max(128),
   purpose: z.enum([
     'oidc.client_secret',
+    'oidc.apple_private_key',
     'saml.metadata_xml',
     'saml.idp_signing_certificate',
     'saml.request_signing_private_key',
