@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.21.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.2...v0.21.3) (2026-09-08)
+
+
+### Performance Improvements
+
+* **ci:** add focused frontend verification ([8fbf7b4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8fbf7b4933119a1ef2cd5686168389c49fadae92))
+
 ## [0.21.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.1...v0.21.2) (2026-09-07)
 
 
