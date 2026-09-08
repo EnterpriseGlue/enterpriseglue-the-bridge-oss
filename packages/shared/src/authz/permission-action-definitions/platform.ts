@@ -2,6 +2,26 @@ import type { AuthzActionDefinition } from '../permission-actions.js';
 
 export const PLATFORM_AUTHZ_ACTIONS = [
   {
+      actionId: 'platform.tenants.self_create',
+      permissionId: 'platform:tenants:self-create',
+      resourceType: 'platform',
+      operation: 'create',
+      risk: 'critical',
+      audit: true,
+      category: 'Tenants',
+      description: 'Issue one-use authority for the authenticated user to create their first managed Cloud organization.',
+      ui: [{ surfaceId: 'cloud.onboarding.organization', behavior: 'disable' }],
+      routes: [
+        {
+          method: 'POST',
+          route: '/api/platform/cloud-identity',
+          resourceResolver: 'platform.self',
+          additionalChecks: ['Request action must equal platform.tenants.self_create'],
+          requestAction: { location: 'body', field: 'action', value: 'platform.tenants.self_create' },
+        },
+      ],
+    },
+  {
       actionId: 'platform.tenants.read',
       permissionId: 'platform:tenants:view',
       resourceType: 'platform',

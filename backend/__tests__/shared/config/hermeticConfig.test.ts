@@ -28,6 +28,7 @@ const originalEligibilityEnvironment = new Map(
 );
 const cloudIdentityEnvironmentNames = [
   'EG_TENANCY_CLOUD_REQUIRED',
+  'EG_CLOUD_ACCOUNT_IDENTITY_ENABLED',
   'EG_TENANT_PLACEMENT_V2_JWKS_JSON',
   'EG_TENANT_PLACEMENT_V2_ISSUER',
   'EG_TENANT_PLACEMENT_V2_AUDIENCE',
@@ -213,6 +214,17 @@ describe('hermetic test configuration', () => {
 
     await expect(import('@enterpriseglue/shared/config/index.js'))
       .rejects.toThrow('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_WORKLOAD_RECEIPT_ISSUER.');
+  });
+
+  it('keeps Cloud account identity disabled by default', async () => {
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config.cloudAccountIdentityEnabled).toBe(false);
+  });
+
+  it('admits Cloud account identity only for pooled managed Cloud tenancy', async () => {
+    process.env.EG_CLOUD_ACCOUNT_IDENTITY_ENABLED = 'true';
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true requires pooled managed Cloud tenancy.');
   });
 
   it('rejects private or non-ES256 eligibility keys', async () => {

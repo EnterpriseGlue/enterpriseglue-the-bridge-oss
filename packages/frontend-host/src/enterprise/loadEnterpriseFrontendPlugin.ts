@@ -2,6 +2,7 @@ import type { EnterpriseFrontendPlugin, FrontendPluginContext } from '@enterpris
 import {
   Button,
   Column,
+  Form,
   Grid,
   InlineLoading,
   InlineNotification,
@@ -9,6 +10,7 @@ import {
   ListItem,
   Stack,
   Tag,
+  TextInput,
   Tile,
   UnorderedList,
 } from '@carbon/react';
@@ -34,6 +36,7 @@ const injectedPluginGlobal = '__ENTERPRISEGLUE_FRONTEND_PLUGIN__';
 export const trustedModuleCarbonComponentsV1 = Object.freeze({
   Button,
   Column,
+  Form,
   Grid,
   InlineLoading,
   InlineNotification,
@@ -41,6 +44,7 @@ export const trustedModuleCarbonComponentsV1 = Object.freeze({
   ListItem,
   Stack,
   Tag,
+  TextInput,
   Tile,
   UnorderedList,
 });

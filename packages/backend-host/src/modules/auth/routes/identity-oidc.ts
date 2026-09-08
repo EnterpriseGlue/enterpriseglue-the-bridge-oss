@@ -152,7 +152,9 @@ async function runInSsoCallbackTenantContext<T>(
     throw Errors.unauthorized('Identity provider callback tenant does not match the signed login state');
   }
   if (!state.identityProviderTenantId) {
-    if (config.tenancyMode === 'pooled') throw Errors.unauthorized('Identity provider login is not tenant-scoped');
+    if (config.tenancyMode === 'pooled' && (!config.cloudAccountIdentityEnabled || state.tenantSlug)) {
+      throw Errors.unauthorized('Identity provider login is not tenant-scoped');
+    }
     return callback();
   }
   // Migration 0125 assigns legacy single-mode providers to the default tenant,
@@ -227,8 +229,9 @@ async function setProviderSession(
   },
 ): Promise<Awaited<ReturnType<typeof authSessionService.issue>>> {
   const tenant = provider.tenantId ? await tenantService.getById(provider.tenantId) : null;
-  if (config.tenancyMode === 'pooled' && (!tenant || tenant.status !== 'active')) {
-    throw Errors.forbidden('Tenant is not active');
+  if (config.tenancyMode === 'pooled') {
+    if (provider.tenantId && (!tenant || tenant.status !== 'active')) throw Errors.forbidden('Tenant is not active');
+    if (!provider.tenantId && !config.cloudAccountIdentityEnabled) throw Errors.forbidden('Cloud account identity is disabled');
   }
   if (provider.tenantId) {
     await tenantService.ensureSsoMember(provider.tenantId, user.id, provider.id);
@@ -348,6 +351,29 @@ router.get('/api/auth/providers/enabled', apiLimiter, identityFlowLimiter, resol
     protocol: provider.protocol,
     loginMethod: provider.protocol === 'ldap' ? 'password' : 'redirect',
   })));
+}));
+
+router.get('/api/auth/cloud-signup/providers', apiLimiter, identityFlowLimiter, asyncHandler(async (_req: Request, res: Response) => {
+  if (!config.cloudAccountIdentityEnabled) throw Errors.notFound('Cloud signup');
+  const providers = (await identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin())
+    .filter((provider) => provider.tenantId === null && (provider.protocol === 'oidc' || provider.protocol === 'saml'));
+  res.json(providers.map((provider) => ({
+    id: provider.id,
+    displayName: provider.displayName?.trim() || provider.key,
+    protocol: provider.protocol,
+  })));
+}));
+
+router.get('/api/auth/cloud-signup/providers/:providerId/start', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
+  if (!config.cloudAccountIdentityEnabled) throw Errors.notFound('Cloud signup');
+  if (Object.keys(req.query).join(',') !== 'returnTo' || req.query.returnTo !== '/cloud/onboarding') {
+    throw Errors.validation('Cloud signup return path is invalid');
+  }
+  const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), null);
+  if (!provider || provider.tenantId !== null || (provider.protocol !== 'oidc' && provider.protocol !== 'saml')) {
+    throw Errors.notFound('Identity provider');
+  }
+  await startMeasuredProviderLogin(req, res, provider);
 }));
 
 async function listLoginMethods(req: Request, res: Response): Promise<void> {

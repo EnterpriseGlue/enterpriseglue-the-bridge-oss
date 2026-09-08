@@ -2955,6 +2955,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post', path: '/api/platform/cloud-identity',
   ...requestActionAuthzExtension([
+    'platform.tenants.self_create',
     'platform.tenants.read',
     'platform.tenants.manage',
   ], 'POST', '/api/platform/cloud-identity'),
@@ -3946,6 +3947,20 @@ registry.registerPath({
 // -----------------------------
 
 // POST /api/auth/login
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/cloud-signup/providers',
+  ...authzExemption('GET', '/api/auth/cloud-signup/providers'),
+  responses: { 200: { description: 'Sanitized, explicitly enabled Cloud account identity methods', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), displayName: z.string(), protocol: z.enum(['oidc', 'saml']) }).strict()) } } }, 404: { description: 'Cloud account identity is disabled' } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/cloud-signup/providers/{providerId}/start',
+  ...authzExemption('GET', '/api/auth/cloud-signup/providers/:providerId/start'),
+  request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.literal('/cloud/onboarding') }).strict() },
+  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding' }, 404: { description: 'Cloud account identity or provider unavailable' } },
+});
+
 registry.registerPath({
   method: 'post',
   path: '/api/auth/login',

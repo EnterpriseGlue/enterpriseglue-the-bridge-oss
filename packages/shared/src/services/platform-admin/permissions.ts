@@ -107,6 +107,7 @@ export const PlatformPermissions = {
   // Native tenant lifecycle
   TENANTS_VIEW: 'platform:tenants:view',
   TENANTS_MANAGE: 'platform:tenants:manage',
+  TENANTS_SELF_CREATE: 'platform:tenants:self-create',
 
   // SSO administration
   SSO_PROVIDERS_VIEW: 'platform:sso-providers:view',
@@ -830,6 +831,7 @@ export const PermissionCatalog: PermissionDefinition[] = [
   permissionDefinition(PlatformPermissions.SETTINGS_MANAGE, 'platform', 'Settings', 'Manage platform settings.'),
   permissionDefinition(PlatformPermissions.TENANTS_VIEW, 'platform', 'Tenants', 'View native tenant lifecycle and placement metadata.'),
   permissionDefinition(PlatformPermissions.TENANTS_MANAGE, 'platform', 'Tenants', 'Create tenants and change native tenant lifecycle or placement metadata.'),
+  permissionDefinition(PlatformPermissions.TENANTS_SELF_CREATE, 'platform', 'Tenants', 'Create the authenticated user’s first managed Cloud organization.'),
   permissionDefinition(PlatformPermissions.SSO_PROVIDERS_VIEW, 'platform', 'SSO', 'View configured SSO identity providers.'),
   permissionDefinition(PlatformPermissions.SSO_PROVIDERS_MANAGE, 'platform', 'SSO', 'Create, update, delete, enable, or disable SSO identity providers.'),
   permissionDefinition(PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW, 'platform', 'SSO', 'View SSO claim mappings that provision platform roles.'),
@@ -895,6 +897,7 @@ export const PlatformRolePermissions: Record<string, Permission[]> = {
   user: [
     PlatformPermissions.DASHBOARD_VIEW,
     PlatformPermissions.PROJECT_CREATE,
+    PlatformPermissions.TENANTS_SELF_CREATE,
   ],
 };
 

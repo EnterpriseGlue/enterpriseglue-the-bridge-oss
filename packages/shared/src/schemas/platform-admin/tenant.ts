@@ -217,6 +217,7 @@ export const TenantCloudIdentityResponseSchema = z.object({
 }).strict();
 
 export const PlatformCloudIdentityActionSchema = z.enum([
+  'platform.tenants.self_create',
   'platform.tenants.read',
   'platform.tenants.manage',
 ]).describe('Exact platform tenant action authorized before this identity is issued');

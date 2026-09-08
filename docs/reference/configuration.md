@@ -109,6 +109,11 @@ rollback qualification gates pass for the intended deployment.
   workload receipt issuer and tenant identity audience so issuer and audience
   roles cannot collide and neither token class can be substituted for the other.
   The host continues to start and the exchange returns HTTP 503 while it is unset.
+- `EG_CLOUD_ACCOUNT_IDENTITY_ENABLED`: Opt-in managed-Cloud account federation.
+  When enabled, the public signup page may start only configured platform-level
+  OIDC/SAML providers and returns the verified session to `/cloud/onboarding`.
+  It requires pooled, Cloud-required tenancy and remains disabled for ordinary
+  self-hosted deployments.
 - `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
   `PUT /api/workloads/tenants/{tenantId}/release-assignment`. Do not reuse a
   service-account token or expose it in frontend runtime configuration.

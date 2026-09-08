@@ -34,7 +34,7 @@ describe('PlatformCloudIdentityService', () => {
     config.platformCloudIdentityAudience = original.audience;
   });
 
-  it.each(['platform.tenants.read', 'platform.tenants.manage'] as const)(
+  it.each(['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage'] as const)(
     'signs one short-lived %s assertion without tenant or session data',
     (action) => {
       const issued = platformCloudIdentityService.issue({

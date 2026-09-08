@@ -365,6 +365,9 @@ router.post('/api/platform/cloud-identity', requireAuth, validateBody(PlatformCl
   const shardId = config.tenantPlacementV2ShardId;
   if (!shardId) throw Errors.serviceUnavailable('Platform cloud identity signing');
   const action = PlatformCloudIdentityActionSchema.parse(req.body.action);
+  if (action === 'platform.tenants.self_create' && !config.cloudAccountIdentityEnabled) {
+    throw Errors.notFound('Cloud account onboarding');
+  }
   res.setHeader('cache-control', 'no-store');
   res.json(PlatformCloudIdentityResponseSchema.parse({
     ...platformCloudIdentityService.issue({ userId: req.user!.userId, shardId, action }),

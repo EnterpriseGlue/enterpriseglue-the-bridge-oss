@@ -3,7 +3,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authz = vi.hoisted(() => ({
-  allowed: new Set<string>(['platform.tenants.read', 'platform.tenants.manage']),
+  allowed: new Set<string>(['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage']),
   evaluated: [] as string[],
 }));
 const issue = vi.hoisted(() => vi.fn(({ action }: { action: string }) => ({
@@ -44,6 +44,7 @@ import router from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.
 
 const original = {
   cloudRequired: config.tenancyCloudRequired,
+  cloudAccountIdentityEnabled: config.cloudAccountIdentityEnabled,
   shardId: config.tenantPlacementV2ShardId,
 };
 
@@ -51,20 +52,22 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
   const app = express().use(express.json()).use(router).use(errorHandler);
 
   beforeEach(() => {
-    authz.allowed = new Set(['platform.tenants.read', 'platform.tenants.manage']);
+    authz.allowed = new Set(['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage']);
     authz.evaluated.length = 0;
     issue.mockClear();
     config.tenancyCloudRequired = false;
+    config.cloudAccountIdentityEnabled = true;
     config.tenantPlacementV2ShardId = 'regional-shard-01';
   });
 
   afterEach(() => {
     config.tenancyCloudRequired = original.cloudRequired;
+    config.cloudAccountIdentityEnabled = original.cloudAccountIdentityEnabled;
     config.tenantPlacementV2ShardId = original.shardId;
     vi.restoreAllMocks();
   });
 
-  it.each(['platform.tenants.read', 'platform.tenants.manage'] as const)(
+  it.each(['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage'] as const)(
     'evaluates the exact requested %s action before issuing',
     async (action) => {
       const response = await request(app).post('/api/platform/cloud-identity').send({ action });
@@ -119,6 +122,16 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
 
     expect(response.status).toBe(503);
     expect(authz.evaluated).toEqual(['platform.tenants.read']);
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('hides self-provisioning assertions unless managed Cloud account identity is enabled', async () => {
+    config.cloudAccountIdentityEnabled = false;
+    const response = await request(app).post('/api/platform/cloud-identity')
+      .send({ action: 'platform.tenants.self_create' });
+
+    expect(response.status).toBe(404);
+    expect(authz.evaluated).toEqual(['platform.tenants.self_create']);
     expect(issue).not.toHaveBeenCalled();
   });
 

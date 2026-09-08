@@ -244,8 +244,8 @@ Native plugins are additive:
 
 The compatibility frontend context also exposes an optional, bounded
 `components.carbon` kit for deployment-owned trusted system modules and legacy
-plugins. It contains host-owned Carbon buttons, grids, notifications, loading,
-links, lists, stacks, tags, and tiles. Modules must feature-detect the kit until
+plugins. It contains host-owned Carbon buttons, forms, text inputs, grids,
+notifications, loading, links, lists, stacks, tags, and tiles. Modules must feature-detect the kit until
 their declared minimum host version guarantees it; they must not bundle a
 second Carbon or React runtime.
 

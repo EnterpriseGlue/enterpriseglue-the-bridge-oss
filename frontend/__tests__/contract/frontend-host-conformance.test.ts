@@ -127,6 +127,7 @@ describe('Frontend host contract conformance', () => {
     expect(Object.keys(context.components.carbon ?? {}).sort()).toEqual([
       'Button',
       'Column',
+      'Form',
       'Grid',
       'InlineLoading',
       'InlineNotification',
@@ -134,6 +135,7 @@ describe('Frontend host contract conformance', () => {
       'ListItem',
       'Stack',
       'Tag',
+      'TextInput',
       'Tile',
       'UnorderedList',
     ]);

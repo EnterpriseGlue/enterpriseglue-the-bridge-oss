@@ -11,26 +11,30 @@
     "developers",
     "security"
   ],
-  "summary": "Adds a short-lived platform identity contract for authorized tenant lifecycle control-plane calls and closes direct shard mutations in managed mode.",
+  "summary": "Adds short-lived platform identity for tenant control-plane calls, a managed Cloud account entry flow, and a direct-mutation fence for managed shards.",
   "userImpact": [
     "Authorized platform operators can exchange their current host session for a short-lived identity limited to tenant read or tenant management operations.",
+    "A managed Cloud deployment can offer verified OIDC or SAML account signup and return the authenticated user to organization onboarding without creating a tenant-local membership prematurely.",
     "Self-hosted deployments keep the existing direct tenant lifecycle routes unless cloud-required mode is enabled."
   ],
   "upgrade": {
     "required": false,
     "instructions": [
       "Managed pooled shards configure a distinct platform Cloud identity audience before a control-plane consumer uses the exchange; hosts continue to start and the exchange returns 503 until it is configured.",
+      "Managed Cloud account signup also requires EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true and an enabled global direct OIDC or SAML provider.",
       "Control-plane consumers must verify the exact issuer, audience, key ID, platform action, shard ID, lifetime, and signature before accepting an assertion."
     ]
   },
   "configuration": [
     "Adds optional EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE for a distinct platform control-plane audience; identity issuance fails closed with 503 when it is absent.",
+    "Adds EG_CLOUD_ACCOUNT_IDENTITY_ENABLED, default false, which is accepted only with pooled tenancy and cloud-required mode.",
     "EG_TENANCY_CLOUD_REQUIRED=true rejects direct POST and PATCH /api/platform/tenants mutations while retaining authenticated tenant reads and workload lifecycle routes."
   ],
   "api": {
     "compatibility": "additive",
     "changes": [
-      "Adds POST /api/platform/cloud-identity with a strict platform.tenants.read or platform.tenants.manage request action and a short-lived ES256 response.",
+      "Adds POST /api/platform/cloud-identity with strict platform.tenants.self_create, platform.tenants.read, or platform.tenants.manage request actions and a short-lived ES256 response.",
+      "Adds sanitized Cloud signup provider discovery and provider-start routes with a fixed /cloud/onboarding return path.",
       "Direct platform tenant mutations return 503 in cloud-required mode so managed control-plane orchestration cannot be bypassed through a shard-local browser session."
     ]
   },
@@ -42,22 +46,23 @@
     ]
   },
   "security": [
-    "The host authenticates the current user and evaluates the exact requested platform.tenants.read or platform.tenants.manage authorization action before signing.",
+    "The host authenticates the current user and evaluates the exact requested self-create, read, or manage authorization action before signing.",
+    "Self-create assertions are unavailable unless managed Cloud account onboarding is explicitly enabled; provider configuration and tokens are never exposed by the signup discovery response.",
     "Assertions expire after 90 seconds, use a platform-specific audience and schema, and contain no tenant record, SSO configuration, provider assertion, secret, or browser credential.",
     "Cloud-required mode fails closed before invoking direct shard-local tenant create or update services."
   ],
   "documentation": [
-    "Documents the platform Cloud identity claims, authorization boundary, managed-mode mutation fence, verifier requirements, configuration, rollback, and cloud-neutral ownership boundary."
+    "Documents the platform Cloud identity claims, authorization boundary, managed account entry, managed-mode mutation fence, verifier requirements, configuration, rollback, and cloud-neutral ownership boundary."
   ],
   "knownLimitations": [
-    "OSS issues and documents the neutral assertion but does not implement a cloud control-plane endpoint or vendor-specific identity exchange."
+    "OSS issues and documents the neutral assertion and managed account entry, but tenant provisioning remains the responsibility of the owning Cloud control-plane plugin."
   ],
   "rollback": [
     "Disable managed control-plane callers before removing the platform audience or rolling back the host.",
     "Turn off cloud-required mode only when operators intentionally accept restored direct shard-local tenant mutation."
   ],
   "validation": [
-    "Focused schema, signing, route authorization, OpenAPI, configuration, and fail-closed mutation tests cover the additive contract.",
+    "Focused schema, signing, route authorization, OIDC callback, signup UI, OpenAPI, configuration, and fail-closed mutation tests cover the additive contract.",
     "PostgreSQL remains the primary pooled-mode feedback lane; all supported database adapters require candidate portability qualification even though this change adds no migration."
   ],
   "packages": [

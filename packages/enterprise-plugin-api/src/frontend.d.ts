@@ -186,6 +186,7 @@ export interface PluginAuthContext {
 export interface PluginCarbonComponentsV1 {
   Button: ComponentType<any>;
   Column: ComponentType<any>;
+  Form: ComponentType<any>;
   Grid: ComponentType<any>;
   InlineLoading: ComponentType<any>;
   InlineNotification: ComponentType<any>;
@@ -193,6 +194,7 @@ export interface PluginCarbonComponentsV1 {
   ListItem: ComponentType<any>;
   Stack: ComponentType<any>;
   Tag: ComponentType<any>;
+  TextInput: ComponentType<any>;
   Tile: ComponentType<any>;
   UnorderedList: ComponentType<any>;
 }

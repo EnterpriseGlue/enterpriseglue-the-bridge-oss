@@ -50,6 +50,8 @@ describe('native tenant contracts', () => {
   });
 
   it('keeps platform Cloud identity requests action-specific and assertions short lived', () => {
+    expect(PlatformCloudIdentityRequestSchema.parse({ action: 'platform.tenants.self_create' }))
+      .toEqual({ action: 'platform.tenants.self_create' });
     expect(PlatformCloudIdentityRequestSchema.parse({ action: 'platform.tenants.read' }))
       .toEqual({ action: 'platform.tenants.read' });
     expect(PlatformCloudIdentityResponseSchema.parse({

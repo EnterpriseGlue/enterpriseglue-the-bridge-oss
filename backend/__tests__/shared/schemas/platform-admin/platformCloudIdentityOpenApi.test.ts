@@ -16,6 +16,16 @@ describe('platform Cloud identity OpenAPI', () => {
       selector: { location: 'body', field: 'action' },
       alternatives: [
         {
+          value: 'platform.tenants.self_create',
+          actionId: 'platform.tenants.self_create',
+          permission: 'platform:tenants:self-create',
+          resourceResolver: 'platform.self',
+          additionalChecks: ['Request action must equal platform.tenants.self_create'],
+          risk: 'critical',
+          audit: true,
+          uiBehavior: 'disable',
+        },
+        {
           value: 'platform.tenants.read',
           actionId: 'platform.tenants.read',
           permission: 'platform:tenants:view',
@@ -41,7 +51,7 @@ describe('platform Cloud identity OpenAPI', () => {
       type: 'object',
       additionalProperties: false,
       required: ['action'],
-      properties: { action: { enum: ['platform.tenants.read', 'platform.tenants.manage'] } },
+      properties: { action: { enum: ['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage'] } },
     });
     expect(responseSchema).toMatchObject({
       type: 'object',

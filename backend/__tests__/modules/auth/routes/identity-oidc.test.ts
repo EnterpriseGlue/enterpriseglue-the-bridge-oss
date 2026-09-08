@@ -156,6 +156,45 @@ describe('provider-neutral OIDC routes', () => {
     expect(cookies.join(';')).toContain('identity_oidc_verifier=verifier');
   });
 
+  it('admits an explicitly enabled global Cloud account provider and returns to onboarding', async () => {
+    const originalMode = config.tenancyMode;
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.tenancyMode = 'pooled';
+    config.cloudAccountIdentityEnabled = true;
+    authSessionService.issue.mockResolvedValueOnce({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, tenantId: null });
+    try {
+      const listed = await request(app).get('/api/auth/cloud-signup/providers');
+      expect(listed.status).toBe(200);
+      expect(listed.body).toEqual([{ id: provider.id, displayName: provider.key, protocol: 'oidc' }]);
+      expect(JSON.stringify(listed.body)).not.toContain('configurationJson');
+
+      const started = await request(app).get('/api/auth/cloud-signup/providers/provider-1/start?returnTo=%2Fcloud%2Fonboarding').redirects(0);
+      expect(started.status).toBe(302);
+      expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith(provider.id, null);
+      const authorizationCalls = genericOidcService.createAuthorizationRequest.mock.calls;
+      const state = authorizationCalls[authorizationCalls.length - 1]?.[1];
+      expect(parseSignedOidcState(state)).toMatchObject({ providerId: provider.id, returnTo: '/cloud/onboarding' });
+      const cookies = (started.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split(';')[0]);
+      const completed = await request(app).get(`/api/auth/identity/callback?code=code&state=${encodeURIComponent(state)}`).set('Cookie', cookies).redirects(0);
+      expect(completed.status).toBe(302);
+      expect(completed.headers.location).toBe(`${config.frontendUrl.replace(/\/$/, '')}/cloud/onboarding`);
+      expect(tenantService.ensureSsoMember).not.toHaveBeenCalled();
+    } finally {
+      config.tenancyMode = originalMode;
+      config.cloudAccountIdentityEnabled = originalCloudIdentity;
+    }
+  });
+
+  it('keeps Cloud account provider discovery disabled by default', async () => {
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.cloudAccountIdentityEnabled = false;
+    try {
+      expect((await request(app).get('/api/auth/cloud-signup/providers')).status).toBe(404);
+      expect((await request(app).get('/api/auth/cloud-signup/providers/provider-1/start')).status).toBe(404);
+      expect(identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin).not.toHaveBeenCalled();
+    } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
+  });
+
   const enrollment = { invitationId: 'invite-1', userId: 'pending-user', tenantId: 'tenant-default', tenantSlug: 'default', authSessionVersion: 0 as const };
   const onboardingCookie = (overrides = {}) => `onboardingToken=${generateOnboardingToken({ ...enrollment, ...overrides })}`;
   function expectNoOutsideEnrollmentWrites() {
