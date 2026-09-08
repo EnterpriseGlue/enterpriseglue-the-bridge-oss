@@ -61,6 +61,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', 
   verifyBackChannelLogoutToken: vi.fn(async () => ({ sub: 'subject-a', sid: 'sid-a' })),
   createLogoutRequest: vi.fn(async () => null),
   createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), authenticationAssurance: vi.fn(),
+  withCallbackUser: vi.fn((_configuration, claims) => claims),
 } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/TenantService.js', () => ({ tenantService: {
   getById: vi.fn(async (id: string) => ({ id, slug: id, status: 'active', placementEpoch: 1 })),
