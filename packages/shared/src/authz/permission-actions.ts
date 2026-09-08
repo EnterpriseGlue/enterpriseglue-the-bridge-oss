@@ -89,6 +89,12 @@ export interface AuthzRouteMetadata {
   route: string;
   resourceResolver: string;
   additionalChecks?: string[];
+  /** Declares that a validated request-body field selects this exact action. */
+  requestAction?: {
+    location: 'body';
+    field: string;
+    value: string;
+  };
   openApiOperationId?: string;
   openApi?: boolean;
 }
@@ -114,7 +120,7 @@ export interface AuthzActionDefinition {
   routes?: AuthzRouteMetadata[];
 }
 
-export interface AuthzOpenApiExtension {
+export interface AuthzStaticOpenApiExtension {
   actionId: string;
   permission: string;
   resourceResolver: string;
@@ -123,6 +129,32 @@ export interface AuthzOpenApiExtension {
   audit: boolean;
   uiBehavior: AuthzUiBehavior;
 }
+
+export interface AuthzRequestActionOpenApiAlternative extends AuthzStaticOpenApiExtension {
+  /** Exact request-field value which selects this authorization action. */
+  value: string;
+}
+
+export interface AuthzRequestActionOpenApiExtension {
+  mode: 'request-action';
+  selector: {
+    location: 'body';
+    field: string;
+  };
+  alternatives: AuthzRequestActionOpenApiAlternative[];
+}
+
+/** Legacy static contract retained for existing typed consumers. */
+export type AuthzOpenApiExtension = AuthzStaticOpenApiExtension;
+
+/**
+ * Static routes retain the established extension shape. A route which selects
+ * one of several registered actions from a validated request field must expose
+ * every alternative instead of silently publishing only one action.
+ */
+export type AuthzOpenApiClassification =
+  | AuthzStaticOpenApiExtension
+  | AuthzRequestActionOpenApiExtension;
 
 export interface UiAuthzDecision {
   actionId: string;
@@ -385,7 +417,7 @@ export function isAuthzPrincipalType(value: string | null | undefined): value is
   return Boolean(value && (AUTHZ_PRINCIPAL_TYPES as readonly string[]).includes(value));
 }
 
-export function toOpenApiAuthzExtension(action: AuthzActionDefinition, route: AuthzRouteMetadata): AuthzOpenApiExtension {
+export function toOpenApiAuthzExtension(action: AuthzActionDefinition, route: AuthzRouteMetadata): AuthzStaticOpenApiExtension {
   const primarySurface = action.ui[0];
   return {
     actionId: action.actionId,

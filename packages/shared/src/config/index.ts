@@ -62,6 +62,8 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantPlacementV2ShardId: z.string().min(1).max(160).optional(),
   tenantPlacementReleaseId: z.string().min(1).max(256).optional(),
   tenantCloudIdentityAudience: z.string().min(1).max(256).optional(),
+  platformCloudIdentityAudience: z.string().min(1).max(256).optional(),
+  cloudAccountIdentityEnabled: z.boolean().default(false),
   tenantReleaseControllerToken: z.string().min(32).max(512).optional(),
   tenantPlacementV2ClockSkewSeconds: z.number().int().nonnegative().max(60).default(5),
   tenancyCloudRequired: z.boolean().default(false),
@@ -221,6 +223,8 @@ function loadConfig(): Config {
     tenantPlacementV2ShardId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_SHARD_ID),
     tenantPlacementReleaseId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_RELEASE_ID),
     tenantCloudIdentityAudience: envOrUndefined(process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE),
+    platformCloudIdentityAudience: envOrUndefined(process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE),
+    cloudAccountIdentityEnabled: process.env.EG_CLOUD_ACCOUNT_IDENTITY_ENABLED === 'true',
     tenantReleaseControllerToken: envOrUndefined(process.env.EG_TENANT_RELEASE_CONTROLLER_TOKEN),
     tenantPlacementV2ClockSkewSeconds: process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS
       ? Number(process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS)
@@ -428,8 +432,20 @@ if (config.tenantSecretBrokerTokenRef?.includes('tenant-secret://')) {
   throw new Error('EG_TENANT_SECRET_BROKER_TOKEN_REF cannot use a tenant-secret reference.');
 }
 
+if (config.platformCloudIdentityAudience
+  && config.platformCloudIdentityAudience === config.tenantCloudIdentityAudience) {
+  throw new Error('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_CLOUD_IDENTITY_AUDIENCE.');
+}
+if (config.platformCloudIdentityAudience
+  && config.platformCloudIdentityAudience === config.tenantWorkloadReceiptIssuer) {
+  throw new Error('EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE must differ from EG_TENANT_WORKLOAD_RECEIPT_ISSUER.');
+}
+
 if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
   throw new Error('EG_TENANCY_CLOUD_REQUIRED=true requires EG_TENANCY_MODE=pooled.');
+}
+if (config.cloudAccountIdentityEnabled && (config.tenancyMode !== 'pooled' || !config.tenancyCloudRequired)) {
+  throw new Error('EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true requires pooled managed Cloud tenancy.');
 }
 
 if (config.tenancyMode === 'pooled') {

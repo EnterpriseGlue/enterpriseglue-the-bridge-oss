@@ -71,7 +71,8 @@ configuration-bundle object model:
 
 | Capability | Canonical REST contract | Portal support | Configuration-bundle support |
 | --- | --- | --- | --- |
-| Tenant list/create/update | `GET/POST /api/platform/tenants`; `PATCH /api/platform/tenants/{tenantId}` | Create, list, and open; lifecycle/placement mutation is API-only | None |
+| Tenant list/create/update | `GET/POST /api/platform/tenants`; `PATCH /api/platform/tenants/{tenantId}` | Create, list, and open; lifecycle/placement mutation is API-only. Cloud-required shards reject direct create/update. | None |
+| Platform Cloud identity | `POST /api/platform/cloud-identity` | No direct portal control; the managed shell requests an assertion for one authorized tenant action | None |
 | Membership list/grant/remove | `GET /api/t/{tenantSlug}/tenant/members`; `PUT/DELETE /api/t/{tenantSlug}/tenant/members/{userId}` | Yes | None; group/role assignments do not create native tenant membership |
 | Login policy | `GET/PUT /api/t/{tenantSlug}/tenant/login-policy` | Yes | Not for non-default pooled tenants |
 | OIDC, SAML, and LDAP providers | `/api/t/{tenantSlug}/identity/providers` | Yes | Not for non-default pooled tenants in this slice |

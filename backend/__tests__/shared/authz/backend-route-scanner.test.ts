@@ -46,6 +46,24 @@ describe('backend authz route scanner', () => {
     expect(result.unregisteredAuthenticatedRoutes).toHaveLength(0);
   });
 
+  it('recognizes the bounded Cloud-account-or-tenant authentication middleware', () => {
+    const result = scanBackendAuthzRoutes([
+      {
+        filePath: 'cloud.ts',
+        content: `
+          const r = Router();
+          r.get('/api/auth/me', requireCloudAccountOrTenantAuth, asyncHandler(handler));
+        `,
+      },
+    ]);
+
+    expect(result.routes[0]).toMatchObject({
+      route: '/api/auth/me',
+      authenticated: true,
+      authMiddleware: ['requireCloudAccountOrTenantAuth'],
+    });
+  });
+
   it('treats explicit auth-only exemptions as covered without action registration', () => {
     const result = scanBackendAuthzRoutes([{
       filePath: 'auth.ts',

@@ -178,6 +178,27 @@ export interface PluginAuthContext {
   refreshUser(): Promise<void>;
 }
 
+/**
+ * Bounded host-owned Carbon kit for legacy and trusted system modules.
+ * The property is optional so previously published plugins remain compatible
+ * with older hosts; callers must feature-detect it or declare a host minimum.
+ */
+export interface PluginCarbonComponentsV1 {
+  Button: ComponentType<any>;
+  Column: ComponentType<any>;
+  Form: ComponentType<any>;
+  Grid: ComponentType<any>;
+  InlineLoading: ComponentType<any>;
+  InlineNotification: ComponentType<any>;
+  Link: ComponentType<any>;
+  ListItem: ComponentType<any>;
+  Stack: ComponentType<any>;
+  Tag: ComponentType<any>;
+  TextInput: ComponentType<any>;
+  Tile: ComponentType<any>;
+  UnorderedList: ComponentType<any>;
+}
+
 /** Shared utilities the OSS host passes to the enterprise frontend plugin. */
 export interface FrontendPluginContext {
   api: {
@@ -190,6 +211,7 @@ export interface FrontendPluginContext {
     PAGE_GRADIENTS: Record<string, [string, string]>;
     ConfirmModal: ComponentType<ConfirmModalProps>;
     InviteMemberModal: ComponentType<any>;
+    carbon?: Readonly<PluginCarbonComponentsV1>;
   };
   hooks: {
     useAuth(): PluginAuthContext;

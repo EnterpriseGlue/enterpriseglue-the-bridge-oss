@@ -8,6 +8,7 @@ import { generateAccessToken, generateRefreshToken, normalizeUserJwtPayload, ver
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config: {
   tenancyMode: 'pooled', jwtSecret: 'synthetic-session-lineage-test-signing-key',
   jwtAccessTokenExpires: 3600, jwtRefreshTokenExpires: 86400,
+  tenancyCloudRequired: true, cloudAccountIdentityEnabled: true,
 } }));
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
@@ -63,6 +64,41 @@ describe('durable browser session identity', () => {
     expect(findSession).toHaveBeenCalledWith(expect.objectContaining({ id: row.id, userId: user.id, tenantId: 'alpha', revokedAt: expect.objectContaining({ _type: 'isNull' }), expiresAt: expect.objectContaining({ _type: 'moreThan' }) }));
   });
 
+  it('consumes an exact neutral Cloud account source and removes its class after tenant switch', async () => {
+    const session = await authSessionService.issue(user, {
+      sessionClass: 'cloud_account',
+      authenticationMethod: 'oidc',
+      identityProviderId: provider.id,
+      identityProviderUpdatedAt: provider.updatedAt,
+      identityProviderProtocol: 'oidc',
+      identityProviderAuthenticationMode: 'direct',
+      identityProviderDirectoryTenantId: null,
+      identityProviderConfigurationJson: '{}',
+      federationSession: { subjectId: 'subject-a', sessionId: 'provider-session-a' },
+    });
+    const sourceRow = insert.mock.calls[0]![0];
+    expect(sourceRow).toMatchObject({ tenantId: null, identityProviderId: provider.id });
+    expect(JSON.parse(sourceRow.deviceInfo)).toMatchObject({ sessionClass: 'cloud_account' });
+    findSession.mockResolvedValue(sourceRow);
+    insert.mockClear();
+    claimProvider.mockClear();
+
+    const child = await authSessionService.switchTenant(user, {
+      principal: normalizeUserJwtPayload(verifyToken(session.accessToken)),
+      refreshToken: session.refreshToken,
+      tenantId: 'alpha',
+      tenantSlug: 'alpha',
+    });
+
+    expect(verifyToken(child.accessToken)).toMatchObject({ tenantId: 'alpha', tenantSlug: 'alpha' });
+    expect(verifyToken(child.accessToken).sessionClass).toBeUndefined();
+    expect(verifyToken(child.refreshToken).sessionClass).toBeUndefined();
+    expect(JSON.parse(insert.mock.calls[0]![0].deviceInfo)).not.toHaveProperty('sessionClass');
+    expect(findSession).toHaveBeenCalledWith(expect.objectContaining({
+      id: sourceRow.id, tenantId: expect.objectContaining({ _type: 'isNull' }),
+    }));
+  });
+
   it('also claims the source for a same-tenant switch', async () => {
     const { input } = await sourceSession();
     await authSessionService.switchTenant(user, { ...input, tenantId: 'alpha', tenantSlug: 'alpha' });
@@ -77,6 +113,7 @@ describe('durable browser session identity', () => {
     ['tenant', { tenantId: 'other' }], ['tenant slug', { tenantSlug: 'other' }],
     ['version', { authSessionVersion: 4 }], ['method', { authenticationMethod: 'saml' }],
     ['MFA', { mfaVerified: false }], ['recovery', { recovery: 'platform_administrator' }],
+    ['session class', { sessionClass: 'cloud_account' }],
     ['token type', { type: 'refresh' }],
   ])('rejects an access/refresh %s mismatch before reading a source row', async (_label, mismatch) => {
     const { input } = await sourceSession();

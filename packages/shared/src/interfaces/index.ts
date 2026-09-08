@@ -9,7 +9,7 @@
  */
 
 // Re-export middleware during migration
-export { requireAuth, requireAdmin, requireOnboarding, optionalAuth } from '../middleware/auth.js';
+export { requireAuth, requireCloudAccountOrTenantAuth, requireAdmin, requireOnboarding, optionalAuth } from '../middleware/auth.js';
 export { errorHandler, asyncHandler, Errors } from '../middleware/errorHandler.js';
 export { apiLimiter, authLimiter } from '../middleware/rateLimiter.js';
 export { 

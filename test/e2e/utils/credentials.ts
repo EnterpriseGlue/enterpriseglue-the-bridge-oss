@@ -36,6 +36,15 @@ export function getE2ECredentials() {
   return { email, password };
 }
 
+export function getE2EAdminCredentials() {
+  const env = process.env;
+  const data = getE2ESeedData();
+  return {
+    email: env.E2E_ADMIN_EMAIL || env.ADMIN_EMAIL || data.adminEmail,
+    password: env.E2E_ADMIN_PASSWORD || env.ADMIN_PASSWORD || data.adminPassword,
+  };
+}
+
 export function getE2EEngineId() {
   return process.env.E2E_ENGINE_ID || getE2ESeedData().engineId;
 }
@@ -113,5 +122,10 @@ export function getE2EVariableAccessFixture() {
 
 export function hasE2ECredentials() {
   const { email, password } = getE2ECredentials();
+  return Boolean(email && password);
+}
+
+export function hasE2EAdminCredentials() {
+  const { email, password } = getE2EAdminCredentials();
   return Boolean(email && password);
 }

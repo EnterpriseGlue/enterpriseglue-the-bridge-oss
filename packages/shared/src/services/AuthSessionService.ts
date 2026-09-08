@@ -27,6 +27,8 @@ export interface IssueAuthSessionInput {
   authenticationMethod?: JwtPayload['authenticationMethod'];
   /** Must be derived from verified authentication evidence, never request input. */
   mfaVerified?: boolean;
+  /** Explicit tenant-neutral managed-Cloud onboarding authority. */
+  sessionClass?: JwtPayload['sessionClass'];
   /** Provider session identifiers required for standards-based federated logout. */
   federationSession?: {
     subjectId: string;
@@ -43,6 +45,15 @@ export interface IssuedAuthSession {
   expiresIn: number;
   /** Effective tenant embedded in the issued browser session. */
   tenantId: string | null;
+}
+
+function persistedSessionClass(session: RefreshToken): JwtPayload['sessionClass'] | null {
+  try {
+    const value = session.deviceInfo ? JSON.parse(session.deviceInfo) as Record<string, unknown> : null;
+    return value?.sessionClass === 'cloud_account' ? 'cloud_account' : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Issues a renewable user session with optional provider lineage for targeted revocation. */
@@ -70,15 +81,26 @@ class AuthSessionService {
       || (source.authSessionVersion ?? 0) !== (principal.authSessionVersion ?? 0)
       || (source.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)
       || source.authenticationMethod !== principal.authenticationMethod
-      || source.recovery !== principal.recovery || (source.mfaVerified === true) !== (principal.mfaVerified === true)) throw denied();
+      || source.recovery !== principal.recovery || source.sessionClass !== principal.sessionClass
+      || (source.mfaVerified === true) !== (principal.mfaVerified === true)) throw denied();
+    if (source.sessionClass === 'cloud_account' && (config.tenancyMode !== 'pooled'
+      || !config.tenancyCloudRequired
+      || !config.cloudAccountIdentityEnabled
+      || !['oidc', 'saml'].includes(source.authenticationMethod || ''))) throw denied();
     const dataSource = await getDataSource();
     const session = await dataSource.getRepository(RefreshToken).findOneBy({
       id: source.sessionId, userId: source.userId, tenantId: source.tenantId || IsNull(),
       revokedAt: IsNull(), expiresAt: MoreThan(Date.now()),
     });
-    if (!session || !await bcrypt.compare(input.refreshToken, session.tokenHash)) throw denied();
+    if (!session || persistedSessionClass(session) !== (source.sessionClass || null)
+      || !await bcrypt.compare(input.refreshToken, session.tokenHash)) throw denied();
     const provider = session.identityProviderId
-      ? await dataSource.getRepository(IdentityProvider).findOneBy({ id: session.identityProviderId, isEnabled: true, authenticationMode: 'direct' })
+      ? await dataSource.getRepository(IdentityProvider).findOneBy({
+          id: session.identityProviderId,
+          isEnabled: true,
+          authenticationMode: 'direct',
+          ...(source.sessionClass === 'cloud_account' ? { tenantId: IsNull() } : {}),
+        })
       : null;
     const federated = ['oidc', 'saml', 'ldap'].includes(source.authenticationMethod || '');
     if (session.identityProviderId && (!provider || !session.providerSubjectId || provider.protocol !== source.authenticationMethod)) throw denied();
@@ -100,11 +122,29 @@ class AuthSessionService {
   }
 
   private async issueSession(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput, source?: RefreshToken): Promise<IssuedAuthSession> {
+    const isCloudAccountSession = input.sessionClass === 'cloud_account';
+    const cloudAccountSessionsEnabled = config.tenancyMode === 'pooled'
+      && config.tenancyCloudRequired
+      && config.cloudAccountIdentityEnabled;
+    if (input.sessionClass !== undefined && input.sessionClass !== 'cloud_account') {
+      throw Errors.unauthorized('Invalid session class');
+    }
+    if (isCloudAccountSession && (!cloudAccountSessionsEnabled
+      || input.administratorRecovery
+      || Boolean(input.tenantId?.trim())
+      || Boolean(input.tenantSlug?.trim())
+      || !input.identityProviderId?.trim()
+      || !input.federationSession?.subjectId?.trim()
+      || !['oidc', 'saml'].includes(input.identityProviderProtocol || '')
+      || input.authenticationMethod !== input.identityProviderProtocol
+      || input.identityProviderAuthenticationMode !== 'direct')) {
+      throw Errors.unauthorized('Invalid cloud account session');
+    }
     const tenantId = input.tenantId?.trim()
       || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
     const tenantSlug = input.tenantSlug?.trim()
       || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_SLUG : null);
-    if (config.tenancyMode === 'pooled' && !input.administratorRecovery && (!tenantId || !tenantSlug)) {
+    if (config.tenancyMode === 'pooled' && !input.administratorRecovery && !isCloudAccountSession && (!tenantId || !tenantSlug)) {
       throw Errors.unauthorized('A tenant-scoped login is required');
     }
     const sessionId = generateId();
@@ -113,6 +153,7 @@ class AuthSessionService {
       administratorRecovery: input.administratorRecovery === true,
       authenticationMethod: input.authenticationMethod,
       mfaVerified: input.mfaVerified === true,
+      ...(input.sessionClass ? { sessionClass: input.sessionClass } : {}),
       ...(tenantId ? { tenantId } : {}),
       ...(tenantSlug ? { tenantSlug } : {}),
     };
@@ -137,6 +178,7 @@ class AuthSessionService {
         ...(input.administratorRecovery ? { recovery: 'platform_administrator' } : {}),
         ...(input.authenticationMethod ? { authenticationMethod: input.authenticationMethod } : {}),
         ...(input.mfaVerified === true ? { mfaVerified: true } : {}),
+        ...(input.sessionClass ? { sessionClass: input.sessionClass } : {}),
         ...(input.federationSession ? {
           federationSession: {
             subjectId: input.federationSession.subjectId,
@@ -175,6 +217,7 @@ class AuthSessionService {
         // waits and revokes this token; if archive wins, no token is inserted.
         const providerClaim = await manager.getRepository(IdentityProvider).update({
           id: token.identityProviderId!,
+          ...(isCloudAccountSession ? { tenantId: IsNull() } : {}),
           isEnabled: true,
           authenticationMode: 'direct',
           updatedAt: Number(input.identityProviderUpdatedAt),

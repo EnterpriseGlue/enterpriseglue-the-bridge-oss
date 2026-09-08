@@ -17,6 +17,21 @@ import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/
 
 const router = Router();
 
+function managedCloudAccountSessionsEnabled(): boolean {
+  return config.tenancyMode === 'pooled'
+    && config.tenancyCloudRequired
+    && config.cloudAccountIdentityEnabled;
+}
+
+function persistedSessionClass(deviceInfo: string | null | undefined): UserJwtPayload['sessionClass'] | null {
+  try {
+    const value = deviceInfo ? JSON.parse(deviceInfo) as Record<string, unknown> : null;
+    return value?.sessionClass === 'cloud_account' ? 'cloud_account' : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * POST /api/auth/refresh
  * Exchange refresh token for new access token
@@ -44,9 +59,17 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     throw Errors.unauthorized('Sign in again to establish a current browser session');
   }
 
+  const cloudAccountSession = payload.sessionClass === 'cloud_account';
+  if (cloudAccountSession && (!managedCloudAccountSessionsEnabled()
+    || !payload.sessionId
+    || !['oidc', 'saml'].includes(payload.authenticationMethod || '')
+    || req.tenant !== undefined)) {
+    throw Errors.unauthorized('Invalid cloud account session');
+  }
+
   const tenantId = payload.tenantId || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_ID : null);
   const tenantSlug = payload.tenantSlug || (config.tenancyMode !== 'pooled' ? OSS_DEFAULT_TENANT_SLUG : null);
-  if (config.tenancyMode === 'pooled' && payload.recovery !== 'platform_administrator') {
+  if (config.tenancyMode === 'pooled' && payload.recovery !== 'platform_administrator' && !cloudAccountSession) {
     if (!tenantId || !tenantSlug) throw Errors.unauthorized('Tenant-scoped refresh token required');
     const tenant = await tenantService.getById(tenantId);
     if (!tenant || tenant.status !== 'active' || tenant.slug !== tenantSlug) {
@@ -69,6 +92,9 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
   if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
     throw Errors.unauthorized('Session has been revoked');
+  }
+  if (cloudAccountSession && !user.isEmailVerified) {
+    throw Errors.forbidden('Email verification required');
   }
   if (payload.recovery === 'platform_administrator'
     && !(await getActivePlatformAdministratorUserIds([user.id], dataSource)).has(user.id)) {
@@ -96,14 +122,14 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
       expiresAt: MoreThan(Date.now()),
       tenantId: tenantId || IsNull(),
     },
-    select: ['tokenHash', 'tenantId'],
+    select: ['tokenHash', 'tenantId', 'deviceInfo'],
   });
 
   // Check if any of the stored token hashes match the provided token
   let isValidToken = false;
   for (const row of tokenResult) {
     const isMatch = await bcrypt.compare(refreshToken, row.tokenHash);
-    if (isMatch) {
+    if (isMatch && persistedSessionClass(row.deviceInfo) === (payload.sessionClass || null)) {
       isValidToken = true;
       break;
     }
@@ -119,6 +145,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     administratorRecovery: payload.recovery === 'platform_administrator',
     authenticationMethod: payload.authenticationMethod,
     mfaVerified: payload.mfaVerified === true,
+    ...(payload.sessionClass ? { sessionClass: payload.sessionClass } : {}),
     ...(tenantId ? { tenantId } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
   });

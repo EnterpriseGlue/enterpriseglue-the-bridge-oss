@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
-import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
@@ -42,6 +42,7 @@ async function currentProviderSession(
     const payload = normalizeUserJwtPayload(verifyToken(presentedRefreshToken));
     if (payload.type !== 'refresh' || payload.sessionId !== principal.sessionId
       || payload.userId !== principal.userId || payload.tenantId !== principal.tenantId
+      || payload.sessionClass !== principal.sessionClass
       || (payload.authSessionVersion ?? 0) !== (principal.authSessionVersion ?? 0)) return null;
     const session = sessions.find((candidate) => candidate.id === payload.sessionId);
     return session && await bcrypt.compare(presentedRefreshToken, session.tokenHash) ? session : null;
@@ -52,7 +53,7 @@ async function currentProviderSession(
  * POST /api/auth/logout
  * Revoke refresh token(s)
  */
-router.post('/api/auth/logout', apiLimiter, requireAuth, validateBody(logoutSchema), asyncHandler(async (req, res) => {
+router.post('/api/auth/logout', apiLimiter, requireCloudAccountOrTenantAuth, validateBody(logoutSchema), asyncHandler(async (req, res) => {
   const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
   const now = Date.now();
   const dataSource = await getDataSource();

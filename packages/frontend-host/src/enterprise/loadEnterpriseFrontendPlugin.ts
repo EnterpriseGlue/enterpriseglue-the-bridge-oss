@@ -1,4 +1,19 @@
 import type { EnterpriseFrontendPlugin, FrontendPluginContext } from '@enterpriseglue/enterprise-plugin-api/frontend';
+import {
+  Button,
+  Column,
+  Form,
+  Grid,
+  InlineLoading,
+  InlineNotification,
+  Link,
+  ListItem,
+  Stack,
+  Tag,
+  TextInput,
+  Tile,
+  UnorderedList,
+} from '@carbon/react';
 import React, { type ComponentType } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { 
@@ -17,6 +32,22 @@ import { useToast } from '../shared/notifications/ToastProvider';
 
 const emptyPlugin: EnterpriseFrontendPlugin = { routes: [], tenantRoutes: [], navItems: [], menuItems: [] };
 const injectedPluginGlobal = '__ENTERPRISEGLUE_FRONTEND_PLUGIN__';
+
+export const trustedModuleCarbonComponentsV1 = Object.freeze({
+  Button,
+  Column,
+  Form,
+  Grid,
+  InlineLoading,
+  InlineNotification,
+  Link,
+  ListItem,
+  Stack,
+  Tag,
+  TextInput,
+  Tile,
+  UnorderedList,
+});
 
 type FrontendPluginModuleShape = {
   default?: unknown;
@@ -88,7 +119,14 @@ export function createFrontendPluginContext(): FrontendPluginContext {
       client: apiClient,
       errors: { ApiError: ApiError as any, parseApiError, getUiErrorMessage, getErrorMessageFromResponse },
     },
-    components: { PageHeader, PageLayout, PAGE_GRADIENTS, ConfirmModal, InviteMemberModal },
+    components: {
+      PageHeader,
+      PageLayout,
+      PAGE_GRADIENTS,
+      ConfirmModal,
+      InviteMemberModal,
+      carbon: trustedModuleCarbonComponentsV1,
+    },
     hooks: { useAuth, useModal, useToast },
     runtime: { react: React },
   };

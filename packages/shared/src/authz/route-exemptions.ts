@@ -114,6 +114,8 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('GET', '/api/auth/identity/callback', 'high', 'platform-auth', 'Completes a state-bound provider-neutral OIDC callback before issuing a local session.'),
   publicRoute('POST', '/api/auth/identity/:key/ldap/login', 'high', 'platform-auth', 'Direct directory login validates credentials before issuing a local session and is rate limited.'),
   publicRoute('GET', '/api/auth/providers/enabled', 'low', 'platform-auth', 'The login page needs sanitized provider-neutral login options before authentication.'),
+  publicRoute('GET', '/api/auth/cloud-signup/providers', 'low', 'platform-auth', 'Cloud signup may list only sanitized platform-account identity methods when explicitly enabled.'),
+  publicRoute('GET', '/api/auth/cloud-signup/providers/:providerId/start', 'high', 'platform-auth', 'Starts an explicitly enabled platform-account federation flow and binds its return path into signed provider state.'),
   publicRoute('GET', '/api/auth/login-methods', 'low', 'platform-auth', 'The login page needs a sanitized policy-resolved list of available login methods before authentication.'),
   publicRoute('GET', '/api/auth/providers/:providerId/start', 'medium', 'platform-auth', 'Starts a state-bound provider-neutral redirect login before a local session exists.'),
   publicRoute('POST', '/api/auth/providers/:providerId/login', 'high', 'platform-auth', 'Provider-neutral directory login validates credentials before issuing a local session and is rate limited.'),

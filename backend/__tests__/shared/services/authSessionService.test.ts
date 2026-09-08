@@ -1,14 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({ generateAccessToken: vi.fn(() => 'access-token'), generateRefreshToken: vi.fn(() => 'refresh-token') }));
 vi.mock('@enterpriseglue/shared/utils/id.js', () => ({ generateId: vi.fn(() => 'session-1') }));
 describe('authSessionService', () => {
+  const originalCloudConfig = {
+    tenancyMode: config.tenancyMode,
+    tenancyCloudRequired: config.tenancyCloudRequired,
+    cloudAccountIdentityEnabled: config.cloudAccountIdentityEnabled,
+  };
   const providerTrust = {
     identityProviderUpdatedAt: 1234,
     identityProviderProtocol: 'oidc' as const,
@@ -30,6 +36,7 @@ describe('authSessionService', () => {
     }};
     (getDataSource as any).mockResolvedValue({ ...manager, transaction: async (work: (store: typeof manager) => unknown) => work(manager) });
   });
+  afterEach(() => Object.assign(config, originalCloudConfig));
 
   it('persists provider lineage for a renewable provider-neutral session', async () => {
     await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }, {
@@ -52,6 +59,54 @@ describe('authSessionService', () => {
     await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }))
       .resolves.toEqual(expect.objectContaining({ tenantId: 'tenant-default' }));
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ identityProviderId: null, tenantId: 'tenant-default' }));
+  });
+
+  it('issues a durable tenant-neutral session only for managed global OIDC/SAML account identity', async () => {
+    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
+    const user = { id: 'user-1', email: 'person@example.test', authSessionVersion: 7 };
+
+    await expect(authSessionService.issue(user, {
+      sessionClass: 'cloud_account',
+      identityProviderId: 'provider-1',
+      ...providerTrust,
+      authenticationMethod: 'oidc',
+      federationSession: { subjectId: 'subject-1', sessionId: 'sid-1' },
+    })).resolves.toMatchObject({ tenantId: null });
+
+    expect(generateAccessToken).toHaveBeenCalledWith(user, expect.objectContaining({
+      sessionClass: 'cloud_account', authenticationMethod: 'oidc',
+    }));
+    expect(generateRefreshToken).toHaveBeenCalledWith(user, expect.objectContaining({
+      sessionClass: 'cloud_account', authenticationMethod: 'oidc',
+    }));
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null,
+      identityProviderId: 'provider-1',
+      deviceInfo: expect.stringContaining('"sessionClass":"cloud_account"'),
+    }));
+    expect(providerUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'provider-1',
+      tenantId: expect.objectContaining({ _type: 'isNull' }),
+    }), { isEnabled: true });
+  });
+
+  it('does not turn ordinary pooled or incompletely configured sessions into tenant-neutral authority', async () => {
+    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
+    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }))
+      .rejects.toThrow('tenant-scoped login');
+
+    config.cloudAccountIdentityEnabled = false;
+    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }, {
+      sessionClass: 'cloud_account', identityProviderId: 'provider-1', ...providerTrust,
+      authenticationMethod: 'oidc', federationSession: { subjectId: 'subject-1' },
+    })).rejects.toThrow('Invalid cloud account session');
+
+    config.cloudAccountIdentityEnabled = true;
+    await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }, {
+      sessionClass: 'cloud_account', tenantId: 'tenant-a', tenantSlug: 'alpha',
+      identityProviderId: 'provider-1', ...providerTrust,
+      authenticationMethod: 'oidc', federationSession: { subjectId: 'subject-1' },
+    })).rejects.toThrow('Invalid cloud account session');
   });
 
   it('preserves the current session version in newly issued provider sessions', async () => {

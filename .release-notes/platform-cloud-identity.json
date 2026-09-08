@@ -1,0 +1,98 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "platform-cloud-identity",
+  "type": "feature",
+  "scope": "tenancy",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds short-lived platform identity for tenant control-plane calls, a managed Cloud account entry flow, and a direct-mutation fence for managed shards.",
+  "userImpact": [
+    "Authorized platform operators can exchange their current host session for a short-lived identity limited to tenant read or tenant management operations.",
+    "A managed Cloud deployment can offer verified OIDC or SAML account signup and return the authenticated user to organization onboarding without creating a tenant-local membership prematurely.",
+    "Trusted frontend modules can use the host-owned Carbon component kit for consistent forms and status views without bundling another UI runtime.",
+    "Self-hosted deployments keep the existing direct tenant lifecycle routes unless cloud-required mode is enabled."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Managed pooled shards configure a distinct platform Cloud identity audience before a control-plane consumer uses the exchange; hosts continue to start and the exchange returns 503 until it is configured.",
+      "Managed Cloud account signup also requires EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true and an enabled global direct OIDC or SAML provider.",
+      "Control-plane consumers must verify the exact issuer, audience, key ID, platform action, shard ID, lifetime, and signature before accepting an assertion."
+    ]
+  },
+  "configuration": [
+    "Adds optional EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE for a distinct platform control-plane audience; identity issuance fails closed with 503 when it is absent.",
+    "Adds EG_CLOUD_ACCOUNT_IDENTITY_ENABLED, default false, which is accepted only with pooled tenancy and cloud-required mode.",
+    "EG_TENANCY_CLOUD_REQUIRED=true rejects direct POST and PATCH /api/platform/tenants mutations while retaining authenticated tenant reads and workload lifecycle routes."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds POST /api/platform/cloud-identity with strict platform.tenants.self_create, platform.tenants.read, or platform.tenants.manage request actions and a short-lived ES256 response.",
+      "Adds sanitized Cloud signup provider discovery and provider-start routes with a fixed /cloud/onboarding return path.",
+      "Adds the optional components.carbon frontend context in plugin API 0.5; consumers must feature-detect it or require a compatible host.",
+      "Direct platform tenant mutations return 503 in cloud-required mode so managed control-plane orchestration cannot be bypassed through a shard-local browser session."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema change is required; platform assertions are stateless, while Cloud-account browser sessions bind their class in existing refresh-token metadata. The existing TypeORM tenant lifecycle remains authoritative outside cloud-required direct-user mutation paths."
+    ]
+  },
+  "security": [
+    "The host authenticates the current user and evaluates the exact requested self-create, read, or manage authorization action before signing.",
+    "Self-create assertions are unavailable unless managed Cloud account onboarding is explicitly enabled; provider configuration and tokens are never exposed by the signup discovery response.",
+    "Global Cloud signup uses an explicitly signed, persisted-session-bound account class limited to account bootstrap and self-create. Tenant API access remains denied until an active membership is verified and a tenant-bound session is issued.",
+    "Assertions expire after 90 seconds, use a platform-specific audience and schema, and contain no tenant record, SSO configuration, provider assertion, secret, or browser credential.",
+    "Cloud-required mode fails closed before invoking direct shard-local tenant create or update services."
+  ],
+  "documentation": [
+    "Documents the platform Cloud identity claims, authorization boundary, managed account entry, managed-mode mutation fence, verifier requirements, configuration, rollback, and cloud-neutral ownership boundary."
+  ],
+  "knownLimitations": [
+    "The homepage signup handoff requires a deployed Cloud onboarding module and configured global identity provider; the OSS account entry alone does not deliver the complete signup-to-tenant journey.",
+    "OSS issues and documents the neutral assertion and managed account entry, but tenant provisioning remains the responsibility of the owning Cloud control-plane plugin."
+  ],
+  "rollback": [
+    "Disable managed control-plane callers before removing the platform audience or rolling back the host. Cloud-account sessions require a fresh sign-in on a host that does not support their restricted session class.",
+    "Turn off cloud-required mode only when operators intentionally accept restored direct shard-local tenant mutation."
+  ],
+  "validation": [
+    "Focused schema, signing, route authorization, OIDC callback, signup UI, OpenAPI, configuration, and fail-closed mutation tests cover the additive contract.",
+    "PostgreSQL remains the primary pooled-mode feedback lane; all supported database adapters require candidate portability qualification even though this change adds no migration."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.4.1",
+      "newVersion": "0.5.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.17.0",
+      "newVersion": "0.18.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.15.0",
+      "newVersion": "0.16.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.16.4",
+      "newVersion": "0.17.0",
+      "impact": "minor"
+    }
+  ]
+}

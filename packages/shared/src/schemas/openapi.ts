@@ -60,6 +60,9 @@ const {
   TenantUpdateRequestSchema,
   NativeTenantMembershipSchema,
   TenantCloudIdentityResponseSchema,
+  PlatformCloudIdentityClaimsSchema,
+  PlatformCloudIdentityRequestSchema,
+  PlatformCloudIdentityResponseSchema,
   TenantMemberSchema,
   TenantMemberUpsertRequestSchema,
   TenantLoginPolicySchema,
@@ -329,6 +332,40 @@ function authzExtension(actionId: string, method: string, path: string): Record<
   ) || action?.routes?.find((candidate) => candidate.method.toUpperCase() === method.toUpperCase());
   if (!action || !route) return {};
   return { [AUTHZ_OPENAPI_EXTENSION_KEY]: toOpenApiAuthzExtension(action, route) };
+}
+
+function requestActionAuthzExtension(
+  actionIds: string[],
+  method: string,
+  path: string,
+): Record<string, unknown> {
+  let selector: { location: 'body'; field: string } | undefined;
+  const alternatives = actionIds.map((actionId) => {
+    const action = getAuthzActionDefinition(actionId);
+    const route = action?.routes?.find((candidate) =>
+      candidate.method.toUpperCase() === method.toUpperCase() && candidate.route === path
+    );
+    if (!action || !route?.requestAction) {
+      throw new Error(`Request-selected authorization action is not registered for ${method} ${path}: ${actionId}`);
+    }
+    const routeSelector = {
+      location: route.requestAction.location,
+      field: route.requestAction.field,
+    };
+    if (selector && (selector.location !== routeSelector.location || selector.field !== routeSelector.field)) {
+      throw new Error(`Request-selected authorization actions disagree on their selector for ${method} ${path}`);
+    }
+    selector = routeSelector;
+    return { value: route.requestAction.value, ...toOpenApiAuthzExtension(action, route) };
+  });
+  if (!selector) throw new Error(`Request-selected authorization operation has no alternatives: ${method} ${path}`);
+  return {
+    [AUTHZ_OPENAPI_EXTENSION_KEY]: {
+      mode: 'request-action',
+      selector,
+      alternatives,
+    },
+  };
 }
 
 function authzExemption(method: string, path: string): Record<string, unknown> {
@@ -2779,6 +2816,9 @@ registry.register('TenantDiscoveryResponse', TenantDiscoveryResponseSchema);
 registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
 registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
 registry.register('TenantCloudIdentityResponse', TenantCloudIdentityResponseSchema);
+registry.register('PlatformCloudIdentityClaims', PlatformCloudIdentityClaimsSchema);
+registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityRequestSchema);
+registry.register('PlatformCloudIdentityResponse', PlatformCloudIdentityResponseSchema);
 registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
 registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
 registry.registerPath({
@@ -2904,13 +2944,29 @@ registry.registerPath({
   method: 'post', path: '/api/platform/tenants',
   ...authzExtension('platform.tenants.manage', 'POST', '/api/platform/tenants'),
   request: { body: { content: { 'application/json': { schema: TenantCreateRequestSchema } } } },
-  responses: { 201: { description: 'Tenant created with its first administrator', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Slug already exists or deployment is in single mode' } },
+  responses: { 201: { description: 'Tenant created with its first administrator', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Slug already exists or deployment is in single mode' }, 503: { description: 'Direct mutation is disabled because the cloud control plane is required' } },
 });
 registry.registerPath({
   method: 'patch', path: '/api/platform/tenants/{tenantId}',
   ...authzExtension('platform.tenants.manage', 'PATCH', '/api/platform/tenants/{tenantId}'),
   request: { params: TenantIdPathSchema, body: { content: { 'application/json': { schema: TenantUpdateRequestSchema } } } },
-  responses: { 200: { description: 'Tenant lifecycle or placement state updated', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Placement epoch conflict or protected default-tenant transition' } },
+  responses: { 200: { description: 'Tenant lifecycle or placement state updated', content: { 'application/json': { schema: NativeTenantSchema } } }, 409: { description: 'Placement epoch conflict or protected default-tenant transition' }, 503: { description: 'Direct mutation is disabled because the cloud control plane is required' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/platform/cloud-identity',
+  ...requestActionAuthzExtension([
+    'platform.tenants.self_create',
+    'platform.tenants.read',
+    'platform.tenants.manage',
+  ], 'POST', '/api/platform/cloud-identity'),
+  request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityRequestSchema } } } },
+  responses: {
+    200: { description: 'Short-lived identity for exactly one authorized platform tenant action', content: { 'application/json': { schema: PlatformCloudIdentityResponseSchema } } },
+    400: { description: 'The requested action is missing, unsupported, or malformed' },
+    401: { description: 'A current authenticated user session is required' },
+    403: { description: 'The user is not authorized for the exact requested platform action' },
+    503: { description: 'Shard identity or platform Cloud identity signing is unavailable' },
+  },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant/cloud-identity',
@@ -3891,6 +3947,20 @@ registry.registerPath({
 // -----------------------------
 
 // POST /api/auth/login
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/cloud-signup/providers',
+  ...authzExemption('GET', '/api/auth/cloud-signup/providers'),
+  responses: { 200: { description: 'Sanitized, explicitly enabled Cloud account identity methods', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), displayName: z.string(), protocol: z.enum(['oidc', 'saml']) }).strict()) } } }, 404: { description: 'Cloud account identity is disabled' } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/cloud-signup/providers/{providerId}/start',
+  ...authzExemption('GET', '/api/auth/cloud-signup/providers/:providerId/start'),
+  request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.literal('/cloud/onboarding') }).strict() },
+  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding' }, 404: { description: 'Cloud account identity or provider unavailable' } },
+});
+
 registry.registerPath({
   method: 'post',
   path: '/api/auth/login',

@@ -43,7 +43,7 @@ const PersistedTimestampSchema = z.union([
   z.string().regex(/^\d+$/).transform(Number),
 ]);
 
-export const AuthzOpenApiExtensionSchema = z.object({
+export const AuthzStaticOpenApiExtensionSchema = z.object({
   actionId: z.string().min(1),
   permission: z.string().min(1),
   resourceResolver: z.string().min(1),
@@ -53,6 +53,25 @@ export const AuthzOpenApiExtensionSchema = z.object({
   uiBehavior: AuthzUiBehaviorSchema,
 });
 
+export const AuthzRequestActionOpenApiExtensionSchema = z.object({
+  mode: z.literal('request-action'),
+  selector: z.object({
+    location: z.literal('body'),
+    field: z.string().min(1),
+  }),
+  alternatives: z.array(AuthzStaticOpenApiExtensionSchema.extend({
+    value: z.string().min(1),
+  })).min(2),
+});
+
+/** Preserve the original static parser and its inferred consumer type. */
+export const AuthzOpenApiExtensionSchema = AuthzStaticOpenApiExtensionSchema;
+
+export const AuthzOpenApiClassificationSchema = z.union([
+  AuthzStaticOpenApiExtensionSchema,
+  AuthzRequestActionOpenApiExtensionSchema,
+]);
+
 export const AuthzOpenApiExemptionSchema = z.object({
   kind: z.enum(AUTHZ_ROUTE_EXEMPTION_KINDS),
   reason: z.string().min(1),
@@ -61,7 +80,7 @@ export const AuthzOpenApiExemptionSchema = z.object({
 });
 
 export const EnterpriseGlueAuthzOpenApiExtensionSchema = z.object({
-  [AUTHZ_OPENAPI_EXTENSION_KEY]: AuthzOpenApiExtensionSchema.optional(),
+  [AUTHZ_OPENAPI_EXTENSION_KEY]: AuthzOpenApiClassificationSchema.optional(),
   [AUTHZ_OPENAPI_EXEMPTION_KEY]: AuthzOpenApiExemptionSchema.optional(),
 }).refine((value) =>
   Boolean(value[AUTHZ_OPENAPI_EXTENSION_KEY]) !== Boolean(value[AUTHZ_OPENAPI_EXEMPTION_KEY]),
@@ -1654,3 +1673,4 @@ export type AuthzResourceType = z.infer<typeof AuthzResourceTypeSchema>;
 export type AuthzPrincipalType = z.infer<typeof AuthzPrincipalTypeSchema>;
 export type AuthzActionRisk = z.infer<typeof AuthzActionRiskSchema>;
 export type AuthzOpenApiExtension = z.infer<typeof AuthzOpenApiExtensionSchema>;
+export type AuthzOpenApiClassification = z.infer<typeof AuthzOpenApiClassificationSchema>;

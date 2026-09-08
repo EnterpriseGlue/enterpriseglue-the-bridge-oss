@@ -2,7 +2,7 @@ import {
   getAuthzActionDefinition,
   getAuthzResourceResolver,
   toOpenApiAuthzExtension,
-  type AuthzOpenApiExtension,
+  type AuthzStaticOpenApiExtension,
 } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import type {
@@ -21,7 +21,7 @@ export interface EnterpriseBackendRouteOpenApiAuthzMetadata {
   actionId: string;
   openApiOperationId?: string;
   openApi?: boolean;
-  extension: AuthzOpenApiExtension;
+  extension: AuthzStaticOpenApiExtension;
 }
 
 function isMissingEnterprisePlugin(error: unknown): boolean {

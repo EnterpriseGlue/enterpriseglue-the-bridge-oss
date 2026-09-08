@@ -31,6 +31,16 @@ describe('jwt utils', () => {
     });
   });
 
+  it('signs the explicit tenant-neutral Cloud account class into both session tokens', () => {
+    const options = { sessionClass: 'cloud_account' as const, authenticationMethod: 'oidc' as const };
+    expect(verifyToken(generateAccessToken(user, options))).toMatchObject({
+      type: 'access', sessionClass: 'cloud_account', authenticationMethod: 'oidc',
+    });
+    expect(verifyToken(generateRefreshToken(user, options))).toMatchObject({
+      type: 'refresh', sessionClass: 'cloud_account', authenticationMethod: 'oidc',
+    });
+  });
+
   it('emits only the canonical principal identity in onboarding tokens', () => {
     const payload = verifyToken(generateOnboardingToken({
       userId: user.id,
@@ -75,5 +85,14 @@ describe('jwt utils', () => {
 
   it.each(['', 'not-a-uuid', 42, null, {}, '00000000-0000-0000-0000-000000000001-extra'])('rejects a malformed durable session claim (%j)', (sessionId) => {
     expect(() => normalizeUserJwtPayload({ principalId: user.id, type: 'access', sessionId } as any)).toThrow('Invalid session identity');
+  });
+
+  it('rejects unknown or tenant/recovery-mixed Cloud account session claims', () => {
+    expect(() => normalizeUserJwtPayload({ principalId: user.id, type: 'access', sessionClass: 'other' } as any))
+      .toThrow('Invalid session class');
+    expect(() => normalizeUserJwtPayload({ principalId: user.id, type: 'access', sessionClass: 'cloud_account', tenantId: 'tenant-a' } as any))
+      .toThrow('Invalid cloud account session');
+    expect(() => normalizeUserJwtPayload({ principalId: user.id, type: 'access', sessionClass: 'cloud_account', recovery: 'platform_administrator' } as any))
+      .toThrow('Invalid cloud account session');
   });
 });

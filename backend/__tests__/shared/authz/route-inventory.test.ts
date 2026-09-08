@@ -8,6 +8,12 @@ import {
 } from '@enterpriseglue/shared/authz/index.js';
 
 describe('authorization route inventory validation', () => {
+  const platformCloudIdentityActions = [
+    'platform.tenants.manage',
+    'platform.tenants.read',
+    'platform.tenants.self_create',
+  ];
+
   it('validates generated OpenAPI authz metadata against the action registry', () => {
     const result = validateAuthzRouteInventory(generateOpenApi());
 
@@ -23,6 +29,85 @@ describe('authorization route inventory validation', () => {
 
     expect(result.issues).toEqual([]);
     expect(result.valid).toBe(true);
+  });
+
+  it('rejects a static classification when one operation selects multiple registered actions', () => {
+    const openApi = structuredClone(generateOpenApi()) as any;
+    const operation = openApi.paths['/api/platform/cloud-identity'].post;
+    const readAlternative = operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives.find(
+      (alternative: { actionId: string }) => alternative.actionId === 'platform.tenants.read',
+    );
+    operation[AUTHZ_OPENAPI_EXTENSION_KEY] = {
+      ...readAlternative,
+    };
+    delete operation[AUTHZ_OPENAPI_EXTENSION_KEY].value;
+
+    const result = validateAuthzRouteInventory(openApi);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'openapi.ambiguous-authz-classification',
+        method: 'POST',
+        openApiPath: '/api/platform/cloud-identity',
+        expected: platformCloudIdentityActions,
+        actual: 'platform.tenants.read',
+      }),
+    ]));
+  });
+
+  it('requires request-action alternatives to cover every registered action exactly once', () => {
+    const openApi = structuredClone(generateOpenApi()) as any;
+    const operation = openApi.paths['/api/platform/cloud-identity'].post;
+    operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives = [
+      operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives.find(
+        (alternative: { actionId: string }) => alternative.actionId === 'platform.tenants.read',
+      ),
+    ];
+
+    const result = validateAuthzRouteInventory(openApi);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'openapi.request-action-alternatives-mismatch',
+        method: 'POST',
+        openApiPath: '/api/platform/cloud-identity',
+        expected: platformCloudIdentityActions,
+        actual: ['platform.tenants.read'],
+      }),
+    ]));
+  });
+
+  it('requires request-action alternatives to match the request selector enum and action id', () => {
+    const openApi = structuredClone(generateOpenApi()) as any;
+    const operation = openApi.paths['/api/platform/cloud-identity'].post;
+    operation.requestBody.content['application/json'].schema.properties.action.enum = [
+      'platform.tenants.read',
+    ];
+    const manageAlternative = operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives.find(
+      (alternative: { actionId: string }) => alternative.actionId === 'platform.tenants.manage',
+    );
+    manageAlternative.value = 'platform.tenants.read-as-manage';
+
+    const result = validateAuthzRouteInventory(openApi);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'openapi.request-action-selector-mismatch',
+        method: 'POST',
+        openApiPath: '/api/platform/cloud-identity',
+        field: 'requestBody.action',
+      }),
+      expect.objectContaining({
+        code: 'openapi.extension-mismatch',
+        actionId: 'platform.tenants.manage',
+        field: 'value',
+        expected: 'platform.tenants.manage',
+        actual: 'platform.tenants.read-as-manage',
+      }),
+    ]));
   });
 
   it('documents recovery failures without exposing administrator membership', () => {
