@@ -11,7 +11,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 * **cloud:** add managed account onboarding entry ([3d85b08](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3d85b084bc5c8a74ee2a622968348813330578b8))
 * **tenancy:** add platform cloud identity boundary ([ab13d01](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ab13d01ca1d75adc4ff16e2228a3b18bf6f8913d))
-* **tenancy:** add platform cloud identity boundary ([9022985](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9022985ce059f00be9aa73b2930f1d1ff586b438))
 * **ui:** expose host-owned Carbon system kit ([d32dc55](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d32dc55f0b471372d6f2e0ba9685114522420f65))
 
 
