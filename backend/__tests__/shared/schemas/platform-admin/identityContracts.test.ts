@@ -7,6 +7,7 @@ import {
   IdentitySyncEventSchema,
   IdentitySyncRunSchema,
   NormalizedExternalIdentitySchema,
+  OidcIdentityProviderConfigurationSchema,
   ProviderIdentityInputSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import {
@@ -41,6 +42,18 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('provider-neutral identity shared contracts', () => {
+  it('accepts only a complete Sign in with Apple private-key profile', () => {
+    const apple = {
+      issuerUrl: 'https://appleid.apple.com', clientId: 'ai.enterpriseglue.web', clientAuthentication: 'apple_private_key_jwt',
+      appleTeamId: 'TEAMID1234', appleKeyId: 'KEYID12345', applePrivateKeyRef: 'ref:tenant-secret://v1/tenant-alpha/oidc.apple_private_key/version-1',
+      callbackUrl: 'https://app.example.test/api/t/tenant-alpha/auth/identity/callback', scopes: ['name', 'email'],
+    } as const;
+    expect(OidcIdentityProviderConfigurationSchema.parse(apple)).toMatchObject(apple);
+    expect(() => OidcIdentityProviderConfigurationSchema.parse({ ...apple, appleTeamId: undefined })).toThrow('Apple Team ID');
+    expect(() => OidcIdentityProviderConfigurationSchema.parse({ ...apple, scopes: ['openid', 'email'] })).toThrow('Apple scopes');
+    expect(() => OidcIdentityProviderConfigurationSchema.parse({ ...apple, clientSecretRef: 'ref:env://STATIC_APPLE_SECRET' })).toThrow('generated from the private key');
+  });
+
   it('accepts normalized identity and adapter input without protocol payload fields', () => {
     expect(ProviderIdentityInputSchema.parse({
       providerKey: 'identity.oidc.example', subjectId: 'subject-1', claims: { groups: ['operators'] },

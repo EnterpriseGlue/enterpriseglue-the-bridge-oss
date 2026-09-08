@@ -49,6 +49,7 @@ The allowed purposes are:
 | Protocol | Purpose | Provider configuration field |
 | --- | --- | --- |
 | OIDC | `oidc.client_secret` | `clientSecretRef` |
+| OIDC (Apple) | `oidc.apple_private_key` | `applePrivateKeyRef` |
 | SAML | `saml.metadata_xml` | `metadataXmlRef` |
 | SAML | `saml.idp_signing_certificate` | `signingCertificateRef` |
 | SAML | `saml.request_signing_private_key` | `requestSigningPrivateKeyRef` |
