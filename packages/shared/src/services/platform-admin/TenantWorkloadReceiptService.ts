@@ -4,6 +4,7 @@ import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { canonicalizeConfigJson } from './config-bundle-hash.js';
 import type { TenantLifecycleCommand } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLifecycleOperation.js';
 import { SignedTenantReleaseActivationReceiptSchema, type SignedTenantReleaseActivationReceipt, type TenantReleaseActivationReceiptPayload } from '@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js';
+import type { ManagedEngineWorkloadReceiptPayload, SignedManagedEngineWorkloadReceipt } from '@enterpriseglue/shared/schemas/platform-admin/managed-engine-workload.js';
 
 export const TENANT_WORKLOAD_RECEIPT_V1_SCHEMA = 'tenant-workload-receipt.enterpriseglue.io/v1' as const;
 
@@ -44,7 +45,11 @@ export class TenantWorkloadReceiptService {
     return SignedTenantReleaseActivationReceiptSchema.parse({ payload, signature: this.signature(payload) });
   }
 
-  private signature(payload: TenantWorkloadReceiptPayloadV1 | TenantReleaseActivationReceiptPayload): SignedTenantWorkloadReceiptV1['signature'] {
+  signManagedEngineWorkload(payload: ManagedEngineWorkloadReceiptPayload): SignedManagedEngineWorkloadReceipt {
+    return { payload, signature: this.signature(payload), idempotent: false };
+  }
+
+  private signature(payload: TenantWorkloadReceiptPayloadV1 | TenantReleaseActivationReceiptPayload | ManagedEngineWorkloadReceiptPayload): SignedTenantWorkloadReceiptV1['signature'] {
     const privateKeyPem = config.tenantWorkloadReceiptPrivateKey;
     const keyId = config.tenantWorkloadReceiptKeyId;
     if (!privateKeyPem || !keyId || !config.tenantWorkloadReceiptIssuer || !config.tenantPlacementV2Audience) {

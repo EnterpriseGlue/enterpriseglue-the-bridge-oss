@@ -133,6 +133,16 @@ exact canonical request, and returns the original receipt for an identical
 retry. A changed request under the same key fails. Receipts are canonical-JSON
 payloads signed with a shard P-256 key and include no user session or secret.
 
+Managed engine registration and decommission use the same tenant-bound workload
+identity, durable idempotency ledger, and signed receipt boundary. The host owns
+the engine inventory record and encrypted credentials; the Cloud controller
+owns provider provisioning and sends credentials only over the private
+authenticated request. Registration is restricted to dedicated Operaton
+engines in the request tenant. Decommission revokes runtime use and clears the
+stored credential while retaining historical engine metadata. The controller
+must verify the decommission receipt before deleting the provider workload or
+its secret.
+
 Membership does not introduce a second authorization model. It uses the
 existing FGA role assignments at tenant scope:
 
@@ -415,6 +425,7 @@ organization-name fallback.
 | `EG_TENANT_SECRET_BROKER_CACHE_MAX_ENTRIES` | `256` | Per-process resolved-value cache bound; maximum 1024. |
 | `EG_TENANT_SECRET_BROKER_REQUIRED` | `false` | Require URL and token reference at startup. |
 | `EG_TENANT_SECRET_BREAK_GLASS_ENABLED` | `false` | Enable audited workload-only recovery to a verified local reference. |
+| `EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX` | unset | Exact Kubernetes service suffix for curated `egme-<40 lowercase hex>` managed engine services. |
 
 Use a secret manager for placement v1 and workload receipt private keys. The
 placement v2 JWKS is public verification material. The broker token stays in

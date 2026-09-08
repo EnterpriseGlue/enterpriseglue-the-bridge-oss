@@ -132,6 +132,90 @@ curl --fail-with-body \
   }'
 ```
 
+## Managed Cloud engine workload lifecycle
+
+The Cloud worker registers an already provisioned managed Operaton engine with
+the tenant's OSS host through:
+
+```text
+POST /api/workloads/tenants/{tenantId}/managed-engines
+```
+
+This is a workload-only contract. It accepts only an `egsa_...` service-account
+bearer with the existing `tenant:lifecycle` scope; browser cookies, user access
+tokens, API-client tokens, and plugin invocation tokens are rejected. The
+`Idempotency-Key` header must exactly equal `operationId`, and every request
+also requires `X-Correlation-ID`.
+
+<!-- enterpriseglue-config-schema: ManagedEngineWorkloadRegistrationRequestSchema -->
+```json
+{
+  "operationId": "managed-engine-connect:01JEXAMPLE0001",
+  "engineRef": "01JEXAMPLE0001",
+  "displayName": "Managed Operaton engine",
+  "baseUrl": "http://egme-0123456789abcdef0123456789abcdef01234567.managed.svc.cluster.local:8081/engine-rest",
+  "credentials": {
+    "type": "basic",
+    "username": "enterpriseglue",
+    "password": "transient-secret-value"
+  }
+}
+```
+
+The host fixes the engine type to `operaton`, connection mode to `direct`,
+runtime access to `resource_aware`, and topology to dedicated ownership by the
+path tenant. It encrypts the password immediately as a literal value. Values
+that resemble `ref:env://`, `ref:file://`, or ciphertext are not interpreted as
+host-side secret references. Credentials are never returned or written to
+audit data.
+
+The endpoint is provider-neutral but intentionally accepts only the configured
+internal service shape. Set `EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX` to the exact
+managed namespace suffix and retain the ordinary private-host, HTTP, and host
+allowlist opt-ins. The only accepted URL is
+`http://egme-<40 lowercase hex>.<configured suffix>:8081/engine-rest`, with no
+query, fragment, or embedded credentials. This exception does not authorize
+other private wildcard targets.
+
+An identical retry returns the original signed receipt with `idempotent: true`.
+A reused key, engine reference, tenant, owner, endpoint, or registration intent
+that does not match returns `409`. The signed payload contains the stable
+`engineId` and canonical tenant-relative overview path
+`/t/{tenantSlug}/engines`; callers must verify the ES256/P-1363 signature,
+schema version, configured issuer and audience, key ID, operation, actor,
+tenant, engine reference, correlation ID, and idempotency-key hash before using
+those values. The signature covers canonical JSON of `payload`. The Cloud
+caller cannot independently recompute the registration `requestHash` because
+its credential component is a host-keyed blind index; treat that field as a
+signed host replay binding, not as caller-computed authority.
+
+Before deleting the provider workload or its secret, the Cloud worker calls:
+
+```text
+POST /api/workloads/tenants/{tenantId}/managed-engines/{engineRef}/decommission
+```
+
+with strict body `{ "operationId": "...", "engineRef": "..." }`; the path and
+body reference must match. Decommission is idempotent and requires the same
+positive tenant and workload-source ownership. An owned registration is revoked,
+its encrypted credential is cleared, historical engine metadata is retained,
+and the signed receipt returns `state: "decommissioned"` with the real engine
+ID. When the host proves that the reference has no engine or registration, it
+returns a signed `state: "absent"` receipt with `engineId: null`; it never
+fabricates a tombstone engine record or ID. A reference owned by another tenant,
+actor, or registration source fails instead of being reported absent. The engine
+reference is durably terminal for that tenant and workload source, so a delayed
+or later registration cannot recreate it after either terminal receipt. The
+host serializes registration and decommission on the tenant boundary; its
+filtered terminal-receipt lookup is portable across the supported TypeORM
+adapters, but grows with that tenant and workload actor's completed managed
+engine decommission operations. The engine client rejects a decommissioned
+record before making an outbound request. The controller must verify either
+terminal receipt before removing provider
+resources. If the host call fails, provider deletion must stop. A temporary
+stop may retain the registration; Cloud observed state reports it as stopped
+while host health polling reports the absent runtime as unavailable.
+
 ## Customer-sidecar Registration API
 
 Set `connectionMode` to `customer_sidecar` when `baseUrl` is a

@@ -1,0 +1,73 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "managed-engine-workload-registration",
+  "type": "feature",
+  "scope": "managed engine workload lifecycle",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds tenant-bound workload APIs for idempotently registering and decommissioning managed Operaton engines without exposing engine credentials.",
+  "userImpact": [
+    "Managed Cloud orchestration can connect and safely decommission a provisioned Operaton engine through a host-owned, dedicated-tenant workload contract."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Cloud control-plane callers must adopt the workload-authenticated registration contract before invoking this endpoint."
+    ]
+  },
+  "configuration": [
+    "Set EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX to the exact managed Kubernetes service suffix; the existing private-host, insecure-HTTP, and engine-host allowlist opt-ins remain required."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds workload-authenticated registration and decommission endpoints under /api/workloads/tenants/:tenantId with strict requests and signed, credential-free receipts."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Implementation reuses existing TypeORM engine, external-registration, authorization, and lifecycle-ledger entities without a schema migration. The focused PostgreSQL persistence lifecycle passed; other supported databases remain a milestone acceptance gate."
+    ]
+  },
+  "security": [
+    "Only tenant-lifecycle workload identity may register or decommission a managed engine; browser and general API authentication are rejected, and an absent receipt is signed only when no conflicting engine or registration exists.",
+    "Plaintext credentials are accepted only at the workload boundary for immediate literal AES-GCM encryption and are never returned or logged.",
+    "Only curated egme-<40 lowercase hex> Kubernetes service URLs under the configured suffix are accepted, and decommissioned engines are denied before outbound transport."
+  ],
+  "documentation": [
+    "Updated the engine tenancy/provisioning API, pooled tenancy architecture, and configuration references with the workload lifecycle and endpoint boundary."
+  ],
+  "knownLimitations": [
+    "Oracle, SQL Server, MySQL, and Spanner portability remain broader milestone acceptance gates; this change has focused PostgreSQL persistence evidence only.",
+    "A temporary Cloud stop retains the host registration; Cloud observed state must report stopped while host health polling reports the absent runtime unavailable."
+  ],
+  "rollback": [
+    "Stop managed Cloud callers from invoking the additive endpoints before rolling back the host. Do not delete provider resources unless a signed host decommission receipt has already been verified; retained engine history remains safe."
+  ],
+  "validation": [
+    "Focused unit and contract tests cover schemas, workload authorization, route inventory, idempotency, literal encryption, endpoint policy, runtime decommission denial, and signed absent decommission recovery.",
+    "PostgreSQL integration: 1 test passed for real TypeORM registration, exact replay, encrypted persistence, decommission, credential clearing, signed absence recovery, terminal recreation denial, and concurrent serialization.",
+    "Shared TypeScript no-emit validation passed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.17.0",
+      "newVersion": "0.18.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.15.0",
+      "newVersion": "0.16.0",
+      "impact": "minor"
+    }
+  ]
+}

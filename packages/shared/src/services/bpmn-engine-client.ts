@@ -168,6 +168,25 @@ function isAllowedEngineEndpointHost(host: string, allowedHosts: string[]): bool
   })
 }
 
+function isConfiguredManagedInternalEngineEndpoint(url: URL): boolean {
+  const suffix = (process.env.EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX || '')
+    .trim().toLowerCase().replace(/^\.+|\.+$/g, '')
+  const normalizedHost = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  if (!suffix || !normalizedHost.endsWith(`.${suffix}`)) return false
+  const serviceName = normalizedHost.slice(0, -(suffix.length + 1))
+  return /^egme-[a-f0-9]{40}$/.test(serviceName)
+    && url.protocol === 'http:'
+    && url.port === '8081'
+    && url.pathname === '/engine-rest'
+    && !url.search
+    && !url.hash
+}
+
+export function isManagedEngineInternalEndpointUrl(rawUrl: string): boolean {
+  try { return isConfiguredManagedInternalEngineEndpoint(new URL(rawUrl)) }
+  catch { return false }
+}
+
 function parseIpv4(host: string): number[] | null {
   const parts = host.split('.')
   if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return null
@@ -346,7 +365,9 @@ export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine en
       throw Errors.validation(`${label} host is private; set EG_ENGINE_ALLOW_PRIVATE_HOSTS=true and add the exact reviewed host to the allowlist`)
     }
     const normalizedHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
-    if (privateHost && !allowedHosts.some((entry) => !entry.startsWith('*.') && entry === normalizedHost)) {
+    const managedInternalHost = isConfiguredManagedInternalEngineEndpoint(parsed)
+    if (privateHost && !allowedHosts.some((entry) => !entry.startsWith('*.') && entry === normalizedHost)
+      && !(managedInternalHost && isAllowedEngineEndpointHost(normalizedHost, allowedHosts))) {
       throw Errors.validation(`${label} private host must have an exact endpoint-policy allowlist entry`)
     }
     if (!privateHost && !isAllowedEngineEndpointHost(parsed.hostname, allowedHosts)) {
@@ -373,7 +394,7 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const row = await engineRepo.findOneBy({ id: engineId })
-  if (!row || !row.baseUrl) throw Errors.engineNotFound(engineId)
+  if (!row || !row.baseUrl || row.lifecycleStatus === 'decommissioned') throw Errors.engineNotFound(engineId)
 
   const engineRow = row as Engine & {
     authType?: string;

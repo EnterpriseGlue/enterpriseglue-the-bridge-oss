@@ -13,6 +13,7 @@ import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimit
 import { tenantDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/TenantDiscoveryService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/platform-admin/TenantWorkloadLifecycleService.js';
+import { managedEngineWorkloadRegistrationService } from '@enterpriseglue/shared/services/platform-admin/ManagedEngineWorkloadRegistrationService.js';
 import { tenantCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/TenantCloudIdentityService.js';
 import { platformCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/PlatformCloudIdentityService.js';
 import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
@@ -57,6 +58,11 @@ import {
   TenantWorkloadSecretBreakGlassRequestSchema,
   SignedTenantWorkloadReceiptSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
+import {
+  ManagedEngineWorkloadRegistrationRequestSchema,
+  ManagedEngineWorkloadDecommissionRequestSchema,
+  SignedManagedEngineWorkloadReceiptSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/managed-engine-workload.js';
 
 const router = Router();
 const tenantIdSchema = z.string().min(1).max(160);
@@ -215,6 +221,59 @@ router.post('/api/workloads/tenants/:tenantId/resume', workloadScope, validateBo
     },
   });
   res.json(SignedTenantWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.post('/api/workloads/tenants/:tenantId/managed-engines', workloadScope, validateBody(ManagedEngineWorkloadRegistrationRequestSchema), asyncHandler(async (req, res) => {
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  const receipt = await managedEngineWorkloadRegistrationService.execute({
+    actorId: req.serviceAccount!.id,
+    tenantId,
+    idempotencyKey: requiredHeader(req, 'idempotency-key'),
+    correlationId: requiredHeader(req, 'x-correlation-id'),
+    request: req.body,
+  });
+  await logAudit({
+    tenantId,
+    userId: req.serviceAccount!.id,
+    action: receipt.idempotent ? 'engine.managed_workload_registration.replay' : 'engine.managed_workload_registration.create',
+    resourceType: 'engine',
+    resourceId: receipt.payload.engineId ?? receipt.payload.engineRef,
+    details: {
+      operationId: receipt.payload.operationId,
+      engineRef: receipt.payload.engineRef,
+      correlationId: receipt.payload.correlationId,
+      credentialsIncluded: false,
+    },
+  });
+  res.status(receipt.idempotent ? 200 : 201).json(SignedManagedEngineWorkloadReceiptSchema.parse(receipt));
+}));
+
+router.post('/api/workloads/tenants/:tenantId/managed-engines/:engineRef/decommission', workloadScope, validateBody(ManagedEngineWorkloadDecommissionRequestSchema), asyncHandler(async (req, res) => {
+  const tenantId = tenantIdSchema.parse(req.params.tenantId);
+  const engineRef = z.string().min(1).max(255).parse(req.params.engineRef);
+  if (engineRef !== req.body.engineRef) throw Errors.validation('Path engineRef must match the request body');
+  const receipt = await managedEngineWorkloadRegistrationService.decommission({
+    actorId: req.serviceAccount!.id,
+    tenantId,
+    idempotencyKey: requiredHeader(req, 'idempotency-key'),
+    correlationId: requiredHeader(req, 'x-correlation-id'),
+    request: req.body,
+  });
+  await logAudit({
+    tenantId,
+    userId: req.serviceAccount!.id,
+    action: receipt.idempotent ? 'engine.managed_workload_decommission.replay' : 'engine.managed_workload_decommission.apply',
+    resourceType: 'engine',
+    resourceId: receipt.payload.engineId ?? receipt.payload.engineRef,
+    details: {
+      operationId: receipt.payload.operationId,
+      engineRef: receipt.payload.engineRef,
+      correlationId: receipt.payload.correlationId,
+      state: receipt.payload.state,
+      credentialsRetired: receipt.payload.state === 'decommissioned',
+    },
+  });
+  res.json(SignedManagedEngineWorkloadReceiptSchema.parse(receipt));
 }));
 
 router.put('/api/workloads/tenants/:tenantId/release-assignment', requireTenantReleaseController, validateBody(TenantReleaseWorkAssignmentRequestSchema), asyncHandler(async (req, res) => {

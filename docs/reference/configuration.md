@@ -255,6 +255,15 @@ disabled and TLS certificates use the runtime's normal verification.
   temporary migration override for a reviewed private-network HTTP endpoint.
   The private-host opt-in and exact allowlist entry are still required. Prefer
   HTTPS and remove this override after migration.
+- `EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX`: Exact Kubernetes service suffix for
+  workload-managed internal engines, for example `managed.svc.cluster.local`.
+  When set, only an exact URL shaped as
+  `http://egme-<40 lowercase hex>.<suffix>:8081/engine-rest` receives the narrow
+  managed-service exception to the ordinary private wildcard rule. It still
+  requires `EG_ENGINE_ALLOW_PRIVATE_HOSTS=true`,
+  `EG_ALLOW_INSECURE_ENGINE_HTTP=true`, and a matching
+  `EG_ENGINE_ALLOWED_HOSTS` entry. Other private wildcard targets, ports,
+  paths, queries, fragments, and embedded credentials remain rejected.
 
 Host allowlisting validates the configured name and address literals; it is
 not DNS pinning. Allowlist only names below a reviewed administrative boundary,
