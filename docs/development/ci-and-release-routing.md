@@ -43,6 +43,13 @@ Documentation and Markdown changes select a dedicated lightweight publication-
 boundary job. They do not select the larger OSS/configuration/plugin boundary
 bundle unless another changed path requires it.
 
+Frontend-only shell and component changes run a focused lane containing both
+frontend typechecks, all frontend unit tests, and frontend lint. They do not
+start PostgreSQL or build the backend. A change that also touches backend,
+persistence, authorization, Mission Control engine integration, or an unknown
+surface continues to use the broader application lane. Package-version and
+documentation guards remain independently selected when applicable.
+
 The exact generated Release Please delta is also explicit: the version
 manifest, top-level changelog, versioned release document, and host chart
 metadata select documentation, boundary, Helm render, and release-readiness
@@ -58,6 +65,8 @@ cannot pass until that exact-SHA qualification completes.
 
 ## Expensive evidence
 
+- Frontend-only shell/component changes run frontend typechecks, unit tests,
+  and lint without a database.
 - Ordinary backend changes run focused PostgreSQL integration.
 - TypeORM entities, migrations, database adapters, or persistence behavior run
   PostgreSQL, MySQL, SQL Server, Oracle, and Spanner qualification.

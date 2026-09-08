@@ -169,7 +169,31 @@ test('frontend source changes select application tests but not Oracle or image b
   assert.equal(result.run_postgres, true);
   assert.equal(result.run_oracle, false);
   assert.equal(result.run_ci_images, false);
+  assert.equal(result.run_frontend_tests, false);
   assert.equal(result.run_engine_browser, true);
+  assert.equal(result.run_package_discipline, true);
+});
+
+test('frontend-only shell changes use the focused frontend lane without a database', () => {
+  const result = classifyChangedFiles([
+    '.release-notes/platform-admin-notification-context.json',
+    'frontend/__tests__/src/components/EngineSelector.test.tsx',
+    'frontend/__tests__/src/features/shared/components/LayoutWithProSidebar.notifications.test.tsx',
+    'packages/frontend-host/package.json',
+    'packages/frontend-host/src/components/EngineSelector.tsx',
+    'packages/frontend-host/src/features/shared/components/LayoutWithProSidebar.tsx',
+  ]);
+
+  assert.equal(result.frontend, true);
+  assert.equal(result.backend, false);
+  assert.equal(result.persistence, false);
+  assert.equal(result.engine_integration, false);
+  assert.equal(result.authorization, false);
+  assert.equal(result.run_frontend_tests, true);
+  assert.equal(result.run_tests, false);
+  assert.equal(result.run_postgres, false);
+  assert.equal(result.run_oracle, false);
+  assert.equal(result.run_engine_browser, false);
   assert.equal(result.run_package_discipline, true);
 });
 
@@ -317,6 +341,7 @@ test('manual full runs select every lane while respecting package publication in
   const result = classifyChangedFiles([], { forceFull: true, enablePluginPackage: false });
 
   assert.equal(result.metadata_only, false);
+  assert.equal(result.run_frontend_tests, false);
   assert.equal(result.run_tests, true);
   assert.equal(result.run_plugin_package, false);
   assert.deepEqual(result.test_databases, ['postgres', 'oracle']);

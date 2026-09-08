@@ -45,6 +45,15 @@ test('change classification makes every selected expensive lane non-skippable', 
   assert.deepEqual(evaluation.rejected, [{ job: 'plugin-platform', result: 'skipped' }])
 })
 
+test('focused frontend selection cannot be silently skipped', () => {
+  const required = requiredJobsForSelection({ run_frontend_tests: 'true', run_tests: 'false' })
+  assert.deepEqual(required, ['frontend-tests'])
+  const evaluation = evaluateNeeds({ 'frontend-tests': { result: 'skipped' } }, {
+    requiredNonSkippedJobs: required,
+  })
+  assert.equal(evaluation.passed, false)
+})
+
 test('documentation publication checks cannot be skipped on documentation changes', () => {
   const required = requiredJobsForSelection({ run_documentation_guard: 'true' })
   assert.deepEqual(required, ['documentation-boundary'])

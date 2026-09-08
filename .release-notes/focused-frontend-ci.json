@@ -1,0 +1,47 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "focused-frontend-ci",
+  "type": "performance",
+  "scope": "ci",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators"
+  ],
+  "summary": "Routes frontend-only shell and component changes through a complete frontend verification lane without starting an unrelated database and backend stack.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The change affects CI routing only and does not alter runtime persistence or the supported database matrix."
+    ]
+  },
+  "security": [
+    "Mixed, authorization-sensitive, persistence, engine, and unknown changes continue to select the broader fail-closed verification paths."
+  ],
+  "documentation": [
+    "The maintainer CI routing guide documents the focused frontend lane and its fail-closed boundary."
+  ],
+  "knownLimitations": [
+    "The exact merge-group revision still runs applicable checks; this change does not yet implement cryptographically bound cross-run evidence reuse."
+  ],
+  "rollback": [
+    "Revert the classifier output and frontend job; frontend-only changes will return to the PostgreSQL application lane."
+  ],
+  "validation": [
+    "Classifier fixtures replay the prior frontend regression change and prove PostgreSQL, Oracle, engine-browser, image, and backend application lanes stay unselected.",
+    "The focused lane passed both frontend typechecks, 1,494 unit tests, and frontend lint locally."
+  ],
+  "packages": []
+}
