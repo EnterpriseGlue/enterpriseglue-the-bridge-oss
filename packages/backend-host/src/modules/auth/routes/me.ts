@@ -3,7 +3,7 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
-import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAuth, requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -32,7 +32,7 @@ const router = Router();
  * GET /api/auth/me
  * Get current user profile
  */
-router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res) => {
+router.get('/api/auth/me', apiLimiter, requireCloudAccountOrTenantAuth, asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
 

@@ -8,6 +8,12 @@ import {
 } from '@enterpriseglue/shared/authz/index.js';
 
 describe('authorization route inventory validation', () => {
+  const platformCloudIdentityActions = [
+    'platform.tenants.manage',
+    'platform.tenants.read',
+    'platform.tenants.self_create',
+  ];
+
   it('validates generated OpenAPI authz metadata against the action registry', () => {
     const result = validateAuthzRouteInventory(generateOpenApi());
 
@@ -28,8 +34,11 @@ describe('authorization route inventory validation', () => {
   it('rejects a static classification when one operation selects multiple registered actions', () => {
     const openApi = structuredClone(generateOpenApi()) as any;
     const operation = openApi.paths['/api/platform/cloud-identity'].post;
+    const readAlternative = operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives.find(
+      (alternative: { actionId: string }) => alternative.actionId === 'platform.tenants.read',
+    );
     operation[AUTHZ_OPENAPI_EXTENSION_KEY] = {
-      ...operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives[0],
+      ...readAlternative,
     };
     delete operation[AUTHZ_OPENAPI_EXTENSION_KEY].value;
 
@@ -41,7 +50,7 @@ describe('authorization route inventory validation', () => {
         code: 'openapi.ambiguous-authz-classification',
         method: 'POST',
         openApiPath: '/api/platform/cloud-identity',
-        expected: ['platform.tenants.manage', 'platform.tenants.read'],
+        expected: platformCloudIdentityActions,
         actual: 'platform.tenants.read',
       }),
     ]));
@@ -51,7 +60,9 @@ describe('authorization route inventory validation', () => {
     const openApi = structuredClone(generateOpenApi()) as any;
     const operation = openApi.paths['/api/platform/cloud-identity'].post;
     operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives = [
-      operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives[0],
+      operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives.find(
+        (alternative: { actionId: string }) => alternative.actionId === 'platform.tenants.read',
+      ),
     ];
 
     const result = validateAuthzRouteInventory(openApi);
@@ -62,7 +73,7 @@ describe('authorization route inventory validation', () => {
         code: 'openapi.request-action-alternatives-mismatch',
         method: 'POST',
         openApiPath: '/api/platform/cloud-identity',
-        expected: ['platform.tenants.manage', 'platform.tenants.read'],
+        expected: platformCloudIdentityActions,
         actual: ['platform.tenants.read'],
       }),
     ]));
@@ -74,7 +85,10 @@ describe('authorization route inventory validation', () => {
     operation.requestBody.content['application/json'].schema.properties.action.enum = [
       'platform.tenants.read',
     ];
-    operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives[1].value = 'platform.tenants.read-as-manage';
+    const manageAlternative = operation[AUTHZ_OPENAPI_EXTENSION_KEY].alternatives.find(
+      (alternative: { actionId: string }) => alternative.actionId === 'platform.tenants.manage',
+    );
+    manageAlternative.value = 'platform.tenants.read-as-manage';
 
     const result = validateAuthzRouteInventory(openApi);
 

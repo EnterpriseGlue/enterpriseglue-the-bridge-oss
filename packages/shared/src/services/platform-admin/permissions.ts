@@ -1296,7 +1296,7 @@ export const SystemRoleDefinitions: SystemRoleDefinition[] = [
     id: SYSTEM_ROLE_IDS.PLATFORM_USER,
     key: SYSTEM_ROLE_IDS.PLATFORM_USER,
     name: 'Platform User',
-    description: 'View the dashboard and create projects. Engine access is granted separately for each engine.',
+    description: 'View the dashboard, create projects, and create your first organization when managed Cloud onboarding is enabled. Engine access is granted separately for each engine.',
     scope: 'platform',
     kind: 'system',
     isEditable: false,

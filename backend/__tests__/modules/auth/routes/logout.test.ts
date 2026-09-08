@@ -25,7 +25,7 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
-  requireAuth: (req: any, _res: any, next: any) => {
+  requireCloudAccountOrTenantAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', type: 'access', platformRole: 'user', sessionId: '00000000-0000-0000-0000-000000000001' };
     next();
   },

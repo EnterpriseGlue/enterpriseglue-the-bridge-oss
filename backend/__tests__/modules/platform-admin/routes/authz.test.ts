@@ -123,6 +123,15 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
     }
     next();
   },
+  requireCloudAccountOrTenantAuth: (req: any, _res: any, next: any) => {
+    req.user = req.headers['x-test-cloud-account'] === 'true'
+      ? { userId: 'cloud-user-1', type: 'access', sessionClass: 'cloud_account', authSessionVersion: 4 }
+      : { userId: 'user-1', platformRole: 'admin' };
+    if (req.headers['x-test-omit-tenant-context'] !== 'true' && req.headers['x-test-cloud-account'] !== 'true') {
+      req.tenant ||= { tenantId: 'tenant-default' };
+    }
+    next();
+  },
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/apiClientAuth.js', () => apiClientAuthMock);
@@ -183,6 +192,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   policyService: {
     evaluateAndLog: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'User is admin' }),
     evaluate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'role:platform:admin' }),
+    evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-deny-policy' }),
     getAllPolicies: vi.fn().mockResolvedValue([]),
     createPolicy: vi.fn().mockResolvedValue({ id: 'policy-1' }),
     updatePolicy: vi.fn().mockResolvedValue(undefined),
@@ -380,6 +390,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     INSTANCE_VIEW: 'engine:instance:view',
   },
   PlatformPermissions: {
+    TENANTS_SELF_CREATE: 'platform:tenants:self-create',
     ENGINE_REGISTRATION_MANAGE: 'platform:engine-registration:manage',
     ENGINE_SETS_VIEW: 'platform:engine-sets:view',
     ENGINE_SETS_MANAGE: 'platform:engine-sets:manage',
@@ -696,6 +707,68 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.tenantId).toBeNull();
     expect(permissionService.getCurrentUserPermissions).toHaveBeenCalledWith('user-1', 'tenant-default');
+  });
+
+  it('returns only first-tenant creation authority for a neutral Cloud account session', async () => {
+    const response = await request(app)
+      .get('/api/authz/me/permissions')
+      .set('x-test-cloud-account', 'true');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toEqual({
+      userId: 'cloud-user-1',
+      tenantId: null,
+      platform: ['platform:tenants:self-create'],
+      platformActionAvailability: {
+        allowedActions: ['platform.tenants.self_create'],
+        restrictions: {},
+      },
+      tenant: null,
+      projects: [],
+      engines: [],
+      authorizationVersion: 'cloud-account:4',
+      generatedAt: expect.any(Number),
+    });
+    expect(permissionService.getCurrentUserPermissions).not.toHaveBeenCalled();
+    expect(platformSettingsServiceMock.get).not.toHaveBeenCalled();
+    expect(getDataSource).not.toHaveBeenCalled();
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:tenants:self-create', {
+      userId: 'cloud-user-1', tenantId: null, resourceType: 'platform',
+    });
+  });
+
+  it('does not advertise first-tenant creation after its permission is revoked', async () => {
+    sharedPermissionServiceMock.hasPermission.mockResolvedValueOnce(false);
+
+    const response = await request(app)
+      .get('/api/authz/me/permissions')
+      .set('x-test-cloud-account', 'true');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      tenantId: null,
+      platform: [],
+      platformActionAvailability: { allowedActions: [], restrictions: {} },
+      projects: [],
+      engines: [],
+    });
+  });
+
+  it('does not advertise first-tenant creation when policy denies the otherwise granted action', async () => {
+    vi.mocked(policyService.evaluateGate).mockResolvedValueOnce({
+      decision: 'deny', reason: 'cloud signup suspended',
+    } as any);
+
+    const response = await request(app)
+      .get('/api/authz/me/permissions')
+      .set('x-test-cloud-account', 'true');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      platform: [],
+      platformActionAvailability: { allowedActions: [] },
+    });
   });
 
   it('serializes authorization audit records through the strict shared API view', async () => {

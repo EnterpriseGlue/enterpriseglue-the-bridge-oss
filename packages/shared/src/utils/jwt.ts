@@ -28,6 +28,12 @@ export interface JwtPayload {
   authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap';
   /** True only when a trusted authenticator/IdP supplied configured MFA evidence. */
   mfaVerified?: boolean;
+  /**
+   * A deliberately tenant-neutral managed-Cloud onboarding session. This is
+   * not a tenant session and must be admitted only by the small account
+   * onboarding route set.
+   */
+  sessionClass?: 'cloud_account';
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
   tenantId?: string;
@@ -39,6 +45,7 @@ export interface SessionAssuranceOptions {
   administratorRecovery?: boolean;
   authenticationMethod?: JwtPayload['authenticationMethod'];
   mfaVerified?: boolean;
+  sessionClass?: JwtPayload['sessionClass'];
   tenantId?: string;
   tenantSlug?: string;
 }
@@ -72,6 +79,13 @@ export function normalizeUserJwtPayload(payload: JwtPayload): UserJwtPayload {
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.sessionId))) {
     throw new Error('Invalid session identity');
   }
+  if (payload.sessionClass !== undefined && payload.sessionClass !== 'cloud_account') {
+    throw new Error('Invalid session class');
+  }
+  if (payload.sessionClass === 'cloud_account'
+    && (payload.tenantId !== undefined || payload.tenantSlug !== undefined || payload.recovery !== undefined)) {
+    throw new Error('Invalid cloud account session');
+  }
 
   return { ...payload, userId: principalId, principalType, principalId };
 }
@@ -88,6 +102,7 @@ export function generateAccessToken(user: User | any, options: SessionAssuranceO
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
+    ...(options.sessionClass ? { sessionClass: options.sessionClass } : {}),
     ...(options.tenantId ? { tenantId: options.tenantId } : {}),
     ...(options.tenantSlug ? { tenantSlug: options.tenantSlug } : {}),
     type: 'access',
@@ -110,6 +125,7 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
+    ...(options.sessionClass ? { sessionClass: options.sessionClass } : {}),
     ...(options.tenantId ? { tenantId: options.tenantId } : {}),
     ...(options.tenantSlug ? { tenantSlug: options.tenantSlug } : {}),
     type: 'refresh',

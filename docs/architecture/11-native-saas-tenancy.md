@@ -397,7 +397,8 @@ organization-name fallback.
 | `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
 | `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, tenant secret broker, and signed tenant application eligibility settings are complete; direct shard-local platform tenant mutations are disabled. |
 | `EG_TENANT_CLOUD_IDENTITY_AUDIENCE` | unset | Exact Cloud API audience for short-lived tenant identity; required with a managed release ID. |
-| `EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE` | unset | Distinct Cloud API audience for short-lived platform tenant read/manage identity; the exchange returns 503 until it is configured. |
+| `EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE` | unset | Distinct Cloud API audience for short-lived platform tenant self-create/read/manage identity; the exchange returns 503 until it is configured. |
+| `EG_CLOUD_ACCOUNT_IDENTITY_ENABLED` | `false` | Enables global OIDC/SAML account signup and restricted tenant-neutral sessions only in pooled, Cloud-required mode. |
 | `EG_TENANT_RELEASE_CONTROLLER_TOKEN` | unset | Private release-controller bearer for release-aware plugin work handoff; required with a managed release ID. |
 | `EG_TENANT_APP_ELIGIBILITY_REQUIRED` | `false` | Require a complete signed tenant application eligibility verifier; cloud-required mode requires `true`. |
 | `EG_TENANT_APP_ELIGIBILITY_JWKS_JSON` | unset | Public P-256 ES256 keys trusted for tenant/plugin eligibility projections. |

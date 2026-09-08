@@ -248,6 +248,9 @@ async function setProviderSession(
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
     authenticationMethod: provider.protocol,
+    ...(config.tenancyMode === 'pooled' && !provider.tenantId
+      ? { sessionClass: 'cloud_account' as const }
+      : {}),
     mfaVerified: evidence.mfaVerified,
     federationSession: {
       subjectId: evidence.subjectId,
@@ -355,7 +358,9 @@ router.get('/api/auth/providers/enabled', apiLimiter, identityFlowLimiter, resol
 
 router.get('/api/auth/cloud-signup/providers', apiLimiter, identityFlowLimiter, asyncHandler(async (_req: Request, res: Response) => {
   if (!config.cloudAccountIdentityEnabled) throw Errors.notFound('Cloud signup');
-  const providers = (await identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin())
+  // Cloud accounts use global providers only; the ordinary login helper merges
+  // default-tenant providers and can shadow a global provider with the same key.
+  const providers = (await identityProviderService.listEnabledDirectLoginProviders(null))
     .filter((provider) => provider.tenantId === null && (provider.protocol === 'oidc' || provider.protocol === 'saml'));
   res.json(providers.map((provider) => ({
     id: provider.id,

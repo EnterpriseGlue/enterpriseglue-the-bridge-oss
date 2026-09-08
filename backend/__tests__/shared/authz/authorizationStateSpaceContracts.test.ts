@@ -174,11 +174,12 @@ describe('authorization state-space contract', () => {
       actionCount: AUTHZ_ACTIONS.length,
     });
 
-    // The expanded authorization surface includes all 233 canonical actions,
-    // including the tenant application lifecycle identities. Keep this exact
-    // sentinel so an unreviewed catalog expansion cannot silently reduce the
-    // generated coverage denominator.
-    expect(summary.rawTupleCount).toBe(164_404_800);
+    // The expanded authorization surface includes all 234 canonical actions,
+    // including the tenant application lifecycle and bounded self-onboarding
+    // identities. Keep both exact sentinels so an unreviewed catalog change
+    // cannot silently alter the generated coverage denominator.
+    expect(AUTHZ_ACTIONS).toHaveLength(234);
+    expect(summary.rawTupleCount).toBe(165_110_400);
     expect(summary.compressedCellCount).toBe(105_840);
     expect(summary.applicableCellCount).toBeGreaterThan(0);
     expect(summary.invalidCompressedCellCount).toBeGreaterThan(0);

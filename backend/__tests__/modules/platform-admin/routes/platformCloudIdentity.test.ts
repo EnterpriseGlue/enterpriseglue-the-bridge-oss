@@ -12,6 +12,17 @@ const issue = vi.hoisted(() => vi.fn(({ action }: { action: string }) => ({
 })));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
+  requireCloudAccountOrTenantAuth: (req: any, res: any, next: any) => {
+    if (req.headers['x-test-unauthenticated'] === 'true') {
+      return res.status(401).json({ code: 'UNAUTHORIZED', error: 'Authentication required' });
+    }
+    req.user = {
+      userId: 'operator-1',
+      type: 'access',
+      ...(req.headers['x-test-cloud-account'] === 'true' ? { sessionClass: 'cloud_account' } : {}),
+    };
+    return next();
+  },
   requireAuth: (req: any, res: any, next: any) => {
     if (req.headers['x-test-unauthenticated'] === 'true') {
       return res.status(401).json({ code: 'UNAUTHORIZED', error: 'Authentication required' });
@@ -94,6 +105,20 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
     expect(authz.evaluated).toEqual([action]);
     expect(issue).not.toHaveBeenCalled();
   });
+
+  it.each(['platform.tenants.read', 'platform.tenants.manage'] as const)(
+    'never admits neutral Cloud account authority to %s',
+    async (action) => {
+      const response = await request(app)
+        .post('/api/platform/cloud-identity')
+        .set('x-test-cloud-account', 'true')
+        .send({ action });
+
+      expect(response.status).toBe(403);
+      expect(authz.evaluated).toEqual([]);
+      expect(issue).not.toHaveBeenCalled();
+    },
+  );
 
   it('denies a tenant member without a platform tenant permission', async () => {
     authz.allowed = new Set();

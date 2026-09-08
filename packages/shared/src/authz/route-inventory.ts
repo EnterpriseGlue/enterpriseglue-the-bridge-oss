@@ -4,7 +4,7 @@ import {
   getAuthzActionDefinition,
   listAuthzActions,
   toOpenApiAuthzExtension,
-  type AuthzOpenApiExtension,
+  type AuthzOpenApiClassification,
   type AuthzRequestActionOpenApiExtension,
   type AuthzRouteMetadata,
   type AuthzStaticOpenApiExtension,
@@ -134,7 +134,7 @@ function addMismatch(
 }
 
 function isRequestActionExtension(
-  extension: Partial<AuthzOpenApiExtension>,
+  extension: Partial<AuthzOpenApiClassification>,
 ): extension is Partial<AuthzRequestActionOpenApiExtension> & { mode: 'request-action' } {
   return (extension as { mode?: unknown }).mode === 'request-action';
 }
@@ -366,7 +366,7 @@ export function validateAuthzRouteInventory(
   }
 
   for (const [key, operation] of openApiOperations.entries()) {
-    const extension = operation[AUTHZ_OPENAPI_EXTENSION_KEY] as Partial<AuthzOpenApiExtension> | undefined;
+    const extension = operation[AUTHZ_OPENAPI_EXTENSION_KEY] as Partial<AuthzOpenApiClassification> | undefined;
     const [method, openApiPath] = key.split(' ');
     const exemptionExtension = operation[AUTHZ_OPENAPI_EXEMPTION_KEY] as Partial<AuthzOpenApiExemption> | undefined;
 

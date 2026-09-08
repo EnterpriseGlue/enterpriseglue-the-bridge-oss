@@ -159,7 +159,9 @@ describe('provider-neutral OIDC routes', () => {
   it('admits an explicitly enabled global Cloud account provider and returns to onboarding', async () => {
     const originalMode = config.tenancyMode;
     const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    const originalCloudRequired = config.tenancyCloudRequired;
     config.tenancyMode = 'pooled';
+    config.tenancyCloudRequired = true;
     config.cloudAccountIdentityEnabled = true;
     authSessionService.issue.mockResolvedValueOnce({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, tenantId: null });
     try {
@@ -179,8 +181,17 @@ describe('provider-neutral OIDC routes', () => {
       expect(completed.status).toBe(302);
       expect(completed.headers.location).toBe(`${config.frontendUrl.replace(/\/$/, '')}/cloud/onboarding`);
       expect(tenantService.ensureSsoMember).not.toHaveBeenCalled();
+      expect(authSessionService.issue).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'user-1' }),
+        expect.objectContaining({
+          identityProviderId: provider.id,
+          authenticationMethod: 'oidc',
+          sessionClass: 'cloud_account',
+        }),
+      );
     } finally {
       config.tenancyMode = originalMode;
+      config.tenancyCloudRequired = originalCloudRequired;
       config.cloudAccountIdentityEnabled = originalCloudIdentity;
     }
   });
@@ -192,6 +203,35 @@ describe('provider-neutral OIDC routes', () => {
       expect((await request(app).get('/api/auth/cloud-signup/providers')).status).toBe(404);
       expect((await request(app).get('/api/auth/cloud-signup/providers/provider-1/start')).status).toBe(404);
       expect(identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin).not.toHaveBeenCalled();
+      expect(identityProviderService.listEnabledDirectLoginProviders).not.toHaveBeenCalled();
+    } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
+  });
+
+  it('discovers global Cloud providers even when ordinary login shadows their key', async () => {
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.cloudAccountIdentityEnabled = true;
+    const tenantProvider = { ...provider, id: 'tenant-provider', tenantId: 'tenant-default' };
+    identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin.mockResolvedValue([tenantProvider]);
+    identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([provider]);
+    try {
+      const response = await request(app).get('/api/auth/cloud-signup/providers');
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([{ id: provider.id, displayName: provider.key, protocol: 'oidc' }]);
+      expect(identityProviderService.listEnabledDirectLoginProviders).toHaveBeenCalledWith(null);
+      expect(identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin).not.toHaveBeenCalled();
+    } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
+  });
+
+  it('rejects tenant providers and unapproved return paths at Cloud signup entry', async () => {
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.cloudAccountIdentityEnabled = true;
+    try {
+      identityProviderService.getDirectLoginProviderById.mockResolvedValue({ ...provider, tenantId: 'tenant-a' });
+      expect((await request(app).get('/api/auth/cloud-signup/providers/provider-1/start?returnTo=%2Fcloud%2Fonboarding')).status).toBe(404);
+      for (const query of ['returnTo=https%3A%2F%2Fevil.invalid', 'returnTo=%2Fcloud%2Fonboarding&tenantId=tenant-a', '']) {
+        expect((await request(app).get(`/api/auth/cloud-signup/providers/provider-1/start?${query}`)).status).toBe(400);
+      }
+      expect(genericOidcService.createAuthorizationRequest).not.toHaveBeenCalled();
     } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
   });
 

@@ -144,12 +144,15 @@ export interface AuthzRequestActionOpenApiExtension {
   alternatives: AuthzRequestActionOpenApiAlternative[];
 }
 
+/** Legacy static contract retained for existing typed consumers. */
+export type AuthzOpenApiExtension = AuthzStaticOpenApiExtension;
+
 /**
  * Static routes retain the established extension shape. A route which selects
  * one of several registered actions from a validated request field must expose
  * every alternative instead of silently publishing only one action.
  */
-export type AuthzOpenApiExtension =
+export type AuthzOpenApiClassification =
   | AuthzStaticOpenApiExtension
   | AuthzRequestActionOpenApiExtension;
 

@@ -15,6 +15,7 @@
   "userImpact": [
     "Authorized platform operators can exchange their current host session for a short-lived identity limited to tenant read or tenant management operations.",
     "A managed Cloud deployment can offer verified OIDC or SAML account signup and return the authenticated user to organization onboarding without creating a tenant-local membership prematurely.",
+    "Trusted frontend modules can use the host-owned Carbon component kit for consistent forms and status views without bundling another UI runtime.",
     "Self-hosted deployments keep the existing direct tenant lifecycle routes unless cloud-required mode is enabled."
   ],
   "upgrade": {
@@ -35,6 +36,7 @@
     "changes": [
       "Adds POST /api/platform/cloud-identity with strict platform.tenants.self_create, platform.tenants.read, or platform.tenants.manage request actions and a short-lived ES256 response.",
       "Adds sanitized Cloud signup provider discovery and provider-start routes with a fixed /cloud/onboarding return path.",
+      "Adds the optional components.carbon frontend context in plugin API 0.5; consumers must feature-detect it or require a compatible host.",
       "Direct platform tenant mutations return 503 in cloud-required mode so managed control-plane orchestration cannot be bypassed through a shard-local browser session."
     ]
   },
@@ -42,12 +44,13 @@
     "migrations": [],
     "rollbackSupported": true,
     "notes": [
-      "No schema change is required; identity issuance is stateless and the existing TypeORM tenant lifecycle remains authoritative outside cloud-required direct-user mutation paths."
+      "No schema change is required; platform assertions are stateless, while Cloud-account browser sessions bind their class in existing refresh-token metadata. The existing TypeORM tenant lifecycle remains authoritative outside cloud-required direct-user mutation paths."
     ]
   },
   "security": [
     "The host authenticates the current user and evaluates the exact requested self-create, read, or manage authorization action before signing.",
     "Self-create assertions are unavailable unless managed Cloud account onboarding is explicitly enabled; provider configuration and tokens are never exposed by the signup discovery response.",
+    "Global Cloud signup uses an explicitly signed, persisted-session-bound account class limited to account bootstrap and self-create. Tenant API access remains denied until an active membership is verified and a tenant-bound session is issued.",
     "Assertions expire after 90 seconds, use a platform-specific audience and schema, and contain no tenant record, SSO configuration, provider assertion, secret, or browser credential.",
     "Cloud-required mode fails closed before invoking direct shard-local tenant create or update services."
   ],
@@ -55,10 +58,11 @@
     "Documents the platform Cloud identity claims, authorization boundary, managed account entry, managed-mode mutation fence, verifier requirements, configuration, rollback, and cloud-neutral ownership boundary."
   ],
   "knownLimitations": [
+    "The homepage signup handoff requires a deployed Cloud onboarding module and configured global identity provider; the OSS account entry alone does not deliver the complete signup-to-tenant journey.",
     "OSS issues and documents the neutral assertion and managed account entry, but tenant provisioning remains the responsibility of the owning Cloud control-plane plugin."
   ],
   "rollback": [
-    "Disable managed control-plane callers before removing the platform audience or rolling back the host.",
+    "Disable managed control-plane callers before removing the platform audience or rolling back the host. Cloud-account sessions require a fresh sign-in on a host that does not support their restricted session class.",
     "Turn off cloud-required mode only when operators intentionally accept restored direct shard-local tenant mutation."
   ],
   "validation": [

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { requireAuth, requireAdmin, requireOnboarding, optionalAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAuth, requireCloudAccountOrTenantAuth, requireAdmin, requireOnboarding, optionalAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireOnboarding as requireOnboardingFromInterfaces } from '@enterpriseglue/shared/interfaces/middleware/auth.js';
 import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
@@ -89,6 +89,93 @@ describe('auth middleware', () => {
         if (middleware === requireAuth) expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
         else expect(next).toHaveBeenCalledWith();
       }
+    });
+  });
+
+  describe('managed Cloud account sessions', () => {
+    async function withManagedCloudAccount(work: () => Promise<void>) {
+      const previous = {
+        tenancyMode: config.tenancyMode,
+        tenancyCloudRequired: config.tenancyCloudRequired,
+        cloudAccountIdentityEnabled: config.cloudAccountIdentityEnabled,
+        adminEmailVerificationExempt: config.adminEmailVerificationExempt,
+        adminEmail: config.adminEmail,
+      };
+      config.tenancyMode = 'pooled';
+      config.tenancyCloudRequired = true;
+      config.cloudAccountIdentityEnabled = true;
+      try { await work(); } finally { Object.assign(config, previous); }
+    }
+
+    function arrangeCloudAccountSession(options: { verified?: boolean; persisted?: boolean; email?: string } = {}) {
+      const sessionId = '00000000-0000-0000-0000-000000000001';
+      req = {
+        ...req,
+        headers: { authorization: `Bearer ${TEST_BEARER_TOKEN}` },
+        path: '/api/auth/me',
+      };
+      vi.mocked(jwt.verifyToken).mockReturnValue({
+        principalType: 'user', principalId: 'user-1', type: 'access', sessionId,
+        authSessionVersion: 2, authenticationMethod: 'oidc', sessionClass: 'cloud_account',
+      });
+      vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+        if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({
+          id: 'user-1', isActive: true, isEmailVerified: options.verified !== false,
+          email: options.email || 'user@example.test', authSessionVersion: 2, createdByUserId: null,
+        }) };
+        if (entity === RefreshToken) return { findOneBy: vi.fn().mockResolvedValue({
+          id: sessionId,
+          deviceInfo: options.persisted === false ? '{}' : JSON.stringify({ sessionClass: 'cloud_account' }),
+        }) };
+        throw new Error('Unexpected repository');
+      } } as any);
+    }
+
+    it('admits the explicit durable class only through the bounded account-capable middleware', async () => {
+      await withManagedCloudAccount(async () => {
+        arrangeCloudAccountSession();
+        await requireCloudAccountOrTenantAuth(req as Request, res as Response, next);
+        expect(req.user).toMatchObject({ userId: 'user-1', sessionClass: 'cloud_account' });
+        expect(req.tenant).toBeUndefined();
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+
+        req.user = undefined;
+        next = vi.fn();
+        await requireAuth(req as Request, res as Response, next);
+        expect(req.user).toBeUndefined();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+      });
+    });
+
+    it.each([
+      ['feature disabled', (): void => { config.cloudAccountIdentityEnabled = false; }],
+      ['unverified user', (): void => undefined],
+      ['missing durable class', (): void => undefined],
+    ] as const)('rejects a neutral session with %s', async (label, mutate) => {
+      await withManagedCloudAccount(async () => {
+        arrangeCloudAccountSession({
+          verified: label !== 'unverified user',
+          persisted: label !== 'missing durable class',
+        });
+        mutate();
+        await requireCloudAccountOrTenantAuth(req as Request, res as Response, next);
+        expect(req.user).toBeUndefined();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: expect.any(Number) }));
+      });
+    });
+
+    it('requires verified email even for the ordinary bootstrap-admin exemption', async () => {
+      await withManagedCloudAccount(async () => {
+        config.adminEmailVerificationExempt = true;
+        config.adminEmail = 'bootstrap@example.test';
+        arrangeCloudAccountSession({ verified: false, email: 'bootstrap@example.test' });
+        await requireCloudAccountOrTenantAuth(req as Request, res as Response, next);
+        expect(req.user).toBeUndefined();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({
+          statusCode: 403,
+          message: 'Email verification required',
+        }));
+      });
     });
   });
 

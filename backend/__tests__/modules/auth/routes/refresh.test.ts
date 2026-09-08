@@ -10,6 +10,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 // Test fixture tokens — not real secrets (CWE-547)
 const TEST_REFRESH_TOKEN = `test-refresh-${Date.now()}`;
@@ -43,6 +44,9 @@ vi.mock('@enterpriseglue/shared/config/index.js', () => ({
     jwtAccessTokenExpires: 3600,
     jwtRefreshTokenExpires: 604800,
     nodeEnv: 'test',
+    tenancyMode: 'single',
+    tenancyCloudRequired: false,
+    cloudAccountIdentityEnabled: false,
   },
 }));
 
@@ -53,6 +57,12 @@ describe('POST /api/auth/refresh', () => {
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
+    app.use((req, _res, next) => {
+      if (req.headers['x-test-tenant-context'] === 'true') {
+        req.tenant = { tenantId: 'tenant-a', tenantSlug: 'alpha' };
+      }
+      next();
+    });
 
     // CSRF protection — mirrors production config with skipCsrfProtection for this endpoint.
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
@@ -151,6 +161,76 @@ describe('POST /api/auth/refresh', () => {
       tenantId: 'tenant-default',
       tenantSlug: 'default',
     });
+  });
+
+  it('refreshes only a durable verified managed Cloud account session and preserves its class', async () => {
+    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
+    try {
+      const sessionId = '00000000-0000-0000-0000-000000000001';
+      const mockUser = {
+        id: 'user-1', email: 'test@example.com', isActive: true,
+        isEmailVerified: true, authSessionVersion: 2,
+      };
+      const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 4);
+      const refreshTokenRepo = { find: vi.fn().mockResolvedValue([{
+        tokenHash, tenantId: null, deviceInfo: JSON.stringify({ sessionClass: 'cloud_account' }),
+      }]) };
+      vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => entity === User
+        ? { findOneBy: vi.fn().mockResolvedValue(mockUser) }
+        : entity === RefreshToken ? refreshTokenRepo : (() => { throw new Error('Unexpected repository'); })() } as any);
+      vi.mocked(jwt.verifyToken).mockReturnValue({
+        principalType: 'user', principalId: 'user-1', type: 'refresh', sessionId,
+        authSessionVersion: 2, authenticationMethod: 'oidc', sessionClass: 'cloud_account',
+      });
+      vi.mocked(jwt.generateAccessToken).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
+
+      const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
+
+      expect(response.status).toBe(200);
+      expect(refreshTokenRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          id: sessionId, tenantId: expect.objectContaining({ _type: 'isNull' }),
+        }),
+        select: ['tokenHash', 'tenantId', 'deviceInfo'],
+      }));
+      expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, expect.objectContaining({
+        sessionId, sessionClass: 'cloud_account', authenticationMethod: 'oidc',
+      }));
+    } finally {
+      Object.assign(config, { tenancyMode: 'single', tenancyCloudRequired: false, cloudAccountIdentityEnabled: false });
+    }
+  });
+
+  it.each([
+    ['disabled feature', false, false],
+    ['tenant-bound request context', true, false],
+    ['missing durable class metadata', false, true],
+  ] as const)('rejects a Cloud account refresh with %s', async (_label, tenantContext, missingMetadata) => {
+    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
+    try {
+      const sessionId = '00000000-0000-0000-0000-000000000001';
+      const mockUser = { id: 'user-1', email: 'test@example.com', isActive: true, isEmailVerified: true, authSessionVersion: 2 };
+      const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 4);
+      const refreshTokenRepo = { find: vi.fn().mockResolvedValue([{
+        tokenHash, tenantId: null, deviceInfo: missingMetadata ? '{}' : JSON.stringify({ sessionClass: 'cloud_account' }),
+      }]) };
+      vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => entity === User
+        ? { findOneBy: vi.fn().mockResolvedValue(mockUser) } : refreshTokenRepo } as any);
+      vi.mocked(jwt.verifyToken).mockReturnValue({
+        principalType: 'user', principalId: 'user-1', type: 'refresh', sessionId,
+        authSessionVersion: 2, authenticationMethod: 'oidc', sessionClass: 'cloud_account',
+      });
+      if (_label === 'disabled feature') config.cloudAccountIdentityEnabled = false;
+
+      const call = request(app).post('/api/auth/refresh');
+      if (tenantContext) call.set('x-test-tenant-context', 'true');
+      const response = await call.send({ refreshToken: TEST_REFRESH_TOKEN });
+
+      expect(response.status).toBe(401);
+      expect(jwt.generateAccessToken).not.toHaveBeenCalled();
+    } finally {
+      Object.assign(config, { tenancyMode: 'single', tenancyCloudRequired: false, cloudAccountIdentityEnabled: false });
+    }
   });
 
   it('rejects an existing administrator-recovery refresh session after membership expires or is removed', async () => {

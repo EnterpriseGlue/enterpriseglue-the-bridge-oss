@@ -1470,16 +1470,20 @@ describe('permissionService', () => {
         PlatformPermissions.USERS_VIEW,
       ],
     });
-    expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_USER)).toMatchObject({
+    const platformUser = roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_USER);
+    expect(platformUser).toMatchObject({
       scope: 'platform',
       isAssignable: true,
       permissions: [
         PlatformPermissions.DASHBOARD_VIEW,
         PlatformPermissions.PROJECT_CREATE,
+        PlatformPermissions.TENANTS_SELF_CREATE,
       ],
     });
-    expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_USER)?.description)
-      .toBe('View the dashboard and create projects. Engine access is granted separately for each engine.');
+    expect(platformUser?.permissions).not.toContain(PlatformPermissions.TENANTS_VIEW);
+    expect(platformUser?.permissions).not.toContain(PlatformPermissions.TENANTS_MANAGE);
+    expect(platformUser?.description)
+      .toBe('View the dashboard, create projects, and create your first organization when managed Cloud onboarding is enabled. Engine access is granted separately for each engine.');
     expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_ACCESS_ADMIN)).toMatchObject({
       scope: 'platform',
       isAssignable: true,

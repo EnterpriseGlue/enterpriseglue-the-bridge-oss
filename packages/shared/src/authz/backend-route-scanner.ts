@@ -10,6 +10,7 @@ const AUTH_MIDDLEWARE_PATTERNS = [
   'requireApiDeploymentEligibility',
   'requireAnyPermission',
   'requireAuth',
+  'requireCloudAccountOrTenantAuth',
   'requireDeployPermission',
   'requireEngineAccess',
   'requireEngineDeployer',

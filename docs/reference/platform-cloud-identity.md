@@ -51,10 +51,13 @@ Unsupported actions and unknown fields are rejected. Successful responses set
 ```
 
 The operation's `x-enterpriseglue-authz` OpenAPI extension uses
-`mode: request-action`, identifies the validated body field, and publishes both
+`mode: request-action`, identifies the validated body field, and publishes all three
 action alternatives with their own permission, risk, audit, resolver, and UI
 metadata. Consumers must select the alternative whose `value` exactly matches
 the request action; they must not treat the operation as a static read action.
+Typed consumers that inspect either form use `AuthzOpenApiClassification` and
+`AuthzOpenApiClassificationSchema`. The existing `AuthzOpenApiExtension` type and
+parser retain their static shape for compatibility.
 
 The token is an identity assertion for a control-plane adapter. It is not an
 EnterpriseGlue access token, refresh token, API-client credential, service
@@ -84,6 +87,30 @@ token, or refresh token is included.
 deployment can roll out the host and Cloud configuration in either order. The
 exchange fails closed with HTTP 503 until the audience is configured; a Cloud
 consumer must not call it before deploying that configuration.
+
+## Tenant-neutral account bootstrap
+
+Configured global OIDC/SAML entry in managed pooled mode issues a distinct
+browser session with signed `sessionClass: cloud_account`. This is separate
+from the platform identity assertion above. Its class is also bound to the
+persisted refresh-session metadata. It has no tenant or administrator-recovery
+claim and requires an active, email-verified user and an enabled managed-account
+configuration. Existing tenant and recovery session formats remain valid.
+
+Only account bootstrap routes opt into this session class: current-user lookup,
+the restricted own-permission snapshot, own memberships, verified tenant switch,
+logout, and the platform exchange for `platform.tenants.self_create` only.
+Refresh preserves the restricted class and checks revocation. Ordinary tenant
+and application routes retain their existing authentication middleware and
+reject this class. An existing operator's grants cannot turn it into a
+tenant-read or tenant-management assertion.
+
+After provisioning, tenant switching independently checks active membership,
+validates the exact source access/refresh-session lineage, and issues an ordinary
+tenant-bound session. The frontend can resume a registered self-create extension
+from the root page for an eligible account without memberships. The Cloud
+extension owns that route and its provisioning UI; OSS does not provision the
+organization from the browser.
 
 ## Verifier requirements
 
@@ -132,7 +159,11 @@ Disable callers before removing `EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE` or
 rolling back the host. Disable cloud-required mode only when restoring direct
 shard-local mutation is an intentional operator decision.
 
-Identity issuance is stateless and adds no entity or migration. The mutation
+Platform assertion issuance is stateless and adds no entity or migration.
+Cloud-account browser sessions use the existing refresh-token entity, with the
+signed session class also recorded in its device metadata. Rolling back to a
+host without that class requires those accounts to sign in again; do not treat
+their tokens as ordinary tenant sessions. The mutation
 fence runs before the existing TypeORM `TenantService`, making its denial
 database-independent. PostgreSQL remains the primary pooled-mode feedback lane;
 the five-database candidate matrix remains required portability evidence for a

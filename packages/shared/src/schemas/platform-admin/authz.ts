@@ -64,7 +64,10 @@ export const AuthzRequestActionOpenApiExtensionSchema = z.object({
   })).min(2),
 });
 
-export const AuthzOpenApiExtensionSchema = z.union([
+/** Preserve the original static parser and its inferred consumer type. */
+export const AuthzOpenApiExtensionSchema = AuthzStaticOpenApiExtensionSchema;
+
+export const AuthzOpenApiClassificationSchema = z.union([
   AuthzStaticOpenApiExtensionSchema,
   AuthzRequestActionOpenApiExtensionSchema,
 ]);
@@ -77,7 +80,7 @@ export const AuthzOpenApiExemptionSchema = z.object({
 });
 
 export const EnterpriseGlueAuthzOpenApiExtensionSchema = z.object({
-  [AUTHZ_OPENAPI_EXTENSION_KEY]: AuthzOpenApiExtensionSchema.optional(),
+  [AUTHZ_OPENAPI_EXTENSION_KEY]: AuthzOpenApiClassificationSchema.optional(),
   [AUTHZ_OPENAPI_EXEMPTION_KEY]: AuthzOpenApiExemptionSchema.optional(),
 }).refine((value) =>
   Boolean(value[AUTHZ_OPENAPI_EXTENSION_KEY]) !== Boolean(value[AUTHZ_OPENAPI_EXEMPTION_KEY]),
@@ -1670,3 +1673,4 @@ export type AuthzResourceType = z.infer<typeof AuthzResourceTypeSchema>;
 export type AuthzPrincipalType = z.infer<typeof AuthzPrincipalTypeSchema>;
 export type AuthzActionRisk = z.infer<typeof AuthzActionRiskSchema>;
 export type AuthzOpenApiExtension = z.infer<typeof AuthzOpenApiExtensionSchema>;
+export type AuthzOpenApiClassification = z.infer<typeof AuthzOpenApiClassificationSchema>;

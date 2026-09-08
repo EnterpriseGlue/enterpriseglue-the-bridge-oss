@@ -18,7 +18,7 @@ import {
   tenantIdsForAuthz,
 } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { isPermissionCompatibleWithResourceType } from '@enterpriseglue/shared/authz/permission-actions.js';
-import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAuth, requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
@@ -26,6 +26,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import {
   policyService,
   permissionService,
+  PlatformPermissions,
   API_CLIENT_TOKEN_PREFIX,
   ApiClientScopes,
   Permission,
@@ -194,8 +195,43 @@ router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(Auth
  * GET /api/platform-admin/authz/me/permissions
  * Return the current user's effective platform, project, and engine permissions.
  */
-router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/authz/me/permissions', apiLimiter, requireCloudAccountOrTenantAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
+    if (req.user!.sessionClass === 'cloud_account') {
+      const permissionContext = {
+        userId: req.user!.userId,
+        tenantId: null,
+        resourceType: 'platform' as const,
+      };
+      const hasSelfCreatePermission = await permissionService.hasPermission(
+        PlatformPermissions.TENANTS_SELF_CREATE,
+        permissionContext,
+      );
+      const selfCreatePolicy = hasSelfCreatePermission
+        ? await policyService.evaluateGate(PlatformPermissions.TENANTS_SELF_CREATE, {
+            ...permissionContext,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            mfaVerified: req.user!.mfaVerified === true,
+          })
+        : null;
+      const selfCreateAllowed = hasSelfCreatePermission && selfCreatePolicy?.decision !== 'deny';
+      res.setHeader('cache-control', 'no-store');
+      return res.json(CurrentUserPermissionsSchema.parse({
+        userId: req.user!.userId,
+        tenantId: null,
+        platform: selfCreateAllowed ? [PlatformPermissions.TENANTS_SELF_CREATE] : [],
+        platformActionAvailability: {
+          allowedActions: selfCreateAllowed ? ['platform.tenants.self_create'] : [],
+          restrictions: {},
+        },
+        tenant: null,
+        projects: [],
+        engines: [],
+        authorizationVersion: `cloud-account:${req.user!.authSessionVersion ?? 0}`,
+        generatedAt: Date.now(),
+      }));
+    }
     const tenantId = effectiveTenantId(req);
     const snapshot = await permissionService.getCurrentUserPermissions(req.user!.userId, tenantId);
     const [settings, engines] = await Promise.all([

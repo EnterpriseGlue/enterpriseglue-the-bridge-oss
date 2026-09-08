@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
-import { requireAuth, requireAdmin } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAuth, requireCloudAccountOrTenantAuth, requireAdmin } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireServiceAccountScope } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireTenantRole, resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
@@ -63,6 +63,9 @@ const tenantIdSchema = z.string().min(1).max(160);
 
 const requireRequestedPlatformCloudAction: RequestHandler = (req, res, next) => {
   const action = PlatformCloudIdentityActionSchema.parse(req.body.action);
+  if (req.user?.sessionClass === 'cloud_account' && action !== 'platform.tenants.self_create') {
+    return next(Errors.forbidden('Cloud account sessions may only create their first tenant'));
+  }
   return requireAction(action)(req, res, next);
 };
 
@@ -322,12 +325,12 @@ router.post('/api/auth/tenant-discovery/exchange', identityFlowLimiter, validate
   }));
 }));
 
-router.get('/api/auth/my-tenants', requireAuth, asyncHandler(async (req, res) => {
+router.get('/api/auth/my-tenants', requireCloudAccountOrTenantAuth, asyncHandler(async (req, res) => {
   const memberships = await tenantService.listForUser(req.user!.userId);
   res.json(z.array(NativeTenantMembershipSchema).parse(memberships));
 }));
 
-router.post('/api/auth/switch-tenant', requireAuth, validateBody(z.object({ tenantSlug: z.string().min(1).max(63) })), asyncHandler(async (req, res) => {
+router.post('/api/auth/switch-tenant', requireCloudAccountOrTenantAuth, validateBody(z.object({ tenantSlug: z.string().min(1).max(63) })), asyncHandler(async (req, res) => {
   if (config.tenancyMode !== 'pooled') throw Errors.conflict('Tenant switching is available only in pooled mode');
   const tenant = await tenantService.getBySlug(req.body.tenantSlug);
   if (!tenant || tenant.status !== 'active') throw Errors.notFound('Tenant');
@@ -361,7 +364,7 @@ router.patch('/api/platform/tenants/:tenantId', requireAuth, requireAdmin, requi
   res.json(NativeTenantSchema.parse(tenant));
 }));
 
-router.post('/api/platform/cloud-identity', requireAuth, validateBody(PlatformCloudIdentityRequestSchema), requireRequestedPlatformCloudAction, asyncHandler(async (req, res) => {
+router.post('/api/platform/cloud-identity', requireCloudAccountOrTenantAuth, validateBody(PlatformCloudIdentityRequestSchema), requireRequestedPlatformCloudAction, asyncHandler(async (req, res) => {
   const shardId = config.tenantPlacementV2ShardId;
   if (!shardId) throw Errors.serviceUnavailable('Platform cloud identity signing');
   const action = PlatformCloudIdentityActionSchema.parse(req.body.action);

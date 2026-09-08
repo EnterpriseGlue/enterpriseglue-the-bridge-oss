@@ -124,6 +124,21 @@ async function establishNativeSessionTenant(req: Request, payload: UserJwtPayloa
   };
 }
 
+function managedCloudAccountSessionsEnabled(): boolean {
+  return config.tenancyMode === 'pooled'
+    && config.tenancyCloudRequired
+    && config.cloudAccountIdentityEnabled;
+}
+
+function persistedSessionClass(session: RefreshToken): JwtPayload['sessionClass'] | null {
+  try {
+    const value = session.deviceInfo ? JSON.parse(session.deviceInfo) as Record<string, unknown> : null;
+    return value?.sessionClass === 'cloud_account' ? 'cloud_account' : null;
+  } catch {
+    return null;
+  }
+}
+
 function continueWithTenantContext(req: Request, next: NextFunction): void {
   if (!req.tenant) return next();
   updateBpmnEngineRequestContext({ tenantId: req.tenant.tenantId, tenantSlug: req.tenant.tenantSlug });
@@ -142,6 +157,79 @@ async function requireCurrentBrowserSession(payload: UserJwtPayload, dataSource:
     revokedAt: IsNull(), expiresAt: MoreThan(Date.now()),
   });
   if (!session) throw Errors.unauthorized('Session has been revoked');
+  if (persistedSessionClass(session) !== (payload.sessionClass || null)) {
+    throw Errors.unauthorized('Session has been revoked');
+  }
+}
+
+async function authenticateBrowserSession(
+  req: Request,
+  next: NextFunction,
+  allowCloudAccount: boolean,
+): Promise<void> {
+  const payload = normalizeUserJwtPayload(readRequiredAuthPayload(req));
+
+  if (payload.type !== 'access') {
+    throw Errors.unauthorized('Invalid token type. Use access token.');
+  }
+
+  const cloudAccountSession = payload.sessionClass === 'cloud_account';
+  if (cloudAccountSession && (!allowCloudAccount
+    || !managedCloudAccountSessionsEnabled()
+    || !payload.sessionId
+    || !['oidc', 'saml'].includes(payload.authenticationMethod || '')
+    || req.tenant !== undefined)) {
+    throw Errors.unauthorized('Cloud account session is not valid for this route');
+  }
+
+  const dataSource = await getDataSource();
+  const userRepo = dataSource.getRepository(User);
+  const user = await userRepo.findOneBy({ id: payload.userId, isActive: true });
+
+  if (!user) {
+    throw Errors.unauthorized('User not found or inactive');
+  }
+  if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
+    throw Errors.unauthorized('Session has been revoked');
+  }
+  await requireCurrentBrowserSession(payload, dataSource);
+  if (payload.recovery === 'platform_administrator'
+    && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
+    throw Errors.unauthorized('Session has been revoked');
+  }
+
+  const requestPath = req.path;
+  const allowUnverifiedPaths = [
+    '/api/auth/me',
+    '/api/auth/reset-password',
+    '/api/auth/change-password',
+    '/api/auth/logout',
+  ];
+
+  const isAdminVerificationExempt =
+    config.adminEmailVerificationExempt &&
+    user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
+    user.createdByUserId === null;
+
+  if (cloudAccountSession && !user.isEmailVerified) {
+    throw Errors.forbidden('Email verification required');
+  }
+  if (!cloudAccountSession && !user.isEmailVerified && !isAdminVerificationExempt
+    && !allowUnverifiedPaths.includes(requestPath)) {
+    throw Errors.forbidden('Email verification required');
+  }
+
+  // Do not establish downstream request identity until the token's subject
+  // has passed the active-account, verification, and revocation checks.
+  req.user = { ...payload, email: user.email };
+  updateBpmnEngineRequestContext({ userId: payload.userId });
+
+  if (!cloudAccountSession) {
+    await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
+    await establishNativeSessionTenant(req, payload);
+  }
+
+  continueWithTenantContext(req, next);
 }
 
 /**
@@ -151,54 +239,7 @@ async function requireCurrentBrowserSession(payload: UserJwtPayload, dataSource:
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const payload = normalizeUserJwtPayload(readRequiredAuthPayload(req));
-
-    if (payload.type !== 'access') {
-      throw Errors.unauthorized('Invalid token type. Use access token.');
-    }
-
-    const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
-    const user = await userRepo.findOneBy({ id: payload.userId, isActive: true });
-
-    if (!user) {
-      throw Errors.unauthorized('User not found or inactive');
-    }
-    if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
-      throw Errors.unauthorized('Session has been revoked');
-    }
-    await requireCurrentBrowserSession(payload, dataSource);
-    if (payload.recovery === 'platform_administrator'
-      && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
-      throw Errors.unauthorized('Session has been revoked');
-    }
-
-    // Do not establish downstream request identity until the token's subject
-    // has passed the active-account and session-revocation checks.
-    req.user = { ...payload, email: user.email };
-    updateBpmnEngineRequestContext({ userId: payload.userId });
-
-    const requestPath = req.path;
-    const allowUnverifiedPaths = [
-      '/api/auth/me',
-      '/api/auth/reset-password',
-      '/api/auth/change-password',
-      '/api/auth/logout',
-    ];
-
-    const isAdminVerificationExempt =
-      config.adminEmailVerificationExempt &&
-      user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
-      user.createdByUserId === null;
-
-    if (!user.isEmailVerified && !isAdminVerificationExempt && !allowUnverifiedPaths.includes(requestPath)) {
-      throw Errors.forbidden('Email verification required');
-    }
-
-    await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
-    await establishNativeSessionTenant(req, payload);
-
-    continueWithTenantContext(req, next);
+    await authenticateBrowserSession(req, next, false);
   } catch (error) {
     if (error instanceof AppError) {
       return next(error);
@@ -206,6 +247,21 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (error instanceof Error) {
       return next(Errors.unauthorized(error.message));
     }
+    return next(Errors.unauthorized('Authentication failed'));
+  }
+}
+
+/**
+ * Admit either an ordinary tenant/recovery session or the explicit managed
+ * Cloud account class. Use only for the account bootstrap surface; tenant and
+ * application routes must continue to use requireAuth.
+ */
+export async function requireCloudAccountOrTenantAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    await authenticateBrowserSession(req, next, true);
+  } catch (error) {
+    if (error instanceof AppError) return next(error);
+    if (error instanceof Error) return next(Errors.unauthorized(error.message));
     return next(Errors.unauthorized('Authentication failed'));
   }
 }

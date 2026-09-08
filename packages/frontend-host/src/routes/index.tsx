@@ -4,7 +4,7 @@ import { apiClient } from '../shared/api/client'
 
 // Extension registry for EE plugin integration
 import { extensions, isMultiTenantEnabled, type EnterpriseExtensionRoute } from '../enterprise/extensionRegistry'
-import { prepareExtensionRoutes } from '../enterprise/extensionRouteAuthz'
+import { getExtensionRouteAuthz, prepareExtensionRoutes } from '../enterprise/extensionRouteAuthz'
 
 // Shared components
 import LayoutWithProSidebar from '../features/shared/components/LayoutWithProSidebar'
@@ -95,9 +95,9 @@ import { evaluateActionSnapshot } from '../shared/auth/guards'
  */
 const DEFAULT_TENANT_SLUG = 'default'
 
-function DefaultTenantRedirect() {
+function DefaultTenantRedirect({ onboardingPath }: { onboardingPath?: string } = {}) {
   const location = useLocation()
-  const { user } = useAuth()
+  const { user, permissions } = useAuth()
   const multiTenant = isMultiTenantEnabled()
   const [targetSlug, setTargetSlug] = React.useState<string | null>(multiTenant ? null : DEFAULT_TENANT_SLUG)
   const [noMembership, setNoMembership] = React.useState(false)
@@ -123,7 +123,7 @@ function DefaultTenantRedirect() {
       .catch(() => { if (!cancelled) setNoMembership(true) })
     return () => { cancelled = true }
   }, [multiTenant, user?.session?.tenant.id, location.pathname, location.search, location.hash])
-  if (noMembership) return <Navigate to="/admin/tenants" replace />
+  if (noMembership) return <Navigate to={onboardingPath && hasPlatformPermission(permissions, 'platform:tenants:self-create') ? onboardingPath : '/admin/tenants'} replace />
   if (!targetSlug) return <PageLoadingState message="Finding your tenant..." />
   const targetPath = location.pathname === '/' ? '' : location.pathname
   return (
@@ -751,6 +751,13 @@ export function getPublicRoutes(): RouteObject[] {
  * For unified tenant routing, we redirect root to the default tenant path
  */
 export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): RouteObject {
+  // Route ownership stays with the registered extension. Never send an account
+  // without a tenant to an absent onboarding page or grant operator access.
+  const onboardingRoute = (enterpriseChildren as EnterpriseExtensionRoute[]).find((route) =>
+    route.element && typeof route.path === 'string'
+    && /^\/?[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(route.path)
+    && getExtensionRouteAuthz(route)?.actionId === 'platform.tenants.self_create')
+  const onboardingPath = onboardingRoute?.path ? `/${onboardingRoute.path.replace(/^\//, '')}` : undefined
   return {
     path: '/',
     element: (
@@ -764,7 +771,7 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
     ),
     children: [
       // Redirect root to default tenant for unified routing
-      { index: true, element: isMultiTenantEnabled() ? <DefaultTenantRedirect /> : <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
+      { index: true, element: isMultiTenantEnabled() ? <DefaultTenantRedirect onboardingPath={onboardingPath} /> : <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
       ...createProtectedChildRoutes(true),
       ...enterpriseChildren,
     ],

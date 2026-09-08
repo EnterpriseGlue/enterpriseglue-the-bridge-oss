@@ -5,6 +5,7 @@
  */
 export {
   requireAuth,
+  requireCloudAccountOrTenantAuth,
   requireAdmin,
   requireOnboarding,
   optionalAuth,

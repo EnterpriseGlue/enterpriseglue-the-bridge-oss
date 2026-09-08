@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
-import { AuthzOpenApiExtensionSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { AuthzOpenApiClassificationSchema, AuthzOpenApiExtensionSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import type { AuthzOpenApiExtension } from '@enterpriseglue/shared/authz/permission-actions.js';
 
 describe('platform Cloud identity OpenAPI', () => {
   it('publishes the strict exchange schemas, exact action authorization, and mutation fence', () => {
@@ -10,7 +11,7 @@ describe('platform Cloud identity OpenAPI', () => {
     const requestSchema = exchange?.requestBody?.content?.['application/json']?.schema;
     const responseSchema = exchange?.responses?.['200']?.content?.['application/json']?.schema;
 
-    const authz = AuthzOpenApiExtensionSchema.parse(exchange?.['x-enterpriseglue-authz']);
+    const authz = AuthzOpenApiClassificationSchema.parse(exchange?.['x-enterpriseglue-authz']);
     expect(authz).toEqual({
       mode: 'request-action',
       selector: { location: 'body', field: 'action' },
@@ -65,5 +66,19 @@ describe('platform Cloud identity OpenAPI', () => {
     expect(document.paths['/api/platform/tenants'].get.responses).not.toHaveProperty('503');
     expect(document.paths['/api/platform/tenants'].post.responses).toHaveProperty('503');
     expect(document.paths['/api/platform/tenants/{tenantId}'].patch.responses).toHaveProperty('503');
+  });
+
+  it('preserves the static extension type and parser for existing consumers', () => {
+    const legacy: AuthzOpenApiExtension = {
+      actionId: 'platform.tenants.read', permission: 'platform:tenants:view',
+      resourceResolver: 'platform.self', additionalChecks: [], risk: 'high',
+      audit: false, uiBehavior: 'hide',
+    };
+    const actionId: string = legacy.actionId;
+    const parsed = AuthzOpenApiExtensionSchema.parse(legacy);
+    const permission: string = parsed.permission;
+    expect(actionId).toBe('platform.tenants.read');
+    expect(permission).toBe('platform:tenants:view');
+    expect(AuthzOpenApiClassificationSchema.parse(legacy)).toEqual(parsed);
   });
 });
