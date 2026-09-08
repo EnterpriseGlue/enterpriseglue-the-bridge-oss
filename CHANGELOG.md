@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.23.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.22.0...v0.23.0) (2026-09-08)
+
+
+### Features
+
+* **auth:** add Sign in with Apple ([8166b70](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8166b705c74678247cc2587fb85172214146262b))
+
 ## [0.22.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.3...v0.22.0) (2026-09-08)
 
 
