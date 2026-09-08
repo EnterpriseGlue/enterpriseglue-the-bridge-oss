@@ -207,9 +207,10 @@ actor, or registration source fails instead of being reported absent. The engine
 reference is durably terminal for that tenant and workload source, so a delayed
 or later registration cannot recreate it after either terminal receipt. The
 host serializes registration and decommission on the tenant boundary; its
-filtered terminal-receipt lookup is portable across the supported TypeORM
-adapters, but grows with that tenant and workload actor's completed managed
-engine decommission operations. The engine client rejects a decommissioned
+filtered terminal-receipt lookup uses adapter-independent TypeORM queries, but
+grows with that tenant and workload actor's completed managed engine decommission
+operations. Focused persistence verification covers PostgreSQL; cross-database
+acceptance remains outstanding. The engine client rejects a decommissioned
 record before making an outbound request. The controller must verify either
 terminal receipt before removing provider
 resources. If the host call fails, provider deletion must stop. A temporary
