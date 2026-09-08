@@ -62,6 +62,12 @@
   ],
   "packages": [
     {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.4.1",
+      "newVersion": "0.5.0",
+      "impact": "minor"
+    },
+    {
       "name": "@enterpriseglue/shared",
       "previousVersion": "0.17.0",
       "newVersion": "0.18.0",
@@ -75,9 +81,9 @@
     },
     {
       "name": "@enterpriseglue/frontend-host",
-      "previousVersion": "0.16.3",
-      "newVersion": "0.16.4",
-      "impact": "patch"
+      "previousVersion": "0.16.4",
+      "newVersion": "0.17.0",
+      "impact": "minor"
     }
   ]
 }
