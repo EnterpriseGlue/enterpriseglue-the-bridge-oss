@@ -2,6 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { scanBackendAuthzRoutes } from '@enterpriseglue/shared/authz/index.js';
 
 describe('backend authz route scanner', () => {
+  it('covers service-account scope factories and their local workload aliases', () => {
+    const result = scanBackendAuthzRoutes([{
+      filePath: 'workloads.ts',
+      content: `
+        const workloadScope = requireServiceAccountScope(ServiceAccountScopes.TENANT_LIFECYCLE);
+        router.post('/api/workloads/tenants/:tenantId/managed-engines', workloadScope, handler);
+        router.post('/api/workloads/tenants/:tenantId/managed-engines/:engineRef/decommission', workloadScope, handler);
+        router.post('/api/workloads/unregistered', requireServiceAccountScope('other'), handler);
+      `,
+    }, {
+      filePath: 'unrelated.ts',
+      content: `router.get('/health', workloadScope, handler);`,
+    }]);
+    expect(result.authenticatedRoutes).toHaveLength(3);
+    expect(result.registeredAuthenticatedRoutes.map((route) => route.registeredActionIds)).toEqual([
+      ['platform.tenants.workload.managed-engines.register'],
+      ['platform.tenants.workload.managed-engines.decommission'],
+    ]);
+    expect(result.uncoveredAuthenticatedRoutes.map((route) => route.route)).toEqual(['/api/workloads/unregistered']);
+    expect(result.routes.find((route) => route.route === '/health')?.authenticated).toBe(false);
+  });
+
+  it('inherits service-account authentication from a scoped router alias', () => {
+    const result = scanBackendAuthzRoutes([{
+      filePath: 'workloads.ts',
+      content: `
+        const guard = requireServiceAccountScope('tenant:lifecycle');
+        router.use('/api/workloads', guard);
+        router.get('/api/workloads/unregistered', handler);
+      `,
+    }]);
+    expect(result.uncoveredAuthenticatedRoutes).toHaveLength(1);
+  });
+
   it('detects authenticated registered routes and open routes from inline middleware', () => {
     const result = scanBackendAuthzRoutes([{
       filePath: 'routes.ts',

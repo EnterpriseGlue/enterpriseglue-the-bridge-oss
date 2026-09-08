@@ -336,9 +336,18 @@ stack_started=true
 echo '[pooled-tenancy-e2e] Starting disposable pooled stack.' >&3
 run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health
 
-curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" "https://localhost:${tls_frontend_port}/login" >/dev/null
-curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" \
-  "https://localhost:${keycloak_port}/realms/enterpriseglue-local/.well-known/openid-configuration" >/dev/null
+# Compose's Keycloak management TCP check and nginx process startup do not
+# establish TLS/realm readiness. Require a successful CA-verified GET, with
+# bounded retries for startup handshake/reset/refusal failures. Never use -k.
+wait_for_local_https() {
+  curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
+    --retry 10 --retry-all-errors --retry-delay 1 --retry-max-time 30 \
+    --cacert "$tls_dir/ca.crt" "$1" >/dev/null
+}
+echo '[pooled-tenancy-e2e] Waiting for verified frontend TLS readiness.' >&3
+wait_for_local_https "https://localhost:${tls_frontend_port}/login"
+echo '[pooled-tenancy-e2e] Waiting for verified Keycloak TLS and realm readiness.' >&3
+wait_for_local_https "https://localhost:${keycloak_port}/realms/enterpriseglue-local/.well-known/openid-configuration"
 
 LOCAL_SAML_ISSUER_URL="https://localhost:${keycloak_port}/realms/enterpriseglue-local" \
 LOCAL_SAML_CA_FILE="$tls_dir/ca.crt" \

@@ -76,6 +76,10 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantWorkloadReceiptPrivateKey: z.string().min(32).optional(),
   tenantWorkloadReceiptKeyId: z.string().min(1).max(160).optional(),
   tenantWorkloadReceiptIssuer: z.string().min(1).max(255).optional(),
+  managedEngineInternalDnsSuffix: z.string().min(1).max(253)
+    .regex(/^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/,
+      'Must be a valid multi-label DNS suffix without leading or trailing dots')
+    .optional(),
   tenantRlsEnforced: z.boolean().default(false),
   
   // PostgreSQL configuration (when databaseType=postgres)
@@ -244,6 +248,7 @@ function loadConfig(): Config {
       ?.replace(/\\n/g, '\n'),
     tenantWorkloadReceiptKeyId: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_KEY_ID),
     tenantWorkloadReceiptIssuer: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_ISSUER),
+    managedEngineInternalDnsSuffix: envOrUndefined(process.env.EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX),
     tenantRlsEnforced: process.env.EG_TENANT_RLS_ENFORCED === 'true',
     postgresUrl: process.env.POSTGRES_URL,
     postgresHost: process.env.POSTGRES_HOST || pgUrlParsed?.hostname || undefined,

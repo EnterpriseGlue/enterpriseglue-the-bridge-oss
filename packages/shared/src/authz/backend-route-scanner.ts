@@ -21,6 +21,7 @@ const AUTH_MIDDLEWARE_PATTERNS = [
   'requirePlatformAdmin',
   'requireProjectAccess',
   'requireProjectRole',
+  'requireServiceAccountScope',
 ];
 
 export interface BackendRouteScanSource {
@@ -154,8 +155,8 @@ function readFirstStringArgument(callText: string): string | null {
   return null;
 }
 
-function authMiddlewareNames(callText: string): string[] {
-  return AUTH_MIDDLEWARE_PATTERNS.filter((name) => new RegExp(`\\b${name}\\b`).test(callText));
+function authMiddlewareNames(callText: string, aliases: string[] = []): string[] {
+  return [...AUTH_MIDDLEWARE_PATTERNS, ...aliases].filter((name) => new RegExp(`\\b${name}\\b`).test(callText));
 }
 
 interface AuthenticatedUseScope {
@@ -163,7 +164,7 @@ interface AuthenticatedUseScope {
   prefix: string | null;
 }
 
-function findAuthenticatedUseScopes(content: string): AuthenticatedUseScope[] {
+function findAuthenticatedUseScopes(content: string, aliases: string[]): AuthenticatedUseScope[] {
   const scopes: AuthenticatedUseScope[] = [];
   const useCallPattern = /\b[A-Za-z_$][\w$]*\s*\.\s*use\s*\(/g;
   let match: RegExpExecArray | null;
@@ -173,7 +174,7 @@ function findAuthenticatedUseScopes(content: string): AuthenticatedUseScope[] {
     if (end === -1) continue;
 
     const callText = content.slice(openParenIndex, end + 1);
-    if (!authMiddlewareNames(callText).length) continue;
+    if (!authMiddlewareNames(callText, aliases).length) continue;
 
     scopes.push({
       index: match.index,
@@ -219,7 +220,11 @@ export function scanBackendAuthzRoutes(sources: BackendRouteScanSource[]): Backe
   const routeCallPattern = /\b[A-Za-z_$][\w$]*\s*\.\s*(get|post|put|patch|delete)\s*\(/g;
 
   for (const source of sources) {
-    const useScopes = findAuthenticatedUseScopes(source.content);
+    // Scope factories are commonly assigned once before reuse by workload
+    // routes. Include those local aliases so their coverage cannot disappear.
+    const aliases = [...source.content.matchAll(/\bconst\s+([A-Za-z_][\w]*)\s*=\s*requireServiceAccountScope\s*\(/g)]
+      .map((match) => match[1]);
+    const useScopes = findAuthenticatedUseScopes(source.content, aliases);
     let match: RegExpExecArray | null;
     while ((match = routeCallPattern.exec(source.content))) {
       const method = match[1].toUpperCase();
@@ -233,7 +238,7 @@ export function scanBackendAuthzRoutes(sources: BackendRouteScanSource[]): Backe
       const route = readFirstStringArgument(callText);
       if (!route || !route.startsWith('/')) continue;
 
-      const callAuthMiddleware = authMiddlewareNames(callText);
+      const callAuthMiddleware = authMiddlewareNames(callText, aliases);
       const authenticated = callAuthMiddleware.length > 0 || isAuthenticatedByUseScope(match.index, route, useScopes);
       const normalizedRoute = normalizeAuthzRoutePath(route);
       const registeredActionIds = registeredActionIndex.get(routeKey(method, route)) || [];

@@ -88,6 +88,8 @@ const {
 } = await import('@enterpriseglue/shared/schemas/platform-admin/tenant.js');
 const { TenantReleaseActivationRequestSchema, TenantReleaseActivationInputSchema, SignedTenantReleaseActivationReceiptSchema } =
   await import('@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js');
+const { ManagedEngineWorkloadRegistrationRequestSchema, ManagedEngineWorkloadDecommissionRequestSchema, SignedManagedEngineWorkloadReceiptSchema } =
+  await import('@enterpriseglue/shared/schemas/platform-admin/managed-engine-workload.js');
 
 const {
   EngineSchema,
@@ -2869,6 +2871,46 @@ registry.registerPath({
   ...authzExtension('platform.tenants.workload.lifecycle', 'POST', '/api/workloads/tenants/{tenantId}/resume'),
   request: { params: TenantIdPathSchema, headers: TenantWorkloadHeadersSchema, body: { content: { 'application/json': { schema: TenantWorkloadEpochRequestSchema } } } },
   responses: { 200: { description: 'Tenant resumed with a signed, idempotent workload receipt', content: { 'application/json': { schema: SignedTenantWorkloadReceiptSchema } } }, 409: { description: 'Idempotency or placement epoch conflict' } },
+});
+registry.register('ManagedEngineWorkloadRegistrationRequest', ManagedEngineWorkloadRegistrationRequestSchema);
+registry.register('ManagedEngineWorkloadDecommissionRequest', ManagedEngineWorkloadDecommissionRequestSchema);
+registry.register('SignedManagedEngineWorkloadReceipt', SignedManagedEngineWorkloadReceiptSchema);
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/managed-engines',
+  ...authzExtension('platform.tenants.workload.managed-engines.register', 'POST', '/api/workloads/tenants/{tenantId}/managed-engines'),
+  request: {
+    params: TenantIdPathSchema,
+    headers: TenantWorkloadHeadersSchema,
+    body: { content: { 'application/json': { schema: ManagedEngineWorkloadRegistrationRequestSchema } } },
+  },
+  responses: {
+    201: { description: 'Managed Operaton engine registered with a signed, secret-free workload receipt', content: { 'application/json': { schema: SignedManagedEngineWorkloadReceiptSchema } } },
+    200: { description: 'Exact operation replay returned the original signed receipt', content: { 'application/json': { schema: SignedManagedEngineWorkloadReceiptSchema } } },
+    400: { description: 'Malformed operation, credential, or managed internal endpoint' },
+    401: { description: 'Tenant-lifecycle service-account bearer token required' },
+    403: { description: 'Service account lacks tenant:lifecycle scope' },
+    404: { description: 'Target tenant does not exist' },
+    409: { description: 'Idempotency, tenant, source ownership, endpoint, or active-tenant conflict' },
+    503: { description: 'Managed endpoint policy, signing, or stored operation evidence unavailable' },
+  },
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/tenants/{tenantId}/managed-engines/{engineRef}/decommission',
+  ...authzExtension('platform.tenants.workload.managed-engines.decommission', 'POST', '/api/workloads/tenants/{tenantId}/managed-engines/{engineRef}/decommission'),
+  request: {
+    params: TenantIdPathSchema.extend({ engineRef: z.string().min(1).max(255) }),
+    headers: TenantWorkloadHeadersSchema,
+    body: { content: { 'application/json': { schema: ManagedEngineWorkloadDecommissionRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Managed engine decommissioned, credential retired, and original signed receipt returned on exact replay', content: { 'application/json': { schema: SignedManagedEngineWorkloadReceiptSchema } } },
+    400: { description: 'Malformed or mismatched operation and engine reference' },
+    401: { description: 'Tenant-lifecycle service-account bearer token required' },
+    403: { description: 'Service account lacks tenant:lifecycle scope' },
+    404: { description: 'Target tenant or managed engine does not exist' },
+    409: { description: 'Idempotency, tenant, or managed workload ownership conflict' },
+    503: { description: 'Signing or stored operation evidence unavailable' },
+  },
 });
 registry.registerPath({
   method: 'put', path: '/api/workloads/tenants/{tenantId}/release-assignment',

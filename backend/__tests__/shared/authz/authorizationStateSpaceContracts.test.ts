@@ -174,12 +174,16 @@ describe('authorization state-space contract', () => {
       actionCount: AUTHZ_ACTIONS.length,
     });
 
-    // The expanded authorization surface includes all 234 canonical actions,
-    // including the tenant application lifecycle and bounded self-onboarding
+    // The expanded authorization surface includes all 236 canonical actions,
+    // including managed-engine workload registration/decommission and self-onboarding
     // identities. Keep both exact sentinels so an unreviewed catalog change
     // cannot silently alter the generated coverage denominator.
-    expect(AUTHZ_ACTIONS).toHaveLength(234);
-    expect(summary.rawTupleCount).toBe(165_110_400);
+    expect(AUTHZ_ACTIONS.map((action) => action.actionId)).toEqual(expect.arrayContaining([
+      'platform.tenants.workload.managed-engines.register',
+      'platform.tenants.workload.managed-engines.decommission',
+    ]));
+    expect(AUTHZ_ACTIONS).toHaveLength(236);
+    expect(summary.rawTupleCount).toBe(166_521_600);
     expect(summary.compressedCellCount).toBe(105_840);
     expect(summary.applicableCellCount).toBeGreaterThan(0);
     expect(summary.invalidCompressedCellCount).toBeGreaterThan(0);

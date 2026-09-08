@@ -34,6 +34,9 @@ import {
   PublicLoginMethodsResponseSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import {
+  ManagedEngineWorkloadRegistrationRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/managed-engine-workload.js';
+import {
   UpdatePlatformSettingsRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import {
@@ -85,6 +88,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   ExternalEngineTenantMappingsUpsertRequestSchema,
   GovernanceOwnershipApplyRequestSchema,
   GovernanceOwnershipRequestSchema,
+  ManagedEngineWorkloadRegistrationRequestSchema,
   PublicLoginMethodsResponseSchema,
   UpdatePlatformSettingsRequest,
   UpdateEngineRequestSchema,

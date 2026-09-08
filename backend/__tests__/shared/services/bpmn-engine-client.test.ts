@@ -41,6 +41,11 @@ vi.mock('undici', () => ({
   Response: globalThis.Response,
 }));
 
+function setOptionalEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 describe('bpmn-engine-client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -492,6 +497,19 @@ describe('bpmn-engine-client', () => {
       .toThrow('Engine request path must be relative to the configured endpoint');
   });
 
+  it('refuses to resolve a decommissioned engine before any outbound request', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({
+        findOneBy: vi.fn().mockResolvedValue({
+          id: 'engine-retired', baseUrl: 'https://engine.example.test/engine-rest',
+          lifecycleStatus: 'decommissioned', authType: 'basic', username: null, passwordEnc: null,
+        }),
+      }),
+    });
+    await expect(camundaGet('engine-retired', '/version')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('enforces the configured endpoint host allowlist before outbound engine requests', () => {
     const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
     const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
@@ -595,6 +613,41 @@ describe('bpmn-engine-client', () => {
       else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
       if (previousAllowPrivate === undefined) delete process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS;
       else process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS = previousAllowPrivate;
+    }
+  });
+
+  it('allows only the curated managed-engine service shape through a private wildcard', () => {
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    const previousAllowPrivate = process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS;
+    const previousInsecureHttp = process.env.EG_ALLOW_INSECURE_ENGINE_HTTP;
+    const previousSuffix = process.env.EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX;
+    const service = `egme-${'a'.repeat(40)}`;
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
+    process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS = 'true';
+    process.env.EG_ALLOW_INSECURE_ENGINE_HTTP = 'true';
+    process.env.EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX = 'managed.svc.cluster.local';
+    process.env.EG_ENGINE_ALLOWED_HOSTS = '*.managed.svc.cluster.local';
+
+    try {
+      expect(validateBpmnEngineEndpointUrl(
+        `http://${service}.managed.svc.cluster.local:8081/engine-rest`,
+      ).hostname).toBe(`${service}.managed.svc.cluster.local`);
+      for (const url of [
+        'http://arbitrary.managed.svc.cluster.local:8081/engine-rest',
+        `http://${service}.managed.svc.cluster.local:8082/engine-rest`,
+        `http://${service}.managed.svc.cluster.local:8081/other`,
+        `http://${service}.managed.svc.cluster.local:8081/engine-rest?redirect=metadata`,
+      ]) {
+        expect(() => validateBpmnEngineEndpointUrl(url))
+          .toThrow('private host must have an exact endpoint-policy allowlist entry');
+      }
+    } finally {
+      setOptionalEnv('EG_ENFORCE_ENGINE_ENDPOINT_POLICY', previousEnforcement);
+      setOptionalEnv('EG_ENGINE_ALLOWED_HOSTS', previousAllowedHosts);
+      setOptionalEnv('EG_ENGINE_ALLOW_PRIVATE_HOSTS', previousAllowPrivate);
+      setOptionalEnv('EG_ALLOW_INSECURE_ENGINE_HTTP', previousInsecureHttp);
+      setOptionalEnv('EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX', previousSuffix);
     }
   });
 
