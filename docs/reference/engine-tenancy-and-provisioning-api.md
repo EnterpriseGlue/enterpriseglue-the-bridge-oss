@@ -186,7 +186,8 @@ schema version, configured issuer and audience, key ID, operation, actor,
 tenant, engine reference, correlation ID, and idempotency-key hash before using
 those values. The signature covers canonical JSON of `payload`. The Cloud
 caller cannot independently recompute the registration `requestHash` because
-its credential component is a host-keyed blind index; treat that field as a
+the complete credential-bearing intent is authenticated with a host-keyed,
+domain-separated HMAC; treat that field as a
 signed host replay binding, not as caller-computed authority.
 
 Before deleting the provider workload or its secret, the Cloud worker calls:

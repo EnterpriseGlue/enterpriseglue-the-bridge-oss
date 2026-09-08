@@ -24,6 +24,7 @@ import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infras
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { TenantLifecycleOperation } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLifecycleOperation.js';
 import { canonicalizeConfigJson } from '@enterpriseglue/shared/services/platform-admin/config-bundle-hash.js';
+import { blindIndex } from '@enterpriseglue/shared/services/encryption.js';
 import { managedEngineWorkloadRegistrationService } from '@enterpriseglue/shared/services/platform-admin/ManagedEngineWorkloadRegistrationService.js';
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
 
@@ -155,6 +156,18 @@ describe('ManagedEngineWorkloadRegistrationService', () => {
     });
     expect(persisted).not.toContain(request.credentials.password);
     expect(persisted).not.toContain('credentials');
+  });
+
+  it('binds the entire credential-bearing intent with a domain-separated keyed MAC', async () => {
+    const result = await managedEngineWorkloadRegistrationService.execute(input);
+    const expected = blindIndex('managed-engine-workload-intent-v1', canonicalizeConfigJson({
+      operationId: request.operationId, tenantId: input.tenantId, engineRef: request.engineRef,
+      displayName: request.displayName, baseUrl: request.baseUrl, credentials: request.credentials,
+    }));
+    expect(result.payload.requestHash).toBe(expected);
+    await expect(managedEngineWorkloadRegistrationService.execute({ ...input,
+      request: { ...request, credentials: { ...request.credentials, password: 'different-private-password' } },
+    })).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('converges a new exact operation but rejects changed intent and cross-tenant or cross-owner claims', async () => {

@@ -113,7 +113,10 @@ async function assertNoTerminalDecommission(
 }
 
 function nonSecretRequestHash(input: RegisterManagedEngineWorkloadInput, baseUrl: string): string {
-  return hashCanonicalConfig({
+  // Authenticate the complete intent with the host's secret key. This is a
+  // replay binding, not a password verifier; neither plaintext credentials nor
+  // a public, dictionary-testable credential digest belongs in the ledger.
+  return blindIndex('managed-engine-workload-intent-v1', canonicalizeConfigJson({
     operationId: input.request.operationId,
     tenantId: input.tenantId,
     engineRef: input.request.engineRef,
@@ -122,12 +125,9 @@ function nonSecretRequestHash(input: RegisterManagedEngineWorkloadInput, baseUrl
     credentials: {
       type: input.request.credentials.type,
       username: input.request.credentials.username,
-      passwordBlindIndex: blindIndex(
-        'managed-engine-workload-password-v1',
-        input.request.credentials.password,
-      ),
+      password: input.request.credentials.password,
     },
-  });
+  }));
 }
 
 function assertExistingMatches(

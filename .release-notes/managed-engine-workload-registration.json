@@ -38,7 +38,7 @@
   },
   "security": [
     "Only tenant-lifecycle workload identity may register or decommission a managed engine; browser and general API authentication are rejected, and an absent receipt is signed only when no conflicting engine or registration exists.",
-    "Plaintext credentials are accepted only at the workload boundary for immediate literal AES-GCM encryption and are never returned or logged.",
+    "Plaintext credentials are accepted only at the workload boundary for immediate literal AES-GCM encryption and are never returned or logged. Replay identity authenticates the complete request with a domain-separated host-keyed HMAC, not a public password digest.",
     "Only curated egme-<40 lowercase hex> Kubernetes service URLs under the configured suffix are accepted, and decommissioned engines are denied before outbound transport."
   ],
   "documentation": [
