@@ -90,6 +90,7 @@ export const frontendPluginFixture: EnterpriseFrontendPlugin = {
     void context.components.PAGE_GRADIENTS;
     void context.components.ConfirmModal;
     void context.components.InviteMemberModal;
+    void context.components.carbon;
     void context.hooks.useAuth;
     void context.hooks.useModal;
     void context.hooks.useToast;

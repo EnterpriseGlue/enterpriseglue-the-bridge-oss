@@ -242,6 +242,13 @@ Native plugins are additive:
 - use host routing and notification APIs rather than direct browser networking; and
 - clean up every contribution when deactivated.
 
+The compatibility frontend context also exposes an optional, bounded
+`components.carbon` kit for deployment-owned trusted system modules and legacy
+plugins. It contains host-owned Carbon buttons, grids, notifications, loading,
+links, lists, stacks, tags, and tiles. Modules must feature-detect the kit until
+their declared minimum host version guarantees it; they must not bundle a
+second Carbon or React runtime.
+
 The initial host extension points include global header actions, platform settings, engine and
 incident actions, process-instance detail actions, and plugin-owned tenant routes/navigation.
 Native plugins cannot replace host features or components. The legacy override seam is reserved

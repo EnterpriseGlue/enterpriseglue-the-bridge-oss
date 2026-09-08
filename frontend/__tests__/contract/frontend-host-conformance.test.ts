@@ -91,6 +91,7 @@ describe('Frontend host contract conformance', () => {
     const { useAuth } = await import('@src/shared/hooks/useAuth');
     const { useModal } = await import('@src/shared/hooks/useModal');
     const { useToast } = await import('@src/shared/notifications/ToastProvider');
+    const { trustedModuleCarbonComponentsV1 } = await import('@src/enterprise/loadEnterpriseFrontendPlugin');
 
     // Build the same context object the host builds in loadEnterpriseFrontendPlugin.ts
     const context: FrontendPluginContext = {
@@ -109,6 +110,7 @@ describe('Frontend host contract conformance', () => {
         PAGE_GRADIENTS,
         ConfirmModal: confirmMod.default,
         InviteMemberModal: inviteMod.default,
+        carbon: trustedModuleCarbonComponentsV1,
       },
       hooks: { useAuth, useModal, useToast },
     };
@@ -122,6 +124,20 @@ describe('Frontend host contract conformance', () => {
     expect(context.components.PAGE_GRADIENTS).toBeDefined();
     expect(context.components.ConfirmModal).toBeDefined();
     expect(context.components.InviteMemberModal).toBeDefined();
+    expect(Object.keys(context.components.carbon ?? {}).sort()).toEqual([
+      'Button',
+      'Column',
+      'Grid',
+      'InlineLoading',
+      'InlineNotification',
+      'Link',
+      'ListItem',
+      'Stack',
+      'Tag',
+      'Tile',
+      'UnorderedList',
+    ]);
+    expect(Object.isFrozen(context.components.carbon)).toBe(true);
     expect(context.hooks.useAuth).toBeDefined();
     expect(context.hooks.useModal).toBeDefined();
     expect(context.hooks.useToast).toBeDefined();
