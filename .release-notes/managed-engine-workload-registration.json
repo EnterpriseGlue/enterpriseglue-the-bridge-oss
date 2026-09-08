@@ -59,15 +59,21 @@
   "packages": [
     {
       "name": "@enterpriseglue/shared",
-      "previousVersion": "0.17.0",
-      "newVersion": "0.18.0",
+      "previousVersion": "0.18.1",
+      "newVersion": "0.19.0",
       "impact": "minor"
     },
     {
       "name": "@enterpriseglue/backend-host",
-      "previousVersion": "0.15.0",
-      "newVersion": "0.16.0",
+      "previousVersion": "0.16.1",
+      "newVersion": "0.17.0",
       "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.1",
+      "newVersion": "0.17.2",
+      "impact": "patch"
     }
   ]
 }
