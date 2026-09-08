@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.22.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.3...v0.22.0) (2026-09-08)
+
+
+### Features
+
+* **cloud:** add managed account onboarding entry ([3d85b08](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3d85b084bc5c8a74ee2a622968348813330578b8))
+* **tenancy:** add platform cloud identity boundary ([ab13d01](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ab13d01ca1d75adc4ff16e2228a3b18bf6f8913d))
+* **ui:** expose host-owned Carbon system kit ([d32dc55](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d32dc55f0b471372d6f2e0ba9685114522420f65))
+
+
+### Bug Fixes
+
+* **authz:** model request-selected cloud actions ([be0385c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/be0385c84babab0df6c039121b907ad29da94588))
+* **release:** declare Carbon host package impact ([ed48f21](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ed48f21b9caf7d604892c1650da9f8254c93287a))
+* **release:** version Carbon plugin contract ([ef9c544](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ef9c544d7f36a622cfc52a393c15a7c1299e345c))
+* **tenancy:** complete managed Cloud account session boundary ([b1d573d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b1d573d07819af29b7a6f4c6d421f71e2173a28f))
+
 ## [0.21.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.21.2...v0.21.3) (2026-09-08)
 
 
