@@ -41,7 +41,7 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.upgradeContract.emptyMigrationLedger).toBe('requires-separate-signed-recovery');
     expect(manifest.executableImplementationInventory).toMatchObject({
       algorithm: 'sha256-source-v1',
-      count: 4,
+      count: 6,
     });
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.through)).toEqual([
       1700000000131,
@@ -64,6 +64,10 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(() => assertSchemaEpochInvocation(manifest, 'owner-migration', 'apply')).not.toThrow();
     expect(() => assertSchemaEpochInvocation(manifest, 'owner-migration', 'verify')).toThrow(
       /owner migration entrypoint only in bounded apply mode/,
+    );
+    expect(() => assertSchemaEpochInvocation(manifest, 'schema-epoch-preflight', 'verify')).not.toThrow();
+    expect(() => assertSchemaEpochInvocation(manifest, 'schema-epoch-preflight', 'apply')).toThrow(
+      /preflight only in verify mode/,
     );
   });
 

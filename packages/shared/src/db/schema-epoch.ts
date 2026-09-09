@@ -35,6 +35,9 @@ const SchemaEpochManifestSchema = z.object({
     applicationStartup: z.object({
       mode: z.literal('verify-only'),
     }).strict(),
+    preflight: z.object({
+      mode: z.literal('verify-runtime-grant'),
+    }).strict(),
     ownerMigration: z.object({
       mode: z.literal('apply-through-executable'),
       from: MigrationInventorySchema,
@@ -143,7 +146,7 @@ export function isSchemaEpochManifestApplicable(
 
 export function assertSchemaEpochInvocation(
   manifest: SchemaEpochManifest,
-  role: 'application-startup' | 'owner-migration',
+  role: 'application-startup' | 'owner-migration' | 'schema-epoch-preflight',
   mode: 'apply' | 'verify',
 ): void {
   if (role === 'application-startup' && mode !== 'verify') {
@@ -154,6 +157,9 @@ export function assertSchemaEpochInvocation(
   }
   if (role === 'owner-migration' && mode !== 'apply') {
     throw new Error(`${manifest.id} permits the owner migration entrypoint only in bounded apply mode`);
+  }
+  if (role === 'schema-epoch-preflight' && mode !== 'verify') {
+    throw new Error(`${manifest.id} permits schema-epoch preflight only in verify mode`);
   }
 }
 

@@ -111,6 +111,7 @@ async function readSchemaEpochManifest(artifactDirectory) {
     manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v1'
     || manifest?.id !== 'postgres-explicit-context-bridge-v1'
     || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
+    || manifest?.roles?.preflight?.mode !== 'verify-runtime-grant'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
     || manifest?.roles?.ownerMigration?.from?.through !== 1700000000130
     || manifest?.target?.databaseType !== 'postgres'
@@ -123,7 +124,7 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
-    || manifest?.executableImplementationInventory?.count !== 4
+    || manifest?.executableImplementationInventory?.count !== 6
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.roles?.ownerMigration?.through !== manifest.executableMigrationInventory.through
     || !Array.isArray(manifest?.acceptedDatabaseEpochs)
@@ -165,6 +166,7 @@ async function createReceipt(args) {
       manifestSha256: schemaEpochArtifact.sha256,
       id: schemaEpochManifest.id,
       applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
+      preflightMode: schemaEpochManifest.roles.preflight.mode,
       ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
       ownerMigrationFrom: schemaEpochManifest.roles.ownerMigration.from.through,
       ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
@@ -207,6 +209,7 @@ async function verifyReceipt(args) {
     manifestSha256: schemaEpochArtifact?.sha256,
     id: schemaEpochManifest.id,
     applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
+    preflightMode: schemaEpochManifest.roles.preflight.mode,
     ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
     ownerMigrationFrom: schemaEpochManifest.roles.ownerMigration.from.through,
     ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,

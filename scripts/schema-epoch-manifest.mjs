@@ -9,6 +9,8 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/db/migrations/1700000000131-add-release-effect-cohorts.ts',
   'packages/shared/src/db/migrations/plugin-migration-schema.ts',
+  'packages/shared/src/infrastructure/persistence/pluginColumnPolicy.ts',
+  'packages/shared/src/infrastructure/persistence/entities/PluginPlatform.ts',
   'packages/shared/src/db/postgres-tenant-rls.ts',
   'packages/shared/src/db/schema-epoch-runtime-grant.ts',
 ])

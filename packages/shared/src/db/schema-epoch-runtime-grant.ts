@@ -13,8 +13,21 @@ export async function grantSchemaEpochReleaseEffectCohortRuntimePrivileges(
   queryRunner: QueryRunner,
   runtimeRole: string,
 ): Promise<void> {
+  const { table, role } = await verifyRuntimeRoleAndTable(dataSource, queryRunner, runtimeRole);
+  await queryRunner.query(`REVOKE ALL PRIVILEGES ON TABLE ${table} FROM ${role}`);
+  await queryRunner.query(`GRANT SELECT, INSERT, UPDATE ON TABLE ${table} TO ${role}`);
+  await verifySchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, queryRunner, runtimeRole);
+}
+
+async function verifyRuntimeRoleAndTable(
+  dataSource: DataSource,
+  queryRunner: QueryRunner,
+  runtimeRole: string,
+): Promise<{ table: string; role: string }> {
   if (!ROLE_PATTERN.test(runtimeRole)) throw new Error('Schema-epoch runtime role is invalid');
-  const schema = String(dataSource.options.schema || 'public');
+  const schema = String(
+    (dataSource.options as typeof dataSource.options & { schema?: string }).schema || 'public',
+  );
   const metadata = dataSource.getMetadata('ReleaseEffectCohort');
   if ((metadata.schema || schema) !== schema || !await queryRunner.hasTable(metadata.tablePath)) {
     throw new Error('Schema-epoch release-effect cohort table is not the exact owner-schema relation');
@@ -32,10 +45,23 @@ export async function grantSchemaEpochReleaseEffectCohortRuntimePrivileges(
     throw new Error('Schema-epoch runtime role must be restricted, nonowning, membership-free, and have schema USAGE');
   }
 
-  const table = metadata.tablePath.split('.').map(quoteIdentifier).join('.');
-  const role = quoteIdentifier(runtimeRole);
-  await queryRunner.query(`REVOKE ALL PRIVILEGES ON TABLE ${table} FROM ${role}`);
-  await queryRunner.query(`GRANT SELECT, INSERT, UPDATE ON TABLE ${table} TO ${role}`);
+  return {
+    table: metadata.tablePath.split('.').map(quoteIdentifier).join('.'),
+    role: quoteIdentifier(runtimeRole),
+  };
+}
+
+/** Read-only preflight for the exact configured role and 0131 table grant. */
+export async function verifySchemaEpochReleaseEffectCohortRuntimePrivileges(
+  dataSource: DataSource,
+  queryRunner: QueryRunner,
+  runtimeRole: string,
+): Promise<void> {
+  await verifyRuntimeRoleAndTable(dataSource, queryRunner, runtimeRole);
+  const schema = String(
+    (dataSource.options as typeof dataSource.options & { schema?: string }).schema || 'public',
+  );
+  const metadata = dataSource.getMetadata('ReleaseEffectCohort');
 
   const grants: Array<{ privilege_type: string }> = await queryRunner.query(
     `SELECT privilege_type FROM information_schema.role_table_grants

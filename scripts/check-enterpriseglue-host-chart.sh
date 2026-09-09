@@ -29,8 +29,8 @@ if ! grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RUNTIME_ROLE_FILE"; then
   echo "Schema-epoch compatibility bridge omitted the configured owner migration runtime role" >&2
   exit 1
 fi
-if grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RENDERED_FILE"; then
-  echo "Unset runtime role must not change deployment environment" >&2
+if [ "$(grep -c 'EG_POSTGRES_RUNTIME_ROLE' "$RENDERED_FILE")" -ne 2 ]; then
+  echo "Schema-epoch runtime role must be isolated to owner and preflight jobs" >&2
   exit 1
 fi
 if helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
@@ -71,8 +71,8 @@ for expected in \
   "value: \"verify\"" \
   "value: \"api\"" \
   "value: \"worker\"" \
-  "mode:'verify'" \
   "runSchemaEpochOwnerMigrations" \
+  "runSchemaEpochPreflight" \
   "readOnly: true" \
   "readOnlyRootFilesystem: true" \
   "allowPrivilegeEscalation: false" \

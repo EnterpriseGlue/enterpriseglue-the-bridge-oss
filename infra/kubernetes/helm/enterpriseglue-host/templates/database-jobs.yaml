@@ -1,5 +1,6 @@
 {{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
 {{- $schemaEpochOwnerMode := include "enterpriseglue-host.schemaEpochOwnerMode" . | trim }}
+{{- $schemaEpochTarget := eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" }}
 {{- if ne $schemaEpochOwnerMode "disabled" }}
 apiVersion: batch/v1
 kind: Job
@@ -119,7 +120,7 @@ spec:
       volumes:
         - { name: tmp, emptyDir: {} }
 {{- end }}
-{{- if .Values.database.preflight.enabled }}
+{{- if or $schemaEpochTarget .Values.database.preflight.enabled }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -154,12 +155,20 @@ spec:
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
           command: ["node", "-e"]
           args:
+            {{- if $schemaEpochTarget }}
+            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runSchemaEpochPreflight}) => runSchemaEpochPreflight())"
+            {{- else }}
             - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
+            {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.preflightSecretName }} }
           {{- if .Values.database.profile.databaseType }}
           env:
+            {{- if $schemaEpochTarget }}
+            - name: EG_POSTGRES_RUNTIME_ROLE
+              value: {{ .Values.database.migration.runtimeRole | quote }}
+            {{- end }}
             - name: DATABASE_TYPE
               value: {{ .Values.database.profile.databaseType | quote }}
             - name: TENANCY_MODE

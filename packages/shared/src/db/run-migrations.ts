@@ -24,7 +24,10 @@ import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verif
 import { config } from '../config/index.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
 import { withPostgresMigrationContext } from './postgres-migration-context.js';
-import { grantSchemaEpochReleaseEffectCohortRuntimePrivileges } from './schema-epoch-runtime-grant.js';
+import {
+  grantSchemaEpochReleaseEffectCohortRuntimePrivileges,
+  verifySchemaEpochReleaseEffectCohortRuntimePrivileges,
+} from './schema-epoch-runtime-grant.js';
 import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
 import { runWithTenantDatabaseContext } from '../services/tenant-database-context.js';
 import {
@@ -608,7 +611,7 @@ async function runBoundedSchemaEpochOwnerMigration(
 
 async function runMigrationsForInvocation(
   options: RunMigrationsOptions,
-  invocation: 'application-startup' | 'owner-migration',
+  invocation: 'application-startup' | 'owner-migration' | 'schema-epoch-preflight',
 ) {
   const mode = options.mode ?? 'apply';
   console.log(mode === 'apply'
@@ -624,8 +627,12 @@ async function runMigrationsForInvocation(
   });
   if (schemaEpochApplies) assertSchemaEpochInvocation(schemaEpochManifest, invocation, mode);
   const boundedSchemaEpochOwner = schemaEpochApplies && invocation === 'owner-migration';
+  const schemaEpochPreflight = schemaEpochApplies && invocation === 'schema-epoch-preflight';
   const runtimeRole = process.env.EG_POSTGRES_RUNTIME_ROLE;
-  if (runtimeRole !== undefined && (dbType !== 'postgres' || mode !== 'apply')) {
+  if (schemaEpochPreflight && runtimeRole === undefined) {
+    throw new Error('Schema-epoch preflight requires the configured PostgreSQL runtime role');
+  }
+  if (runtimeRole !== undefined && (dbType !== 'postgres' || (mode !== 'apply' && !schemaEpochPreflight))) {
     throw new Error('EG_POSTGRES_RUNTIME_ROLE is supported only by PostgreSQL apply-mode migration jobs');
   }
   
@@ -794,9 +801,12 @@ async function runMigrationsForInvocation(
             );
           }
         }
+        if (schemaEpochPreflight && runtimeRole !== undefined) {
+          await verifySchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, integrityRunner, runtimeRole);
+        }
       }
       await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
-      if (runtimeRole !== undefined) await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
+      if (runtimeRole !== undefined && mode === 'apply') await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
     } finally {
       await integrityRunner.release();
     }
@@ -834,6 +844,12 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
  */
 export async function runSchemaEpochOwnerMigrations() {
   return runMigrationsForInvocation({ mode: 'apply' }, 'owner-migration');
+}
+
+/** Separately credentialed, read-only preflight. It verifies both the accepted
+ * epoch/policy and the exact configured runtime grant before cohort opening. */
+export async function runSchemaEpochPreflight() {
+  return runMigrationsForInvocation({ mode: 'verify' }, 'schema-epoch-preflight');
 }
 
 /**

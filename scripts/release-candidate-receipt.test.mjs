@@ -63,6 +63,7 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   assert.equal(created.publicationPerformed, false)
   assert.equal(created.artifacts.length, 13)
   assert.equal(created.schemaEpoch.applicationStartupMode, 'verify-only')
+  assert.equal(created.schemaEpoch.preflightMode, 'verify-runtime-grant')
   assert.equal(created.schemaEpoch.ownerMigrationMode, 'apply-through-executable')
   assert.equal(created.schemaEpoch.ownerMigrationFrom, 1700000000130)
   assert.equal(created.schemaEpoch.ownerRuntimeGrant, 'configured-role-release-effect-cohorts-select-insert-update/v1')

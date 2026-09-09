@@ -9,6 +9,9 @@
     "applicationStartup": {
       "mode": "verify-only"
     },
+    "preflight": {
+      "mode": "verify-runtime-grant"
+    },
     "ownerMigration": {
       "mode": "apply-through-executable",
       "from": {
@@ -37,8 +40,8 @@
   },
   "executableImplementationInventory": {
     "algorithm": "sha256-source-v1",
-    "count": 4,
-    "sha256": "c6cf2b22229317dce1bf2853cf3367628d50f70469f8e5e4f8409403a9dec451"
+    "count": 6,
+    "sha256": "adaf58768a55ea27a87f09e02f084517d3c813e00f4fade0b46628b37906bc96"
   },
   "acceptedDatabaseEpochs": [
     {

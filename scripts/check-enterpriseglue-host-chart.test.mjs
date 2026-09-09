@@ -84,10 +84,11 @@ test('pooled PostgreSQL profile always renders the signed bridge owner and verif
   })
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /runSchemaEpochOwnerMigrations/)
+  assert.match(result.stdout, /runSchemaEpochPreflight/)
   assert.doesNotMatch(result.stdout, /runMigrations\(\{mode:'apply'\}\)/)
   assert.equal(result.stdout.match(/name: EG_DATABASE_STARTUP_MODE\n\s+value: "verify"/g)?.length, 2)
   assert.match(result.stdout, /secretRef: \{ name: enterpriseglue-migration-secrets \}/)
-  assert.equal(result.stdout.match(/name: EG_POSTGRES_RUNTIME_ROLE/g)?.length, 1)
+  assert.equal(result.stdout.match(/name: EG_POSTGRES_RUNTIME_ROLE/g)?.length, 2)
   assert.match(result.stdout, /name: EG_POSTGRES_RUNTIME_ROLE\n\s+value: "eg_runtime"/)
 })
 

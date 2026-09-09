@@ -100,6 +100,9 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if ne $manifest.roles.applicationStartup.mode "verify-only" -}}
 {{- fail "compatibility bridge application startup must be verify-only" -}}
 {{- end -}}
+{{- if ne $manifest.roles.preflight.mode "verify-runtime-grant" -}}
+{{- fail "compatibility bridge preflight must verify the runtime grant" -}}
+{{- end -}}
 {{- if ne $manifest.roles.ownerMigration.mode "apply-through-executable" -}}
 {{- fail "compatibility bridge owner migration must use bounded apply" -}}
 {{- end -}}
@@ -129,6 +132,8 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- define "enterpriseglue-host.schemaEpochOwnerMode" -}}
 {{- if eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" -}}
 {{- $migrationSecret := required "database.migrationSecretName is required for the pooled PostgreSQL schema-epoch bridge" .Values.database.migrationSecretName -}}
+{{- $preflightSecret := required "database.preflightSecretName is required for pooled PostgreSQL schema-epoch preflight" .Values.database.preflightSecretName -}}
+{{- $runtimeRole := required "database.migration.runtimeRole is required for pooled PostgreSQL schema-epoch preflight" .Values.database.migration.runtimeRole -}}
 {{- include "enterpriseglue-host.schemaEpochManifest" . | fromJson | dig "roles" "ownerMigration" "mode" "" -}}
 {{- else -}}
 {{- ternary "legacy-apply" "disabled" .Values.database.migration.enabled -}}
