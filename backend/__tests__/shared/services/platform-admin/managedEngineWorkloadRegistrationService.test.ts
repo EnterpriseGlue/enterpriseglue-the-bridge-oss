@@ -241,6 +241,7 @@ describe('ManagedEngineWorkloadRegistrationService', () => {
       tenantId: input.tenantId, engineRef: request.engineRef,
     });
     expect(replay).toEqual({ ...first, idempotent: true });
+    if (registered.payload.engineId === null) throw new Error('Registration must return an engine ID');
     const engine = await state.dataSource!.getRepository(Engine).findOneByOrFail({ id: registered.payload.engineId });
     expect(engine).toMatchObject({ lifecycleStatus: 'decommissioned', username: null, passwordEnc: null });
     const registration = await state.dataSource!.getRepository(ExternalEngineRegistration)
@@ -303,6 +304,7 @@ describe('ManagedEngineWorkloadRegistrationService', () => {
       },
     };
     const result = await managedEngineWorkloadRegistrationService.execute(literalInput);
+    if (result.payload.engineId === null) throw new Error('Registration must return an engine ID');
     const engine = await state.dataSource!.getRepository(Engine).findOneByOrFail({ id: result.payload.engineId });
     expect(engine.passwordEnc).toMatch(/^v2:/);
     expect(secretResolver.resolveStored(engine.passwordEnc)).toBe(literalPassword);

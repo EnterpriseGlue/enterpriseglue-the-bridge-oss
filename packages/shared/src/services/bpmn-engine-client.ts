@@ -340,6 +340,23 @@ function shouldRewriteDockerLoopbackEngineUrls(): boolean {
 }
 
 export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine endpoint URL'): URL {
+  return validateEngineEndpointUrl(rawUrl, label)
+}
+
+function isManagedRestRequest(url: URL, base: URL): boolean {
+  if (url.origin !== base.origin || url.username || url.password || url.hash) return false
+  if (url.pathname !== base.pathname && !url.pathname.startsWith(`${base.pathname}/`)) return false
+  // Do not allow another URL decoder or servlet path-parameter normalization
+  // to turn an apparently scoped resource into a different path.
+  if (/%(?:2f|5c|25)/i.test(url.pathname)) return false
+  try {
+    const path = decodeURIComponent(url.pathname)
+    return !/[\u0000-\u001f\u007f\\]/.test(path)
+      && !path.split('/').some((segment) => ['.', '..'].includes(segment.split(';')[0]))
+  } catch { return false }
+}
+
+function validateEngineEndpointUrl(rawUrl: string, label: string, managedBase?: URL): URL {
   let parsed: URL
   try {
     parsed = new URL(rawUrl)
@@ -351,6 +368,9 @@ export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine en
   }
   if (parsed.username || parsed.password) {
     throw Errors.validation(`${label} must not include embedded credentials`)
+  }
+  if (managedBase && !isManagedRestRequest(parsed, managedBase)) {
+    throw Errors.validation('Managed engine request must remain within the approved REST endpoint')
   }
   if (isEngineEndpointPolicyEnforced()) {
     if (parsed.protocol !== 'https:' && !isInsecureEngineHttpAllowed()) {
@@ -366,6 +386,7 @@ export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine en
     }
     const normalizedHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
     const managedInternalHost = isConfiguredManagedInternalEngineEndpoint(parsed)
+      || (managedBase !== undefined && isManagedRestRequest(parsed, managedBase))
     if (privateHost && !allowedHosts.some((entry) => !entry.startsWith('*.') && entry === normalizedHost)
       && !(managedInternalHost && isAllowedEngineEndpointHost(normalizedHost, allowedHosts))) {
       throw Errors.validation(`${label} private host must have an exact endpoint-policy allowlist entry`)
@@ -381,8 +402,12 @@ export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string 
   if (/^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith('//')) {
     throw Errors.validation('Engine request path must be relative to the configured endpoint')
   }
+  // Registration keeps its exact base-URL contract. Only this request builder
+  // may extend a separately validated managed base to REST resources/queries.
+  const managedBase = isManagedEngineInternalEndpointUrl(baseUrl)
+    ? validateBpmnEngineEndpointUrl(baseUrl) : undefined
   const rawUrl = baseUrl.replace(/\/$/, '') + path
-  const parsed = validateBpmnEngineEndpointUrl(rawUrl, 'Engine endpoint URL')
+  const parsed = validateEngineEndpointUrl(rawUrl, 'Engine endpoint URL', managedBase)
   if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
 
   parsed.hostname = 'host.docker.internal'

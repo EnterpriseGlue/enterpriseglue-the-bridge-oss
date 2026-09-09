@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { connect } from 'node:net';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import {
@@ -8,6 +10,7 @@ import {
 } from '../../../packages/shared/dist/services/platform-admin/EngineBackstopSyncService.js';
 import { getDataSource } from '../../../packages/shared/dist/db/data-source.js';
 import { Engine } from '../../../packages/shared/dist/infrastructure/persistence/entities/Engine.js';
+import { fetchBpmnEngineEndpoint } from '../../../packages/shared/dist/services/bpmn-engine-client.js';
 
 const execFileAsync = promisify(execFile);
 // Pin the fixture image so the Operaton compatibility claim is reproducible.
@@ -274,6 +277,61 @@ function projection(groupId, processKey, decisionKey) {
     ],
   };
 }
+
+test('managed engine policy permits real Operaton health, process, BPMN and variable requests', {
+  skip: !enabled && 'set EG_RUN_OPERATON_CONTAINER_TESTS=1 to run the disposable Docker contract',
+  timeout: 180_000,
+}, async () => {
+  const { Agent } = createRequire(new URL('../../../packages/shared/package.json', import.meta.url))('undici');
+  const fixture = await startOperaton();
+  const fixtureUrl = new URL(fixture.baseUrl);
+  const hostname = `egme-${'a'.repeat(40)}.managed.svc.cluster.local`;
+  const managedBaseUrl = `http://${hostname}:8081/engine-rest`;
+  const settings = {
+    EG_ENFORCE_ENGINE_ENDPOINT_POLICY: 'true', EG_ENGINE_ALLOW_PRIVATE_HOSTS: 'true',
+    EG_ALLOW_INSECURE_ENGINE_HTTP: 'true', EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX: 'managed.svc.cluster.local',
+    EG_ENGINE_ALLOWED_HOSTS: '*.managed.svc.cluster.local',
+  };
+  const previous = Object.fromEntries(Object.keys(settings).map((key) => [key, process.env[key]]));
+  let requests = 0;
+  const dispatcher = new Agent({ connect(options, callback) {
+    if (options.hostname !== hostname || Number(options.port) !== 8081) { callback(Error('unexpected fixture target'), null); return; }
+    const socket = connect({ host: '127.0.0.1', port: Number(fixtureUrl.port) });
+    socket.once('connect', () => callback(null, socket));
+    socket.once('error', (error) => callback(error, null));
+  } });
+  async function request(path, method = 'GET', body) {
+    const { response } = await fetchBpmnEngineEndpoint({ id: 'managed-fixture', baseUrl: managedBaseUrl, authType: 'none' },
+      { path, method }, { dispatcher, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    requests++;
+    assert.equal(response.ok, true, `managed ${method} ${path} must reach Operaton`);
+    return response.status === 204 ? null : response.json();
+  }
+  try {
+    Object.assign(process.env, settings);
+    const version = await request('/version');
+    assert.match(version.version, /^2\.1\./);
+    await deployFixture(fixture.baseUrl, 'authorization-process.bpmn', 'eg-managed-rest-policy-fixture');
+    const definitions = await request('/process-definition?key=egprocess');
+    assert.equal(definitions.length, 1);
+    const xml = await request(`/process-definition/${encodeURIComponent(definitions[0].id)}/xml`);
+    assert.match(xml.bpmn20Xml, /bpmndi:BPMNDiagram/);
+    const instance = await request('/process-definition/key/egprocess/start', 'POST', { variables: { amount: { value: 84, type: 'Integer' }, approved: { value: true, type: 'Boolean' } } });
+    const instances = await request(`/history/process-instance?processInstanceId=${encodeURIComponent(instance.id)}`);
+    assert.equal(instances[0].state, 'COMPLETED');
+    const variables = await request(`/history/variable-instance?processInstanceId=${encodeURIComponent(instance.id)}`);
+    assert.ok(variables.some((variable) => variable.name === 'amount' && variable.type === 'Integer' && variable.value === 84));
+    assert.ok(variables.some((variable) => variable.name === 'approved' && variable.type === 'Boolean' && variable.value === true));
+    await assert.rejects(request('/../admin'));
+    assert.equal(requests, 6, 'the denied traversal must not reach outbound transport');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    await dispatcher.close();
+    await removeContainer(fixture.name);
+  }
+});
 
 test('real Operaton container supports the owned group READ authorization lifecycle', {
   skip: !enabled && 'set EG_RUN_OPERATON_CONTAINER_TESTS=1 to run the disposable Docker contract',
