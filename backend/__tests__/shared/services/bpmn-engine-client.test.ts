@@ -676,6 +676,23 @@ describe('bpmn-engine-client', () => {
     }
   });
 
+  it('resolves REST resources and query parameters below an approved managed base', () => {
+    const settings = {
+      EG_ENFORCE_ENGINE_ENDPOINT_POLICY: 'true', EG_ENGINE_ALLOW_PRIVATE_HOSTS: 'true',
+      EG_ALLOW_INSECURE_ENGINE_HTTP: 'true', EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX: 'managed.svc.cluster.local',
+      EG_ENGINE_ALLOWED_HOSTS: '*.managed.svc.cluster.local',
+    };
+    const previous = Object.fromEntries(Object.keys(settings).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, settings);
+    const base = `http://egme-${'a'.repeat(40)}.managed.svc.cluster.local:8081/engine-rest`;
+    try {
+      for (const path of ['/version', '/process-definition?latestVersion=true', '/process-definition/order%3A1%3Aid/xml',
+        '/process-instance?active=true', '/history/variable-instance?processInstanceId=one', '/process-definition/key/order/start']) {
+        expect(resolveBpmnEngineRequestUrl(base, path)).toBe(base + path);
+      }
+    } finally { for (const [key, value] of Object.entries(previous)) setOptionalEnv(key, value); }
+  });
+
   it('obtains OAuth2 client credentials tokens server-side before calling the engine', async () => {
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({

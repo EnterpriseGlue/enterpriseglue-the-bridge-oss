@@ -265,6 +265,14 @@ disabled and TLS certificates use the runtime's normal verification.
   `EG_ENGINE_ALLOWED_HOSTS` entry. Other private wildcard targets, ports,
   paths, queries, fragments, and embedded credentials remain rejected.
 
+  This exact-path restriction applies to the registered base URL. After validating
+  that base, the engine request builder permits REST resources and query parameters
+  beneath it, such as `/engine-rest/version` and `/engine-rest/process-instance?active=true`.
+  Requests must retain the approved origin and REST subtree. Fragments, traversal
+  outside that subtree, encoded path separators and double-encoded paths are denied;
+  the exception does not authorize registering an arbitrary resource as an engine
+  base or extending the allowlist to other private services.
+
 Host allowlisting validates the configured name and address literals; it is
 not DNS pinning. Allowlist only names below a reviewed administrative boundary,
 and enforce network egress rules that block private, loopback, and cloud-metadata

@@ -1,0 +1,30 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "managed-engine-request-policy",
+  "type": "fix",
+  "scope": "managed engine requests",
+  "breaking": false,
+  "audiences": ["users", "operators", "developers", "security"],
+  "summary": "Corrects managed-engine endpoint policy so approved REST requests can reach health, process and BPMN resources beneath the registered engine base URL.",
+  "userImpact": ["Managed-engine registration alone must not leave subsequent health and process requests blocked by the private-host allowlist."],
+  "upgrade": {"required": false, "instructions": ["Update the host to consume the corrected request policy; no database migration is required."]},
+  "configuration": ["Existing managed DNS suffix, private-host, insecure-HTTP and allowlist opt-ins remain required; no broader private network access is introduced."],
+  "api": {"compatibility": "none", "changes": ["The registered managed base URL remains restricted to the exact /engine-rest path without query or fragment."]},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["No persistence or database adapter change."]},
+  "security": ["Request authorization remains bound to the approved managed origin and REST subtree; off-origin requests and traversal outside that subtree remain denied."],
+  "documentation": ["The engine endpoint configuration reference explains the distinction between registered base URLs and REST resource requests."],
+  "knownLimitations": ["Live staging activation and the real browser journey remain separate acceptance gates."],
+  "rollback": ["Reverting restores the restrictive managed-request behavior without changing stored engines or credentials."],
+  "validation": [
+    "The regression failed before the fix. All 55 affected request-policy, real HTTP transport and managed-registration unit checks now pass.",
+    "Authorization structure checks, 128 authorization checks against an isolated migrated PostgreSQL database, and the managed-registration PostgreSQL lifecycle integration check pass.",
+    "The complete adapter backstop gate passes, including four real sidecar tests and three real Operaton container tests. Operaton 2.1.4 health, process lookup, BPMN XML, process start, completed state and typed variables were exercised through the corrected host client with endpoint enforcement enabled.",
+    "Backend type checking, built host runtime imports, all three host and five plugin/API package tarball entry points and dependency-reference checks pass. No database adapter changed; these checks do not constitute new cross-database or live browser acceptance."
+  ],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.19.0", "newVersion": "0.19.1", "impact": "patch"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.17.0", "newVersion": "0.17.1", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.2", "newVersion": "0.17.3", "impact": "patch"}
+  ]
+}

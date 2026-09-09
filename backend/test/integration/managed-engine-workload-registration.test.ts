@@ -151,6 +151,7 @@ describePostgres('managed engine workload lifecycle with PostgreSQL', () => {
     const replay = await managedEngineWorkloadRegistrationService.execute(registerInput);
     expect(replay).toEqual({ ...registered, idempotent: true });
     expect(await database.current!.getRepository(Engine).count()).toBe(1);
+    if (registered.payload.engineId === null) throw new Error('Registration must return an engine ID');
     const active = await database.current!.getRepository(Engine).findOneByOrFail({ id: registered.payload.engineId });
     expect(active).toMatchObject({
       tenantId: 'tenant-pg', externalId: engineRef, tenancyMode: 'dedicated',
