@@ -37,6 +37,57 @@ app.kubernetes.io/component: {{ .component }}
 {{ printf "%s@%s" $repository $digest }}
 {{- end }}
 
+{{- define "enterpriseglue-host.releaseEffectCohortValidate" -}}
+{{- if .Values.database.releaseEffectCohort.enabled -}}
+{{- if or (ne .Values.database.profile.databaseType "postgres") (ne .Values.database.profile.tenancyMode "pooled") -}}
+{{- fail "database.releaseEffectCohort requires the explicit postgres/pooled database profile" -}}
+{{- end -}}
+{{- if or (not .Values.database.migration.enabled) (not .Values.database.preflight.enabled) -}}
+{{- fail "database.releaseEffectCohort requires owner migration and restricted preflight hooks" -}}
+{{- end -}}
+{{- $releaseId := required "database.releaseEffectCohort.releaseId is required" .Values.database.releaseEffectCohort.releaseId -}}
+{{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$" $releaseId) -}}
+{{- fail "database.releaseEffectCohort.releaseId is invalid" -}}
+{{- end -}}
+{{- if lt (int64 .Values.database.releaseEffectCohort.cohortEpoch) 1 -}}
+{{- fail "database.releaseEffectCohort.cohortEpoch must be positive" -}}
+{{- end -}}
+{{- if ne .Values.database.releaseEffectCohort.inventoryVersion "release-effect-inventory.enterpriseglue.io/v1" -}}
+{{- fail "database.releaseEffectCohort.inventoryVersion is unsupported" -}}
+{{- end -}}
+{{- if not (regexMatch "^[a-f0-9]{64}$" .Values.database.releaseEffectCohort.inventorySha256) -}}
+{{- fail "database.releaseEffectCohort.inventorySha256 must be an exact SHA-256" -}}
+{{- end -}}
+{{- range $annotation := list "enterpriseglue.io/release-effect-release-id" "enterpriseglue.io/release-effect-cohort-epoch" "enterpriseglue.io/release-effect-inventory-version" "enterpriseglue.io/release-effect-inventory-sha256" -}}
+{{- if hasKey $.Values.podAnnotations $annotation -}}
+{{- fail "release-effect rollout annotations cannot be overridden through podAnnotations" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{- define "enterpriseglue-host.releaseEffectCohortAnnotations" -}}
+{{- if .Values.database.releaseEffectCohort.enabled }}
+enterpriseglue.io/release-effect-release-id: {{ .Values.database.releaseEffectCohort.releaseId | quote }}
+enterpriseglue.io/release-effect-cohort-epoch: {{ .Values.database.releaseEffectCohort.cohortEpoch | quote }}
+enterpriseglue.io/release-effect-inventory-version: {{ .Values.database.releaseEffectCohort.inventoryVersion | quote }}
+enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEffectCohort.inventorySha256 | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "enterpriseglue-host.releaseEffectCohortEnvironment" -}}
+{{- if .Values.database.releaseEffectCohort.enabled }}
+- name: EG_TENANT_PLACEMENT_RELEASE_ID
+  value: {{ .Values.database.releaseEffectCohort.releaseId | quote }}
+- name: EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH
+  value: {{ .Values.database.releaseEffectCohort.cohortEpoch | quote }}
+- name: EG_RELEASE_EFFECT_EXPECTED_INVENTORY_VERSION
+  value: {{ .Values.database.releaseEffectCohort.inventoryVersion | quote }}
+- name: EG_RELEASE_EFFECT_EXPECTED_INVENTORY_SHA256
+  value: {{ .Values.database.releaseEffectCohort.inventorySha256 | quote }}
+{{- end }}
+{{- end }}
+
 {{- define "enterpriseglue-host.serviceAccountName" -}}
 {{- $root := .root -}}
 {{- $component := .component -}}
@@ -77,7 +128,7 @@ topologySpreadConstraints:
 
 {{- define "enterpriseglue-host.commonPodSpec" -}}
 {{- $settings := index .root.Values.serviceAccounts (ternary "api" .component (eq .component "frontend")) -}}
-automountServiceAccountToken: {{ ternary false $settings.automountServiceAccountToken (eq .component "frontend") }}
+automountServiceAccountToken: {{ ternary false $settings.automountServiceAccountToken (or (eq .component "frontend") (eq .component "cohort")) }}
 securityContext:
   {{- include "enterpriseglue-host.podSecurityContext" .root | nindent 2 }}
 {{- with .root.Values.imagePullSecrets }}

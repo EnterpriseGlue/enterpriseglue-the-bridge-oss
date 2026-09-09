@@ -18,6 +18,36 @@ migration is pending. API and worker pods use `database.applicationSecretName` a
 migrations or install RLS. Give the migration identity DDL privileges and application/preflight
 identities only the least database authority they need.
 
+Managed PostgreSQL pooled releases may enable `database.releaseEffectCohort`. The chart then
+orders the owner migration at hook weight `-20`, restricted schema/policy preflight at `-10`, and
+the cohort opener at `0`, before Kubernetes creates API or worker Deployments. The opener uses
+`database.applicationSecretName`, a dedicated ServiceAccount with no Kubernetes API token, and
+only `ReleaseEffectSettlementService.open`; it has no migration, synchronization, repair, seed,
+or owner-credential path. The explicit release ID, positive cohort epoch, inventory version, and
+inventory SHA-256 are placed on the opener, API, and worker environments and rollout annotations.
+The opener verifies the returned identity, inventory, `state=open`, and `revision=1`. A retry of
+the same open cohort converges; a changed identity, changed inventory, or closing/settled cohort
+blocks rollout.
+
+```yaml
+database:
+  profile: { databaseType: postgres, tenancyMode: pooled }
+  releaseEffectCohort:
+    enabled: true
+    releaseId: <immutable-managed-release-id>
+    cohortEpoch: <positive-safe-integer>
+    inventoryVersion: release-effect-inventory.enterpriseglue.io/v1
+    inventorySha256: <sha256-from-the-signed-release-receipt>
+serviceAccounts:
+  cohort: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+```
+
+The deployment controller must obtain the inventory inputs from the exact signed release receipt,
+not an operator claim or a prior release. `database.releaseEffectCohort` is rejected unless owner
+migration and restricted preflight are both enabled and the explicit profile is exactly
+`postgres`/`pooled`. The separate settlement runbook defines retirement and fail-closed coverage;
+opening a cohort does not establish maintenance or shutdown eligibility.
+
 For PostgreSQL, set `database.migration.runtimeRole` to an existing restricted runtime login to
 refresh its grants after successful owner migrations. This emits `EG_POSTGRES_RUNTIME_ROLE` only
 on the migration job, never API, worker, or preflight. The login must have no memberships,
@@ -37,7 +67,7 @@ For private managed databases that require a local authentication proxy, enable 
 `database.connectionProxy` sidecar with a digest-pinned image and deployment-owned arguments.
 The API, worker, migration and preflight service accounts may then opt into projected workload
 identity tokens with `automountServiceAccountToken: true`; the default remains `false`, and the
-frontend never receives a service-account token. Jobs use Kubernetes native sidecars so the proxy
+frontend and cohort opener never receive a service-account token. Jobs use Kubernetes native sidecars so the proxy
 does not prevent completion. Provider-specific instances, identities and arguments stay outside
 this chart.
 

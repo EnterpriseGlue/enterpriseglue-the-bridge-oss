@@ -1,3 +1,4 @@
+{{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
 {{- if .Values.apiConfigBundle.enabled }}
 {{- if or (hasKey .Values.podAnnotations "enterpriseglue.io/api-config-bundle-contract") (hasKey .Values.podAnnotations "enterpriseglue.io/api-config-bundle-sha256") }}
 {{- fail "apiConfigBundle rollout annotations cannot be overridden through podAnnotations" }}
@@ -38,6 +39,7 @@ spec:
         {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
       annotations:
         enterpriseglue.io/rollout-revision: {{ .Values.rolloutRevision | quote }}
+        {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 8 }}
         {{- if .Values.apiConfigBundle.enabled }}
         enterpriseglue.io/api-config-bundle-contract: v1
         enterpriseglue.io/api-config-bundle-sha256: {{ .Values.apiConfigBundle.expectedSha256 | quote }}
@@ -59,6 +61,7 @@ spec:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.applicationSecretName }} }
           env:
+            {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             {{- if .Values.apiConfigBundle.enabled }}
             - name: EG_CONFIG_BUNDLE_PATH
               value: {{ printf "/etc/enterpriseglue/platform-config/%s" .Values.apiConfigBundle.configMapKey | quote }}

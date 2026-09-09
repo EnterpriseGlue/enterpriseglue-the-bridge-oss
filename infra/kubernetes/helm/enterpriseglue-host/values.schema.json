@@ -57,12 +57,46 @@
     "database": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "migration", "preflight", "connectionProxy"],
+      "required": ["profile", "configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "releaseEffectCohort", "migration", "preflight", "connectionProxy"],
       "properties": {
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["databaseType", "tenancyMode"],
+          "properties": {
+            "databaseType": { "type": "string", "enum": ["", "postgres"] },
+            "tenancyMode": { "type": "string", "enum": ["", "single", "pooled"] }
+          }
+        },
         "configMapName": { "$ref": "#/$defs/name" },
         "applicationSecretName": { "$ref": "#/$defs/name" },
         "migrationSecretName": { "$ref": "#/$defs/name" },
         "preflightSecretName": { "$ref": "#/$defs/name" },
+        "releaseEffectCohort": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "releaseId", "cohortEpoch", "inventoryVersion", "inventorySha256", "backoffLimit", "ttlSecondsAfterFinished"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "releaseId": { "type": "string", "maxLength": 256, "pattern": "^(|[A-Za-z0-9][A-Za-z0-9._:-]*)$" },
+            "cohortEpoch": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "inventoryVersion": { "type": "string", "enum": ["", "release-effect-inventory.enterpriseglue.io/v1"] },
+            "inventorySha256": { "type": "string", "pattern": "^(|[a-f0-9]{64})$" },
+            "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 }
+          },
+          "allOf": [{
+            "if": { "properties": { "enabled": { "const": true } } },
+            "then": {
+              "properties": {
+                "releaseId": { "minLength": 1 },
+                "cohortEpoch": { "minimum": 1 },
+                "inventoryVersion": { "minLength": 1 },
+                "inventorySha256": { "minLength": 64 }
+              }
+            }
+          }]
+        },
         "migration": {
           "type": "object",
           "additionalProperties": false,
@@ -81,10 +115,11 @@
     "serviceAccounts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["api", "worker", "migration", "preflight"],
+      "required": ["api", "worker", "cohort", "migration", "preflight"],
       "properties": {
         "api": { "$ref": "#/$defs/serviceAccount" },
         "worker": { "$ref": "#/$defs/serviceAccount" },
+        "cohort": { "$ref": "#/$defs/serviceAccount" },
         "migration": { "$ref": "#/$defs/serviceAccount" },
         "preflight": { "$ref": "#/$defs/serviceAccount" }
       }

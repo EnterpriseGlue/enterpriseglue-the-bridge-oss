@@ -1,3 +1,4 @@
+{{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
 {{- if .Values.workers.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -24,6 +25,7 @@ spec:
         {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
       annotations:
         enterpriseglue.io/rollout-revision: {{ .Values.rolloutRevision | quote }}
+        {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 8 }}
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "worker") }}
@@ -39,6 +41,7 @@ spec:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.applicationSecretName }} }
           env:
+            {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             - { name: EG_RUNTIME_ROLE, value: "worker" }
             - name: EG_DATABASE_STARTUP_MODE
               value: {{ ternary "verify" "apply" .Values.database.migration.enabled | quote }}

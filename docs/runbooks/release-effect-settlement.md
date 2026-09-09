@@ -31,7 +31,14 @@ do not participate in release settlement.
 
 1. Open the exact cohort with `PUT
    /api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}` and
-   `{"expectedRevision":0}` before admitting work on that release.
+   `{"expectedRevision":0}` before admitting work on that release. Managed
+   Helm deployments use the signed `database.releaseEffectCohort` hook instead:
+   the owner migration runs at weight `-20`, restricted schema/policy preflight
+   at `-10`, and the application-credential cohort opener at `0`, before API or
+   worker Deployments exist. The deployment must supply the exact release ID,
+   positive epoch, and inventory version/hash from its signed receipt. The hook
+   accepts only the matching `open` revision `1`; same-identity retry is
+   idempotent and any drift or prior close fails the rollout.
 2. Route/reassign tenants away from the retiring release. Assignment insert,
    movement, and same-epoch repair retry lock the assignment and share the
    target cohort's open-state fence. The retry resweeps every non-delivering

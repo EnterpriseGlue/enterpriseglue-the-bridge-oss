@@ -1,3 +1,4 @@
+{{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
 {{- if .Values.database.migration.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -46,6 +47,60 @@ spec:
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}
+{{- if .Values.database.releaseEffectCohort.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-open-effect-cohort-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cohort
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.database.releaseEffectCohort.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.database.releaseEffectCohort.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "cohort") | nindent 8 }}
+      annotations:
+        {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "cohort") }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "cohort") | nindent 6 }}
+      {{- if .Values.database.connectionProxy.enabled }}
+      initContainers:
+        {{- include "enterpriseglue-host.connectionProxy" (dict "root" . "nativeSidecar" true) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: open-effect-cohort
+          image: {{ include "enterpriseglue-host.backendImage" . | quote }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          command: ["node", "-e"]
+          args:
+            - "import('./dist/packages/shared/src/services/platform-admin/open-release-effect-cohort.js').then(({openConfiguredReleaseEffectCohort}) => openConfiguredReleaseEffectCohort())"
+          env:
+            {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
+          envFrom:
+            - configMapRef: { name: {{ .Values.database.configMapName }} }
+            - secretRef: { name: {{ .Values.database.applicationSecretName }} }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
       volumes:

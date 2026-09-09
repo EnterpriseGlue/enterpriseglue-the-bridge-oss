@@ -65,6 +65,11 @@ workers:
     targetCPUUtilizationPercentage: 70
 
 database:
+  # Explicit deployment profile. Managed cohort admission is rendered only for
+  # PostgreSQL pooled tenancy; blank preserves existing self-host behavior.
+  profile:
+    databaseType: ""
+    tenancyMode: ""
   # Non-secret application configuration (DATABASE_TYPE, host, database,
   # tenancy/RLS settings, public trust material, endpoint policy).
   configMapName: enterpriseglue-config
@@ -73,6 +78,16 @@ database:
   applicationSecretName: enterpriseglue-secrets
   migrationSecretName: enterpriseglue-migration-secrets
   preflightSecretName: enterpriseglue-preflight-secrets
+  releaseEffectCohort:
+    # Managed releases enable this narrow application-credential hook. It opens
+    # the configured durable cohort after migration/preflight and before workloads.
+    enabled: false
+    releaseId: ""
+    cohortEpoch: 0
+    inventoryVersion: ""
+    inventorySha256: ""
+    backoffLimit: 1
+    ttlSecondsAfterFinished: 3600
   migration:
     enabled: true
     # PostgreSQL-only optional post-migration ACL refresh; never sent to application/preflight.
@@ -98,6 +113,7 @@ database:
 serviceAccounts:
   api: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   worker: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  cohort: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   migration: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   preflight: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
 

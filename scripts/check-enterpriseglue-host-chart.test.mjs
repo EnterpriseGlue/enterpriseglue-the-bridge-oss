@@ -145,3 +145,103 @@ test('signed chart publishes its generic capability without provider-specific co
   const template = await readFile(path.join(chart, 'templates/backend-deployment.yaml'), 'utf8')
   assert.doesNotMatch(template, /accounts\.google|googleapis|cloud-signup-google|GOOGLE_CLIENT/)
 })
+
+test('managed pooled PostgreSQL opens the exact effect cohort after preflight and before workloads', async (t) => {
+  const inventorySha256 = 'd'.repeat(64)
+  const result = await render(t, {
+    database: {
+      profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      releaseEffectCohort: {
+        enabled: true,
+        releaseId: 'saas-preview-1',
+        cohortEpoch: 41,
+        inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1',
+        inventorySha256,
+      },
+    },
+    serviceAccounts: { cohort: { automountServiceAccountToken: true } },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  const rendered = documents(result.stdout)
+  const jobs = Object.fromEntries(['migration', 'preflight', 'cohort'].map((component) => [
+    component,
+    rendered.find((document) => document.includes('kind: Job') && document.includes(`app.kubernetes.io/component: ${component}`)),
+  ]))
+  assert.match(jobs.migration, /helm\.sh\/hook-weight: "-20"/)
+  assert.match(jobs.preflight, /helm\.sh\/hook-weight: "-10"/)
+  assert.match(jobs.cohort, /helm\.sh\/hook-weight: "0"/)
+  assert.match(jobs.cohort, /openConfiguredReleaseEffectCohort/)
+  assert.match(jobs.cohort, /secretRef: \{ name: enterpriseglue-secrets \}/)
+  assert.doesNotMatch(jobs.cohort, /enterpriseglue-migration-secrets|runMigrations|synchronize|repair/)
+  assert.match(jobs.cohort, /automountServiceAccountToken: false/)
+  const cohortServiceAccount = rendered.find((document) => document.includes('kind: ServiceAccount') &&
+    document.includes('app.kubernetes.io/component: cohort'))
+  assert.match(cohortServiceAccount, /helm\.sh\/hook-delete-policy: before-hook-creation/)
+  assert.doesNotMatch(cohortServiceAccount, /hook-succeeded/)
+
+  for (const component of ['cohort', 'api', 'worker']) {
+    const workload = component === 'cohort' ? jobs.cohort : rendered.find((document) =>
+      document.includes('kind: Deployment') && document.includes(`app.kubernetes.io/component: ${component}`))
+    assert.ok(workload, component)
+    for (const [name, value] of Object.entries({
+      EG_TENANT_PLACEMENT_RELEASE_ID: 'saas-preview-1',
+      EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH: '41',
+      EG_RELEASE_EFFECT_EXPECTED_INVENTORY_VERSION: 'release-effect-inventory.enterpriseglue.io/v1',
+      EG_RELEASE_EFFECT_EXPECTED_INVENTORY_SHA256: inventorySha256,
+    })) assert.match(workload, new RegExp(`name: ${name}\\n\\s+value: "${value}"`), `${component}:${name}`)
+    assert.match(workload, new RegExp(`enterpriseglue.io/release-effect-inventory-sha256: "${inventorySha256}"`))
+  }
+})
+
+for (const [label, database] of [
+  ['non-PostgreSQL profile', { profile: { databaseType: '', tenancyMode: 'pooled' } }],
+  ['single tenancy', { profile: { databaseType: 'postgres', tenancyMode: 'single' } }],
+  ['missing release', { releaseEffectCohort: { releaseId: '' } }],
+  ['zero epoch', { releaseEffectCohort: { cohortEpoch: 0 } }],
+  ['unknown inventory', { releaseEffectCohort: { inventoryVersion: '' } }],
+  ['malformed inventory hash', { releaseEffectCohort: { inventorySha256: '' } }],
+  ['disabled migration', { migration: { enabled: false } }],
+  ['disabled preflight', { preflight: { enabled: false } }],
+]) {
+  test(`effect cohort rejects ${label}`, async (t) => {
+    const base = {
+      profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      migration: { enabled: true },
+      preflight: { enabled: true },
+      releaseEffectCohort: {
+        enabled: true,
+        releaseId: 'saas-preview-1',
+        cohortEpoch: 41,
+        inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1',
+        inventorySha256: 'd'.repeat(64),
+      },
+    }
+    const result = await render(t, {
+      database: {
+        ...base,
+        ...database,
+        profile: { ...base.profile, ...database.profile },
+        migration: { ...base.migration, ...database.migration },
+        preflight: { ...base.preflight, ...database.preflight },
+        releaseEffectCohort: { ...base.releaseEffectCohort, ...database.releaseEffectCohort },
+      },
+    })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.stdout, '')
+  })
+}
+
+test('effect cohort rollout identity annotations cannot be overridden', async (t) => {
+  const result = await render(t, {
+    database: {
+      profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      releaseEffectCohort: {
+        enabled: true, releaseId: 'saas-preview-1', cohortEpoch: 41,
+        inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1', inventorySha256: 'd'.repeat(64),
+      },
+    },
+    podAnnotations: { 'enterpriseglue.io/release-effect-cohort-epoch': '42' },
+  })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /cannot be overridden/)
+})

@@ -2,6 +2,9 @@ EnterpriseGlue OSS host {{ .Chart.AppVersion }} rendered with immutable images.
 
 The migration and preflight hooks run before the application rollout. Application
 pods use EG_DATABASE_STARTUP_MODE={{ ternary "verify" "apply" .Values.database.migration.enabled }}.
+{{- if .Values.database.releaseEffectCohort.enabled }}
+The managed release-effect cohort opener runs after preflight and before API/worker creation for
+release {{ .Values.database.releaseEffectCohort.releaseId }} at epoch {{ .Values.database.releaseEffectCohort.cohortEpoch }}.
+{{- end }}
 Only the frontend Service is referenced by the optional Ingress; the backend and
 Plugin Manager remain cluster-internal.
-
