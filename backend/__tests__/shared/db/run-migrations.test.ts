@@ -7,6 +7,12 @@ import {
 } from '@enterpriseglue/shared/db/run-migrations.js';
 import { getDataSource, adapter } from '@enterpriseglue/shared/db/data-source.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { refreshPostgresRuntimeGrants } from '@enterpriseglue/shared/db/postgres-runtime-grants.js';
+import { AddPostgresTenantRls1700000000126 } from '@enterpriseglue/shared/db/migrations/1700000000126-add-postgres-tenant-rls.js';
+
+vi.mock('@enterpriseglue/shared/db/postgres-runtime-grants.js', () => ({
+  refreshPostgresRuntimeGrants: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -99,10 +105,78 @@ function createIntegrityRunner(options?: {
 }
 
 describe('runMigrations bootstrap behavior', () => {
+  it('rejects the optional runtime role on non-PostgreSQL before opening a connection', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    try {
+      await expect(runMigrations()).rejects.toThrow('only by PostgreSQL apply-mode');
+      expect(getDataSource).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('rejects runtime grant configuration in read-only verification mode', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
+    try {
+      await expect(runMigrations({ mode: 'verify' })).rejects.toThrow('only by PostgreSQL apply-mode');
+      expect(getDataSource).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     (adapter.getSchemaName as unknown as Mock).mockReturnValue('public');
     (adapter.getDatabaseType as unknown as Mock).mockReturnValue('oracle');
+  });
+
+  it('refreshes runtime grants only after pending migrations and critical schema repair, before releasing the runner', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
+    const rls = vi.spyOn(AddPostgresTenantRls1700000000126.prototype, 'up').mockResolvedValue(undefined);
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const integrityRunner = createIntegrityRunner({ workingFilesHasColumn: false, workingFilesHasIndex: false });
+    const dataSource = {
+      createQueryRunner: vi.fn().mockReturnValueOnce(bootstrapRunner).mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: { name: string }) => ({ tablePath: `main.${entity.name.toLowerCase()}` })),
+      synchronize: vi.fn(),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
+    try {
+      await runMigrations();
+      expect(dataSource.runMigrations).toHaveBeenCalledWith({ transaction: 'all' });
+      expect(integrityRunner.addColumn).toHaveBeenCalledOnce();
+      expect(integrityRunner.createIndex).toHaveBeenCalledOnce();
+      expect(refreshPostgresRuntimeGrants).toHaveBeenCalledExactlyOnceWith(integrityRunner, 'eg_runtime');
+      const migrationOrder = dataSource.runMigrations.mock.invocationCallOrder[0];
+      const repairOrder = integrityRunner.createIndex.mock.invocationCallOrder[0];
+      const grantOrder = vi.mocked(refreshPostgresRuntimeGrants).mock.invocationCallOrder[0];
+      expect(migrationOrder).toBeLessThan(integrityRunner.addColumn.mock.invocationCallOrder[0]);
+      expect(repairOrder).toBeLessThan(grantOrder);
+      expect(grantOrder).toBeLessThan(integrityRunner.release.mock.invocationCallOrder[0]);
+    } finally {
+      rls.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('never refreshes runtime grants when a pending migration fails', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const dataSource = {
+      createQueryRunner: vi.fn().mockReturnValueOnce(bootstrapRunner),
+      getMetadata: vi.fn((entity: { name: string }) => ({ tablePath: `main.${entity.name.toLowerCase()}` })),
+      synchronize: vi.fn(),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockRejectedValue(new Error('migration rejected')),
+    };
+    vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
+    try {
+      await expect(runMigrations()).rejects.toThrow('migration rejected');
+      expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
+      expect(dataSource.createQueryRunner).toHaveBeenCalledOnce();
+      expect(bootstrapRunner.release).toHaveBeenCalledOnce();
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it('verifies a ready schema without synchronizing or applying migrations', async () => {

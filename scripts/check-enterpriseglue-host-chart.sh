@@ -9,9 +9,10 @@ RENDERED_FILE="$(mktemp)"
 OPENSHIFT_FILE="$(mktemp)"
 COMBINED_FILE="$(mktemp)"
 PROXY_FILE="$(mktemp)"
+RUNTIME_ROLE_FILE="$(mktemp)"
 
 cleanup() {
-  rm -f "$RENDERED_FILE" "$OPENSHIFT_FILE" "$COMBINED_FILE" "$PROXY_FILE"
+  rm -f "$RENDERED_FILE" "$OPENSHIFT_FILE" "$COMBINED_FILE" "$PROXY_FILE" "$RUNTIME_ROLE_FILE"
 }
 trap cleanup EXIT
 
@@ -19,6 +20,19 @@ command -v helm >/dev/null 2>&1 || { echo "helm is required" >&2; exit 1; }
 
 helm lint "$CHART_DIR" -f "$VALUES_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" >"$RENDERED_FILE"
+helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
+  --set-string database.migration.runtimeRole=eg_runtime >"$RUNTIME_ROLE_FILE"
+test "$(grep -c 'name: EG_POSTGRES_RUNTIME_ROLE' "$RUNTIME_ROLE_FILE")" -eq 1
+if grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RENDERED_FILE"; then
+  echo "Unset runtime role must not change deployment environment" >&2
+  exit 1
+fi
+awk 'BEGIN { RS="---" } /EG_POSTGRES_RUNTIME_ROLE/ { if ($0 !~ /name: migrate/ || $0 !~ /value: "eg_runtime"/) exit 1 }' "$RUNTIME_ROLE_FILE"
+if helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
+  --set-string 'database.migration.runtimeRole=runtime;invalid' >/dev/null 2>&1; then
+  echo "Host chart accepted an invalid runtime role" >&2
+  exit 1
+fi
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
   --set platform=openshift >"$OPENSHIFT_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \

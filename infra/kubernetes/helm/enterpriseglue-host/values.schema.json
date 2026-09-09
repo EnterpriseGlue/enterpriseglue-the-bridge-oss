@@ -32,7 +32,17 @@
         "applicationSecretName": { "$ref": "#/$defs/name" },
         "migrationSecretName": { "$ref": "#/$defs/name" },
         "preflightSecretName": { "$ref": "#/$defs/name" },
-        "migration": { "$ref": "#/$defs/job" },
+        "migration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "backoffLimit", "ttlSecondsAfterFinished"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+            "runtimeRole": { "type": "string", "pattern": "^(|[a-z_][a-z0-9_]{0,62})$" }
+          }
+        },
         "preflight": { "$ref": "#/$defs/job" },
         "connectionProxy": { "$ref": "#/$defs/connectionProxy" }
       }

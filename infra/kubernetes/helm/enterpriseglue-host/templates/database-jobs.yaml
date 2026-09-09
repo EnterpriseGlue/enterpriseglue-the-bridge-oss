@@ -33,6 +33,11 @@ spec:
           command: ["node", "-e"]
           args:
             - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
+          {{- if .Values.database.migration.runtimeRole }}
+          env:
+            - name: EG_POSTGRES_RUNTIME_ROLE
+              value: {{ .Values.database.migration.runtimeRole | quote }}
+          {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.migrationSecretName }} }

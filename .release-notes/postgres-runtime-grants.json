@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "postgres-runtime-grants",
+  "type": "security",
+  "scope": "database",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Refresh least-privilege PostgreSQL application grants after owner-only migrations.",
+  "userImpact": ["Database migration and application identities can remain separate across upgrades."],
+  "upgrade": { "required": false, "instructions": ["Create a restricted runtime login separately, then configure the optional migration-only runtime role setting."] },
+  "configuration": ["database.migration.runtimeRole supplies EG_POSTGRES_RUNTIME_ROLE only to the migration job; unset preserves existing behavior."],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": ["PostgreSQL only: refresh current table CRUD grants, read-only migration ledger and bounded sequence permissions after migrations; future tables default to read-only until the next refresh."] },
+  "security": ["Reject privileged, owning, member, or schema-creating runtime roles; do not grant DDL, role administration, bypass-RLS, TRUNCATE, or sequence UPDATE."],
+  "documentation": ["infra/kubernetes/helm/enterpriseglue-host/README.md"],
+  "knownLimitations": ["This setting is PostgreSQL-only and does not create roles or change their credentials."],
+  "rollback": ["Unset the migration-only setting to stop grant refresh; existing grants remain and require explicit operator revocation if needed."],
+  "validation": ["PostgreSQL 16 real-role privilege integration, migration-runner unit tests, backend typecheck, raw SQL guard, Helm scope/lint and release-note preflight."],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.19.3", "newVersion": "0.19.4", "impact": "patch" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.17.3", "newVersion": "0.17.4", "impact": "patch" },
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.6", "newVersion": "0.17.7", "impact": "patch" }
+  ]
+}

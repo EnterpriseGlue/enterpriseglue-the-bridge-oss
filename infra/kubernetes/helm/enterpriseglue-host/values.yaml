@@ -62,6 +62,8 @@ database:
   preflightSecretName: enterpriseglue-preflight-secrets
   migration:
     enabled: true
+    # PostgreSQL-only optional post-migration ACL refresh; never sent to application/preflight.
+    runtimeRole: ""
     backoffLimit: 1
     ttlSecondsAfterFinished: 3600
   preflight:
