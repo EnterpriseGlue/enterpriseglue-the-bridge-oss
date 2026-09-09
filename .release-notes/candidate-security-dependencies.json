@@ -1,0 +1,31 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "candidate-security-dependencies",
+  "type": "security",
+  "scope": "runtime-and-plugin-toolchain",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Updates Nodemailer and the gRPC dependency embedded in Cosign to clear backend and plugin toolchain security vulnerabilities.",
+  "userImpact": ["Email delivery and plugin installation retain their existing configuration and interfaces."],
+  "upgrade": {"required": true, "instructions": ["Upgrade the backend and use plugin installer 0.2.9 and Plugin Manager 0.1.9 with their matching Helm charts."]},
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": [
+    "Nodemailer 9.1.1 fixes GHSA-2x7j-588g-ccc2 and the related address-validation and message-access-policy advisories.",
+    "Both Cosign binaries are rebuilt with google.golang.org/grpc 1.83.2 to fix CVE-2026-84445; the build verifies the embedded dependency version.",
+    "HIGH and CRITICAL image vulnerability gates remain enforced."
+  ],
+  "documentation": ["The toolchain container notices identify the patched gRPC build dependency."],
+  "knownLimitations": [],
+  "rollback": ["Restoring earlier images reintroduces the security findings; prefer a forward fix. No database rollback is needed."],
+  "validation": ["Email service regression tests, toolchain release policy, dependency notices, release-note preflight, and local production-image vulnerability scans."],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.19.1", "newVersion": "0.19.2", "impact": "patch"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.17.1", "newVersion": "0.17.2", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.4", "newVersion": "0.17.5", "impact": "patch"},
+    {"name": "@enterpriseglue/plugin-installer", "previousVersion": "0.2.8", "newVersion": "0.2.9", "impact": "patch"},
+    {"name": "@enterpriseglue/plugin-manager", "previousVersion": "0.1.8", "newVersion": "0.1.9", "impact": "patch"}
+  ]
+}

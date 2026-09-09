@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-08-27T21:32:09.702Z
+Generated at: 2026-09-09T05:41:45.208Z
 
 Generated from:
 - third_party_licenses.json
@@ -91,7 +91,7 @@ Generated from:
 | morgan | 1.11.0 | MIT | expressjs/morgan | backend, packages/backend-host |
 | mssql | 12.7.0 | MIT | git+https://github.com/tediousjs/node-mssql.git | backend, frontend, packages/shared, root |
 | mysql2 | 3.23.4 | MIT | git+https://github.com/sidorares/node-mysql2.git | backend, frontend, packages/shared, root |
-| nodemailer | 9.0.5 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/shared, root |
+| nodemailer | 9.1.1 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/shared, root |
 | octokit | 5.0.5 | MIT | github:octokit/octokit.js | backend, frontend, packages/shared, root |
 | oracledb | 6.10.0 | (Apache-2.0 OR UPL-1.0) | git://github.com/oracle/node-oracledb.git | backend, frontend, packages/shared, root |
 | pg | 8.23.0 | MIT | git://github.com/brianc/node-postgres.git | backend, frontend, packages/shared, root |

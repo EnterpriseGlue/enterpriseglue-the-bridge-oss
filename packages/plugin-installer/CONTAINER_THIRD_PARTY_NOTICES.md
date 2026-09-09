@@ -10,7 +10,8 @@ standalone command-line tools:
 
 ORAS and Cosign are reproducibly compiled from their immutable Go module
 releases with the patched Go toolchain and `golang.org/x/crypto` security floor pinned
-in this package's `Dockerfile`. The complete Apache License 2.0 text is
+in this package's `Dockerfile`. Cosign also pins `google.golang.org/grpc` to
+1.83.2 to address CVE-2026-84445. The complete Apache License 2.0 text is
 installed in the image at
 `/usr/share/licenses/enterpriseglue-plugin-installer/Apache-2.0.txt`.
 
