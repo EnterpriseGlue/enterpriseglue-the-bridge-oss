@@ -68,6 +68,21 @@ test('release workflow changes run release readiness without unrelated applicati
   assert.equal(result.run_plugin_checks, false);
 });
 
+test('candidate artifact helpers select release readiness without application or database fan-out', () => {
+  for (const path of ['scripts/release-candidate-artifacts.sh', 'scripts/release-candidate-workflow.test.mjs']) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.workflow_or_release, true);
+    assert.equal(result.unknown_high_risk, false);
+    assert.equal(result.run_release_readiness, true);
+    assert.equal(result.run_tests, false);
+    assert.equal(result.run_postgres, false);
+    assert.equal(result.run_database_matrix, false);
+    assert.equal(result.run_ci_images, false);
+  }
+  assert.equal(classifyChangedFiles(['scripts/unclassified-new-helper.sh']).unknown_high_risk, true);
+  assert.equal(classifyChangedFiles(['.release-notes/candidate-chart-identity.json']).run_release_readiness, false);
+});
+
 test('release hardening helpers do not fan out into unrelated heavyweight matrices', () => {
   const result = classifyChangedFiles([
     '.github/workflows/engine-compatibility.yml',

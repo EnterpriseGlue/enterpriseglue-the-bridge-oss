@@ -302,6 +302,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+            source scripts/release-candidate-artifacts.sh
+          fi
           REPRO_OUTPUT="$RUNNER_TEMP/enterpriseglue-plugin-charts-repro"
           mkdir -p "$CHART_OUTPUT" "$REPRO_OUTPUT"
           helm package infra/kubernetes/helm/enterpriseglue-plugin-runtime \
@@ -341,33 +344,39 @@ jobs:
             local repository="$2"
             local version="$3"
             local candidate_key="$4"
-            local existing
-            existing="$(oras resolve "$repository:$version" 2>/dev/null || true)"
+            local existing candidate_subject candidate_digest
+            if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+              candidate_subject="$(candidate_chart_subject "$CANDIDATE_RECEIPT" "$candidate_key")" || return 1
+              candidate_digest="${candidate_subject##*@}"
+              candidate_compare_chart "$archive" "${candidate_subject%@*}" "$candidate_digest" || return 1
+            fi
+            if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+              existing="$(candidate_resolve_optional "$repository:$version")" || return 1
+            else
+              existing="$(oras resolve "$repository:$version" 2>/dev/null || true)"
+            fi
             if [[ -z "$existing" ]]; then
               if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
-                local candidate_subject candidate_digest
-                candidate_subject="$(jq -er --arg key "$candidate_key" '.subjects[$key].subject' "$CANDIDATE_RECEIPT")"
-                candidate_digest="${candidate_subject##*@}"
-                oras cp -r "$candidate_subject" "$repository:$version"
-                [[ "$(oras resolve "$repository:$version")" == "$candidate_digest" ]]
+                oras cp -r "$candidate_subject" "$repository:$version" || return 1
+                [[ "$(oras resolve "$repository:$version")" == "$candidate_digest" ]] || return 1
               else
-                helm push "$archive" oci://ghcr.io/enterpriseglue/charts
+                helm push "$archive" oci://ghcr.io/enterpriseglue/charts || return 1
               fi
-              existing="$(oras resolve "$repository:$version")"
+              existing="$(oras resolve "$repository:$version")" || return 1
             fi
             local layer pulled
             layer="$(
               oras manifest fetch "$repository@$existing" |
                 jq -er '[.layers[] | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip") | .digest] | if length == 1 then .[0] else error("expected one chart layer") end'
-            )"
+            )" || return 1
             pulled="$RUNNER_TEMP/existing-$(basename "$archive")"
-            oras blob fetch --output "$pulled" "$repository@$layer"
+            oras blob fetch --output "$pulled" "$repository@$layer" || return 1
             node scripts/helm-chart-archive.mjs compare "$archive" "$pulled" || {
                 echo "Published immutable chart version $repository:$version differs from source" >&2
-                exit 1
+                return 1
               }
             if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
-              [[ "$existing" == "$(jq -er --arg key "$candidate_key" '.subjects[$key].subject' "$CANDIDATE_RECEIPT" | sed 's/.*@//')" ]]
+              [[ "$existing" == "$candidate_digest" ]] || return 1
             fi
           }
           publish_or_verify_chart "$RUNTIME_ARCHIVE" "$RUNTIME_CHART_REPOSITORY" "$TOOLCHAIN_VERSION" runtimeChart

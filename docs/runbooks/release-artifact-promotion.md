@@ -77,6 +77,27 @@ The candidate repository and `candidate-vX.Y.Z-<commit>` image tags are
 staging identities. Consumers must use released semantic tags or digest
 references from a published distribution lock.
 
+Candidate Helm charts use
+`ghcr.io/enterpriseglue/release-candidates/charts/<full-source-revision>/<chart>:<chart-version>`.
+The full revision is the verified merge-group source, not the protected checkout
+or an abbreviated SHA. Different candidates can propose the same unpublished
+semantic chart version without sharing a mutable staging tag. Existing candidate
+payloads must compare canonically before reuse; a mismatch fails before signing.
+An unchanged already-public semantic version is compared and copied by its exact
+public digest into the candidate namespace, preserving digest identity despite
+archive timestamp differences. A changed public payload requires a new version.
+After successful comparison the signed bundle retains the exact fetched chart
+archive bytes, so retries cannot drift from the referenced OCI chart layer.
+Registry authentication, transport, malformed metadata, comparison, or transfer
+errors do not authorize a push or a successful candidate reference.
+
+Protected host and plugin chart promotion require the known chart name under
+the signed receipt's exact `sourceRevision` namespace and compare the referenced
+OCI archive to the candidate archive before copying or reusing public tags. A
+different source, chart name, registry, or old unscoped staging reference is
+rejected. Public chart repositories, semantic versions, and candidate-to-public
+digest equality are unchanged.
+
 Backend and frontend candidate images are each split into amd64 and arm64 jobs.
 The four jobs use separate registry-backed BuildKit caches and publish temporary
 architecture digests. Only after every job succeeds does the reusable workflow
@@ -124,6 +145,10 @@ move or recreate the tag.
   run or let the merge queue recreate the candidate. Do not manually dispatch
   an unmerged merge-group SHA. Candidate image, chart, and bundle tags are
   immutable: an existing payload is compared and reused.
+  Retry only after classifying the actual failure: a transient signing failure
+  does not make an earlier chart comparison mismatch safe. A conflicting
+  candidate requires a reviewed source fix and newly qualified queue candidate;
+  never overwrite the existing candidate or public semantic tag.
 - Manual `Release Candidate Stage` recovery accepts only the current protected
   `main` commit and its matching `release_tag`. This supports a release commit
   that has already reached `main` without allowing a privileged workflow to
@@ -156,6 +181,13 @@ recovery workflows retain their legacy build-and-compare or immutable-tag
 verification path for source commits created before this candidate workflow
 existed. New release commits fail closed when their signed candidate receipt
 is absent or does not match.
+
+Strict source-scoped chart consumers do not accept an older signed candidate's
+unscoped chart references. Historical candidate recovery must use the matching
+historical protected release workflow/source; do not relabel an old receipt or
+copy its chart into a new candidate namespace as a workaround. The explicit
+pre-candidate legacy recovery path remains separate and does not require helper
+scripts that were absent from those historical checkouts.
 
 An explicit `security_rebuild=true` Docker Images dispatch remains available
 for a non-release, commit-tagged rebuild. It cannot be combined with semantic

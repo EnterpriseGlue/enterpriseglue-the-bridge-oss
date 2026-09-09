@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { classifyChangedFiles } from './ci-change-classifier.mjs'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 
 const read = (relative) => readFile(new URL(relative, import.meta.url), 'utf8')
+const artifactHelper = await read('./release-candidate-artifacts.sh')
 
 const [
   stage,
@@ -107,8 +108,9 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /--volume "\$GITHUB_WORKSPACE\/\.trivyignore:\/workspace\/\.trivyignore:ro"/)
   assert.match(stage, /--ignorefile \/workspace\/\.trivyignore/)
   assert.match(stage, /plugin-installer:\$installer_version-\$SOURCE_REF/)
-  assert.match(stage, /release-candidates\/charts\/enterpriseglue-host/)
-  assert.match(stage, /helm-chart-archive\.mjs compare "\$archive" "\$pulled" >&2/)
+  assert.match(stage, /source scripts\/release-candidate-artifacts\.sh/)
+  assert.match(artifactHelper, /release-candidates\/charts\/\$SOURCE_REF\/\$chart/)
+  assert.match(artifactHelper, /helm-chart-archive\.mjs compare "\$archive" "\$pulled" >&2 \|\| return 1/)
   assert.match(stage, /release-candidate-receipt\.mjs create/)
   assert.match(stage, /cosign verify/)
   assert.match(stage, /results\.every\(\(result\) => result === 'success'\)/)
@@ -230,11 +232,191 @@ test('candidate pipeline changes always re-run release readiness', () => {
   for (const changedPath of [
     '.github/workflows/release-candidate-stage.yml',
     'scripts/release-candidate-receipt.mjs',
+    'scripts/release-candidate-artifacts.sh',
     'scripts/fetch-release-candidate.sh',
   ]) {
     const classification = classifyChangedFiles([changedPath])
     assert.equal(classification.workflow_or_release, true, changedPath)
     assert.equal(classification.run_release_readiness, true, changedPath)
+  }
+})
+
+test('chart consumers enforce source-bound subjects before either copying or reusing public tags', () => {
+  for (const [workflow, marker] of [[hostChart, '      - name: Publish or verify immutable chart'], [toolchain, '      - name: Package and publish the fixed Helm charts']]) {
+    const step = workflow.slice(workflow.indexOf(marker))
+    assert.match(step, /source scripts\/release-candidate-artifacts\.sh/)
+    assert.ok(step.indexOf('candidate_chart_subject') < step.indexOf('candidate_resolve_optional'))
+    assert.ok(step.indexOf('candidate_compare_chart') < step.indexOf('oras cp -r'))
+  }
+})
+
+// Execute the actual sourced functions through Bash command substitutions, with
+// only registry/build transports replaced. A real canonical archive comparison
+// ensures the regression does not merely assert a changed workflow string.
+const chartSource = 'a'.repeat(40)
+const chartDigest = `sha256:${'b'.repeat(64)}`
+const publicChartDigest = `sha256:${'c'.repeat(64)}`
+const chartName = 'enterpriseglue-host'
+const candidateChartRepository = `ghcr.io/enterpriseglue/release-candidates/charts/${chartSource}/${chartName}`
+
+async function artifactHarness(t, { mode = 'candidate', failure = '', action = 'chart', source = chartSource } = {}) {
+  const directory = await mkdtemp(path.join(tmpdir(), 'eg-candidate-chart-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const chart = path.join(directory, chartName)
+  await mkdir(chart)
+  await writeFile(path.join(chart, 'Chart.yaml'), 'name: enterpriseglue-host\nversion: 0.1.20\n')
+  await writeFile(path.join(chart, 'values.yaml'), 'runtimeRole: eg_shard_runtime\n')
+  const archive = path.join(directory, 'candidate.tgz')
+  execFileSync('tar', ['-czf', archive, '-C', directory, chartName])
+  await writeFile(path.join(chart, 'values.yaml'), failure === 'compare' ? 'oldPayload: true\n' : 'runtimeRole: eg_shard_runtime\n')
+  // Semantically equivalent, byte-distinct archive metadata models a retry.
+  await utimes(path.join(chart, 'values.yaml'), new Date('2020-01-01'), new Date('2020-01-01'))
+  const stored = path.join(directory, 'stored.tgz')
+  execFileSync('tar', ['-czf', stored, '-C', directory, chartName])
+  const log = path.join(directory, 'calls')
+  await writeFile(log, '')
+  const shell = `
+set -euo pipefail
+source "$HELPER"
+oras() {
+  printf 'oras %s\\n' "$*" >> "$CALLS"
+  case "$1" in
+    resolve)
+      if [[ "$FAILURE" == lookup ]]; then echo 'unauthorized: access denied' >&2; return 1; fi
+      if [[ "$FAILURE" == forbidden ]]; then echo 'Error response from registry: 403 Forbidden' >&2; return 1; fi
+      if [[ "$FAILURE" == network ]]; then echo 'read: connection reset by peer' >&2; return 1; fi
+      if [[ "$FAILURE" == credential ]]; then echo 'credential helper file not found' >&2; return 1; fi
+      if [[ "$FAILURE" == mixed ]]; then printf 'network error\\nError response from registry: failed to resolve digest: %s: not found\\n' "$2" >&2; return 1; fi
+      if [[ "$FAILURE" == wrong-reference ]]; then echo 'Error response from registry: failed to resolve digest: another: not found' >&2; return 1; fi
+      if [[ -f "$STATE" ]]; then
+        [[ "$FAILURE" != final-resolve ]] || return 1
+        if [[ "$FAILURE" == invalid-digest ]]; then printf invalid; elif [[ "$MODE" == public ]]; then printf '%s' "$PUBLIC_DIGEST"; else printf '%s' "$DIGEST"; fi
+      elif [[ "$MODE" == candidate && "$2" == *release-candidates* ]]; then
+        if [[ "$FAILURE" == invalid-digest ]]; then printf invalid; else printf '%s' "$DIGEST"; fi
+      elif [[ "$MODE" == public && "$2" != *release-candidates* ]]; then printf '%s' "$PUBLIC_DIGEST"
+      else echo "Error response from registry: failed to resolve digest: $2: not found" >&2; return 1; fi ;;
+    manifest)
+      [[ "$FAILURE" != manifest ]] || return 1
+      if [[ "$FAILURE" == malformed-manifest ]]; then printf '{}'; else printf '{"layers":[{"mediaType":"application/vnd.cncf.helm.chart.content.v1.tar+gzip","digest":"%s"}]}' "$DIGEST"; fi ;;
+    blob) [[ "$FAILURE" != blob ]] || return 1; cp "$STORED" "$4" ;;
+    cp) [[ "$FAILURE" != copy ]] || return 1; touch "$STATE" ;;
+    *) return 1 ;;
+  esac
+}
+helm() { printf 'helm %s\\n' "$*" >> "$CALLS"; [[ "$FAILURE" != push ]] || return 1; touch "$STATE"; }
+docker() { printf 'docker %s\\n' "$*" >> "$CALLS"; [[ "$FAILURE" != build ]] || return 1; touch "$STATE"; printf 'build diagnostic'; }
+node() { shift; "$REAL_NODE" "$COMPARATOR" "$@"; }
+if [[ "$ACTION" == image ]]; then
+  subject="$(stage_image "ghcr.io/enterpriseglue/plugin-installer:0.2.9-$SOURCE_REF" Dockerfile 0.2.9)"
+else
+  subject="$(stage_chart "$ARCHIVE" enterpriseglue-host 0.1.20)"
+fi
+printf '%s' "$subject"
+printf 'sign\\n' >> "$CALLS"
+`
+  const result = spawnSync('bash', ['-c', shell], {
+    encoding: 'utf8',
+    env: { ...process.env, HELPER: new URL('./release-candidate-artifacts.sh', import.meta.url).pathname,
+      COMPARATOR: new URL('./helm-chart-archive.mjs', import.meta.url).pathname, REAL_NODE: process.execPath,
+      RUNNER_TEMP: directory, SOURCE_REF: source, MODE: mode, FAILURE: failure, ACTION: action,
+      DIGEST: chartDigest, PUBLIC_DIGEST: publicChartDigest, CALLS: log, STATE: path.join(directory, 'written'),
+      ARCHIVE: archive, STORED: stored, GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'EnterpriseGlue/enterpriseglue-the-bridge-oss' },
+  })
+  return { ...result, calls: await readFile(log, 'utf8'), archive: await readFile(archive), stored: await readFile(stored) }
+}
+
+for (const mode of ['candidate', 'public', 'new']) {
+  test(`actual chart staging safely handles ${mode} identity without public writes`, async (t) => {
+    const result = await artifactHarness(t, { mode })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.stdout, `${candidateChartRepository}@${mode === 'public' ? publicChartDigest : chartDigest}`)
+    assert.deepEqual(result.archive, result.stored, 'retained bundle chart must match exact OCI layer bytes')
+    assert.match(result.calls, /sign\n$/)
+    if (mode === 'candidate') assert.doesNotMatch(result.calls, /helm |oras cp/)
+    if (mode === 'public') assert.match(result.calls, new RegExp(`oras cp -r ghcr.io/enterpriseglue/charts/${chartName}@${publicChartDigest} ${candidateChartRepository}:0.1.20`))
+    if (mode === 'new') assert.match(result.calls, new RegExp(`helm push .* oci://ghcr.io/enterpriseglue/release-candidates/charts/${chartSource}`))
+  })
+}
+
+for (const [mode, failures] of [
+  ['candidate', ['compare', 'manifest', 'malformed-manifest', 'blob', 'invalid-digest', 'lookup', 'forbidden', 'network', 'credential', 'mixed', 'wrong-reference']],
+  ['public', ['compare', 'copy', 'final-resolve']],
+  ['new', ['push', 'final-resolve', 'invalid-digest']],
+]) {
+  for (const failure of failures) test(`actual chart staging rejects ${mode}/${failure} before signing`, async (t) => {
+    const result = await artifactHarness(t, { mode, failure })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.stdout, '')
+    assert.doesNotMatch(result.calls, /sign/)
+    if (['compare', 'manifest', 'malformed-manifest', 'blob', 'lookup', 'forbidden', 'network', 'credential', 'mixed', 'wrong-reference'].includes(failure)) {
+      assert.doesNotMatch(result.calls, /helm |oras cp/)
+    }
+  })
+}
+
+test('new candidate source uses a different namespace for the same semantic chart version', async (t) => {
+  const source = 'd'.repeat(40)
+  const result = await artifactHarness(t, { source, mode: 'new' })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stdout, `ghcr.io/enterpriseglue/release-candidates/charts/${source}/${chartName}@${chartDigest}`)
+  assert.doesNotMatch(result.calls, new RegExp(chartSource))
+})
+
+for (const failure of ['build', 'final-resolve', 'invalid-digest', 'lookup', 'credential']) {
+  test(`actual image command substitution rejects ${failure} before signing`, async (t) => {
+    const result = await artifactHarness(t, { action: 'image', mode: 'new', failure })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.stdout, '')
+    assert.doesNotMatch(result.calls, /sign/)
+  })
+}
+
+test('actual image command substitution emits only the immutable digest after a build', async (t) => {
+  const result = await artifactHarness(t, { action: 'image', mode: 'new' })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stdout, `ghcr.io/enterpriseglue/plugin-installer@${chartDigest}`)
+})
+
+test('actual consumer subject validation rejects wrong source, chart, registry and legacy namespace', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'eg-candidate-subject-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const receipt = path.join(directory, 'receipt.json')
+  const charts = { hostChart: 'enterpriseglue-host', runtimeChart: 'enterpriseglue-plugin-runtime', installerRbacChart: 'enterpriseglue-plugin-installer-rbac', managerChart: 'enterpriseglue-plugin-manager' }
+  for (const [key, chart] of Object.entries(charts)) {
+    const valid = `ghcr.io/enterpriseglue/release-candidates/charts/${chartSource}/${chart}@${chartDigest}`
+    for (const subject of [valid, valid.replace(chartSource, 'd'.repeat(40)), valid.replace(chart, 'unexpected-chart'), valid.replace('ghcr.io', 'attacker.invalid'), valid.replace(`${chartSource}/`, ''), valid.replace(chartDigest, 'not-a-digest')]) {
+      await writeFile(receipt, JSON.stringify({ sourceRevision: chartSource, subjects: { [key]: { subject } } }))
+      const result = spawnSync('bash', ['-c', 'set -euo pipefail; source "$1"; subject="$(candidate_chart_subject "$2" "$3")"; printf "%s" "$subject"', 'test', new URL('./release-candidate-artifacts.sh', import.meta.url).pathname, receipt, key], { encoding: 'utf8' })
+      assert.equal(result.status === 0, subject === valid, subject)
+      assert.equal(result.stdout, subject === valid ? valid : '')
+    }
+  }
+})
+
+test('actual plugin promotion function propagates identity, comparison and lookup failures through substitution', async (t) => {
+  const body = toolchain.match(/          publish_or_verify_chart\(\) \{([\s\S]*?)\n          \}/)
+  assert.ok(body, 'protected workflow must contain the promotion function under test')
+  const directory = await mkdtemp(path.join(tmpdir(), 'eg-chart-promotion-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const calls = path.join(directory, 'calls')
+  for (const failure of ['subject', 'compare', 'lookup', 'copy']) {
+    await writeFile(calls, '')
+    const result = spawnSync('bash', ['-c', `
+set -euo pipefail
+candidate_chart_subject() { [[ "$FAILURE" != subject ]] || return 1; printf '%s' "$SUBJECT"; }
+candidate_compare_chart() { [[ "$FAILURE" != compare ]] || return 1; }
+candidate_resolve_optional() { [[ "$FAILURE" != lookup ]] || return 1; }
+oras() { printf '%s\\n' "$*" >> "$CALLS"; return 1; }
+publish_or_verify_chart() {${body[1]}
+}
+result="$(publish_or_verify_chart candidate.tgz ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-runtime 0.2.9 runtimeChart)"
+printf 'unsafe-success'
+`], { encoding: 'utf8', env: { ...process.env, FAILURE: failure, CALLS: calls, CANDIDATE_RECEIPT: 'receipt.json', SUBJECT: `${candidateChartRepository}@${chartDigest}` } })
+    assert.notEqual(result.status, 0, failure)
+    assert.equal(result.stdout, '', failure)
+    const actualCalls = await readFile(calls, 'utf8')
+    if (failure !== 'copy') assert.equal(actualCalls, '', failure)
+    else assert.match(actualCalls, /^cp -r /)
   }
 })
 
