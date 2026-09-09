@@ -73,14 +73,47 @@ async function writer(): Promise<{ runner: QueryRunner; pid: number }> {
   const runner = runtime.createQueryRunner(); await runner.connect(); await runner.startTransaction();
   const [{ pid }] = await runner.query('SELECT pg_backend_pid() AS pid'); return { runner, pid };
 }
+async function runtimePidsBlockedBy(pid: number): Promise<number[]> {
+  const rows = await admin.query(
+    'SELECT pid FROM pg_stat_activity WHERE usename=$1 AND pid<>$2 AND $2=ANY(pg_blocking_pids(pid)) ORDER BY pid',
+    [runtimeName, pid],
+  );
+  return rows.map((row: { pid: number | string }) => Number(row.pid));
+}
+async function runtimeWaitChainSize(rootPid: number): Promise<number> {
+  const rows = await admin.query(
+    'SELECT pid, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE usename=$1 AND pid<>$2',
+    [runtimeName, rootPid],
+  ) as Array<{ pid: number | string; blockers: Array<number | string> }>;
+  const reachable = new Set([rootPid]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      const pid = Number(row.pid);
+      if (!reachable.has(pid) && row.blockers.some((blocker) => reachable.has(Number(blocker)))) {
+        reachable.add(pid);
+        changed = true;
+      }
+    }
+  }
+  return reachable.size - 1;
+}
 async function awaitBlockedBy(pid: number, minimumWaiters = 1): Promise<void> {
   const deadline = Date.now() + 3000;
   while (Date.now() < deadline) {
-    const rows = await admin.query('SELECT pid FROM pg_stat_activity WHERE usename=$1 AND pid<>$2 AND $2=ANY(pg_blocking_pids(pid))', [runtimeName, pid]);
-    if (rows.length >= minimumWaiters) return;
+    if ((await runtimePidsBlockedBy(pid)).length >= minimumWaiters) return;
     await delay(10);
   }
   throw Error('Expected a real PostgreSQL row-lock waiter');
+}
+async function awaitBlockedChain(rootPid: number, minimumWaiters: number): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    if (await runtimeWaitChainSize(rootPid) >= minimumWaiters) return;
+    await delay(10);
+  }
+  throw Error('Expected a real PostgreSQL row-lock wait chain');
 }
 async function verifyPolicies() {
   const runner = runtime.createQueryRunner(); try { return await verifyPostgresTenantRls(runner); } finally { await runner.release(); }
@@ -437,21 +470,35 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       { tenantRef: tenantIds[1] }, { nextRunAt: 9_000 },
     );
 
-    const blocker = await writer();
+    const blockerA = await writer();
+    const blockerB = await writer();
     const assignment = new TenantReleaseWorkAssignmentService(async () => runtime, () => newBinding);
     let eventClaim: Promise<unknown> | undefined;
     let scheduleClaim: Promise<unknown> | undefined;
     try {
-      await blocker.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
+      await blockerA.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
+        where: { tenantRef: tenantIds[0] }, lock: { mode: 'pessimistic_write' },
+      });
+      await blockerB.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
         where: { tenantRef: tenantIds[1] }, lock: { mode: 'pessimistic_write' },
       });
       eventClaim = eventStore.claimDue({ workerRef: 'event-batch', limit: 2, leaseSeconds: 30, now: 10_000 });
       scheduleClaim = scheduleStore.claimDue({ workerRef: 'schedule-batch', limit: 2, leaseSeconds: 30, now: 10_000 });
-      await awaitBlockedBy(blocker.pid);
+      // Although the event preview orders B→A and the schedule preview A→B,
+      // both managed batches must try the sorted A assignment first. The old
+      // per-candidate implementation instead leaves one waiter on each blocker
+      // and can form the cross-batch cycle after both blockers are released.
+      // PostgreSQL queues the second tuple-lock waiter behind the first, so
+      // inspect the complete blocker chain rooted at A rather than only its
+      // direct blockers.
+      await awaitBlockedChain(blockerA.pid, 2);
+      expect(await runtimePidsBlockedBy(blockerB.pid)).toEqual([]);
+      await blockerA.runner.commitTransaction();
+      await awaitBlockedBy(blockerB.pid);
       await expect(assignment.assign({
         tenantId: tenantIds[1], releaseId: newReleaseId, assignmentEpoch: 2,
-      }, blocker.runner.manager)).resolves.toMatchObject({ updatedEvents: 1, updatedSchedules: 1 });
-      await blocker.runner.commitTransaction();
+      }, blockerB.runner.manager)).resolves.toMatchObject({ updatedEvents: 1, updatedSchedules: 1 });
+      await blockerB.runner.commitTransaction();
 
       await expect(Promise.all([eventClaim, scheduleClaim])).resolves.toEqual([
         [expect.objectContaining({ deliveryId: eventA.deliveryId, attempt: 2, leaseOwner: 'event-batch' })],
@@ -468,8 +515,10 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       expect(await runtime.getRepository(PluginScheduledJob).findOneByOrFail({ tenantRef: tenantIds[0] }))
         .toMatchObject({ releaseId: oldReleaseId, status: 'retry_wait', reasonCode: 'lease_expired' });
     } finally {
-      if (blocker.runner.isTransactionActive) await blocker.runner.rollbackTransaction();
-      await blocker.runner.release();
+      if (blockerA.runner.isTransactionActive) await blockerA.runner.rollbackTransaction();
+      if (blockerB.runner.isTransactionActive) await blockerB.runner.rollbackTransaction();
+      await blockerA.runner.release();
+      await blockerB.runner.release();
       await Promise.allSettled([eventClaim, scheduleClaim].filter(Boolean) as Promise<unknown>[]);
     }
   }, 45000);
