@@ -20,6 +20,7 @@ import {
   TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
+import { assertReleaseEffectAdmission } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
 
 import {
   findPluginRowForUpdateV1,
@@ -292,7 +293,6 @@ implements PluginEventDeliveryStoreV1 {
             dataSource,
             async (manager) => {
             const repository = manager.getRepository(PluginEventDelivery);
-            const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
             const existing = await repository.findOne({
               where: { deliveryId },
             });
@@ -308,6 +308,11 @@ implements PluginEventDeliveryStoreV1 {
                 outcome: 'duplicate' as const,
               };
             }
+            const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
+            await assertReleaseEffectAdmission(manager, {
+              sourceId: 'plugin_event_delivery',
+              releaseId: releaseAssignment?.releaseId ?? null,
+            });
 
             const queueStateRepository =
               manager.getRepository(PluginEventQueueState);
@@ -703,6 +708,10 @@ implements PluginEventDeliveryStoreV1 {
       ) {
         throw new Error('plugin_event_requeue_conflict');
       }
+      await assertReleaseEffectAdmission(manager, {
+        sourceId: 'plugin_event_delivery',
+        releaseId: record.releaseId,
+      });
       await repository.update(
         { id: record.id, status: 'dead_letter' },
         {

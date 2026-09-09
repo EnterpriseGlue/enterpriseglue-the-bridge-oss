@@ -2,8 +2,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 import { applyPostgresTenantPolicies } from '../postgres-tenant-policy.js';
 
 /** Upgrade requires draining/replacing every older shared-schema consumer. */
-export class EnforceExplicitPostgresContext1700000000131 implements MigrationInterface {
-  name = 'EnforceExplicitPostgresContext1700000000131';
+export class EnforceExplicitPostgresContext1700000000132 implements MigrationInterface {
+  name = 'EnforceExplicitPostgresContext1700000000132';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await applyPostgresTenantPolicies(queryRunner);

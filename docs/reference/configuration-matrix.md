@@ -41,6 +41,7 @@ in `engine-tenant-mappings.json`. See
 | EG_TENANT_PLACEMENT_V2_AUDIENCE | Required for cloud-required pooled mode | unset | Exact shard assertion audience and workload receipt audience. |
 | EG_TENANT_PLACEMENT_V2_SHARD_ID | Required for cloud-required pooled mode | unset | Canonical shard identity; must match the durable tenant placement key. |
 | EG_TENANT_PLACEMENT_RELEASE_ID | Required for managed mixed-release shards | unset | Exact immutable SaaS release identity accepted by placement v3. Omit it for ordinary self-hosted single or pooled deployments. |
+| EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH | Optional managed-release settlement foundation | unset | Positive durable effect-admission epoch for the exact host release. Omission or incomplete source coverage keeps shutdown verification ineligible. |
 | EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS | No | 5 | Clock tolerance for `iat`, `nbf`, and `exp`; maximum 60. |
 | EG_TENANCY_CLOUD_REQUIRED | No | false | Requires placement v2, signed workload receipts, forced RLS, the tenant secret broker, and signed tenant application eligibility without changing the self-hosted default. |
 | EG_TENANT_CLOUD_IDENTITY_AUDIENCE | Required with a managed release ID | unset | Exact Cloud control-plane audience for the host-issued, short-lived tenant administrator identity assertion. |

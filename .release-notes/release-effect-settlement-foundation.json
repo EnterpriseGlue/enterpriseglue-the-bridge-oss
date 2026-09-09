@@ -1,0 +1,68 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-effect-settlement-foundation",
+  "type": "feature",
+  "scope": "managed-release-runtime",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds a durable, revision-fenced release effect cohort and a fail-closed inventory for proving whether retained API and worker effects have settled.",
+  "userImpact": [],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Run TypeORM migration AddReleaseEffectCohorts1700000000131 before enabling the release effect cohort API.",
+      "Do not use a settlement result to terminate retained API or worker replicas until the response reports complete inventory coverage and settled=true."
+    ]
+  },
+  "configuration": [
+    "EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH optionally binds a managed release process to one positive effect-admission epoch; omission keeps effect admission compatible but makes shutdown settlement ineligible."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds release-controller-only open, close, read, and verify endpoints below /api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}."
+    ]
+  },
+  "database": {
+    "migrations": ["1700000000131-add-release-effect-cohorts"],
+    "rollbackSupported": true,
+    "notes": [
+      "The new deployment-global cohort table is managed through TypeORM and portable migration column helpers on every supported adapter.",
+      "PostgreSQL pooled-tenancy qualification verifies that tenant RLS-hidden queues remain explicitly uncovered instead of being mistaken for an empty global drain."
+    ]
+  },
+  "security": [
+    "The existing timing-safe private release-controller credential protects every cohort operation.",
+    "Opening and closing admission uses conditional revision fences, and verification cannot succeed while any inventoried source lacks authoritative coverage.",
+    "No broad PostgreSQL bypass, direct tenant SQL, inferred receipt, or shortened durable-record retention is introduced."
+  ],
+  "documentation": [
+    "The managed release effect settlement runbook documents the protocol, inventory, crash and retry semantics, database behavior, and fail-closed limitations."
+  ],
+  "knownLimitations": [
+    "This foundational packet authoritatively covers durable plugin event and fixed-schedule work only; engine mutations, Git writes, email delivery, tenant secret broker mutations, plugin gateway calls, configuration reconciliation, and other enumerated sources keep the overall settlement result fail-closed until later packets instrument them.",
+    "A cohort epoch must be configured before effects are admitted; a cohort opened after untracked work began is not eligible for shutdown proof. The epoch is immutable for a release identity because covered work rows are release-bound rather than epoch-tagged."
+  ],
+  "rollback": [
+    "Stop using the cohort endpoints, unset EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH, deploy the previous host packages, then run the migration down only after confirming no operator depends on retained cohort history."
+  ],
+  "validation": [
+    "Run focused cohort service, schema, route, plugin event, and plugin schedule tests, plus shared and backend-host typechecks.",
+    "Run PostgreSQL forced-RLS qualification and the supported database migration matrix at the integrated milestone."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.20.0",
+      "newVersion": "0.21.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.18.0",
+      "newVersion": "0.19.0",
+      "impact": "minor"
+    }
+  ]
+}

@@ -404,6 +404,7 @@ organization-name fallback.
 | `EG_TENANT_PLACEMENT_V2_AUDIENCE` | unset | Exact shard and receipt audience. |
 | `EG_TENANT_PLACEMENT_V2_SHARD_ID` | unset | Canonical shard identity. |
 | `EG_TENANT_PLACEMENT_RELEASE_ID` | unset | Exact managed release accepted by placement v3; self-hosted deployments leave it unset. |
+| `EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH` | unset | Positive durable effect-admission epoch for the exact managed release; the settlement inventory remains fail-closed while any mutating source is uncovered. |
 | `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS` | `5` | Bounded clock tolerance, maximum 60 seconds. |
 | `EG_TENANCY_CLOUD_REQUIRED` | `false` | Fail startup unless placement v2, signed receipts, forced RLS, tenant secret broker, and signed tenant application eligibility settings are complete; direct shard-local platform tenant mutations are disabled. |
 | `EG_TENANT_CLOUD_IDENTITY_AUDIENCE` | unset | Exact Cloud API audience for short-lived tenant identity; required with a managed release ID. |

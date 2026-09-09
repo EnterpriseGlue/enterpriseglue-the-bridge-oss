@@ -149,7 +149,7 @@ ordinary runtime verification cannot accept it.
 
 ## Coordinated upgrade and rollback
 
-Migration `1700000000131` enforces the explicit-context policy. All API, worker,
+Migration `1700000000132` enforces the explicit-context policy. All API, worker,
 and retained-release consumers of the shared schema must be upgraded or drained
 together before enforcement. An old application does not install the new
 context, and must not be left serving traffic or running startup migration

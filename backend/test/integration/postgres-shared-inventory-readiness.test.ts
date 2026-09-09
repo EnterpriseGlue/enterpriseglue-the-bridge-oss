@@ -24,7 +24,9 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { ConfigBundleRuntimeReconciliationTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleRuntimeReconciliationTask.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { ReleaseEffectSettlementService } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
 import { reconcileSharedEngineInventory } from '@enterpriseglue/backend-host/services/sharedEngineInventoryReconciliation.js';
 
 const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
@@ -127,6 +129,34 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       expect(rows).toHaveLength(1); expect(rows[0].tenantId).toBe(id); expect(rows[0].tenantMappingVersion).toBe(7);
     }
     expect(getTenantDatabaseContext()).toBeUndefined();
+  });
+
+  it('keeps a tenant RLS-hidden effect source uncovered instead of inferring an empty global drain', async () => {
+    const releaseId = `release-${suffix}`;
+    await tenant(tenantIds[0], () => runtime.getRepository(ConfigBundleRuntimeReconciliationTask).insert({
+      id: randomUUID(), tenantId: tenantIds[0], applyRunId: `apply-${suffix}`,
+      engineSetIdsJson: '[]', runtimeResourceSetIdsJson: '[]', engineIdsJson: '[]',
+      status: 'queued', leaseId: null, leaseExpiresAt: null, attempts: 0,
+      nextAttemptAt: Date.now(), resultJson: null, lastError: null, completedAt: null,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+    expect(await tenant(tenantIds[0], () => runtime.getRepository(ConfigBundleRuntimeReconciliationTask).count()))
+      .toBe(1);
+
+    const settlement = new ReleaseEffectSettlementService(
+      async () => runtime,
+      () => ({ releaseId, cohortEpoch: 1 }),
+    );
+    await settlement.open({ releaseId, cohortEpoch: 1, expectedRevision: 0 });
+    await settlement.close({ releaseId, cohortEpoch: 1, expectedRevision: 1 });
+    const status = await settlement.verify({ releaseId, cohortEpoch: 1, expectedRevision: 2 });
+    expect(status.sources.find((source) => source.sourceId === 'config_runtime_reconciliation'))
+      .toMatchObject({ coverage: 'uncovered', outstanding: null, reasonCode: 'uncovered' });
+    expect(status).toMatchObject({
+      inventoryComplete: false,
+      settled: false,
+      eligibleForShutdown: false,
+    });
   });
 
   it('partial and earlier-failed cohorts cannot publish later tenant success as global readiness', async () => {

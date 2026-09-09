@@ -11,6 +11,8 @@ const originalTenantSecretBrokerRequired = process.env.EG_TENANT_SECRET_BROKER_R
 const runtimeEnvironmentNames = [
   'EG_RUNTIME_ROLE',
   'EG_DATABASE_STARTUP_MODE',
+  'EG_TENANT_PLACEMENT_RELEASE_ID',
+  'EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH',
 ] as const;
 const originalRuntimeEnvironment = new Map(
   runtimeEnvironmentNames.map((name) => [name, process.env[name]]),
@@ -121,6 +123,22 @@ describe('hermetic test configuration', () => {
     process.env.EG_RUNTIME_ROLE = 'frontend';
     process.env.EG_DATABASE_STARTUP_MODE = 'synchronize';
     await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow();
+  });
+
+  it('binds a positive effect cohort epoch to an explicit release identity', async () => {
+    process.env.EG_TENANT_PLACEMENT_RELEASE_ID = 'release-preview';
+    process.env.EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH = '7';
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config).toMatchObject({
+      tenantPlacementReleaseId: 'release-preview',
+      tenantReleaseEffectCohortEpoch: 7,
+    });
+  });
+
+  it('rejects an effect cohort epoch without a release identity', async () => {
+    process.env.EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH = '7';
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH requires EG_TENANT_PLACEMENT_RELEASE_ID.');
   });
 
   it('rejects pooled tenancy on a non-PostgreSQL database', async () => {

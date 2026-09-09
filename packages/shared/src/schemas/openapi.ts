@@ -88,6 +88,12 @@ const {
 } = await import('@enterpriseglue/shared/schemas/platform-admin/tenant.js');
 const { TenantReleaseActivationRequestSchema, TenantReleaseActivationInputSchema, SignedTenantReleaseActivationReceiptSchema } =
   await import('@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js');
+const {
+  ReleaseEffectReleaseIdSchema,
+  ReleaseEffectCohortEpochSchema,
+  ReleaseEffectCohortMutationRequestSchema,
+  ReleaseEffectSettlementStatusSchema,
+} = await import('@enterpriseglue/shared/schemas/platform-admin/release-effect-settlement.js');
 const { ManagedEngineWorkloadRegistrationRequestSchema, ManagedEngineWorkloadDecommissionRequestSchema, SignedManagedEngineWorkloadReceiptSchema } =
   await import('@enterpriseglue/shared/schemas/platform-admin/managed-engine-workload.js');
 
@@ -2823,6 +2829,7 @@ registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityRequestSc
 registry.register('PlatformCloudIdentityResponse', PlatformCloudIdentityResponseSchema);
 registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
 registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
+registry.register('ReleaseEffectSettlementStatus', ReleaseEffectSettlementStatusSchema);
 registry.registerPath({
   method: 'post', path: '/api/workloads/tenants/{tenantId}/release-assignment-operations',
   ...authzExemption('POST', '/api/workloads/tenants/{tenantId}/release-assignment-operations'),
@@ -2839,6 +2846,42 @@ registry.registerPath({
     409: { description: 'Changed intent under the same idempotency key, tenant/placement/assignment conflict or in-flight work' },
     503: { description: 'Unresolved operation, unavailable signing or invalid stored receipt' },
   },
+});
+const ReleaseEffectCohortPathSchema = z.object({
+  releaseId: ReleaseEffectReleaseIdSchema,
+  cohortEpoch: ReleaseEffectCohortEpochSchema,
+});
+const releaseEffectResponses = {
+  200: { description: 'Current durable cohort state and fail-closed source inventory', content: { 'application/json': { schema: ReleaseEffectSettlementStatusSchema } } },
+  400: { description: 'Malformed path, body, or unexpected query parameter' },
+  401: { description: 'Dedicated release-controller bearer credential required' },
+  404: { description: 'The exact release cohort has not been opened' },
+  409: { description: 'Runtime binding, cohort epoch, state, or expected revision conflict' },
+  503: { description: 'Release effect cohort tracking is not configured' },
+};
+registry.registerPath({
+  method: 'put', path: '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}',
+  ...authzExemption('PUT', '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}'),
+  request: { params: ReleaseEffectCohortPathSchema, body: { content: { 'application/json': { schema: ReleaseEffectCohortMutationRequestSchema } } } },
+  responses: releaseEffectResponses,
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}/close',
+  ...authzExemption('POST', '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}/close'),
+  request: { params: ReleaseEffectCohortPathSchema, body: { content: { 'application/json': { schema: ReleaseEffectCohortMutationRequestSchema } } } },
+  responses: releaseEffectResponses,
+});
+registry.registerPath({
+  method: 'get', path: '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}',
+  ...authzExemption('GET', '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}'),
+  request: { params: ReleaseEffectCohortPathSchema },
+  responses: releaseEffectResponses,
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}/verify',
+  ...authzExemption('POST', '/api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}/verify'),
+  request: { params: ReleaseEffectCohortPathSchema, body: { content: { 'application/json': { schema: ReleaseEffectCohortMutationRequestSchema } } } },
+  responses: releaseEffectResponses,
 });
 const TenantWorkloadHeadersSchema = z.object({
   'idempotency-key': z.string().min(16).max(200),

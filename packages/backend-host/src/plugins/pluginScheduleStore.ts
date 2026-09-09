@@ -18,6 +18,7 @@ import {
   TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
+import { assertReleaseEffectAdmission } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
 
 import {
   findPluginRowForUpdateV1,
@@ -146,6 +147,12 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
         }
         const now = this.clock();
         const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
+        if (input.request.action === 'upsert') {
+          await assertReleaseEffectAdmission(manager, {
+            sourceId: 'plugin_schedule_delivery',
+            releaseId: releaseAssignment?.releaseId ?? null,
+          });
+        }
         const jobRepository = manager.getRepository(PluginScheduledJob);
         const current = await findPluginRowForUpdateV1(jobRepository, {
           jobRef,
@@ -394,6 +401,12 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
         integer(record.revision) !== input.expectedRevision
       ) {
         throw new Error('plugin_schedule_revision_conflict');
+      }
+      if (!input.paused) {
+        await assertReleaseEffectAdmission(manager, {
+          sourceId: 'plugin_schedule_delivery',
+          releaseId: record.releaseId,
+        });
       }
       const revision = integer(record.revision) + 1;
       const status = input.paused ? 'paused' : 'scheduled';

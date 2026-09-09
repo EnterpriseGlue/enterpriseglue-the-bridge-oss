@@ -255,6 +255,7 @@ const deploymentGlobalRows = records([
   'plugin_manager_capabilities',
   'plugin_permission_grants',
   'plugin_platform_state',
+  'release_effect_cohorts',
   'service_accounts',
   'tenant_lifecycle_operations',
 ], {

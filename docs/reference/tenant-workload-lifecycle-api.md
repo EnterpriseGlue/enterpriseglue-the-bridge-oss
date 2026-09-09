@@ -175,6 +175,11 @@ neither original worker termination nor plugin/global work quiescence. Existing
 v1/v2 routes and their snapshot semantics are unchanged. Before rollback, disable
 the new consumer; preserve ledger records and verification keys.
 
+For current release-wide work admission and settlement, use the separate
+[managed release effect settlement runbook](../runbooks/release-effect-settlement.md).
+Its current inventory is intentionally incomplete; an activation receipt never
+substitutes for `eligibleForShutdown=true` from a complete settlement cohort.
+
 ## Provision a tenant
 
 `POST /api/workloads/tenants`
