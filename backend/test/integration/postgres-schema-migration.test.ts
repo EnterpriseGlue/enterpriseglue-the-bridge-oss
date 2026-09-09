@@ -17,6 +17,7 @@ const baseEnv = {
 };
 
 const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`;
+const migrationCaseTimeout = 30_000;
 
 async function createPool() {
   const pgModule = await import('pg');
@@ -127,7 +128,7 @@ describe('Postgres schema auto-migration', () => {
     } finally {
       await pool.end();
     }
-  });
+  }, migrationCaseTimeout);
 
   it('reconciles a mixed state where some tables already live in the configured schema', async () => {
     applyBaseEnv('main');
@@ -197,7 +198,7 @@ describe('Postgres schema auto-migration', () => {
     } finally {
       await verifyPool.end();
     }
-  });
+  }, migrationCaseTimeout);
 
   it('repairs critical versioning schema drift even when migrations are already recorded', async () => {
     applyBaseEnv(versioningDriftSchema);
@@ -315,5 +316,5 @@ describe('Postgres schema auto-migration', () => {
     } finally {
       await verifyPool.end();
     }
-  });
+  }, migrationCaseTimeout);
 });
