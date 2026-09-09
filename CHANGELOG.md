@@ -12,14 +12,10 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 * **deps:** patch backend and toolchain security dependencies ([1562a77](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1562a77a4035c8d062a198b36ca70d3b56b6f9c9))
 * **deps:** patch backend email and plugin toolchain vulnerabilities ([17b06f1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/17b06f160041e23bf6f87e17085527856bf350f6))
 * **release:** bind candidate charts to exact source identity ([def1b7a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/def1b7aec208de78fa11eb352a888d4d75cf817c))
-* **release:** bind candidate charts to exact source identity ([770bbeb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/770bbebfa294031308d95d3461b57c4d3ca43f2c))
 * **security:** bound ZIP imports and patch request logging ([c135a45](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c135a45706eac51f540a36adee3f763337f8e5f8))
-* **security:** bound ZIP imports and patch request logging ([1d63828](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1d6382883189d113a3f738cca3f7d4e0dc487219))
 * **security:** refresh restricted PostgreSQL runtime grants after migrations ([eed369b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eed369b6807da86f4772cc2b27c49120be9acf25))
-* **security:** refresh restricted PostgreSQL runtime grants after migrations ([2d9cc1d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2d9cc1db59ff108c2dc542149afa34aa37fe80b7))
 * **security:** validate and own archive request buffers ([1061abf](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1061abfbafd346919100878b3af8e40efda85583))
 * **ui:** align Carbon login and application presentation ([7f1ebb6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7f1ebb6fb1620f0412b2758169a086a66b34c5bf))
-* **ui:** align Carbon login and application presentation ([d1f8014](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d1f80146a2430e91acd5437927e005956df7dc88))
 
 ## [0.24.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.24.0...v0.24.1) (2026-09-09)
 
