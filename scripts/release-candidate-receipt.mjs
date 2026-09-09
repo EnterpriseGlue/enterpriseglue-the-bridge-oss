@@ -125,7 +125,7 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
     || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-closure/v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
-    || manifest?.executableImplementationInventory?.count !== 12
+    || manifest?.executableImplementationInventory?.count !== 13
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.releaseEffectInventory?.version !== 'release-effect-inventory.enterpriseglue.io/v1'
     || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')

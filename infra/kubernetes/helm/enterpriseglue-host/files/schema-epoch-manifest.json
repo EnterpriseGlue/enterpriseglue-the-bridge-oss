@@ -41,8 +41,8 @@
   "executableImplementationInventory": {
     "algorithm": "sha256-source-v1",
     "purpose": "owner-transition-1700000000131-closure/v1",
-    "count": 12,
-    "sha256": "2713df2883b1d50691bba63c40ea46fec1149e885ffc39ee9a2cdb2a59c19290"
+    "count": 13,
+    "sha256": "0b8aece1b36c96bf9f03e3d1f0aa31825b987bd06cbc56ad3565fae8552c7dfe"
   },
   "releaseEffectInventory": {
     "version": "release-effect-inventory.enterpriseglue.io/v1",

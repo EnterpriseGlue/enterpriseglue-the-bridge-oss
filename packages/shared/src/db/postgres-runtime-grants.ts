@@ -7,6 +7,94 @@ async function quarantinedPostgresSQL<T = unknown[]>(runner: QueryRunner, sql: s
   return runner.query(sql, parameters);
 }
 
+export interface SchemaEpochRuntimeRoleInspection {
+  safe: boolean;
+  schema_usage: boolean;
+}
+
+export interface SchemaEpochRuntimeEffectivePrivileges {
+  select_ok: boolean;
+  insert_ok: boolean;
+  update_ok: boolean;
+  delete_ok: boolean;
+  truncate_ok: boolean;
+  references_ok: boolean;
+  trigger_ok: boolean;
+  public_grant: boolean;
+}
+
+/** Exact PostgreSQL catalog boundary used by the signed 0131 owner transition.
+ * Callers supply values, never SQL fragments. */
+export function inspectSchemaEpochRuntimeRole(
+  runner: QueryRunner,
+  runtimeRole: string,
+  schema: string,
+): Promise<SchemaEpochRuntimeRoleInspection[]> {
+  return quarantinedPostgresSQL(runner, `SELECT
+    NOT (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication)
+      AND r.rolname<>current_user
+      AND NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE member=r.oid)
+      AND NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspowner=r.oid)
+      AND NOT EXISTS (SELECT 1 FROM pg_class WHERE relowner=r.oid) AS safe,
+    has_schema_privilege(r.rolname, $2, 'USAGE') AS schema_usage
+    FROM pg_roles r WHERE r.rolname=$1`, [runtimeRole, schema]);
+}
+
+export async function applySchemaEpochRuntimeTablePrivileges(
+  runner: QueryRunner,
+  schema: string,
+  tableName: string,
+  runtimeRole: string,
+): Promise<void> {
+  const table = `${identifier(schema)}.${identifier(tableName)}`;
+  const role = identifier(runtimeRole);
+  await quarantinedPostgresSQL(runner, `REVOKE ALL PRIVILEGES ON TABLE ${table} FROM ${role}`);
+  await quarantinedPostgresSQL(runner, `GRANT SELECT, INSERT, UPDATE ON TABLE ${table} TO ${role}`);
+}
+
+export function readSchemaEpochRuntimeDirectTablePrivileges(
+  runner: QueryRunner,
+  runtimeRole: string,
+  schema: string,
+  tableName: string,
+): Promise<Array<{ privilege_type: string }>> {
+  return quarantinedPostgresSQL(
+    runner,
+    `SELECT upper(acl.privilege_type) AS privilege_type
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
+      JOIN pg_roles grantee ON grantee.oid=acl.grantee
+      WHERE grantee.rolname=$1 AND n.nspname=$2 AND c.relname=$3
+      ORDER BY privilege_type`,
+    [runtimeRole, schema, tableName],
+  );
+}
+
+export function readSchemaEpochRuntimeEffectiveTablePrivileges(
+  runner: QueryRunner,
+  runtimeRole: string,
+  schema: string,
+  tableName: string,
+): Promise<SchemaEpochRuntimeEffectivePrivileges[]> {
+  return quarantinedPostgresSQL(runner, `SELECT
+    has_table_privilege($1, c.oid, 'SELECT') AS select_ok,
+    has_table_privilege($1, c.oid, 'INSERT') AS insert_ok,
+    has_table_privilege($1, c.oid, 'UPDATE') AS update_ok,
+    has_table_privilege($1, c.oid, 'DELETE') AS delete_ok,
+    has_table_privilege($1, c.oid, 'TRUNCATE') AS truncate_ok,
+    has_table_privilege($1, c.oid, 'REFERENCES') AS references_ok,
+    has_table_privilege($1, c.oid, 'TRIGGER') AS trigger_ok,
+    EXISTS (
+      SELECT 1
+      FROM aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
+      WHERE acl.grantee=0
+    ) AS public_grant
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname=$2 AND c.relname=$3`, [runtimeRole, schema, tableName]);
+}
+
 /** Apply only after owner migrations, in a single transaction. Never creates or alters roles. */
 export async function refreshPostgresRuntimeGrants(runner: QueryRunner, runtimeRole: string): Promise<void> {
   if (runner.connection.options.type !== 'postgres') throw new Error('EG_POSTGRES_RUNTIME_ROLE requires PostgreSQL');

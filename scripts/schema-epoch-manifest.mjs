@@ -21,6 +21,7 @@ export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/infrastructure/persistence/entities/PluginPlatform.ts',
   'packages/shared/src/db/postgres-tenant-rls.ts',
   'packages/shared/src/db/schema-epoch-runtime-grant.ts',
+  'packages/shared/src/db/postgres-runtime-grants.ts',
   'packages/shared/src/contracts/release-effect-inventory.ts',
   'packages/shared/src/services/platform-admin/ReleaseEffectSettlementService.ts',
   'packages/shared/src/services/platform-admin/open-release-effect-cohort.ts',

@@ -41,9 +41,11 @@ describe('schema-epoch release-effect runtime grant', () => {
     await grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, queryRunner, 'eg_runtime');
     expect(queryRunner.query).toHaveBeenCalledWith(
       'REVOKE ALL PRIVILEGES ON TABLE "main"."release_effect_cohorts" FROM "eg_runtime"',
+      undefined,
     );
     expect(queryRunner.query).toHaveBeenCalledWith(
       'GRANT SELECT, INSERT, UPDATE ON TABLE "main"."release_effect_cohorts" TO "eg_runtime"',
+      undefined,
     );
     expect(queryRunner.query).not.toHaveBeenCalledWith(expect.stringMatching(/DEFAULT PRIVILEGES|GRANT DELETE/));
   });

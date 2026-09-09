@@ -47,7 +47,7 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.executableImplementationInventory).toMatchObject({
       algorithm: 'sha256-source-v1',
       purpose: 'owner-transition-1700000000131-closure/v1',
-      count: 12,
+      count: 13,
     });
     expect(manifest.releaseEffectInventory).toEqual({
       version: RELEASE_EFFECT_INVENTORY_VERSION,
