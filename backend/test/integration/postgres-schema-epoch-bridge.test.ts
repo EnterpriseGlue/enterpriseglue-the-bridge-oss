@@ -3,7 +3,10 @@ import type { Pool } from 'pg';
 import {
   verifyPostgresTenantRlsForPolicyProfile,
 } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
-import { grantSchemaEpochReleaseEffectCohortRuntimePrivileges } from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
+import {
+  grantSchemaEpochReleaseEffectCohortRuntimePrivileges,
+  verifySchemaEpochReleaseEffectCohortRuntimePrivileges,
+} from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
 import { EnforceExplicitPostgresContext1700000000132 } from '@enterpriseglue/shared/db/migrations/1700000000132-enforce-explicit-postgres-context.js';
 
 const env = (name: string, fallback: string) =>
@@ -15,9 +18,12 @@ const tableRef = `${quoteIdentifier(schema)}.${quoteIdentifier('projects')}`;
 const cohortTablePath = `${schema}.release_effect_cohorts`;
 const cohortTableRef = `${quoteIdentifier(schema)}.${quoteIdentifier('release_effect_cohorts')}`;
 const runtimeRole = `epoch_runtime_${Date.now()}`;
+const preflightRole = `epoch_preflight_${Date.now()}`;
+const preflightPassword = 'epoch_preflight_membership_free_password';
 const legacyPredicate = "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode', true), ''), 'single') <> 'pooled' OR tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), '')";
 
 let pool: Pool;
+let preflightPool: Pool;
 
 function runner() {
   return {
@@ -52,6 +58,7 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
     await pool.query(`CREATE TABLE ${tableRef} (id text PRIMARY KEY, tenant_id text NOT NULL)`);
     await pool.query(`CREATE TABLE ${cohortTableRef} (id text PRIMARY KEY, release_id text NOT NULL, state text NOT NULL)`);
     await pool.query(`CREATE ROLE ${quoteIdentifier(runtimeRole)} LOGIN`);
+    await pool.query(`CREATE ROLE ${quoteIdentifier(preflightRole)} LOGIN PASSWORD '${preflightPassword}'`);
     await pool.query(`GRANT USAGE ON SCHEMA ${quoteIdentifier(schema)} TO ${quoteIdentifier(runtimeRole)}`);
     await pool.query(`ALTER TABLE ${tableRef} ENABLE ROW LEVEL SECURITY`);
     await pool.query(`ALTER TABLE ${tableRef} FORCE ROW LEVEL SECURITY`);
@@ -62,8 +69,10 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
 
   afterAll(async () => {
     if (!pool) return;
+    if (preflightPool) await preflightPool.end();
     await pool.query(`DROP SCHEMA IF EXISTS ${quoteIdentifier(schema)} CASCADE`);
     await pool.query(`DROP ROLE IF EXISTS ${quoteIdentifier(runtimeRole)}`);
+    await pool.query(`DROP ROLE IF EXISTS ${quoteIdentifier(preflightRole)}`);
     await pool.end();
   });
 
@@ -100,6 +109,30 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
       query: async (sql: string, parameters?: unknown[]) => (await pool.query(sql, parameters)).rows,
     } as any;
     await grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, queryRunner, runtimeRole);
+    const pgModule = await import('pg');
+    const PoolConstructor = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
+    preflightPool = new PoolConstructor({
+      host: env('POSTGRES_HOST', 'localhost'),
+      port: Number(env('POSTGRES_PORT', '5432')),
+      user: preflightRole,
+      password: preflightPassword,
+      database: env('POSTGRES_DATABASE', 'postgres'),
+      ssl: env('POSTGRES_SSL', 'false') === 'true' ? { rejectUnauthorized: false } : false,
+    });
+    const preflightQueryRunner = {
+      hasTable: async (value: string) => value === cohortTablePath,
+      query: async (sql: string, parameters?: unknown[]) => (await preflightPool.query(sql, parameters)).rows,
+    } as any;
+    await expect(
+      verifySchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, preflightQueryRunner, runtimeRole),
+    ).resolves.toBeUndefined();
+    const memberships = await pool.query(
+      `SELECT count(*)::int AS count FROM pg_auth_members m
+       JOIN pg_roles member ON member.oid=m.member
+       WHERE member.rolname=$1`,
+      [preflightRole],
+    );
+    expect(memberships.rows).toEqual([{ count: 0 }]);
     const result = await pool.query(`SELECT
       has_table_privilege($1, $2, 'SELECT') AS select_ok,
       has_table_privilege($1, $2, 'INSERT') AS insert_ok,

@@ -29,10 +29,12 @@ import { tenantService } from '@enterpriseglue/shared/services/platform-admin/Te
 import { ReleaseEffectSettlementService } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
 import { TenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import {
+  PluginEventDelivery,
   PluginScheduledJob,
   ReleaseEffectCohort,
   TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
+import { DatabasePluginEventDeliveryStoreV1 } from '@enterpriseglue/backend-host/plugins/pluginEventDeliveryStore.js';
 import { DatabasePluginScheduleStoreV1 } from '@enterpriseglue/backend-host/plugins/pluginScheduleStore.js';
 import { reconcileSharedEngineInventory } from '@enterpriseglue/backend-host/services/sharedEngineInventoryReconciliation.js';
 
@@ -105,6 +107,29 @@ function scheduleCommand(tenantRef: string, idempotencyKey: string) {
       intervalSeconds: 3600,
       idempotencyKey,
     },
+  };
+}
+
+function eventCommand(tenantRef: string, id: string) {
+  return {
+    pluginId: 'io.enterpriseglue.reference' as const,
+    deploymentRef: `deployment-${suffix}`,
+    tenantRef,
+    subscriptionType: 'io.enterpriseglue.host.incident.v1' as const,
+    operationId: 'io.enterpriseglue.reference.consume-incident',
+    maxAttempts: 3,
+    event: {
+      specversion: '1.0' as const,
+      id,
+      source: 'enterpriseglue-oss' as const,
+      type: 'io.enterpriseglue.host.incident.v1' as const,
+      subject: `incident-${suffix}`,
+      time: '2026-09-10T00:00:00.000Z',
+      dataschema: 'https://schemas.enterpriseglue.io/events/incident-v1.json',
+      tenantRef,
+      data: { engineRef: `engine-${suffix}`, incidentRef: `incident-${suffix}`, incidentType: 'failedJob' as const },
+    },
+    now: 10_000,
   };
 }
 
@@ -188,8 +213,8 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
   });
 
   it('serializes schedule admission before release assignment movement and resweeps the committed row', async () => {
-    const oldReleaseId = `old-schedule-${suffix}`;
-    const newReleaseId = `new-schedule-${suffix}`;
+    const oldReleaseId = `sha256:${'4'.repeat(64)}`;
+    const newReleaseId = `sha256:${'5'.repeat(64)}`;
     const oldBinding = { releaseId: oldReleaseId, cohortEpoch: 11, managedPooledCloud: true };
     const newBinding = { releaseId: newReleaseId, cohortEpoch: 12, managedPooledCloud: true };
     const oldSettlement = new ReleaseEffectSettlementService(async () => runtime, () => oldBinding);
@@ -229,6 +254,65 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       if (blocker.runner.isTransactionActive) await blocker.runner.rollbackTransaction();
       await blocker.runner.release();
       await Promise.allSettled([produced, moved].filter(Boolean) as Promise<unknown>[]);
+    }
+  }, 45000);
+
+  it('locks assignment then cohort then event/schedule effects before claiming delivery', async () => {
+    const oldReleaseId = `sha256:${'6'.repeat(64)}`;
+    const newReleaseId = `sha256:${'7'.repeat(64)}`;
+    const oldBinding = { releaseId: oldReleaseId, cohortEpoch: 21, managedPooledCloud: true };
+    const newBinding = { releaseId: newReleaseId, cohortEpoch: 22, managedPooledCloud: true };
+    await runtime.getRepository(PluginEventDelivery).delete({ tenantRef: tenantIds[0] });
+    await runtime.getRepository(PluginScheduledJob).delete({ tenantRef: tenantIds[0] });
+    await runtime.getRepository(TenantReleaseWorkAssignment).delete({ tenantRef: tenantIds[0] });
+    await new ReleaseEffectSettlementService(async () => runtime, () => oldBinding)
+      .open({ releaseId: oldReleaseId, cohortEpoch: 21, expectedRevision: 0 });
+    await new ReleaseEffectSettlementService(async () => runtime, () => newBinding)
+      .open({ releaseId: newReleaseId, cohortEpoch: 22, expectedRevision: 0 });
+    await runtime.getRepository(TenantReleaseWorkAssignment).insert({
+      id: randomUUID(), tenantRef: tenantIds[0], releaseId: oldReleaseId, assignmentEpoch: 1, updatedAt: Date.now(),
+    });
+    const eventStore = new DatabasePluginEventDeliveryStoreV1(
+      async () => runtime, {}, {}, undefined, () => oldBinding,
+    );
+    const scheduleStore = new DatabasePluginScheduleStoreV1(async () => runtime, () => 10_000, () => oldBinding);
+    const event = await eventStore.enqueue(eventCommand(tenantIds[0], `claim-${suffix}`));
+    await scheduleStore.execute(scheduleCommand(tenantIds[0], `claim-${suffix}`));
+    await runtime.getRepository(PluginScheduledJob).update(
+      { tenantRef: tenantIds[0] }, { nextRunAt: 10_000 },
+    );
+
+    const blocker = await writer();
+    let eventClaim: Promise<unknown> | undefined;
+    let scheduleClaim: Promise<unknown> | undefined;
+    try {
+      await blocker.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
+        where: { tenantRef: tenantIds[0] }, lock: { mode: 'pessimistic_write' },
+      });
+      eventClaim = eventStore.claimDue({ workerRef: 'event-worker', limit: 1, leaseSeconds: 30, now: 10_000 });
+      scheduleClaim = scheduleStore.claimDue({ workerRef: 'schedule-worker', limit: 1, leaseSeconds: 30, now: 10_000 });
+      await awaitBlockedBy(blocker.pid);
+
+      const assignment = new TenantReleaseWorkAssignmentService(async () => runtime, () => newBinding);
+      await expect(assignment.assign({
+        tenantId: tenantIds[0], releaseId: newReleaseId, assignmentEpoch: 2,
+      }, blocker.runner.manager)).resolves.toMatchObject({ updatedEvents: 1, updatedSchedules: 1 });
+      await blocker.runner.commitTransaction();
+
+      await expect(eventClaim).resolves.toEqual([]);
+      await expect(scheduleClaim).resolves.toEqual([]);
+      const movedEvent = await runtime.getRepository(PluginEventDelivery)
+        .findOneByOrFail({ deliveryId: event.deliveryId });
+      expect(movedEvent).toMatchObject({ releaseId: newReleaseId, status: 'pending' });
+      expect(Number(movedEvent.assignmentEpoch)).toBe(2);
+      const movedSchedule = await runtime.getRepository(PluginScheduledJob)
+        .findOneByOrFail({ tenantRef: tenantIds[0] });
+      expect(movedSchedule).toMatchObject({ releaseId: newReleaseId, status: 'scheduled' });
+      expect(Number(movedSchedule.assignmentEpoch)).toBe(2);
+    } finally {
+      if (blocker.runner.isTransactionActive) await blocker.runner.rollbackTransaction();
+      await blocker.runner.release();
+      await Promise.allSettled([eventClaim, scheduleClaim].filter(Boolean) as Promise<unknown>[]);
     }
   }, 45000);
 

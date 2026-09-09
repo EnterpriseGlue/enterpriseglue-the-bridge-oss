@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { grantSchemaEpochReleaseEffectCohortRuntimePrivileges } from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
 
-function fixture(options: { safe?: boolean; schemaUsage?: boolean; grants?: string[] } = {}) {
+function fixture(options: {
+  safe?: boolean;
+  schemaUsage?: boolean;
+  grants?: string[];
+  publicGrant?: boolean;
+} = {}) {
   const metadata = { tablePath: 'main.release_effect_cohorts', tableName: 'release_effect_cohorts', schema: 'main' };
   const dataSource = {
     options: { schema: 'main' },
@@ -11,7 +16,7 @@ function fixture(options: { safe?: boolean; schemaUsage?: boolean; grants?: stri
     hasTable: vi.fn().mockResolvedValue(true),
     query: vi.fn(async (sql: string) => {
       if (sql.includes('FROM pg_roles')) return [{ safe: options.safe ?? true, schema_usage: options.schemaUsage ?? true }];
-      if (sql.includes('role_table_grants')) {
+      if (sql.includes('aclexplode') && sql.includes('JOIN pg_roles grantee')) {
         return (options.grants ?? ['INSERT', 'SELECT', 'UPDATE']).map((privilege_type) => ({ privilege_type }));
       }
       if (sql.includes('has_table_privilege')) return [{
@@ -22,6 +27,7 @@ function fixture(options: { safe?: boolean; schemaUsage?: boolean; grants?: stri
         truncate_ok: false,
         references_ok: false,
         trigger_ok: false,
+        public_grant: options.publicGrant ?? false,
       }];
       return [];
     }),
@@ -55,5 +61,17 @@ describe('schema-epoch release-effect runtime grant', () => {
     await expect(
       grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, queryRunner, 'eg_runtime'),
     ).rejects.toThrow(/exact release-effect cohort privileges/);
+  });
+
+  it('uses catalog ACLs visible to a membership-free preflight and rejects PUBLIC grants', async () => {
+    const { dataSource, queryRunner } = fixture({ publicGrant: true });
+    await expect(
+      grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, queryRunner, 'eg_runtime'),
+    ).rejects.toThrow(/unexpected effective/);
+    expect(queryRunner.query).toHaveBeenCalledWith(
+      expect.stringContaining('aclexplode'),
+      ['eg_runtime', 'main', 'release_effect_cohorts'],
+    );
+    expect(queryRunner.query).not.toHaveBeenCalledWith(expect.stringContaining('information_schema'));
   });
 });

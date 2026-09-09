@@ -36,13 +36,17 @@ chart and signed candidate bundle.
 - the exact ordered migration inventory the bridge may execute; and
 - the exact release-effect inventory version and SHA-256 accepted by the
   ordered cohort opener;
-- a source-content digest over migration 1700000000131, its schema helper,
+- an `owner-transition-1700000000131-closure/v1` source-content digest over
+  migration 1700000000131 and its bounded verification/startup closure, including its schema helper,
   legacy-policy verifier, runtime-grant helper, effect inventory, settlement
   implementation and cohort opener; and
 - the exact pre- and post-enforcement database ledgers it accepts, including
   the required policy profile for each ledger.
 
-The executable inventory ends before the enforcement migration. Both roles
+The executable migration inventory ends before the enforcement migration. The
+implementation inventory covers the 0131 owner-transition closure; it neither
+binds nor authorizes replay of migrations 0000–0130, and it is not the future
+fresh-shard bootstrap closure. Both roles
 hash the complete ordered `timestamp:name` inventory registered in the image,
 then bind TypeORM to the declared executable subset. Protected candidate
 staging additionally hashes the source bytes that can affect the only
@@ -94,6 +98,7 @@ field:
     "emptyMigrationLedger": "requires-separate-signed-recovery",
     "executableThrough": 1700000000131,
     "executableImplementationSha256": "<64 lowercase hexadecimal characters>",
+    "executableImplementationPurpose": "owner-transition-1700000000131-closure/v1",
     "releaseEffectInventoryVersion": "release-effect-inventory.enterpriseglue.io/v1",
     "releaseEffectInventorySha256": "c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087",
     "acceptedThrough": [1700000000131, 1700000000132]
@@ -104,9 +109,11 @@ field:
 The manifest is also an inventoried OCI layer at the declared path. Candidate
 staging verifies that the backend image contains byte-identical manifest data,
 and the chart packages the same bytes. A downstream deployment controller must
-verify the candidate signature, source revision, subject digests, receipt
-inventory and manifest checksum before it recognizes the release as a bridge.
-It must not synthesize this field from tags or operator input.
+verify the candidate signature, source revision, backend and chart subject digests, receipt
+inventory, manifest checksum, transition implementation digest and effect inventory before it
+recognizes the release as a bridge. It computes the SHA-256 of the exact verified receipt bytes
+and passes `sha256:<64 lowercase hex>` as the managed release ID; OSS stores and propagates that
+identity unchanged. It must not synthesize the receipt projection from tags or operator input.
 
 The bridge host chart activates this contract only when its validated profile
 is exactly `postgres` plus `pooled`, then derives application
@@ -116,11 +123,18 @@ separate owner credential and fixed bounded entrypoint; a Helm value cannot
 skip it or extend its ceiling. Omitted profiles, other adapters and
 single-tenancy PostgreSQL retain the prior `database.migration.enabled`
 behavior. Preflight verifies the live database before any application rollout.
-For an enabled release-effect cohort, the chart accepts only the inventory
+For an enabled release-effect cohort, the chart accepts only that receipt-digest release ID and the inventory
 version and SHA-256 projected from this exact signed receipt. Hook weights fix
 the order to owner `-20`, grant/epoch preflight `-10`, cohort opener `0`, then
 API and workers. There is no `skipMigrations`, ledger edit or mutable
 release-mode value.
+
+The managed bridge requires pairwise-distinct application, owner-migration and
+membership-free preflight database Secrets. Migration and preflight Kubernetes
+ServiceAccounts are distinct; the enabled opener has a third distinct account.
+Every hook imports the stable built shared-package output under
+`dist/packages/shared/dist`; candidate-image qualification executes those
+imports so a source-only path cannot pass release qualification.
 
 ## Cutover boundary
 

@@ -13,13 +13,14 @@
     "instructions": [
       "Deploy the independently signed bridge release and let its separately credentialed owner job apply exactly through migration 1700000000131 before starting bridge application replicas.",
       "For pooled PostgreSQL, set the chart profile to database.profile.databaseType=postgres and database.profile.tenancyMode=pooled; confirm the existing ledger is exactly the signed 132-entry inventory through migration 1700000000130.",
-      "Configure the release-effect cohort with the exact inventory version and SHA-256 projected by this release's signed candidate receipt; the chart orders owner migration, restricted preflight, and cohort opening before workloads.",
+      "After verifying the candidate signature, source, backend/chart subjects, schema manifest, transition implementation and effect inventory, configure the release-effect cohort releaseId as the SHA-256 digest of those exact receipt bytes and use its projected inventory values; the chart orders owner migration, restricted preflight, and cohort opening before workloads.",
       "Keep the bridge and previous qualified release for the complete 28-day fallback interval; only the later owner-controlled release may apply migration 1700000000132."
     ]
   },
   "configuration": [
     "The explicit postgres/pooled chart profile activates the signed bridge contract. Other adapters, single-tenancy PostgreSQL, and omitted profiles retain the existing database.migration.enabled behavior.",
-    "No operator migration-skip or schema-epoch selector is added. The application verify role and owner migration ceiling are immutable signed manifest data."
+    "No operator migration-skip or schema-epoch selector is added. The application verify role and owner migration ceiling are immutable signed manifest data.",
+    "The managed chart pins DATABASE_TYPE and EG_TENANCY_MODE directly on owner, preflight, API and worker containers, so a missing or drifted ConfigMap cannot select a generic migration path."
   ],
   "api": {"compatibility": "none", "changes": []},
   "database": {
@@ -34,7 +35,8 @@
   "security": [
     "Application startup rejects apply mode for pooled PostgreSQL before schema repair, synchronization or connection-owned migration work.",
     "The bounded owner path cannot run synchronize, migration-ledger baselining, policy repair, critical-schema repair, generic grant refresh, RBAC seeding or legacy projection side effects; its optional configured-role action is limited to SELECT, INSERT, and UPDATE on the new 0131 cohort table.",
-    "The signed candidate receipt binds the manifest checksum, exact minimum/accepted epochs, unsupported bootstrap/recovery states, executable implementation digest, and exact release-effect inventory version/SHA-256; candidate image qualification verifies the same bytes at both backend runtime and published shared-package locations."
+    "The signed candidate receipt binds the manifest checksum, exact minimum/accepted epochs, unsupported bootstrap/recovery states, 0131 owner-transition implementation digest, and exact release-effect inventory version/SHA-256; candidate image qualification verifies the same bytes and imports the owner, preflight, and cohort commands from the stable built shared-package layout.",
+    "Application, migration, and membership-free preflight database Secrets are pairwise distinct; migration, preflight, and enabled cohort Kubernetes ServiceAccounts cannot alias one another."
   ],
   "documentation": [
     "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
@@ -49,7 +51,8 @@
   ],
   "validation": [
     "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, exact pre/post ledger acceptance, and exact receipt-bound cohort inventory.",
-    "PostgreSQL integration verifies the released legacy policy and restricted cohort grant before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery."
+    "PostgreSQL integration verifies the released legacy policy and restricted cohort grant through a third membership-free preflight login before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery.",
+    "Real PostgreSQL concurrency verifies assignment-to-cohort-to-effect claim ordering for event and schedule work while tenant release assignment moves."
   ],
   "packages": [
     {"name": "@enterpriseglue/shared", "previousVersion": "0.21.0", "newVersion": "0.21.1", "impact": "patch"},

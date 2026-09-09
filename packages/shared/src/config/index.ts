@@ -460,6 +460,13 @@ if (config.tenantReleaseEffectCohortEpoch && !config.tenantPlacementReleaseId) {
   throw new Error('EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH requires EG_TENANT_PLACEMENT_RELEASE_ID.');
 }
 if (config.tenancyCloudRequired
+  && config.tenantPlacementReleaseId
+  && !/^sha256:[a-f0-9]{64}$/.test(config.tenantPlacementReleaseId)) {
+  throw new Error(
+    'Managed pooled Cloud EG_TENANT_PLACEMENT_RELEASE_ID must be the sha256 digest of the verified signed candidate receipt.',
+  );
+}
+if (config.tenancyCloudRequired
   && config.tenancyMode === 'pooled'
   && config.tenantPlacementReleaseId
   && !config.tenantReleaseEffectCohortEpoch) {

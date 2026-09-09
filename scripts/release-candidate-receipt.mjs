@@ -123,6 +123,7 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.upgradeContract?.freshDatabase !== 'requires-separate-signed-bootstrap'
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
+    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-closure/v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
     || manifest?.executableImplementationInventory?.count !== 12
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
@@ -176,6 +177,7 @@ async function createReceipt(args) {
       emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
       executableThrough: schemaEpochManifest.executableMigrationInventory.through,
       executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
+      executableImplementationPurpose: schemaEpochManifest.executableImplementationInventory.purpose,
       releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
       releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
       acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
@@ -221,6 +223,7 @@ async function verifyReceipt(args) {
     emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
     executableThrough: schemaEpochManifest.executableMigrationInventory.through,
     executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
+    executableImplementationPurpose: schemaEpochManifest.executableImplementationInventory.purpose,
     releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
     releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
     acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),

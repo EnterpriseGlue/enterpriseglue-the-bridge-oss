@@ -63,9 +63,18 @@ export async function verifySchemaEpochReleaseEffectCohortRuntimePrivileges(
   );
   const metadata = dataSource.getMetadata('ReleaseEffectCohort');
 
+  // information_schema.role_table_grants deliberately hides grants from a
+  // membership-free preflight login that is neither grantor nor grantee. Read
+  // the relation ACL itself so that a distinct, restricted verifier observes
+  // the exact direct grant without acquiring membership in the runtime role.
   const grants: Array<{ privilege_type: string }> = await queryRunner.query(
-    `SELECT privilege_type FROM information_schema.role_table_grants
-      WHERE grantee=$1 AND table_schema=$2 AND table_name=$3 ORDER BY privilege_type`,
+    `SELECT upper(acl.privilege_type) AS privilege_type
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
+      JOIN pg_roles grantee ON grantee.oid=acl.grantee
+      WHERE grantee.rolname=$1 AND n.nspname=$2 AND c.relname=$3
+      ORDER BY privilege_type`,
     [runtimeRole, schema, metadata.tableName],
   );
   if (JSON.stringify(grants.map((row) => row.privilege_type)) !== JSON.stringify(EXPECTED_PRIVILEGES)) {
@@ -74,14 +83,23 @@ export async function verifySchemaEpochReleaseEffectCohortRuntimePrivileges(
   const effective: Array<{
     select_ok: boolean; insert_ok: boolean; update_ok: boolean;
     delete_ok: boolean; truncate_ok: boolean; references_ok: boolean; trigger_ok: boolean;
+    public_grant: boolean;
   }> = await queryRunner.query(`SELECT
-    has_table_privilege($1, $2, 'SELECT') AS select_ok,
-    has_table_privilege($1, $2, 'INSERT') AS insert_ok,
-    has_table_privilege($1, $2, 'UPDATE') AS update_ok,
-    has_table_privilege($1, $2, 'DELETE') AS delete_ok,
-    has_table_privilege($1, $2, 'TRUNCATE') AS truncate_ok,
-    has_table_privilege($1, $2, 'REFERENCES') AS references_ok,
-    has_table_privilege($1, $2, 'TRIGGER') AS trigger_ok`, [runtimeRole, metadata.tablePath]);
+    has_table_privilege($1, c.oid, 'SELECT') AS select_ok,
+    has_table_privilege($1, c.oid, 'INSERT') AS insert_ok,
+    has_table_privilege($1, c.oid, 'UPDATE') AS update_ok,
+    has_table_privilege($1, c.oid, 'DELETE') AS delete_ok,
+    has_table_privilege($1, c.oid, 'TRUNCATE') AS truncate_ok,
+    has_table_privilege($1, c.oid, 'REFERENCES') AS references_ok,
+    has_table_privilege($1, c.oid, 'TRIGGER') AS trigger_ok,
+    EXISTS (
+      SELECT 1
+      FROM aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
+      WHERE acl.grantee=0
+    ) AS public_grant
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname=$2 AND c.relname=$3`, [runtimeRole, schema, metadata.tableName]);
   if (
     effective.length !== 1
     || effective[0].select_ok !== true
@@ -91,5 +109,6 @@ export async function verifySchemaEpochReleaseEffectCohortRuntimePrivileges(
     || effective[0].truncate_ok !== false
     || effective[0].references_ok !== false
     || effective[0].trigger_ok !== false
+    || effective[0].public_grant !== false
   ) throw new Error('Schema-epoch runtime role has unexpected effective release-effect cohort privileges');
 }

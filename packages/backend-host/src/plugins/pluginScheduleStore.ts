@@ -250,6 +250,7 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
     assertClaim(input);
     const dataSource = await this.dataSourceProvider();
     const now = input.now ?? this.clock();
+    const runtime = this.runtimeBinding();
     return runPluginTransactionV1(dataSource, async (manager) => {
       await recoverExpiredLeases(manager, now);
       const repository = manager.getRepository(PluginScheduledJob);
@@ -265,11 +266,16 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
         )
         .orderBy('job.next_run_at', 'ASC')
         .addOrderBy('job.created_at', 'ASC');
-      if (config.tenantPlacementReleaseId) {
-        query.andWhere('job.release_id = :hostReleaseId', { hostReleaseId: config.tenantPlacementReleaseId });
+      if (runtime.releaseId) {
+        query.andWhere('job.release_id = :hostReleaseId', { hostReleaseId: runtime.releaseId });
       }
-      const records =
-        dataSource.options.type === 'oracle'
+      const records = runtime.releaseId
+        ? await query
+          .take(dataSource.options.type === 'oracle'
+            ? oraclePluginClaimCandidateWindowV1(input.limit)
+            : input.limit)
+          .getMany()
+        : dataSource.options.type === 'oracle'
           ? await lockOraclePluginClaimCandidatesV1(
               repository,
               await query
@@ -285,7 +291,29 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
               .take(input.limit)
               .getMany();
       const claimed: ClaimedPluginScheduledJobV1[] = [];
-      for (const record of records) {
+      for (const candidate of records) {
+        let record = candidate;
+        if (runtime.releaseId) {
+          // Canonical release claim order is assignment -> cohort -> effect.
+          // Re-read the candidate only after both release fences are held.
+          const releaseAssignment = await findTenantReleaseWorkAssignmentForUpdate(
+            manager,
+            candidate.tenantRef,
+          );
+          if (!releaseAssignment || releaseAssignment.releaseId !== runtime.releaseId) continue;
+          await assertReleaseEffectAdmission(manager, {
+            sourceId: 'plugin_schedule_delivery',
+            releaseId: releaseAssignment.releaseId,
+          }, runtime);
+          const locked = await findPluginRowForUpdateV1(repository, { id: candidate.id });
+          if (
+            !locked
+            || !scheduleClaimEligible(locked, now)
+            || locked.releaseId !== releaseAssignment.releaseId
+            || integer(locked.assignmentEpoch ?? 0) !== integer(releaseAssignment.assignmentEpoch)
+          ) continue;
+          record = locked;
+        }
         const attempt = integer(record.attempt) + 1;
         await manager.getRepository(PluginScheduledJob).update(
           { id: record.id },

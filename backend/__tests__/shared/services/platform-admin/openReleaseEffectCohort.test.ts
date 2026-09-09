@@ -7,7 +7,7 @@ import {
   openReleaseEffectCohort,
 } from '@enterpriseglue/shared/services/platform-admin/open-release-effect-cohort.js';
 
-const releaseId = 'saas-preview-1';
+const releaseId = `sha256:${'1'.repeat(64)}`;
 const cohortEpoch = 41;
 const inventorySha256 = releaseEffectInventorySha256();
 const status = {
@@ -48,6 +48,7 @@ describe('openReleaseEffectCohort', () => {
 
   it.each([
     { releaseId: '' },
+    { releaseId: 'saas-preview-1' },
     { cohortEpoch: 0 },
     { cohortEpoch: Number.MAX_SAFE_INTEGER + 1 },
     { inventoryVersion: 'release-effect-inventory.enterpriseglue.io/other' },

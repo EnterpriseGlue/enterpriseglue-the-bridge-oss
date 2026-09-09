@@ -21,7 +21,8 @@ identities only the least database authority they need.
 Set `database.profile.databaseType=postgres` and
 `database.profile.tenancyMode=pooled` together to activate the schema-epoch bridge. The chart
 renders those values explicitly into each database workload so the ConfigMap cannot select a
-different runtime contract. Application startup is then verify-only. The separately credentialed
+different runtime contract. The exact environment name is `EG_TENANCY_MODE`; legacy
+`TENANCY_MODE` data in a projected ConfigMap has no effect. Application startup is then verify-only. The separately credentialed
 owner hook always renders and can apply only the exact signed 0130-to-0131 transition;
 `database.migration.enabled` cannot skip it or extend it to the later enforcement migration.
 The owner rejects a fresh database, empty ledger, partial ledger, or any other predecessor before
@@ -43,7 +44,7 @@ database:
   profile: { databaseType: postgres, tenancyMode: pooled }
   releaseEffectCohort:
     enabled: true
-    releaseId: <immutable-managed-release-id>
+    releaseId: sha256:<digest-of-the-verified-candidate-receipt-bytes>
     cohortEpoch: <positive-safe-integer>
     inventoryVersion: release-effect-inventory.enterpriseglue.io/v1
     inventorySha256: <sha256-from-the-signed-release-receipt>
@@ -51,12 +52,19 @@ serviceAccounts:
   cohort: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
 ```
 
-The deployment controller must obtain the inventory inputs from the exact signed release receipt,
-not an operator claim or a prior release. The chart requires those values to equal its packaged
+The deployment controller must verify the candidate signature, source revision, backend/chart
+subjects, manifest, owner-transition implementation digest, and effect inventory. It then computes
+the SHA-256 of those exact verified receipt bytes and supplies `sha256:<64 lowercase hex>` as the
+release ID; the value is propagated and stored unchanged. The chart requires the inventory values to equal its packaged
 manifest. `database.releaseEffectCohort` also requires the explicit `postgres`/`pooled` profile;
 that profile always renders the owner and restricted preflight hooks even when their legacy enable
 booleans are false. The separate settlement runbook defines retirement and fail-closed coverage;
 opening a cohort does not establish maintenance or shutdown eligibility.
+
+For the managed bridge, application, migration, and preflight Secret names are pairwise distinct.
+Migration and preflight ServiceAccounts are distinct, and an enabled cohort opener uses a third
+distinct ServiceAccount. The preflight database login is membership-free and reads PostgreSQL
+relation ACL catalogues without inheriting either owner or runtime privileges.
 
 For PostgreSQL, `database.migration.runtimeRole` names an existing restricted runtime login. Outside
 the bridge profile it refreshes ordinary grants after successful owner migrations. In the bridge

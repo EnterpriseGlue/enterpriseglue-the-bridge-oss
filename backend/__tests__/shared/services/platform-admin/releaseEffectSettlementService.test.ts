@@ -17,6 +17,7 @@ import {
 } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
 
 const releaseId = 'release-preview';
+const managedReleaseId = `sha256:${'2'.repeat(64)}`;
 const cohortEpoch = 7;
 const binding = { releaseId, cohortEpoch };
 let source: DataSource;
@@ -51,12 +52,22 @@ async function open(serviceUnderTest = service()) {
 describe('ReleaseEffectSettlementService', () => {
   it('rejects managed pooled Cloud producer admission when a release has no cohort epoch', async () => {
     await expect(source.transaction((manager) => assertReleaseEffectAdmission(manager, {
-      sourceId: 'plugin_event_delivery', releaseId,
-    }, { releaseId, managedPooledCloud: true })))
+      sourceId: 'plugin_event_delivery', releaseId: managedReleaseId,
+    }, { releaseId: managedReleaseId, managedPooledCloud: true })))
       .rejects.toThrow('release_effect_admission_not_configured');
     await expect(source.transaction((manager) => assertReleaseEffectAdmission(manager, {
       sourceId: 'plugin_event_delivery', releaseId,
     }, { releaseId }))).resolves.toBeUndefined();
+  });
+
+  it('rejects an arbitrary label as a managed candidate release identity', async () => {
+    const managed = new ReleaseEffectSettlementService(
+      async () => source,
+      () => ({ releaseId, cohortEpoch, managedPooledCloud: true }),
+    );
+    await expect(managed.open({ releaseId, cohortEpoch, expectedRevision: 0 }))
+      .rejects.toThrow('sha256 digest of the verified signed candidate receipt');
+    expect(await source.getRepository(ReleaseEffectCohort).count()).toBe(0);
   });
 
   it('opens once, closes with a revision fence, and rejects admission after close', async () => {

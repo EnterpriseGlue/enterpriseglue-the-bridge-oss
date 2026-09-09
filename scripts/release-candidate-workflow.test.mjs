@@ -125,6 +125,9 @@ test('candidate signatures bind the schema-epoch manifest in the image, chart, p
   assert.match(dockerReusable, /dist\/packages\/shared\/src\/schema-epoch-manifest\.json/)
   assert.match(dockerReusable, /dist\/packages\/shared\/dist\/schema-epoch-manifest\.json/)
   assert.match(dockerReusable, /backend schema-epoch manifest differs from protected source/)
+  assert.match(dockerReusable, /import\('\.\/dist\/packages\/shared\/dist\/db\/run-migrations\.js'\)/)
+  assert.match(dockerReusable, /import\('\.\/dist\/packages\/shared\/dist\/services\/platform-admin\/open-release-effect-cohort\.js'\)/)
+  assert.match(dockerReusable, /backend schema-epoch entrypoints are not executable from the production package layout/)
 })
 
 test('candidate package planning authenticates to GitHub Packages', () => {

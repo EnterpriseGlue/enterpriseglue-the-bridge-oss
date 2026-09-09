@@ -166,8 +166,9 @@ describe('runMigrations bootstrap behavior', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('lets the owner job apply only the signed migration ceiling without policy or repair side effects', async () => {
+  it('uses the explicit pooled runtime contract and applies only 0131 despite a drifted legacy tenancy variable', async () => {
     vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    vi.stubEnv('TENANCY_MODE', 'single');
     vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
     const previousTenancyMode = config.tenancyMode;
     (config as { tenancyMode: string }).tenancyMode = 'pooled';
@@ -234,6 +235,8 @@ describe('runMigrations bootstrap behavior', () => {
       expect(dataSource.runMigrations).toHaveBeenCalledOnce();
       expect(verifyOwnerMigrationStartingEpoch).toHaveBeenCalledOnce();
       expect(dataSource.migrations.at(-1)?.name).toBe('AddReleaseEffectCohorts1700000000131');
+      expect(dataSource.migrations.some((migration: { name?: string }) =>
+        migration.name === 'EnforceExplicitPostgresContext1700000000132')).toBe(false);
       expect(dataSource.synchronize).not.toHaveBeenCalled();
       expect(rlsRepair).not.toHaveBeenCalled();
       expect(policyRunner.addColumn).not.toHaveBeenCalled();

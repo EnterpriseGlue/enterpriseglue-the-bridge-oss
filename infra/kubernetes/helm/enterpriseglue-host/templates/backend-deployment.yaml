@@ -89,7 +89,7 @@ spec:
             {{- if .Values.database.profile.databaseType }}
             - name: DATABASE_TYPE
               value: {{ .Values.database.profile.databaseType | quote }}
-            - name: TENANCY_MODE
+            - name: EG_TENANCY_MODE
               value: {{ .Values.database.profile.tenancyMode | quote }}
             {{- end }}
             - name: EG_DATABASE_STARTUP_MODE

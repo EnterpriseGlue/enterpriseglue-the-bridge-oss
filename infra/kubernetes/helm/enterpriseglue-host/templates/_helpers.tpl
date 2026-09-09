@@ -42,10 +42,18 @@ app.kubernetes.io/component: {{ .component }}
 {{- if or (ne .Values.database.profile.databaseType "postgres") (ne .Values.database.profile.tenancyMode "pooled") -}}
 {{- fail "database.releaseEffectCohort requires the explicit postgres/pooled database profile" -}}
 {{- end -}}
+{{- if eq .Values.database.applicationSecretName .Values.database.migrationSecretName -}}
+{{- fail "database.releaseEffectCohort requires distinct application and migration Secrets" -}}
+{{- end -}}
+{{- $cohortServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "cohort") | trim -}}
+{{- $migrationServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "migration") | trim -}}
+{{- if eq $cohortServiceAccount $migrationServiceAccount -}}
+{{- fail "database.releaseEffectCohort requires distinct cohort and migration ServiceAccounts" -}}
+{{- end -}}
 {{- $manifest := include "enterpriseglue-host.schemaEpochManifest" . | fromJson -}}
 {{- $releaseId := required "database.releaseEffectCohort.releaseId is required" .Values.database.releaseEffectCohort.releaseId -}}
-{{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$" $releaseId) -}}
-{{- fail "database.releaseEffectCohort.releaseId is invalid" -}}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $releaseId) -}}
+{{- fail "database.releaseEffectCohort.releaseId must be the digest of the verified signed candidate receipt" -}}
 {{- end -}}
 {{- if lt (int64 .Values.database.releaseEffectCohort.cohortEpoch) 1 -}}
 {{- fail "database.releaseEffectCohort.cohortEpoch must be positive" -}}
@@ -135,9 +143,24 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 
 {{- define "enterpriseglue-host.schemaEpochOwnerMode" -}}
 {{- if eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" -}}
+{{- $applicationSecret := required "database.applicationSecretName is required for the pooled PostgreSQL schema-epoch bridge" .Values.database.applicationSecretName -}}
 {{- $migrationSecret := required "database.migrationSecretName is required for the pooled PostgreSQL schema-epoch bridge" .Values.database.migrationSecretName -}}
 {{- $preflightSecret := required "database.preflightSecretName is required for pooled PostgreSQL schema-epoch preflight" .Values.database.preflightSecretName -}}
 {{- $runtimeRole := required "database.migration.runtimeRole is required for pooled PostgreSQL schema-epoch preflight" .Values.database.migration.runtimeRole -}}
+{{- if or (eq $applicationSecret $migrationSecret) (eq $applicationSecret $preflightSecret) (eq $migrationSecret $preflightSecret) -}}
+{{- fail "pooled PostgreSQL schema-epoch bridge requires pairwise-distinct application, migration, and preflight Secrets" -}}
+{{- end -}}
+{{- $migrationServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "migration") | trim -}}
+{{- $preflightServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "preflight") | trim -}}
+{{- if eq $migrationServiceAccount $preflightServiceAccount -}}
+{{- fail "pooled PostgreSQL schema-epoch bridge requires distinct migration and preflight ServiceAccounts" -}}
+{{- end -}}
+{{- if .Values.database.releaseEffectCohort.enabled -}}
+{{- $cohortServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "cohort") | trim -}}
+{{- if or (eq $cohortServiceAccount $migrationServiceAccount) (eq $cohortServiceAccount $preflightServiceAccount) -}}
+{{- fail "pooled PostgreSQL schema-epoch bridge requires pairwise-distinct migration, preflight, and cohort ServiceAccounts" -}}
+{{- end -}}
+{{- end -}}
 {{- include "enterpriseglue-host.schemaEpochManifest" . | fromJson | dig "roles" "ownerMigration" "mode" "" -}}
 {{- else -}}
 {{- ternary "legacy-apply" "disabled" .Values.database.migration.enabled -}}

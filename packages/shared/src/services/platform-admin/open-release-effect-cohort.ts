@@ -4,6 +4,7 @@ import {
 import { closeDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
   configuredReleaseEffectRuntimeBinding,
+  assertSignedCandidateReceiptReleaseId,
   releaseEffectInventorySha256,
   releaseEffectSettlementService,
   type ReleaseEffectSettlementService,
@@ -29,6 +30,7 @@ export async function openReleaseEffectCohort(
   service: CohortOpener = releaseEffectSettlementService,
 ): Promise<ReleaseEffectSettlementStatusV1> {
   const configuredInventorySha256 = releaseEffectInventorySha256();
+  assertSignedCandidateReceiptReleaseId(command.releaseId);
   if (
     !command.releaseId
     || !Number.isSafeInteger(command.cohortEpoch)

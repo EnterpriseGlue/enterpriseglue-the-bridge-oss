@@ -78,7 +78,7 @@
           "required": ["enabled", "releaseId", "cohortEpoch", "inventoryVersion", "inventorySha256", "backoffLimit", "ttlSecondsAfterFinished"],
           "properties": {
             "enabled": { "type": "boolean" },
-            "releaseId": { "type": "string", "maxLength": 256, "pattern": "^(|[A-Za-z0-9][A-Za-z0-9._:-]*)$" },
+            "releaseId": { "type": "string", "pattern": "^(|sha256:[a-f0-9]{64})$" },
             "cohortEpoch": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
             "inventoryVersion": { "type": "string", "enum": ["", "release-effect-inventory.enterpriseglue.io/v1"] },
             "inventorySha256": { "type": "string", "pattern": "^(|[a-f0-9]{64})$" },

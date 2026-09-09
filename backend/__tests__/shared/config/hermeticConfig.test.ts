@@ -9,6 +9,7 @@ const originalTenantSecretBrokerUrl = process.env.EG_TENANT_SECRET_BROKER_URL;
 const originalTenantSecretBrokerTokenRef = process.env.EG_TENANT_SECRET_BROKER_TOKEN_REF;
 const originalTenantSecretBrokerRequired = process.env.EG_TENANT_SECRET_BROKER_REQUIRED;
 const runtimeEnvironmentNames = [
+  'TENANCY_MODE',
   'EG_RUNTIME_ROLE',
   'EG_DATABASE_STARTUP_MODE',
   'EG_TENANT_PLACEMENT_RELEASE_ID',
@@ -145,9 +146,20 @@ describe('hermetic test configuration', () => {
     process.env.EG_TENANCY_MODE = 'pooled';
     process.env.EG_TENANCY_CLOUD_REQUIRED = 'true';
     process.env.EG_TENANT_RLS_ENFORCED = 'true';
-    process.env.EG_TENANT_PLACEMENT_RELEASE_ID = 'release-preview';
+    process.env.EG_TENANT_PLACEMENT_RELEASE_ID = `sha256:${'1'.repeat(64)}`;
     await expect(import('@enterpriseglue/shared/config/index.js'))
       .rejects.toThrow('Managed pooled Cloud release awareness requires EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH.');
+  });
+
+  it('rejects an arbitrary managed release label instead of a verified candidate receipt digest', async () => {
+    process.env.EG_TENANCY_MODE = 'pooled';
+    process.env.TENANCY_MODE = 'single';
+    process.env.EG_TENANCY_CLOUD_REQUIRED = 'true';
+    process.env.EG_TENANT_RLS_ENFORCED = 'true';
+    process.env.EG_TENANT_PLACEMENT_RELEASE_ID = 'release-preview';
+    process.env.EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH = '7';
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('sha256 digest of the verified signed candidate receipt');
   });
 
   it('rejects pooled tenancy on a non-PostgreSQL database', async () => {

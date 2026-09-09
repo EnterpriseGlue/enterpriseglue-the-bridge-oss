@@ -478,6 +478,7 @@ implements PluginEventDeliveryStoreV1 {
     }
     const dataSource = await this.dataSourceProvider();
     const now = input.now ?? Date.now();
+    const runtime = this.runtimeBinding();
     const result = await runPluginTransactionV1(
       dataSource,
       async (manager) => {
@@ -509,11 +510,16 @@ implements PluginEventDeliveryStoreV1 {
         )
         .orderBy('delivery.next_attempt_at', 'ASC')
         .addOrderBy('delivery.created_at', 'ASC');
-      if (config.tenantPlacementReleaseId) {
-        query.andWhere('delivery.release_id = :hostReleaseId', { hostReleaseId: config.tenantPlacementReleaseId });
+      if (runtime.releaseId) {
+        query.andWhere('delivery.release_id = :hostReleaseId', { hostReleaseId: runtime.releaseId });
       }
-      const records =
-        dataSource.options.type === 'oracle'
+      const records = runtime.releaseId
+        ? await query
+          .take(dataSource.options.type === 'oracle'
+            ? oraclePluginClaimCandidateWindowV1(input.limit)
+            : input.limit)
+          .getMany()
+        : dataSource.options.type === 'oracle'
           ? await lockOraclePluginClaimCandidatesV1(
               repository,
               await query
@@ -530,7 +536,30 @@ implements PluginEventDeliveryStoreV1 {
               .getMany();
       const claimed: ClaimedPluginEventV1[] = [];
       const circuitObservations: PluginEventCircuitObservationV1[] = [];
-      for (const record of records) {
+      for (const candidate of records) {
+        let record = candidate;
+        if (runtime.releaseId) {
+          // Canonical release claim order is assignment -> cohort -> effect.
+          // The candidate read is only a preview; every field is revalidated
+          // after the three durable row fences are held.
+          const releaseAssignment = await findTenantReleaseWorkAssignmentForUpdate(
+            manager,
+            candidate.tenantRef,
+          );
+          if (!releaseAssignment || releaseAssignment.releaseId !== runtime.releaseId) continue;
+          await assertReleaseEffectAdmission(manager, {
+            sourceId: 'plugin_event_delivery',
+            releaseId: releaseAssignment.releaseId,
+          }, runtime);
+          const locked = await findPluginRowForUpdateV1(repository, { id: candidate.id });
+          if (
+            !locked
+            || !eventClaimEligible(locked, now)
+            || locked.releaseId !== releaseAssignment.releaseId
+            || number(locked.assignmentEpoch ?? 0) !== number(releaseAssignment.assignmentEpoch)
+          ) continue;
+          record = locked;
+        }
         const claimDecision = await subscriptionClaimAllowed(
           manager,
           record,

@@ -36,9 +36,9 @@ spec:
           command: ["node", "-e"]
           args:
             {{- if eq $schemaEpochOwnerMode "apply-through-executable" }}
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runSchemaEpochOwnerMigrations}) => runSchemaEpochOwnerMigrations())"
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runSchemaEpochOwnerMigrations}) => runSchemaEpochOwnerMigrations())"
             {{- else }}
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
             {{- end }}
           {{- if or .Values.database.migration.runtimeRole .Values.database.profile.databaseType }}
           env:
@@ -49,7 +49,7 @@ spec:
             {{- if .Values.database.profile.databaseType }}
             - name: DATABASE_TYPE
               value: {{ .Values.database.profile.databaseType | quote }}
-            - name: TENANCY_MODE
+            - name: EG_TENANCY_MODE
               value: {{ .Values.database.profile.tenancyMode | quote }}
             {{- end }}
           {{- end }}
@@ -104,9 +104,13 @@ spec:
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
           command: ["node", "-e"]
           args:
-            - "import('./dist/packages/shared/src/services/platform-admin/open-release-effect-cohort.js').then(({openConfiguredReleaseEffectCohort}) => openConfiguredReleaseEffectCohort())"
+            - "import('./dist/packages/shared/dist/services/platform-admin/open-release-effect-cohort.js').then(({openConfiguredReleaseEffectCohort}) => openConfiguredReleaseEffectCohort())"
           env:
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: EG_TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.applicationSecretName }} }
@@ -156,9 +160,9 @@ spec:
           command: ["node", "-e"]
           args:
             {{- if $schemaEpochTarget }}
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runSchemaEpochPreflight}) => runSchemaEpochPreflight())"
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runSchemaEpochPreflight}) => runSchemaEpochPreflight())"
             {{- else }}
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
             {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
@@ -171,7 +175,7 @@ spec:
             {{- end }}
             - name: DATABASE_TYPE
               value: {{ .Values.database.profile.databaseType | quote }}
-            - name: TENANCY_MODE
+            - name: EG_TENANCY_MODE
               value: {{ .Values.database.profile.tenancyMode | quote }}
           {{- end }}
           securityContext:

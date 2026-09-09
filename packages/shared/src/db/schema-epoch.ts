@@ -20,6 +20,7 @@ const DatabaseEpochSchema = MigrationInventorySchema.extend({
 
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
+  purpose: z.literal('owner-transition-1700000000131-closure/v1'),
   count: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();

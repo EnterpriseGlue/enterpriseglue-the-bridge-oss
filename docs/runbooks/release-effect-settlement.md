@@ -23,7 +23,10 @@ stop rather than infer success from the covered counters.
 ## Protocol
 
 Configure one positive `EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH` together with
-the immutable `EG_TENANT_PLACEMENT_RELEASE_ID`. Use the existing private
+`EG_TENANT_PLACEMENT_RELEASE_ID=sha256:<digest-of-verified-candidate-receipt-bytes>`. The Cloud
+controller first verifies the candidate signature, source, backend/chart subjects, schema
+manifest, owner-transition implementation digest and effect inventory, then hashes those exact
+receipt bytes. OSS propagates and stores that identity unchanged. Use the existing private
 `EG_TENANT_RELEASE_CONTROLLER_TOKEN` for every request.
 Managed pooled Cloud startup rejects a configured release identity without an
 epoch. Ordinary self-host installations may omit both values; those runtimes
@@ -49,7 +52,7 @@ do not participate in release settlement.
    Plugin event enqueue and fixed-schedule upsert lock the tenant assignment
    before sharing a conditional TypeORM write fence with this transition.
    Exact event and command replays remain idempotent. Dead-letter requeue and
-   schedule resume use the canonical assignment → cohort → effect-row lock
+   schedule resume and worker event/schedule claims use the canonical assignment → cohort → effect-row lock
    order and revalidate the locked assignment; schedule pause/cancellation
    remain available to settle retained work.
 4. Read `GET ...` and invoke `POST .../verify` with the current revision.

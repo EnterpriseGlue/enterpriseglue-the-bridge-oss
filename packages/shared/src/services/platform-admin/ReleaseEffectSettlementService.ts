@@ -18,6 +18,13 @@ import type { DataSource, EntityManager } from 'typeorm';
 
 const EVENT_UNRESOLVED = ['pending', 'delivering', 'retry_wait'] as const;
 const SCHEDULE_UNRESOLVED = ['scheduled', 'delivering', 'retry_wait'] as const;
+export const SIGNED_CANDIDATE_RECEIPT_RELEASE_ID = /^sha256:[a-f0-9]{64}$/;
+
+export function assertSignedCandidateReceiptReleaseId(releaseId: string): void {
+  if (!SIGNED_CANDIDATE_RECEIPT_RELEASE_ID.test(releaseId)) {
+    throw new Error('Managed release identity does not match the sha256 digest of the verified signed candidate receipt');
+  }
+}
 
 export interface ReleaseEffectSourceStatusV1 extends ReleaseEffectSourceV1 {
   readonly outstanding: number | null;
@@ -83,6 +90,9 @@ export function releaseEffectInventorySha256(
 }
 
 export function configuredReleaseEffectRuntimeBinding(): ReleaseEffectRuntimeBindingV1 {
+  if (config.tenancyMode === 'pooled' && config.tenancyCloudRequired && config.tenantPlacementReleaseId) {
+    assertSignedCandidateReceiptReleaseId(config.tenantPlacementReleaseId);
+  }
   return {
     releaseId: config.tenantPlacementReleaseId,
     cohortEpoch: config.tenantReleaseEffectCohortEpoch,
@@ -104,6 +114,9 @@ export async function assertReleaseEffectAdmission(
   input: ReleaseEffectProducerAdmissionV1,
   runtime: ReleaseEffectRuntimeBindingV1 = configuredReleaseEffectRuntimeBinding(),
 ): Promise<void> {
+  if (runtime.managedPooledCloud && runtime.releaseId) {
+    assertSignedCandidateReceiptReleaseId(runtime.releaseId);
+  }
   if (!runtime.cohortEpoch) {
     if (runtime.releaseId && runtime.managedPooledCloud) {
       throw new ReleaseEffectAdmissionError('release_effect_admission_not_configured');
@@ -267,6 +280,7 @@ export class ReleaseEffectSettlementService {
 
   private assertRuntimeBinding(releaseId: string, cohortEpoch: number): void {
     const runtime = this.runtimeBinding();
+    if (runtime.managedPooledCloud) assertSignedCandidateReceiptReleaseId(releaseId);
     if (!runtime.releaseId || !runtime.cohortEpoch) {
       throw Errors.serviceUnavailable('Release effect cohort tracking is not configured');
     }

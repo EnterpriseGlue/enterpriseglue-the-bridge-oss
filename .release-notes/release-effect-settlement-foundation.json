@@ -16,7 +16,7 @@
     ]
   },
   "configuration": [
-    "EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH binds a managed release process to one positive effect-admission epoch. Managed pooled Cloud rejects a release identity without it; ordinary self-host installations may omit both values."
+    "EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH binds a managed release process to one positive effect-admission epoch. Managed pooled Cloud requires EG_TENANT_PLACEMENT_RELEASE_ID to be the sha256 digest of the exact verified signed candidate receipt bytes and rejects a release identity without an epoch; ordinary self-host installations may omit both values."
   ],
   "api": {
     "compatibility": "additive",

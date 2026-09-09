@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const chart = path.join(root, 'infra/kubernetes/helm/enterpriseglue-host')
 const sha256 = 'a'.repeat(64)
 const releaseEffectInventorySha256 = 'c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087'
+const receiptReleaseId = `sha256:${'1'.repeat(64)}`
 const enabled = {
   enabled: true,
   configMapName: 'api-platform-bundle-a',
@@ -86,11 +87,16 @@ test('pooled PostgreSQL profile always renders the signed bridge owner and verif
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /runSchemaEpochOwnerMigrations/)
   assert.match(result.stdout, /runSchemaEpochPreflight/)
+  assert.match(result.stdout, /dist\/packages\/shared\/dist\/db\/run-migrations\.js/)
+  assert.doesNotMatch(result.stdout, /dist\/packages\/shared\/src\/db\/run-migrations\.js/)
   assert.doesNotMatch(result.stdout, /runMigrations\(\{mode:'apply'\}\)/)
   assert.equal(result.stdout.match(/name: EG_DATABASE_STARTUP_MODE\n\s+value: "verify"/g)?.length, 2)
   assert.match(result.stdout, /secretRef: \{ name: enterpriseglue-migration-secrets \}/)
   assert.equal(result.stdout.match(/name: EG_POSTGRES_RUNTIME_ROLE/g)?.length, 2)
   assert.match(result.stdout, /name: EG_POSTGRES_RUNTIME_ROLE\n\s+value: "eg_runtime"/)
+  assert.equal(result.stdout.match(/name: EG_TENANCY_MODE\n\s+value: "pooled"/g)?.length, 4)
+  assert.equal(result.stdout.match(/name: DATABASE_TYPE\n\s+value: "postgres"/g)?.length, 4)
+  assert.doesNotMatch(result.stdout, /^\s*- name: TENANCY_MODE$/m)
 })
 
 test('non-target profiles retain migration.enabled and never require the bridge owner secret', async (t) => {
@@ -205,7 +211,7 @@ test('managed pooled PostgreSQL opens the exact effect cohort after preflight an
       preflight: { enabled: false },
       releaseEffectCohort: {
         enabled: true,
-        releaseId: 'saas-preview-1',
+        releaseId: receiptReleaseId,
         cohortEpoch: 41,
         inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1',
         inventorySha256,
@@ -223,6 +229,7 @@ test('managed pooled PostgreSQL opens the exact effect cohort after preflight an
   assert.match(jobs.preflight, /helm\.sh\/hook-weight: "-10"/)
   assert.match(jobs.cohort, /helm\.sh\/hook-weight: "0"/)
   assert.match(jobs.cohort, /openConfiguredReleaseEffectCohort/)
+  assert.match(jobs.cohort, /dist\/packages\/shared\/dist\/services\/platform-admin\/open-release-effect-cohort\.js/)
   assert.match(jobs.cohort, /secretRef: \{ name: enterpriseglue-secrets \}/)
   assert.doesNotMatch(jobs.cohort, /enterpriseglue-migration-secrets|runMigrations|synchronize|repair/)
   assert.match(jobs.cohort, /automountServiceAccountToken: false/)
@@ -236,7 +243,7 @@ test('managed pooled PostgreSQL opens the exact effect cohort after preflight an
       document.includes('kind: Deployment') && document.includes(`app.kubernetes.io/component: ${component}`))
     assert.ok(workload, component)
     for (const [name, value] of Object.entries({
-      EG_TENANT_PLACEMENT_RELEASE_ID: 'saas-preview-1',
+      EG_TENANT_PLACEMENT_RELEASE_ID: receiptReleaseId,
       EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH: '41',
       EG_RELEASE_EFFECT_EXPECTED_INVENTORY_VERSION: 'release-effect-inventory.enterpriseglue.io/v1',
       EG_RELEASE_EFFECT_EXPECTED_INVENTORY_SHA256: inventorySha256,
@@ -249,6 +256,7 @@ for (const [label, database] of [
   ['non-PostgreSQL profile', { profile: { databaseType: '', tenancyMode: 'pooled' } }],
   ['single tenancy', { profile: { databaseType: 'postgres', tenancyMode: 'single' } }],
   ['missing release', { releaseEffectCohort: { releaseId: '' } }],
+  ['arbitrary release label', { releaseEffectCohort: { releaseId: 'saas-preview-1' } }],
   ['zero epoch', { releaseEffectCohort: { cohortEpoch: 0 } }],
   ['unknown inventory', { releaseEffectCohort: { inventoryVersion: '' } }],
   ['missing inventory hash', { releaseEffectCohort: { inventorySha256: '' } }],
@@ -261,7 +269,7 @@ for (const [label, database] of [
       preflight: { enabled: true },
       releaseEffectCohort: {
         enabled: true,
-        releaseId: 'saas-preview-1',
+        releaseId: receiptReleaseId,
         cohortEpoch: 41,
         inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1',
         inventorySha256: releaseEffectInventorySha256,
@@ -287,7 +295,7 @@ test('effect cohort rollout identity annotations cannot be overridden', async (t
     database: {
       profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
       releaseEffectCohort: {
-        enabled: true, releaseId: 'saas-preview-1', cohortEpoch: 41,
+        enabled: true, releaseId: receiptReleaseId, cohortEpoch: 41,
         inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1', inventorySha256: releaseEffectInventorySha256,
       },
     },
@@ -296,3 +304,31 @@ test('effect cohort rollout identity annotations cannot be overridden', async (t
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /cannot be overridden/)
 })
+
+for (const [label, database, serviceAccounts] of [
+  ['application/migration Secret alias', { applicationSecretName: 'same-secret', migrationSecretName: 'same-secret' }, {}],
+  ['application/preflight Secret alias', { applicationSecretName: 'same-secret', preflightSecretName: 'same-secret' }, {}],
+  ['migration/preflight Secret alias', { migrationSecretName: 'same-secret', preflightSecretName: 'same-secret' }, {}],
+  ['migration/preflight ServiceAccount alias', {}, { migration: { name: 'same-sa' }, preflight: { name: 'same-sa' } }],
+  ['cohort/migration ServiceAccount alias', {}, { cohort: { name: 'same-sa' }, migration: { name: 'same-sa' } }],
+  ['cohort/preflight ServiceAccount alias', {}, { cohort: { name: 'same-sa' }, preflight: { name: 'same-sa' } }],
+]) {
+  test(`managed bridge rejects ${label}`, async (t) => {
+    const result = await render(t, {
+      database: {
+        profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+        ...database,
+        releaseEffectCohort: {
+          enabled: true,
+          releaseId: receiptReleaseId,
+          cohortEpoch: 41,
+          inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1',
+          inventorySha256: releaseEffectInventorySha256,
+        },
+      },
+      serviceAccounts,
+    })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.stdout, '')
+  })
+}

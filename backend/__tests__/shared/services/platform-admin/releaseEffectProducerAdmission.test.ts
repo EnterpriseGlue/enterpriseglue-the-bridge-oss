@@ -92,6 +92,14 @@ describe('covered release effect producers', () => {
     })).rejects.toThrow('release_effect_admission_closed');
   });
 
+  it('claims due event work only after revalidating its release assignment', async () => {
+    const eventStore = new DatabasePluginEventDeliveryStoreV1(async () => source);
+    const queued = await eventStore.enqueue(event('claim-event'));
+
+    await expect(eventStore.claimDue({ workerRef: 'event-worker', limit: 1, leaseSeconds: 30, now: 10_000 }))
+      .resolves.toEqual([expect.objectContaining({ deliveryId: queued.deliveryId, leaseOwner: 'event-worker' })]);
+  });
+
   it('revalidates the locked assignment before administrative event and schedule retries', async () => {
     const eventStore = new DatabasePluginEventDeliveryStoreV1(async () => source);
     const scheduleStore = new DatabasePluginScheduleStoreV1(async () => source, () => 10_000);
@@ -102,7 +110,7 @@ describe('covered release effect producers', () => {
     await scheduleStore.execute(schedule('upsert', 'schedule-cross-release'));
     await scheduleStore.setPaused({ jobRef: scheduleJobRef(), paused: true, expectedRevision: 1, reasonCode: 'operator_paused' });
 
-    const nextReleaseId = 'release-next';
+    const nextReleaseId = `sha256:${'3'.repeat(64)}`;
     const nextBinding = { releaseId: nextReleaseId, cohortEpoch: 8, managedPooledCloud: true };
     await new ReleaseEffectSettlementService(async () => source, () => nextBinding)
       .open({ releaseId: nextReleaseId, cohortEpoch: 8, expectedRevision: 0 });

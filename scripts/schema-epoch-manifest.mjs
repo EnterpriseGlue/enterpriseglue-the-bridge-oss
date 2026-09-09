@@ -34,6 +34,7 @@ export function implementationInventoryFromSources(sources) {
     .sort((left, right) => left.path.localeCompare(right.path))
   return {
     algorithm: 'sha256-source-v1',
+    purpose: 'owner-transition-1700000000131-closure/v1',
     count: entries.length,
     sha256: sha256(JSON.stringify(entries)),
   }
