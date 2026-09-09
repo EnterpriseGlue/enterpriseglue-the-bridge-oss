@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **engines:** permit REST requests beneath approved managed base ([d0e01b6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d0e01b69c7da108ac33457ac0086b3f867f4d85e))
-* **engines:** permit REST requests beneath approved managed base ([5d80651](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5d806519a0e9582a933ba9e59e89efecf5749ffb))
 
 ## [0.24.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.23.0...v0.24.0) (2026-09-08)
 
