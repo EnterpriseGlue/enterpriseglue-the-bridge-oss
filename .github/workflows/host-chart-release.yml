@@ -161,12 +161,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          existing="$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION" 2>/dev/null || true)"
+          if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+            source scripts/release-candidate-artifacts.sh
+            candidate_subject="$(candidate_chart_subject "$CANDIDATE_RECEIPT" hostChart)"
+            candidate_digest="${candidate_subject##*@}"
+            candidate_compare_chart "$CHART_ARCHIVE" "${candidate_subject%@*}" "$candidate_digest"
+          fi
+          if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+            existing="$(candidate_resolve_optional "$CHART_REPOSITORY:$CHART_VERSION")"
+          else
+            # Historical pre-candidate checkouts do not contain the new helper.
+            existing="$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION" 2>/dev/null || true)"
+          fi
           if [[ -z "$existing" ]]; then
             if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
-              candidate_subject="$(jq -er '.subjects.hostChart.subject' "$CANDIDATE_RECEIPT")"
-              candidate_digest="${candidate_subject##*@}"
-              [[ "${candidate_subject%@*}" == "ghcr.io/enterpriseglue/release-candidates/charts/enterpriseglue-host" ]]
               oras cp -r "$candidate_subject" "$CHART_REPOSITORY:$CHART_VERSION"
               [[ "$(oras resolve "$CHART_REPOSITORY:$CHART_VERSION")" == "$candidate_digest" ]]
             else

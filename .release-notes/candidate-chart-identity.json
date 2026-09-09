@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "candidate-chart-identity",
+  "type": "security",
+  "scope": "release",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Bind staged Helm charts to their exact release candidate and reject failed artifact comparisons before signing or promotion.",
+  "userImpact": ["Release candidates cannot silently reuse a different chart payload staged for an earlier candidate."],
+  "upgrade": {"required": false, "instructions": []},
+  "configuration": ["Candidate chart repositories are scoped by the verified full source revision; public chart names and semantic versions remain unchanged."],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": ["Artifact lookup, comparison, transfer, and digest failures propagate through shell command substitutions. Protected chart consumers require the exact receipt-bound candidate repository."],
+  "documentation": ["docs/runbooks/release-artifact-promotion.md"],
+  "knownLimitations": ["Live signing and protected registry promotion remain acceptance checks in the authorized release pipeline.", "New source-scoped consumers reject legacy unscoped signed candidate charts; historical recovery requires the matching protected workflow and source."],
+  "rollback": ["Do not overwrite an immutable candidate or public semantic tag. Correct a changed payload through a newly qualified candidate or forward release."],
+  "validation": ["134 CI-contract tests passed, including 48 candidate cases with actual shell and archive comparison regressions; 66 classifier tests, release-note and documentation guards, and workflow lint passed on supported Node 24.15. Live publication and signing were not performed by these local checks."],
+  "packages": []
+}
