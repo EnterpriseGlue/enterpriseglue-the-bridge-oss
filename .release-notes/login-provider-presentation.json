@@ -1,0 +1,21 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "login-provider-presentation",
+  "type": "fix",
+  "scope": "login presentation",
+  "breaking": false,
+  "audiences": ["users", "developers", "administrators"],
+  "summary": "Present a dark, illustrated Carbon login with compact identity-provider buttons.",
+  "userImpact": ["Use a left-aligned dark login panel with a lightweight business-process SVG that is hidden on narrow screens. Other public forms retain their existing appearance.", "Keep the login and authenticated application headers consistently black without changing Carbon navigation controls, sidebar, or page themes.", "Remove the redundant local-credentials heading and visible organization captions beneath provider buttons; retain organization metadata in accessible names. Use recognizable provider logos with uniform Carbon button typography."],
+  "upgrade": {"required": false, "instructions": []},
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": ["Login policy, provider selection, redirect endpoints, and administrator recovery remain unchanged. Brand recognition is presentation-only and never grants trust or access."],
+  "documentation": ["Provider artwork provenance is recorded beside the frontend assets."],
+  "knownLimitations": ["Provider branding uses an exact allowlist of public display names; custom names retain the generic Carbon button. This presentation change does not configure or enable an identity provider.", "Uniform Carbon typography is a product presentation choice, not a claim of full conformance with provider-specific font or label-proportion guidance."],
+  "rollback": ["Revert the frontend presentation change; there is no data migration."],
+  "validation": ["All 36 focused login/provider component tests pass, including custom branding, policy gating, provider-id routing, validation, disabled buttons, and conservative brand recognition. The frontend milestone ran 1,463 tests: 1,461 passed initially; both failures passed in a subsequent isolated 34-test run without assertion or timeout changes.", "The 13 login gallery scenarios pass in Chromium; existing Firefox/WebKit login evidence is reused where source remains applicable. The changed branded-provider scenario passes in all three browsers with exact computed typography parity against the primary Carbon button. The authenticated black header, Voyager links, skip link and mobile navigation pass in Chromium, Firefox and WebKit. Desktop captures, 320px reflow, 200 percent zoom, recovery, progressive discovery and keyboard activation were checked. WebKit authenticated-dashboard screenshot capture timed out; its functional test passes without the optional screenshot capture.", "The three-provider fixture rejects unexpected console warnings/errors, page errors, failed requests, and HTTP failures; only the explicit unauthenticated-session 401 responses are expected.", "Frontend compilation/typechecking, affected-file lint, authorization structure, release-note preflight, documentation-boundary and all eight package tarball checks pass. Unchanged package artifacts were reused after verifying source and lockfile parity; the frontend package was repacked. Protocol emulators, database matrices, and live-provider authentication were not rerun for this presentation-only change."],
+  "packages": [{"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.3", "newVersion": "0.17.4", "impact": "patch"}]
+}

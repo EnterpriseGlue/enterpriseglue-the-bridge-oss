@@ -1,9 +1,11 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProcessesOverviewPage from '@src/features/mission-control/processes-overview/ProcessesOverviewPage';
+
+const instanceState = vi.hoisted(() => ({ empty: false }));
 
 vi.mock('react-split-pane', () => ({
   SplitPane: ({ children }: any) => <div>{children}</div>,
@@ -11,7 +13,7 @@ vi.mock('react-split-pane', () => ({
 }));
 
 vi.mock('@src/components/EngineSelector', () => ({
-  useSelectedEngine: () => null,
+  useSelectedEngine: () => 'engine-1',
 }));
 
 vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
@@ -29,7 +31,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
       countsByStateQ: { data: null, isLoading: false },
       previewCountQ: { data: null, isLoading: false },
       instQ: {
-        data: [
+        data: instanceState.empty ? [] : [
           {
             id: 'inst-1',
             processDefinitionKey: 'order-process',
@@ -39,6 +41,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
         ],
         isLoading: false,
         isError: false,
+        isSuccess: true,
         refetch: vi.fn(),
       },
       defIdQ: { data: 'def-1', isLoading: false },
@@ -85,6 +88,27 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
 });
 
 describe('ProcessesOverviewPage instances', () => {
+  beforeEach(() => { instanceState.empty = false; });
+
+  it('shows only the table empty state when the engine returns no instances', async () => {
+    instanceState.empty = true;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/mission-control/processes']}>
+          <ProcessesOverviewPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('No results found')).toBeInTheDocument();
+    expect(screen.getAllByText('No results found')).toHaveLength(1);
+    expect(screen.getByText('Try adjusting your filters or search criteria.')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Instance ID' })).toBeInTheDocument();
+    expect(screen.queryByText('No visible process instances')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No authorized instances match/)).not.toBeInTheDocument();
+  });
+
   it('renders instance row', async () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },

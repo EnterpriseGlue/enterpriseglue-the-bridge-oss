@@ -121,6 +121,21 @@ describe('Login', () => {
     expect(document.title).toBe('Log in | OneJOP');
   });
 
+  it.each([
+    { titleFontSize: 22, titleFontUrl: null },
+    { titleFontSize: 14, titleFontUrl: '/assets/custom-brand.woff2' },
+  ])('preserves custom wordmark settings: %o', async (settings) => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => Promise.resolve(url === '/api/auth/branding'
+      ? { logoTitle: 'Custom brand', titleFontWeight: '500', ...settings }
+      : { localPassword: { enabled: true }, providerSelection: 'chooser', autoRedirectProviderId: null, providers: [], configurationStatus: 'ready' }) as any);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ToastProvider><MemoryRouter initialEntries={['/login']}><Login /></MemoryRouter></ToastProvider>
+    </QueryClientProvider>);
+    const title = await screen.findByText('Custom brand');
+    expect(title).toHaveStyle({ fontSize: `${settings.titleFontSize}px`, fontWeight: '500' });
+    if (settings.titleFontUrl) expect(title).toHaveStyle({ fontFamily: 'PublicBrandingFont' });
+  });
+
   it('uses Carbon login landmarks, headings, links, and inline validation', async () => {
     const user = userEvent.setup();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

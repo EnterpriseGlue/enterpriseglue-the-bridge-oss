@@ -1,11 +1,11 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, Tile } from '@carbon/react';
-import { Login as LoginIcon } from '@carbon/icons-react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
+import LoginProviderButton from '../shared/components/LoginProviderButton';
 import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
@@ -562,7 +562,7 @@ export default function Login() {
 
   if (isOrganizationFinder) {
     return (
-      <PublicAuthShell title="Find your organization" homePath="/">
+      <PublicAuthShell title="Find your organization" homePath="/" appearance="process">
         {organizationError && <InlineNotification
           kind="error"
           lowContrast
@@ -652,6 +652,7 @@ export default function Login() {
     <PublicAuthShell
       title={isAdministratorRecovery ? 'Log in for administrator recovery' : 'Log in'}
       homePath={headerHomePath}
+      appearance="process"
     >
 
         {isAdministratorRecovery && <InlineNotification
@@ -770,7 +771,7 @@ export default function Login() {
           </form>
         ) : showLocalForm ? (
           <form onSubmit={handleSubmit} noValidate>
-            <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading">{isAdministratorRecovery ? 'Recovery credentials' : 'Email and password'}</h2>
+            {isAdministratorRecovery && <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading">Recovery credentials</h2>}
             <div style={{ marginBottom: 'var(--spacing-5)' }}>
               <TextInput
                 id="email"
@@ -836,11 +837,11 @@ export default function Login() {
               margin: 'var(--spacing-6) 0',
               textAlign: 'center'
             }}>
-              <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--color-border-primary)' }} />
-              <span style={{ padding: '0 var(--spacing-4)', color: 'var(--color-text-secondary)', fontSize: 'var(--text-14)' }}>
+              <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--cds-border-subtle)' }} />
+              <span style={{ padding: '0 var(--spacing-4)', color: 'var(--cds-text-secondary)', fontSize: 'var(--text-14)' }}>
                 or
               </span>
-              <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--color-border-primary)' }} />
+              <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--cds-border-subtle)' }} />
             </div>}
 
             {!showLocalForm && <div style={{ marginBottom: 'var(--spacing-5)' }}>
@@ -848,34 +849,13 @@ export default function Login() {
               <p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Use your work account.</p>
             </div>}
             <div className="eg-login-provider-list">
-              {visibleProviders.map((provider) => {
-                const primary = provider.id === primaryProviderId;
-                const accessibleLabel = `Continue with ${provider.displayName}${provider.organization ? ` ${provider.organization}` : ''}`;
-                return (
-                  <Button
-                    key={provider.id}
-                    type="button"
-                    kind={primary ? 'primary' : 'tertiary'}
-                    size="lg"
-                    aria-label={accessibleLabel}
-                    className="eg-login-provider-button"
-                    renderIcon={LoginIcon}
-                    onClick={() => handleSsoLogin(provider)}
-                    disabled={isLoading}
-                  >
-                    <span className="eg-login-provider-button__content">
-                      <span className="eg-login-provider-button__action">
-                        Continue with {provider.displayName}
-                      </span>
-                      {provider.organization && (
-                        <span className="eg-login-provider-button__supporting">
-                          {provider.organization}
-                        </span>
-                      )}
-                    </span>
-                  </Button>
-                );
-              })}
+              {visibleProviders.map((provider) => <LoginProviderButton
+                key={provider.id}
+                provider={provider}
+                primary={provider.id === primaryProviderId}
+                disabled={isLoading}
+                onClick={() => handleSsoLogin(provider)}
+              />)}
             </div>
             {loginMethods?.providerSelection === 'progressive' && <Button type="button" kind="ghost" size="md" onClick={() => { setDiscoveredProviderIds(null); setLoginError(null); setLoginStep('discover'); }} className="eg-login-secondary-action">Use a different email</Button>}
             {loginMethods?.localPassword.enabled && !showLocalForm && <Button type="button" kind="ghost" size="md" onClick={() => { setLoginError(null); setLoginStep('local'); }} className="eg-login-secondary-action">Use a local password</Button>}
@@ -887,10 +867,10 @@ export default function Login() {
           <div style={{
             marginTop: 'var(--spacing-6)',
             paddingTop: 'var(--spacing-5)',
-            borderTop: '1px solid var(--color-border-primary)',
+            borderTop: '1px solid var(--cds-border-subtle)',
             textAlign: 'center'
           }}>
-            <p style={{ fontSize: 'var(--text-14)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-3)' }}>
+            <p style={{ fontSize: 'var(--text-14)', color: 'var(--cds-text-secondary)', marginBottom: 'var(--spacing-3)' }}>
               Need an account?{' '}
               <CarbonLink as={RouterLink} to="/signup" inline>
                 Create account

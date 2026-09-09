@@ -3,6 +3,7 @@ import { Header, HeaderName, SkipToContent, Theme } from '@carbon/react';
 import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { apiClient } from '../api/client';
 import logoPng from '../../assets/logo.png';
+import processLandscape from '../../assets/login/process-landscape.svg';
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
@@ -156,6 +157,7 @@ interface PublicAuthShellProps {
   description?: React.ReactNode;
   homePath?: string;
   panelSize?: 'default' | 'wide';
+  appearance?: 'default' | 'process';
   children: React.ReactNode | ((branding: PublicAuthBrandingState) => React.ReactNode);
 }
 
@@ -164,19 +166,22 @@ export default function PublicAuthShell({
   description,
   homePath = '/',
   panelSize = 'default',
+  appearance = 'default',
   children,
 }: PublicAuthShellProps) {
   const branding = usePublicAuthBranding();
   const headingId = 'public-auth-page-title';
+  // Give the standard login wordmark more presence without replacing custom fonts/sizes.
+  const useLoginBrandDefaults = appearance === 'process' && !branding.titleFontFamily && branding.titleFontSize === 14;
 
   useEffect(() => {
     document.title = `${title} | ${branding.brandTitle}`;
   }, [branding.brandTitle, title]);
 
-  return (
-    <div className="eg-login-shell">
+  const shell = (
+    <div className={`eg-login-shell${appearance === 'process' ? ' eg-login-shell--process' : ''}`}>
       <Theme theme="g100">
-        <Header aria-label={`${branding.brandTitle} application header`}>
+        <Header className="eg-login-header" aria-label={`${branding.brandTitle} application header`}>
           <SkipToContent href="#public-auth-main">Skip to main content</SkipToContent>
           <HeaderName href={homePath} prefix="">
             <span className="eg-login-header-brand">
@@ -190,9 +195,9 @@ export default function PublicAuthShell({
               <span
                 className="eg-login-header-title"
                 style={{
-                  fontSize: `${branding.titleFontSize}px`,
+                  fontSize: useLoginBrandDefaults ? 'var(--cds-heading-compact-02-font-size, 1rem)' : `${branding.titleFontSize}px`,
                   fontWeight: branding.titleFontWeight,
-                  fontFamily: branding.titleFontFamily || 'inherit',
+                  fontFamily: branding.titleFontFamily || (useLoginBrandDefaults ? 'var(--font-ibm-plex-sans, inherit)' : 'inherit'),
                   transform: branding.titleOffset ? `translateY(${branding.titleOffset}px)` : undefined,
                 }}
               >
@@ -203,6 +208,9 @@ export default function PublicAuthShell({
         </Header>
       </Theme>
       <main id="public-auth-main" className="eg-login-page" aria-labelledby={headingId} tabIndex={-1}>
+        {appearance === 'process' && <div className="eg-login-landscape" aria-hidden="true">
+          <img src={processLandscape} alt="" />
+        </div>}
         <section className={`eg-login-panel${panelSize === 'wide' ? ' eg-login-panel--wide' : ''}`}>
           <h1 id={headingId} className="eg-login-title">{title}</h1>
           {description && <p className="eg-public-auth-description">{description}</p>}
@@ -211,4 +219,5 @@ export default function PublicAuthShell({
       </main>
     </div>
   );
+  return appearance === 'process' ? <Theme theme="g100">{shell}</Theme> : shell;
 }

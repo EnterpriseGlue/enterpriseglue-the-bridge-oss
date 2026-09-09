@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { captureManualScreenshot } from './utils/manualScreenshots';
+import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 
 type LoginProvider = {
   id: string;
@@ -42,10 +43,23 @@ const provider = (
   ...overrides,
 });
 
+async function installBootstrap(page: Page): Promise<void> {
+  // Keep this browser fixture independent of whichever backend occupies local ports.
+  await page.route('**/api/tenancy/capabilities', (route) => json(route, {
+    mode: 'single', rootTenantAliasesEnabled: true, tenantScopedLoginRequired: false,
+    databaseIsolation: 'application', customDomainsEnabled: false, organizationDiscoveryEnabled: false,
+    signedPlacementAssertionsEnabled: false,
+  }));
+  await page.route('**/api/plugins/v1/frontend', (route) => json(route, {
+    apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 1, issues: [], plugins: [],
+  }));
+  await page.route('**/api/auth/branding', (route) => json(route, {}));
+}
+
 async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | null): Promise<void> {
+  await installBootstrap(page);
   await page.route('**/api/auth/me', (route) => json(route, { error: 'Not authenticated' }, 401));
   await page.route('**/api/auth/refresh', (route) => json(route, { error: 'No refresh session' }, 401));
-  await page.route('**/api/auth/branding', (route) => json(route, {}));
   await page.route('**/auth/login-methods', (route) => (
     methods
       ? json(route, methods)
@@ -54,6 +68,117 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 }
 
 test.describe('Login experience screenshot gallery', () => {
+  test('keeps the authenticated Carbon header black with working navigation @login-gallery @identity-lifecycle @accessibility', async ({ page }) => {
+    const stack = new MockBrowserIdentityStack();
+    await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5187');
+    await installBootstrap(page);
+    // Represent an OSS operator, not the identity-admin-only fixture account.
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'browser-admin-user', tenantId: null,
+      platform: ['platform:dashboard:view', 'platform:settings:view', 'project:create', 'platform:engine:create'],
+      projects: [], engines: [{ resourceId: 'preview-engine', permissions: ['engine:instance:view'] }],
+      generatedAt: Date.now(), authorizationVersion: 'oss-header-preview-v1',
+    }));
+    await page.route('**/api/notifications?*', (route) => json(route, { notifications: [], unreadCount: 0 }));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    const header = page.getByRole('banner');
+    await expect(header).toHaveClass(/eg-app-header/);
+    const background = () => header.evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(await background()).toBe('rgb(0, 0, 0)');
+    await expect(header.getByRole('button', { name: 'User', exact: true })).toBeVisible();
+    await expect(header.getByRole('button', { name: 'Logout', exact: true })).toBeVisible();
+    const voyager = header.getByRole('link', { name: 'Voyager', exact: true });
+    await expect(voyager).toBeVisible();
+    await voyager.click();
+    for (const name of ['Starbase', 'Mission Control', 'Engines']) {
+      await expect(header.getByRole('link', { name, exact: true })).toBeVisible();
+    }
+    await page.keyboard.press('Escape');
+    await captureManualScreenshot(page, '95-authenticated-black-header.jpg');
+    await page.getByRole('link', { name: 'Skip to main content' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#main-content')).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Open global navigation' }).click();
+    await expect(page.getByRole('button', { name: 'Close global navigation' })).toHaveAttribute('aria-expanded', 'true');
+    expect(await background()).toBe('rgb(0, 0, 0)');
+    expect(errors).toEqual([]);
+  });
+
+  test('shows compact branded providers below the local action without duplicate labels @login-gallery @identity-lifecycle @accessibility', async ({ page, browserName }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => {
+      if (['error', 'warning'].includes(message.type()) && !message.text().includes('401 (Unauthorized)')) errors.push(message.text());
+    });
+    page.on('requestfailed', (request) => errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`));
+    page.on('response', (response) => {
+      const path = new URL(response.url()).pathname;
+      const expectedUnauthenticated = response.status() === 401 && ['/api/auth/me', '/api/auth/refresh'].includes(path);
+      if (response.status() >= 400 && !expectedUnauthenticated) errors.push(`${response.status()} ${path}`);
+    });
+    await installUnauthenticatedLogin(page, {
+      localPassword: { enabled: true }, providerSelection: 'chooser', autoRedirectProviderId: null,
+      providers: [provider('microsoft', 'Microsoft', { organization: 'Example Corporation' }), provider('google', 'Google', { organization: 'Google' }), provider('apple', 'Apple')],
+      configurationStatus: 'ready',
+    });
+    await page.goto('/login');
+    const submit = page.getByRole('button', { name: 'Log in', exact: true });
+    await expect(submit).toBeVisible();
+    await expect(page.getByText('Email and password', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Email is required', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Google', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Example Corporation', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.eg-login-shell--process')).toBeVisible();
+    const header = page.getByRole('banner');
+    await expect(header).toHaveClass(/cds--header/);
+    expect(await header.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(0, 0, 0)');
+    expect(await header.locator('.eg-login-header-title').evaluate((element) => getComputedStyle(element).fontSize)).toBe('16px');
+    expect(await header.locator('.eg-login-header-logo').evaluate((element) => getComputedStyle(element).height)).toBe('16px');
+    await expect.poll(() => page.locator('.eg-login-landscape img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    expect(await page.locator('.eg-login-page').evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgb(8, 9, 13)');
+    const typography = (element: Element) => {
+      const style = getComputedStyle(element);
+      return { family: style.fontFamily, size: style.fontSize, weight: style.fontWeight, lineHeight: style.lineHeight, letterSpacing: style.letterSpacing };
+    };
+    const primaryTypography = await submit.evaluate(typography);
+    for (const label of ['Sign in with Microsoft Example Corporation', 'Continue with Google', 'Continue with Apple']) {
+      const button = page.getByRole('button', { name: label, exact: true });
+      await expect(button).toBeVisible();
+      expect(await button.evaluate(typography)).toEqual(primaryTypography);
+      await expect(button.locator('img')).toHaveAttribute('alt', '');
+      await expect.poll(() => button.locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+      const box = (await button.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeLessThanOrEqual(48);
+      expect(box.y).toBeGreaterThan((await submit.boundingBox())!.y);
+      expect(box.y + box.height).toBeLessThan(900);
+    }
+    await captureManualScreenshot(page, '94-login-branded-providers.jpg');
+    for (const width of [720, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate((zoom) => { document.documentElement.style.zoom = zoom; }, width === 720 ? '2' : '1');
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      if (width === 320) await expect(page.locator('.eg-login-landscape')).toBeHidden();
+      for (const button of await page.locator('.eg-login-provider-button').all()) {
+        await expect.poll(() => button.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      }
+    }
+    await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
+    await page.getByRole('button', { name: 'Continue with Google', exact: true }).focus();
+    // WebKit on macOS uses Option+Tab to include buttons when Full Keyboard Access is off.
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(page.getByRole('button', { name: 'Continue with Apple', exact: true })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Opening Apple' })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test('shows one friendly provider without exposing its configuration key @login-gallery @identity-lifecycle', async ({ page }) => {
     const entra = provider('entra-primary', 'Microsoft Entra ID', {
       organization: 'Example Corporation',
@@ -69,7 +194,7 @@ test.describe('Login experience screenshot gallery', () => {
     });
 
     await page.goto('/login?no_sso_redirect=1');
-    await expect(page.getByRole('button', { name: /Continue with Microsoft Entra ID Example Corporation/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Sign in with Microsoft Example Corporation/ })).toBeVisible();
     await expect(page.getByText(entra.key, { exact: false })).toHaveCount(0);
     await expect(page.getByLabel('Password')).toHaveCount(0);
     await captureManualScreenshot(page, '62-login-single-provider.jpg');
@@ -97,7 +222,7 @@ test.describe('Login experience screenshot gallery', () => {
 
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: 'Choose how to log in' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Microsoft Entra ID Example Corporation/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Sign in with Microsoft Example Corporation/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Partner login Contoso partners/ })).toBeVisible();
     await expect(page.getByLabel('Password')).toHaveCount(0);
     await captureManualScreenshot(page, '63-login-provider-chooser.jpg');
@@ -183,7 +308,7 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.locator('#password')).toBeVisible();
     await expect(page.getByText('or', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Microsoft Entra ID Example Corporation/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Sign in with Microsoft Example Corporation/ })).toBeVisible();
     await captureManualScreenshot(page, '67-login-local-and-sso-policy.jpg');
   });
 
@@ -236,7 +361,7 @@ test.describe('Login experience screenshot gallery', () => {
     await page.goto('/login');
     await page.evaluate(() => document.fonts.ready);
     await page.mouse.move(0, 0);
-    await page.getByRole('button', { name: /Continue with Microsoft Entra ID Example Corporation/ }).click();
+    await page.getByRole('button', { name: /Sign in with Microsoft Example Corporation/ }).click();
     await expect(page.getByRole('heading', { name: 'Opening Microsoft Entra ID' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Choose another login method' })).toBeVisible();
     await captureManualScreenshot(page, '71-login-provider-redirect-transition.jpg', { stabilize: false });
@@ -342,15 +467,12 @@ test.describe('Login experience screenshot gallery', () => {
       // which does not Tab to buttons by default on macOS runners.
       await providerButton.focus();
     } else {
-      let headerReached = false;
-      let providerReached = false;
-      for (let tabIndex = 0; tabIndex < 3 && !providerReached; tabIndex += 1) {
-        await page.keyboard.press('Tab');
-        headerReached ||= await headerBrandLink.evaluate((element) => element === document.activeElement);
-        providerReached = await providerButton.evaluate((element) => element === document.activeElement);
-      }
-      expect(headerReached).toBe(true);
-      expect(providerReached).toBe(true);
+      // Start at a known document landmark rather than the browser chrome's
+      // implementation-specific initial focus position.
+      await page.getByRole('link', { name: 'Skip to main content' }).focus();
+      await page.keyboard.press('Tab');
+      await expect(headerBrandLink).toBeFocused();
+      await page.keyboard.press('Tab');
     }
     await expect(providerButton).toBeFocused();
     await expect(page.evaluate(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)).resolves.toBe(true);

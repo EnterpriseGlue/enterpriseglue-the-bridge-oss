@@ -179,7 +179,7 @@ describe('LayoutWithProSidebar', () => {
   it('exposes semantic header, skip link, responsive navigation trigger, and main focus target', async () => {
     renderLayout();
 
-    expect(screen.getByRole('banner', { name: 'EnterpriseGlue application header' })).toBeInTheDocument();
+    expect(screen.getByRole('banner', { name: 'EnterpriseGlue application header' })).toHaveClass('cds--header', 'eg-app-header');
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main-content');
     expect(screen.getByRole('button', { name: 'Open global navigation' })).toHaveAttribute('aria-controls', 'enterpriseglue-global-navigation');
     await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content'));
