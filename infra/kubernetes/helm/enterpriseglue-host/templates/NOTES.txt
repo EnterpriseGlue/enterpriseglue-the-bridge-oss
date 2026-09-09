@@ -1,7 +1,10 @@
 EnterpriseGlue OSS host {{ .Chart.AppVersion }} rendered with immutable images.
 
-The migration and preflight hooks run before the application rollout. Application
-pods use EG_DATABASE_STARTUP_MODE={{ ternary "verify" "apply" .Values.database.migration.enabled }}.
+The immutable schema-epoch manifest sets application startup to
+EG_DATABASE_STARTUP_MODE={{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim }}.
+The separately credentialed owner hook applies only the manifest's exact
+executable inventory; the preflight hook then verifies an accepted database
+epoch before rollout. The chart value cannot extend or skip that bridge ceiling.
 {{- if .Values.database.releaseEffectCohort.enabled }}
 The managed release-effect cohort opener runs after preflight and before API/worker creation for
 release {{ .Values.database.releaseEffectCohort.releaseId }} at epoch {{ .Values.database.releaseEffectCohort.cohortEpoch }}.

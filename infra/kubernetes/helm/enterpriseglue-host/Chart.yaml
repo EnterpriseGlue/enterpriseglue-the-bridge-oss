@@ -2,13 +2,15 @@ apiVersion: v2
 name: enterpriseglue-host
 description: Cloud-neutral production topology for the EnterpriseGlue OSS host
 type: application
-version: 0.1.21
+version: 0.1.22
 appVersion: "0.24.2"
 kubeVersion: ">=1.29.0-0"
 annotations:
   enterpriseglue.io/api-config-bundle-contract: v1
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
+    - kind: security
+      description: Signed PostgreSQL schema-epoch bridge with bounded owner migration and verify-only application roles.
     - kind: added
       description: Production frontend, API, worker, migration, preflight, and optional Plugin Manager topology.
     - kind: added

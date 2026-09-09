@@ -88,6 +88,35 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- end }}
 {{- end }}
 
+{{- define "enterpriseglue-host.schemaEpochManifest" -}}
+{{- $manifestBytes := required "files/schema-epoch-manifest.json is required" (.Files.Get "files/schema-epoch-manifest.json") -}}
+{{- $manifest := mustFromJson $manifestBytes -}}
+{{- if ne $manifest.schemaVersion "enterpriseglue-schema-epoch/v1" -}}
+{{- fail "unsupported schema-epoch manifest version" -}}
+{{- end -}}
+{{- if ne $manifest.id "postgres-explicit-context-bridge-v1" -}}
+{{- fail "unsupported schema-epoch manifest identity" -}}
+{{- end -}}
+{{- if ne $manifest.roles.applicationStartup.mode "verify-only" -}}
+{{- fail "compatibility bridge application startup must be verify-only" -}}
+{{- end -}}
+{{- if ne $manifest.roles.ownerMigration.mode "apply-through-executable" -}}
+{{- fail "compatibility bridge owner migration must use bounded apply" -}}
+{{- end -}}
+{{- if ne (int $manifest.roles.ownerMigration.through) (int $manifest.executableMigrationInventory.through) -}}
+{{- fail "compatibility bridge owner migration ceiling must equal the executable inventory" -}}
+{{- end -}}
+{{- toJson $manifest -}}
+{{- end }}
+
+{{- define "enterpriseglue-host.schemaEpochStartupMode" -}}
+{{- include "enterpriseglue-host.schemaEpochManifest" . | fromJson | dig "roles" "applicationStartup" "mode" "" | trimSuffix "-only" -}}
+{{- end }}
+
+{{- define "enterpriseglue-host.schemaEpochOwnerMode" -}}
+{{- include "enterpriseglue-host.schemaEpochManifest" . | fromJson | dig "roles" "ownerMigration" "mode" "" -}}
+{{- end }}
+
 {{- define "enterpriseglue-host.serviceAccountName" -}}
 {{- $root := .root -}}
 {{- $component := .component -}}

@@ -64,6 +64,7 @@ MIGRATION_TEST_POSTGRES_DATABASE=postgres \
     test/integration/postgres-context-boundary.test.ts \
     test/integration/postgres-global-identity.test.ts \
     test/integration/postgres-shared-inventory-readiness.test.ts \
+    test/integration/postgres-schema-epoch-bridge.test.ts \
     test/qualification/sessionRevocationRace.test.ts \
     --config vitest.config.ts \
     --reporter=dot \

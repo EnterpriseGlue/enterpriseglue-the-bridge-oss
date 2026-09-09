@@ -48,6 +48,12 @@ migration and restricted preflight are both enabled and the explicit profile is 
 `postgres`/`pooled`. The separate settlement runbook defines retirement and fail-closed coverage;
 opening a cohort does not establish maintenance or shutdown eligibility.
 
+The schema-epoch bridge release makes these roles immutable in its packaged manifest. Application
+startup is verify-only. The separately credentialed owner hook always renders and can apply only
+through the manifest's executable ceiling; `database.migration.enabled` cannot skip it or extend
+it to the later enforcement migration. The setting remains in the values schema solely for
+compatibility with non-bridge chart versions.
+
 For PostgreSQL, set `database.migration.runtimeRole` to an existing restricted runtime login to
 refresh its grants after successful owner migrations. This emits `EG_POSTGRES_RUNTIME_ROLE` only
 on the migration job, never API, worker, or preflight. The login must have no memberships,
@@ -71,8 +77,8 @@ frontend and cohort opener never receive a service-account token. Jobs use Kuber
 does not prevent completion. Provider-specific instances, identities and arguments stay outside
 this chart.
 
-If `database.migration.enabled=false`, application pods use the backward-compatible `apply` startup
-mode. This is intended for existing self-hosted installations, not pooled SaaS.
+Older, non-bridge charts use `database.migration.enabled=false` to select the backward-compatible
+application-owned migration path. The bridge chart intentionally ignores that mutable selection.
 
 ## API-only platform configuration bootstrap
 

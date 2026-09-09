@@ -20,12 +20,20 @@ import { AuthzMigrationState } from '../infrastructure/persistence/entities/Auth
 import { generateId } from '../utils/id.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
-import { verifyPostgresTenantRls, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
+import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
 import { config } from '../config/index.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
 import { withPostgresMigrationContext } from './postgres-migration-context.js';
 import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
 import { runWithTenantDatabaseContext } from '../services/tenant-database-context.js';
+import {
+  bindDataSourceToSchemaEpoch,
+  assertSchemaEpochInvocation,
+  isSchemaEpochManifestApplicable,
+  loadBundledSchemaEpochManifest,
+  verifyExecutedSchemaEpoch,
+  type AcceptedDatabaseEpoch,
+} from './schema-epoch.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -534,7 +542,10 @@ export interface RunMigrationsOptions {
   mode?: 'apply' | 'verify';
 }
 
-export async function runMigrations(options: RunMigrationsOptions = {}) {
+async function runMigrationsForInvocation(
+  options: RunMigrationsOptions,
+  invocation: 'application-startup' | 'owner-migration',
+) {
   const mode = options.mode ?? 'apply';
   console.log(mode === 'apply'
     ? '🔄 Running database migrations...'
@@ -542,13 +553,20 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
   
   const dbType = adapter.getDatabaseType();
   const schemaName = adapter.getSchemaName();
+  const schemaEpochManifest = loadBundledSchemaEpochManifest();
+  const schemaEpochApplies = isSchemaEpochManifestApplicable(schemaEpochManifest, {
+    databaseType: dbType,
+    tenancyMode: config.tenancyMode,
+  });
+  if (schemaEpochApplies) assertSchemaEpochInvocation(schemaEpochManifest, invocation, mode);
+  const boundedSchemaEpochOwner = schemaEpochApplies && invocation === 'owner-migration';
   const runtimeRole = process.env.EG_POSTGRES_RUNTIME_ROLE;
   if (runtimeRole !== undefined && (dbType !== 'postgres' || mode !== 'apply')) {
     throw new Error('EG_POSTGRES_RUNTIME_ROLE is supported only by PostgreSQL apply-mode migration jobs');
   }
   
   // Ensure schema exists BEFORE DataSource init (migrations need the schema)
-  if (mode === 'apply' && schemaName && schemaName !== 'public') {
+  if (mode === 'apply' && !boundedSchemaEpochOwner && schemaName && schemaName !== 'public') {
     try {
       await ensureSchemaExists(schemaName);
       console.log(`  ✅ Schema "${schemaName}" ensured`);
@@ -565,6 +583,8 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
     return await withPostgresMigrationContext(dataSource, mode, async () => {
+    if (schemaEpochApplies) bindDataSourceToSchemaEpoch(dataSource, schemaEpochManifest);
+    let acceptedDatabaseEpoch: AcceptedDatabaseEpoch | null = null;
     let initializedFreshSchema = false;
     if (dbType === 'spanner' && mode === 'apply') {
       await ensureSpannerTypeOrmMigrationLedgerV1(dataSource);
@@ -572,7 +592,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
 
     const queryRunner = dataSource.createQueryRunner();
     try {
-      if (mode === 'apply' && dbType === 'postgres' && schemaName) {
+      if (mode === 'apply' && !boundedSchemaEpochOwner && dbType === 'postgres' && schemaName) {
         try {
           await autoMigratePostgresSchema(queryRunner, schemaName);
         } catch (error) {
@@ -624,7 +644,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
       }
 
       if (missingTables.length > 0) {
-        if (mode === 'verify') {
+        if (mode === 'verify' || boundedSchemaEpochOwner) {
           throw new Error(
             `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
           );
@@ -646,6 +666,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
 
       if (
         mode === 'apply'
+        && !boundedSchemaEpochOwner
         && !initializedFreshSchema
         && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
       ) {
@@ -670,15 +691,33 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
       }
     }
 
+    if (schemaEpochApplies) {
+      const epochRunner = dataSource.createQueryRunner();
+      try {
+        acceptedDatabaseEpoch = await verifyExecutedSchemaEpoch(dataSource, epochRunner, schemaEpochManifest);
+      } finally {
+        await epochRunner.release();
+      }
+      console.log(
+        `  ✅ Verified immutable database schema epoch ${acceptedDatabaseEpoch.id} ` +
+        `(through ${acceptedDatabaseEpoch.through})`,
+      );
+    }
+
     const integrityRunner = dataSource.createQueryRunner();
     try {
       if (dbType === 'postgres') {
-        if (mode === 'apply') {
+        if (mode === 'apply' && !boundedSchemaEpochOwner) {
           await new AddPostgresTenantRls1700000000126().up(integrityRunner);
         }
         if (config.tenancyMode === 'pooled') {
           if (mode === 'verify') await assertRestrictedPostgresRuntimeRole(integrityRunner);
-          const rls = await verifyPostgresTenantRls(integrityRunner);
+          const rls = acceptedDatabaseEpoch
+            ? await verifyPostgresTenantRlsForPolicyProfile(
+                integrityRunner,
+                acceptedDatabaseEpoch.postgresPolicyProfile,
+              )
+            : await verifyPostgresTenantRls(integrityRunner);
           if (rls.expected === 0 || rls.enforced !== rls.expected) {
             throw new Error(`Pooled tenancy requires enforced PostgreSQL RLS policies (expected ${rls.expected}, found ${rls.enforced}).`);
           }
@@ -690,12 +729,17 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
           }
         }
       }
-      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
+      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply' && !boundedSchemaEpochOwner);
       if (runtimeRole !== undefined) await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
     } finally {
       await integrityRunner.release();
     }
-    if (dbType === 'postgres' && config.tenancyMode === 'pooled' && mode === 'apply') {
+    if (
+      dbType === 'postgres'
+      && config.tenancyMode === 'pooled'
+      && mode === 'apply'
+      && !boundedSchemaEpochOwner
+    ) {
       await permissionService.seedRbacFoundation(dataSource);
       await projectLegacyLocalRoleAssignmentsOnce(dataSource);
     }
@@ -708,6 +752,23 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
     console.error('❌ Migration failed:', error.message);
     throw error;
   }
+}
+
+/**
+ * Application/bootstrap entrypoint. The signed bridge manifest rejects apply
+ * for pooled PostgreSQL even if an environment setting requests it.
+ */
+export async function runMigrations(options: RunMigrationsOptions = {}) {
+  return runMigrationsForInvocation(options, 'application-startup');
+}
+
+/**
+ * Owner-job-only entrypoint used by the chart's separately credentialed hook.
+ * The bundled manifest filters TypeORM to its exact executable ceiling before
+ * any pending migration is evaluated or applied.
+ */
+export async function runSchemaEpochOwnerMigrations() {
+  return runMigrationsForInvocation({ mode: 'apply' }, 'owner-migration');
 }
 
 /**

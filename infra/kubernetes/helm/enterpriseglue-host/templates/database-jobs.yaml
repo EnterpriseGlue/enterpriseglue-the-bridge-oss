@@ -1,5 +1,6 @@
 {{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
-{{- if .Values.database.migration.enabled }}
+{{- $schemaEpochOwnerMode := include "enterpriseglue-host.schemaEpochOwnerMode" . | trim }}
+{{- if eq $schemaEpochOwnerMode "apply-through-executable" }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -33,7 +34,7 @@ spec:
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
           command: ["node", "-e"]
           args:
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
+            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runSchemaEpochOwnerMigrations}) => runSchemaEpochOwnerMigrations())"
           {{- if .Values.database.migration.runtimeRole }}
           env:
             - name: EG_POSTGRES_RUNTIME_ROLE

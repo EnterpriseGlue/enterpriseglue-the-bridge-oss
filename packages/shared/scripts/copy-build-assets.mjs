@@ -8,6 +8,11 @@ await mkdir(fromPackageRoot('dist/db/adapters/'), { recursive: true });
 await mkdir(fromPackageRoot('dist/contracts/'), { recursive: true });
 
 await cp(
+  fromPackageRoot('src/schema-epoch-manifest.json'),
+  fromPackageRoot('dist/schema-epoch-manifest.json'),
+);
+
+await cp(
   fromPackageRoot('src/db/adapters/sql/'),
   fromPackageRoot('dist/db/adapters/sql/'),
   { recursive: true },

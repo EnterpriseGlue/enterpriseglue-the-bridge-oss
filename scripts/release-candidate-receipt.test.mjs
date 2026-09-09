@@ -26,6 +26,7 @@ async function fixture() {
   await mkdir(path.join(artifacts, 'charts'), { recursive: true })
   await mkdir(path.join(artifacts, 'packages', 'plugin'), { recursive: true })
   await mkdir(path.join(artifacts, 'packages', 'host'), { recursive: true })
+  await mkdir(path.join(artifacts, 'metadata'), { recursive: true })
   const files = [
     'charts/enterpriseglue-host-0.1.2.tgz',
     'charts/enterpriseglue-plugin-installer-rbac-0.2.6.tgz',
@@ -41,6 +42,10 @@ async function fixture() {
     'packages/host/enterpriseglue-frontend-host-0.15.4.tgz',
   ]
   await Promise.all(files.map((file) => writeFile(path.join(artifacts, file), `payload:${file}`)))
+  await writeFile(
+    path.join(artifacts, 'metadata/schema-epoch-manifest.json'),
+    await readFile(new URL('../packages/shared/src/schema-epoch-manifest.json', import.meta.url)),
+  )
   return { root, artifacts, output: path.join(root, 'release-candidate.json') }
 }
 
@@ -56,7 +61,10 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   const created = await createReceipt(args)
   assert.equal(created.schemaVersion, 'enterpriseglue-release-candidate/v1')
   assert.equal(created.publicationPerformed, false)
-  assert.equal(created.artifacts.length, 12)
+  assert.equal(created.artifacts.length, 13)
+  assert.equal(created.schemaEpoch.applicationStartupMode, 'verify-only')
+  assert.equal(created.schemaEpoch.ownerMigrationMode, 'apply-through-executable')
+  assert.deepEqual(created.schemaEpoch.acceptedThrough, [1700000000131, 1700000000132])
   assert.deepEqual(await verifyReceipt({
     receipt: output,
     artifacts,
@@ -79,6 +87,21 @@ test('rejects changed candidate bytes', async () => {
     verifyReceipt({ receipt: output, artifacts }),
     /checksums or inventory/,
   )
+})
+
+test('rejects a schema-epoch receipt projection that differs from the inventoried manifest', async () => {
+  const { artifacts, output } = await fixture()
+  await createReceipt({
+    'source-ref': sourceRevision,
+    'release-tag': releaseTag,
+    artifacts,
+    output,
+    ...subjectArgs,
+  })
+  const receipt = JSON.parse(await readFile(output, 'utf8'))
+  receipt.schemaEpoch.acceptedThrough = [1700000000131]
+  await writeFile(output, JSON.stringify(receipt))
+  await assert.rejects(verifyReceipt({ receipt: output, artifacts }), /does not match/)
 })
 
 test('rejects a mutable or off-namespace subject', async () => {

@@ -23,12 +23,14 @@ helm lint "$CHART_DIR" -f "$VALUES_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" >"$RENDERED_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
   --set-string database.migration.runtimeRole=eg_runtime >"$RUNTIME_ROLE_FILE"
-test "$(grep -c 'name: EG_POSTGRES_RUNTIME_ROLE' "$RUNTIME_ROLE_FILE")" -eq 1
+if ! grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RUNTIME_ROLE_FILE"; then
+  echo "Schema-epoch compatibility bridge omitted the configured owner migration runtime role" >&2
+  exit 1
+fi
 if grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RENDERED_FILE"; then
   echo "Unset runtime role must not change deployment environment" >&2
   exit 1
 fi
-awk 'BEGIN { RS="---" } /EG_POSTGRES_RUNTIME_ROLE/ { if ($0 !~ /name: migrate/ || $0 !~ /value: "eg_runtime"/) exit 1 }' "$RUNTIME_ROLE_FILE"
 if helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
   --set-string 'database.migration.runtimeRole=runtime;invalid' >/dev/null 2>&1; then
   echo "Host chart accepted an invalid runtime role" >&2
@@ -65,8 +67,8 @@ for expected in \
   "value: \"verify\"" \
   "value: \"api\"" \
   "value: \"worker\"" \
-  "mode:'apply'" \
   "mode:'verify'" \
+  "runSchemaEpochOwnerMigrations" \
   "readOnly: true" \
   "readOnlyRootFilesystem: true" \
   "allowPrivilegeEscalation: false" \
@@ -81,6 +83,15 @@ for expected in \
     exit 1
   }
 done
+
+if ! grep -Fq -- '- name: migrate' "$RENDERED_FILE"; then
+  echo "Schema-epoch compatibility bridge omitted its bounded owner migration workload" >&2
+  exit 1
+fi
+if grep -Fq "runMigrations({mode:'apply'})" "$RENDERED_FILE"; then
+  echo "Schema-epoch compatibility bridge rendered the unbounded application migration entrypoint" >&2
+  exit 1
+fi
 
 grep -Fq 'image: "ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:' "$RENDERED_FILE"
 grep -Fq 'image: "ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-frontend@sha256:' "$RENDERED_FILE"
@@ -98,7 +109,11 @@ if grep -Fq 'app.kubernetes.io/component: worker' "$COMBINED_FILE"; then
   exit 1
 fi
 grep -A4 -F 'name: EG_RUNTIME_ROLE' "$COMBINED_FILE" | grep -Fq 'value: "all"'
-grep -A4 -F 'name: EG_DATABASE_STARTUP_MODE' "$COMBINED_FILE" | grep -Fq 'value: "apply"'
+grep -A4 -F 'name: EG_DATABASE_STARTUP_MODE' "$COMBINED_FILE" | grep -Fq 'value: "verify"'
+grep -Fq 'runSchemaEpochOwnerMigrations' "$COMBINED_FILE"
+
+cmp "$ROOT_DIR/packages/shared/src/schema-epoch-manifest.json" \
+  "$CHART_DIR/files/schema-epoch-manifest.json"
 
 test "$(grep -c 'name: database-connection-proxy' "$PROXY_FILE")" -eq 4
 test "$(grep -c 'restartPolicy: Always' "$PROXY_FILE")" -eq 2

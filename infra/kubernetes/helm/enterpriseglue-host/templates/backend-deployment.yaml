@@ -87,7 +87,7 @@ spec:
             - name: EG_RUNTIME_ROLE
               value: {{ ternary "api" "all" .Values.workers.enabled | quote }}
             - name: EG_DATABASE_STARTUP_MODE
-              value: {{ ternary "verify" "apply" .Values.database.migration.enabled | quote }}
+              value: {{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim | quote }}
             - name: API_UPSTREAM
               value: {{ printf "%s-api:%v" (include "enterpriseglue-host.fullname" .) .Values.backend.service.port | quote }}
             {{- if .Values.pluginAssets.enabled }}

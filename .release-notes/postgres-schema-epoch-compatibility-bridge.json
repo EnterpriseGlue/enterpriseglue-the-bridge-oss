@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "postgres-schema-epoch-compatibility-bridge",
+  "type": "security",
+  "scope": "database-upgrade",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds a signed PostgreSQL schema-epoch bridge whose owner job stops before explicit-context enforcement while application startup verifies either side of the policy cutover.",
+  "userImpact": [],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Deploy the independently signed bridge release and let its separately credentialed owner job apply exactly through migration 1700000000131 before starting bridge application replicas.",
+      "Keep the bridge and previous qualified release for the complete 28-day fallback interval; only the later owner-controlled release may apply migration 1700000000132."
+    ]
+  },
+  "configuration": [
+    "No operator migration-skip or schema-epoch selector is added. The application verify role and owner migration ceiling are immutable signed manifest data."
+  ],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The bridge owner entrypoint can execute the already introduced release-effect migration 1700000000131 but filters TypeORM before migration 1700000000132.",
+      "The bridge accepts only exact migration-ledger inventories through 1700000000131 with the released legacy policy or through 1700000000132 with attested explicit-context policies."
+    ]
+  },
+  "security": [
+    "Application startup rejects apply mode for pooled PostgreSQL before schema repair, synchronization or connection-owned migration work.",
+    "The bounded owner path cannot run synchronize, migration-ledger baselining, policy repair, critical-schema repair, RBAC seeding or legacy projection side effects.",
+    "The signed candidate receipt binds the manifest checksum and exact accepted epochs; candidate image qualification verifies the same bytes at both backend runtime and published shared-package locations."
+  ],
+  "documentation": [
+    "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
+    "infra/kubernetes/helm/enterpriseglue-host/README.md"
+  ],
+  "knownLimitations": [
+    "Cloud rollout remains responsible for verifying the signed receipt and exact source/image/chart subjects before selecting the bridge; this OSS release does not implement a provider controller."
+  ],
+  "rollback": [
+    "Before migration 1700000000132, restore the preceding qualified runtime while preserving migration 1700000000131 and its additive settlement tables.",
+    "After migration 1700000000132, use the qualified pre-upgrade backup and compatible runtime; do not edit the TypeORM ledger or recreate permissive policies in place."
+  ],
+  "validation": [
+    "Focused tests prove application apply rejection, the exact owner ceiling, absence of owner repair side effects, exact pre/post ledger acceptance and rejection of malformed or unexpected epochs.",
+    "PostgreSQL integration verifies the released legacy policy remains valid before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery."
+  ],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.21.0", "newVersion": "0.21.1", "impact": "patch"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.19.0", "newVersion": "0.19.1", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.8", "newVersion": "0.17.9", "impact": "patch"}
+  ]
+}

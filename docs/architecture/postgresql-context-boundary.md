@@ -149,6 +149,12 @@ ordinary runtime verification cannot accept it.
 
 ## Coordinated upgrade and rollback
 
+The independently signed, dual-role schema-epoch bridge used for a retained
+runtime cutover is specified in
+[PostgreSQL schema-epoch compatibility bridge](postgresql-schema-epoch-compatibility-bridge.md).
+It does not weaken the explicit-context policy or authorize a migration-ledger
+edit.
+
 Migration `1700000000132` enforces the explicit-context policy. All API, worker,
 and retained-release consumers of the shared schema must be upgraded or drained
 together before enforcement. An old application does not install the new

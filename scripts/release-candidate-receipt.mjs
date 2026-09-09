@@ -29,7 +29,9 @@ const REQUIRED_ARTIFACTS = [
   /^packages\/host\/enterpriseglue-shared-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
   /^packages\/host\/enterpriseglue-backend-host-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
   /^packages\/host\/enterpriseglue-frontend-host-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
+  /^metadata\/schema-epoch-manifest\.json$/,
 ]
+const SCHEMA_EPOCH_MANIFEST_PATH = 'metadata/schema-epoch-manifest.json'
 
 function fail(message) {
   throw new Error(message)
@@ -82,7 +84,9 @@ async function digestFile(file) {
 }
 
 async function collectArtifacts(artifactDirectory) {
-  const files = (await walkFiles(artifactDirectory)).filter((file) => file.endsWith('.tgz')).sort()
+  const files = (await walkFiles(artifactDirectory))
+    .filter((file) => file.endsWith('.tgz') || file === SCHEMA_EPOCH_MANIFEST_PATH)
+    .sort()
   for (const pattern of REQUIRED_ARTIFACTS) {
     const matches = files.filter((file) => pattern.test(file))
     if (matches.length !== 1) fail(`Expected exactly one candidate artifact matching ${pattern}`)
@@ -101,6 +105,25 @@ async function collectArtifacts(artifactDirectory) {
   }))
 }
 
+async function readSchemaEpochManifest(artifactDirectory) {
+  const manifest = JSON.parse(await readFile(path.join(artifactDirectory, SCHEMA_EPOCH_MANIFEST_PATH), 'utf8'))
+  if (
+    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v1'
+    || manifest?.id !== 'postgres-explicit-context-bridge-v1'
+    || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
+    || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
+    || manifest?.target?.databaseType !== 'postgres'
+    || manifest?.target?.tenancyMode !== 'pooled'
+    || manifest?.executableMigrationInventory?.through !== 1700000000131
+    || manifest?.roles?.ownerMigration?.through !== manifest.executableMigrationInventory.through
+    || !Array.isArray(manifest?.acceptedDatabaseEpochs)
+    || manifest.acceptedDatabaseEpochs.length !== 2
+    || manifest.acceptedDatabaseEpochs[0]?.through !== 1700000000131
+    || manifest.acceptedDatabaseEpochs[1]?.through !== 1700000000132
+  ) fail('Candidate schema-epoch manifest is not the bounded dual-role compatibility bridge')
+  return manifest
+}
+
 function subjectsFromArgs(args) {
   return Object.fromEntries(REQUIRED_SUBJECTS.map((name) => {
     const subject = requireValue(args, name)
@@ -116,6 +139,10 @@ async function createReceipt(args) {
   const output = path.resolve(requireValue(args, 'output'))
   validateIdentity(sourceRevision, releaseTag)
 
+  const artifacts = await collectArtifacts(artifactDirectory)
+  const schemaEpochManifest = await readSchemaEpochManifest(artifactDirectory)
+  const schemaEpochArtifact = artifacts.find((artifact) => artifact.path === SCHEMA_EPOCH_MANIFEST_PATH)
+  if (!schemaEpochArtifact) fail('Candidate schema-epoch manifest is missing from the artifact inventory')
   const receipt = {
     schemaVersion: SCHEMA_VERSION,
     status: 'qualified',
@@ -123,7 +150,16 @@ async function createReceipt(args) {
     releaseTag,
     publicationPerformed: false,
     subjects: subjectsFromArgs(args),
-    artifacts: await collectArtifacts(artifactDirectory),
+    schemaEpoch: {
+      manifestPath: SCHEMA_EPOCH_MANIFEST_PATH,
+      manifestSha256: schemaEpochArtifact.sha256,
+      id: schemaEpochManifest.id,
+      applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
+      ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
+      executableThrough: schemaEpochManifest.executableMigrationInventory.through,
+      acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
+    },
+    artifacts,
   }
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`)
   return receipt
@@ -148,6 +184,20 @@ async function verifyReceipt(args) {
   const actualArtifacts = await collectArtifacts(artifactDirectory)
   if (JSON.stringify(receipt.artifacts) !== JSON.stringify(actualArtifacts)) {
     fail('Candidate artifact checksums or inventory do not match the receipt')
+  }
+  const schemaEpochManifest = await readSchemaEpochManifest(artifactDirectory)
+  const schemaEpochArtifact = actualArtifacts.find((artifact) => artifact.path === SCHEMA_EPOCH_MANIFEST_PATH)
+  const expectedSchemaEpoch = {
+    manifestPath: SCHEMA_EPOCH_MANIFEST_PATH,
+    manifestSha256: schemaEpochArtifact?.sha256,
+    id: schemaEpochManifest.id,
+    applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
+    ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
+    executableThrough: schemaEpochManifest.executableMigrationInventory.through,
+    acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
+  }
+  if (JSON.stringify(receipt.schemaEpoch) !== JSON.stringify(expectedSchemaEpoch)) {
+    fail('Candidate schema-epoch receipt does not match the immutable manifest')
   }
   return receipt
 }

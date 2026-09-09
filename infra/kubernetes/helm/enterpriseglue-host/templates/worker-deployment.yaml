@@ -44,7 +44,7 @@ spec:
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             - { name: EG_RUNTIME_ROLE, value: "worker" }
             - name: EG_DATABASE_STARTUP_MODE
-              value: {{ ternary "verify" "apply" .Values.database.migration.enabled | quote }}
+              value: {{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim | quote }}
             {{- if .Values.pluginAssets.enabled }}
             - name: ENTERPRISEGLUE_PLUGIN_ASSET_ROOT
               value: {{ .Values.pluginAssets.mountPath | quote }}

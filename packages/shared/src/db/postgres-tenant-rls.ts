@@ -9,6 +9,90 @@ import {
 
 export { POSTGRES_TENANT_RLS_TABLES } from './tenant-ownership-inventory.js';
 
+export type PostgresTenantPolicyProfile =
+  | 'legacy-explicit-runtime-compatible/v1'
+  | 'explicit-context/v1';
+
+interface LegacyPostgresTenantPolicyCatalogRow {
+  policy_name: string;
+  command: string;
+  permissive: string;
+  roles: string[];
+  using_expression: string | null;
+  check_expression: string | null;
+}
+
+const legacyTenantPolicySource = "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode', true), ''), 'single') <> 'pooled' OR tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), '')";
+
+/** PostgreSQL adds harmless text casts and parentheses while deparsing. Strip
+ * only those two presentation details; all function, setting, literal,
+ * operator and column tokens remain byte-sensitive. */
+export function normalizeLegacyPostgresTenantPolicyExpression(expression: string): string {
+  return expression
+    .replace(/::(?:pg_catalog\.)?text/g, '')
+    .replace(/[()\s]/g, '');
+}
+
+export function legacyPostgresTenantPolicyMatches(row: LegacyPostgresTenantPolicyCatalogRow): boolean {
+  if (
+    row.policy_name !== 'eg_tenant_isolation'
+    || row.command !== 'ALL'
+    || row.permissive !== 'PERMISSIVE'
+    || row.roles.length !== 1
+    || row.roles[0] !== 'public'
+    || typeof row.using_expression !== 'string'
+    || typeof row.check_expression !== 'string'
+  ) return false;
+  const expected = normalizeLegacyPostgresTenantPolicyExpression(legacyTenantPolicySource);
+  return normalizeLegacyPostgresTenantPolicyExpression(row.using_expression) === expected
+    && normalizeLegacyPostgresTenantPolicyExpression(row.check_expression) === expected;
+}
+
+async function verifyLegacyPostgresTenantRls(queryRunner: QueryRunner): Promise<{ expected: number; enforced: number }> {
+  assertTenantPersistenceOwnershipV1(queryRunner.connection.entityMetadatas);
+  let expected = 0;
+  let enforced = 0;
+  for (const metadata of queryRunner.connection.entityMetadatas) {
+    if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
+    if (!await queryRunner.hasTable(metadata.tablePath)) continue;
+    expected += 1;
+    const schema = metadata.schema || String((queryRunner.connection.options as { schema?: string }).schema || 'public');
+    const rows: Array<{
+      relrowsecurity: boolean;
+      relforcerowsecurity: boolean;
+      policies: LegacyPostgresTenantPolicyCatalogRow[];
+    }> = await queryRunner.query(
+      `SELECT c.relrowsecurity,c.relforcerowsecurity,COALESCE(json_agg(json_build_object(
+          'policy_name',p.policyname,'command',p.cmd,'permissive',p.permissive,'roles',p.roles,
+          'using_expression',p.qual,'check_expression',p.with_check
+        )) FILTER (WHERE p.policyname IS NOT NULL),'[]'::json) AS policies
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        LEFT JOIN pg_policies p ON p.schemaname=n.nspname AND p.tablename=c.relname
+        WHERE n.nspname=$1 AND c.relname=$2 GROUP BY c.relrowsecurity,c.relforcerowsecurity`,
+      [schema, metadata.tableName],
+    );
+    const row = rows[0];
+    if (
+      row?.relrowsecurity
+      && row.relforcerowsecurity
+      && Array.isArray(row.policies)
+      && row.policies.length === 1
+      && legacyPostgresTenantPolicyMatches(row.policies[0])
+    ) enforced += 1;
+  }
+  return { expected, enforced };
+}
+
+export async function verifyPostgresTenantRlsForPolicyProfile(
+  queryRunner: QueryRunner,
+  profile: PostgresTenantPolicyProfile,
+): Promise<{ expected: number; enforced: number }> {
+  if (queryRunner.connection.options.type !== 'postgres') return { expected: 0, enforced: 0 };
+  return profile === 'legacy-explicit-runtime-compatible/v1'
+    ? verifyLegacyPostgresTenantRls(queryRunner)
+    : verifyPostgresTenantRls(queryRunner);
+}
+
 /** Runtime verification is independent of the optional migration grant hook. */
 export async function assertRestrictedPostgresRuntimeRole(queryRunner: QueryRunner): Promise<void> {
   if (queryRunner.connection.options.type !== 'postgres') return;

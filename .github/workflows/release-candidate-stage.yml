@@ -801,7 +801,9 @@ jobs:
           package_output="$payload/packages"
           plugin_package_output="$package_output/plugin"
           host_package_output="$package_output/host"
-          mkdir -p "$chart_output" "$plugin_package_output" "$host_package_output"
+          metadata_output="$payload/metadata"
+          mkdir -p "$chart_output" "$plugin_package_output" "$host_package_output" "$metadata_output"
+          cp packages/shared/src/schema-epoch-manifest.json "$metadata_output/schema-epoch-manifest.json"
 
           installer_version="$(node -p "require('./packages/plugin-installer/package.json').version")"
           manager_version="$(node -p "require('./packages/plugin-manager/package.json').version")"
@@ -966,7 +968,7 @@ jobs:
                 media_type="application/vnd.enterpriseglue.release-candidate.metadata.v1+json"
               fi
               push_args+=("$file:$media_type")
-            done < <(cd "$payload" && find charts packages -type f -print | LC_ALL=C sort)
+            done < <(cd "$payload" && find charts packages metadata -type f -print | LC_ALL=C sort)
             (cd "$payload" && oras push --artifact-type application/vnd.enterpriseglue.release-candidate.v1 "${push_args[@]}")
           else
             comparison="$RUNNER_TEMP/existing-release-candidate"

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "enterpriseglue-schema-epoch/v1",
+  "id": "postgres-explicit-context-bridge-v1",
+  "target": {
+    "databaseType": "postgres",
+    "tenancyMode": "pooled"
+  },
+  "roles": {
+    "applicationStartup": {
+      "mode": "verify-only"
+    },
+    "ownerMigration": {
+      "mode": "apply-through-executable",
+      "through": 1700000000131
+    }
+  },
+  "runtimeCapability": "postgres-explicit-context/v1",
+  "executableMigrationInventory": {
+    "through": 1700000000131,
+    "count": 133,
+    "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1"
+  },
+  "acceptedDatabaseEpochs": [
+    {
+      "id": "pre-enforcement",
+      "through": 1700000000131,
+      "count": 133,
+      "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1",
+      "postgresPolicyProfile": "legacy-explicit-runtime-compatible/v1"
+    },
+    {
+      "id": "post-enforcement",
+      "through": 1700000000132,
+      "count": 134,
+      "sha256": "fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a",
+      "postgresPolicyProfile": "explicit-context/v1"
+    }
+  ]
+}
