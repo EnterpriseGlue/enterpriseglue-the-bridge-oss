@@ -75,6 +75,54 @@ test('disabled API bundle delivery leaves every rendered workload unchanged', as
   assert.doesNotMatch(disabled.stdout, /EG_CONFIG_|api-config-bundle|platform-config/)
 })
 
+test('pooled PostgreSQL profile always renders the signed bridge owner and verify-only runtimes', async (t) => {
+  const result = await render(t, {
+    database: {
+      profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      migration: { enabled: false, runtimeRole: 'eg_runtime' },
+    },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /runSchemaEpochOwnerMigrations/)
+  assert.doesNotMatch(result.stdout, /runMigrations\(\{mode:'apply'\}\)/)
+  assert.equal(result.stdout.match(/name: EG_DATABASE_STARTUP_MODE\n\s+value: "verify"/g)?.length, 2)
+  assert.match(result.stdout, /secretRef: \{ name: enterpriseglue-migration-secrets \}/)
+  assert.equal(result.stdout.match(/name: EG_POSTGRES_RUNTIME_ROLE/g)?.length, 1)
+  assert.match(result.stdout, /name: EG_POSTGRES_RUNTIME_ROLE\n\s+value: "eg_runtime"/)
+})
+
+test('non-target profiles retain migration.enabled and never require the bridge owner secret', async (t) => {
+  const single = await render(t, {
+    database: {
+      profile: { databaseType: 'postgres', tenancyMode: 'single' },
+      migrationSecretName: 'unused-migration-secret',
+      migration: { enabled: false },
+      preflight: { enabled: false },
+    },
+  })
+  assert.equal(single.status, 0, single.stderr)
+  assert.doesNotMatch(single.stdout, /runSchemaEpochOwnerMigrations|runMigrations\(\{mode:'apply'\}\)|unused-migration-secret/)
+  assert.equal(single.stdout.match(/name: EG_DATABASE_STARTUP_MODE\n\s+value: "apply"/g)?.length, 2)
+
+  const oracle = await render(t, {
+    database: { profile: { databaseType: 'oracle', tenancyMode: 'single' } },
+  })
+  assert.equal(oracle.status, 0, oracle.stderr)
+  assert.match(oracle.stdout, /runMigrations\(\{mode:'apply'\}\)/)
+  assert.doesNotMatch(oracle.stdout, /runSchemaEpochOwnerMigrations/)
+})
+
+test('bridge profile rejects incomplete profile and a missing owner secret', async (t) => {
+  for (const values of [
+    { database: { profile: { databaseType: 'postgres', tenancyMode: '' } } },
+    { database: { profile: { databaseType: 'postgres', tenancyMode: 'pooled' }, migrationSecretName: '' } },
+  ]) {
+    const result = await render(t, values)
+    assert.notEqual(result.status, 0)
+    assert.equal(result.stdout, '')
+  }
+})
+
 test('database proxy sidecars do not inherit API bootstrap credentials or mounts', async (t) => {
   const result = await render(t, {
     apiConfigBundle: enabled,

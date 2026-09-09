@@ -11,16 +11,21 @@ import {
 import { getDataSource, adapter } from '@enterpriseglue/shared/db/data-source.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { refreshPostgresRuntimeGrants } from '@enterpriseglue/shared/db/postgres-runtime-grants.js';
+import { grantSchemaEpochReleaseEffectCohortRuntimePrivileges } from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
 import { AddPostgresTenantRls1700000000126 } from '@enterpriseglue/shared/db/migrations/1700000000126-add-postgres-tenant-rls.js';
 import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
-import { verifyExecutedSchemaEpoch } from '@enterpriseglue/shared/db/schema-epoch.js';
+import { verifyExecutedSchemaEpoch, verifyOwnerMigrationStartingEpoch } from '@enterpriseglue/shared/db/schema-epoch.js';
 
 vi.mock('@enterpriseglue/shared/db/schema-epoch.js', async () => {
   const actual = await vi.importActual<typeof import('@enterpriseglue/shared/db/schema-epoch.js')>(
     '@enterpriseglue/shared/db/schema-epoch.js',
   );
-  return { ...actual, verifyExecutedSchemaEpoch: vi.fn() };
+  return {
+    ...actual,
+    verifyExecutedSchemaEpoch: vi.fn(),
+    verifyOwnerMigrationStartingEpoch: vi.fn(),
+  };
 });
 
 // Owner verification and lease/pool behavior have real PostgreSQL coverage;
@@ -31,6 +36,10 @@ vi.mock('@enterpriseglue/shared/db/postgres-migration-context.js', () => ({
 
 vi.mock('@enterpriseglue/shared/db/postgres-runtime-grants.js', () => ({
   refreshPostgresRuntimeGrants: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@enterpriseglue/shared/db/schema-epoch-runtime-grant.js', () => ({
+  grantSchemaEpochReleaseEffectCohortRuntimePrivileges: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -153,15 +162,14 @@ describe('runMigrations bootstrap behavior', () => {
   });
 
   it('lets the owner job apply only the signed migration ceiling without policy or repair side effects', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
     vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
     const previousTenancyMode = config.tenancyMode;
     (config as { tenancyMode: string }).tenancyMode = 'pooled';
     const rlsRepair = vi.spyOn(AddPostgresTenantRls1700000000126.prototype, 'up');
     const rbacSeed = vi.spyOn(permissionService, 'seedRbacFoundation');
-    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
-    const epochRunner = { release: vi.fn().mockResolvedValue(undefined) };
     const legacyPredicate = "((COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode'::text, true), ''::text), 'single'::text) <> 'pooled'::text) OR (tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id'::text, true), ''::text)))";
-    const integrityRunner = {
+    const policyRunner = {
       ...createIntegrityRunner(),
       connection: {
         options: { type: 'postgres', schema: 'public' },
@@ -197,9 +205,8 @@ describe('runMigrations bootstrap behavior', () => {
     const dataSource = {
       migrations: registeredMigrationIdentities(),
       createQueryRunner: vi.fn()
-        .mockReturnValueOnce(bootstrapRunner)
-        .mockReturnValueOnce(epochRunner)
-        .mockReturnValueOnce(integrityRunner),
+        .mockReturnValueOnce(policyRunner)
+        .mockReturnValueOnce(policyRunner),
       getMetadata: vi.fn((entity: { name: string }) => ({ tablePath: `public.${entity.name.toLowerCase()}` })),
       entityMetadatas: [],
       synchronize: vi.fn(),
@@ -208,6 +215,7 @@ describe('runMigrations bootstrap behavior', () => {
       transaction: vi.fn(),
     };
     vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
+    vi.mocked(verifyOwnerMigrationStartingEpoch).mockResolvedValue('owner-source');
     vi.mocked(verifyExecutedSchemaEpoch).mockResolvedValue({
       id: 'pre-enforcement',
       through: 1700000000131,
@@ -219,14 +227,22 @@ describe('runMigrations bootstrap behavior', () => {
     try {
       await runSchemaEpochOwnerMigrations();
       expect(dataSource.runMigrations).toHaveBeenCalledOnce();
+      expect(verifyOwnerMigrationStartingEpoch).toHaveBeenCalledOnce();
       expect(dataSource.migrations.at(-1)?.name).toBe('AddReleaseEffectCohorts1700000000131');
       expect(dataSource.synchronize).not.toHaveBeenCalled();
       expect(rlsRepair).not.toHaveBeenCalled();
-      expect(integrityRunner.addColumn).not.toHaveBeenCalled();
-      expect(integrityRunner.createIndex).not.toHaveBeenCalled();
+      expect(policyRunner.addColumn).not.toHaveBeenCalled();
+      expect(policyRunner.createIndex).not.toHaveBeenCalled();
       expect(rbacSeed).not.toHaveBeenCalled();
       expect(dataSource.transaction).not.toHaveBeenCalled();
-      expect(integrityRunner.query).toHaveBeenCalledWith(
+      expect(withPostgresMigrationContext).not.toHaveBeenCalled();
+      expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).toHaveBeenCalledExactlyOnceWith(
+        dataSource,
+        policyRunner,
+        'eg_runtime',
+      );
+      expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
+      expect(policyRunner.query).toHaveBeenCalledWith(
         expect.stringContaining('json_agg'),
         ['public', 'projects'],
       );
@@ -234,6 +250,39 @@ describe('runMigrations bootstrap behavior', () => {
       (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
       rlsRepair.mockRestore();
       rbacSeed.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('rejects empty, partial, or unexpected owner ledgers before any database mutation', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
+    const previousTenancyMode = config.tenancyMode;
+    (config as { tenancyMode: string }).tenancyMode = 'pooled';
+    const runner = { release: vi.fn().mockResolvedValue(undefined) };
+    const dataSource = {
+      migrations: registeredMigrationIdentities(),
+      createQueryRunner: vi.fn().mockReturnValue(runner),
+      showMigrations: vi.fn(),
+      runMigrations: vi.fn(),
+      synchronize: vi.fn(),
+    };
+    vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
+    vi.mocked(verifyOwnerMigrationStartingEpoch).mockRejectedValue(
+      new Error('Owner migration starting epoch is not accepted'),
+    );
+
+    try {
+      await expect(runSchemaEpochOwnerMigrations()).rejects.toThrow(/starting epoch is not accepted/);
+      expect(dataSource.showMigrations).not.toHaveBeenCalled();
+      expect(dataSource.runMigrations).not.toHaveBeenCalled();
+      expect(dataSource.synchronize).not.toHaveBeenCalled();
+      expect(withPostgresMigrationContext).not.toHaveBeenCalled();
+      expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).not.toHaveBeenCalled();
+      expect(runner).not.toHaveProperty('query');
+    } finally {
+      (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
+      vi.unstubAllEnvs();
     }
   });
   beforeEach(() => {

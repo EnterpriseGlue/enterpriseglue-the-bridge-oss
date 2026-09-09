@@ -22,6 +22,8 @@ node --test "$ROOT_DIR/scripts/check-enterpriseglue-host-chart.test.mjs"
 helm lint "$CHART_DIR" -f "$VALUES_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" >"$RENDERED_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
+  --set-string database.profile.databaseType=postgres \
+  --set-string database.profile.tenancyMode=single \
   --set-string database.migration.runtimeRole=eg_runtime >"$RUNTIME_ROLE_FILE"
 if ! grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RUNTIME_ROLE_FILE"; then
   echo "Schema-epoch compatibility bridge omitted the configured owner migration runtime role" >&2
@@ -32,6 +34,8 @@ if grep -Fq 'EG_POSTGRES_RUNTIME_ROLE' "$RENDERED_FILE"; then
   exit 1
 fi
 if helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" \
+  --set-string database.profile.databaseType=postgres \
+  --set-string database.profile.tenancyMode=single \
   --set-string 'database.migration.runtimeRole=runtime;invalid' >/dev/null 2>&1; then
   echo "Host chart accepted an invalid runtime role" >&2
   exit 1

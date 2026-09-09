@@ -18,6 +18,15 @@ migration is pending. API and worker pods use `database.applicationSecretName` a
 migrations or install RLS. Give the migration identity DDL privileges and application/preflight
 identities only the least database authority they need.
 
+Set `database.profile.databaseType=postgres` and
+`database.profile.tenancyMode=pooled` together to activate the schema-epoch bridge. The chart
+renders those values explicitly into each database workload so the ConfigMap cannot select a
+different runtime contract. Application startup is then verify-only. The separately credentialed
+owner hook always renders and can apply only the exact signed 0130-to-0131 transition;
+`database.migration.enabled` cannot skip it or extend it to the later enforcement migration.
+The owner rejects a fresh database, empty ledger, partial ledger, or any other predecessor before
+DDL; new managed shards need a separate signed bootstrap/recovery artifact.
+
 Managed PostgreSQL pooled releases may enable `database.releaseEffectCohort`. The chart then
 orders the owner migration at hook weight `-20`, restricted schema/policy preflight at `-10`, and
 the cohort opener at `0`, before Kubernetes creates API or worker Deployments. The opener uses
@@ -48,14 +57,11 @@ migration and restricted preflight are both enabled and the explicit profile is 
 `postgres`/`pooled`. The separate settlement runbook defines retirement and fail-closed coverage;
 opening a cohort does not establish maintenance or shutdown eligibility.
 
-The schema-epoch bridge release makes these roles immutable in its packaged manifest. Application
-startup is verify-only. The separately credentialed owner hook always renders and can apply only
-through the manifest's executable ceiling; `database.migration.enabled` cannot skip it or extend
-it to the later enforcement migration. The setting remains in the values schema solely for
-compatibility with non-bridge chart versions.
-
-For PostgreSQL, set `database.migration.runtimeRole` to an existing restricted runtime login to
-refresh its grants after successful owner migrations. This emits `EG_POSTGRES_RUNTIME_ROLE` only
+For PostgreSQL, `database.migration.runtimeRole` names an existing restricted runtime login. Outside
+the bridge profile it refreshes ordinary grants after successful owner migrations. In the bridge
+profile it grants only `SELECT`, `INSERT`, and `UPDATE` on the exact 0131
+`release_effect_cohorts` table and verifies that exact result; it does not use the generic refresh
+or alter default privileges. The value is emitted as `EG_POSTGRES_RUNTIME_ROLE` only
 on the migration job, never API, worker, or preflight. The login must have no memberships,
 ownership, administrative attributes, database CREATE or schema CREATE privilege. The migration
 identity must own all tables and sequences in the configured schema. Roles and credentials remain
@@ -77,8 +83,11 @@ frontend and cohort opener never receive a service-account token. Jobs use Kuber
 does not prevent completion. Provider-specific instances, identities and arguments stay outside
 this chart.
 
-Older, non-bridge charts use `database.migration.enabled=false` to select the backward-compatible
-application-owned migration path. The bridge chart intentionally ignores that mutable selection.
+When the profile is omitted, uses another adapter, or selects single tenancy,
+`database.migration.enabled` retains its historical contract: `true` renders the generic owner
+job and verify-only applications; `false` omits the owner job and selects the backward-compatible
+application-owned migration path. The bridge profile never sends its bounded runtime-role grant
+setting to application or preflight containers.
 
 ## API-only platform configuration bootstrap
 

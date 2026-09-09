@@ -24,6 +24,7 @@ import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verif
 import { config } from '../config/index.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
 import { withPostgresMigrationContext } from './postgres-migration-context.js';
+import { grantSchemaEpochReleaseEffectCohortRuntimePrivileges } from './schema-epoch-runtime-grant.js';
 import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
 import { runWithTenantDatabaseContext } from '../services/tenant-database-context.js';
 import {
@@ -32,6 +33,7 @@ import {
   isSchemaEpochManifestApplicable,
   loadBundledSchemaEpochManifest,
   verifyExecutedSchemaEpoch,
+  verifyOwnerMigrationStartingEpoch,
   type AcceptedDatabaseEpoch,
 } from './schema-epoch.js';
 
@@ -542,6 +544,68 @@ export interface RunMigrationsOptions {
   mode?: 'apply' | 'verify';
 }
 
+async function verifySchemaEpochPolicy(
+  queryRunner: QueryRunner,
+  policyProfile: AcceptedDatabaseEpoch['postgresPolicyProfile'],
+): Promise<void> {
+  const rls = await verifyPostgresTenantRlsForPolicyProfile(queryRunner, policyProfile);
+  if (rls.expected === 0 || rls.enforced !== rls.expected) {
+    throw new Error(
+      `Pooled tenancy requires the exact ${policyProfile} PostgreSQL RLS profile ` +
+      `(expected ${rls.expected}, found ${rls.enforced}).`,
+    );
+  }
+}
+
+/** Execute the one signed 0130 -> 0131 bridge transition without the generic
+ * migration policy lease or any bootstrap/repair/baseline path. The database
+ * ledger and legacy policy are verified before the first database mutation. */
+async function runBoundedSchemaEpochOwnerMigration(
+  dataSource: DataSource,
+  manifest: ReturnType<typeof loadBundledSchemaEpochManifest>,
+  runtimeRole: string | undefined,
+): Promise<void> {
+  bindDataSourceToSchemaEpoch(dataSource, manifest);
+
+  const startingRunner = dataSource.createQueryRunner();
+  let startingEpoch: Awaited<ReturnType<typeof verifyOwnerMigrationStartingEpoch>>;
+  try {
+    startingEpoch = await verifyOwnerMigrationStartingEpoch(dataSource, startingRunner, manifest);
+    const profile = startingEpoch === 'owner-source'
+      ? 'legacy-explicit-runtime-compatible/v1'
+      : manifest.acceptedDatabaseEpochs.find((epoch) => epoch.id === startingEpoch)!.postgresPolicyProfile;
+    await verifySchemaEpochPolicy(startingRunner, profile);
+  } finally {
+    await startingRunner.release();
+  }
+
+  const pendingMigrations = await dataSource.showMigrations();
+  if (startingEpoch === 'owner-source') {
+    if (!pendingMigrations) {
+      throw new Error('Signed owner transition expected migration 1700000000131 to be pending');
+    }
+    await dataSource.runMigrations({ transaction: 'all' });
+  } else if (pendingMigrations) {
+    throw new Error(`Accepted ${startingEpoch} database epoch unexpectedly has a pending bridge migration`);
+  }
+
+  const verifiedRunner = dataSource.createQueryRunner();
+  try {
+    const accepted = await verifyExecutedSchemaEpoch(dataSource, verifiedRunner, manifest);
+    await verifySchemaEpochPolicy(verifiedRunner, accepted.postgresPolicyProfile);
+    if (runtimeRole !== undefined) {
+      await grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, verifiedRunner, runtimeRole);
+    }
+    console.log(
+      `  ✅ Verified immutable database schema epoch ${accepted.id} ` +
+      `(through ${accepted.through})`,
+    );
+  } finally {
+    await verifiedRunner.release();
+  }
+  console.log('✅ Bounded schema-epoch owner migration complete');
+}
+
 async function runMigrationsForInvocation(
   options: RunMigrationsOptions,
   invocation: 'application-startup' | 'owner-migration',
@@ -582,6 +646,9 @@ async function runMigrationsForInvocation(
   try {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
+    if (boundedSchemaEpochOwner) {
+      return await runBoundedSchemaEpochOwnerMigration(dataSource, schemaEpochManifest, runtimeRole);
+    }
     return await withPostgresMigrationContext(dataSource, mode, async () => {
     if (schemaEpochApplies) bindDataSourceToSchemaEpoch(dataSource, schemaEpochManifest);
     let acceptedDatabaseEpoch: AcceptedDatabaseEpoch | null = null;
@@ -644,7 +711,7 @@ async function runMigrationsForInvocation(
       }
 
       if (missingTables.length > 0) {
-        if (mode === 'verify' || boundedSchemaEpochOwner) {
+        if (mode === 'verify') {
           throw new Error(
             `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
           );
@@ -666,7 +733,6 @@ async function runMigrationsForInvocation(
 
       if (
         mode === 'apply'
-        && !boundedSchemaEpochOwner
         && !initializedFreshSchema
         && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
       ) {
@@ -707,7 +773,7 @@ async function runMigrationsForInvocation(
     const integrityRunner = dataSource.createQueryRunner();
     try {
       if (dbType === 'postgres') {
-        if (mode === 'apply' && !boundedSchemaEpochOwner) {
+        if (mode === 'apply') {
           await new AddPostgresTenantRls1700000000126().up(integrityRunner);
         }
         if (config.tenancyMode === 'pooled') {
@@ -729,7 +795,7 @@ async function runMigrationsForInvocation(
           }
         }
       }
-      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply' && !boundedSchemaEpochOwner);
+      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
       if (runtimeRole !== undefined) await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
     } finally {
       await integrityRunner.release();
@@ -738,7 +804,6 @@ async function runMigrationsForInvocation(
       dbType === 'postgres'
       && config.tenancyMode === 'pooled'
       && mode === 'apply'
-      && !boundedSchemaEpochOwner
     ) {
       await permissionService.seedRbacFoundation(dataSource);
       await projectLegacyLocalRoleAssignmentsOnce(dataSource);

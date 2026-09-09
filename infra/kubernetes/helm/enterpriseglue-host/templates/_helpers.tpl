@@ -109,12 +109,30 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- toJson $manifest -}}
 {{- end }}
 
+{{- define "enterpriseglue-host.schemaEpochTarget" -}}
+{{- $databaseType := .Values.database.profile.databaseType | default "" -}}
+{{- $tenancyMode := .Values.database.profile.tenancyMode | default "" -}}
+{{- if ne (empty $databaseType) (empty $tenancyMode) -}}
+{{- fail "database.profile.databaseType and database.profile.tenancyMode must be set together" -}}
+{{- end -}}
+{{- if and (eq $databaseType "postgres") (eq $tenancyMode "pooled") -}}true{{- else -}}false{{- end -}}
+{{- end }}
+
 {{- define "enterpriseglue-host.schemaEpochStartupMode" -}}
+{{- if eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" -}}
 {{- include "enterpriseglue-host.schemaEpochManifest" . | fromJson | dig "roles" "applicationStartup" "mode" "" | trimSuffix "-only" -}}
+{{- else -}}
+{{- ternary "verify" "apply" .Values.database.migration.enabled -}}
+{{- end -}}
 {{- end }}
 
 {{- define "enterpriseglue-host.schemaEpochOwnerMode" -}}
+{{- if eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" -}}
+{{- $migrationSecret := required "database.migrationSecretName is required for the pooled PostgreSQL schema-epoch bridge" .Values.database.migrationSecretName -}}
 {{- include "enterpriseglue-host.schemaEpochManifest" . | fromJson | dig "roles" "ownerMigration" "mode" "" -}}
+{{- else -}}
+{{- ternary "legacy-apply" "disabled" .Values.database.migration.enabled -}}
+{{- end -}}
 {{- end }}
 
 {{- define "enterpriseglue-host.serviceAccountName" -}}

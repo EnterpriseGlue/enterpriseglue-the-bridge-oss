@@ -65,8 +65,10 @@ workers:
     targetCPUUtilizationPercentage: 70
 
 database:
-  # Explicit deployment profile. Managed cohort admission is rendered only for
-  # PostgreSQL pooled tenancy; blank preserves existing self-host behavior.
+  # Optional chart-validated runtime profile. Leave both values empty to retain
+  # the historical ConfigMap-driven contract. The signed bridge is activated
+  # only by the exact postgres/pooled pair; managed cohort admission also uses
+  # this explicit profile.
   profile:
     databaseType: ""
     tenancyMode: ""

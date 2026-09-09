@@ -10,6 +10,7 @@ import {
   migrationInventorySha256,
   parseSchemaEpochManifest,
   resolveAcceptedDatabaseEpoch,
+  resolveOwnerMigrationStartingEpoch,
 } from '@enterpriseglue/shared/db/schema-epoch.js';
 import {
   legacyPostgresTenantPolicyMatches,
@@ -35,6 +36,13 @@ describe('immutable schema-epoch compatibility bridge', () => {
     const dataSource = { migrations } as any;
 
     expect(manifest.executableMigrationInventory.through).toBe(1700000000131);
+    expect(manifest.upgradeContract.minimumDatabaseEpoch).toEqual(manifest.roles.ownerMigration.from);
+    expect(manifest.upgradeContract.freshDatabase).toBe('requires-separate-signed-bootstrap');
+    expect(manifest.upgradeContract.emptyMigrationLedger).toBe('requires-separate-signed-recovery');
+    expect(manifest.executableImplementationInventory).toMatchObject({
+      algorithm: 'sha256-source-v1',
+      count: 4,
+    });
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.through)).toEqual([
       1700000000131,
       1700000000132,
@@ -96,6 +104,26 @@ describe('immutable schema-epoch compatibility bridge', () => {
     )).toMatchObject({ id: 'pre-enforcement' });
     expect(resolveAcceptedDatabaseEpoch(manifest, all)).toMatchObject({ id: 'post-enforcement' });
     expect(() => resolveAcceptedDatabaseEpoch(manifest, all.slice(1))).toThrow(/not accepted/);
+  });
+
+  it('lets the owner start only from the exact predecessor or an already accepted epoch', () => {
+    const manifest = loadBundledSchemaEpochManifest();
+    const all = canonicalMigrationInventory(registeredMigrations());
+    expect(resolveOwnerMigrationStartingEpoch(
+      manifest,
+      all.filter((migration) => migration.timestamp <= 1700000000130),
+    )).toBe('owner-source');
+    expect(resolveOwnerMigrationStartingEpoch(
+      manifest,
+      all.filter((migration) => migration.timestamp <= 1700000000131),
+    )).toBe('pre-enforcement');
+    expect(resolveOwnerMigrationStartingEpoch(manifest, all)).toBe('post-enforcement');
+    expect(() => resolveOwnerMigrationStartingEpoch(manifest, [])).toThrow(
+      /starting epoch is not accepted/,
+    );
+    expect(() => resolveOwnerMigrationStartingEpoch(manifest, all.slice(1))).toThrow(
+      /starting epoch is not accepted/,
+    );
   });
 
   it('rejects malformed or broadened manifest data', () => {

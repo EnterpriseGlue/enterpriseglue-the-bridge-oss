@@ -1,13 +1,19 @@
 EnterpriseGlue OSS host {{ .Chart.AppVersion }} rendered with immutable images.
 
-The immutable schema-epoch manifest sets application startup to
+Database startup renders as
 EG_DATABASE_STARTUP_MODE={{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim }}.
+{{- if eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" }}
+The immutable schema-epoch manifest is active for pooled PostgreSQL.
 The separately credentialed owner hook applies only the manifest's exact
 executable inventory; the preflight hook then verifies an accepted database
 epoch before rollout. The chart value cannot extend or skip that bridge ceiling.
 {{- if .Values.database.releaseEffectCohort.enabled }}
 The managed release-effect cohort opener runs after preflight and before API/worker creation for
 release {{ .Values.database.releaseEffectCohort.releaseId }} at epoch {{ .Values.database.releaseEffectCohort.cohortEpoch }}.
+{{- end }}
+{{- else }}
+The signed pooled-PostgreSQL schema-epoch bridge is not active; the historical
+database.migration.enabled behavior is retained for this profile.
 {{- end }}
 Only the frontend Service is referenced by the optional Ingress; the backend and
 Plugin Manager remain cluster-internal.

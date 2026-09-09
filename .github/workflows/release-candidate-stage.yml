@@ -803,6 +803,7 @@ jobs:
           host_package_output="$package_output/host"
           metadata_output="$payload/metadata"
           mkdir -p "$chart_output" "$plugin_package_output" "$host_package_output" "$metadata_output"
+          node scripts/schema-epoch-manifest.mjs verify
           cp packages/shared/src/schema-epoch-manifest.json "$metadata_output/schema-epoch-manifest.json"
 
           installer_version="$(node -p "require('./packages/plugin-installer/package.json').version")"

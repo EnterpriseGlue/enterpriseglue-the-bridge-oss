@@ -1,6 +1,6 @@
 {{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
 {{- $schemaEpochOwnerMode := include "enterpriseglue-host.schemaEpochOwnerMode" . | trim }}
-{{- if eq $schemaEpochOwnerMode "apply-through-executable" }}
+{{- if ne $schemaEpochOwnerMode "disabled" }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -34,11 +34,23 @@ spec:
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
           command: ["node", "-e"]
           args:
+            {{- if eq $schemaEpochOwnerMode "apply-through-executable" }}
             - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runSchemaEpochOwnerMigrations}) => runSchemaEpochOwnerMigrations())"
-          {{- if .Values.database.migration.runtimeRole }}
+            {{- else }}
+            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
+            {{- end }}
+          {{- if or .Values.database.migration.runtimeRole .Values.database.profile.databaseType }}
           env:
+            {{- if .Values.database.migration.runtimeRole }}
             - name: EG_POSTGRES_RUNTIME_ROLE
               value: {{ .Values.database.migration.runtimeRole | quote }}
+            {{- end }}
+            {{- if .Values.database.profile.databaseType }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+            {{- end }}
           {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
@@ -146,6 +158,13 @@ spec:
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.preflightSecretName }} }
+          {{- if .Values.database.profile.databaseType }}
+          env:
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+          {{- end }}
           securityContext:
             {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
           resources:

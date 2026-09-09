@@ -118,6 +118,7 @@ test('candidate staging qualifies every public artifact before recording success
 
 test('candidate signatures bind the schema-epoch manifest in the image, chart, payload and receipt', async () => {
   const receiptContract = await read('./release-candidate-receipt.mjs')
+  assert.match(stage, /node scripts\/schema-epoch-manifest\.mjs verify/)
   assert.match(stage, /cp packages\/shared\/src\/schema-epoch-manifest\.json "\$metadata_output\/schema-epoch-manifest\.json"/)
   assert.match(stage, /find charts packages metadata -type f/)
   assert.match(receiptContract, /schemaEpoch/)

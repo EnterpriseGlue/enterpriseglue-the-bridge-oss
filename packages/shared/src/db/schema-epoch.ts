@@ -18,6 +18,12 @@ const DatabaseEpochSchema = MigrationInventorySchema.extend({
   ]),
 }).strict();
 
+const ImplementationInventorySchema = z.object({
+  algorithm: z.literal('sha256-source-v1'),
+  count: z.number().int().positive(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict();
+
 const SchemaEpochManifestSchema = z.object({
   schemaVersion: z.literal('enterpriseglue-schema-epoch/v1'),
   id: z.literal('postgres-explicit-context-bridge-v1'),
@@ -31,11 +37,19 @@ const SchemaEpochManifestSchema = z.object({
     }).strict(),
     ownerMigration: z.object({
       mode: z.literal('apply-through-executable'),
+      from: MigrationInventorySchema,
       through: z.number().int().nonnegative(),
+      runtimeGrant: z.literal('configured-role-release-effect-cohorts-select-insert-update/v1'),
     }).strict(),
   }).strict(),
   runtimeCapability: z.literal('postgres-explicit-context/v1'),
+  upgradeContract: z.object({
+    minimumDatabaseEpoch: MigrationInventorySchema,
+    freshDatabase: z.literal('requires-separate-signed-bootstrap'),
+    emptyMigrationLedger: z.literal('requires-separate-signed-recovery'),
+  }).strict(),
   executableMigrationInventory: MigrationInventorySchema,
+  executableImplementationInventory: ImplementationInventorySchema,
   acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema]),
 }).strict();
 
@@ -101,6 +115,11 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || manifest.executableMigrationInventory.count !== pre.count
     || manifest.executableMigrationInventory.sha256 !== pre.sha256
     || manifest.roles.ownerMigration.through !== manifest.executableMigrationInventory.through
+    || manifest.roles.ownerMigration.from.through + 1 !== manifest.executableMigrationInventory.through
+    || manifest.roles.ownerMigration.from.count + 1 !== manifest.executableMigrationInventory.count
+    || manifest.upgradeContract.minimumDatabaseEpoch.through !== manifest.roles.ownerMigration.from.through
+    || manifest.upgradeContract.minimumDatabaseEpoch.count !== manifest.roles.ownerMigration.from.count
+    || manifest.upgradeContract.minimumDatabaseEpoch.sha256 !== manifest.roles.ownerMigration.from.sha256
     || post.through !== pre.through + 1
     || post.count !== pre.count + 1
   ) {
@@ -186,6 +205,42 @@ export async function verifyExecutedSchemaEpoch(
 ): Promise<AcceptedDatabaseEpoch> {
   const executed = await new MigrationExecutor(dataSource, queryRunner).getExecutedMigrations();
   return resolveAcceptedDatabaseEpoch(manifest, executed);
+}
+
+/** Refuse an owner transition unless its starting ledger is the one exact
+ * predecessor or an already accepted bridge epoch. This runs before pending
+ * migration, synchronize, repair or projection work. */
+export async function verifyOwnerMigrationStartingEpoch(
+  dataSource: DataSource,
+  queryRunner: QueryRunner,
+  manifest: SchemaEpochManifest,
+): Promise<'owner-source' | AcceptedDatabaseEpoch['id']> {
+  const executed = await new MigrationExecutor(dataSource, queryRunner).getExecutedMigrations();
+  return resolveOwnerMigrationStartingEpoch(manifest, executed);
+}
+
+export function resolveOwnerMigrationStartingEpoch(
+  manifest: SchemaEpochManifest,
+  executed: ReadonlyArray<MigrationInterface | { name?: string; timestamp?: number }>,
+): 'owner-source' | AcceptedDatabaseEpoch['id'] {
+  const inventory = canonicalMigrationInventory(executed);
+  const digest = migrationInventorySha256(inventory);
+  const source = manifest.roles.ownerMigration.from;
+  if (
+    source.count === inventory.length
+    && source.through === inventory[inventory.length - 1]?.timestamp
+    && source.sha256 === digest
+  ) return 'owner-source';
+  const accepted = manifest.acceptedDatabaseEpochs.find((epoch) =>
+    epoch.count === inventory.length
+    && epoch.through === inventory[inventory.length - 1]?.timestamp
+    && epoch.sha256 === digest,
+  );
+  if (accepted) return accepted.id;
+  throw new Error(
+    `Owner migration starting epoch is not accepted by ${manifest.id} ` +
+    `(through=${inventory[inventory.length - 1]?.timestamp ?? 'none'}, count=${inventory.length}, sha256=${digest})`,
+  );
 }
 
 export function resolveAcceptedDatabaseEpoch(

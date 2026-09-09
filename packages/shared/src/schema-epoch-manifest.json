@@ -11,14 +11,34 @@
     },
     "ownerMigration": {
       "mode": "apply-through-executable",
-      "through": 1700000000131
+      "from": {
+        "through": 1700000000130,
+        "count": 132,
+        "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16"
+      },
+      "through": 1700000000131,
+      "runtimeGrant": "configured-role-release-effect-cohorts-select-insert-update/v1"
     }
   },
   "runtimeCapability": "postgres-explicit-context/v1",
+  "upgradeContract": {
+    "minimumDatabaseEpoch": {
+      "through": 1700000000130,
+      "count": 132,
+      "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16"
+    },
+    "freshDatabase": "requires-separate-signed-bootstrap",
+    "emptyMigrationLedger": "requires-separate-signed-recovery"
+  },
   "executableMigrationInventory": {
     "through": 1700000000131,
     "count": 133,
     "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1"
+  },
+  "executableImplementationInventory": {
+    "algorithm": "sha256-source-v1",
+    "count": 4,
+    "sha256": "c6cf2b22229317dce1bf2853cf3367628d50f70469f8e5e4f8409403a9dec451"
   },
   "acceptedDatabaseEpochs": [
     {

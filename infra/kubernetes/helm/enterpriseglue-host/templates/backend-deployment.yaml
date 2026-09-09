@@ -86,6 +86,12 @@ spec:
             {{- end }}
             - name: EG_RUNTIME_ROLE
               value: {{ ternary "api" "all" .Values.workers.enabled | quote }}
+            {{- if .Values.database.profile.databaseType }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+            {{- end }}
             - name: EG_DATABASE_STARTUP_MODE
               value: {{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim | quote }}
             - name: API_UPSTREAM

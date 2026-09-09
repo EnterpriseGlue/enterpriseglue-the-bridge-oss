@@ -43,6 +43,12 @@ spec:
           env:
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             - { name: EG_RUNTIME_ROLE, value: "worker" }
+            {{- if .Values.database.profile.databaseType }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+            {{- end }}
             - name: EG_DATABASE_STARTUP_MODE
               value: {{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim | quote }}
             {{- if .Values.pluginAssets.enabled }}

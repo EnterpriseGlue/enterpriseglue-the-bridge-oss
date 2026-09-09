@@ -64,6 +64,11 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   assert.equal(created.artifacts.length, 13)
   assert.equal(created.schemaEpoch.applicationStartupMode, 'verify-only')
   assert.equal(created.schemaEpoch.ownerMigrationMode, 'apply-through-executable')
+  assert.equal(created.schemaEpoch.ownerMigrationFrom, 1700000000130)
+  assert.equal(created.schemaEpoch.ownerRuntimeGrant, 'configured-role-release-effect-cohorts-select-insert-update/v1')
+  assert.equal(created.schemaEpoch.freshDatabase, 'requires-separate-signed-bootstrap')
+  assert.equal(created.schemaEpoch.emptyMigrationLedger, 'requires-separate-signed-recovery')
+  assert.match(created.schemaEpoch.executableImplementationSha256, /^[0-9a-f]{64}$/)
   assert.deepEqual(created.schemaEpoch.acceptedThrough, [1700000000131, 1700000000132])
   assert.deepEqual(await verifyReceipt({
     receipt: output,

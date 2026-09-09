@@ -112,9 +112,19 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.id !== 'postgres-explicit-context-bridge-v1'
     || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
+    || manifest?.roles?.ownerMigration?.from?.through !== 1700000000130
     || manifest?.target?.databaseType !== 'postgres'
     || manifest?.target?.tenancyMode !== 'pooled'
     || manifest?.executableMigrationInventory?.through !== 1700000000131
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000130
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.count !== manifest?.roles?.ownerMigration?.from?.count
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.sha256 !== manifest?.roles?.ownerMigration?.from?.sha256
+    || manifest?.upgradeContract?.freshDatabase !== 'requires-separate-signed-bootstrap'
+    || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
+    || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
+    || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
+    || manifest?.executableImplementationInventory?.count !== 4
+    || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.roles?.ownerMigration?.through !== manifest.executableMigrationInventory.through
     || !Array.isArray(manifest?.acceptedDatabaseEpochs)
     || manifest.acceptedDatabaseEpochs.length !== 2
@@ -156,7 +166,12 @@ async function createReceipt(args) {
       id: schemaEpochManifest.id,
       applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
       ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
+      ownerMigrationFrom: schemaEpochManifest.roles.ownerMigration.from.through,
+      ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
+      freshDatabase: schemaEpochManifest.upgradeContract.freshDatabase,
+      emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
       executableThrough: schemaEpochManifest.executableMigrationInventory.through,
+      executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
       acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
     },
     artifacts,
@@ -193,7 +208,12 @@ async function verifyReceipt(args) {
     id: schemaEpochManifest.id,
     applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
     ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
+    ownerMigrationFrom: schemaEpochManifest.roles.ownerMigration.from.through,
+    ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
+    freshDatabase: schemaEpochManifest.upgradeContract.freshDatabase,
+    emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
     executableThrough: schemaEpochManifest.executableMigrationInventory.through,
+    executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
     acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
   }
   if (JSON.stringify(receipt.schemaEpoch) !== JSON.stringify(expectedSchemaEpoch)) {

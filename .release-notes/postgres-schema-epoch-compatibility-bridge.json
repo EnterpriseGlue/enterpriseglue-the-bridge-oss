@@ -12,10 +12,12 @@
     "required": true,
     "instructions": [
       "Deploy the independently signed bridge release and let its separately credentialed owner job apply exactly through migration 1700000000131 before starting bridge application replicas.",
+      "For pooled PostgreSQL, set the chart profile to database.profile.databaseType=postgres and database.profile.tenancyMode=pooled; confirm the existing ledger is exactly the signed 132-entry inventory through migration 1700000000130.",
       "Keep the bridge and previous qualified release for the complete 28-day fallback interval; only the later owner-controlled release may apply migration 1700000000132."
     ]
   },
   "configuration": [
+    "The explicit postgres/pooled chart profile activates the signed bridge contract. Other adapters, single-tenancy PostgreSQL, and omitted profiles retain the existing database.migration.enabled behavior.",
     "No operator migration-skip or schema-epoch selector is added. The application verify role and owner migration ceiling are immutable signed manifest data."
   ],
   "api": {"compatibility": "none", "changes": []},
@@ -24,13 +26,14 @@
     "rollbackSupported": true,
     "notes": [
       "The bridge owner entrypoint can execute the already introduced release-effect migration 1700000000131 but filters TypeORM before migration 1700000000132.",
-      "The bridge accepts only exact migration-ledger inventories through 1700000000131 with the released legacy policy or through 1700000000132 with attested explicit-context policies."
+      "The bridge accepts only exact migration-ledger inventories through 1700000000131 with the released legacy policy or through 1700000000132 with attested explicit-context policies.",
+      "The owner accepts only the exact 1700000000130 predecessor or an already accepted epoch. Fresh databases and empty or partial ledgers require a separate signed bootstrap/recovery release."
     ]
   },
   "security": [
     "Application startup rejects apply mode for pooled PostgreSQL before schema repair, synchronization or connection-owned migration work.",
-    "The bounded owner path cannot run synchronize, migration-ledger baselining, policy repair, critical-schema repair, RBAC seeding or legacy projection side effects.",
-    "The signed candidate receipt binds the manifest checksum and exact accepted epochs; candidate image qualification verifies the same bytes at both backend runtime and published shared-package locations."
+    "The bounded owner path cannot run synchronize, migration-ledger baselining, policy repair, critical-schema repair, generic grant refresh, RBAC seeding or legacy projection side effects; its optional configured-role action is limited to SELECT, INSERT, and UPDATE on the new 0131 cohort table.",
+    "The signed candidate receipt binds the manifest checksum, exact minimum/accepted epochs, unsupported bootstrap/recovery states, and the executable implementation digest; candidate image qualification verifies the same bytes at both backend runtime and published shared-package locations."
   ],
   "documentation": [
     "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
@@ -44,7 +47,7 @@
     "After migration 1700000000132, use the qualified pre-upgrade backup and compatible runtime; do not edit the TypeORM ledger or recreate permissive policies in place."
   ],
   "validation": [
-    "Focused tests prove application apply rejection, the exact owner ceiling, absence of owner repair side effects, exact pre/post ledger acceptance and rejection of malformed or unexpected epochs.",
+    "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, and exact pre/post ledger acceptance.",
     "PostgreSQL integration verifies the released legacy policy remains valid before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery."
   ],
   "packages": [

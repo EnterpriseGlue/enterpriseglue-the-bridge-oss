@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import {
   verifyPostgresTenantRlsForPolicyProfile,
 } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
+import { grantSchemaEpochReleaseEffectCohortRuntimePrivileges } from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
 import { EnforceExplicitPostgresContext1700000000132 } from '@enterpriseglue/shared/db/migrations/1700000000132-enforce-explicit-postgres-context.js';
 
 const env = (name: string, fallback: string) =>
@@ -11,6 +12,9 @@ const schema = `epoch_bridge_${Date.now()}`;
 const tablePath = `${schema}.projects`;
 const quoteIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
 const tableRef = `${quoteIdentifier(schema)}.${quoteIdentifier('projects')}`;
+const cohortTablePath = `${schema}.release_effect_cohorts`;
+const cohortTableRef = `${quoteIdentifier(schema)}.${quoteIdentifier('release_effect_cohorts')}`;
+const runtimeRole = `epoch_runtime_${Date.now()}`;
 const legacyPredicate = "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode', true), ''), 'single') <> 'pooled' OR tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), '')";
 
 let pool: Pool;
@@ -46,6 +50,9 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
     });
     await pool.query(`CREATE SCHEMA ${quoteIdentifier(schema)}`);
     await pool.query(`CREATE TABLE ${tableRef} (id text PRIMARY KEY, tenant_id text NOT NULL)`);
+    await pool.query(`CREATE TABLE ${cohortTableRef} (id text PRIMARY KEY, release_id text NOT NULL, state text NOT NULL)`);
+    await pool.query(`CREATE ROLE ${quoteIdentifier(runtimeRole)} LOGIN`);
+    await pool.query(`GRANT USAGE ON SCHEMA ${quoteIdentifier(schema)} TO ${quoteIdentifier(runtimeRole)}`);
     await pool.query(`ALTER TABLE ${tableRef} ENABLE ROW LEVEL SECURITY`);
     await pool.query(`ALTER TABLE ${tableRef} FORCE ROW LEVEL SECURITY`);
     await pool.query(
@@ -56,6 +63,7 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
   afterAll(async () => {
     if (!pool) return;
     await pool.query(`DROP SCHEMA IF EXISTS ${quoteIdentifier(schema)} CASCADE`);
+    await pool.query(`DROP ROLE IF EXISTS ${quoteIdentifier(runtimeRole)}`);
     await pool.end();
   });
 
@@ -76,5 +84,27 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
     await expect(
       verifyPostgresTenantRlsForPolicyProfile(runner(), 'legacy-explicit-runtime-compatible/v1'),
     ).resolves.toEqual({ expected: 1, enforced: 0 });
+  });
+
+  it('gives the configured restricted runtime exactly the 0131 cohort DML privileges', async () => {
+    const dataSource = {
+      options: { schema },
+      getMetadata: () => ({
+        tablePath: cohortTablePath,
+        tableName: 'release_effect_cohorts',
+        schema,
+      }),
+    } as any;
+    const queryRunner = {
+      hasTable: async (value: string) => value === cohortTablePath,
+      query: async (sql: string, parameters?: unknown[]) => (await pool.query(sql, parameters)).rows,
+    } as any;
+    await grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, queryRunner, runtimeRole);
+    const result = await pool.query(`SELECT
+      has_table_privilege($1, $2, 'SELECT') AS select_ok,
+      has_table_privilege($1, $2, 'INSERT') AS insert_ok,
+      has_table_privilege($1, $2, 'UPDATE') AS update_ok,
+      has_table_privilege($1, $2, 'DELETE') AS delete_ok`, [runtimeRole, cohortTablePath]);
+    expect(result.rows).toEqual([{ select_ok: true, insert_ok: true, update_ok: true, delete_ok: false }]);
   });
 });

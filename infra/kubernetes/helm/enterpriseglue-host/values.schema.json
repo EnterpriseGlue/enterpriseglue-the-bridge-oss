@@ -64,7 +64,7 @@
           "additionalProperties": false,
           "required": ["databaseType", "tenancyMode"],
           "properties": {
-            "databaseType": { "type": "string", "enum": ["", "postgres"] },
+            "databaseType": { "type": "string", "enum": ["", "postgres", "oracle", "mysql", "mssql", "spanner"] },
             "tenancyMode": { "type": "string", "enum": ["", "single", "pooled"] }
           }
         },
