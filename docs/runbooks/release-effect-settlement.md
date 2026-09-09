@@ -52,7 +52,8 @@ do not participate in release settlement.
    Plugin event enqueue and fixed-schedule upsert lock the tenant assignment
    before sharing a conditional TypeORM write fence with this transition.
    Exact event and command replays remain idempotent. Dead-letter requeue and
-   schedule resume and worker event/schedule claims use the canonical assignment → cohort → effect-row lock
+   schedule resume and worker event/schedule claims, including expired-lease
+   recovery, use the canonical assignment → cohort → effect-row lock
    order and revalidate the locked assignment; schedule pause/cancellation
    remain available to settle retained work.
 4. Read `GET ...` and invoke `POST .../verify` with the current revision.
@@ -85,7 +86,9 @@ different or older revision fails with `409`. A cohort is never reopened.
 `plugin_event_deliveries` states `pending`, `delivering`, and `retry_wait` are
 unresolved. `delivered` and `dead_letter` are terminal. An expired delivery
 lease is still unresolved until ordinary worker recovery records a terminal or
-retry state.
+retry state. Recovery previews expired rows without locking them, then acquires
+the assignment, cohort and effect-row fences in canonical order and revalidates
+the lease before changing state.
 
 For `plugin_scheduled_jobs`, `scheduled`, `delivering`, and `retry_wait` all
 block the retiring cohort. `paused` and `cancelled` are terminal for that

@@ -482,32 +482,19 @@ implements PluginEventDeliveryStoreV1 {
     const result = await runPluginTransactionV1(
       dataSource,
       async (manager) => {
-      await manager
-        .getRepository(PluginEventDelivery)
-        .createQueryBuilder()
-        .update()
-        .set({
-          status: 'retry_wait',
-          leaseOwner: null,
-          leaseExpiresAt: null,
-          nextAttemptAt: now,
-          reasonCode: 'lease_expired',
-          updatedAt: now,
-        })
-        .where('status = :status', { status: 'delivering' })
-        .andWhere('lease_expires_at <= :now', { now })
-        .execute();
       const repository = manager.getRepository(PluginEventDelivery);
       const query = repository
         .createQueryBuilder('delivery')
-        .where('delivery.status IN (:...statuses)', {
-          statuses: ['pending', 'retry_wait'],
+        .where(`(
+          (delivery.status IN (:...readyStatuses)
+            AND delivery.next_attempt_at <= :now
+            AND (delivery.lease_expires_at IS NULL OR delivery.lease_expires_at <= :now))
+          OR (delivery.status = :deliveringStatus AND delivery.lease_expires_at <= :now)
+        )`, {
+          readyStatuses: ['pending', 'retry_wait'],
+          deliveringStatus: 'delivering',
+          now,
         })
-        .andWhere('delivery.next_attempt_at <= :now', { now })
-        .andWhere(
-          '(delivery.lease_expires_at IS NULL OR delivery.lease_expires_at <= :now)',
-          { now },
-        )
         .orderBy('delivery.next_attempt_at', 'ASC')
         .addOrderBy('delivery.created_at', 'ASC');
       if (runtime.releaseId) {
@@ -1150,6 +1137,11 @@ function eventClaimEligible(
   record: PluginEventDelivery,
   now: number,
 ): boolean {
+  if (record.status === 'delivering') {
+    return record.leaseExpiresAt !== null
+      && record.leaseExpiresAt !== undefined
+      && Number(record.leaseExpiresAt) <= now;
+  }
   return (
     (record.status === 'pending' || record.status === 'retry_wait') &&
     Number(record.nextAttemptAt) <= now &&

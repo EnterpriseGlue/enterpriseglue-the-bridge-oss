@@ -92,12 +92,39 @@ describe('covered release effect producers', () => {
     })).rejects.toThrow('release_effect_admission_closed');
   });
 
-  it('claims due event work only after revalidating its release assignment', async () => {
+  it('claims due event and schedule work only after revalidating their release assignment', async () => {
     const eventStore = new DatabasePluginEventDeliveryStoreV1(async () => source);
+    const scheduleStore = new DatabasePluginScheduleStoreV1(async () => source, () => 10_000);
     const queued = await eventStore.enqueue(event('claim-event'));
+    await scheduleStore.execute(schedule('upsert', 'claim-schedule'));
+    await source.getRepository(PluginScheduledJob).update({ tenantRef }, { nextRunAt: 10_000 });
 
     await expect(eventStore.claimDue({ workerRef: 'event-worker', limit: 1, leaseSeconds: 30, now: 10_000 }))
       .resolves.toEqual([expect.objectContaining({ deliveryId: queued.deliveryId, leaseOwner: 'event-worker' })]);
+    await expect(scheduleStore.claimDue({ workerRef: 'schedule-worker', limit: 1, leaseSeconds: 30, now: 10_000 }))
+      .resolves.toEqual([expect.objectContaining({ jobRef: scheduleJobRef(), leaseOwner: 'schedule-worker' })]);
+  });
+
+  it('recovers expired event and schedule leases only through their canonical claim path', async () => {
+    const eventStore = new DatabasePluginEventDeliveryStoreV1(async () => source);
+    const scheduleStore = new DatabasePluginScheduleStoreV1(async () => source, () => 10_000);
+    const queued = await eventStore.enqueue(event('expired-event'));
+    await scheduleStore.execute(schedule('upsert', 'expired-schedule'));
+    await source.getRepository(PluginEventDelivery).update(
+      { deliveryId: queued.deliveryId },
+      { status: 'delivering', attempt: 1, leaseOwner: 'expired-event-worker', leaseExpiresAt: 9_999 },
+    );
+    await source.getRepository(PluginScheduledJob).update(
+      { tenantRef },
+      { status: 'delivering', attempt: 1, nextRunAt: 9_000, leaseOwner: 'expired-schedule-worker', leaseExpiresAt: 9_999 },
+    );
+
+    await expect(eventStore.claimDue({ workerRef: 'event-worker-2', limit: 1, leaseSeconds: 30, now: 10_000 }))
+      .resolves.toEqual([expect.objectContaining({ deliveryId: queued.deliveryId, attempt: 2, leaseOwner: 'event-worker-2' })]);
+    await expect(scheduleStore.claimDue({ workerRef: 'schedule-worker-2', limit: 1, leaseSeconds: 30, now: 10_000 }))
+      .resolves.toEqual([]);
+    await expect(source.getRepository(PluginScheduledJob).findOneByOrFail({ tenantRef }))
+      .resolves.toMatchObject({ status: 'retry_wait', reasonCode: 'lease_expired', nextRunAt: 11_000, leaseOwner: null });
   });
 
   it('revalidates the locked assignment before administrative event and schedule retries', async () => {

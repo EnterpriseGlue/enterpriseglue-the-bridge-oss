@@ -73,11 +73,11 @@ async function writer(): Promise<{ runner: QueryRunner; pid: number }> {
   const runner = runtime.createQueryRunner(); await runner.connect(); await runner.startTransaction();
   const [{ pid }] = await runner.query('SELECT pg_backend_pid() AS pid'); return { runner, pid };
 }
-async function awaitBlockedBy(pid: number): Promise<void> {
+async function awaitBlockedBy(pid: number, minimumWaiters = 1): Promise<void> {
   const deadline = Date.now() + 3000;
   while (Date.now() < deadline) {
     const rows = await admin.query('SELECT pid FROM pg_stat_activity WHERE usename=$1 AND pid<>$2 AND $2=ANY(pg_blocking_pids(pid))', [runtimeName, pid]);
-    if (rows.length) return;
+    if (rows.length >= minimumWaiters) return;
     await delay(10);
   }
   throw Error('Expected a real PostgreSQL row-lock waiter');
@@ -313,6 +313,82 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       if (blocker.runner.isTransactionActive) await blocker.runner.rollbackTransaction();
       await blocker.runner.release();
       await Promise.allSettled([eventClaim, scheduleClaim].filter(Boolean) as Promise<unknown>[]);
+    }
+  }, 45000);
+
+  it('serializes expired event and schedule recovery behind assignment before touching effect rows', async () => {
+    const oldReleaseId = `sha256:${'8'.repeat(64)}`;
+    const newReleaseId = `sha256:${'9'.repeat(64)}`;
+    const oldBinding = { releaseId: oldReleaseId, cohortEpoch: 31, managedPooledCloud: true };
+    const newBinding = { releaseId: newReleaseId, cohortEpoch: 32, managedPooledCloud: true };
+    await runtime.getRepository(PluginEventDelivery).delete({ tenantRef: tenantIds[0] });
+    await runtime.getRepository(PluginScheduledJob).delete({ tenantRef: tenantIds[0] });
+    await runtime.getRepository(TenantReleaseWorkAssignment).delete({ tenantRef: tenantIds[0] });
+    await new ReleaseEffectSettlementService(async () => runtime, () => oldBinding)
+      .open({ releaseId: oldReleaseId, cohortEpoch: 31, expectedRevision: 0 });
+    await new ReleaseEffectSettlementService(async () => runtime, () => newBinding)
+      .open({ releaseId: newReleaseId, cohortEpoch: 32, expectedRevision: 0 });
+    await runtime.getRepository(TenantReleaseWorkAssignment).insert({
+      id: randomUUID(), tenantRef: tenantIds[0], releaseId: oldReleaseId, assignmentEpoch: 1, updatedAt: Date.now(),
+    });
+    const eventStore = new DatabasePluginEventDeliveryStoreV1(
+      async () => runtime, {}, {}, undefined, () => oldBinding,
+    );
+    const scheduleStore = new DatabasePluginScheduleStoreV1(async () => runtime, () => 10_000, () => oldBinding);
+    const event = await eventStore.enqueue(eventCommand(tenantIds[0], `expired-${suffix}`));
+    await scheduleStore.execute(scheduleCommand(tenantIds[0], `expired-${suffix}`));
+    await runtime.getRepository(PluginEventDelivery).update(
+      { deliveryId: event.deliveryId },
+      { status: 'delivering', attempt: 1, leaseOwner: 'expired-event', leaseExpiresAt: 9_999 },
+    );
+    await runtime.getRepository(PluginScheduledJob).update(
+      { tenantRef: tenantIds[0] },
+      { status: 'delivering', attempt: 1, nextRunAt: 9_000, leaseOwner: 'expired-schedule', leaseExpiresAt: 9_999 },
+    );
+
+    const assignment = new TenantReleaseWorkAssignmentService(async () => runtime, () => newBinding);
+    const eventBlocker = await writer();
+    let eventClaim: Promise<unknown> | undefined;
+    try {
+      await eventBlocker.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
+        where: { tenantRef: tenantIds[0] }, lock: { mode: 'pessimistic_write' },
+      });
+      eventClaim = eventStore.claimDue({ workerRef: 'event-recovery', limit: 1, leaseSeconds: 30, now: 10_000 });
+      await awaitBlockedBy(eventBlocker.pid);
+      await expect(assignment.assign({
+        tenantId: tenantIds[0], releaseId: newReleaseId, assignmentEpoch: 2,
+      }, eventBlocker.runner.manager)).rejects.toMatchObject({ statusCode: 409 });
+      await eventBlocker.runner.commitTransaction();
+      await expect(eventClaim).resolves.toEqual([
+        expect.objectContaining({ deliveryId: event.deliveryId, attempt: 2, leaseOwner: 'event-recovery' }),
+      ]);
+    } finally {
+      if (eventBlocker.runner.isTransactionActive) await eventBlocker.runner.rollbackTransaction();
+      await eventBlocker.runner.release();
+      await Promise.allSettled([eventClaim].filter(Boolean) as Promise<unknown>[]);
+    }
+
+    const scheduleBlocker = await writer();
+    let scheduleClaim: Promise<unknown> | undefined;
+    try {
+      await scheduleBlocker.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
+        where: { tenantRef: tenantIds[0] }, lock: { mode: 'pessimistic_write' },
+      });
+      scheduleClaim = scheduleStore.claimDue({ workerRef: 'schedule-recovery', limit: 1, leaseSeconds: 30, now: 10_000 });
+      await awaitBlockedBy(scheduleBlocker.pid);
+      await expect(assignment.assign({
+        tenantId: tenantIds[0], releaseId: newReleaseId, assignmentEpoch: 2,
+      }, scheduleBlocker.runner.manager)).rejects.toMatchObject({ statusCode: 409 });
+      await scheduleBlocker.runner.commitTransaction();
+      await expect(scheduleClaim).resolves.toEqual([]);
+      expect(await runtime.getRepository(TenantReleaseWorkAssignment).findOneByOrFail({ tenantRef: tenantIds[0] }))
+        .toMatchObject({ releaseId: oldReleaseId });
+      expect(await runtime.getRepository(PluginScheduledJob).findOneByOrFail({ tenantRef: tenantIds[0] }))
+        .toMatchObject({ status: 'retry_wait', reasonCode: 'lease_expired', leaseOwner: null });
+    } finally {
+      if (scheduleBlocker.runner.isTransactionActive) await scheduleBlocker.runner.rollbackTransaction();
+      await scheduleBlocker.runner.release();
+      await Promise.allSettled([scheduleClaim].filter(Boolean) as Promise<unknown>[]);
     }
   }, 45000);
 

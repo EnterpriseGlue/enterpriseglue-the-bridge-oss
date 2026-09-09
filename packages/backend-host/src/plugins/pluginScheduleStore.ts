@@ -252,18 +252,19 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
     const now = input.now ?? this.clock();
     const runtime = this.runtimeBinding();
     return runPluginTransactionV1(dataSource, async (manager) => {
-      await recoverExpiredLeases(manager, now);
       const repository = manager.getRepository(PluginScheduledJob);
       const query = repository
         .createQueryBuilder('job')
-        .where('job.status IN (:...statuses)', {
-          statuses: ['scheduled', 'retry_wait'],
+        .where(`(
+          (job.status IN (:...readyStatuses)
+            AND job.next_run_at <= :now
+            AND (job.lease_expires_at IS NULL OR job.lease_expires_at <= :now))
+          OR (job.status = :deliveringStatus AND job.lease_expires_at <= :now)
+        )`, {
+          readyStatuses: ['scheduled', 'retry_wait'],
+          deliveringStatus: 'delivering',
+          now,
         })
-        .andWhere('job.next_run_at <= :now', { now })
-        .andWhere(
-          '(job.lease_expires_at IS NULL OR job.lease_expires_at <= :now)',
-          { now },
-        )
         .orderBy('job.next_run_at', 'ASC')
         .addOrderBy('job.created_at', 'ASC');
       if (runtime.releaseId) {
@@ -313,6 +314,23 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
             || integer(locked.assignmentEpoch ?? 0) !== integer(releaseAssignment.assignmentEpoch)
           ) continue;
           record = locked;
+        }
+        if (record.status === 'delivering') {
+          const exhausted = integer(record.attempt) >= integer(record.maxAttempts);
+          await repository.update(
+            { id: record.id },
+            {
+              status: exhausted ? 'paused' : 'retry_wait',
+              leaseOwner: null,
+              leaseExpiresAt: null,
+              nextRunAt: exhausted
+                ? record.nextRunAt
+                : now + retryDelayMs(integer(record.attempt)),
+              reasonCode: exhausted ? 'attempts_exhausted' : 'lease_expired',
+              updatedAt: now,
+            },
+          );
+          continue;
         }
         const attempt = integer(record.attempt) + 1;
         await manager.getRepository(PluginScheduledJob).update(
@@ -537,37 +555,6 @@ export class PluginScheduleDeliveryCoordinatorV1 {
   }
 }
 
-async function recoverExpiredLeases(
-  manager: EntityManager,
-  now: number,
-): Promise<void> {
-  const repository = manager.getRepository(PluginScheduledJob);
-  const query = repository
-    .createQueryBuilder('job')
-    .where('job.status = :status', { status: 'delivering' })
-    .andWhere('job.lease_expires_at <= :now', { now });
-  const expired =
-    manager.connection.options.type === 'spanner'
-      ? await query.getMany()
-      : await query.setLock('pessimistic_write').getMany();
-  for (const record of expired) {
-    const exhausted = integer(record.attempt) >= integer(record.maxAttempts);
-    await repository.update(
-      { id: record.id },
-      {
-        status: exhausted ? 'paused' : 'retry_wait',
-        leaseOwner: null,
-        leaseExpiresAt: null,
-        nextRunAt: exhausted
-          ? record.nextRunAt
-          : now + retryDelayMs(integer(record.attempt)),
-        reasonCode: exhausted ? 'attempts_exhausted' : 'lease_expired',
-        updatedAt: now,
-      },
-    );
-  }
-}
-
 function duplicate(responseJson: string): PluginFixedScheduleResponseV1 {
   const prior = pluginFixedScheduleResponseV1Schema.parse(
     JSON.parse(responseJson),
@@ -620,6 +607,11 @@ function scheduleClaimEligible(
   record: PluginScheduledJob,
   now: number,
 ): boolean {
+  if (record.status === 'delivering') {
+    return record.leaseExpiresAt !== null
+      && record.leaseExpiresAt !== undefined
+      && Number(record.leaseExpiresAt) <= now;
+  }
   return (
     (record.status === 'scheduled' || record.status === 'retry_wait') &&
     Number(record.nextRunAt) <= now &&
