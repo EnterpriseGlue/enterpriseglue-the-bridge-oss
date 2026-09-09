@@ -3,6 +3,9 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { getEngineTenancyDefaultFallbackMetrics } from '@enterpriseglue/shared/engine-tenancy/operational-metrics.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 
 const ENGINE_MODES = ['dedicated', 'shared', 'unknown'] as const;
 const ENGINE_RESOLUTION_STATUSES = ['ready', 'incomplete', 'conflict', 'migration_required', 'unknown'] as const;
@@ -51,16 +54,37 @@ function fallbackMetricLines(): string[] {
 }
 
 export async function getEngineTenancyMetrics(): Promise<string> {
+  const pooled = config.tenancyMode === 'pooled';
+  const scopeLines = pooled ? [
+    '# HELP enterpriseglue_engine_tenancy_global_runtime_collection_supported Whether global or unowned runtime resources can be included in this scrape; pooled collection supports only active registered tenants.',
+    '# TYPE enterpriseglue_engine_tenancy_global_runtime_collection_supported gauge',
+    'enterpriseglue_engine_tenancy_global_runtime_collection_supported 0',
+  ] : [];
   try {
     const dataSource = await getDataSource();
+    const collectRuntimeResources = async (): Promise<RuntimeResource[]> => {
+      const repo = dataSource.getRepository(RuntimeResource);
+      if (!pooled) return repo.find({ where: { isActive: true }, select: ['tenantResolutionStatus'] });
+      // The canonical registry is deployment-wide; tenant-owned inventory is
+      // never scanned without its concrete context, even for an aggregate.
+      const tenants = await dataSource.getRepository(Tenant).find({ where: { status: 'active' }, select: ['id', 'slug', 'status'] });
+      const seen = new Set<string>();
+      const rows: RuntimeResource[] = [];
+      for (const tenant of tenants) {
+        if (tenant.status !== 'active') continue;
+        if (!tenant.id || !tenant.slug || seen.has(tenant.id)) throw new Error('Invalid active tenant metrics scope');
+        seen.add(tenant.id);
+        rows.push(...await runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => repo.find({
+          where: { isActive: true, tenantId: tenant.id }, select: ['tenantResolutionStatus'],
+        })));
+      }
+      return rows;
+    };
     const [engines, runtimeResources] = await Promise.all([
       dataSource.getRepository(Engine).find({
         select: ['tenancyMode', 'tenantResolutionStatus'],
       }),
-      dataSource.getRepository(RuntimeResource).find({
-        where: { isActive: true },
-        select: ['tenantResolutionStatus'],
-      }),
+      collectRuntimeResources(),
     ]);
     const engineCounts = countBy(engines, (engine) => counterKey(
       normalizeEngineMode(engine.tenancyMode),
@@ -73,11 +97,14 @@ export async function getEngineTenancyMetrics(): Promise<string> {
       '# HELP enterpriseglue_engine_tenancy_metrics_collection_success Whether the current scrape collected tenancy persistence gauges.',
       '# TYPE enterpriseglue_engine_tenancy_metrics_collection_success gauge',
       'enterpriseglue_engine_tenancy_metrics_collection_success 1',
+      ...scopeLines,
       '# HELP enterpriseglue_engine_tenancy_engines Current engines by topology and tenant-resolution status.',
       '# TYPE enterpriseglue_engine_tenancy_engines gauge',
       ...ENGINE_MODES.flatMap((mode) => ENGINE_RESOLUTION_STATUSES.map((resolutionStatus) =>
         `enterpriseglue_engine_tenancy_engines{mode="${mode}",resolution_status="${resolutionStatus}"} ${engineCounts.get(counterKey(mode, resolutionStatus)) || 0}`)),
-      '# HELP enterpriseglue_engine_tenancy_runtime_resources Current active runtime resources by tenant-resolution status.',
+      pooled
+        ? '# HELP enterpriseglue_engine_tenancy_runtime_resources Current active runtime resources belonging to active registered tenants by tenant-resolution status; global and unowned resources are unsupported and excluded.'
+        : '# HELP enterpriseglue_engine_tenancy_runtime_resources Current active runtime resources by tenant-resolution status.',
       '# TYPE enterpriseglue_engine_tenancy_runtime_resources gauge',
       ...RUNTIME_RESOLUTION_STATUSES.map((resolutionStatus) =>
         `enterpriseglue_engine_tenancy_runtime_resources{resolution_status="${resolutionStatus}"} ${runtimeCounts.get(resolutionStatus) || 0}`),
@@ -90,6 +117,7 @@ export async function getEngineTenancyMetrics(): Promise<string> {
       '# HELP enterpriseglue_engine_tenancy_metrics_collection_success Whether the current scrape collected tenancy persistence gauges.',
       '# TYPE enterpriseglue_engine_tenancy_metrics_collection_success gauge',
       'enterpriseglue_engine_tenancy_metrics_collection_success 0',
+      ...scopeLines,
       ...fallbackMetricLines(),
       '',
     ].join('\n');

@@ -3,6 +3,7 @@ import { DataSource, Repository, EntityTarget, ObjectLiteral } from 'typeorm';
 import { getAdapter, DatabaseAdapter } from './adapters/index.js';
 import { TimestampedTypeOrmLogger } from './TimestampedTypeOrmLogger.js';
 import { logger } from '../utils/logger.js';
+import { installPostgresContextBoundary, assertPostgresContextBoundary } from '../infrastructure/persistence/subscribers/TenantRlsSubscriber.js';
 
 // Get the database adapter based on configuration
 const adapter: DatabaseAdapter = getAdapter();
@@ -13,6 +14,7 @@ export const AppDataSource = new DataSource({
   ...dataSourceOptions,
   logger: new TimestampedTypeOrmLogger(),
 });
+installPostgresContextBoundary(AppDataSource);
 
 // Export adapter for use in other modules
 export { adapter };
@@ -22,6 +24,8 @@ let initialized = false;
 export async function getDataSource(): Promise<DataSource> {
   if (!initialized) {
     await AppDataSource.initialize();
+    try { assertPostgresContextBoundary(AppDataSource); }
+    catch (error) { await AppDataSource.destroy(); throw error; }
     initialized = true;
     logger.info('✅ TypeORM DataSource initialized');
   }

@@ -28,6 +28,7 @@ import { authzGroupService } from './AuthzGroupService.js';
 import { getActivePlatformAdministratorUserIds } from './PlatformAdministratorMembershipService.js';
 import { IsNull } from 'typeorm';
 import type { PlatformUserResponse } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
+import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
 
 export interface CreateUserInput {
   email: string;
@@ -199,7 +200,10 @@ export class UserService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       if (normalizedPlatformRole === 'admin') {
-        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
+        // The authorized command has created this canonical user in the same
+        // transaction; capability fields never come from the request body.
+        await runWithPlatformDatabaseCapability({ kind: 'manual-administrator-grant', userId }, () =>
+          authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId));
       }
       const user = await userRepo.findOneBy({ id: userId });
       const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([userId], manager);
@@ -249,7 +253,8 @@ export class UserService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       if (normalizedPlatformRole === 'admin') {
-        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
+        await runWithPlatformDatabaseCapability({ kind: 'manual-administrator-grant', userId }, () =>
+          authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId));
       }
       const user = await userRepo.findOneBy({ id: userId });
       const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([userId], manager);
@@ -283,9 +288,11 @@ export class UserService {
       }
       if (input.platformRole !== undefined) {
         if (normalizeRoleValue(input.platformRole) === 'admin') {
-          await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, id);
+          await runWithPlatformDatabaseCapability({ kind: 'manual-administrator-grant', userId: existing.id }, () =>
+            authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, existing.id));
         } else {
-          const removal = await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
+          const removal = await runWithPlatformDatabaseCapability({ kind: 'manual-administrator-revoke', userId: existing.id }, () =>
+            authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, existing.id));
           if (removal.removed) {
             // A break-glass session is deliberately indistinguishable from a
             // normal local session after issue. Invalidate every existing

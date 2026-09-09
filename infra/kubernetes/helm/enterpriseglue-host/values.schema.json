@@ -16,6 +16,37 @@
     },
     "imagePullSecrets": { "type": "array", "items": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } },
     "rolloutRevision": { "type": "string", "maxLength": 128 },
+    "apiConfigBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "configMapName", "configMapKey", "expectedSha256", "mode", "secret"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "configMapName": { "type": "string", "maxLength": 253, "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*)$" },
+        "configMapKey": { "type": "string", "maxLength": 253, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*\\.json$" },
+        "expectedSha256": { "type": "string", "pattern": "^(|[a-f0-9]{64})$" },
+        "mode": { "enum": ["validate", "apply"] },
+        "secret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "key"],
+          "properties": {
+            "name": { "type": "string", "maxLength": 253, "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*)$" },
+            "key": { "type": "string", "maxLength": 253, "pattern": "^(|[A-Za-z0-9][A-Za-z0-9_.-]*)$" }
+          }
+        }
+      },
+      "allOf": [{
+        "if": { "properties": { "enabled": { "const": true } } },
+        "then": {
+          "properties": {
+            "configMapName": { "minLength": 1 },
+            "expectedSha256": { "minLength": 64 },
+            "secret": { "properties": { "name": { "minLength": 1 }, "key": { "minLength": 1 } } }
+          }
+        }
+      }]
+    },
     "frontend": { "$ref": "#/$defs/workload" },
     "backend": { "$ref": "#/$defs/workload" },
     "workers": {

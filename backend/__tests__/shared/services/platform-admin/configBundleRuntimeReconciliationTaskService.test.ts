@@ -33,6 +33,7 @@ describe('configBundleRuntimeReconciliationTaskService', () => {
     materializeForEngine.mockResolvedValue([]);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: () => ({ update, find, findOne, insert }),
+      transaction: (work: (manager: unknown) => Promise<unknown>) => work({ getRepository: () => ({ update, find, findOne, insert }) }),
     });
   });
 

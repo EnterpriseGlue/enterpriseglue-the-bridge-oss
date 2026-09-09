@@ -402,10 +402,14 @@ export class ScimService {
           existingUser.updatedAt = now;
           if (wasActive && !input.active) {
             existingUser.authSessionVersion = Number(existingUser.authSessionVersion || 0) + 1;
+          }
+          // Persist inactivity in this transaction before the guarded global
+          // baseline removal; an in-memory requested state is not authority.
+          await userRepo.save(existingUser);
+          if (wasActive && !input.active) {
             await manager.getRepository(RefreshToken).update({ userId, revokedAt: IsNull() }, { revokedAt: now });
             await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, userId);
           }
-          await userRepo.save(existingUser);
         } else {
           await userRepo.insert(user);
         }
@@ -551,19 +555,20 @@ export class ScimService {
     link.deactivatedAt = input.active ? null : (link.deactivatedAt ?? now);
 
     if (wasActive !== input.active) {
+      user.isActive = input.active;
+      if (!input.active) user.authSessionVersion = Number(user.authSessionVersion || 0) + 1;
+    }
+    await userRepo.save(user);
+    if (wasActive !== input.active) {
       if (input.active) {
-        user.isActive = true;
         await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
         await this.restoreMappedGroupAccess(manager, context, link);
       } else {
-        user.isActive = false;
-        user.authSessionVersion = Number(user.authSessionVersion || 0) + 1;
         await manager.getRepository(RefreshToken).update({ userId: user.id, revokedAt: IsNull() }, { revokedAt: now });
         await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, user.id);
         await manager.getRepository(AuthzGroupMembership).delete({ userId: user.id, source: 'scim' });
       }
     }
-    await userRepo.save(user);
     await linkRepo.save(link);
     await recordDiagnostic(manager, context, {
       eventType: wasActive !== input.active

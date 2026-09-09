@@ -11,6 +11,7 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { identityProviderKeyIdentity, identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
@@ -33,6 +34,25 @@ describe('identityProviderService', () => {
     delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY;
     delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS;
     delete process.env.EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS;
+  });
+
+  it('uses only read-only discovery for the pooled global legacy key fallback and revokes it afterward', async () => {
+    const previousMode = config.tenancyMode;
+    config.tenancyMode = 'pooled';
+    try {
+      const provider = { id: 'global-id', key: 'global-key' } as IdentityProvider;
+      findOne.mockImplementation(async ({ where }) => {
+        if (where.providerKeyIdentity === `${OSS_DEFAULT_TENANT_ID}:global-key`) {
+          expect(getPlatformDatabaseCapability()).toBeUndefined();
+          return null;
+        }
+        expect(where.providerKeyIdentity).toBe('platform:global-key');
+        expect(getPlatformDatabaseCapability()).toEqual({kind:'provider-discovery'});
+        return provider;
+      });
+      await expect(identityProviderService.getDirectLoginProviderByKey('global-key')).resolves.toBe(provider);
+      expect(getPlatformDatabaseCapability()).toBeUndefined();
+    } finally { config.tenancyMode = previousMode; }
   });
 
   it('requires the exact tenant callback for managed OIDC and SAML providers', async () => {

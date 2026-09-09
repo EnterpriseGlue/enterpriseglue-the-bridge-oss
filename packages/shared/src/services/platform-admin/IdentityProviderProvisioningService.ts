@@ -1,4 +1,5 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { externalIdentityKey, externalIdentityService } from './ExternalIdentityService.js';
@@ -165,6 +166,13 @@ class IdentityProviderProvisioningService {
   }
 
   private async reconcileLogin(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
+    if (config.tenancyMode === 'pooled' && !provider.tenantId) {
+      return runWithPlatformDatabaseCapability({kind:'provider-login',providerId:provider.id,subjectId:input.subjectId,runId:generateId()}, () => this.reconcileLoginScoped(provider,input));
+    }
+    return this.reconcileLoginScoped(provider,input);
+  }
+
+  private async reconcileLoginScoped(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
     const details = { source: 'identity_provider_reconciliation', protocol: input.providerType, mode: 'login' };
     const runId = await ssoSyncDiagnosticsService.startRun({ tenantId: provider.tenantId, providerId: provider.id, trigger: 'login', details });
     try {
@@ -209,7 +217,7 @@ class IdentityProviderProvisioningService {
     const emailVerified = input.emailVerified;
     const now = Date.now();
     const dataSource = await getDataSource();
-    return dataSource.transaction(async (manager) => {
+    const transact = () => dataSource.transaction(async (manager) => {
       const providerWhere = {
         id: provider.id,
         ...(enrollment ? { tenantId: enrollment.context.tenantId } : {}),
@@ -306,6 +314,9 @@ class IdentityProviderProvisioningService {
         await userRepo.update({ id: user.id }, { email: emailVerified ? email : user.email, authProvider, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
         user = { ...user, email: emailVerified ? email : user.email } as User;
       }
+      const boundUser = user;
+      const persistIdentity = async () => {
+      const user = boundUser;
       if (recoveredUnlinkedIdentity) {
         await externalIdentityService.restoreUnlinkedWithManager(manager, {
           tenantId: provider.tenantId,
@@ -352,7 +363,14 @@ class IdentityProviderProvisioningService {
         groupMembershipsCreated: normalizedIdentity.groupMembershipsCreated || 0,
         groupMembershipsRemoved: normalizedIdentity.groupMembershipsRemoved || 0,
       };
+      };
+      return config.tenancyMode === 'pooled' && !provider.tenantId
+        ? runWithPlatformDatabaseCapability({kind:'provider-account',providerId:provider.id,subjectId:input.subjectId,userId:boundUser.id}, persistIdentity)
+        : persistIdentity();
     });
+    return config.tenancyMode === 'pooled' && !provider.tenantId
+      ? runWithPlatformDatabaseCapability({kind:'provider-proof',providerId:provider.id,subjectId:input.subjectId}, transact)
+      : transact();
   }
 }
 

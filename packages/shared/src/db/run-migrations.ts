@@ -20,9 +20,12 @@ import { AuthzMigrationState } from '../infrastructure/persistence/entities/Auth
 import { generateId } from '../utils/id.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
-import { verifyPostgresTenantRls, verifyPostgresTenantRlsRole } from './postgres-tenant-rls.js';
+import { verifyPostgresTenantRls, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
 import { config } from '../config/index.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
+import { withPostgresMigrationContext } from './postgres-migration-context.js';
+import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
+import { runWithTenantDatabaseContext } from '../services/tenant-database-context.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -88,6 +91,10 @@ export async function projectLegacyLocalRoleAssignmentsOnce(
     const completed = await projectionStateRepo.findOneBy({ key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY });
     if (completed) {
       return null;
+    }
+
+    if (config.tenancyMode === 'pooled' && getPlatformDatabaseCapability()?.kind !== 'migration-execution') {
+      throw new Error('Pooled legacy role projection requires the owner migration job before runtime startup');
     }
 
     const result = await permissionService.syncLegacyRoleAssignments({ now }, manager);
@@ -557,6 +564,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
   try {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
+    return await withPostgresMigrationContext(dataSource, mode, async () => {
     let initializedFreshSchema = false;
     if (dbType === 'spanner' && mode === 'apply') {
       await ensureSpannerTypeOrmMigrationLedgerV1(dataSource);
@@ -669,6 +677,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
           await new AddPostgresTenantRls1700000000126().up(integrityRunner);
         }
         if (config.tenancyMode === 'pooled') {
+          if (mode === 'verify') await assertRestrictedPostgresRuntimeRole(integrityRunner);
           const rls = await verifyPostgresTenantRls(integrityRunner);
           if (rls.expected === 0 || rls.enforced !== rls.expected) {
             throw new Error(`Pooled tenancy requires enforced PostgreSQL RLS policies (expected ${rls.expected}, found ${rls.enforced}).`);
@@ -686,10 +695,15 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
     } finally {
       await integrityRunner.release();
     }
+    if (dbType === 'postgres' && config.tenancyMode === 'pooled' && mode === 'apply') {
+      await permissionService.seedRbacFoundation(dataSource);
+      await projectLegacyLocalRoleAssignmentsOnce(dataSource);
+    }
     
     console.log(mode === 'apply'
       ? '✅ Database migrations complete'
       : '✅ Database migration readiness verified');
+    });
   } catch (error: any) {
     console.error('❌ Migration failed:', error.message);
     throw error;
@@ -735,12 +749,14 @@ export async function seedInitialData() {
   try {
     const tenantRepo = dataSource.getRepository(Tenant);
     const existingTenant = await tenantRepo.findOneBy({ id: 'tenant-default' });
+    if (config.tenancyMode === 'pooled' && existingTenant && existingTenant.status !== 'active') throw new Error('Default tenant is not active');
     if (!existingTenant) {
       await tenantRepo.insert({
         id: 'tenant-default', name: 'Default', slug: 'default', status: 'active',
         placementKey: 'local', placementEpoch: 1, createdByUserId: null, createdAt: now, updatedAt: now,
       });
     }
+    await runWithTenantDatabaseContext({tenantId:'tenant-default',tenantSlug:'default'}, async () => {
     const policyRepo = dataSource.getRepository(TenantLoginPolicy);
     const existingPolicy = await policyRepo.findOneBy({ tenantId: 'tenant-default' });
     if (!existingPolicy) {
@@ -749,9 +765,11 @@ export async function seedInitialData() {
         providerSelectionMode: 'chooser', updatedByUserId: null, createdAt: now, updatedAt: now,
       });
     }
+    });
     console.log('  ✅ native default tenant and login policy seeded');
   } catch (error: any) {
     console.log('  Note: native tenant seed:', error.message);
+    if (config.tenancyMode === 'pooled') throw error;
   }
   
   // Seed default email templates
@@ -817,6 +835,7 @@ export async function seedInitialData() {
     console.log('  ✅ RBAC permission catalog and system roles seeded');
   } catch (error: any) {
     console.log('  Note: RBAC foundation:', error.message);
+    if (config.tenancyMode === 'pooled') throw error;
   }
 
   try {
@@ -824,6 +843,7 @@ export async function seedInitialData() {
     console.log(`  ✅ default platform groups seeded (${result.groups} groups, ${result.assignments} role assignments)`);
   } catch (error: any) {
     console.log('  Note: default platform groups:', error.message);
+    if (config.tenancyMode === 'pooled') throw error;
   }
 
   try {
@@ -831,6 +851,7 @@ export async function seedInitialData() {
     console.log(`  ✅ authenticated-user memberships reconciled (${result.created} created across ${result.scanned} active users)`);
   } catch (error: any) {
     console.log('  Note: authenticated-user membership backfill:', error.message);
+    if (config.tenancyMode === 'pooled') throw error;
   }
 
   try {
@@ -838,6 +859,7 @@ export async function seedInitialData() {
     console.log(`  ✅ legacy platform-admin memberships reconciled (${result.created} created across ${result.scanned} active admins)`);
   } catch (error: any) {
     console.log('  Note: legacy platform-admin membership backfill:', error.message);
+    if (config.tenancyMode === 'pooled') throw error;
   }
 
   const projectionResult = await projectLegacyLocalRoleAssignmentsOnce(dataSource, now);

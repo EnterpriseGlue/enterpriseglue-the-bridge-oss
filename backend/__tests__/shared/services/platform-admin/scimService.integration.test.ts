@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataSource } from 'typeorm';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
@@ -15,7 +15,7 @@ import { ScimGroupMembership } from '@enterpriseglue/shared/infrastructure/persi
 import { ScimUserLink } from '@enterpriseglue/shared/infrastructure/persistence/entities/ScimUserLink.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { SCIM_GROUP_SCHEMA, SCIM_PATCH_OP_SCHEMA, SCIM_USER_SCHEMA } from '@enterpriseglue/shared/schemas/scim.js';
-import { DEFAULT_PLATFORM_GROUP_IDS } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
+import { authzGroupService, DEFAULT_PLATFORM_GROUP_IDS } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { PLATFORM_ADMINISTRATORS_GROUP_ID } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { ScimProtocolError, ScimService, type ScimRequestContext } from '@enterpriseglue/shared/services/platform-admin/ScimService.js';
 
@@ -68,8 +68,18 @@ describe('ScimService relational lifecycle', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     if (dataSource?.isInitialized) await dataSource.destroy();
   });
+
+  function assertPersistedInactiveBeforeBaselineRemoval() {
+    const original = authzGroupService.removeAuthenticatedUserMembershipWithManager.bind(authzGroupService);
+    return vi.spyOn(authzGroupService, 'removeAuthenticatedUserMembershipWithManager').mockImplementation(async (manager, userId) => {
+      expect(manager.queryRunner?.isTransactionActive).toBe(true);
+      expect(await manager.getRepository(User).findOneByOrFail({ id: userId })).toMatchObject({ isActive: false, authSessionVersion: 1 });
+      return original(manager, userId);
+    });
+  }
 
   it('creates, filters, retrieves, and rejects unsafe email or external-id collisions', async () => {
     const alice = await service.createUser(context, {
@@ -121,7 +131,7 @@ describe('ScimService relational lifecycle', () => {
     expect(await dataSource.getRepository(ScimUserLink).count()).toBe(1);
   });
 
-  it('links an existing account only when the associated sign-in provider already verifies that identity', async () => {
+  it.each([true, false])('links an existing verified account with persisted active=%s before baseline mutation', async active => {
     const now = Date.now();
     context.directory.identityProviderKey = 'workday-oidc';
     await dataSource.getRepository(IdentityProvisioningDirectory).save(context.directory);
@@ -145,15 +155,17 @@ describe('ScimService relational lifecycle', () => {
       emailHint: 'existing@example.test', status: 'active', linkedAt: now, lastSeenAt: now, createdAt: now, updatedAt: now,
     });
 
+    const removal = assertPersistedInactiveBeforeBaselineRemoval();
     const linked = await service.createUser(context, {
-      schemas: [SCIM_USER_SCHEMA], externalId: 'wd-existing', userName: 'existing@example.test', active: true,
+      schemas: [SCIM_USER_SCHEMA], externalId: 'wd-existing', userName: 'existing@example.test', active,
       name: { givenName: 'Directory', familyName: 'Owned' },
     });
     expect(await dataSource.getRepository(User).count()).toBe(1);
     expect(await dataSource.getRepository(ScimUserLink).findOneByOrFail({ id: linked.id })).toMatchObject({ userId: 'existing-user' });
     expect(await dataSource.getRepository(User).findOneByOrFail({ id: 'existing-user' })).toMatchObject({
-      authProvider: 'oidc', firstName: 'Directory', lastName: 'Owned',
+      authProvider: 'oidc', firstName: 'Directory', lastName: 'Owned', isActive: active,
     });
+    expect(removal).toHaveBeenCalledTimes(active ? 0 : 1);
     expect(await dataSource.getRepository(AuditLog).findOneBy({ action: 'identity.provisioning.user.link' })).not.toBeNull();
   });
 
@@ -176,6 +188,7 @@ describe('ScimService relational lifecycle', () => {
       source: 'manual', sourceRef: null, expiresAt: null, createdById: 'admin-1', createdAt: Date.now(), updatedAt: Date.now(),
     });
 
+    const removal = assertPersistedInactiveBeforeBaselineRemoval();
     const deactivated = await service.replaceUser(context, alice.id, {
       schemas: [SCIM_USER_SCHEMA], externalId: 'wd-100', userName: 'alice@example.test', active: false,
     }, alice.meta.version);
@@ -194,6 +207,7 @@ describe('ScimService relational lifecycle', () => {
     expect(await dataSource.getRepository(AuthzGroupMembership).findOneBy({
       userId: internalUserId, groupId: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
     })).not.toBeNull();
+    expect(removal).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when a linked user becomes a local recovery administrator', async () => {

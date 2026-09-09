@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { runWithPlatformDatabaseCapability } from './platform-database-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
@@ -95,12 +96,12 @@ class AuthSessionService {
     if (!session || persistedSessionClass(session) !== (source.sessionClass || null)
       || !await bcrypt.compare(input.refreshToken, session.tokenHash)) throw denied();
     const provider = session.identityProviderId
-      ? await dataSource.getRepository(IdentityProvider).findOneBy({
-          id: session.identityProviderId,
+      ? await runWithPlatformDatabaseCapability({kind:'session-account',providerId:session.identityProviderId,userId:user.id}, () => dataSource.getRepository(IdentityProvider).findOneBy({
+          id: session.identityProviderId!,
           isEnabled: true,
           authenticationMode: 'direct',
           ...(source.sessionClass === 'cloud_account' ? { tenantId: IsNull() } : {}),
-        })
+        }))
       : null;
     const federated = ['oidc', 'saml', 'ldap'].includes(source.authenticationMethod || '');
     if (session.identityProviderId && (!provider || !session.providerSubjectId || provider.protocol !== source.authenticationMethod)) throw denied();
@@ -228,8 +229,10 @@ class AuthSessionService {
         if (providerClaim.affected !== 1) throw Errors.unauthorized('Identity provider changed while sign-in was in progress');
         await insertSession(manager);
       };
-      if (input.store) await issueProviderSession(input.store);
-      else await dataSource.transaction(issueProviderSession);
+      await runWithPlatformDatabaseCapability({kind:'session-account',providerId:token.identityProviderId,userId:user.id}, async () => {
+        if (input.store) await issueProviderSession(input.store);
+        else await dataSource.transaction(issueProviderSession);
+      });
     } else if (source) {
       await dataSource.transaction(insertSession);
     } else {

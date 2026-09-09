@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import {
   getEngineTenancyDefaultFallbackMetrics,
   recordEngineTenancyDefaultFallback,
@@ -19,9 +22,62 @@ vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({
 }));
 
 describe('engine tenancy operational metrics', () => {
+  const originalTenancyMode = config.tenancyMode;
   beforeEach(() => {
+    config.tenancyMode = 'single';
     vi.clearAllMocks();
     resetEngineTenancyOperationalMetricsForTests();
+  });
+  afterEach(() => { config.tenancyMode = originalTenancyMode; });
+
+  it('sums real pooled tenant scopes and explicitly excludes unsupported global inventory', async () => {
+    config.tenancyMode = 'pooled';
+    const tenantFind = vi.fn().mockResolvedValue([
+      { id: 'a', slug: 'alpha', status: 'active' }, { id: 'b', slug: 'beta', status: 'active' },
+      { id: 'disabled', slug: 'disabled', status: 'suspended' },
+    ]);
+    const resourceFind = vi.fn().mockImplementation(async ({ where }) => {
+      expect(getTenantDatabaseContext()).toEqual({ tenantId: where.tenantId, tenantSlug: where.tenantId === 'a' ? 'alpha' : 'beta' });
+      expect(where).toEqual({ isActive: true, tenantId: where.tenantId });
+      return where.tenantId === 'a' ? [{ tenantResolutionStatus: 'resolved' }] : [{ tenantResolutionStatus: 'resolved' }, { tenantResolutionStatus: 'stale' }];
+    });
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === Tenant) return { find: tenantFind };
+      if (entity === RuntimeResource) return { find: resourceFind };
+      if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
+      throw new Error('Unexpected repository');
+    } } as any);
+    const metrics = await getEngineTenancyMetrics();
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_metrics_collection_success 1');
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_global_runtime_collection_supported 0');
+    expect(metrics).toContain('global and unowned resources are unsupported and excluded');
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_runtime_resources{resolution_status="resolved"} 2');
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_runtime_resources{resolution_status="stale"} 1');
+    expect(tenantFind).toHaveBeenCalledWith({ where: { status: 'active' }, select: ['id', 'slug', 'status'] });
+    expect(resourceFind).toHaveBeenCalledTimes(2);
+    expect(getTenantDatabaseContext()).toBeUndefined();
+  });
+
+  it('fails the whole persistence scrape when one tenant scan fails, rather than publishing a partial healthy count', async () => {
+    config.tenancyMode = 'pooled';
+    const resourceFind = vi.fn().mockImplementation(async ({ where }) => {
+      expect(getTenantDatabaseContext()?.tenantId).toBe(where.tenantId);
+      if (where.tenantId === 'b') throw new Error('tenant unavailable');
+      return [{ tenantResolutionStatus: 'resolved' }];
+    });
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === Tenant) return { find: vi.fn().mockResolvedValue([{ id: 'a', slug: 'alpha', status: 'active' }, { id: 'b', slug: 'beta', status: 'active' }]) };
+      if (entity === RuntimeResource) return { find: resourceFind };
+      if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
+      throw new Error('Unexpected repository');
+    } } as any);
+    const metrics = await getEngineTenancyMetrics();
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_metrics_collection_success 0');
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_global_runtime_collection_supported 0');
+    expect(metrics).not.toContain('enterpriseglue_engine_tenancy_runtime_resources{');
+    expect(metrics).not.toContain('enterpriseglue_engine_tenancy_engines{');
+    expect(resourceFind).toHaveBeenCalledTimes(2);
+    expect(getTenantDatabaseContext()).toBeUndefined();
   });
 
   it('exports bounded aggregate topology, resolution, and fallback metrics without resource identifiers', async () => {

@@ -44,6 +44,62 @@ this chart.
 If `database.migration.enabled=false`, application pods use the backward-compatible `apply` startup
 mode. This is intended for existing self-hosted installations, not pooled SaaS.
 
+## API-only platform configuration bootstrap
+
+`apiConfigBundle` is disabled by default. It delivers an existing non-secret JSON configuration
+bundle envelope and exactly one dedicated Secret key only to the split API container. It is not
+a new configuration administration API, does not create Kubernetes credentials, and does not
+change identity-provider verification or database permissions. The existing bootstrap owns
+preview, secret preflight, hash checking, apply receipts and readiness behavior.
+
+```yaml
+apiConfigBundle:
+  enabled: true
+  configMapName: platform-config-bundle-<content-hash>
+  configMapKey: config-bundle.json
+  expectedSha256: <sha256-of-exact-final-envelope-bytes>
+  mode: validate
+  secret:
+    name: api-platform-credential-<version>
+    key: client-secret
+```
+
+The deployment operator creates the immutable, version-specific ConfigMap and dedicated Secret
+before rollout. Secret bytes must not appear in Helm values, the ConfigMap or rollout artifacts.
+The API receives `EG_CONFIG_BUNDLE_SECRET` through a non-optional `secretKeyRef`; the envelope
+references it as `env://EG_CONFIG_BUNDLE_SECRET` (without a leading `ref:`). No arbitrary
+environment names, additional credentials or extra volumes are accepted through this setting.
+
+Only `configMapKey` is projected read-only at
+`/etc/enterpriseglue/platform-config/<configMapKey>`. The API receives
+`EG_CONFIG_BUNDLE_PATH`, `EG_CONFIG_BOOTSTRAP_MODE`, and `EG_CONFIG_EXPECTED_SHA256` along with
+fixed platform scope, required secret preflight, fail-closed behavior and the environment secret
+provider. The same file hash is recorded in `enterpriseglue.io/api-config-bundle-sha256` on the
+API pod, so a changed approved hash triggers rollout. Reserved bootstrap annotations cannot be
+overridden by global `podAnnotations`. The chart advertises
+`enterpriseglue.io/api-config-bundle-contract: v1`; consumers must also verify its actual schema
+and rendered mount/environment isolation, not trust the annotation alone.
+
+First qualify `mode: validate`, then explicitly select `mode: apply` with the same approved file
+hash. Validate mode does not persist a provider or prove signup works. Apply is a platform/global
+configuration mutation even when deployed in a preview API: retained releases sharing the
+database must remain compatible and must have the appropriate API-only credential available
+before they can route the configured identity callback. The bundle's explicit ownership and
+additive semantics govern what is changed; repeated identical bootstrap bytes reuse the durable
+apply identity rather than granting permission to reset unrelated provider configuration.
+
+Workers, frontend, migration/preflight hooks and Plugin Manager receive neither the bootstrap
+mount nor these environment settings. Enabled delivery requires `workers.enabled=true` to avoid
+placing the credential in a combined background-worker runtime. Reusing the shared application,
+migration, preflight or Plugin Manager Secret, or the shared database ConfigMap, is rejected.
+Operators must likewise keep those resources dedicated outside this chart.
+
+Qualify bootstrap under the application's restricted database role and real RLS configuration;
+successful rendering is not database or authentication acceptance. This setting never enables
+DDL, owner credentials, RLS bypass or a global tenant administration endpoint. Disabling delivery
+removes the API mount/environment but does not revert configuration already persisted by apply.
+Use the normal reviewed configuration ownership workflow for any persisted change.
+
 ## Plugin topology
 
 Set `pluginAssets.enabled=true` and provide a versioned ReadWriteMany claim. Every API and worker

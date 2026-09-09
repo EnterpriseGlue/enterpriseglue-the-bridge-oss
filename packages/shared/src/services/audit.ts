@@ -7,6 +7,7 @@
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { runWithPlatformDatabaseCapability } from './platform-database-context.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 
 import { Request } from 'express';
@@ -74,7 +75,7 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(AuditLog);
 
-    await repo.insert({
+    await runWithPlatformDatabaseCapability({kind:'audit-append',rowId:id}, () => repo.insert({
       id,
       tenantId: entry.tenantId || null,
       userId: entry.userId || null,
@@ -85,7 +86,7 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
       userAgent: entry.userAgent || null,
       details: entry.details ? JSON.stringify(entry.details) : null,
       createdAt,
-    });
+    }));
   } catch (error) {
     // Don't throw - audit logging should never break the main flow
     logger.error('Failed to write audit log:', error);

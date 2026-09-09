@@ -79,7 +79,8 @@ export class PostgresAdapter implements DatabaseAdapter {
       synchronize: false,
       logging: this.logging,
       entities,
-      subscribers: config.tenancyMode === 'pooled' ? [TenantRlsSubscriber] : [],
+      // Missing database context must not be interpreted as single-mode access.
+      subscribers: [TenantRlsSubscriber],
       migrations,
       ssl: config.postgresSsl ? { rejectUnauthorized: config.postgresSslRejectUnauthorized } : undefined,
     };

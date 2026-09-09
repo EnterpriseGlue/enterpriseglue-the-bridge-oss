@@ -537,11 +537,15 @@ The lane creates an authoritative schema from the exact `v0.18.0` source tag,
 verifies the immutable published v0.18.0 backend image by resolved digest,
 seeds three tenants with separate OIDC, SAML, and LDAP providers plus two active
 and one inactive tenant application, and takes a pre-upgrade backup. It then
-applies the current additive migrations using a restricted application role,
-verifies schema readiness, proves that the previous v0.18.0 application can
-still become ready on the expanded schema, takes an upgraded backup, restores
-that backup into a clean database owned by the application role, and verifies
-the preserved tenant, SSO, application, and migration state.
+applies current migrations using a dedicated owner, refreshes runtime grants,
+and verifies schema readiness with a separate nonowning application role. The
+historical TypeORM transport must be denied protected identity reads without
+context on the expanded schema. The upgraded backup is restored with its ACLs
+and reverified as runtime, including preserved tenant, SSO, application and
+migration state. Finally, the previous published application must become ready
+after restoring the pre-upgrade backup. Old applications lacking the registered
+context boundary are not supported on the expanded schema; rollback requires
+the historical backup and does not preserve post-backup writes.
 
 The exact procedure, artifacts, production adaptation, and rollback boundary
 are documented in the

@@ -1,5 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { deploymentDiscoveryService } from './DeploymentDiscoveryService.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
 import { EngineMetadataReconciliationResultSchema, type EngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
@@ -10,8 +11,10 @@ export type { EngineMetadataReconciliationResult } from '@enterpriseglue/shared/
 class EngineMetadataReconciliationService {
   async reconcileEngine(engineId: string, tenantId?: string | null, options: { runtimeMetadataDiscoveryEnabled?: boolean; deploymentDiscoveryEnabled?: boolean } = {}): Promise<EngineMetadataReconciliationResult> {
     const engineRepo = (await getDataSource()).getRepository(Engine);
+    const engine = await engineRepo.findOne({ where: { id: engineId } });
+    const sharedPooled = config.tenancyMode === 'pooled' && engine?.tenancyMode === 'shared';
     const deploymentDiscoveryEnabled = options.deploymentDiscoveryEnabled === undefined
-      ? (await engineRepo.findOne({ where: { id: engineId } }))?.deploymentDiscoveryEnabled !== false
+      ? engine?.deploymentDiscoveryEnabled !== false
       : options.deploymentDiscoveryEnabled;
     const attemptedAt = Date.now();
     try {
@@ -21,14 +24,16 @@ class EngineMetadataReconciliationService {
       const deployments = !deploymentDiscoveryEnabled
         ? { created: 0, updated: 0, artifactsCreated: 0, skipped: true }
         : await deploymentDiscoveryService.reconcileEngine(engineId, tenantId);
-      await engineRepo.update({ id: engineId }, {
+      // A tenant's success cannot publish engine-wide shared readiness. The
+      // scheduled complete-cohort aggregate owns those diagnostics in pooled mode.
+      if (!sharedPooled) await engineRepo.update({ id: engineId }, {
         lastMetadataReconciledAt: attemptedAt,
         lastMetadataReconciliationStatus: 'succeeded',
       });
       return EngineMetadataReconciliationResultSchema.parse({ ...runtime, deployments });
     } catch (error) {
       try {
-        await engineRepo.update({ id: engineId }, {
+        if (!sharedPooled) await engineRepo.update({ id: engineId }, {
           lastMetadataReconciledAt: attemptedAt,
           lastMetadataReconciliationStatus: 'failed',
         });

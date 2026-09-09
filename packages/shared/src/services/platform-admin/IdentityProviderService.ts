@@ -1,4 +1,5 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
@@ -274,7 +275,10 @@ class IdentityProviderServiceClass {
     return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { id: id.trim(), tenantId: normalized(tenantId)! } : { id: id.trim(), tenantId: IsNull() } });
   }
   async listEnabledDirectLoginProviders(tenantId?: string | null): Promise<IdentityProvider[]> {
-    return (await this.list(tenantId)).filter(isDirectLoginProvider);
+    const providers = config.tenancyMode === 'pooled' && !normalized(tenantId)
+      ? await runWithPlatformDatabaseCapability({kind:'provider-discovery'}, () => this.list(null))
+      : await this.list(tenantId);
+    return providers.filter(isDirectLoginProvider);
   }
   /**
    * A logged-out OSS browser has no request tenant yet. Prefer providers in
@@ -292,11 +296,13 @@ class IdentityProviderServiceClass {
   }
   async getDirectLoginProviderByKey(key: string, tenantId?: string | null): Promise<IdentityProvider | null> {
     if (normalized(tenantId) && !isOssDefaultTenantId(tenantId)) return this.getByKey(key, tenantId);
-    return await this.getByKey(key, OSS_DEFAULT_TENANT_ID) || await this.getByKey(key, null);
+    return await this.getByKey(key, OSS_DEFAULT_TENANT_ID) || await (config.tenancyMode === 'pooled'
+      ? runWithPlatformDatabaseCapability({kind:'provider-discovery'}, () => this.getByKey(key, null))
+      : this.getByKey(key, null));
   }
   async getDirectLoginProviderById(id: string, tenantId?: string | null): Promise<IdentityProvider | null> {
     if (normalized(tenantId) && !isOssDefaultTenantId(tenantId)) return this.getById(id, tenantId);
-    return await this.getById(id, OSS_DEFAULT_TENANT_ID) || await this.getById(id, null);
+    return await this.getById(id, OSS_DEFAULT_TENANT_ID) || await runWithPlatformDatabaseCapability({kind:'provider-lookup',providerId:id.trim()}, () => this.getById(id, null));
   }
   async upsert(input: IdentityProviderInput, store?: DataSource | EntityManager): Promise<IdentityProvider> {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();

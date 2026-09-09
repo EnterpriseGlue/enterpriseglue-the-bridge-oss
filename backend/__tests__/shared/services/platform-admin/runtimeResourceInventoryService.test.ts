@@ -6,6 +6,9 @@ import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persi
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { getTenantDatabaseContext, runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 const { camundaGet, getDecisionDefinitions } = vi.hoisted(() => ({ camundaGet: vi.fn(), getDecisionDefinitions: vi.fn() }));
@@ -13,7 +16,8 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camund
 
 function setup() {
   const resourceRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), update: vi.fn(), find: vi.fn().mockResolvedValue([]) };
-  const setRepo = { findOne: vi.fn().mockResolvedValue(null) };
+  const setRepo = { findOne: vi.fn().mockResolvedValue(null), find: vi.fn().mockResolvedValue([]) };
+  const tenantRepo = { findOne: vi.fn().mockImplementation(async ({ where }: any) => ({ id: where.id, slug: where.id === 'tenant-a' ? 'alpha' : 'beta', status: 'active' })) };
   const materializationRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
   const engineRepo = {
     findOne: vi.fn().mockResolvedValue({
@@ -33,15 +37,82 @@ function setup() {
       if (entity === RuntimeResourceSetMaterialization) return materializationRepo;
       if (entity === Engine) return engineRepo;
       if (entity === EngineTenantMapping) return mappingRepo;
+      if (entity === Tenant) return tenantRepo;
       throw new Error('Unexpected repository');
     },
   });
-  return { resourceRepo, setRepo, materializationRepo, engineRepo, mappingRepo };
+  return { resourceRepo, setRepo, materializationRepo, engineRepo, mappingRepo, tenantRepo };
 }
 
 describe('runtimeResourceInventoryService', () => {
-  beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.restoreAllMocks());
+  const originalTenancyMode = config.tenancyMode;
+  beforeEach(() => { vi.clearAllMocks(); config.tenancyMode = 'single'; });
+  afterEach(() => { vi.restoreAllMocks(); config.tenancyMode = originalTenancyMode; });
+
+  it('partitions shared discovery and stale cleanup to the canonical bound tenant', async () => {
+    config.tenancyMode = 'pooled';
+    const { resourceRepo, engineRepo, mappingRepo, setRepo } = setup();
+    engineRepo.findOne.mockResolvedValue({ id: 'engine-1', tenancyMode: 'shared', tenantId: null, tenantMappingStrategy: 'engine_tenant_id' });
+    mappingRepo.find.mockResolvedValue(['a', 'b'].map(id => ({ id: `map-${id}`, strategy: 'engine_tenant_id', externalTenantId: `runtime-${id}`, enterpriseTenantId: `tenant-${id}` })));
+    camundaGet.mockResolvedValue(['a', 'b'].map(id => ({ key: `process-${id}`, tenantId: `runtime-${id}` })));
+    getDecisionDefinitions.mockResolvedValue([]);
+    resourceRepo.find.mockImplementation(async () => {
+      expect(getTenantDatabaseContext()).toEqual({ tenantId: 'tenant-a', tenantSlug: 'alpha' });
+      return [
+        { id: 'stale-a', tenantId: 'tenant-a', resourceKind: 'process_definition', resourceKey: 'removed', runtimeTenantId: 'runtime-a' },
+        { id: 'foreign-b', tenantId: 'tenant-b', resourceKind: 'process_definition', resourceKey: 'removed', runtimeTenantId: 'runtime-b' },
+      ];
+    });
+    resourceRepo.insert.mockImplementation(async row => {
+      expect(getTenantDatabaseContext()?.tenantId).toBe(row.tenantId);
+    });
+    await expect(runtimeResourceInventoryService.reconcileEngine('engine-1', 'tenant-a')).resolves.toMatchObject({ created: 1, deactivated: 1 });
+    expect(resourceRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', resourceKey: 'process-a' }));
+    expect(resourceRepo.update).toHaveBeenCalledWith({ id: 'stale-a' }, expect.objectContaining({ isActive: false }));
+    expect(resourceRepo.update).not.toHaveBeenCalledWith({ id: 'foreign-b' }, expect.anything());
+    expect(setRepo.find).toHaveBeenCalledWith({ where: { engineId: 'engine-1', isArchived: false, tenantId: 'tenant-a' } });
+    expect(engineRepo.update).not.toHaveBeenCalled(); // A tenant subset is not engine-wide readiness.
+    expect(getTenantDatabaseContext()).toBeUndefined();
+  });
+
+  it('rejects foreign or ambiguous shared observation batches before any writes', async () => {
+    config.tenancyMode = 'pooled';
+    const { resourceRepo, engineRepo, mappingRepo } = setup();
+    engineRepo.findOne.mockResolvedValue({ id: 'engine-1', tenancyMode: 'shared', tenantMappingStrategy: 'engine_tenant_id' });
+    const mappings = ['a', 'b'].map(id => ({ strategy: 'engine_tenant_id', externalTenantId: `runtime-${id}`, enterpriseTenantId: `tenant-${id}` }));
+    mappingRepo.find.mockResolvedValue(mappings);
+    const observations = ['a', 'b'].map(id => ({ resourceKind: 'process_definition' as const, resourceKey: `process-${id}`, runtimeTenantId: `runtime-${id}` }));
+    await expect(runtimeResourceInventoryService.observe('engine-1', 'tenant-a', observations)).rejects.toThrow('bound tenant');
+    mappingRepo.find.mockResolvedValue([mappings[0], { ...mappings[0], enterpriseTenantId: 'tenant-b' }]);
+    await expect(runtimeResourceInventoryService.observe('engine-1', 'tenant-a', [observations[0]])).rejects.toThrow('bound tenant');
+    expect(resourceRepo.insert).not.toHaveBeenCalled();
+    expect(resourceRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('does not revoke stale resources from an unresolved shared discovery snapshot', async () => {
+    config.tenancyMode = 'pooled';
+    const { resourceRepo, engineRepo, mappingRepo } = setup();
+    engineRepo.findOne.mockResolvedValue({ id: 'engine-1', tenancyMode: 'shared', tenantMappingStrategy: 'engine_tenant_id' });
+    mappingRepo.find.mockResolvedValue([]);
+    camundaGet.mockResolvedValue([{ key: 'unmapped', tenantId: 'unknown' }]);
+    getDecisionDefinitions.mockResolvedValue([]);
+    await expect(runtimeResourceInventoryService.reconcileEngine('engine-1', 'tenant-a')).rejects.toThrow('unresolved');
+    expect(resourceRepo.insert).not.toHaveBeenCalled();
+    expect(resourceRepo.update).not.toHaveBeenCalled();
+    expect(resourceRepo.find).not.toHaveBeenCalled();
+  });
+
+  it('does not switch an existing tenant context or run missing/inactive/global scope', async () => {
+    config.tenancyMode = 'pooled';
+    const { resourceRepo, tenantRepo } = setup();
+    await expect(runWithTenantDatabaseContext({ tenantId: 'tenant-a', tenantSlug: 'alpha' }, () =>
+      runtimeResourceInventoryService.observe('engine-1', 'tenant-b', []))).rejects.toThrow('bound tenant');
+    await expect(runtimeResourceInventoryService.observe('engine-1', null, [])).rejects.toThrow('bound tenant');
+    tenantRepo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'tenant-a', slug: 'alpha', status: 'suspended' });
+    await expect(runtimeResourceInventoryService.observe('engine-1', 'tenant-a', [])).rejects.toThrow('not active');
+    await expect(runtimeResourceInventoryService.materializeForEngine('engine-1', 'tenant-a')).rejects.toThrow('not active');
+    expect(resourceRepo.findOne).not.toHaveBeenCalled();
+  });
 
   it('persists only sanitized runtime metadata and normalizes no runtime tenant to an empty key', async () => {
     const { resourceRepo } = setup();

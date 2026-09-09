@@ -17,6 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 command -v helm >/dev/null 2>&1 || { echo "helm is required" >&2; exit 1; }
+node --test "$ROOT_DIR/scripts/check-enterpriseglue-host-chart.test.mjs"
 
 helm lint "$CHART_DIR" -f "$VALUES_FILE"
 helm template enterpriseglue "$CHART_DIR" -f "$VALUES_FILE" >"$RENDERED_FILE"

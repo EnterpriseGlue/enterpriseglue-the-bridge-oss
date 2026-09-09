@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { deploymentDiscoveryService } from '@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryService.js';
@@ -14,12 +15,25 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentDiscoveryServi
 
 describe('EngineMetadataReconciliationService', () => {
   const update = vi.fn();
+  const originalTenancyMode = config.tenancyMode;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    config.tenancyMode = 'single';
     vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', deploymentDiscoveryEnabled: true }), update }) } as any);
     vi.mocked(runtimeResourceInventoryService.reconcileEngine).mockResolvedValue({ created: 1, updated: 2, deactivated: 3, materializedSets: 4 });
     vi.mocked(deploymentDiscoveryService.reconcileEngine).mockResolvedValue({ created: 5, updated: 6, artifactsCreated: 7 });
+  });
+  afterEach(() => { config.tenancyMode = originalTenancyMode; });
+
+  it('neither success nor failure of a shared tenant subset publishes global metadata status', async () => {
+    config.tenancyMode = 'pooled';
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenancyMode: 'shared' }), update }) } as any);
+    await engineMetadataReconciliationService.reconcileEngine('engine-1', 'tenant-a');
+    vi.mocked(runtimeResourceInventoryService.reconcileEngine).mockRejectedValueOnce(Error('subset failed'));
+    await expect(engineMetadataReconciliationService.reconcileEngine('engine-1', 'tenant-b')).rejects.toThrow('subset failed');
+    await engineMetadataReconciliationService.reconcileEngine('engine-1', 'tenant-a');
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('records successful reconciliation diagnostics', async () => {

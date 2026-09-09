@@ -12,6 +12,10 @@ baseline_source_dir="$temp_dir/v0.18.0-source"
 database_name="enterpriseglue_recovery"
 app_user="enterpriseglue_recovery_app"
 app_password="disposable-recovery-app-password"
+# The published historical baseline migrates with its owner identity. Current
+# application verification must use a separate, nonowning runtime identity.
+runtime_user="enterpriseglue_recovery_runtime"
+runtime_password="disposable-recovery-runtime-password"
 bootstrap_password="disposable-recovery-bootstrap-password"
 database_port=""
 
@@ -89,6 +93,8 @@ if [[ "$postgres_ready_streak" -lt 3 ]]; then
 fi
 docker exec "$postgres_name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE ROLE ${app_user} LOGIN PASSWORD '${app_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS" >/dev/null
+docker exec "$postgres_name" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -c "CREATE ROLE ${runtime_user} LOGIN PASSWORD '${runtime_password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS" >/dev/null
 docker exec "$postgres_name" createdb -U postgres -O "$app_user" "$database_name"
 
 start_baseline() {
@@ -141,15 +147,24 @@ stop_baseline_capture() {
 run_migrations_from() {
   local source_root="$1"
   local mode="$2"
+  local database_identity="$app_user"
+  local database_password="$app_password"
+  local -a grant_options=()
+  if [[ "$mode" == verify || "$mode" == legacy-runtime-denial ]]; then
+    database_identity="$runtime_user"
+    database_password="$runtime_password"
+  elif [[ "$source_root" == "$root_dir" ]]; then
+    grant_options=("EG_POSTGRES_RUNTIME_ROLE=$runtime_user")
+  fi
   (
   cd "$source_root"
-  env \
+  env -u EG_POSTGRES_RUNTIME_ROLE ${grant_options[@]+"${grant_options[@]}"} \
     NODE_ENV=production \
     DATABASE_TYPE=postgres \
     POSTGRES_HOST=127.0.0.1 \
     POSTGRES_PORT="$database_port" \
-    POSTGRES_USER="$app_user" \
-    POSTGRES_PASSWORD="$app_password" \
+    POSTGRES_USER="$database_identity" \
+    POSTGRES_PASSWORD="$database_password" \
     POSTGRES_DATABASE="$database_name" \
     POSTGRES_SCHEMA=main \
     POSTGRES_SSL=false \
@@ -167,7 +182,15 @@ const [sourceRoot, mode] = process.argv.slice(2);
 const migrations = await import(`${new URL(`file://${sourceRoot}/backend/dist/packages/shared/src/db/run-migrations.js`)}`);
 const dataSource = await import(`${new URL(`file://${sourceRoot}/backend/dist/packages/shared/src/db/data-source.js`)}`);
 try {
-  if (mode === 'apply') await migrations.runMigrations();
+  if (mode === 'legacy-runtime-denial') {
+    // Use the actual historical TypeORM transport, not a manually set GUC.
+    // That application has no registered context boundary and cannot read the
+    // protected tenant rows on the upgraded schema with runtime credentials.
+    const source = await dataSource.getDataSource();
+    const rows = await source.query('SELECT count(*) AS count FROM main.identity_providers');
+    if (Number(rows[0]?.count) !== 0) throw new Error('Historical runtime unexpectedly read protected identities');
+    console.log('historical-runtime-missing-context=denied');
+  } else if (mode === 'apply') await migrations.runMigrations();
   else await migrations.runMigrations({ mode });
 } finally {
   await dataSource.closeDataSource();
@@ -245,15 +268,15 @@ run_migrations_from "$root_dir" verify \
 docker exec "$postgres_name" pg_dump -U postgres -d "$database_name" -Fc \
   > "$artifact_dir/current-upgraded.dump"
 
-echo '[saas-recovery] Exercising previous-application rollback on the expanded schema.'
-start_baseline
-stop_baseline_capture v0.18.0-application-rollback
+echo '[saas-recovery] Proving the historical runtime cannot consume the protected expanded schema.'
+run_migrations_from "$baseline_source_dir" legacy-runtime-denial \
+  > "$artifact_dir/v0.18.0-expanded-schema-denial.log" 2>&1
 
 echo '[saas-recovery] Restoring the upgraded database into a clean database.'
 docker exec "$postgres_name" dropdb -U postgres --force "$database_name"
 docker exec "$postgres_name" createdb -U postgres -O "$app_user" "$database_name"
 docker exec -i "$postgres_name" pg_restore -U postgres -d "$database_name" \
-  --exit-on-error --role="$app_user" --no-owner --no-privileges \
+  --exit-on-error --role="$app_user" --no-owner \
   < "$artifact_dir/current-upgraded.dump"
 run_migrations_from "$root_dir" verify \
   > "$artifact_dir/restored-database-verify.log" 2>&1
@@ -269,22 +292,45 @@ docker exec "$postgres_name" psql -v ON_ERROR_STOP=1 -U postgres -d "$database_n
       (SELECT count(*) FROM main.identity_providers) AS identity_providers,
       (SELECT count(*) FROM main.plugin_tenant_enablements WHERE enabled) AS active_plugins,
       (SELECT count(*) FROM main.plugin_tenant_enablements WHERE NOT enabled) AS inactive_plugins,
+      (SELECT count(*) FROM main.identity_providers WHERE
+        (id, tenant_id, key, protocol, is_enabled) IN (
+          ('20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'tenant-sso', 'oidc', true),
+          ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000002', 'tenant-sso', 'saml', true),
+          ('20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003', 'tenant-sso', 'ldap', true)
+        )) AS exact_provider_bindings,
+      (SELECT count(*) FROM main.plugin_tenant_enablements WHERE
+        (id, plugin_id, tenant_ref, enabled) IN (
+          ('40000000-0000-4000-8000-000000000001', 'io.enterpriseglue.reference-health', '10000000-0000-4000-8000-000000000001', true),
+          ('40000000-0000-4000-8000-000000000002', 'io.enterpriseglue.reference-health', '10000000-0000-4000-8000-000000000002', true),
+          ('40000000-0000-4000-8000-000000000003', 'io.enterpriseglue.reference-health', '10000000-0000-4000-8000-000000000003', false)
+        )) AS exact_plugin_bindings,
       (SELECT count(*) FROM main.migrations) AS migrations;
   " > "$artifact_dir/restored-state.csv"
 
 restored_state="$(cat "$artifact_dir/restored-state.csv")"
-if [[ ! "$restored_state" =~ ^3,3,2,1,[0-9]+$ ]]; then
+if [[ ! "$restored_state" =~ ^3,3,2,1,3,3,[0-9]+$ ]]; then
   echo "[saas-recovery] Restored state is incomplete: ${restored_state}" >&2
   exit 1
 fi
+
+echo '[saas-recovery] Rehearsing rollback using the pre-upgrade database backup.'
+docker exec "$postgres_name" dropdb -U postgres --force "$database_name"
+docker exec "$postgres_name" createdb -U postgres -O "$app_user" "$database_name"
+docker exec -i "$postgres_name" pg_restore -U postgres -d "$database_name" \
+  --exit-on-error --role="$app_user" --no-owner \
+  < "$artifact_dir/v0.18.0-populated-pre-upgrade.dump"
+start_baseline
+stop_baseline_capture v0.18.0-application-restored-rollback
 
 {
   echo 'status=passed'
   echo 'baseline=v0.18.0'
   echo "baseline_digest=${baseline_digest}"
-  echo 'upgrade=populated-additive'
-  echo 'application_rollback=previous-v0.18.0-ready-on-expanded-schema'
-  echo 'restore=current-upgraded-dump-verified'
+  echo 'upgrade=populated-security-policy-with-separate-runtime-role'
+  echo 'historical_expanded_schema=missing-context-denied'
+  echo 'application_rollback=previous-v0.18.0-ready-on-restored-pre-upgrade-schema'
+  echo 'restore=current-upgraded-dump-verified-with-runtime-role'
+  echo 'rollback_limit=pre-upgrade-backup-required-post-backup-writes-not-preserved'
   echo 'preserved=three-tenants,oidc-saml-ldap,alpha-bravo-active,charlie-inactive'
 } > "$artifact_dir/summary.txt"
 

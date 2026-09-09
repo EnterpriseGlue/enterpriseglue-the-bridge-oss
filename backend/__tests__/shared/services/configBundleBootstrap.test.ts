@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { zipSync } from 'fflate';
+import { createHash } from 'node:crypto';
+import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 
 const config = vi.hoisted(() => ({
   configBundlePath: '/etc/enterpriseglue/config/bundle.json' as string | undefined,
@@ -8,6 +10,7 @@ const config = vi.hoisted(() => ({
   configExpectedTenantScope: undefined as string | undefined,
   configRequireSecretPreflight: false,
   configMaxBytes: 1024 * 1024,
+  tenancyMode: 'single' as 'single' | 'pooled',
 }));
 const open = vi.hoisted(() => vi.fn());
 const stat = vi.hoisted(() => vi.fn());
@@ -59,6 +62,7 @@ describe('configBundleBootstrap', () => {
     config.configExpectedTenantScope = undefined;
     config.configRequireSecretPreflight = false;
     config.configMaxBytes = 1024 * 1024;
+    config.tenancyMode = 'single';
     stat.mockResolvedValue({ isFile: () => true, size: 2 });
     readFile.mockResolvedValue('{}');
     close.mockResolvedValue(undefined);
@@ -298,5 +302,124 @@ describe('configBundleBootstrap', () => {
 
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied', reconciliation: 'completed' });
     expect(drainRuntimeApplyRun).toHaveBeenCalledWith({ applyRunId: 'apply-run-1', maxTasks: 100 });
+  });
+
+  function providerPayload(): any {
+    return { bundle: { apiVersion: 'enterpriseglue.ai/v1beta1', kind: 'EnterpriseGlueConfigBundle',
+      metadata: { key: 'platform.signup', owner: 'platform-team' }, tenantKey: 'platform', mode: 'additive', imports: ['./identity-providers.json'] },
+    files: { './identity-providers.json': { identityProviders: [{ key: 'signup-oidc', type: 'oidc', authenticationMode: 'direct', enabled: true,
+      oidc: { issuerUrl: 'https://issuer.example.com', clientId: 'client-id', clientSecretRef: 'env://EG_CONFIG_BUNDLE_SECRET',
+        clientAuthentication: 'client_secret_post', callbackUrl: 'https://app.example.com/api/auth/identity/callback', scopes: ['openid', 'email', 'profile'] },
+      sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false } }] } } };
+  }
+
+  function mountPooled(payload = providerPayload()) {
+    config.tenancyMode = 'pooled';
+    config.configExpectedTenantScope = 'platform';
+    config.configRequireSecretPreflight = true;
+    const bytes = JSON.stringify(payload);
+    config.configExpectedSha256 = createHash('sha256').update(bytes).digest('hex');
+    readFile.mockResolvedValue(bytes);
+    return payload;
+  }
+
+  it('grants one verified provider-only lease for apply and receipt then revokes deferred work', async () => {
+    mountPooled();
+    const expected = { kind: 'config-bootstrap', bundleKey: 'platform.signup', providerKeys: ['signup-oidc'] };
+    let resume!: () => void;
+    let deferred!: Promise<unknown>;
+    apply.mockImplementation(async () => {
+      expect(getPlatformDatabaseCapability()).toEqual(expected);
+      deferred = new Promise<void>(resolve => { resume = resolve; }).then(() => getPlatformDatabaseCapability());
+      return { applyRunId: 'apply-run-1', reconciliation: { identitySnapshot: { status: 'not_needed' }, runtimeReconciliation: { status: 'not_needed' } } };
+    });
+    updateApplyRun.mockImplementation(async () => {
+      expect(getPlatformDatabaseCapability()).toEqual(expected);
+      return { affected: 1 };
+    });
+    preview.mockImplementation(() => {
+      expect(getPlatformDatabaseCapability()).toBeUndefined();
+      return { valid: true, canonicalHash: 'preview-hash' };
+    });
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+    resume();
+    await expect(deferred).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['unknown facet', (p: any) => { p.bundle.extraAuthority = true; }],
+    ['governance', (p: any) => { p.bundle.governance = {}; }],
+    ['login', (p: any) => { p.bundle.login = {}; }],
+    ['foreign scope', (p: any) => { p.bundle.tenantKey = 'other'; }],
+    ['authoritative mode', (p: any) => { p.bundle.mode = 'authoritative'; }],
+    ['group import', (p: any) => { p.bundle.imports.push('./groups.json'); p.files['./groups.json'] = { groups: [] }; }],
+    ['unimported file', (p: any) => { p.files['./groups.json'] = { groups: [] }; }],
+    ['empty owner', (p: any) => { p.bundle.metadata.owner = ''; }],
+    ['ownership acknowledgement', (p: any) => { p.acknowledgements = ['config.ownership_adoption:platform_settings:general']; }],
+    ['duplicate provider', (p: any) => { p.files['./identity-providers.json'].identityProviders.push(p.files['./identity-providers.json'].identityProviders[0]); }],
+  ])('rejects pooled %s before importer authority', async (_, mutate) => {
+    const payload = providerPayload(); mutate(payload); mountPooled(payload);
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('validation failed');
+    expect(apply).not.toHaveBeenCalled();
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('validates pooled bundles without granting mutation authority', async () => {
+    mountPooled(); config.configBootstrapMode = 'validate';
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'validated' });
+    expect(apply).not.toHaveBeenCalled();
+    expect(updateApplyRun).not.toHaveBeenCalled();
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('fails unexpected global replay inside the same lease instead of treating invisible tasks as drained', async () => {
+    mountPooled();
+    apply.mockResolvedValue({ applyRunId: 'apply-run-1', reconciliation: { identitySnapshot: { status: 'truncated' } } });
+    updateApplyRun.mockImplementation(async (_, change) => {
+      expect(getPlatformDatabaseCapability()?.kind).toBe('config-bootstrap');
+      expect(JSON.parse(change.resultJson).bootstrap.status).toBe('failed');
+      return { affected: 1 };
+    });
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('identity reconciliation failed');
+    expect(drainApplyRun).not.toHaveBeenCalled();
+    expect(drainRuntimeApplyRun).not.toHaveBeenCalled();
+    expect(updateApplyRun).toHaveBeenCalledTimes(1);
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('does not report pooled readiness when the receipt is hidden or fails to update', async () => {
+    mountPooled();
+    apply.mockResolvedValue({ applyRunId: 'apply-run-1' });
+    findApplyRun.mockResolvedValue(null);
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('apply failed');
+    expect(getConfigBootstrapStatus().status).toBe('failed');
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+    findApplyRun.mockResolvedValue({ id: 'apply-run-1', resultJson: '{}' });
+    updateApplyRun.mockResolvedValue({ affected: 0 });
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('apply failed');
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('requires hash, platform scope and secret preflight before pooled apply authority', async () => {
+    mountPooled(); config.configExpectedSha256 = undefined;
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('validation failed');
+    mountPooled(); config.configExpectedTenantScope = 'tenant-a';
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('validation failed');
+    mountPooled(); config.configRequireSecretPreflight = false;
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('validation failed');
+    expect(apply).not.toHaveBeenCalled();
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('revokes pooled capability after importer failure without exposing the raw error', async () => {
+    mountPooled();
+    apply.mockImplementation(async () => {
+      expect(getPlatformDatabaseCapability()?.kind).toBe('config-bootstrap');
+      throw new Error('private upstream credential diagnostic');
+    });
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle apply failed');
+    expect(JSON.stringify(bootstrapLogger.error.mock.calls)).not.toContain('private upstream');
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
   });
 });

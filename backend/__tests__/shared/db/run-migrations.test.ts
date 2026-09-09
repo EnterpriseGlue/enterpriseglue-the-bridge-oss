@@ -9,6 +9,13 @@ import { getDataSource, adapter } from '@enterpriseglue/shared/db/data-source.js
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { refreshPostgresRuntimeGrants } from '@enterpriseglue/shared/db/postgres-runtime-grants.js';
 import { AddPostgresTenantRls1700000000126 } from '@enterpriseglue/shared/db/migrations/1700000000126-add-postgres-tenant-rls.js';
+import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
+
+// Owner verification and lease/pool behavior have real PostgreSQL coverage;
+// this suite isolates runMigrations orchestration from the database transport.
+vi.mock('@enterpriseglue/shared/db/postgres-migration-context.js', () => ({
+  withPostgresMigrationContext: vi.fn(async (_source: unknown, _mode: unknown, work: () => Promise<unknown>) => work()),
+}));
 
 vi.mock('@enterpriseglue/shared/db/postgres-runtime-grants.js', () => ({
   refreshPostgresRuntimeGrants: vi.fn().mockResolvedValue(undefined),

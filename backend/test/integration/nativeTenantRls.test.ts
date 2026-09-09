@@ -46,7 +46,7 @@ describe('native pooled-tenancy PostgreSQL RLS', () => {
           driver: { escape: quoteIdentifier },
         },
         hasTable: async (tablePath: string) => tablePath === `${schema}.projects`,
-        query: (sql: string, parameters?: unknown[]) => admin.query(sql, parameters),
+        query: async (sql: string, parameters?: unknown[]) => (await admin.query(sql, parameters)).rows,
       } as any;
       await new AddPostgresTenantRls1700000000126().up(migrationRunner);
 
