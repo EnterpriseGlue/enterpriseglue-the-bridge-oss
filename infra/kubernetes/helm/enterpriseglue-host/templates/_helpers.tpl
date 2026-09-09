@@ -112,8 +112,28 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if ne $manifest.roles.ownerMigration.mode "apply-through-executable" -}}
 {{- fail "compatibility bridge owner migration must use bounded apply" -}}
 {{- end -}}
+{{- if ne $manifest.roles.ownerMigration.from.postgresPolicyProfile "legacy-tenant-context/v1" -}}
+{{- fail "compatibility bridge owner source must use the exact legacy tenant-context policy" -}}
+{{- end -}}
+{{- if ne $manifest.upgradeContract.minimumDatabaseEpoch.postgresPolicyProfile "legacy-tenant-context/v1" -}}
+{{- fail "compatibility bridge minimum epoch must use the exact legacy tenant-context policy" -}}
+{{- end -}}
 {{- if ne (int $manifest.roles.ownerMigration.through) (int $manifest.executableMigrationInventory.through) -}}
 {{- fail "compatibility bridge owner migration ceiling must equal the executable inventory" -}}
+{{- end -}}
+{{- if ne (len $manifest.acceptedDatabaseEpochs) 2 -}}
+{{- fail "compatibility bridge must declare exactly two accepted database epochs" -}}
+{{- end -}}
+{{- $preEpoch := index $manifest.acceptedDatabaseEpochs 0 -}}
+{{- $postEpoch := index $manifest.acceptedDatabaseEpochs 1 -}}
+{{- if or (ne $preEpoch.id "pre-enforcement") (ne $preEpoch.postgresPolicyProfile "dual-context-compatibility/v1") (ne (int $preEpoch.through) 1700000000131) -}}
+{{- fail "compatibility bridge pre-enforcement epoch must use the exact dual-context policy" -}}
+{{- end -}}
+{{- if or (ne $postEpoch.id "post-enforcement") (ne $postEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $postEpoch.through) 1700000000132) -}}
+{{- fail "compatibility bridge post-enforcement epoch must use the exact explicit-context policy" -}}
+{{- end -}}
+{{- if ne $manifest.executableImplementationInventory.purpose "owner-transition-1700000000131-dual-context-closure/v1" -}}
+{{- fail "compatibility bridge implementation purpose is unsupported" -}}
 {{- end -}}
 {{- if ne $manifest.releaseEffectInventory.version "release-effect-inventory.enterpriseglue.io/v1" -}}
 {{- fail "compatibility bridge release-effect inventory version is unsupported" -}}

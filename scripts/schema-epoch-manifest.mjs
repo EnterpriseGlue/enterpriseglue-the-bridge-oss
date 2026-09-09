@@ -14,12 +14,15 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/db/run-migrations.ts',
   'packages/shared/src/db/schema-epoch.ts',
+  'packages/shared/src/db/postgres-tenant-policy.ts',
   'packages/shared/src/db/postgres-migration-context.ts',
   'packages/shared/src/db/migrations/1700000000131-add-release-effect-cohorts.ts',
   'packages/shared/src/db/migrations/plugin-migration-schema.ts',
+  'packages/shared/src/db/release-effect-cohort-schema.ts',
   'packages/shared/src/infrastructure/persistence/pluginColumnPolicy.ts',
   'packages/shared/src/infrastructure/persistence/entities/PluginPlatform.ts',
   'packages/shared/src/db/postgres-tenant-rls.ts',
+  'packages/shared/src/db/tenant-ownership-inventory.ts',
   'packages/shared/src/db/schema-epoch-runtime-grant.ts',
   'packages/shared/src/db/postgres-runtime-grants.ts',
   'packages/shared/src/contracts/release-effect-inventory.ts',
@@ -35,7 +38,7 @@ export function implementationInventoryFromSources(sources) {
     .sort((left, right) => left.path.localeCompare(right.path))
   return {
     algorithm: 'sha256-source-v1',
-    purpose: 'owner-transition-1700000000131-closure/v1',
+    purpose: 'owner-transition-1700000000131-dual-context-closure/v1',
     count: entries.length,
     sha256: sha256(JSON.stringify(entries)),
   }

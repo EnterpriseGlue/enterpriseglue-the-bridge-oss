@@ -65,15 +65,25 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   assert.equal(created.schemaEpoch.applicationStartupMode, 'verify-only')
   assert.equal(created.schemaEpoch.preflightMode, 'verify-runtime-grant')
   assert.equal(created.schemaEpoch.ownerMigrationMode, 'apply-through-executable')
-  assert.equal(created.schemaEpoch.ownerMigrationFrom, 1700000000130)
+  assert.deepEqual(created.schemaEpoch.ownerMigrationFrom, {
+    through: 1700000000130,
+    count: 132,
+    sha256: 'e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16',
+    postgresPolicyProfile: 'legacy-tenant-context/v1',
+  })
   assert.equal(created.schemaEpoch.ownerRuntimeGrant, 'configured-role-release-effect-cohorts-select-insert-update/v1')
   assert.equal(created.schemaEpoch.freshDatabase, 'requires-separate-signed-bootstrap')
   assert.equal(created.schemaEpoch.emptyMigrationLedger, 'requires-separate-signed-recovery')
   assert.match(created.schemaEpoch.executableImplementationSha256, /^[0-9a-f]{64}$/)
-  assert.equal(created.schemaEpoch.executableImplementationPurpose, 'owner-transition-1700000000131-closure/v1')
+  assert.equal(created.schemaEpoch.executableImplementationPurpose, 'owner-transition-1700000000131-dual-context-closure/v1')
   assert.equal(created.schemaEpoch.releaseEffectInventoryVersion, 'release-effect-inventory.enterpriseglue.io/v1')
   assert.equal(created.schemaEpoch.releaseEffectInventorySha256, 'c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087')
-  assert.deepEqual(created.schemaEpoch.acceptedThrough, [1700000000131, 1700000000132])
+  assert.deepEqual(created.schemaEpoch.acceptedDatabaseEpochs.map(({ id, through, postgresPolicyProfile }) => ({
+    id, through, postgresPolicyProfile,
+  })), [
+    { id: 'pre-enforcement', through: 1700000000131, postgresPolicyProfile: 'dual-context-compatibility/v1' },
+    { id: 'post-enforcement', through: 1700000000132, postgresPolicyProfile: 'explicit-context/v1' },
+  ])
   assert.deepEqual(await verifyReceipt({
     receipt: output,
     artifacts,
@@ -108,7 +118,7 @@ test('rejects a schema-epoch receipt projection that differs from the inventorie
     ...subjectArgs,
   })
   const receipt = JSON.parse(await readFile(output, 'utf8'))
-  receipt.schemaEpoch.acceptedThrough = [1700000000131]
+  receipt.schemaEpoch.acceptedDatabaseEpochs[0].postgresPolicyProfile = 'explicit-context/v1'
   await writeFile(output, JSON.stringify(receipt))
   await assert.rejects(verifyReceipt({ receipt: output, artifacts }), /does not match/)
 })

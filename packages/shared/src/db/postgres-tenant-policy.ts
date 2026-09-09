@@ -9,6 +9,11 @@ const authenticatedGroup = "'system.group.authenticated_users'";
 const systemGroups = ['platform_administrators','authenticated_users','access_administrators','access_auditors','user_administrators','sso_administrators','engine_registry_administrators','api_client_administrators'].map(name => `'system.group.${name}'`).join(',');
 export const POSTGRES_TENANT_POLICY_COMMANDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] as const;
 type Command = typeof POSTGRES_TENANT_POLICY_COMMANDS[number];
+export type ExplicitPostgresTenantPolicyProfile =
+  | 'dual-context-compatibility/v1'
+  | 'explicit-context/v1';
+export const LEGACY_POSTGRES_TENANT_POLICY_SOURCE =
+  "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode', true), ''), 'single') <> 'pooled' OR tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), '')";
 
 /** PostgreSQL policies have no portable TypeORM API; isolate SQL at this boundary. */
 async function quarantinedPostgresSQL(runner: QueryRunner, sql: string, parameters?: unknown[]): Promise<any> {
@@ -76,7 +81,7 @@ function globalPredicate(table: string, command: Command, membershipTable: strin
 }
 
 /** One canonical source for creation and runtime drift verification. */
-function policySource(schema: string, tableName: string, command: Command): string {
+function explicitPolicySource(schema: string, tableName: string, command: Command): string {
   const schemaLiteral = `'${schema.replace(/'/g, "''")}'`;
   const membershipTable = `"${schema.replace(/"/g, '""')}"."authz_group_memberships"`;
   const userTable = `"${schema.replace(/"/g, '""')}"."users"`;
@@ -84,6 +89,18 @@ function policySource(schema: string, tableName: string, command: Command): stri
   const tenant = "(current_setting('enterpriseglue.tenancy_mode', true) = 'pooled' AND tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), ''))";
   const single = "current_setting('enterpriseglue.tenancy_mode', true) = 'single'";
   return `(${single} OR ${tenant} OR ${migration} OR ${globalPredicate(tableName, command, membershipTable, userTable)})`;
+}
+
+function policySource(
+  schema: string,
+  tableName: string,
+  command: Command,
+  profile: ExplicitPostgresTenantPolicyProfile,
+): string {
+  const explicit = explicitPolicySource(schema, tableName, command);
+  return profile === 'dual-context-compatibility/v1'
+    ? `((${LEGACY_POSTGRES_TENANT_POLICY_SOURCE}) OR ${explicit})`
+    : explicit;
 }
 
 export interface PostgresTenantPolicyCatalogRow {
@@ -121,32 +138,46 @@ export async function readPostgresTenantPolicyCatalog(runner: QueryRunner, schem
 }
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-function policyAttestation(schema: string, tableName: string, command: Command, row: PostgresTenantPolicyCatalogRow) {
+function policyAttestation(
+  schema: string,
+  tableName: string,
+  command: Command,
+  row: PostgresTenantPolicyCatalogRow,
+  profile: ExplicitPostgresTenantPolicyProfile,
+) {
   if ((command === 'INSERT' ? row.using_expression !== null : typeof row.using_expression !== 'string') ||
       (command === 'SELECT' || command === 'DELETE' ? row.check_expression !== null : typeof row.check_expression !== 'string')) {
     throw new Error('PostgreSQL tenant policy catalog expression is missing');
   }
-  return { schemaVersion: 'postgres-tenant-policy-attestation/v1', schema, table: tableName, command,
-    sourceSha256: hash(policySource(schema, tableName, command)),
+  return { schemaVersion: 'postgres-tenant-policy-attestation/v1', profile, schema, table: tableName, command,
+    sourceSha256: hash(policySource(schema, tableName, command, profile)),
     usingSha256: row.using_expression === null ? null : hash(row.using_expression),
     checkSha256: row.check_expression === null ? null : hash(row.check_expression) };
 }
 
 /** Owner-controlled drift evidence, not a signature or protection from a
  * malicious schema owner capable of changing both policy and its comment. */
-export function postgresTenantPolicyAttestationMatches(schema: string, tableName: string, command: Command, row: PostgresTenantPolicyCatalogRow): boolean {
+export function postgresTenantPolicyAttestationMatches(
+  schema: string,
+  tableName: string,
+  command: Command,
+  row: PostgresTenantPolicyCatalogRow,
+  profile: ExplicitPostgresTenantPolicyProfile = 'explicit-context/v1',
+): boolean {
   try {
     if (typeof row.attestation !== 'string' || row.attestation.length > 2048) return false;
     const recorded = JSON.parse(row.attestation);
-    const expected = policyAttestation(schema, tableName, command, row);
+    const expected = policyAttestation(schema, tableName, command, row, profile);
     return recorded !== null && !Array.isArray(recorded) &&
       Object.keys(recorded).sort().join() === Object.keys(expected).sort().join() &&
       Object.entries(expected).every(([key, value]) => recorded[key] === value);
   } catch { return false; }
 }
 
-/** Shared by the additive policy migration and the critical migration repair. */
-export async function applyPostgresTenantPolicies(queryRunner: QueryRunner): Promise<void> {
+async function applyExplicitPostgresTenantPolicies(
+  queryRunner: QueryRunner,
+  profile: ExplicitPostgresTenantPolicyProfile,
+): Promise<void> {
   if (queryRunner.connection.options.type !== 'postgres') return;
   for (const metadata of queryRunner.connection.entityMetadatas) {
     if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
@@ -159,7 +190,7 @@ export async function applyPostgresTenantPolicies(queryRunner: QueryRunner): Pro
     for (const command of POSTGRES_TENANT_POLICY_COMMANDS) {
       const policy = `eg_tenant_isolation_${command.toLowerCase()}`;
       await quarantinedPostgresSQL(queryRunner, `DROP POLICY IF EXISTS ${policy} ON ${table}`);
-      const predicate = policySource(schema, metadata.tableName, command);
+      const predicate = policySource(schema, metadata.tableName, command, profile);
       const using = command === 'INSERT' ? '' : ` USING (${predicate})`;
       const check = command === 'SELECT' || command === 'DELETE' ? '' : ` WITH CHECK (${predicate})`;
       await quarantinedPostgresSQL(queryRunner, `CREATE POLICY ${policy} ON ${table} FOR ${command}${using}${check}`);
@@ -170,8 +201,36 @@ export async function applyPostgresTenantPolicies(queryRunner: QueryRunner): Pro
       const policy = `eg_tenant_isolation_${command.toLowerCase()}`;
       const row = catalog.find(item => item.policy_name === policy);
       if (!row) throw new Error('PostgreSQL tenant policy catalog is incomplete');
-      const comment = JSON.stringify(policyAttestation(schema, metadata.tableName, command, row)).replace(/'/g, "''");
+      const comment = JSON.stringify(policyAttestation(schema, metadata.tableName, command, row, profile)).replace(/'/g, "''");
       await quarantinedPostgresSQL(queryRunner, `COMMENT ON POLICY ${policy} ON ${table} IS '${comment}'`);
     }
+  }
+}
+
+/** Migration 0131 retains legacy consumers while enabling current bounded capabilities. */
+export async function applyDualContextPostgresTenantPolicies(queryRunner: QueryRunner): Promise<void> {
+  return applyExplicitPostgresTenantPolicies(queryRunner, 'dual-context-compatibility/v1');
+}
+
+/** Migration 0132 removes the legacy predicate and leaves only explicit contexts. */
+export async function applyPostgresTenantPolicies(queryRunner: QueryRunner): Promise<void> {
+  return applyExplicitPostgresTenantPolicies(queryRunner, 'explicit-context/v1');
+}
+
+/** Restore the exact released 0130 policy when reverting the additive 0131 transition. */
+export async function applyLegacyPostgresTenantPolicies(queryRunner: QueryRunner): Promise<void> {
+  if (queryRunner.connection.options.type !== 'postgres') return;
+  for (const metadata of queryRunner.connection.entityMetadatas) {
+    if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
+    if (!await queryRunner.hasTable(metadata.tablePath)) continue;
+    const table = metadata.tablePath.split('.').map((part) => queryRunner.connection.driver.escape(part)).join('.');
+    for (const command of POSTGRES_TENANT_POLICY_COMMANDS) {
+      await quarantinedPostgresSQL(queryRunner, `DROP POLICY IF EXISTS eg_tenant_isolation_${command.toLowerCase()} ON ${table}`);
+    }
+    await quarantinedPostgresSQL(queryRunner, `DROP POLICY IF EXISTS eg_tenant_isolation ON ${table}`);
+    await quarantinedPostgresSQL(
+      queryRunner,
+      `CREATE POLICY eg_tenant_isolation ON ${table} USING (${LEGACY_POSTGRES_TENANT_POLICY_SOURCE}) WITH CHECK (${LEGACY_POSTGRES_TENANT_POLICY_SOURCE})`,
+    );
   }
 }

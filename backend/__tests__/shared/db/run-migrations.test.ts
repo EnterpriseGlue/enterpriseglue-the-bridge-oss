@@ -5,6 +5,7 @@ import { MigrationExecutor } from 'typeorm';
 import {
   LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
   projectLegacyLocalRoleAssignmentsOnce,
+  runDatabaseInitialization,
   runMigrations,
   runSchemaEpochOwnerMigrations,
   runSchemaEpochPreflight,
@@ -20,6 +21,7 @@ import { AddPostgresTenantRls1700000000126 } from '@enterpriseglue/shared/db/mig
 import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { verifyExecutedSchemaEpoch, verifyOwnerMigrationStartingEpoch } from '@enterpriseglue/shared/db/schema-epoch.js';
+import { verifyPostgresTenantRlsForPolicyProfile } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
 
 vi.mock('@enterpriseglue/shared/db/schema-epoch.js', async () => {
   const actual = await vi.importActual<typeof import('@enterpriseglue/shared/db/schema-epoch.js')>(
@@ -31,6 +33,21 @@ vi.mock('@enterpriseglue/shared/db/schema-epoch.js', async () => {
     verifyOwnerMigrationStartingEpoch: vi.fn(),
   };
 });
+
+vi.mock('@enterpriseglue/shared/db/postgres-tenant-rls.js', async () => {
+  const actual = await vi.importActual<typeof import('@enterpriseglue/shared/db/postgres-tenant-rls.js')>(
+    '@enterpriseglue/shared/db/postgres-tenant-rls.js',
+  );
+  return {
+    ...actual,
+    verifyPostgresTenantRlsForPolicyProfile: vi.fn().mockResolvedValue({ expected: 1, enforced: 1 }),
+  };
+});
+
+vi.mock('@enterpriseglue/shared/db/release-effect-cohort-schema.js', () => ({
+  expectedReleaseEffectCohortTable: vi.fn().mockReturnValue({ name: 'public.release_effect_cohorts' }),
+  assertReleaseEffectCohortTableShape: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Owner verification and lease/pool behavior have real PostgreSQL coverage;
 // this suite isolates runMigrations orchestration from the database transport.
@@ -213,7 +230,9 @@ describe('runMigrations bootstrap behavior', () => {
       createQueryRunner: vi.fn()
         .mockReturnValueOnce(policyRunner)
         .mockReturnValueOnce(policyRunner),
-      getMetadata: vi.fn((entity: { name: string }) => ({ tablePath: `public.${entity.name.toLowerCase()}` })),
+      getMetadata: vi.fn((entity: { name: string } | string) => ({
+        tablePath: `public.${(typeof entity === 'string' ? entity : entity.name).toLowerCase()}`,
+      })),
       entityMetadatas: [],
       synchronize: vi.fn(),
       showMigrations: vi.fn().mockResolvedValue(true),
@@ -227,7 +246,7 @@ describe('runMigrations bootstrap behavior', () => {
       through: 1700000000131,
       count: 133,
       sha256: '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1',
-      postgresPolicyProfile: 'legacy-explicit-runtime-compatible/v1',
+      postgresPolicyProfile: 'dual-context-compatibility/v1',
     });
 
     try {
@@ -250,9 +269,15 @@ describe('runMigrations bootstrap behavior', () => {
         'eg_runtime',
       );
       expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
-      expect(policyRunner.query).toHaveBeenCalledWith(
-        expect.stringContaining('json_agg'),
-        ['public', 'projects'],
+      expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(
+        1,
+        policyRunner,
+        'legacy-tenant-context/v1',
+      );
+      expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(
+        2,
+        policyRunner,
+        'dual-context-compatibility/v1',
       );
     } finally {
       (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
@@ -334,7 +359,9 @@ describe('runMigrations bootstrap behavior', () => {
         .mockReturnValueOnce(bootstrapRunner)
         .mockReturnValueOnce(epochRunner)
         .mockReturnValueOnce(integrityRunner),
-      getMetadata: vi.fn((entity: { name: string }) => ({ tablePath: `public.${entity.name.toLowerCase()}` })),
+      getMetadata: vi.fn((entity: { name: string } | string) => ({
+        tablePath: `public.${(typeof entity === 'string' ? entity : entity.name).toLowerCase()}`,
+      })),
       entityMetadatas: [],
       showMigrations: vi.fn().mockResolvedValue(false),
       runMigrations: vi.fn(),
@@ -344,7 +371,7 @@ describe('runMigrations bootstrap behavior', () => {
     vi.mocked(verifyExecutedSchemaEpoch).mockResolvedValue({
       id: 'pre-enforcement', through: 1700000000131, count: 133,
       sha256: '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1',
-      postgresPolicyProfile: 'legacy-explicit-runtime-compatible/v1',
+      postgresPolicyProfile: 'dual-context-compatibility/v1',
     });
     try {
       await runSchemaEpochPreflight();
@@ -1036,5 +1063,27 @@ describe('projectLegacyLocalRoleAssignmentsOnce', () => {
     } finally {
       syncLegacyRoleAssignments.mockRestore();
     }
+  });
+});
+
+describe('runDatabaseInitialization', () => {
+  it('keeps verify-only startup read-only after schema verification', async () => {
+    const migrate = vi.fn().mockResolvedValue(undefined);
+    const seed = vi.fn().mockResolvedValue(undefined);
+
+    await runDatabaseInitialization('verify', { migrate, seed });
+
+    expect(migrate).toHaveBeenCalledWith({ mode: 'verify' });
+    expect(seed).not.toHaveBeenCalled();
+  });
+
+  it('preserves initial-data seeding for apply bootstrap mode', async () => {
+    const migrate = vi.fn().mockResolvedValue(undefined);
+    const seed = vi.fn().mockResolvedValue(undefined);
+
+    await runDatabaseInitialization('apply', { migrate, seed });
+
+    expect(migrate).toHaveBeenCalledWith({ mode: 'apply' });
+    expect(seed).toHaveBeenCalledOnce();
   });
 });

@@ -21,6 +21,7 @@ export interface SchemaEpochRuntimeEffectivePrivileges {
   references_ok: boolean;
   trigger_ok: boolean;
   public_grant: boolean;
+  column_grant: boolean;
 }
 
 /** Exact PostgreSQL catalog boundary used by the signed 0131 owner transition.
@@ -32,10 +33,12 @@ export function inspectSchemaEpochRuntimeRole(
 ): Promise<SchemaEpochRuntimeRoleInspection[]> {
   return quarantinedPostgresSQL(runner, `SELECT
     NOT (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication)
+      AND r.rolcanlogin
       AND r.rolname<>current_user
       AND NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE member=r.oid)
-      AND NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspowner=r.oid)
-      AND NOT EXISTS (SELECT 1 FROM pg_class WHERE relowner=r.oid) AS safe,
+      AND NOT EXISTS (SELECT 1 FROM pg_shdepend d WHERE d.refclassid='pg_authid'::regclass AND d.refobjid=r.oid AND d.deptype='o')
+      AND NOT has_schema_privilege(r.oid,$2,'CREATE')
+      AND NOT has_database_privilege(r.oid,current_database(),'CREATE') AS safe,
     has_schema_privilege(r.rolname, $2, 'USAGE') AS schema_usage
     FROM pg_roles r WHERE r.rolname=$1`, [runtimeRole, schema]);
 }
@@ -89,7 +92,13 @@ export function readSchemaEpochRuntimeEffectiveTablePrivileges(
       SELECT 1
       FROM aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) acl
       WHERE acl.grantee=0
-    ) AS public_grant
+    ) AS public_grant,
+    EXISTS (
+      SELECT 1 FROM pg_attribute a
+      CROSS JOIN LATERAL aclexplode(a.attacl) acl
+      WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
+        AND (acl.grantee=0 OR acl.grantee=$1::regrole)
+    ) AS column_grant
     FROM pg_class c
     JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname=$2 AND c.relname=$3`, [runtimeRole, schema, tableName]);

@@ -21,6 +21,7 @@ import {
   loadEnterpriseBackendPlugin,
   requireDeclaredEnterpriseBackendRouteAction,
 } from './enterprise/loadEnterpriseBackendPlugin.js';
+import { runDatabaseStartupBootstraps } from './databaseStartupBootstrap.js';
 
 export { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 export { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
@@ -90,36 +91,51 @@ export async function startServer() {
   // Initialize database schema before starting server
   await initializeDatabase();
 
-  // Enterprise schema and migrations only run when enterprise plugin is present
-  if (enterprisePlugin.migrateEnterpriseDatabase) {
-    try {
-      const schema = config.enterpriseSchema;
+  // Application verify mode is a read-only startup contract. Schema-owner jobs
+  // and a published predecessor bootstrap must perform every schema/data seed.
+  await runDatabaseStartupBootstraps(config.databaseStartupMode, {
+    migrateEnterpriseDatabase: enterprisePlugin.migrateEnterpriseDatabase
+      ? async () => {
+        try {
+          const schema = config.enterpriseSchema;
 
-      // Create enterprise schema if configured (and not 'public')
-      if (schema && schema !== 'public') {
-        await ensureSchemaExists(schema);
+          if (schema && schema !== 'public') await ensureSchemaExists(schema);
+          await enterprisePlugin.migrateEnterpriseDatabase?.({
+            ...enterpriseContext,
+          } as any);
+        } catch (error) {
+          console.error('Failed to run enterprise migrations:', error);
+          throw error;
+        }
       }
-
-      // Run enterprise migrations
-      await enterprisePlugin.migrateEnterpriseDatabase({
-        ...enterpriseContext,
-      } as any);
-    } catch (error) {
-      console.error('Failed to run enterprise migrations:', error);
-      throw error;
-    }
-  }
-
-  // Bootstrap admin account on first run
-  await bootstrapAdmin({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
-  await bootstrapDefaultEmailConfig();
-
-  try {
-    await runConfigBundleBootstrap({ tenantReferenceResolver: engineTenantReferenceResolver });
-  } catch {
-    console.error('Configuration bundle bootstrap failed:', getConfigBootstrapStatus());
-    if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');
-  }
+      : undefined,
+    bootstrapAdmin: () => bootstrapAdmin({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded }),
+    bootstrapDefaultEmailConfig,
+    applyConfigBundle: async () => {
+      try {
+        await runConfigBundleBootstrap({ tenantReferenceResolver: engineTenantReferenceResolver });
+      } catch {
+        console.error('Configuration bundle bootstrap failed:', getConfigBootstrapStatus());
+        if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');
+      }
+    },
+    seedGitProviders: async () => {
+      try {
+        const { seedGitProviders } = await import('@enterpriseglue/shared/db/seed/gitProviders.js');
+        await seedGitProviders();
+      } catch (error) {
+        console.error('Failed to seed Git providers:', error);
+      }
+    },
+    seedEnvironmentTags: async () => {
+      try {
+        const { environmentTagService } = await import('@enterpriseglue/shared/services/platform-admin/EnvironmentTagService.js');
+        await environmentTagService.seedDefaults();
+      } catch (error) {
+        console.error('Failed to seed environment tags:', error);
+      }
+    },
+  });
 
   if (runsWorkers) {
     app.locals.enterpriseGluePluginContributionAvailabilityDispatcher?.start();
@@ -128,22 +144,6 @@ export async function startServer() {
     if (process.env.ENTERPRISEGLUE_PLUGIN_ENGINE_EVENT_POLLING_ENABLED === 'true') {
       app.locals.enterpriseGluePluginEngineEventPoller?.start();
     }
-  }
-
-  // Seed Git providers on first run
-  try {
-    const { seedGitProviders } = await import('@enterpriseglue/shared/db/seed/gitProviders.js');
-    await seedGitProviders();
-  } catch (error) {
-    console.error('Failed to seed Git providers:', error);
-  }
-
-  // Seed default environment tags on first run
-  try {
-    const { environmentTagService } = await import('@enterpriseglue/shared/services/platform-admin/EnvironmentTagService.js');
-    await environmentTagService.seedDefaults();
-  } catch (error) {
-    console.error('Failed to seed environment tags:', error);
   }
 
   if (servesHttp) {

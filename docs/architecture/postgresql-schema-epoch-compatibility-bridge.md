@@ -36,7 +36,7 @@ chart and signed candidate bundle.
 - the exact ordered migration inventory the bridge may execute; and
 - the exact release-effect inventory version and SHA-256 accepted by the
   ordered cohort opener;
-- an `owner-transition-1700000000131-closure/v1` source-content digest over
+- an `owner-transition-1700000000131-dual-context-closure/v1` source-content digest over
   migration 1700000000131 and its bounded verification/startup closure, including its schema helper,
   legacy-policy verifier, runtime-grant helper, effect inventory, settlement
   implementation and cohort opener; and
@@ -55,7 +55,7 @@ or helper mutation therefore invalidates the manifest. Application startup
 rejects `apply` before schema creation or repair.
 
 The owner entrypoint is intentionally narrower than the ordinary migration
-orchestrator. It reads the ledger and exact legacy policy before any database
+orchestrator. It reads the ledger and exact `legacy-tenant-context/v1` policy before any database
 mutation, accepts only the signed 0130 predecessor or an already accepted
 0131/0132 epoch, and executes only migration 0131. It does not enter the
 temporary migration-policy lease, replay migrations 0000–0130, synchronize,
@@ -67,12 +67,17 @@ database, the known v0.20 empty-ledger state, a partial ledger, or any other
 starting point fails closed and requires a separately designed and signed
 bootstrap/recovery artifact.
 
-Pre-enforcement readiness requires the exact legacy FORCE-RLS policy shape.
-The bridge does not accept an arbitrary permissive policy: policy name,
-command, roles, `USING` and `WITH CHECK` tokens must match the released policy.
-Post-enforcement readiness uses the attested four-command explicit-context
-policy verifier. Both states still require a restricted nonowning runtime role
-and the normal critical-schema integrity checks.
+The exact 0130 source requires the released one-policy
+`legacy-tenant-context/v1` FORCE-RLS shape. Migration 0131 atomically replaces
+it with four attested command policies using
+`dual-context-compatibility/v1`: each predicate is the exact legacy predicate
+OR the finite current capability predicate. This permits the pinned predecessor
+and current runtime to overlap without adding a database role, grant, bypass,
+or unbounded global branch. Migration 0132 replaces dual compatibility with
+the attested `explicit-context/v1` profile. A ledger/profile mismatch or policy
+drift fails readiness; pure legacy policy is never accepted at 0131. Every
+accepted state still requires a restricted nonowning runtime role and the
+normal critical-schema integrity checks.
 
 The manifest applies only to PostgreSQL pooled tenancy. Other supported
 database adapters and single-tenancy PostgreSQL retain their ordinary migration
@@ -92,16 +97,36 @@ field:
     "applicationStartupMode": "verify-only",
     "preflightMode": "verify-runtime-grant",
     "ownerMigrationMode": "apply-through-executable",
-    "ownerMigrationFrom": 1700000000130,
+    "ownerMigrationFrom": {
+      "through": 1700000000130,
+      "count": 132,
+      "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16",
+      "postgresPolicyProfile": "legacy-tenant-context/v1"
+    },
     "ownerRuntimeGrant": "configured-role-release-effect-cohorts-select-insert-update/v1",
     "freshDatabase": "requires-separate-signed-bootstrap",
     "emptyMigrationLedger": "requires-separate-signed-recovery",
     "executableThrough": 1700000000131,
     "executableImplementationSha256": "<64 lowercase hexadecimal characters>",
-    "executableImplementationPurpose": "owner-transition-1700000000131-closure/v1",
+    "executableImplementationPurpose": "owner-transition-1700000000131-dual-context-closure/v1",
     "releaseEffectInventoryVersion": "release-effect-inventory.enterpriseglue.io/v1",
     "releaseEffectInventorySha256": "c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087",
-    "acceptedThrough": [1700000000131, 1700000000132]
+    "acceptedDatabaseEpochs": [
+      {
+        "id": "pre-enforcement",
+        "through": 1700000000131,
+        "count": 133,
+        "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1",
+        "postgresPolicyProfile": "dual-context-compatibility/v1"
+      },
+      {
+        "id": "post-enforcement",
+        "through": 1700000000132,
+        "count": 134,
+        "sha256": "fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a",
+        "postgresPolicyProfile": "explicit-context/v1"
+      }
+    ]
   }
 }
 ```
@@ -135,6 +160,15 @@ ServiceAccounts are distinct; the enabled opener has a third distinct account.
 Every hook imports the stable built shared-package output under
 `dist/packages/shared/dist`; candidate-image qualification executes those
 imports so a source-only path cannot pass release qualification.
+
+Any retained v0.24.2 predecessor at the 0131 epoch must run with
+`EG_DATABASE_STARTUP_MODE=verify`. Its apply path reruns migration 0126's
+historical policy installer and would add a fifth legacy policy beside the four
+attested dual policies. The chart's immutable pooled-PostgreSQL profile forces
+verify startup; qualification restarts the exact digest-pinned predecessor at
+0131, proves readiness and a legacy tenant read, and then proves current exact
+dual attestation is unchanged. Apply-mode predecessor overlap is unsupported
+and rejected by the operational harness.
 
 ## Cutover boundary
 

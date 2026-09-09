@@ -32,6 +32,9 @@ const REQUIRED_ARTIFACTS = [
   /^metadata\/schema-epoch-manifest\.json$/,
 ]
 const SCHEMA_EPOCH_MANIFEST_PATH = 'metadata/schema-epoch-manifest.json'
+const LEGACY_POLICY_PROFILE = 'legacy-tenant-context/v1'
+const DUAL_POLICY_PROFILE = 'dual-context-compatibility/v1'
+const EXPLICIT_POLICY_PROFILE = 'explicit-context/v1'
 
 function fail(message) {
   throw new Error(message)
@@ -114,18 +117,20 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.roles?.preflight?.mode !== 'verify-runtime-grant'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
     || manifest?.roles?.ownerMigration?.from?.through !== 1700000000130
+    || manifest?.roles?.ownerMigration?.from?.postgresPolicyProfile !== LEGACY_POLICY_PROFILE
     || manifest?.target?.databaseType !== 'postgres'
     || manifest?.target?.tenancyMode !== 'pooled'
     || manifest?.executableMigrationInventory?.through !== 1700000000131
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000130
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.count !== manifest?.roles?.ownerMigration?.from?.count
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.sha256 !== manifest?.roles?.ownerMigration?.from?.sha256
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.postgresPolicyProfile !== LEGACY_POLICY_PROFILE
     || manifest?.upgradeContract?.freshDatabase !== 'requires-separate-signed-bootstrap'
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
-    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-closure/v1'
+    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-dual-context-closure/v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
-    || manifest?.executableImplementationInventory?.count !== 13
+    || manifest?.executableImplementationInventory?.count !== 16
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.releaseEffectInventory?.version !== 'release-effect-inventory.enterpriseglue.io/v1'
     || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')
@@ -133,10 +138,16 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || !Array.isArray(manifest?.acceptedDatabaseEpochs)
     || manifest.acceptedDatabaseEpochs.length !== 2
     || manifest.acceptedDatabaseEpochs[0]?.through !== 1700000000131
+    || manifest.acceptedDatabaseEpochs[0]?.id !== 'pre-enforcement'
+    || manifest.acceptedDatabaseEpochs[0]?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
     || manifest.acceptedDatabaseEpochs[1]?.through !== 1700000000132
+    || manifest.acceptedDatabaseEpochs[1]?.id !== 'post-enforcement'
+    || manifest.acceptedDatabaseEpochs[1]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
   ) fail('Candidate schema-epoch manifest is not the bounded dual-role compatibility bridge')
   return manifest
 }
+
+const deepCopy = (value) => JSON.parse(JSON.stringify(value))
 
 function subjectsFromArgs(args) {
   return Object.fromEntries(REQUIRED_SUBJECTS.map((name) => {
@@ -171,7 +182,7 @@ async function createReceipt(args) {
       applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
       preflightMode: schemaEpochManifest.roles.preflight.mode,
       ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
-      ownerMigrationFrom: schemaEpochManifest.roles.ownerMigration.from.through,
+      ownerMigrationFrom: deepCopy(schemaEpochManifest.roles.ownerMigration.from),
       ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
       freshDatabase: schemaEpochManifest.upgradeContract.freshDatabase,
       emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
@@ -180,7 +191,7 @@ async function createReceipt(args) {
       executableImplementationPurpose: schemaEpochManifest.executableImplementationInventory.purpose,
       releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
       releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
-      acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
+      acceptedDatabaseEpochs: deepCopy(schemaEpochManifest.acceptedDatabaseEpochs),
     },
     artifacts,
   }
@@ -217,7 +228,7 @@ async function verifyReceipt(args) {
     applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
     preflightMode: schemaEpochManifest.roles.preflight.mode,
     ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
-    ownerMigrationFrom: schemaEpochManifest.roles.ownerMigration.from.through,
+    ownerMigrationFrom: deepCopy(schemaEpochManifest.roles.ownerMigration.from),
     ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
     freshDatabase: schemaEpochManifest.upgradeContract.freshDatabase,
     emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
@@ -226,7 +237,7 @@ async function verifyReceipt(args) {
     executableImplementationPurpose: schemaEpochManifest.executableImplementationInventory.purpose,
     releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
     releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
-    acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
+    acceptedDatabaseEpochs: deepCopy(schemaEpochManifest.acceptedDatabaseEpochs),
   }
   if (JSON.stringify(receipt.schemaEpoch) !== JSON.stringify(expectedSchemaEpoch)) {
     fail('Candidate schema-epoch receipt does not match the immutable manifest')

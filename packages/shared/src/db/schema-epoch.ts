@@ -10,17 +10,21 @@ const MigrationInventorySchema = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
 
+const LegacyMigrationInventorySchema = MigrationInventorySchema.extend({
+  postgresPolicyProfile: z.literal('legacy-tenant-context/v1'),
+}).strict();
+
 const DatabaseEpochSchema = MigrationInventorySchema.extend({
   id: z.enum(['pre-enforcement', 'post-enforcement']),
   postgresPolicyProfile: z.enum([
-    'legacy-explicit-runtime-compatible/v1',
+    'dual-context-compatibility/v1',
     'explicit-context/v1',
   ]),
 }).strict();
 
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
-  purpose: z.literal('owner-transition-1700000000131-closure/v1'),
+  purpose: z.literal('owner-transition-1700000000131-dual-context-closure/v1'),
   count: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
@@ -46,14 +50,14 @@ const SchemaEpochManifestSchema = z.object({
     }).strict(),
     ownerMigration: z.object({
       mode: z.literal('apply-through-executable'),
-      from: MigrationInventorySchema,
+      from: LegacyMigrationInventorySchema,
       through: z.number().int().nonnegative(),
       runtimeGrant: z.literal('configured-role-release-effect-cohorts-select-insert-update/v1'),
     }).strict(),
   }).strict(),
   runtimeCapability: z.literal('postgres-explicit-context/v1'),
   upgradeContract: z.object({
-    minimumDatabaseEpoch: MigrationInventorySchema,
+    minimumDatabaseEpoch: LegacyMigrationInventorySchema,
     freshDatabase: z.literal('requires-separate-signed-bootstrap'),
     emptyMigrationLedger: z.literal('requires-separate-signed-recovery'),
   }).strict(),
@@ -118,7 +122,7 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
   const [pre, post] = manifest.acceptedDatabaseEpochs;
   if (
     pre.id !== 'pre-enforcement'
-    || pre.postgresPolicyProfile !== 'legacy-explicit-runtime-compatible/v1'
+    || pre.postgresPolicyProfile !== 'dual-context-compatibility/v1'
     || post.id !== 'post-enforcement'
     || post.postgresPolicyProfile !== 'explicit-context/v1'
     || manifest.executableMigrationInventory.through !== pre.through

@@ -1,6 +1,11 @@
 import type { QueryRunner } from 'typeorm';
 import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
-import { POSTGRES_TENANT_POLICY_COMMANDS, postgresTenantPolicyAttestationMatches, readPostgresTenantPolicyCatalog } from './postgres-tenant-policy.js';
+import {
+  LEGACY_POSTGRES_TENANT_POLICY_SOURCE,
+  POSTGRES_TENANT_POLICY_COMMANDS,
+  postgresTenantPolicyAttestationMatches,
+  readPostgresTenantPolicyCatalog,
+} from './postgres-tenant-policy.js';
 
 import {
   assertTenantPersistenceOwnershipV1,
@@ -10,7 +15,8 @@ import {
 export { POSTGRES_TENANT_RLS_TABLES } from './tenant-ownership-inventory.js';
 
 export type PostgresTenantPolicyProfile =
-  | 'legacy-explicit-runtime-compatible/v1'
+  | 'legacy-tenant-context/v1'
+  | 'dual-context-compatibility/v1'
   | 'explicit-context/v1';
 
 interface LegacyPostgresTenantPolicyCatalogRow {
@@ -21,8 +27,6 @@ interface LegacyPostgresTenantPolicyCatalogRow {
   using_expression: string | null;
   check_expression: string | null;
 }
-
-const legacyTenantPolicySource = "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode', true), ''), 'single') <> 'pooled' OR tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), '')";
 
 /** PostgreSQL adds harmless text casts and parentheses while deparsing. Strip
  * only those two presentation details; all function, setting, literal,
@@ -43,7 +47,7 @@ export function legacyPostgresTenantPolicyMatches(row: LegacyPostgresTenantPolic
     || typeof row.using_expression !== 'string'
     || typeof row.check_expression !== 'string'
   ) return false;
-  const expected = normalizeLegacyPostgresTenantPolicyExpression(legacyTenantPolicySource);
+  const expected = normalizeLegacyPostgresTenantPolicyExpression(LEGACY_POSTGRES_TENANT_POLICY_SOURCE);
   return normalizeLegacyPostgresTenantPolicyExpression(row.using_expression) === expected
     && normalizeLegacyPostgresTenantPolicyExpression(row.check_expression) === expected;
 }
@@ -88,9 +92,9 @@ export async function verifyPostgresTenantRlsForPolicyProfile(
   profile: PostgresTenantPolicyProfile,
 ): Promise<{ expected: number; enforced: number }> {
   if (queryRunner.connection.options.type !== 'postgres') return { expected: 0, enforced: 0 };
-  return profile === 'legacy-explicit-runtime-compatible/v1'
+  return profile === 'legacy-tenant-context/v1'
     ? verifyLegacyPostgresTenantRls(queryRunner)
-    : verifyPostgresTenantRls(queryRunner);
+    : verifyPostgresTenantRls(queryRunner, profile);
 }
 
 /** Runtime verification is independent of the optional migration grant hook. */
@@ -107,7 +111,10 @@ export async function assertRestrictedPostgresRuntimeRole(queryRunner: QueryRunn
   if (rows.length !== 1 || rows[0].safe !== true) throw new Error('Pooled PostgreSQL runtime requires a restricted nonowning role without memberships or CREATE privileges');
 }
 
-export async function verifyPostgresTenantRls(queryRunner: QueryRunner): Promise<{ expected: number; enforced: number }> {
+export async function verifyPostgresTenantRls(
+  queryRunner: QueryRunner,
+  profile: Exclude<PostgresTenantPolicyProfile, 'legacy-tenant-context/v1'> = 'explicit-context/v1',
+): Promise<{ expected: number; enforced: number }> {
   if (queryRunner.connection.options.type !== 'postgres') return { expected: 0, enforced: 0 };
   assertTenantPersistenceOwnershipV1(queryRunner.connection.entityMetadatas);
   let expected = 0;
@@ -138,7 +145,7 @@ export async function verifyPostgresTenantRls(queryRunner: QueryRunner): Promise
       const catalog = await readPostgresTenantPolicyCatalog(queryRunner, schema, metadata.tableName);
       if (Array.isArray(catalog) && catalog.length === 4 && POSTGRES_TENANT_POLICY_COMMANDS.every(command => {
         const policy = catalog.find(item => item.policy_name === `eg_tenant_isolation_${command.toLowerCase()}`);
-        return policy && postgresTenantPolicyAttestationMatches(schema, metadata.tableName, command, policy);
+        return policy && postgresTenantPolicyAttestationMatches(schema, metadata.tableName, command, policy, profile);
       })) enforced += 1;
     }
   }

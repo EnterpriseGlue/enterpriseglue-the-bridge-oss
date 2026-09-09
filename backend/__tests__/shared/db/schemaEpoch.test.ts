@@ -46,8 +46,8 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.upgradeContract.emptyMigrationLedger).toBe('requires-separate-signed-recovery');
     expect(manifest.executableImplementationInventory).toMatchObject({
       algorithm: 'sha256-source-v1',
-      purpose: 'owner-transition-1700000000131-closure/v1',
-      count: 13,
+      purpose: 'owner-transition-1700000000131-dual-context-closure/v1',
+      count: 16,
     });
     expect(manifest.releaseEffectInventory).toEqual({
       version: RELEASE_EFFECT_INVENTORY_VERSION,
@@ -59,6 +59,11 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.through)).toEqual([
       1700000000131,
       1700000000132,
+    ]);
+    expect(manifest.roles.ownerMigration.from.postgresPolicyProfile).toBe('legacy-tenant-context/v1');
+    expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.postgresPolicyProfile)).toEqual([
+      'dual-context-compatibility/v1',
+      'explicit-context/v1',
     ]);
     bindDataSourceToSchemaEpoch(dataSource, manifest);
 
@@ -184,7 +189,7 @@ describe('immutable schema-epoch compatibility bridge', () => {
       }]),
     } as any;
     await expect(
-      verifyPostgresTenantRlsForPolicyProfile(queryRunner, 'legacy-explicit-runtime-compatible/v1'),
+      verifyPostgresTenantRlsForPolicyProfile(queryRunner, 'legacy-tenant-context/v1'),
     ).resolves.toEqual({ expected: 1, enforced: 1 });
   });
 });

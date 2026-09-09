@@ -5,6 +5,10 @@ import {
   readSchemaEpochRuntimeDirectTablePrivileges,
   readSchemaEpochRuntimeEffectiveTablePrivileges,
 } from './postgres-runtime-grants.js';
+import {
+  assertReleaseEffectCohortTableShape,
+  expectedReleaseEffectCohortTable,
+} from './release-effect-cohort-schema.js';
 
 const ROLE_PATTERN = /^[a-z_][a-z0-9_]{0,62}$/;
 const EXPECTED_PRIVILEGES = ['INSERT', 'SELECT', 'UPDATE'];
@@ -32,9 +36,16 @@ async function verifyRuntimeRoleAndTable(
     (dataSource.options as typeof dataSource.options & { schema?: string }).schema || 'public',
   );
   const metadata = dataSource.getMetadata('ReleaseEffectCohort');
-  if ((metadata.schema || schema) !== schema || !await queryRunner.hasTable(metadata.tablePath)) {
+  if (
+    (metadata.schema || schema) !== schema
+    || (queryRunner.connection.options.type !== 'postgres' && !await queryRunner.hasTable(metadata.tablePath))
+  ) {
     throw new Error('Schema-epoch release-effect cohort table is not the exact owner-schema relation');
   }
+  await assertReleaseEffectCohortTableShape(
+    queryRunner,
+    expectedReleaseEffectCohortTable(queryRunner, metadata.tablePath),
+  );
 
   const roles = await inspectSchemaEpochRuntimeRole(queryRunner, runtimeRole, schema);
   if (roles.length !== 1 || roles[0].safe !== true || roles[0].schema_usage !== true) {
@@ -88,5 +99,6 @@ export async function verifySchemaEpochReleaseEffectCohortRuntimePrivileges(
     || effective[0].references_ok !== false
     || effective[0].trigger_ok !== false
     || effective[0].public_grant !== false
+    || effective[0].column_grant !== false
   ) throw new Error('Schema-epoch runtime role has unexpected effective release-effect cohort privileges');
 }

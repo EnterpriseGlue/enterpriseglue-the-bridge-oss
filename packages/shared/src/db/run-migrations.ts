@@ -21,6 +21,7 @@ import { generateId } from '../utils/id.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
 import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
+import type { PostgresTenantPolicyProfile } from './postgres-tenant-rls.js';
 import { config } from '../config/index.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
 import { withPostgresMigrationContext } from './postgres-migration-context.js';
@@ -29,6 +30,10 @@ import {
   verifySchemaEpochReleaseEffectCohortRuntimePrivileges,
 } from './schema-epoch-runtime-grant.js';
 import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
+import {
+  assertReleaseEffectCohortTableShape,
+  expectedReleaseEffectCohortTable,
+} from './release-effect-cohort-schema.js';
 import { runWithTenantDatabaseContext } from '../services/tenant-database-context.js';
 import {
   bindDataSourceToSchemaEpoch,
@@ -549,7 +554,7 @@ export interface RunMigrationsOptions {
 
 async function verifySchemaEpochPolicy(
   queryRunner: QueryRunner,
-  policyProfile: AcceptedDatabaseEpoch['postgresPolicyProfile'],
+  policyProfile: PostgresTenantPolicyProfile,
 ): Promise<void> {
   const rls = await verifyPostgresTenantRlsForPolicyProfile(queryRunner, policyProfile);
   if (rls.expected === 0 || rls.enforced !== rls.expected) {
@@ -575,7 +580,7 @@ async function runBoundedSchemaEpochOwnerMigration(
   try {
     startingEpoch = await verifyOwnerMigrationStartingEpoch(dataSource, startingRunner, manifest);
     const profile = startingEpoch === 'owner-source'
-      ? 'legacy-explicit-runtime-compatible/v1'
+      ? manifest.roles.ownerMigration.from.postgresPolicyProfile
       : manifest.acceptedDatabaseEpochs.find((epoch) => epoch.id === startingEpoch)!.postgresPolicyProfile;
     await verifySchemaEpochPolicy(startingRunner, profile);
   } finally {
@@ -595,6 +600,11 @@ async function runBoundedSchemaEpochOwnerMigration(
   const verifiedRunner = dataSource.createQueryRunner();
   try {
     const accepted = await verifyExecutedSchemaEpoch(dataSource, verifiedRunner, manifest);
+    const cohortMetadata = dataSource.getMetadata('ReleaseEffectCohort');
+    await assertReleaseEffectCohortTableShape(
+      verifiedRunner,
+      expectedReleaseEffectCohortTable(verifiedRunner, cohortMetadata.tablePath),
+    );
     await verifySchemaEpochPolicy(verifiedRunner, accepted.postgresPolicyProfile);
     if (runtimeRole !== undefined) {
       await grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, verifiedRunner, runtimeRole);
@@ -785,6 +795,13 @@ async function runMigrationsForInvocation(
         }
         if (config.tenancyMode === 'pooled') {
           if (mode === 'verify') await assertRestrictedPostgresRuntimeRole(integrityRunner);
+          if (schemaEpochApplies) {
+            const cohortMetadata = dataSource.getMetadata('ReleaseEffectCohort');
+            await assertReleaseEffectCohortTableShape(
+              integrityRunner,
+              expectedReleaseEffectCohortTable(integrityRunner, cohortMetadata.tablePath),
+            );
+          }
           const rls = acceptedDatabaseEpoch
             ? await verifyPostgresTenantRlsForPolicyProfile(
                 integrityRunner,
@@ -1016,7 +1033,20 @@ export async function seedInitialData() {
 /**
  * Initialize database - run migrations and seed data
  */
+export async function runDatabaseInitialization(
+  mode: 'apply' | 'verify',
+  operations: {
+    migrate: (options: { mode: 'apply' | 'verify' }) => Promise<unknown>;
+    seed: () => Promise<unknown>;
+  },
+) {
+  await operations.migrate({ mode });
+  if (mode === 'apply') await operations.seed();
+}
+
 export async function initializeDatabase() {
-  await runMigrations({ mode: config.databaseStartupMode });
-  await seedInitialData();
+  await runDatabaseInitialization(config.databaseStartupMode, {
+    migrate: runMigrations,
+    seed: seedInitialData,
+  });
 }

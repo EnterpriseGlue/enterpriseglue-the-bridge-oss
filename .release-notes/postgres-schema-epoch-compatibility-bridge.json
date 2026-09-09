@@ -28,7 +28,7 @@
     "rollbackSupported": true,
     "notes": [
       "The bridge owner entrypoint can execute the already introduced release-effect migration 1700000000131 but filters TypeORM before migration 1700000000132.",
-      "The bridge accepts only exact migration-ledger inventories through 1700000000131 with the released legacy policy or through 1700000000132 with attested explicit-context policies.",
+      "The bridge accepts only exact migration-ledger inventories through 1700000000131 with the attested dual legacy-or-capability policy or through 1700000000132 with attested explicit-context policies.",
       "The owner accepts only the exact 1700000000130 predecessor or an already accepted epoch. Fresh databases and empty or partial ledgers require a separate signed bootstrap/recovery release."
     ]
   },
@@ -40,18 +40,22 @@
   ],
   "documentation": [
     "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
+    "docs/runbooks/saas-upgrade-restore-rollback.md",
     "infra/kubernetes/helm/enterpriseglue-host/README.md"
   ],
   "knownLimitations": [
-    "Cloud rollout remains responsible for verifying the signed receipt and exact source/image/chart subjects before selecting the bridge; this OSS release does not implement a provider controller."
+    "Cloud rollout remains responsible for verifying the signed receipt and exact source/image/chart subjects before selecting the bridge; this OSS release does not implement a provider controller.",
+    "The managed Helm bridge accepts only exact 1700000000130 upgrades and has no executable fresh pooled predecessor bootstrap; fresh or empty managed shards remain fail-closed and blocked pending a separate provider-owned bootstrap packet.",
+    "Migration 1700000000131 is a bounded compatibility epoch, not final enforcement: its exact attested policy permits the released legacy tenant-context predicate OR the finite current capability predicate until migration 1700000000132 removes the legacy route."
   ],
   "rollback": [
-    "Before migration 1700000000132, restore the preceding qualified runtime while preserving migration 1700000000131 and its additive settlement tables.",
+    "Before migration 1700000000132, a qualified v0.24.2 predecessor may overlap migration 1700000000131 only with EG_DATABASE_STARTUP_MODE=verify; its apply path would recreate the legacy policy and invalidate the exact dual attestation. Database rollback still uses the qualified pre-upgrade backup.",
     "After migration 1700000000132, use the qualified pre-upgrade backup and compatible runtime; do not edit the TypeORM ledger or recreate permissive policies in place."
   ],
   "validation": [
     "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, exact pre/post ledger acceptance, and exact receipt-bound cohort inventory.",
-    "PostgreSQL integration verifies the released legacy policy and restricted cohort grant through a third membership-free preflight login before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery.",
+    "The populated v0.18.0 recovery and fresh native pooled harnesses hard-pin the published v0.24.2 predecessor by OCI digest and release labels, attest its exact registered 132-entry inventory before mutation, verify its executed ledger through 1700000000130 and owner-created bootstrap prerequisites, invoke current code only through the bounded 1700000000131 owner entrypoint, restart v0.24.2 at 0131 only in verify mode with legacy tenant access, and start the restricted current application in verify-only mode without seeding or applying 1700000000132.",
+    "PostgreSQL integration verifies exact legacy policy at 0130, the attested dual policy at 0131 with legacy tenant access plus current global membership and audit capabilities, the restricted cohort grant through a third membership-free preflight login, and strict explicit-context policy after the real 0132 migration; package, Helm and signed-candidate contracts verify immutable manifest delivery.",
     "Real PostgreSQL concurrency observes reverse-preview event and schedule claimers queued in one wait chain behind the same first sorted tenant assignment, then verifies deterministic all-assignment-to-cohort-to-effect batch ordering, expired-lease recovery, and exclusion of work moved to a new release."
   ],
   "packages": [
