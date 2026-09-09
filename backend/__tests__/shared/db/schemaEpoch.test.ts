@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -17,6 +18,10 @@ import {
   normalizeLegacyPostgresTenantPolicyExpression,
   verifyPostgresTenantRlsForPolicyProfile,
 } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
+import {
+  RELEASE_EFFECT_INVENTORY_VERSION,
+  RELEASE_EFFECT_SOURCES_V1,
+} from '@enterpriseglue/shared/contracts/release-effect-inventory.js';
 
 function registeredMigrations() {
   const directory = path.resolve(process.cwd(), '../packages/shared/src/db/migrations');
@@ -41,7 +46,14 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.upgradeContract.emptyMigrationLedger).toBe('requires-separate-signed-recovery');
     expect(manifest.executableImplementationInventory).toMatchObject({
       algorithm: 'sha256-source-v1',
-      count: 6,
+      count: 12,
+    });
+    expect(manifest.releaseEffectInventory).toEqual({
+      version: RELEASE_EFFECT_INVENTORY_VERSION,
+      sha256: createHash('sha256').update(JSON.stringify({
+        version: RELEASE_EFFECT_INVENTORY_VERSION,
+        sources: RELEASE_EFFECT_SOURCES_V1,
+      }), 'utf8').digest('hex'),
     });
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.through)).toEqual([
       1700000000131,

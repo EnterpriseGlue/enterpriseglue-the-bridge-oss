@@ -13,6 +13,7 @@
     "instructions": [
       "Deploy the independently signed bridge release and let its separately credentialed owner job apply exactly through migration 1700000000131 before starting bridge application replicas.",
       "For pooled PostgreSQL, set the chart profile to database.profile.databaseType=postgres and database.profile.tenancyMode=pooled; confirm the existing ledger is exactly the signed 132-entry inventory through migration 1700000000130.",
+      "Configure the release-effect cohort with the exact inventory version and SHA-256 projected by this release's signed candidate receipt; the chart orders owner migration, restricted preflight, and cohort opening before workloads.",
       "Keep the bridge and previous qualified release for the complete 28-day fallback interval; only the later owner-controlled release may apply migration 1700000000132."
     ]
   },
@@ -33,7 +34,7 @@
   "security": [
     "Application startup rejects apply mode for pooled PostgreSQL before schema repair, synchronization or connection-owned migration work.",
     "The bounded owner path cannot run synchronize, migration-ledger baselining, policy repair, critical-schema repair, generic grant refresh, RBAC seeding or legacy projection side effects; its optional configured-role action is limited to SELECT, INSERT, and UPDATE on the new 0131 cohort table.",
-    "The signed candidate receipt binds the manifest checksum, exact minimum/accepted epochs, unsupported bootstrap/recovery states, and the executable implementation digest; candidate image qualification verifies the same bytes at both backend runtime and published shared-package locations."
+    "The signed candidate receipt binds the manifest checksum, exact minimum/accepted epochs, unsupported bootstrap/recovery states, executable implementation digest, and exact release-effect inventory version/SHA-256; candidate image qualification verifies the same bytes at both backend runtime and published shared-package locations."
   ],
   "documentation": [
     "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
@@ -47,8 +48,8 @@
     "After migration 1700000000132, use the qualified pre-upgrade backup and compatible runtime; do not edit the TypeORM ledger or recreate permissive policies in place."
   ],
   "validation": [
-    "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, and exact pre/post ledger acceptance.",
-    "PostgreSQL integration verifies the released legacy policy remains valid before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery."
+    "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, exact pre/post ledger acceptance, and exact receipt-bound cohort inventory.",
+    "PostgreSQL integration verifies the released legacy policy and restricted cohort grant before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery."
   ],
   "packages": [
     {"name": "@enterpriseglue/shared", "previousVersion": "0.21.0", "newVersion": "0.21.1", "impact": "patch"},

@@ -124,8 +124,10 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
-    || manifest?.executableImplementationInventory?.count !== 6
+    || manifest?.executableImplementationInventory?.count !== 12
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
+    || manifest?.releaseEffectInventory?.version !== 'release-effect-inventory.enterpriseglue.io/v1'
+    || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')
     || manifest?.roles?.ownerMigration?.through !== manifest.executableMigrationInventory.through
     || !Array.isArray(manifest?.acceptedDatabaseEpochs)
     || manifest.acceptedDatabaseEpochs.length !== 2
@@ -174,6 +176,8 @@ async function createReceipt(args) {
       emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
       executableThrough: schemaEpochManifest.executableMigrationInventory.through,
       executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
+      releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
+      releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
       acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
     },
     artifacts,
@@ -217,6 +221,8 @@ async function verifyReceipt(args) {
     emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
     executableThrough: schemaEpochManifest.executableMigrationInventory.through,
     executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
+    releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
+    releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
     acceptedThrough: schemaEpochManifest.acceptedDatabaseEpochs.map((epoch) => epoch.through),
   }
   if (JSON.stringify(receipt.schemaEpoch) !== JSON.stringify(expectedSchemaEpoch)) {

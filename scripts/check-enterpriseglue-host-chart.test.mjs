@@ -9,6 +9,7 @@ import test from 'node:test'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const chart = path.join(root, 'infra/kubernetes/helm/enterpriseglue-host')
 const sha256 = 'a'.repeat(64)
+const releaseEffectInventorySha256 = 'c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087'
 const enabled = {
   enabled: true,
   configMapName: 'api-platform-bundle-a',
@@ -196,10 +197,12 @@ test('signed chart publishes its generic capability without provider-specific co
 })
 
 test('managed pooled PostgreSQL opens the exact effect cohort after preflight and before workloads', async (t) => {
-  const inventorySha256 = 'd'.repeat(64)
+  const inventorySha256 = releaseEffectInventorySha256
   const result = await render(t, {
     database: {
       profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      migration: { enabled: false },
+      preflight: { enabled: false },
       releaseEffectCohort: {
         enabled: true,
         releaseId: 'saas-preview-1',
@@ -248,9 +251,8 @@ for (const [label, database] of [
   ['missing release', { releaseEffectCohort: { releaseId: '' } }],
   ['zero epoch', { releaseEffectCohort: { cohortEpoch: 0 } }],
   ['unknown inventory', { releaseEffectCohort: { inventoryVersion: '' } }],
-  ['malformed inventory hash', { releaseEffectCohort: { inventorySha256: '' } }],
-  ['disabled migration', { migration: { enabled: false } }],
-  ['disabled preflight', { preflight: { enabled: false } }],
+  ['missing inventory hash', { releaseEffectCohort: { inventorySha256: '' } }],
+  ['wrong receipt inventory hash', { releaseEffectCohort: { inventorySha256: 'd'.repeat(64) } }],
 ]) {
   test(`effect cohort rejects ${label}`, async (t) => {
     const base = {
@@ -262,7 +264,7 @@ for (const [label, database] of [
         releaseId: 'saas-preview-1',
         cohortEpoch: 41,
         inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1',
-        inventorySha256: 'd'.repeat(64),
+        inventorySha256: releaseEffectInventorySha256,
       },
     }
     const result = await render(t, {
@@ -286,7 +288,7 @@ test('effect cohort rollout identity annotations cannot be overridden', async (t
       profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
       releaseEffectCohort: {
         enabled: true, releaseId: 'saas-preview-1', cohortEpoch: 41,
-        inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1', inventorySha256: 'd'.repeat(64),
+        inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1', inventorySha256: releaseEffectInventorySha256,
       },
     },
     podAnnotations: { 'enterpriseglue.io/release-effect-cohort-epoch': '42' },

@@ -42,9 +42,7 @@ app.kubernetes.io/component: {{ .component }}
 {{- if or (ne .Values.database.profile.databaseType "postgres") (ne .Values.database.profile.tenancyMode "pooled") -}}
 {{- fail "database.releaseEffectCohort requires the explicit postgres/pooled database profile" -}}
 {{- end -}}
-{{- if or (not .Values.database.migration.enabled) (not .Values.database.preflight.enabled) -}}
-{{- fail "database.releaseEffectCohort requires owner migration and restricted preflight hooks" -}}
-{{- end -}}
+{{- $manifest := include "enterpriseglue-host.schemaEpochManifest" . | fromJson -}}
 {{- $releaseId := required "database.releaseEffectCohort.releaseId is required" .Values.database.releaseEffectCohort.releaseId -}}
 {{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$" $releaseId) -}}
 {{- fail "database.releaseEffectCohort.releaseId is invalid" -}}
@@ -52,11 +50,11 @@ app.kubernetes.io/component: {{ .component }}
 {{- if lt (int64 .Values.database.releaseEffectCohort.cohortEpoch) 1 -}}
 {{- fail "database.releaseEffectCohort.cohortEpoch must be positive" -}}
 {{- end -}}
-{{- if ne .Values.database.releaseEffectCohort.inventoryVersion "release-effect-inventory.enterpriseglue.io/v1" -}}
-{{- fail "database.releaseEffectCohort.inventoryVersion is unsupported" -}}
+{{- if ne .Values.database.releaseEffectCohort.inventoryVersion $manifest.releaseEffectInventory.version -}}
+{{- fail "database.releaseEffectCohort.inventoryVersion must equal the signed release receipt" -}}
 {{- end -}}
-{{- if not (regexMatch "^[a-f0-9]{64}$" .Values.database.releaseEffectCohort.inventorySha256) -}}
-{{- fail "database.releaseEffectCohort.inventorySha256 must be an exact SHA-256" -}}
+{{- if ne .Values.database.releaseEffectCohort.inventorySha256 $manifest.releaseEffectInventory.sha256 -}}
+{{- fail "database.releaseEffectCohort.inventorySha256 must equal the signed release receipt" -}}
 {{- end -}}
 {{- range $annotation := list "enterpriseglue.io/release-effect-release-id" "enterpriseglue.io/release-effect-cohort-epoch" "enterpriseglue.io/release-effect-inventory-version" "enterpriseglue.io/release-effect-inventory-sha256" -}}
 {{- if hasKey $.Values.podAnnotations $annotation -}}
@@ -108,6 +106,12 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- end -}}
 {{- if ne (int $manifest.roles.ownerMigration.through) (int $manifest.executableMigrationInventory.through) -}}
 {{- fail "compatibility bridge owner migration ceiling must equal the executable inventory" -}}
+{{- end -}}
+{{- if ne $manifest.releaseEffectInventory.version "release-effect-inventory.enterpriseglue.io/v1" -}}
+{{- fail "compatibility bridge release-effect inventory version is unsupported" -}}
+{{- end -}}
+{{- if not (regexMatch "^[a-f0-9]{64}$" $manifest.releaseEffectInventory.sha256) -}}
+{{- fail "compatibility bridge release-effect inventory must be an exact SHA-256" -}}
 {{- end -}}
 {{- toJson $manifest -}}
 {{- end }}

@@ -52,9 +52,10 @@ serviceAccounts:
 ```
 
 The deployment controller must obtain the inventory inputs from the exact signed release receipt,
-not an operator claim or a prior release. `database.releaseEffectCohort` is rejected unless owner
-migration and restricted preflight are both enabled and the explicit profile is exactly
-`postgres`/`pooled`. The separate settlement runbook defines retirement and fail-closed coverage;
+not an operator claim or a prior release. The chart requires those values to equal its packaged
+manifest. `database.releaseEffectCohort` also requires the explicit `postgres`/`pooled` profile;
+that profile always renders the owner and restricted preflight hooks even when their legacy enable
+booleans are false. The separate settlement runbook defines retirement and fail-closed coverage;
 opening a cohort does not establish maintenance or shutdown eligibility.
 
 For PostgreSQL, `database.migration.runtimeRole` names an existing restricted runtime login. Outside
@@ -62,7 +63,7 @@ the bridge profile it refreshes ordinary grants after successful owner migration
 profile it grants only `SELECT`, `INSERT`, and `UPDATE` on the exact 0131
 `release_effect_cohorts` table and verifies that exact result; it does not use the generic refresh
 or alter default privileges. The value is emitted as `EG_POSTGRES_RUNTIME_ROLE` only
-on the migration job, never API, worker, or preflight. The login must have no memberships,
+on the owner and read-only preflight jobs, never API or worker. The login must have no memberships,
 ownership, administrative attributes, database CREATE or schema CREATE privilege. The migration
 identity must own all tables and sequences in the configured schema. Roles and credentials remain
 operator-managed; the hook never creates or alters roles.
@@ -72,8 +73,9 @@ migration ledger, and USAGE/SELECT (not UPDATE) on sequences. Future owner-creat
 sequences default to SELECT only until another successful refresh. Unsafe PUBLIC privileges or
 global default ACLs fail closed instead of silently retaining write authority. Existing RLS is
 unchanged. An unset value preserves existing behavior; explicitly configuring this environment
-variable on a non-PostgreSQL connection or verify-mode process is an error. Removing the setting
-stops future refreshes but does not revoke existing grants.
+variable on a non-PostgreSQL connection or an ordinary verify-mode process is an error. The signed
+bridge preflight is the sole verify-mode exception and only inspects the exact cohort grant.
+Removing the setting stops future refreshes but does not revoke existing grants.
 
 For private managed databases that require a local authentication proxy, enable the cloud-neutral
 `database.connectionProxy` sidecar with a digest-pinned image and deployment-owned arguments.
@@ -87,7 +89,7 @@ When the profile is omitted, uses another adapter, or selects single tenancy,
 `database.migration.enabled` retains its historical contract: `true` renders the generic owner
 job and verify-only applications; `false` omits the owner job and selects the backward-compatible
 application-owned migration path. The bridge profile never sends its bounded runtime-role grant
-setting to application or preflight containers.
+setting to application containers; preflight receives only the role name for read-only verification.
 
 ## API-only platform configuration bootstrap
 

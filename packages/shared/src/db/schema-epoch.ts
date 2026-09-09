@@ -24,6 +24,11 @@ const ImplementationInventorySchema = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
 
+const ReleaseEffectInventorySchema = z.object({
+  version: z.literal('release-effect-inventory.enterpriseglue.io/v1'),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict();
+
 const SchemaEpochManifestSchema = z.object({
   schemaVersion: z.literal('enterpriseglue-schema-epoch/v1'),
   id: z.literal('postgres-explicit-context-bridge-v1'),
@@ -53,6 +58,7 @@ const SchemaEpochManifestSchema = z.object({
   }).strict(),
   executableMigrationInventory: MigrationInventorySchema,
   executableImplementationInventory: ImplementationInventorySchema,
+  releaseEffectInventory: ReleaseEffectInventorySchema,
   acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema]),
 }).strict();
 

@@ -27,14 +27,18 @@ chart and signed candidate bundle.
 - the PostgreSQL pooled-tenancy target;
 - the `postgres-explicit-context/v1` runtime capability;
 - a `verify-only` application-startup role;
+- a read-only preflight role that verifies the exact runtime cohort grant;
 - an owner-migration role bounded to the exact executable inventory;
 - an optional configured-role grant bounded to `SELECT`, `INSERT`, and
   `UPDATE` on the 0131 `release_effect_cohorts` table;
 - the exact 132-entry predecessor ledger through migration 1700000000130;
 - explicit unsupported fresh-database and empty-ledger states;
 - the exact ordered migration inventory the bridge may execute; and
-- a source-content digest over migration 1700000000131, its schema helper and
-  the exact legacy-policy verifier; and
+- the exact release-effect inventory version and SHA-256 accepted by the
+  ordered cohort opener;
+- a source-content digest over migration 1700000000131, its schema helper,
+  legacy-policy verifier, runtime-grant helper, effect inventory, settlement
+  implementation and cohort opener; and
 - the exact pre- and post-enforcement database ledgers it accepts, including
   the required policy profile for each ledger.
 
@@ -82,6 +86,7 @@ field:
     "manifestSha256": "<64 lowercase hexadecimal characters>",
     "id": "postgres-explicit-context-bridge-v1",
     "applicationStartupMode": "verify-only",
+    "preflightMode": "verify-runtime-grant",
     "ownerMigrationMode": "apply-through-executable",
     "ownerMigrationFrom": 1700000000130,
     "ownerRuntimeGrant": "configured-role-release-effect-cohorts-select-insert-update/v1",
@@ -89,6 +94,8 @@ field:
     "emptyMigrationLedger": "requires-separate-signed-recovery",
     "executableThrough": 1700000000131,
     "executableImplementationSha256": "<64 lowercase hexadecimal characters>",
+    "releaseEffectInventoryVersion": "release-effect-inventory.enterpriseglue.io/v1",
+    "releaseEffectInventorySha256": "c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087",
     "acceptedThrough": [1700000000131, 1700000000132]
   }
 }
@@ -109,7 +116,11 @@ separate owner credential and fixed bounded entrypoint; a Helm value cannot
 skip it or extend its ceiling. Omitted profiles, other adapters and
 single-tenancy PostgreSQL retain the prior `database.migration.enabled`
 behavior. Preflight verifies the live database before any application rollout.
-There is no `skipMigrations`, ledger edit or mutable release-mode value.
+For an enabled release-effect cohort, the chart accepts only the inventory
+version and SHA-256 projected from this exact signed receipt. Hook weights fix
+the order to owner `-20`, grant/epoch preflight `-10`, cohort opener `0`, then
+API and workers. There is no `skipMigrations`, ledger edit or mutable
+release-mode value.
 
 ## Cutover boundary
 

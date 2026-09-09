@@ -4,15 +4,26 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+  RELEASE_EFFECT_INVENTORY_VERSION,
+  RELEASE_EFFECT_SOURCES_V1,
+} from '../packages/shared/src/contracts/release-effect-inventory.ts'
+
 const root = fileURLToPath(new URL('..', import.meta.url))
 
 export const executableImplementationFiles = Object.freeze([
+  'packages/shared/src/db/run-migrations.ts',
+  'packages/shared/src/db/schema-epoch.ts',
+  'packages/shared/src/db/postgres-migration-context.ts',
   'packages/shared/src/db/migrations/1700000000131-add-release-effect-cohorts.ts',
   'packages/shared/src/db/migrations/plugin-migration-schema.ts',
   'packages/shared/src/infrastructure/persistence/pluginColumnPolicy.ts',
   'packages/shared/src/infrastructure/persistence/entities/PluginPlatform.ts',
   'packages/shared/src/db/postgres-tenant-rls.ts',
   'packages/shared/src/db/schema-epoch-runtime-grant.ts',
+  'packages/shared/src/contracts/release-effect-inventory.ts',
+  'packages/shared/src/services/platform-admin/ReleaseEffectSettlementService.ts',
+  'packages/shared/src/services/platform-admin/open-release-effect-cohort.ts',
 ])
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex')
@@ -25,6 +36,13 @@ export function implementationInventoryFromSources(sources) {
     algorithm: 'sha256-source-v1',
     count: entries.length,
     sha256: sha256(JSON.stringify(entries)),
+  }
+}
+
+export function releaseEffectInventoryFromSources(sources = RELEASE_EFFECT_SOURCES_V1) {
+  return {
+    version: RELEASE_EFFECT_INVENTORY_VERSION,
+    sha256: sha256(JSON.stringify({ version: RELEASE_EFFECT_INVENTORY_VERSION, sources })),
   }
 }
 
@@ -43,6 +61,11 @@ export async function verifySchemaEpochManifest(base = root) {
     manifest.executableImplementationInventory,
     actual,
     'schema-epoch executable implementation bytes differ from the signed manifest',
+  )
+  assert.deepEqual(
+    manifest.releaseEffectInventory,
+    releaseEffectInventoryFromSources(),
+    'schema-epoch release-effect inventory differs from the canonical runtime inventory',
   )
   return actual
 }
