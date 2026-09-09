@@ -22,6 +22,7 @@ import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledge
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
 import { verifyPostgresTenantRls, verifyPostgresTenantRlsRole } from './postgres-tenant-rls.js';
 import { config } from '../config/index.js';
+import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -534,6 +535,10 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
   
   const dbType = adapter.getDatabaseType();
   const schemaName = adapter.getSchemaName();
+  const runtimeRole = process.env.EG_POSTGRES_RUNTIME_ROLE;
+  if (runtimeRole !== undefined && (dbType !== 'postgres' || mode !== 'apply')) {
+    throw new Error('EG_POSTGRES_RUNTIME_ROLE is supported only by PostgreSQL apply-mode migration jobs');
+  }
   
   // Ensure schema exists BEFORE DataSource init (migrations need the schema)
   if (mode === 'apply' && schemaName && schemaName !== 'public') {
@@ -677,6 +682,7 @@ export async function runMigrations(options: RunMigrationsOptions = {}) {
         }
       }
       await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
+      if (runtimeRole !== undefined) await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
     } finally {
       await integrityRunner.release();
     }

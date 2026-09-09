@@ -37,6 +37,7 @@ const IGNORED_FILES = new Set(['check-no-raw-sql.ts']);
 const ALLOWED_INFRASTRUCTURE_FILES = new Set([
   'packages/shared/src/db/db-pool.ts',
   'packages/shared/src/db/postgres-tenant-rls.ts',
+  'packages/shared/src/db/postgres-runtime-grants.ts',
   'packages/shared/src/db/run-migrations.ts',
   'packages/shared/src/infrastructure/persistence/subscribers/TenantRlsSubscriber.ts',
 ]);
