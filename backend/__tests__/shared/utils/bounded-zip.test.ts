@@ -9,6 +9,17 @@ const central = (zip: Buffer) => zip.readUInt32LE(zip.length - 6);
 const read = (zip: Buffer) => readMemoryZip(zip).map(entry => entry.getData());
 
 describe('bounded in-memory ZIP reader', () => {
+  it.each(['not-a-zip', ['archive'], { length: 22 }, new Uint8Array(22), null, undefined])('rejects non-Buffer request input (%j)', input => {
+    expect(() => readMemoryZip(input)).toThrow('input must be a Buffer');
+  });
+
+  it('owns its validated bytes for deferred entry reads', () => {
+    const zip = fixture();
+    const entries = readMemoryZip(zip);
+    zip.fill(0);
+    expect(entries[0].getData().toString()).toBe('hello '.repeat(100));
+  });
+
   it.each([0, 6] as const)('reads stored/deflated entries (level %s)', level => {
     expect(read(fixture(level))[0].toString()).toBe('hello '.repeat(100));
   });

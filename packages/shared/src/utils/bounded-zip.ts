@@ -15,15 +15,19 @@ export interface MemoryZipEntry {
  * Format: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
  */
 export function readMemoryZip(
-  buffer: Buffer,
+  input: unknown,
   { maxBytes = 25 * 1024 * 1024, maxUncompressedBytes = 100 * 1024 * 1024, maxEntries = 10_000 } = {},
 ): MemoryZipEntry[] {
   const invalid = (detail = 'invalid'): never => { throw Errors.validation(`ZIP archive ${detail}`); };
   for (const limit of [maxBytes, maxUncompressedBytes, maxEntries]) {
     if (!Number.isSafeInteger(limit) || limit <= 0) invalid('limits must be positive safe integers');
   }
-  if (!Buffer.isBuffer(buffer) || buffer.length < 22) invalid();
-  if (buffer.length > maxBytes) invalid(`exceeds ${maxBytes} compressed bytes`);
+  // Reject request parameter tampering explicitly before observing byte counts.
+  // Own the bounded bytes so deferred entry reads cannot see caller mutations.
+  if (!Buffer.isBuffer(input)) throw Errors.validation('ZIP archive input must be a Buffer');
+  if (input.byteLength > maxBytes) throw Errors.validation(`ZIP archive exceeds ${maxBytes} compressed bytes`);
+  const buffer = Buffer.from(input);
+  if (buffer.length < 22) invalid();
   const range = (offset: number, length: number, end = buffer.length): void => {
     if (offset < 0 || length < 0 || offset + length > end) invalid('contains truncated or overlapping records');
   };
