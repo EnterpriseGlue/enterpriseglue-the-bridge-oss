@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.24.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.24.0...v0.24.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **engines:** permit REST requests beneath approved managed base ([d0e01b6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d0e01b69c7da108ac33457ac0086b3f867f4d85e))
+* **engines:** permit REST requests beneath approved managed base ([5d80651](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5d806519a0e9582a933ba9e59e89efecf5749ffb))
+
 ## [0.24.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.23.0...v0.24.0) (2026-09-08)
 
 
