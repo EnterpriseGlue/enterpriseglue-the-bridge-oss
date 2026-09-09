@@ -106,7 +106,8 @@ for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   );
   assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
   assert.match(dockerfile, /golang\.org\/x\/text@v0\.41\.0/);
-  assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.83\.1/);
+  assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.83\.2/);
+  assert.match(dockerfile, /google\.golang\.org\/grpc\[\[:space:\]\]\+v1\\\.83\\\.2/);
   assert.equal(
     [...dockerfile.matchAll(/id=enterpriseglue-plugin-toolchain-go-modules/g)].length,
     2,

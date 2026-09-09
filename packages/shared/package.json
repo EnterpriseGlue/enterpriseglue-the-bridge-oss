@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -51,7 +51,7 @@
     "ldapts": "^9.0.0",
     "mssql": "^12.7.0",
     "mysql2": "^3.14.3",
-    "nodemailer": "^9.0.1",
+    "nodemailer": "9.1.1",
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",

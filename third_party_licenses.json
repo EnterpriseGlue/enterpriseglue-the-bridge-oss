@@ -303,7 +303,7 @@
     "publisher": "Andrey Sidorov",
     "email": "andrey.sidorov@gmail.com"
   },
-  "nodemailer@9.0.5": {
+  "nodemailer@9.1.1": {
     "licenses": "MIT-0",
     "repository": "https://github.com/nodemailer/nodemailer.git",
     "publisher": "Andris Reinman"
