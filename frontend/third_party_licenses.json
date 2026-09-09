@@ -80,13 +80,6 @@
     "repository": "https://github.com/TanStack/table.git",
     "publisher": "Tanner Linsley"
   },
-  "adm-zip@0.6.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/cthackers/adm-zip.git",
-    "publisher": "Nasca Iacob",
-    "email": "adm-zip@pm.me",
-    "url": "https://github.com/cthackers"
-  },
   "azure-devops-node-api@15.1.3": {
     "licenses": "MIT",
     "repository": "https://github.com/Microsoft/azure-devops-node-api",

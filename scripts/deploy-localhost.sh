@@ -322,7 +322,6 @@ npm_install_with_lockfile() {
 build_backend() {
   local backend_required_packages=(
     "@azure/msal-node/package.json"
-    "adm-zip/package.json"
   )
   local missing_backend_pkg=""
 

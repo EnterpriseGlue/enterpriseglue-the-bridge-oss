@@ -83,7 +83,7 @@ jq -n \
       host: {registryPlan: "packages/host/registry-plan.json", dryRun: "packages/host/publication-dry-run.json"}
     },
     charts: {registryPlan: "charts/plugin-toolchain-chart-plan.json"},
-    productionImages: {built: true, vulnerabilityScan: "HIGH,CRITICAL", platforms: ["linux/amd64", "linux/arm64"]},
+    productionImages: {built: true, applicationVulnerabilityScan: "CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN", toolchainVulnerabilityScan: "HIGH,CRITICAL", platforms: ["linux/amd64", "linux/arm64"]},
     toolchainReceiptRehearsal: {signatures: true, immutableRepull: true, disconnectedImport: true}
   }' > "$OUTPUT_DIR/release-readiness.json"
 

@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-09-09T05:41:45.208Z
+Generated at: 2026-09-09T07:47:55.169Z
 
 Generated from:
 - third_party_licenses.json
@@ -27,7 +27,7 @@ Generated from:
 | BSD-2-Clause | 1 |
 | BSD-3-Clause | 1 |
 | ISC | 4 |
-| MIT | 60 |
+| MIT | 59 |
 | MIT-0 | 1 |
 | OFL-1.1 | 3 |
 | SEE LICENSE IN LICENSE | 2 |
@@ -52,7 +52,6 @@ Generated from:
 | @node-saml/node-saml | 5.1.0 | MIT | https://github.com/node-saml/node-saml.git | backend, frontend, packages/shared, root |
 | @tanstack/react-query | 5.102.0 | MIT | git+https://github.com/TanStack/query.git | frontend, packages/frontend-host |
 | @tanstack/react-table | 8.21.3 | MIT | https://github.com/TanStack/table.git | frontend, packages/frontend-host |
-| adm-zip | 0.6.0 | MIT | https://github.com/cthackers/adm-zip.git | backend, frontend, packages/shared, root |
 | ajv | 8.20.0 | MIT | ajv-validator/ajv | packages/plugin-runtime |
 | archiver | 7.0.1 | MIT | https://github.com/archiverjs/node-archiver.git | backend, packages/backend-host |
 | azure-devops-node-api | 15.1.3 | MIT | https://github.com/Microsoft/azure-devops-node-api | backend, frontend, packages/shared, root |
@@ -88,7 +87,7 @@ Generated from:
 | jspdf | 4.2.1 | MIT | https://github.com/parallax/jsPDF.git | frontend, packages/frontend-host |
 | ldapts | 9.0.0 | MIT | git+https://github.com/ldapts/ldapts.git | backend, frontend, packages/shared, root |
 | lucide-react | 0.577.0 | ISC | https://github.com/lucide-icons/lucide.git | frontend |
-| morgan | 1.11.0 | MIT | expressjs/morgan | backend, packages/backend-host |
+| morgan | 1.12.0 | MIT | expressjs/morgan | backend, packages/backend-host |
 | mssql | 12.7.0 | MIT | git+https://github.com/tediousjs/node-mssql.git | backend, frontend, packages/shared, root |
 | mysql2 | 3.23.4 | MIT | git+https://github.com/sidorares/node-mysql2.git | backend, frontend, packages/shared, root |
 | nodemailer | 9.1.1 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/shared, root |

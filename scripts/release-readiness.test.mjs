@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { spawnSync } from 'node:child_process'
 import { classifyChangedFiles } from './ci-change-classifier.mjs'
 
 const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
@@ -106,6 +107,35 @@ test('the production image gate scans every release image', () => {
   assert.match(productionImages, /docker volume rm --force "\$TRIVY_CACHE_SOURCE"/)
   assert.match(productionImages, /\/root\/\.cache\/trivy/)
   assert.match(productionImages, /--severity HIGH,CRITICAL/)
+  assert.match(productionImages, /if \[\[ "\$image" == "\$BACKEND_IMAGE" \|\| "\$image" == "\$FRONTEND_IMAGE" \]\]/)
+  assert.match(productionImages, /--severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --ignorefile \/workspace\/\.trivyignore/)
+  assert.match(productionImages, /"\$\{scan_args\[@\]\}" "\$image"/)
+  assert.match(readiness, /applicationVulnerabilityScan: "CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN"/)
+})
+
+test('local scanner actually applies the candidate threshold to each image type', () => {
+  const start = productionImages.indexOf('for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do')
+  const end = productionImages.indexOf('\ncleanup_trivy_cache', start)
+  assert.ok(start >= 0 && end > start)
+  const result = spawnSync('bash', ['-c', `
+    set -euo pipefail
+    BACKEND_IMAGE=backend FRONTEND_IMAGE=frontend INSTALLER_IMAGE=installer MANAGER_IMAGE=manager
+    ROOT_DIR=/workspace TRIVY_CACHE_SOURCE=cache TRIVY_IMAGE=trivy
+    docker() { printf '%s\\n' "$*"; }
+    ${productionImages.slice(start, end)}
+  `], { encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr)
+  const calls = result.stdout.trim().split('\n')
+  assert.equal(calls.length, 4)
+  for (const [index, image] of ['backend', 'frontend', 'installer', 'manager'].entries()) {
+    assert.match(calls[index], /image --quiet --exit-code 1/)
+    if (index < 2) {
+      assert.ok(calls[index].endsWith(`--severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --ignorefile /workspace/.trivyignore ${image}`))
+    } else {
+      assert.ok(calls[index].endsWith(`--severity HIGH,CRITICAL ${image}`))
+      assert.doesNotMatch(calls[index], /--ignorefile/)
+    }
+  }
 })
 
 test('the local OCI drill qualifies the complete toolchain and distribution lock', () => {

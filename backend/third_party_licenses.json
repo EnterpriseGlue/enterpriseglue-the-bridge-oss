@@ -29,13 +29,6 @@
     "email": "henri.bergius@iki.fi",
     "url": "http://bergie.iki.fi"
   },
-  "adm-zip@0.6.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/cthackers/adm-zip.git",
-    "publisher": "Nasca Iacob",
-    "email": "adm-zip@pm.me",
-    "url": "https://github.com/cthackers"
-  },
   "archiver@7.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-archiver.git",
@@ -127,7 +120,7 @@
     "repository": "git+https://github.com/ldapts/ldapts.git",
     "publisher": "jim@biacreations.com"
   },
-  "morgan@1.11.0": {
+  "morgan@1.12.0": {
     "licenses": "MIT",
     "repository": "expressjs/morgan"
   },

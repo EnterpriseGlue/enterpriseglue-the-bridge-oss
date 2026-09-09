@@ -29,6 +29,18 @@ const isPatchedFastUri = (version) => {
   return isAtLeast(`${major}.${minor}.${patch}`, minimum)
 }
 
+test('request logging stays patched and vulnerable archive reader cannot return', async () => {
+  const lockText = await readFile(new URL('pnpm-lock.yaml', root), 'utf8')
+  const versions = [...lockText.matchAll(/^ {2}morgan@(\d+\.\d+\.\d+):$/gm)].map(match => match[1])
+  assert.ok(versions.length > 0, 'expected the request logger in the lockfile')
+  for (const version of versions) assert.ok(isAtLeast(version, [1, 12, 0]), `morgan ${version} is below the security floor`)
+  assert.doesNotMatch(lockText, /adm-zip/, 'vulnerable ZIP dependency must not return, including transitively')
+  for (const name of ['backend', 'packages/shared', 'packages/backend-host']) {
+    const manifest = JSON.parse(await readFile(new URL(`${name}/package.json`, root), 'utf8'))
+    assert.equal(manifest.dependencies?.['adm-zip'], undefined)
+  }
+})
+
 test('fast-uri security override and lockfile stay on a patched release line', async () => {
   const [packageText, workspaceText, lockText] = await Promise.all([
     readFile(new URL('package.json', root), 'utf8'),

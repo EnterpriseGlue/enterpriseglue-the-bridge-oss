@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import AdmZip from 'adm-zip';
+import { unzipSync } from 'fflate';
 import { createApp } from '../../../packages/backend-host/src/app.js';
 import { getDataSource } from '../../../packages/shared/src/db/data-source.js';
 import { File } from '../../../packages/shared/src/infrastructure/persistence/entities/File.js';
@@ -63,14 +63,14 @@ describe('Starbase project download', () => {
     expect(response.status).toBe(200);
     expect(Buffer.isBuffer(response.body)).toBe(true);
 
-    const zip = new AdmZip(response.body as Buffer);
-    const manifestEntry = zip.getEntry('starbase-manifest.json');
-    const legacyManifestEntry = zip.getEntry('.starbase/manifest.json');
+    const zip = unzipSync(response.body as Buffer);
+    const manifestEntry = zip['starbase-manifest.json'];
+    const legacyManifestEntry = zip['.starbase/manifest.json'];
     expect(manifestEntry).toBeTruthy();
     expect(legacyManifestEntry).toBeTruthy();
 
-    const manifest = JSON.parse(zip.readAsText(manifestEntry!));
-    const legacyManifest = JSON.parse(zip.readAsText(legacyManifestEntry!));
+    const manifest = JSON.parse(Buffer.from(manifestEntry).toString('utf8'));
+    const legacyManifest = JSON.parse(Buffer.from(legacyManifestEntry).toString('utf8'));
     expect(manifest.schemaVersion).toBe(1);
     expect(Array.isArray(manifest.files)).toBe(true);
     expect(manifest.files.some((file: any) => String(file.path || '').endsWith('.bpmn'))).toBe(true);

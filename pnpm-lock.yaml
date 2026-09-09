@@ -15,7 +15,7 @@ overrides:
   fast-uri: ^3.1.6
   form-data: ^4.0.6
   ip-address: ^10.4.0
-  morgan: ^1.11.0
+  morgan: ^1.12.0
   nodemailer: 9.1.1
   postcss: ^8.5.26
   qs: ^6.16.0
@@ -91,9 +91,6 @@ importers:
       '@node-saml/node-saml':
         specifier: ^5.1.0
         version: 5.1.0
-      adm-zip:
-        specifier: ^0.6.0
-        version: 0.6.0
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -140,8 +137,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       morgan:
-        specifier: ^1.11.0
-        version: 1.11.0
+        specifier: ^1.12.0
+        version: 1.12.0
       mssql:
         specifier: ^12.7.0
         version: 12.7.0
@@ -227,6 +224,9 @@ importers:
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       supertest:
         specifier: ^7.0.0
         version: 7.2.2
@@ -424,8 +424,8 @@ importers:
         specifier: ^8.1.0
         version: 8.3.0
       morgan:
-        specifier: ^1.11.0
-        version: 1.11.0
+        specifier: ^1.12.0
+        version: 1.12.0
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -762,9 +762,6 @@ importers:
       '@node-saml/node-saml':
         specifier: ^5.1.0
         version: 5.1.0
-      adm-zip:
-        specifier: ^0.6.0
-        version: 0.6.0
       azure-devops-node-api:
         specifier: ^15.1.1
         version: 15.1.3
@@ -2742,10 +2739,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  adm-zip@0.6.0:
-    resolution: {integrity: sha512-XleryMhbuksdKtofnWZ9Sk+4CUTbms4Mb/EU32SZwToAyZ5RgVos/ki8n+yr0LWHOGKuakbXTuuYNHLQjhddgg==}
-    engines: {node: '>=14.0'}
-
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
@@ -4550,8 +4543,8 @@ packages:
   moddle@8.2.1:
     resolution: {integrity: sha512-20qzO/ZpMGO9j9gdQgXk9bfGxb9wA3JKnGth/21YZKODLrZE4RW/uVMIL5pTskYm34Z61DucBEPkq93qByNsBQ==}
 
-  morgan@1.11.0:
-    resolution: {integrity: sha512-zSkVu3t18r39pw4ixfBKvfZi3y2UOqr7d4WYwcj3m8nXpEQK4rPO6GLzs/CExoRgmX3y9EjmmcXqv6jq0SK46g==}
+  morgan@1.12.0:
+    resolution: {integrity: sha512-OHpTRQwn2ezasILW8iKe+Yww1XsfWsZIpUOLF7RDb2g5GwO3trPaRwi7+8BDiJ7HFx2Kg2mfUdCBcVhwYlOz2g==}
     engines: {node: '>= 0.8.0'}
 
   mri@1.2.0:
@@ -8109,8 +8102,6 @@ snapshots:
 
   acorn@8.18.0: {}
 
-  adm-zip@0.6.0: {}
-
   agent-base@7.1.4: {}
 
   ajv@6.15.0:
@@ -10251,7 +10242,7 @@ snapshots:
     dependencies:
       min-dash: 5.1.0
 
-  morgan@1.11.0:
+  morgan@1.12.0:
     dependencies:
       basic-auth: 2.0.1
       debug: 2.6.9

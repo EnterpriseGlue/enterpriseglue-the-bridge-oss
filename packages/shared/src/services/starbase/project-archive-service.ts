@@ -1,4 +1,4 @@
-import AdmZip from 'adm-zip'
+import { readMemoryZip } from '../../utils/bounded-zip.js'
 import { posix as pathPosix } from 'node:path'
 import type { DeepPartial, EntityManager } from 'typeorm'
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
@@ -148,17 +148,12 @@ export function parseProjectArchive(zipBuffer: Buffer): ParsedProjectArchive {
     throw Errors.validation('ZIP archive is required')
   }
 
-  let zip: any
-  try {
-    zip = new AdmZip(zipBuffer)
-  } catch {
-    throw Errors.validation('Invalid ZIP archive')
-  }
+  const entries = readMemoryZip(zipBuffer)
 
   const warnings: string[] = []
   let manifest: ProjectArchiveManifest | null = null
 
-  for (const entry of zip.getEntries()) {
+  for (const entry of entries) {
     if (entry.isDirectory) continue
     const entryPath = normalizeArchivePath(entry.entryName)
     if (!PROJECT_ARCHIVE_MANIFEST_PATHS.includes(entryPath as (typeof PROJECT_ARCHIVE_MANIFEST_PATHS)[number])) continue
@@ -180,7 +175,7 @@ export function parseProjectArchive(zipBuffer: Buffer): ParsedProjectArchive {
   }
 
   const files: ParsedArchiveFile[] = []
-  for (const entry of zip.getEntries()) {
+  for (const entry of entries) {
     if (entry.isDirectory) continue
     const entryPath = normalizeArchivePath(entry.entryName)
     if (PROJECT_ARCHIVE_MANIFEST_PATHS.includes(entryPath as (typeof PROJECT_ARCHIVE_MANIFEST_PATHS)[number])) continue

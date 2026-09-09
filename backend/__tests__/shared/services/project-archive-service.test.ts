@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import AdmZip from 'adm-zip'
+import { zipSync } from 'fflate'
 import { parseProjectArchive } from '@enterpriseglue/shared/services/starbase/project-archive-service.js'
 
 function buildArchive(options?: {
@@ -7,12 +7,10 @@ function buildArchive(options?: {
   manifestContent?: string | null
   files?: Array<{ path: string; xml: string }>
 }): Buffer {
-  const zip = new AdmZip()
+  const zip: Record<string, Uint8Array> = {}
 
   if (options?.manifestContent !== null) {
-    zip.addFile(
-      options?.manifestPath || 'starbase-manifest.json',
-      Buffer.from(
+    zip[options?.manifestPath || 'starbase-manifest.json'] = Buffer.from(
         options?.manifestContent || JSON.stringify({
           schemaVersion: 1,
           projectName: 'Imported project',
@@ -31,15 +29,14 @@ function buildArchive(options?: {
             },
           ],
         })
-      )
     )
   }
 
   for (const file of options?.files || [{ path: 'nested/child.bpmn', xml: '<definitions><process id="Process_1" /></definitions>' }]) {
-    zip.addFile(file.path, Buffer.from(file.xml))
+    zip[file.path] = Buffer.from(file.xml)
   }
 
-  return zip.toBuffer()
+  return Buffer.from(zipSync(zip))
 }
 
 describe('project archive service', () => {
@@ -77,9 +74,8 @@ describe('project archive service', () => {
   })
 
   it('rejects archives without BPMN or DMN files', () => {
-    const zip = new AdmZip()
-    zip.addFile('starbase-manifest.json', Buffer.from(JSON.stringify({ schemaVersion: 1, projectName: 'Only manifest', exportedAt: 1, folders: [], files: [] })))
+    const zip = Buffer.from(zipSync({ 'starbase-manifest.json': Buffer.from(JSON.stringify({ schemaVersion: 1, projectName: 'Only manifest', exportedAt: 1, folders: [], files: [] })) }))
 
-    expect(() => parseProjectArchive(zip.toBuffer())).toThrowError('ZIP archive does not contain any BPMN or DMN files')
+    expect(() => parseProjectArchive(zip)).toThrowError('ZIP archive does not contain any BPMN or DMN files')
   })
 })

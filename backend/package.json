@@ -33,7 +33,6 @@
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",
-    "adm-zip": "^0.6.0",
     "archiver": "^7.0.1",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",
@@ -49,7 +48,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "ldapts": "^9.0.0",
-    "morgan": "^1.11.0",
+    "morgan": "^1.12.0",
     "mssql": "^12.7.0",
     "mysql2": "^3.23.2",
     "nodemailer": "9.1.1",
@@ -66,6 +65,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "fflate": "^0.8.3",
     "@enterpriseglue/shared": "workspace:*",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
