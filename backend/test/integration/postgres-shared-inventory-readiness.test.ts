@@ -392,6 +392,88 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
     }
   }, 45000);
 
+  it('orders two-tenant event and schedule claim batches before cohort and effect locks', async () => {
+    const oldReleaseId = `sha256:${'a'.repeat(64)}`;
+    const newReleaseId = `sha256:${'b'.repeat(64)}`;
+    const oldBinding = { releaseId: oldReleaseId, cohortEpoch: 41, managedPooledCloud: true };
+    const newBinding = { releaseId: newReleaseId, cohortEpoch: 42, managedPooledCloud: true };
+    for (const tenantRef of tenantIds) {
+      await runtime.getRepository(PluginEventDelivery).delete({ tenantRef });
+      await runtime.getRepository(PluginScheduledJob).delete({ tenantRef });
+      await runtime.getRepository(TenantReleaseWorkAssignment).delete({ tenantRef });
+    }
+    await new ReleaseEffectSettlementService(async () => runtime, () => oldBinding)
+      .open({ releaseId: oldReleaseId, cohortEpoch: 41, expectedRevision: 0 });
+    await new ReleaseEffectSettlementService(async () => runtime, () => newBinding)
+      .open({ releaseId: newReleaseId, cohortEpoch: 42, expectedRevision: 0 });
+    for (const tenantRef of tenantIds) {
+      await runtime.getRepository(TenantReleaseWorkAssignment).insert({
+        id: randomUUID(), tenantRef, releaseId: oldReleaseId, assignmentEpoch: 1, updatedAt: Date.now(),
+      });
+    }
+    const eventStore = new DatabasePluginEventDeliveryStoreV1(
+      async () => runtime, {}, {}, undefined, () => oldBinding,
+    );
+    const scheduleStore = new DatabasePluginScheduleStoreV1(async () => runtime, () => 10_000, () => oldBinding);
+    const eventA = await eventStore.enqueue(eventCommand(tenantIds[0], `batch-a-${suffix}`));
+    const eventB = await eventStore.enqueue(eventCommand(tenantIds[1], `batch-b-${suffix}`));
+    await scheduleStore.execute(scheduleCommand(tenantIds[0], `batch-a-${suffix}`));
+    await scheduleStore.execute(scheduleCommand(tenantIds[1], `batch-b-${suffix}`));
+    // Reverse the preview order across stores. Tenant A carries the expired
+    // leases while tenant B remains movable before either claimant reaches a
+    // cohort or effect row.
+    await runtime.getRepository(PluginEventDelivery).update(
+      { deliveryId: eventA.deliveryId },
+      { status: 'delivering', attempt: 1, leaseOwner: 'expired-event', leaseExpiresAt: 9_999 },
+    );
+    await runtime.getRepository(PluginEventDelivery).update(
+      { deliveryId: eventB.deliveryId }, { nextAttemptAt: 8_000 },
+    );
+    await runtime.getRepository(PluginScheduledJob).update(
+      { tenantRef: tenantIds[0] },
+      { status: 'delivering', attempt: 1, nextRunAt: 8_000, leaseOwner: 'expired-schedule', leaseExpiresAt: 9_999 },
+    );
+    await runtime.getRepository(PluginScheduledJob).update(
+      { tenantRef: tenantIds[1] }, { nextRunAt: 9_000 },
+    );
+
+    const blocker = await writer();
+    const assignment = new TenantReleaseWorkAssignmentService(async () => runtime, () => newBinding);
+    let eventClaim: Promise<unknown> | undefined;
+    let scheduleClaim: Promise<unknown> | undefined;
+    try {
+      await blocker.runner.manager.getRepository(TenantReleaseWorkAssignment).findOne({
+        where: { tenantRef: tenantIds[1] }, lock: { mode: 'pessimistic_write' },
+      });
+      eventClaim = eventStore.claimDue({ workerRef: 'event-batch', limit: 2, leaseSeconds: 30, now: 10_000 });
+      scheduleClaim = scheduleStore.claimDue({ workerRef: 'schedule-batch', limit: 2, leaseSeconds: 30, now: 10_000 });
+      await awaitBlockedBy(blocker.pid);
+      await expect(assignment.assign({
+        tenantId: tenantIds[1], releaseId: newReleaseId, assignmentEpoch: 2,
+      }, blocker.runner.manager)).resolves.toMatchObject({ updatedEvents: 1, updatedSchedules: 1 });
+      await blocker.runner.commitTransaction();
+
+      await expect(Promise.all([eventClaim, scheduleClaim])).resolves.toEqual([
+        [expect.objectContaining({ deliveryId: eventA.deliveryId, attempt: 2, leaseOwner: 'event-batch' })],
+        [],
+      ]);
+      const movedEvent = await runtime.getRepository(PluginEventDelivery)
+        .findOneByOrFail({ deliveryId: eventB.deliveryId });
+      expect(movedEvent).toMatchObject({ releaseId: newReleaseId, status: 'pending' });
+      expect(Number(movedEvent.assignmentEpoch)).toBe(2);
+      const movedSchedule = await runtime.getRepository(PluginScheduledJob)
+        .findOneByOrFail({ tenantRef: tenantIds[1] });
+      expect(movedSchedule).toMatchObject({ releaseId: newReleaseId, status: 'scheduled' });
+      expect(Number(movedSchedule.assignmentEpoch)).toBe(2);
+      expect(await runtime.getRepository(PluginScheduledJob).findOneByOrFail({ tenantRef: tenantIds[0] }))
+        .toMatchObject({ releaseId: oldReleaseId, status: 'retry_wait', reasonCode: 'lease_expired' });
+    } finally {
+      if (blocker.runner.isTransactionActive) await blocker.runner.rollbackTransaction();
+      await blocker.runner.release();
+      await Promise.allSettled([eventClaim, scheduleClaim].filter(Boolean) as Promise<unknown>[]);
+    }
+  }, 45000);
+
   it('partial and earlier-failed cohorts cannot publish later tenant success as global readiness', async () => {
     const partial = await seed(); await reconcileSharedEngineInventory(partial, [tenantIds[0]]);
     expect(await runtime.getRepository(Engine).findOneByOrFail({ id: partial.id })).toMatchObject({ tenantResolutionStatus: 'incomplete', lastMetadataReconciliationStatus: 'failed' });

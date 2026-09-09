@@ -52,7 +52,7 @@
   "validation": [
     "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, exact pre/post ledger acceptance, and exact receipt-bound cohort inventory.",
     "PostgreSQL integration verifies the released legacy policy and restricted cohort grant through a third membership-free preflight login before the real 1700000000132 enforcement migration and the explicit-context profile afterward; package, Helm and signed-candidate contracts verify immutable manifest delivery.",
-    "Real PostgreSQL concurrency verifies assignment-to-cohort-to-effect claim ordering for ordinary and expired-lease event/schedule work while tenant release assignment moves or rejects in-flight work."
+    "Real PostgreSQL concurrency verifies deterministic all-assignment-to-cohort-to-effect batch claim ordering across two tenants for ordinary and expired-lease event/schedule work while tenant release assignment moves or rejects in-flight work."
   ],
   "packages": [
     {"name": "@enterpriseglue/shared", "previousVersion": "0.21.0", "newVersion": "0.21.1", "impact": "patch"},

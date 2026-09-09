@@ -53,9 +53,11 @@ do not participate in release settlement.
    before sharing a conditional TypeORM write fence with this transition.
    Exact event and command replays remain idempotent. Dead-letter requeue and
    schedule resume and worker event/schedule claims, including expired-lease
-   recovery, use the canonical assignment → cohort → effect-row lock
-   order and revalidate the locked assignment; schedule pause/cancellation
-   remain available to settle retained work.
+   recovery, use the canonical assignment → cohort → effect-row lock order.
+   A batched claim locks every distinct candidate assignment in tenant-reference
+   order before it locks the shared cohort, then locks effects in stable
+   candidate order and revalidates each locked assignment; schedule
+   pause/cancellation remain available to settle retained work.
 4. Read `GET ...` and invoke `POST .../verify` with the current revision.
    Verification may mark the cohort `settled` only after the stored inventory
    hash still matches, every settlement-relevant source is authoritative, all
@@ -87,8 +89,9 @@ different or older revision fails with `409`. A cohort is never reopened.
 unresolved. `delivered` and `dead_letter` are terminal. An expired delivery
 lease is still unresolved until ordinary worker recovery records a terminal or
 retry state. Recovery previews expired rows without locking them, then acquires
-the assignment, cohort and effect-row fences in canonical order and revalidates
-the lease before changing state.
+all batch assignments in tenant-reference order, the cohort, and effect-row
+fences in stable candidate order. It revalidates the lease before changing
+state.
 
 For `plugin_scheduled_jobs`, `scheduled`, `delivering`, and `retry_wait` all
 block the retiring cohort. `paused` and `cancelled` are terminal for that

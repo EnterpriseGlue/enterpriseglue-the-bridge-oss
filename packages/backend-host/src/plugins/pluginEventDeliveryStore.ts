@@ -496,7 +496,9 @@ implements PluginEventDeliveryStoreV1 {
           now,
         })
         .orderBy('delivery.next_attempt_at', 'ASC')
-        .addOrderBy('delivery.created_at', 'ASC');
+        .addOrderBy('delivery.created_at', 'ASC')
+        .addOrderBy('delivery.tenant_ref', 'ASC')
+        .addOrderBy('delivery.id', 'ASC');
       if (runtime.releaseId) {
         query.andWhere('delivery.release_id = :hostReleaseId', { hostReleaseId: runtime.releaseId });
       }
@@ -523,21 +525,30 @@ implements PluginEventDeliveryStoreV1 {
               .getMany();
       const claimed: ClaimedPluginEventV1[] = [];
       const circuitObservations: PluginEventCircuitObservationV1[] = [];
+      const releaseAssignments = new Map<string, TenantReleaseWorkAssignment>();
+      if (runtime.releaseId) {
+        const tenantRefs = [...new Set(records.map((candidate) => candidate.tenantRef))].sort();
+        for (const tenantRef of tenantRefs) {
+          const assignment = await findTenantReleaseWorkAssignmentForUpdate(manager, tenantRef);
+          if (assignment?.releaseId === runtime.releaseId) {
+            releaseAssignments.set(tenantRef, assignment);
+          }
+        }
+        if (releaseAssignments.size > 0) {
+          await assertReleaseEffectAdmission(manager, {
+            sourceId: 'plugin_event_delivery',
+            releaseId: runtime.releaseId,
+          }, runtime);
+        }
+      }
       for (const candidate of records) {
         let record = candidate;
         if (runtime.releaseId) {
-          // Canonical release claim order is assignment -> cohort -> effect.
-          // The candidate read is only a preview; every field is revalidated
-          // after the three durable row fences are held.
-          const releaseAssignment = await findTenantReleaseWorkAssignmentForUpdate(
-            manager,
-            candidate.tenantRef,
-          );
-          if (!releaseAssignment || releaseAssignment.releaseId !== runtime.releaseId) continue;
-          await assertReleaseEffectAdmission(manager, {
-            sourceId: 'plugin_event_delivery',
-            releaseId: releaseAssignment.releaseId,
-          }, runtime);
+          // Canonical batched order is every assignment (tenantRef sorted),
+          // then the cohort, then every effect (candidate order). The preview
+          // is revalidated only after all shared release fences are held.
+          const releaseAssignment = releaseAssignments.get(candidate.tenantRef);
+          if (!releaseAssignment) continue;
           const locked = await findPluginRowForUpdateV1(repository, { id: candidate.id });
           if (
             !locked
