@@ -249,6 +249,16 @@ notifications, loading, links, lists, stacks, tags, and tiles. Modules must feat
 their declared minimum host version guarantees it; they must not bundle a
 second Carbon or React runtime.
 
+Trusted system modules can contribute `navItems` with `section: 'main'` to the
+host's Enterprise navigation group on desktop and mobile. These contributions
+come from the owner-isolated extension registry, independently of the legacy
+frontend plugin. Set `scope: 'root'` for an absolute platform route; tenant scope
+(or omitted scope) uses the active tenant prefix. Declare the corresponding
+`actionId`/`actionIds` and route authorization metadata: navigation visibility
+does not replace route or API authorization. Module activation must complete
+before the host mounts, as enforced by the startup loader. A legacy item already
+registered with the same ID renders only once in each menu.
+
 The initial host extension points include global header actions, platform settings, engine and
 incident actions, process-instance detail actions, and plugin-owned tenant routes/navigation.
 Native plugins cannot replace host features or components. The legacy override seam is reserved
