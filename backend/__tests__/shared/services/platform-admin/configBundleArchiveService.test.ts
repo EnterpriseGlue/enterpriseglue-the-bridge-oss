@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import AdmZip from 'adm-zip';
+import { zipSync } from 'fflate';
 import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
 
 function archive(entries: Record<string, unknown | Buffer>): Buffer {
-  const zip = new AdmZip();
-  for (const [path, value] of Object.entries(entries)) zip.addFile(path, Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value)));
-  return zip.toBuffer();
+  return Buffer.from(zipSync(Object.fromEntries(Object.entries(entries).map(([path, value]) =>
+    [path, Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value))]))));
 }
 
 const bundle = {

@@ -1,0 +1,25 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "archive-logging-security",
+  "type": "security",
+  "scope": "archive-import-and-request-logging",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Replaces the vulnerable archive reader with bounded in-memory ZIP processing and upgrades request logging to the patched Morgan release.",
+  "userImpact": ["Configuration bundle and project archive imports retain their existing interfaces and never extract files onto the server filesystem."],
+  "upgrade": {"required": true, "instructions": ["Upgrade the backend and matching shared and host packages to consume the patched dependencies."]},
+  "configuration": ["No environment variable changes. Configuration ZIPs retain their existing JSON envelope and byte/file limits and now reject unsupported ZIP metadata before processing."],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": ["Removes adm-zip, affected by CVE-2026-76845, without downgrading to versions affected by earlier archive vulnerabilities.", "Morgan 1.12.0 fixes CVE-2026-15603 request-log forging.", "Candidate image acceptance continues to reject all vulnerability severities; no advisory exceptions are added."],
+  "documentation": ["Dependency notices identify the patched request logger; docs/development/archive-imports.md describes the bounded reader, supported ZIP subset and import limits."],
+  "knownLimitations": ["ZIP imports accept stored/deflated single-disk UTF-8 archives; ZIP64, multipart, encrypted and special-file archives must be re-exported as ordinary ZIPs. Project imports are limited to 25 MiB compressed, 100 MiB uncompressed and 10,000 entries; configuration archives retain 1 MiB and 64-file limits with a 128-record metadata ceiling."],
+  "rollback": ["Restoring the earlier image reintroduces vulnerable dependencies; prefer a forward fix. No database rollback is required."],
+  "validation": ["Archive/logging regressions, including real streaming exports, dishonest sizes, CRC, overlap and descriptor rejection; PostgreSQL route export/import round trip.", "Backend and host package builds/type checks; eight packed package contracts; dependency/readiness/classifier contracts; notices and documentation boundary checks.", "Pinned candidate Trivy scanner rejects all severities; the rebuilt local backend and unchanged exact candidate frontend digest both passed without new ignore entries. Protected CI still qualifies the proposed revision and candidate images."],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.19.2", "newVersion": "0.19.3", "impact": "patch"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.17.2", "newVersion": "0.17.3", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.5", "newVersion": "0.17.6", "impact": "patch"}
+  ]
+}

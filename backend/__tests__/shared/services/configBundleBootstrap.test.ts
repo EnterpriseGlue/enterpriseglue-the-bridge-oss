@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import AdmZip from 'adm-zip';
+import { zipSync } from 'fflate';
 
 const config = vi.hoisted(() => ({
   configBundlePath: '/etc/enterpriseglue/config/bundle.json' as string | undefined,
@@ -97,11 +97,11 @@ describe('configBundleBootstrap', () => {
   it('loads a folder-style ZIP through the same configuration envelope path', async () => {
     config.configBundlePath = '/etc/enterpriseglue/config/bundle.zip';
     config.configExpectedTenantScope = 'tenant-a';
-    const zip = new AdmZip();
     const bundle = { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'acme.authz', owner: 'platform' }, tenantKey: 'acme', mode: 'preview_only', settings: {}, imports: ['./groups.json'] };
-    zip.addFile('bundle.json', Buffer.from(JSON.stringify(bundle)));
-    zip.addFile('groups.json', Buffer.from(JSON.stringify({ groups: [{ key: 'group.ops', name: 'Operations' }] })));
-    readFile.mockResolvedValue(zip.toBuffer());
+    readFile.mockResolvedValue(Buffer.from(zipSync({
+      'bundle.json': Buffer.from(JSON.stringify(bundle)),
+      'groups.json': Buffer.from(JSON.stringify({ groups: [{ key: 'group.ops', name: 'Operations' }] })),
+    })));
     apply.mockResolvedValue({ canonicalHash: 'preview-hash' });
 
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ mode: 'apply', status: 'applied' });

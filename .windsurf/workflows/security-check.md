@@ -46,33 +46,45 @@ docker build -f frontend/Dockerfile.prod -t bridge-frontend-scan:local .
 
 For Docker images:
 ```bash
-trivy image --severity HIGH,CRITICAL --format table bridge-backend-scan:local
-trivy image --severity HIGH,CRITICAL --format table bridge-frontend-scan:local
+trivy image --exit-code 1 --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --ignorefile .trivyignore --format table bridge-backend-scan:local
+trivy image --exit-code 1 --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --ignorefile .trivyignore --format table bridge-frontend-scan:local
 ```
 
 For filesystem:
 // turbo
 ```bash
-trivy fs --severity HIGH,CRITICAL --format table .
+trivy fs --exit-code 1 --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --ignorefile .trivyignore --format table .
 ```
 
 ## Step 5: Report
 
 Summarize findings:
-- Total HIGH / CRITICAL CVEs per image
+- Total findings by severity per image; distinguish advisory filesystem scans
+  from actual image acceptance
 - Any new CVEs not seen in the nightly scan
 
 If clean:
-> No HIGH/CRITICAL vulnerabilities found. Safe to ship.
+> No unignored vulnerabilities found in the scanned images. Other required
+> acceptance checks still apply.
 
 If findings exist:
-> Found {N} vulnerabilities. Review above and decide:
-> - Fix before shipping (recommended for CRITICAL)
-> - Ship anyway and track in nightly scan (acceptable for HIGH with no fix available)
+> Found {N} vulnerabilities. Fix the dependencies or affected implementation
+> before shipping. An unfixed advisory is not permission to bypass acceptance.
 
 ## Notes for Cascade
 
-- This is purely local — no data leaves the machine
+- Image analysis is local; scanner databases and registry images may be fetched.
 - The nightly GitHub security scan (`security-nightly.yml`) runs Trivy on
   published images, so this is a pre-push safety net
-- Use `--ignore-unfixed` flag if the user only wants actionable findings
+- Backend/frontend candidate acceptance rejects CRITICAL, HIGH, MEDIUM, LOW and
+  UNKNOWN using the committed `.trivyignore`. Plugin toolchain candidate images
+  have a separate HIGH/CRITICAL gate. Do not confuse either with nightly drift
+  thresholds or claim a HIGH/CRITICAL-only scan qualifies an application image.
+- The exact-candidate scanner is pinned in
+  `.github/workflows/release-candidate-stage.yml`; use that image for final local
+  acceptance. `scripts/check-plugin-platform-production-images.sh` runs the
+  same per-image thresholds and scanner. Do not rerun builds when the exact
+  image inputs already have valid evidence.
+- Never add an exception, lower severity, or use `--ignore-unfixed` for candidate
+  acceptance merely to make the scan pass. Report a diagnostic filtered scan
+  as incomplete, not release acceptance.

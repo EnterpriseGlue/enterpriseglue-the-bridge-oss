@@ -108,11 +108,17 @@ cleanup_trivy_cache() {
 trap cleanup_trivy_cache EXIT
 
 for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do
+  # Mirror the exact candidate's application gate; toolchain retains its own gate.
+  scan_args=(--severity HIGH,CRITICAL)
+  if [[ "$image" == "$BACKEND_IMAGE" || "$image" == "$FRONTEND_IMAGE" ]]; then
+    scan_args=(--severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN --ignorefile /workspace/.trivyignore)
+  fi
   docker run --rm \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume "$TRIVY_CACHE_SOURCE:/root/.cache/trivy" \
+    --volume "$ROOT_DIR/.trivyignore:/workspace/.trivyignore:ro" \
     "$TRIVY_IMAGE" image --quiet --exit-code 1 \
-      --severity HIGH,CRITICAL "$image"
+      "${scan_args[@]}" "$image"
 done
 
 cleanup_trivy_cache

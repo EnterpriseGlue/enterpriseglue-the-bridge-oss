@@ -80,13 +80,6 @@
     "repository": "https://github.com/TanStack/table.git",
     "publisher": "Tanner Linsley"
   },
-  "adm-zip@0.6.0": {
-    "licenses": "MIT",
-    "repository": "https://github.com/cthackers/adm-zip.git",
-    "publisher": "Nasca Iacob",
-    "email": "adm-zip@pm.me",
-    "url": "https://github.com/cthackers"
-  },
   "ajv@8.20.0": {
     "licenses": "MIT",
     "repository": "ajv-validator/ajv",
@@ -287,7 +280,7 @@
     "repository": "https://github.com/lucide-icons/lucide.git",
     "publisher": "Eric Fennis"
   },
-  "morgan@1.11.0": {
+  "morgan@1.12.0": {
     "licenses": "MIT",
     "repository": "expressjs/morgan"
   },

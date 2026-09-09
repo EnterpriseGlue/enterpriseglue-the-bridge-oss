@@ -1,4 +1,4 @@
-import AdmZip from 'adm-zip';
+import { readMemoryZip } from '../../utils/bounded-zip.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import type { ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 
@@ -128,13 +128,8 @@ class ConfigBundleArchiveService {
     const buffer = Buffer.from(input);
     if (buffer.byteLength > maxBytes) throw Errors.validation(`Configuration ZIP archive exceeds ${maxBytes} bytes`);
 
-    let archive: any;
-    try {
-      archive = new AdmZip(buffer);
-    } catch {
-      throw Errors.validation('Configuration ZIP archive is invalid');
-    }
-    const entries = archive.getEntries().filter((entry: any) => !entry.isDirectory);
+    const entries = readMemoryZip(buffer, { maxBytes, maxUncompressedBytes: maxBytes, maxEntries: 128 })
+      .filter((entry) => !entry.isDirectory);
     if (entries.length === 0) throw Errors.validation('Configuration ZIP archive contains no files');
     if (entries.length > MAX_ARCHIVE_ENTRIES) throw Errors.validation(`Configuration ZIP archive exceeds ${MAX_ARCHIVE_ENTRIES} files`);
 

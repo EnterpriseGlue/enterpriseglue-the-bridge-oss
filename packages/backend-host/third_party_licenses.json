@@ -36,7 +36,7 @@
     "email": "adam@npmjs.com",
     "url": "https://evilpacket.net"
   },
-  "morgan@1.11.0": {
+  "morgan@1.12.0": {
     "licenses": "MIT",
     "repository": "expressjs/morgan"
   },

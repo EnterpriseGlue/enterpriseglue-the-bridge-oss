@@ -145,7 +145,9 @@ qualification phase before they may merge. That contract-focused phase:
 4. compares existing immutable package and Helm chart versions with the
    candidate payload, or records that a new version would be published;
 5. builds the backend, frontend, plugin-installer, and Plugin Manager
-   production images and rejects HIGH or CRITICAL vulnerability findings; and
+   production images, rejecting all vulnerability severities for application
+   images and HIGH or CRITICAL for toolchain images, matching their respective
+   exact-candidate gates; and
 6. rehearses chart receipts, signatures, immutable repulls, the signed air-gap
    bundle, and a disconnected registry import.
 
