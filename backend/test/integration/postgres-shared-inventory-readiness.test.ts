@@ -27,6 +27,13 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { ConfigBundleRuntimeReconciliationTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleRuntimeReconciliationTask.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { ReleaseEffectSettlementService } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
+import { TenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
+import {
+  PluginScheduledJob,
+  ReleaseEffectCohort,
+  TenantReleaseWorkAssignment,
+} from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
+import { DatabasePluginScheduleStoreV1 } from '@enterpriseglue/backend-host/plugins/pluginScheduleStore.js';
 import { reconcileSharedEngineInventory } from '@enterpriseglue/backend-host/services/sharedEngineInventoryReconciliation.js';
 
 const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
@@ -78,6 +85,27 @@ async function verifyPolicies() {
 }
 async function restorePolicies() {
   const runner = owner.createQueryRunner(); try { await applyPostgresTenantPolicies(runner); } finally { await runner.release(); }
+}
+
+function scheduleCommand(tenantRef: string, idempotencyKey: string) {
+  return {
+    pluginId: 'io.enterpriseglue.reference' as const,
+    deploymentRef: `deployment-${suffix}`,
+    tenantRef,
+    subjectRef: `subject-${suffix}`,
+    deliveryOperationId: 'io.enterpriseglue.reference.refresh-index',
+    allowedIntervalsSeconds: [3600],
+    maxAttempts: 3,
+    request: {
+      apiVersion: 'fixed-schedule-request.plugin.enterpriseglue.io/v1' as const,
+      callId: `call-${idempotencyKey}`,
+      operationId: 'io.enterpriseglue.reference.schedule',
+      action: 'upsert' as const,
+      jobType: `io.enterpriseglue.reference.refresh-${suffix}`,
+      intervalSeconds: 3600,
+      idempotencyKey,
+    },
+  };
 }
 
 describe('shared readiness with actual restricted PostgreSQL repositories and writer races', () => {
@@ -158,6 +186,51 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       eligibleForShutdown: false,
     });
   });
+
+  it('serializes schedule admission before release assignment movement and resweeps the committed row', async () => {
+    const oldReleaseId = `old-schedule-${suffix}`;
+    const newReleaseId = `new-schedule-${suffix}`;
+    const oldBinding = { releaseId: oldReleaseId, cohortEpoch: 11, managedPooledCloud: true };
+    const newBinding = { releaseId: newReleaseId, cohortEpoch: 12, managedPooledCloud: true };
+    const oldSettlement = new ReleaseEffectSettlementService(async () => runtime, () => oldBinding);
+    const newSettlement = new ReleaseEffectSettlementService(async () => runtime, () => newBinding);
+    await oldSettlement.open({ releaseId: oldReleaseId, cohortEpoch: 11, expectedRevision: 0 });
+    await newSettlement.open({ releaseId: newReleaseId, cohortEpoch: 12, expectedRevision: 0 });
+    await runtime.getRepository(TenantReleaseWorkAssignment).insert({
+      id: randomUUID(), tenantRef: tenantIds[0], releaseId: oldReleaseId, assignmentEpoch: 1, updatedAt: Date.now(),
+    });
+
+    const blocker = await writer();
+    const producer = new DatabasePluginScheduleStoreV1(async () => runtime, Date.now, () => oldBinding);
+    const assignment = new TenantReleaseWorkAssignmentService(async () => runtime, () => newBinding);
+    let produced: Promise<unknown> | undefined;
+    let moved: Promise<unknown> | undefined;
+    try {
+      await blocker.runner.manager.getRepository(ReleaseEffectCohort).findOne({
+        where: { releaseId: oldReleaseId }, lock: { mode: 'pessimistic_write' },
+      });
+      produced = producer.execute(scheduleCommand(tenantIds[0], `serialize-${suffix}`));
+      await awaitBlockedBy(blocker.pid);
+      moved = assignment.assign({ tenantId: tenantIds[0], releaseId: newReleaseId, assignmentEpoch: 2 });
+      await delay(25);
+      await blocker.runner.commitTransaction();
+      await expect(produced).resolves.toMatchObject({ status: 'scheduled' });
+      await expect(moved).resolves.toMatchObject({ releaseId: newReleaseId, assignmentEpoch: 2, updatedSchedules: 1 });
+      const movedAssignment = await runtime.getRepository(TenantReleaseWorkAssignment).findOneByOrFail({ tenantRef: tenantIds[0] });
+      expect(movedAssignment.releaseId).toBe(newReleaseId);
+      expect(Number(movedAssignment.assignmentEpoch)).toBe(2);
+      const movedSchedule = await runtime.getRepository(PluginScheduledJob).findOneByOrFail({ tenantRef: tenantIds[0] });
+      expect(movedSchedule.releaseId).toBe(newReleaseId);
+      expect(Number(movedSchedule.assignmentEpoch)).toBe(2);
+      expect((await oldSettlement.status({ releaseId: oldReleaseId, cohortEpoch: 11 })).sources
+        .find((source) => source.sourceId === 'plugin_schedule_delivery'))
+        .toMatchObject({ outstanding: 0, reasonCode: 'settled' });
+    } finally {
+      if (blocker.runner.isTransactionActive) await blocker.runner.rollbackTransaction();
+      await blocker.runner.release();
+      await Promise.allSettled([produced, moved].filter(Boolean) as Promise<unknown>[]);
+    }
+  }, 45000);
 
   it('partial and earlier-failed cohorts cannot publish later tenant success as global readiness', async () => {
     const partial = await seed(); await reconcileSharedEngineInventory(partial, [tenantIds[0]]);

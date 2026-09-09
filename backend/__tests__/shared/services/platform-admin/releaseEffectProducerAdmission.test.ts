@@ -91,9 +91,42 @@ describe('covered release effect producers', () => {
       jobRef: scheduleJobRef(), paused: false, expectedRevision: 2, reasonCode: 'operator_resumed',
     })).rejects.toThrow('release_effect_admission_closed');
   });
+
+  it('revalidates the locked assignment before administrative event and schedule retries', async () => {
+    const eventStore = new DatabasePluginEventDeliveryStoreV1(async () => source);
+    const scheduleStore = new DatabasePluginScheduleStoreV1(async () => source, () => 10_000);
+    const queued = await eventStore.enqueue(event('event-cross-release'));
+    await source.getRepository(PluginEventDelivery).update(
+      { deliveryId: queued.deliveryId }, { status: 'dead_letter', attempt: 1 },
+    );
+    await scheduleStore.execute(schedule('upsert', 'schedule-cross-release'));
+    await scheduleStore.setPaused({ jobRef: scheduleJobRef(), paused: true, expectedRevision: 1, reasonCode: 'operator_paused' });
+
+    const nextReleaseId = 'release-next';
+    const nextBinding = { releaseId: nextReleaseId, cohortEpoch: 8, managedPooledCloud: true };
+    await new ReleaseEffectSettlementService(async () => source, () => nextBinding)
+      .open({ releaseId: nextReleaseId, cohortEpoch: 8, expectedRevision: 0 });
+    await source.getRepository(TenantReleaseWorkAssignment).update(
+      { tenantRef }, { releaseId: nextReleaseId, assignmentEpoch: 10 },
+    );
+
+    const nextEventStore = new DatabasePluginEventDeliveryStoreV1(
+      async () => source, {}, {}, undefined, () => nextBinding,
+    );
+    const nextScheduleStore = new DatabasePluginScheduleStoreV1(
+      async () => source, () => 10_000, () => nextBinding,
+    );
+    await expect(nextEventStore.requeueDeadLetter({
+      pluginId: 'io.enterpriseglue.reference', deliveryId: queued.deliveryId,
+      expectedAttempt: 1, actorRef: 'operator', correlationId: 'cross-release-event', now: 11_000,
+    })).rejects.toThrow('plugin_event_release_assignment_changed');
+    await expect(nextScheduleStore.setPaused({
+      jobRef: scheduleJobRef(), paused: false, expectedRevision: 2, reasonCode: 'operator_resumed',
+    })).rejects.toThrow('plugin_schedule_release_assignment_changed');
+  });
 });
 
-function event(id: string) {
+function event(id: string): Parameters<DatabasePluginEventDeliveryStoreV1['enqueue']>[0] {
   return {
     pluginId: 'io.enterpriseglue.reference' as const,
     deploymentRef: 'deployment-1', tenantRef,
@@ -110,17 +143,25 @@ function event(id: string) {
   };
 }
 
-function schedule(action: 'upsert' | 'cancel', idempotencyKey: string) {
+function schedule(
+  action: 'upsert' | 'cancel',
+  idempotencyKey: string,
+): Parameters<DatabasePluginScheduleStoreV1['execute']>[0] {
   return {
     pluginId: 'io.enterpriseglue.reference' as const,
     deploymentRef: 'deployment-1', tenantRef, subjectRef: 'subject-1',
     deliveryOperationId: 'io.enterpriseglue.reference.refresh-index',
     allowedIntervalsSeconds: [3600], maxAttempts: 3,
-    request: {
+    request: action === 'upsert' ? {
       apiVersion: 'fixed-schedule-request.plugin.enterpriseglue.io/v1' as const,
       callId: `call-${idempotencyKey}`, operationId: 'io.enterpriseglue.reference.schedule',
       action, jobType: 'io.enterpriseglue.reference.refresh-index',
-      ...(action === 'upsert' ? { intervalSeconds: 3600 } : {}),
+      intervalSeconds: 3600,
+      idempotencyKey,
+    } : {
+      apiVersion: 'fixed-schedule-request.plugin.enterpriseglue.io/v1' as const,
+      callId: `call-${idempotencyKey}`, operationId: 'io.enterpriseglue.reference.schedule',
+      action, jobType: 'io.enterpriseglue.reference.refresh-index',
       idempotencyKey,
     },
   };

@@ -49,6 +49,7 @@ export interface ReleaseEffectSettlementStatusV1 {
 export interface ReleaseEffectRuntimeBindingV1 {
   releaseId?: string;
   cohortEpoch?: number;
+  managedPooledCloud?: boolean;
 }
 
 export interface ReleaseEffectProducerAdmissionV1 {
@@ -60,6 +61,7 @@ export class ReleaseEffectAdmissionError extends Error {
   constructor(readonly code:
     | 'release_effect_admission_source_uncovered'
     | 'release_effect_admission_release_mismatch'
+    | 'release_effect_admission_not_configured'
     | 'release_effect_admission_closed') {
     super(code);
     this.name = 'ReleaseEffectAdmissionError';
@@ -80,10 +82,11 @@ export function releaseEffectInventorySha256(
     .digest('hex');
 }
 
-function defaultRuntimeBinding(): ReleaseEffectRuntimeBindingV1 {
+export function configuredReleaseEffectRuntimeBinding(): ReleaseEffectRuntimeBindingV1 {
   return {
     releaseId: config.tenantPlacementReleaseId,
     cohortEpoch: config.tenantReleaseEffectCohortEpoch,
+    managedPooledCloud: config.tenancyMode === 'pooled' && config.tenancyCloudRequired,
   };
 }
 
@@ -99,9 +102,14 @@ function defaultRuntimeBinding(): ReleaseEffectRuntimeBindingV1 {
 export async function assertReleaseEffectAdmission(
   manager: EntityManager,
   input: ReleaseEffectProducerAdmissionV1,
-  runtime: ReleaseEffectRuntimeBindingV1 = defaultRuntimeBinding(),
+  runtime: ReleaseEffectRuntimeBindingV1 = configuredReleaseEffectRuntimeBinding(),
 ): Promise<void> {
-  if (!runtime.cohortEpoch) return;
+  if (!runtime.cohortEpoch) {
+    if (runtime.releaseId && runtime.managedPooledCloud) {
+      throw new ReleaseEffectAdmissionError('release_effect_admission_not_configured');
+    }
+    return;
+  }
   const source = RELEASE_EFFECT_SOURCES_V1.find((candidate) => candidate.sourceId === input.sourceId);
   if (!source || source.coverage !== 'authoritative' || !source.settlementRequired) {
     throw new ReleaseEffectAdmissionError('release_effect_admission_source_uncovered');
@@ -140,7 +148,7 @@ export async function assertReleaseEffectAdmission(
 export class ReleaseEffectSettlementService {
   constructor(
     private readonly dataSourceProvider: () => Promise<DataSource> = getDataSource,
-    private readonly runtimeBinding: RuntimeBindingProvider = defaultRuntimeBinding,
+    private readonly runtimeBinding: RuntimeBindingProvider = configuredReleaseEffectRuntimeBinding,
     private readonly sources: readonly ReleaseEffectSourceV1[] = RELEASE_EFFECT_SOURCES_V1,
     private readonly clock: () => number = Date.now,
   ) {}
@@ -295,6 +303,7 @@ export class ReleaseEffectSettlementService {
     const assignments = await manager.getRepository(TenantReleaseWorkAssignment)
       .count({ where: { releaseId: cohort.releaseId } });
     const counts = new Map<string, number>([
+      ['tenant_release_assignment', assignments],
       ['plugin_event_delivery', events],
       ['plugin_schedule_delivery', schedules],
     ]);

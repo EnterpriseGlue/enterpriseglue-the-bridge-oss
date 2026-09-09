@@ -49,6 +49,16 @@ async function open(serviceUnderTest = service()) {
 }
 
 describe('ReleaseEffectSettlementService', () => {
+  it('rejects managed pooled Cloud producer admission when a release has no cohort epoch', async () => {
+    await expect(source.transaction((manager) => assertReleaseEffectAdmission(manager, {
+      sourceId: 'plugin_event_delivery', releaseId,
+    }, { releaseId, managedPooledCloud: true })))
+      .rejects.toThrow('release_effect_admission_not_configured');
+    await expect(source.transaction((manager) => assertReleaseEffectAdmission(manager, {
+      sourceId: 'plugin_event_delivery', releaseId,
+    }, { releaseId }))).resolves.toBeUndefined();
+  });
+
   it('opens once, closes with a revision fence, and rejects admission after close', async () => {
     const subject = service();
     await expect(open(subject)).resolves.toMatchObject({ state: 'open', revision: 1, inventoryComplete: false });

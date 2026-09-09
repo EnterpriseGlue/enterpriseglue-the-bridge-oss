@@ -29,6 +29,20 @@ export interface ReleaseEffectSourceV1 {
 export const RELEASE_EFFECT_SOURCES_V1: readonly ReleaseEffectSourceV1[] =
   Object.freeze([
     {
+      sourceId: 'release_runtime_membership', owner: 'api-and-worker',
+      settlementRequired: true, coverage: 'uncovered',
+      durableTables: [],
+      admissionBoundary: 'Configured cohort epochs fence participating producers, but retained and partially configured replicas have no authoritative membership ledger.',
+      settlementBasis: 'Cloud must attest the exact retained API/worker controller membership and terminal drain of pre-feature or misconfigured replicas.',
+    },
+    {
+      sourceId: 'tenant_release_assignment', owner: 'api',
+      settlementRequired: true, coverage: 'authoritative',
+      durableTables: ['tenant_release_work_assignments'],
+      admissionBoundary: 'Assignment insert and movement share the destination cohort admission transaction fence.',
+      settlementBasis: 'The retiring release has no assignment row; the assignment row lock serializes producers with movement and retry.',
+    },
+    {
       sourceId: 'plugin_event_delivery', owner: 'worker',
       settlementRequired: true, coverage: 'authoritative',
       durableTables: ['plugin_event_deliveries'],
@@ -97,6 +111,13 @@ export const RELEASE_EFFECT_SOURCES_V1: readonly ReleaseEffectSourceV1[] =
       durableTables: [],
       admissionBoundary: 'Secret put and retire calls execute inline without a release-bound durable intent.',
       settlementBasis: 'A broker timeout or lost response cannot prove whether the external secret mutation committed.',
+    },
+    {
+      sourceId: 'diagnostic_bundle_handoff', owner: 'api',
+      settlementRequired: true, coverage: 'uncovered',
+      durableTables: [],
+      admissionBoundary: 'The signed sanitized bundle is POSTed inline without a release-bound durable intent.',
+      settlementBasis: 'A timeout or lost receipt cannot prove whether the remote diagnostics consumer accepted the bundle.',
     },
     {
       sourceId: 'plugin_engine_event_polling', owner: 'worker',

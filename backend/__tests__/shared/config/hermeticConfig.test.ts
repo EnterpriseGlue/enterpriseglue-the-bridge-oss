@@ -141,6 +141,15 @@ describe('hermetic test configuration', () => {
       .rejects.toThrow('EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH requires EG_TENANT_PLACEMENT_RELEASE_ID.');
   });
 
+  it('rejects a managed pooled Cloud release identity without a cohort epoch', async () => {
+    process.env.EG_TENANCY_MODE = 'pooled';
+    process.env.EG_TENANCY_CLOUD_REQUIRED = 'true';
+    process.env.EG_TENANT_RLS_ENFORCED = 'true';
+    process.env.EG_TENANT_PLACEMENT_RELEASE_ID = 'release-preview';
+    await expect(import('@enterpriseglue/shared/config/index.js'))
+      .rejects.toThrow('Managed pooled Cloud release awareness requires EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH.');
+  });
+
   it('rejects pooled tenancy on a non-PostgreSQL database', async () => {
     process.env.EG_TENANCY_MODE = 'pooled';
     process.env.EG_TENANT_RLS_ENFORCED = 'true';

@@ -16,7 +16,7 @@
     ]
   },
   "configuration": [
-    "EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH optionally binds a managed release process to one positive effect-admission epoch; omission keeps effect admission compatible but makes shutdown settlement ineligible."
+    "EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH binds a managed release process to one positive effect-admission epoch. Managed pooled Cloud rejects a release identity without it; ordinary self-host installations may omit both values."
   ],
   "api": {
     "compatibility": "additive",
@@ -41,7 +41,7 @@
     "The managed release effect settlement runbook documents the protocol, inventory, crash and retry semantics, database behavior, and fail-closed limitations."
   ],
   "knownLimitations": [
-    "This foundational packet authoritatively covers durable plugin event and fixed-schedule work only; engine mutations, Git writes, email delivery, tenant secret broker mutations, plugin gateway calls, configuration reconciliation, and other enumerated sources keep the overall settlement result fail-closed until later packets instrument them.",
+    "This foundational packet authoritatively covers tenant release assignment plus durable plugin event and fixed-schedule work only; runtime membership, engine mutations, Git writes, email and diagnostic delivery, tenant secret broker mutations, plugin gateway calls, configuration reconciliation, and other enumerated sources keep the overall settlement result fail-closed until later packets instrument them.",
     "A cohort epoch must be configured before effects are admitted; a cohort opened after untracked work began is not eligible for shutdown proof. The epoch is immutable for a release identity because covered work rows are release-bound rather than epoch-tagged."
   ],
   "rollback": [

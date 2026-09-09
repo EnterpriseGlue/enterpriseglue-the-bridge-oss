@@ -459,6 +459,12 @@ if (config.cloudAccountIdentityEnabled && (config.tenancyMode !== 'pooled' || !c
 if (config.tenantReleaseEffectCohortEpoch && !config.tenantPlacementReleaseId) {
   throw new Error('EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH requires EG_TENANT_PLACEMENT_RELEASE_ID.');
 }
+if (config.tenancyCloudRequired
+  && config.tenancyMode === 'pooled'
+  && config.tenantPlacementReleaseId
+  && !config.tenantReleaseEffectCohortEpoch) {
+  throw new Error('Managed pooled Cloud release awareness requires EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH.');
+}
 
 if (config.tenancyMode === 'pooled') {
   if (config.databaseType !== 'postgres') {

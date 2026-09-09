@@ -14,7 +14,8 @@ zero-pod proof; none of those signals resolves a remote mutation whose response
 was lost.
 
 This first packet is deliberately not a complete shutdown authority. It covers
-durable plugin event and fixed-schedule delivery. Every other mutating source
+durable tenant release assignment, plugin event, and fixed-schedule delivery.
+Every other mutating source
 listed below remains `uncovered`, so `inventoryComplete`, `settled`, and
 `eligibleForShutdown` remain false in production. A maintenance controller must
 stop rather than infer success from the covered counters.
@@ -24,18 +25,26 @@ stop rather than infer success from the covered counters.
 Configure one positive `EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH` together with
 the immutable `EG_TENANT_PLACEMENT_RELEASE_ID`. Use the existing private
 `EG_TENANT_RELEASE_CONTROLLER_TOKEN` for every request.
+Managed pooled Cloud startup rejects a configured release identity without an
+epoch. Ordinary self-host installations may omit both values; those runtimes
+do not participate in release settlement.
 
 1. Open the exact cohort with `PUT
    /api/workloads/releases/{releaseId}/effect-cohorts/{cohortEpoch}` and
    `{"expectedRevision":0}` before admitting work on that release.
-2. Route/reassign tenants away from the retiring release. The verifier requires
-   zero `tenant_release_work_assignments` for that release.
+2. Route/reassign tenants away from the retiring release. Assignment insert,
+   movement, and same-epoch repair retry lock the assignment and share the
+   target cohort's open-state fence. The retry resweeps every non-delivering
+   event and schedule so a crash cannot strand recurring work on the old
+   release. The verifier requires zero `tenant_release_work_assignments` for
+   the retiring release.
 3. Close effect admission with `POST .../close` at the returned revision.
-   Plugin event enqueue and fixed-schedule upsert share a conditional TypeORM
-   write fence with this transition. Exact event and command replays remain
-   idempotent; dead-letter requeue and schedule resume use the same admission
-   fence, while schedule pause/cancellation remain available to settle retained
-   work.
+   Plugin event enqueue and fixed-schedule upsert lock the tenant assignment
+   before sharing a conditional TypeORM write fence with this transition.
+   Exact event and command replays remain idempotent. Dead-letter requeue and
+   schedule resume use the canonical assignment → cohort → effect-row lock
+   order and revalidate the locked assignment; schedule pause/cancellation
+   remain available to settle retained work.
 4. Read `GET ...` and invoke `POST .../verify` with the current revision.
    Verification may mark the cohort `settled` only after the stored inventory
    hash still matches, every settlement-relevant source is authoritative, all
@@ -78,6 +87,8 @@ schedule rather than deleting it to manufacture an empty result.
 
 | Source | Owner | Settlement | Durable authority | Foundation status |
 |---|---|---:|---|---|
+| `release_runtime_membership` | API/worker | required | no exact retained-controller membership or drain ledger | uncovered |
+| `tenant_release_assignment` | API | required | `tenant_release_work_assignments` | authoritative |
 | `plugin_event_delivery` | worker | required | `plugin_event_deliveries` | authoritative |
 | `plugin_schedule_delivery` | worker | required | `plugin_scheduled_jobs`, `plugin_schedule_commands` | authoritative |
 | `plugin_gateway_invocation` | API | required | concurrency lease lacks release binding | uncovered |
@@ -88,6 +99,7 @@ schedule rather than deleting it to manufacture an empty result.
 | `git_remote_mutation` | API/worker | required | local queue/locks do not resolve remote acceptance | uncovered |
 | `email_delivery` | API | required | no durable release-bound outbox | uncovered |
 | `tenant_secret_broker_mutation` | API | required | external put/retire has no durable intent | uncovered |
+| `diagnostic_bundle_handoff` | API | required | signed inline POST has no durable intent/receipt reconciliation | uncovered |
 | `plugin_engine_event_polling` | worker | observation only | local event enqueue | observation only |
 | `plugin_contribution_refresh` | worker | observation only | availability projection | observation only |
 | `engine_inventory_and_batch_polling` | worker | observation only | local projections | observation only |
@@ -100,6 +112,13 @@ schedule rather than deleting it to manufacture an empty result.
 The executable inventory is `RELEASE_EFFECT_SOURCES_V1`. Its deterministic
 SHA-256 is stored when the cohort opens. Adding, removing, or reclassifying a
 source invalidates an older cohort rather than silently expanding its proof.
+
+`release_runtime_membership` deliberately keeps maintenance fail-closed even
+when all recorded producer rows are terminal. Cohort registration proves only
+that a configured producer participates; it does not prove the absence or
+drain of an old/pre-feature or partially configured API/worker replica. Cloud
+must later provide exact retained-controller membership and terminal drain
+evidence before that source can become authoritative.
 
 New producers adopt the stable `assertReleaseEffectAdmission` boundary inside
 the same TypeORM transaction that creates their durable, release-bound intent.

@@ -18,7 +18,12 @@ import {
   TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
-import { assertReleaseEffectAdmission } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
+import {
+  assertReleaseEffectAdmission,
+  configuredReleaseEffectRuntimeBinding,
+  type ReleaseEffectRuntimeBindingV1,
+} from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
+import { findTenantReleaseWorkAssignmentForUpdate } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 
 import {
   findPluginRowForUpdateV1,
@@ -103,6 +108,7 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
     private readonly dataSourceProvider: () => Promise<DataSource> =
       getDataSource,
     private readonly clock: () => number = Date.now,
+    private readonly runtimeBinding: () => ReleaseEffectRuntimeBindingV1 = configuredReleaseEffectRuntimeBinding,
   ) {}
 
   async execute(
@@ -132,6 +138,7 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
       ].join('\0'),
     )}`;
     const dataSource = await this.dataSourceProvider();
+    const runtime = this.runtimeBinding();
     try {
       return await runPluginTransactionV1(dataSource, async (manager) => {
         const commandRepository = manager.getRepository(PluginScheduleCommand);
@@ -146,12 +153,12 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
           return duplicate(existingCommand.responseJson);
         }
         const now = this.clock();
-        const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
+        const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef, runtime);
         if (input.request.action === 'upsert') {
           await assertReleaseEffectAdmission(manager, {
             sourceId: 'plugin_schedule_delivery',
             releaseId: releaseAssignment?.releaseId ?? null,
-          });
+          }, runtime);
         }
         const jobRepository = manager.getRepository(PluginScheduledJob);
         const current = await findPluginRowForUpdateV1(jobRepository, {
@@ -390,8 +397,26 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
   }): Promise<PluginScheduledJobSafeSummaryV1> {
     const dataSource = await this.dataSourceProvider();
     const now = input.now ?? this.clock();
+    const runtime = this.runtimeBinding();
     return runPluginTransactionV1(dataSource, async (manager) => {
       const repository = manager.getRepository(PluginScheduledJob);
+      const preview = await repository.findOneBy({ jobRef: input.jobRef });
+      if (
+        !preview ||
+        preview.status === 'cancelled' ||
+        integer(preview.revision) !== input.expectedRevision
+      ) {
+        throw new Error('plugin_schedule_revision_conflict');
+      }
+      const releaseAssignment = !input.paused
+        ? await requireManagedReleaseAssignment(manager, preview.tenantRef, runtime)
+        : null;
+      if (!input.paused) {
+        await assertReleaseEffectAdmission(manager, {
+          sourceId: 'plugin_schedule_delivery',
+          releaseId: releaseAssignment?.releaseId ?? null,
+        }, runtime);
+      }
       const record = await findPluginRowForUpdateV1(repository, {
         jobRef: input.jobRef,
       });
@@ -402,11 +427,11 @@ implements PluginFixedScheduleStoreV1, PluginScheduleDeliveryStoreV1 {
       ) {
         throw new Error('plugin_schedule_revision_conflict');
       }
-      if (!input.paused) {
-        await assertReleaseEffectAdmission(manager, {
-          sourceId: 'plugin_schedule_delivery',
-          releaseId: record.releaseId,
-        });
+      if (releaseAssignment && (
+        record.releaseId !== releaseAssignment.releaseId ||
+        integer(record.assignmentEpoch ?? 0) !== integer(releaseAssignment.assignmentEpoch)
+      )) {
+        throw new Error('plugin_schedule_release_assignment_changed');
       }
       const revision = integer(record.revision) + 1;
       const status = input.paused ? 'paused' : 'scheduled';
@@ -618,10 +643,14 @@ function hash(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-async function requireManagedReleaseAssignment(manager: EntityManager, tenantRef: string): Promise<TenantReleaseWorkAssignment | null> {
-  if (!config.tenantPlacementReleaseId) return null;
-  const assignment = await manager.getRepository(TenantReleaseWorkAssignment).findOneBy({ tenantRef });
-  if (!assignment || assignment.releaseId !== config.tenantPlacementReleaseId) {
+async function requireManagedReleaseAssignment(
+  manager: EntityManager,
+  tenantRef: string,
+  runtime: ReleaseEffectRuntimeBindingV1,
+): Promise<TenantReleaseWorkAssignment | null> {
+  if (!runtime.releaseId) return null;
+  const assignment = await findTenantReleaseWorkAssignmentForUpdate(manager, tenantRef);
+  if (!assignment || assignment.releaseId !== runtime.releaseId) {
     throw new Error('plugin_schedule_release_not_assigned');
   }
   return assignment;
