@@ -323,6 +323,8 @@ jobs:
 
       - name: Run integration tests
         if: matrix.database == 'postgres'
+        env:
+          MIGRATION_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: pnpm run test:integration
 
       - name: Run authorization mutation guard

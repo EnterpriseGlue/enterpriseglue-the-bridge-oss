@@ -16,7 +16,7 @@ async function quarantinedPostgresSQL(runner: QueryRunner, sql: string, paramete
 }
 
 /** Finite global branches. Unlisted tables/actions have no NULL-row authority. */
-function globalPredicate(table: string, command: Command, membershipTable: string): string {
+function globalPredicate(table: string, command: Command, membershipTable: string, userTable: string): string {
   const read = command === 'SELECT';
   const write = command === 'INSERT' || command === 'UPDATE';
   const clauses: string[] = [];
@@ -52,6 +52,9 @@ function globalPredicate(table: string, command: Command, membershipTable: strin
     if (read) clauses.push(`(${kind('system-membership')} AND id = ${field('groupId')} AND source = 'system')`);
   }
   if (table === 'authz_group_memberships') {
+    if (read) clauses.push(`(${kind('administrator-status')} AND group_id='system.group.platform_administrators'
+      AND (expires_at IS NULL OR expires_at > floor(extract(epoch FROM clock_timestamp())*1000))
+      AND EXISTS (SELECT 1 FROM ${userTable} administrator WHERE administrator.id=user_id AND administrator.is_active))`);
     if (read || command === 'DELETE') clauses.push(`(${kind('authenticated-baseline-revoke')} AND group_id=${authenticatedGroup} AND user_id=${field('userId')} AND source='system' AND source_ref='authenticated-user-baseline')`);
     if (read || command === 'INSERT') clauses.push(`(${kind('manual-administrator-grant')} AND group_id='system.group.platform_administrators' AND user_id=${field('userId')} AND source='manual' AND source_ref='manual-platform-administrator')`);
     if (read || command === 'DELETE') clauses.push(`(${kind('manual-administrator-revoke')} AND group_id='system.group.platform_administrators' AND user_id=${field('userId')} AND source='manual' AND source_ref='manual-platform-administrator')`);
@@ -76,10 +79,11 @@ function globalPredicate(table: string, command: Command, membershipTable: strin
 function policySource(schema: string, tableName: string, command: Command): string {
   const schemaLiteral = `'${schema.replace(/'/g, "''")}'`;
   const membershipTable = `"${schema.replace(/"/g, '""')}"."authz_group_memberships"`;
+  const userTable = `"${schema.replace(/"/g, '""')}"."users"`;
   const migration = `(${kind('migration-execution')} AND ${field('schema')} = ${schemaLiteral} AND ${field('ownerRole')} = current_user AND EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname = ${schemaLiteral} AND n.nspowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)))`;
   const tenant = "(current_setting('enterpriseglue.tenancy_mode', true) = 'pooled' AND tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), ''))";
   const single = "current_setting('enterpriseglue.tenancy_mode', true) = 'single'";
-  return `(${single} OR ${tenant} OR ${migration} OR ${globalPredicate(tableName, command, membershipTable)})`;
+  return `(${single} OR ${tenant} OR ${migration} OR ${globalPredicate(tableName, command, membershipTable, userTable)})`;
 }
 
 export interface PostgresTenantPolicyCatalogRow {

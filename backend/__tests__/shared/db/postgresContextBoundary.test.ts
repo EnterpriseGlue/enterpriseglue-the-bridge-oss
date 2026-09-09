@@ -23,7 +23,7 @@ describe('single-mode cursor boundary', () => {
     const work=vi.fn(async()=>true);
     for(const input of [{kind:'config-bootstrap',bundleKey:'bundle',providerKeys:'provider'}, {kind:'system-group-seed',groupIds:'group'},
       {kind:'provider-proof',providerId:['provider'],subjectId:'subject'}, {kind:'provider-account',providerId:'provider',subjectId:'subject'},
-      {kind:'provider-discovery',extra:'binding'}]) await expect(runWithPlatformDatabaseCapability(input as any,work)).rejects.toThrow();
+      {kind:'provider-discovery',extra:'binding'}, {kind:'administrator-status',extra:'binding'}]) await expect(runWithPlatformDatabaseCapability(input as any,work)).rejects.toThrow();
     expect(work).not.toHaveBeenCalled();
   });
   it('sets explicit single context and holds release until consumed/cleared', async () => {

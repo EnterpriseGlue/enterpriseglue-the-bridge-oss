@@ -11,6 +11,7 @@ export type PlatformDatabaseCapability =
   | { kind: 'account-baseline'; userId: string }
   | { kind: 'session-account'; providerId: string; userId: string }
   | { kind: 'authenticated-account'; userId: string }
+  | { kind: 'administrator-status' }
   | { kind: 'authenticated-baseline-revoke'; userId: string }
   | { kind: 'manual-administrator-grant' | 'manual-administrator-revoke'; userId: string }
   | { kind: 'administrator-recovery-claim'; userId: string; membershipId: string; source: string; sourceRef: string|null; expiresAt: string|null; createdById: string|null; createdAt: string; updatedAt: string }
@@ -52,7 +53,7 @@ export async function runWithPlatformDatabaseCapability<T>(
     'provider-proof': ['providerId','subjectId'], 'provider-account': ['providerId','subjectId','userId'],
     'provider-login': ['providerId','subjectId','runId'],
     'account-baseline': ['userId'], 'config-bootstrap': ['bundleKey','providerKeys'],
-    'session-account': ['providerId','userId'], 'authenticated-account': ['userId'],
+    'session-account': ['providerId','userId'], 'authenticated-account': ['userId'], 'administrator-status': [],
     'authenticated-baseline-revoke': ['userId'],
     'manual-administrator-grant': ['userId'], 'manual-administrator-revoke': ['userId'],
     'administrator-recovery-claim': ['userId','membershipId','source','sourceRef','expiresAt','createdById','createdAt','updatedAt'],

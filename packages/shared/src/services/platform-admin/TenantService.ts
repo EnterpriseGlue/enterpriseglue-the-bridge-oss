@@ -14,6 +14,7 @@ import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { permissionService } from './permissions.js';
 import { NATIVE_TENANT_ROLE_IDS } from '@enterpriseglue/shared/authz/native-tenant-roles.js';
+import { runWithTenantDatabaseContext } from '../tenant-database-context.js';
 import {
   tenantPlacementAssertionService,
   type TenantPlacementClaimV2,
@@ -164,7 +165,10 @@ export class TenantService {
           updatedAt: now,
         });
         if (ownerUserId) {
-          await permissionService.assignRole({
+          // The registry row now exists in this transaction. Scope its owner
+          // assignment and audit to that canonical tenant, not the caller's
+          // platform-administration context.
+          await runWithTenantDatabaseContext({ tenantId, tenantSlug: slug }, () => permissionService.assignRole({
             tenantId,
             principalType: 'user',
             principalId: ownerUserId,
@@ -174,7 +178,7 @@ export class TenantService {
             source: 'manual',
             sourceRef: null,
             createdById: ownerUserId,
-          }, manager);
+          }, manager));
         }
       };
       if (entityManager) await createWithManager(entityManager);

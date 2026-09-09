@@ -1,4 +1,5 @@
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
@@ -19,6 +20,7 @@ export async function getActivePlatformAdministratorUserIds(
   const dataSource = providedDataSource || await getDataSource();
   const memberships = (await Promise.all(userIds.map(userId => runWithPlatformDatabaseCapability({kind:'authenticated-account',userId}, () => dataSource.getRepository(AuthzGroupMembership).find({
     where: {
+      tenantId: IsNull(),
       groupId: PLATFORM_ADMINISTRATORS_GROUP_ID,
       userId,
     },
@@ -29,6 +31,27 @@ export async function getActivePlatformAdministratorUserIds(
       .filter((membership) => membership.expiresAt === null || Number(membership.expiresAt) > now)
       .map((membership) => String(membership.userId))
   );
+}
+
+/**
+ * Returns only the deployment-level setup witness. In pooled mode the
+ * temporary capability can read active, global platform-administrator rows,
+ * while this service boundary exposes no membership identifiers or directory.
+ */
+export async function hasActivePlatformAdministrator(
+  providedDataSource?: DataSource | EntityManager,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const dataSource = providedDataSource || await getDataSource();
+  const exists = () => dataSource.getRepository(AuthzGroupMembership)
+    .createQueryBuilder('membership')
+    .innerJoin(User, 'administrator', 'administrator.id = membership.userId AND administrator.isActive = :active', { active: true })
+    .where({ tenantId: IsNull(), groupId: PLATFORM_ADMINISTRATORS_GROUP_ID })
+    .andWhere('(membership.expiresAt IS NULL OR membership.expiresAt > :now)', { now })
+    .getExists();
+  return config.tenancyMode === 'pooled'
+    ? runWithPlatformDatabaseCapability({ kind: 'administrator-status' }, exists)
+    : exists();
 }
 
 /**

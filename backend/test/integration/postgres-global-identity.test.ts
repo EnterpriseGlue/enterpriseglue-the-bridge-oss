@@ -6,6 +6,7 @@ import type { Server } from 'node:http';
 import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { DataSource } from 'typeorm';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { MockOidcProvider } from '../identity-mocks/index.js';
@@ -46,8 +47,11 @@ import { claimActivePlatformAdministratorMembership, PLATFORM_ADMINISTRATORS_GRO
 import loginRoutes from '@enterpriseglue/backend-host/modules/auth/routes/login.js';
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
-import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
+import { getTenantDatabaseContext, runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
+import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { seedGitProviders } from '@enterpriseglue/shared/db/seed/gitProviders.js';
+import { setupStatusService } from '@enterpriseglue/shared/services/admin/SetupStatusService.js';
 
 const suffix=randomUUID().replace(/-/g,'').slice(0,10);
 const schema=`global_${suffix}`, ownerName=`owner_${suffix}`, runtimeName=`runtime_${suffix}`, password=`fixture_${suffix}`;
@@ -82,6 +86,7 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     vi.stubGlobal('fetch',protocol.fetch.bind(protocol));
     app=express();app.use(express.json());app.use(express.urlencoded({extended:false}));app.use(cookieParser());
     app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);
+    app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
     app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,tenantId:req.user!.tenantId}));
     app.get('/tenant-only-probe',requireAuth,(_req,res)=>res.json({ok:true}));
     app.get('/tenant-permissions-probe',requireAuth,(req,res,next)=>{
@@ -324,6 +329,81 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect((await runtime.getRepository(User).findOneBy({ id: target.id }))!.isActive).toBe(false);
     await userService.updateUser(target.id, { isActive: true });
     expect(await baseline()).toHaveLength(1);
+  });
+
+  it('creates a tenant and its audited owner assignment from the platform context without leaking tenant scope', async () => {
+    const target = await userService.createPendingUser({ email: 'tenant-creator@example.test', createdByUserId: 'fixture-operator' });
+    vi.mocked(logger.error).mockClear();
+    const created = await tenantService.create({ name: 'Created tenant', slug: ' Created-Tenant ', ownerUserId: target.id });
+    expect(created.slug).toBe('created-tenant');
+    expect(getTenantDatabaseContext()).toBeUndefined();
+    const assignments = await runtime.getRepository(RbacRoleAssignment).findBy({ tenantId: created.id, principalId: target.id });
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0]).toMatchObject({ scopeType: 'tenant', scopeId: created.id });
+    const audits = await runWithTenantDatabaseContext({ tenantId: created.id, tenantSlug: created.slug }, () =>
+      runtime.getRepository(AuditLog).findBy({ tenantId: created.id, action: 'authz.role_assignment.create' }));
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ userId: target.id, resourceId: assignments[0].id });
+    expect(await runtime.getRepository(AuditLog).findBy({ tenantId: created.id })).toEqual([]);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('rolls back tenant creation and owner assignment together when the tenant audit fails', async () => {
+    const target = await userService.createPendingUser({ email: 'tenant-rollback@example.test', createdByUserId: 'fixture-operator' });
+    await admin.query(`CREATE FUNCTION ${schema}.reject_tenant_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='authz.role_assignment.create' THEN RAISE EXCEPTION 'fixture tenant audit failure'; END IF; RETURN NEW; END $$`);
+    await admin.query(`CREATE TRIGGER reject_tenant_audit BEFORE INSERT ON ${schema}.audit_logs FOR EACH ROW EXECUTE FUNCTION ${schema}.reject_tenant_audit()`);
+    try {
+      await expect(tenantService.create({ name: 'Rollback tenant', slug: 'rollback-tenant', ownerUserId: target.id })).rejects.toThrow('fixture tenant audit failure');
+      expect(await runtime.getRepository(Tenant).countBy({ slug: 'rollback-tenant' })).toBe(0);
+      expect(await runtime.getRepository(RbacRoleAssignment).countBy({ principalId: target.id, scopeType: 'tenant' })).toBe(0);
+      expect(getTenantDatabaseContext()).toBeUndefined();
+    } finally {
+      await admin.query(`DROP TRIGGER reject_tenant_audit ON ${schema}.audit_logs`);
+      await admin.query(`DROP FUNCTION ${schema}.reject_tenant_audit()`);
+    }
+  });
+
+  it('resolves real pooled setup status with a fast caller witness and one delegated boolean query', async () => {
+    const administrator = await userService.createPendingUser({ email: 'setup-admin@example.test', platformRole: 'admin', createdByUserId: 'fixture-operator' });
+    const delegate = await userService.createPendingUser({ email: 'setup-delegate@example.test', createdByUserId: 'fixture-operator' });
+    const membership = runtime.getRepository(AuthzGroupMembership);
+    const find = vi.spyOn(membership, 'find');
+    const createQueryBuilder = vi.spyOn(membership, 'createQueryBuilder');
+    const userFind = vi.spyOn(runtime.getRepository(User), 'find');
+    try {
+      expect((await setupStatusService.getSetupStatus(administrator.id)).isConfigured).toBe(true);
+      expect(find).toHaveBeenCalledTimes(1); expect(createQueryBuilder).not.toHaveBeenCalled();
+      find.mockClear(); createQueryBuilder.mockClear();
+      expect((await setupStatusService.getSetupStatus(delegate.id)).isConfigured).toBe(true);
+      expect(find).toHaveBeenCalledTimes(1); expect(createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(userFind).not.toHaveBeenCalled();
+    } finally { find.mockRestore(); createQueryBuilder.mockRestore(); userFind.mockRestore(); }
+  });
+
+  it('reports no administrator when only expired, inactive-user, or tenant-scoped lookalike grants remain', async () => {
+    const lookalike = await userService.createPendingUser({ email: 'setup-lookalike@example.test', createdByUserId: 'fixture-operator' });
+    const inactive = await userService.createPendingUser({ email: 'setup-inactive@example.test', createdByUserId: 'fixture-operator' });
+    const before = await admin.query(`SELECT id, expires_at FROM ${schema}.authz_group_memberships WHERE tenant_id IS NULL AND group_id=$1`, [PLATFORM_ADMINISTRATORS_GROUP_ID]);
+    const tenant = await tenantService.create({ name: 'Setup lookalike', slug: 'setup-lookalike' });
+    const membershipId = randomUUID();
+    const inactiveMembershipId = randomUUID();
+    try {
+      await admin.query(`UPDATE ${schema}.authz_group_memberships SET expires_at=1 WHERE tenant_id IS NULL AND group_id=$1`, [PLATFORM_ADMINISTRATORS_GROUP_ID]);
+      await admin.query(`UPDATE ${schema}.users SET is_active=false WHERE id=$1`, [inactive.id]);
+      await admin.query(`INSERT INTO ${schema}.authz_group_memberships (id,tenant_id,group_id,user_id,source,source_ref,expires_at,created_at,updated_at)
+        VALUES ($1,NULL,$2,$3,'manual','fixture-inactive-administrator',NULL,1,1)`, [inactiveMembershipId, PLATFORM_ADMINISTRATORS_GROUP_ID, inactive.id]);
+      expect((await setupStatusService.getSetupStatus(lookalike.id)).isConfigured).toBe(false);
+      await runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => runtime.getRepository(AuthzGroupMembership).insert({
+        id: membershipId, tenantId: tenant.id, groupId: PLATFORM_ADMINISTRATORS_GROUP_ID, userId: lookalike.id,
+        source: 'manual', sourceRef: 'fixture-lookalike', expiresAt: null, createdById: null, createdAt: Date.now(), updatedAt: Date.now(),
+      }));
+      const result = await runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => setupStatusService.getSetupStatus(lookalike.id));
+      expect(result).toMatchObject({ isConfigured: false, checks: { hasAdminUser: false }, requiredActions: ['Configure admin user'] });
+      expect(getTenantDatabaseContext()).toBeUndefined();
+    } finally {
+      await admin.query(`DELETE FROM ${schema}.authz_group_memberships WHERE id IN ($1,$2)`, [membershipId, inactiveMembershipId]);
+      for (const row of before) await admin.query(`UPDATE ${schema}.authz_group_memberships SET expires_at=$1 WHERE id=$2`, [row.expires_at, row.id]);
+    }
   });
 
   it('derives a real tenant session from verified global identity and retains only its own global baseline on refresh', async()=>{

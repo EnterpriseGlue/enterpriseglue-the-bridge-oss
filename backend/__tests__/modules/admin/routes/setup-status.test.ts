@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { IsNull } from 'typeorm';
 import request from 'supertest';
 import express from 'express';
 import setupStatusRouter from '../../../../../packages/backend-host/src/modules/admin/routes/setup-status.js';
@@ -7,6 +8,11 @@ import { EmailSendConfig } from '@enterpriseglue/shared/db/entities/EmailSendCon
 import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
+
+const originalMode = config.tenancyMode;
+afterEach(() => { config.tenancyMode = originalMode; });
 
 const authState = vi.hoisted(() => ({
   user: { userId: 'user-1', platformRole: 'admin' } as any,
@@ -45,6 +51,7 @@ describe('GET /api/admin/setup-status', () => {
   let app: express.Application;
 
   beforeEach(() => {
+    config.tenancyMode = 'single';
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
@@ -59,6 +66,7 @@ describe('GET /api/admin/setup-status', () => {
     const emailConfigRepo = { count: vi.fn().mockResolvedValue(1) };
     const membershipRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         andWhere: vi.fn().mockReturnThis(),
         getExists: vi.fn().mockResolvedValue(true),
@@ -96,10 +104,75 @@ describe('GET /api/admin/setup-status', () => {
     expect(getDataSource).not.toHaveBeenCalled();
   });
 
+  it('uses the authenticated caller as a one-query pooled administrator witness', async () => {
+    config.tenancyMode = 'pooled';
+    const membership = { find: vi.fn(async ({ where }) => {
+      expect(where).toEqual({ tenantId: IsNull(), groupId: 'system.group.platform_administrators', userId: 'user-1' });
+      expect(getPlatformDatabaseCapability()).toEqual({ kind: 'authenticated-account', userId: 'user-1' });
+      return [{ userId: 'user-1', expiresAt: null }];
+    }) };
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === AuthzGroupMembership) return membership;
+      if (entity === EmailSendConfig) return { count: async () => 0 };
+      throw Error('Unexpected repository');
+    } } as any);
+    const response = await request(app).get('/api/admin/setup-status');
+    expect(response.status).toBe(200); expect(response.body.isConfigured).toBe(true);
+    expect(membership.find).toHaveBeenCalledTimes(1);
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('uses one boolean administrator-status query for a delegated reader without returning a membership directory', async () => {
+    config.tenancyMode = 'pooled';
+    const getExists = vi.fn(async () => {
+      expect(getPlatformDatabaseCapability()).toEqual({ kind: 'administrator-status' });
+      return true;
+    });
+    const query = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getExists,
+    };
+    const membership = {
+      find: vi.fn().mockResolvedValue([]),
+      createQueryBuilder: vi.fn().mockReturnValue(query),
+    };
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === AuthzGroupMembership) return membership;
+      if (entity === EmailSendConfig) return { count: async () => 0 };
+      throw Error('Unexpected repository');
+    } } as any);
+    const response = await request(app).get('/api/admin/setup-status');
+    expect(response.status).toBe(200); expect(response.body.isConfigured).toBe(true);
+    expect(membership.find).toHaveBeenCalledTimes(1);
+    expect(membership.createQueryBuilder).toHaveBeenCalledTimes(1);
+    expect(query.innerJoin).toHaveBeenCalled();
+    expect(query.where).toHaveBeenCalledWith({ tenantId: IsNull(), groupId: 'system.group.platform_administrators' });
+    expect(getExists).toHaveBeenCalledTimes(1);
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('returns not configured from the pooled boolean witness when no active global administrator exists', async () => {
+    config.tenancyMode = 'pooled';
+    const query = { innerJoin: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), andWhere: vi.fn().mockReturnThis(), getExists: vi.fn(async () => false) };
+    const membership = { find: vi.fn().mockResolvedValue([]), createQueryBuilder: vi.fn().mockReturnValue(query) };
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === AuthzGroupMembership) return membership;
+      if (entity === EmailSendConfig) return { count: async () => 0 };
+      throw Error('Unexpected repository');
+    } } as any);
+    const response = await request(app).get('/api/admin/setup-status');
+    expect(response.status).toBe(200); expect(response.body.isConfigured).toBe(false);
+    expect(membership.find).toHaveBeenCalledTimes(1); expect(query.getExists).toHaveBeenCalledTimes(1);
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
   it('returns not configured when missing admin user', async () => {
     const emailConfigRepo = { count: vi.fn().mockResolvedValue(0) };
     const membershipRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         andWhere: vi.fn().mockReturnThis(),
         getExists: vi.fn().mockResolvedValue(false),

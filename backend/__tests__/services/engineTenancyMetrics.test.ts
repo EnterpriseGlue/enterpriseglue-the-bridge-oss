@@ -80,6 +80,41 @@ describe('engine tenancy operational metrics', () => {
     expect(getTenantDatabaseContext()).toBeUndefined();
   });
 
+  it.each([
+    ['missing ID', { id: '', slug: 'invalid', status: 'active' }],
+    ['missing slug', { id: 'invalid', slug: '', status: 'active' }],
+    ['duplicate ID', { id: 'a', slug: 'another-alpha', status: 'active' }],
+  ])('rejects an active tenant with %s without publishing partial persistence metrics', async (_name, invalidTenant) => {
+    config.tenancyMode = 'pooled';
+    const resourceFind = vi.fn().mockImplementation(async () => {
+      expect(getTenantDatabaseContext()).toEqual({ tenantId: 'a', tenantSlug: 'alpha' });
+      return [{ tenantResolutionStatus: 'resolved' }];
+    });
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === Tenant) return { find: vi.fn().mockResolvedValue([
+        { id: 'a', slug: 'alpha', status: 'active' }, invalidTenant,
+        { id: 'b', slug: 'beta', status: 'active' },
+      ]) };
+      if (entity === RuntimeResource) return { find: resourceFind };
+      if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ tenancyMode: 'shared', tenantResolutionStatus: 'ready' }]) };
+      throw new Error('Unexpected repository');
+    } } as any);
+    recordEngineTenancyDefaultFallback({ principalType: 'system', declaration: 'omitted' });
+
+    const metrics = await getEngineTenancyMetrics();
+
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_metrics_collection_success 0');
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_global_runtime_collection_supported 0');
+    expect(metrics).toContain('enterpriseglue_engine_tenancy_default_fallback_total{principal_type="system",declaration="omitted"} 1');
+    expect(metrics).not.toContain('enterpriseglue_engine_tenancy_runtime_resources{');
+    expect(metrics).not.toContain('enterpriseglue_engine_tenancy_engines{');
+    expect(resourceFind).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith('Failed to collect engine tenancy metrics', {
+      error: new Error('Invalid active tenant metrics scope'),
+    });
+    expect(getTenantDatabaseContext()).toBeUndefined();
+  });
+
   it('exports bounded aggregate topology, resolution, and fallback metrics without resource identifiers', async () => {
     const engineFind = vi.fn().mockResolvedValue([
       {
