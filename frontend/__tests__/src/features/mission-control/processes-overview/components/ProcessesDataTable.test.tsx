@@ -70,6 +70,14 @@ function renderTable(
 }
 
 describe('ProcessesDataTable', () => {
+  it.each(['empty response', 'unmatched search'])('keeps the table empty state for %s', (scenario) => {
+    renderTable(scenario === 'unmatched search' ? 'no-matching-process' : '', scenario === 'empty response' ? [] : undefined);
+
+    expect(screen.getAllByText('No results found')).toHaveLength(1);
+    expect(screen.getByText('Try adjusting your filters or search criteria.')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Instance ID' })).toBeInTheDocument();
+  });
+
   it('filters by resolved process name', () => {
     renderTable('recei');
 

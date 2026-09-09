@@ -1,0 +1,24 @@
+{
+  "purpose": "Official identity-provider artwork in src/assets/login for sign-in controls; trademarks remain with their owners and are not relicensed under Apache-2.0.",
+  "google": {
+    "logo": "https://developers.google.com/static/identity/images/g-logo.png",
+    "guidance": "https://developers.google.com/identity/branding-guidelines"
+  },
+  "microsoft": {
+    "logo": "https://learn.microsoft.com/en-us/entra/identity-platform/media/howto-add-branding-in-apps/ms-symbollockup_mssymbol_19.svg",
+    "guidance": "https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-branding-in-apps"
+  },
+  "typography": "All provider labels use the host Carbon body-compact-01 typography. This is a uniform product presentation, not a claim of full conformance with provider-specific font or label-proportion guidance.",
+  "processLandscape": {
+    "asset": "src/assets/login/process-landscape.svg",
+    "source": "Original EnterpriseGlue vector illustration of BPMN process-flow and DMN decision-table contours; no OpusNexa artwork is copied. Decorative illustration, not an executable or normative model.",
+    "usage": "Decorative, non-interactive login background; hidden at narrow viewport widths. No scripts, external resources, fonts, or animation."
+  },
+  "apple": {
+    "source": "https://devimages-cdn.apple.com/design/resources/download/Logo-Sign-in-with-Apple.dmg",
+    "asset": "Sign in with Apple - Left Aligned/SVG/Logo - SIWA - Left-aligned - Black - Medium.svg",
+    "license": "Apple Developer Artwork License Agreement for Sign in with Apple EA1677 1/30/2020",
+    "guidance": "https://developer.apple.com/design/human-interface-guidelines/sign-in-with-apple",
+    "usage": "Unmodified artwork with built-in padding; rendered at button height."
+  }
+}

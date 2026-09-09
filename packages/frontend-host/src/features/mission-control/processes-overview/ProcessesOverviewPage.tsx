@@ -1446,9 +1446,6 @@ export default function ProcessesOverviewPage() {
 
           {/* Data Table (scrollable) */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            {instQ.isSuccess && selectedEngineId && defItems.length > 0 && (instQ.data || []).length === 0 && (
-              <RuntimeCollectionEmptyState kind="process_instances" />
-            )}
             <ProcessesDataTable
               data={instQ.data || []}
               onTerminate={(id) => {

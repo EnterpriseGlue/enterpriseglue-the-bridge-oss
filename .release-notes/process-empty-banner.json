@@ -1,0 +1,21 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "process-empty-banner",
+  "type": "fix",
+  "scope": "mission control",
+  "breaking": false,
+  "audiences": ["users", "developers"],
+  "summary": "Remove the duplicate process-instance empty-state banner while retaining the table's No results found message.",
+  "userImpact": ["An empty process-instance table shows one empty-state message instead of a redundant informational banner above its headers."],
+  "upgrade": {"required": false, "instructions": []},
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": ["Authorization, permission notices, and engine error handling are unchanged."],
+  "documentation": ["This technical release note records the presentation-only correction; no configuration or API documentation changes are required."],
+  "knownLimitations": [],
+  "rollback": ["Revert the frontend change to restore the duplicate banner; no data changes are required."],
+  "validation": ["The page-level regression fails with the old banner and passes after removal. All 55 focused process overview, table, and shared empty-state tests pass across 26 files, including empty responses, unmatched searches, and existing denied-action checks.", "Affected-file ESLint and release-note preflight pass. Live browser and deployment acceptance remain separate from these local component checks."],
+  "packages": [{"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.3", "newVersion": "0.17.4", "impact": "patch"}]
+}

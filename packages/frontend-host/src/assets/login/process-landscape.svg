@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="840" viewBox="0 -40 1000 840" fill="none">
+  <defs>
+    <radialGradient id="light"><stop stop-color="#13213b" stop-opacity=".55"/><stop offset="1" stop-color="#08090d" stop-opacity="0"/></radialGradient>
+    <linearGradient id="surface" x2="1" y2="1"><stop stop-color="#131c2b"/><stop offset="1" stop-color="#0a101b"/></linearGradient>
+    <linearGradient id="edge"><stop stop-color="#4589ff" stop-opacity=".15"/><stop offset=".55" stop-color="#7597cf" stop-opacity=".65"/><stop offset="1" stop-color="#a78bfa" stop-opacity=".15"/></linearGradient>
+    <linearGradient id="path"><stop stop-color="#4589ff"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
+    <marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="m1 1 5 2.5L1 6" stroke="#7392bd" stroke-width="1.2"/></marker>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="4"/></filter>
+    <g id="pulse"><circle r="9" fill="#4589ff" opacity=".35" filter="url(#glow)"/><circle r="3" fill="#78a9ff"/></g>
+  </defs>
+  <ellipse cx="550" cy="370" rx="455" ry="330" fill="url(#light)"/>
+  <!-- Decorative process and decision-model contours, not an executable model. -->
+  <g transform="translate(15 50) skewY(-4)">
+    <g stroke="#233650" stroke-opacity=".4">
+      <path d="M90 180H910M90 260H910M90 340H910M90 420H910M90 500H910M90 580H910"/>
+      <path d="M160 120v520M320 120v520M480 120v520M640 120v520M800 120v520"/>
+    </g>
+    <!-- Raised BPMN canvas. -->
+    <path d="M80 178h820v282H80Z" fill="#090e17" stroke="#202d43"/>
+    <rect x="80" y="168" width="820" height="282" rx="5" fill="url(#surface)" stroke="url(#edge)"/>
+    <path d="M80 205h820M116 205v245" stroke="#334760" stroke-opacity=".65"/>
+    <path d="M101 187h54m14 0h23" stroke="#7292bc" stroke-opacity=".65" stroke-width="2"/>
+    <circle cx="871" cy="187" r="3" fill="#4589ff" opacity=".7"/>
+    <!-- Start event, user task, and exclusive gateway. -->
+    <g stroke="#7594bd" stroke-width="1.6">
+      <circle cx="155" cy="330" r="17"/>
+      <rect x="212" y="299" width="122" height="62" rx="8" fill="#121e30"/>
+      <path d="m395 304 26 26-26 26-26-26Z" fill="#142037"/>
+      <path d="m386 321 18 18m0-18-18 18"/>
+    </g>
+    <g stroke="#80a4d0" stroke-width="1.5">
+      <circle cx="231" cy="314" r="4"/><path d="M224 327v-3q7-8 14 0v3Z"/>
+      <path d="M250 322h63m-63 11h43" stroke-opacity=".55"/>
+    </g>
+    <!-- Approval and automated decision branches. -->
+    <g stroke="#7594bd" stroke-width="1.6" fill="#121c2d">
+      <rect x="491" y="238" width="131" height="62" rx="8"/>
+      <rect x="491" y="367" width="131" height="62" rx="8"/>
+      <path d="m705 304 26 26-26 26-26-26Z"/>
+    </g>
+    <g stroke="#83a4d0" stroke-width="1.4">
+      <path d="M505 250h18v16h-18Zm0 5h18m-12-5v16m6-16v16"/>
+      <path d="M535 262h66m-66 11h44" stroke-opacity=".5"/>
+      <path d="m508 383 5 5 9-11M535 391h66m-66 11h44" stroke-opacity=".65"/>
+      <path d="m696 321 18 18m0-18-18 18"/>
+    </g>
+    <g stroke="#7392bd" stroke-width="1.4" marker-end="url(#arrow)">
+      <path d="M172 330h40M334 330h35M421 330h25v-61h45M446 330v68h45M622 269h39v61h18M622 398h39v-68M731 330h79"/>
+    </g>
+    <circle cx="829" cy="330" r="18" stroke="#8f9fcd" stroke-width="3.5"/>
+    <path d="M829 376v92H720v59" stroke="#8278b3" stroke-opacity=".45" stroke-dasharray="4 7"/>
+    <path d="M555 238v-72h174v-42" stroke="#4589ff" stroke-opacity=".35" stroke-dasharray="4 7"/>
+    <!-- DMN decision requirement and floating decision table. -->
+    <rect x="654" y="83" width="150" height="42" rx="2" fill="#111a2b" stroke="#526e96"/>
+    <path d="M678 100h100m-100 9h68" stroke="#8f9fcd" stroke-opacity=".55"/>
+    <path d="M727 63v20" stroke="#7392bd" marker-end="url(#arrow)"/>
+    <rect x="677" y="33" width="100" height="30" rx="15" stroke="#526e96"/>
+    <path d="M700 48h54" stroke="#7392bd" stroke-opacity=".6"/>
+    <path d="M350 512h493v185H350Z" fill="#090e17" stroke="#25324a"/>
+    <rect x="350" y="502" width="493" height="185" rx="4" fill="url(#surface)" stroke="url(#edge)"/>
+    <path d="M350 535h493M350 570h493M350 609h493M350 648h493M389 535v152M530 535v152M671 535v152" stroke="#476084" stroke-opacity=".65"/>
+    <path d="M673 537h168v31H673Z" fill="#292343" opacity=".7"/>
+    <path d="M391 537h278v31H391Z" fill="#162e4d" opacity=".6"/>
+    <g stroke-width="2" stroke-linecap="round">
+      <path d="M370 519h17m9 0h92" stroke="#8195ba" stroke-opacity=".65"/>
+      <path d="M414 552h71m70 0h71" stroke="#78a9ff" stroke-opacity=".55"/>
+      <path d="M698 552h115" stroke="#b6a2e1" stroke-opacity=".65"/>
+      <path d="M414 590h42m99 0h57m-198 39h68m73 0h34m-175 39h52m89 0h63" stroke="#627b9e" stroke-opacity=".7"/>
+      <path d="M698 590h83m-83 39h54m-54 39h95" stroke="#8c81b3" stroke-opacity=".7"/>
+      <path d="M367 590h5m-5 39h5m-5 39h5" stroke="#627b9e"/>
+    </g>
+    <path d="M173 330h37M335 330h31M447 300v-31h40" stroke="url(#path)" stroke-width="2"/>
+    <use href="#pulse" x="191" y="330"/><use href="#pulse" x="447" y="288"/><use href="#pulse" x="765" y="330"/>
+    <circle cx="720" cy="468" r="3" fill="#a78bfa" opacity=".65"/>
+  </g>
+</svg>

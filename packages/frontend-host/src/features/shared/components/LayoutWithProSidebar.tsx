@@ -799,7 +799,7 @@ export default function LayoutWithProSidebar() {
         </div>
       </Modal>
       {/* Entire app shell uses g100 dark theme - header menus inherit this */}
-      <Header aria-label={`${effectiveBrandTitle} application header`}>
+      <Header className="eg-app-header" aria-label={`${effectiveBrandTitle} application header`}>
               <SkipToContent href="#main-content">Skip to main content</SkipToContent>
               <HeaderMenuButton
                 aria-label={globalNavigationOpen ? 'Close global navigation' : 'Open global navigation'}

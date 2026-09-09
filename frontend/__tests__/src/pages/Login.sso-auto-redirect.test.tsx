@@ -139,7 +139,7 @@ describe('Login SSO auto-redirect behavior', () => {
     });
 
     expect(redirectTo).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: /Microsoft Entra ID/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sign in with Microsoft/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Partner SAML/i })).toBeInTheDocument();
   });
 
@@ -167,11 +167,11 @@ describe('Login SSO auto-redirect behavior', () => {
 
     renderLogin();
 
-    const providerButton = await screen.findByRole('button', { name: /Continue with Microsoft Entra ID Example Corporation/i });
-    expect(providerButton).toHaveClass('eg-login-provider-button', 'cds--btn', 'cds--btn--primary');
-    expect(screen.getByText('Continue with Microsoft Entra ID')).toHaveClass('eg-login-provider-button__action');
-    expect(screen.getByText('Example Corporation')).toHaveClass('eg-login-provider-button__supporting');
-    expect(providerButton.querySelector('svg')).toBeInTheDocument();
+    const providerButton = await screen.findByRole('button', { name: /Sign in with Microsoft Example Corporation/i });
+    expect(providerButton).toHaveClass('eg-login-provider-button', 'eg-login-provider-button--microsoft');
+    expect(screen.getByText('Sign in with Microsoft')).toHaveClass('eg-login-provider-button__action');
+    expect(screen.queryByText('Example Corporation')).not.toBeInTheDocument();
+    expect(decodeURIComponent(providerButton.querySelector('img')?.getAttribute('src') || '')).toContain('MS-SymbolLockup');
     expect(screen.queryByLabelText(/^Password$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/provider-p1/i)).not.toBeInTheDocument();
   });

@@ -910,44 +910,82 @@
   gap: var(--spacing-3);
 }
 
+.eg-login-provider-button,
 .eg-login-provider-button.cds--btn {
   inline-size: 100%;
   max-inline-size: none;
-  min-block-size: 4.75rem;
+  min-block-size: 2.875rem;
   block-size: auto;
   align-items: center;
   white-space: normal;
   text-align: start;
 }
 
-.eg-login-provider-button__content {
-  display: block;
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  padding-inline-end: var(--spacing-5);
-}
-
-.eg-login-provider-button__action,
-.eg-login-provider-button__supporting {
+.eg-login-provider-button__action {
   display: block;
   overflow-wrap: anywhere;
   white-space: normal;
 }
 
-.eg-login-provider-button__supporting {
-  margin-block-start: var(--spacing-2);
-  color: var(--cds-text-secondary);
-  font-size: var(--text-12);
+.eg-login-provider-button:not(.cds--btn) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid #747775;
+  border-radius: 0;
+  background: #fff;
+  color: #1f1f1f;
+  font-family: inherit;
+  font-size: var(--cds-body-compact-01-font-size, 0.875rem);
+  font-weight: var(--cds-body-compact-01-font-weight, 400);
+  line-height: var(--cds-body-compact-01-line-height, 1.28572);
+  letter-spacing: var(--cds-body-compact-01-letter-spacing, 0.16px);
+  cursor: pointer;
 }
 
-.eg-login-provider-button.cds--btn--primary .eg-login-provider-button__supporting {
-  color: var(--cds-text-on-color);
-  opacity: 0.85;
+.eg-login-provider-button--apple:not(.cds--btn) {
+  gap: 0;
+  border-color: #000;
+  color: #000;
 }
 
-.eg-login-provider-button.cds--btn--tertiary:hover .eg-login-provider-button__supporting,
-.eg-login-provider-button.cds--btn--tertiary:active .eg-login-provider-button__supporting {
-  color: var(--cds-text-on-color);
+.eg-login-provider-logo {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  object-fit: contain;
+}
+
+.eg-login-provider-button--microsoft .eg-login-provider-logo {
+  inline-size: 21px;
+  block-size: 21px;
+}
+
+.eg-login-provider-button--apple .eg-login-provider-logo {
+  inline-size: 31px;
+  block-size: 44px;
+}
+
+.eg-login-provider-button:not(.cds--btn):hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.eg-login-provider-button:not(.cds--btn):focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.eg-login-provider-button:not(.cds--btn):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (forced-colors: active) {
+  .eg-login-provider-button:not(.cds--btn) {
+    border-color: ButtonText;
+    color: ButtonText;
+  }
 }
 
 @media (max-width: 42rem) {
@@ -965,6 +1003,81 @@
     border: 0;
     box-shadow: none;
   }
+}
+
+/* The illustrated login is opt-in: other public forms keep their existing shell. */
+.eg-login-shell--process {
+  background: #08090d;
+  color: var(--cds-text-primary);
+}
+
+/* Shared black product header before and after login. Preserve Carbon's
+   interaction states without changing the global g100 page/sidebar theme. */
+.eg-login-shell--process .eg-login-header.cds--header,
+.eg-app-header.cds--header {
+  --cds-background: #000;
+}
+
+.eg-login-shell--process .eg-login-header-title {
+  line-height: 1.5rem;
+  letter-spacing: 0;
+}
+
+.eg-login-shell--process .eg-login-page {
+  position: relative;
+  isolation: isolate;
+  justify-content: flex-start;
+  padding: 3rem clamp(1.5rem, 4.5vw, 5rem);
+  background: #08090d;
+  overflow: hidden;
+}
+
+.eg-login-shell--process .eg-login-panel {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  inline-size: min(27.5rem, 100%);
+  padding: 2.5rem;
+  border: 0;
+  background: #08090d;
+}
+
+.eg-login-shell--process .eg-login-title {
+  font-size: 2rem;
+  line-height: 1.25;
+  margin-block-end: 2rem;
+}
+
+.eg-login-landscape {
+  position: absolute;
+  z-index: 0;
+  inset: 8% 3% 8% 38%;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.8;
+  mask-image: linear-gradient(to right, transparent, #000 12%);
+}
+
+.eg-login-landscape img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+@media (max-width: 66rem) {
+  .eg-login-landscape { opacity: 0.5; }
+}
+
+@media (max-width: 42rem) {
+  .eg-login-shell--process .eg-login-page { padding: 1.5rem; }
+  .eg-login-shell--process .eg-login-panel {
+    inline-size: 100%;
+    max-inline-size: none;
+    min-block-size: 0;
+    padding: 1.5rem 0;
+  }
+  .eg-login-landscape { display: none; }
 }
 
 /* Toolbar controls use the search field's outline for separation. Remove the
