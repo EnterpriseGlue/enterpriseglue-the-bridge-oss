@@ -6,6 +6,7 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
 import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -3232,6 +3233,10 @@ class PermissionServiceClass {
   }
 
   async getCurrentUserPermissions(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
+    return runWithPlatformDatabaseCapability({kind:'authenticated-account',userId}, () => this.getCurrentUserPermissionsScoped(userId,tenantId));
+  }
+
+  private async getCurrentUserPermissionsScoped(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
     const dataSource = await getDataSource();
     const generatedAt = Date.now();
     const projectIds = await this.getKnownProjectIds(dataSource, userId, tenantId);
@@ -3621,7 +3626,7 @@ class PermissionServiceClass {
     addTenantScopeFilter(qb, 'membership', tenantId);
     addTenantScopeFilter(qb, 'authzGroup', tenantId);
 
-    const memberships = await qb.getMany();
+    const memberships = await runWithPlatformDatabaseCapability({kind:'authenticated-account',userId}, () => qb.getMany());
     return Array.from(new Set(memberships.map((membership) => membership.groupId))).sort();
   }
 

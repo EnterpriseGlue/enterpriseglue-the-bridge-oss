@@ -1,4 +1,7 @@
-{{- if .Values.database.migration.enabled }}
+{{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
+{{- $schemaEpochOwnerMode := include "enterpriseglue-host.schemaEpochOwnerMode" . | trim }}
+{{- $schemaEpochTarget := eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" }}
+{{- if ne $schemaEpochOwnerMode "disabled" }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -32,11 +35,23 @@ spec:
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
           command: ["node", "-e"]
           args:
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
-          {{- if .Values.database.migration.runtimeRole }}
+            {{- if eq $schemaEpochOwnerMode "apply-through-executable" }}
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runSchemaEpochOwnerMigrations}) => runSchemaEpochOwnerMigrations())"
+            {{- else }}
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
+            {{- end }}
+          {{- if or .Values.database.migration.runtimeRole .Values.database.profile.databaseType }}
           env:
+            {{- if .Values.database.migration.runtimeRole }}
             - name: EG_POSTGRES_RUNTIME_ROLE
               value: {{ .Values.database.migration.runtimeRole | quote }}
+            {{- end }}
+            {{- if .Values.database.profile.databaseType }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: EG_TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+            {{- end }}
           {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
@@ -51,7 +66,65 @@ spec:
       volumes:
         - { name: tmp, emptyDir: {} }
 {{- end }}
-{{- if .Values.database.preflight.enabled }}
+{{- if .Values.database.releaseEffectCohort.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-open-effect-cohort-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cohort
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.database.releaseEffectCohort.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.database.releaseEffectCohort.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "cohort") | nindent 8 }}
+      annotations:
+        {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "cohort") }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "cohort") | nindent 6 }}
+      {{- if .Values.database.connectionProxy.enabled }}
+      initContainers:
+        {{- include "enterpriseglue-host.connectionProxy" (dict "root" . "nativeSidecar" true) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: open-effect-cohort
+          image: {{ include "enterpriseglue-host.backendImage" . | quote }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          command: ["node", "-e"]
+          args:
+            - "import('./dist/packages/shared/dist/services/platform-admin/open-release-effect-cohort.js').then(({openConfiguredReleaseEffectCohort}) => openConfiguredReleaseEffectCohort())"
+          env:
+            {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: EG_TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+          envFrom:
+            - configMapRef: { name: {{ .Values.database.configMapName }} }
+            - secretRef: { name: {{ .Values.database.applicationSecretName }} }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}
+{{- if or $schemaEpochTarget .Values.database.preflight.enabled }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -86,10 +159,25 @@ spec:
           imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
           command: ["node", "-e"]
           args:
-            - "import('./dist/packages/shared/src/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
+            {{- if $schemaEpochTarget }}
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runSchemaEpochPreflight}) => runSchemaEpochPreflight())"
+            {{- else }}
+            - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
+            {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.preflightSecretName }} }
+          {{- if .Values.database.profile.databaseType }}
+          env:
+            {{- if $schemaEpochTarget }}
+            - name: EG_POSTGRES_RUNTIME_ROLE
+              value: {{ .Values.database.migration.runtimeRole | quote }}
+            {{- end }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: EG_TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+          {{- end }}
           securityContext:
             {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
           resources:

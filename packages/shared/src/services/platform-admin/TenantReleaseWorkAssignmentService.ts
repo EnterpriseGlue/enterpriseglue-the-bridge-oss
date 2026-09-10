@@ -8,8 +8,12 @@ import {
   TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import {
+  assertReleaseEffectAdmission,
+  configuredReleaseEffectRuntimeBinding,
+  type ReleaseEffectRuntimeBindingV1,
+} from './ReleaseEffectSettlementService.js';
 
 interface AssignmentInput {
   tenantId: string;
@@ -36,14 +40,18 @@ export type TenantReleaseWorkAssignmentResult = AssignmentState & {
 }
 
 export class TenantReleaseWorkAssignmentService {
-  constructor(private readonly dataSourceProvider = getDataSource) {}
+  constructor(
+    private readonly dataSourceProvider = getDataSource,
+    private readonly runtimeBinding: () => ReleaseEffectRuntimeBindingV1 = configuredReleaseEffectRuntimeBinding,
+  ) {}
 
   async assign(input: AssignmentInput, transactionManager?: EntityManager): Promise<TenantReleaseWorkAssignmentResult> {
-    if (!config.tenantPlacementReleaseId) throw Errors.serviceUnavailable('Release-aware plugin work is not configured');
-    if (config.tenantPlacementReleaseId !== input.releaseId) {
+    const runtime = this.runtimeBinding();
+    if (!runtime.releaseId) throw Errors.serviceUnavailable('Release-aware plugin work is not configured');
+    if (runtime.releaseId !== input.releaseId) {
       throw Errors.conflict('Release assignment must be applied through its target host release');
     }
-    const apply = async (manager: EntityManager, databaseType: string) => {
+    const apply = async (manager: EntityManager) => {
       if (input.expectedPlacementEpoch !== undefined) {
         // Acquire the Tenant write fence BEFORE assignment/event/schedule locks.
         // Same-value conditional DML also works on Spanner and SQLite, where
@@ -58,25 +66,19 @@ export class TenantReleaseWorkAssignmentService {
         }
       }
       const assignmentRepository = manager.getRepository(TenantReleaseWorkAssignment);
-      // Oracle rejects FOR UPDATE on the row-limited view that findOne adds.
-      // tenantRef is unique, so getOne needs no limiting wrapper here.
-      const current = databaseType === 'oracle'
-        ? await assignmentRepository.createQueryBuilder('assignment')
-          .where({ tenantRef: input.tenantId })
-          .setLock('pessimistic_write')
-          .getOne()
-        : await assignmentRepository.findOne({
-          where: { tenantRef: input.tenantId },
-          lock: ['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(databaseType)
-            ? undefined : { mode: 'pessimistic_write' },
-        });
+      const current = await findTenantReleaseWorkAssignmentForUpdate(manager, input.tenantId);
       if (current && Number(current.assignmentEpoch) > input.assignmentEpoch) {
         throw Errors.conflict('Tenant release assignment epoch is stale');
       }
-      if (current && Number(current.assignmentEpoch) === input.assignmentEpoch) {
-        if (current.releaseId !== input.releaseId) throw Errors.conflict('Tenant release assignment epoch conflicts with the current release');
-        return response(input, 0, 0, true);
+      const idempotent = Boolean(current && Number(current.assignmentEpoch) === input.assignmentEpoch);
+      if (idempotent && current!.releaseId !== input.releaseId) {
+        throw Errors.conflict('Tenant release assignment epoch conflicts with the current release');
       }
+
+      await assertReleaseEffectAdmission(manager, {
+        sourceId: 'tenant_release_assignment',
+        releaseId: input.releaseId,
+      }, runtime);
 
       const activeEvents = await manager.getRepository(PluginEventDelivery).count({
         where: { tenantRef: input.tenantId, status: 'delivering' },
@@ -89,9 +91,9 @@ export class TenantReleaseWorkAssignmentService {
       }
 
       const now = Date.now();
-      if (current) {
+      if (current && !idempotent) {
         await assignmentRepository.update({ id: current.id }, { releaseId: input.releaseId, assignmentEpoch: input.assignmentEpoch, updatedAt: now });
-      } else {
+      } else if (!current) {
         await assignmentRepository.insert({ id: randomUUID(), tenantRef: input.tenantId, releaseId: input.releaseId, assignmentEpoch: input.assignmentEpoch, updatedAt: now });
       }
       const eventResult = await manager.getRepository(PluginEventDelivery).update(
@@ -102,15 +104,52 @@ export class TenantReleaseWorkAssignmentService {
         { tenantRef: input.tenantId, status: Not('delivering') },
         { releaseId: input.releaseId, assignmentEpoch: input.assignmentEpoch, updatedAt: now },
       );
-      return response(input, eventResult.affected || 0, scheduleResult.affected || 0, false);
+      return response(input, eventResult.affected || 0, scheduleResult.affected || 0, idempotent);
     };
     if (transactionManager) {
       if (!transactionManager.queryRunner?.isTransactionActive) throw Errors.conflict('Release assignment requires an active transaction');
-      return apply(transactionManager, String(transactionManager.connection.options.type));
+      return apply(transactionManager);
     }
     const dataSource = await this.dataSourceProvider();
-    return dataSource.transaction((manager) => apply(manager, String(dataSource.options.type)));
+    return dataSource.transaction((manager) => apply(manager));
   }
+}
+
+export async function findTenantReleaseWorkAssignmentForUpdate(
+  manager: EntityManager,
+  tenantRef: string,
+): Promise<TenantReleaseWorkAssignment | null> {
+  const repository = manager.getRepository(TenantReleaseWorkAssignment);
+  const databaseType = String(manager.connection.options.type);
+  // Oracle rejects FOR UPDATE on the row-limited view that findOne adds.
+  // tenantRef is unique, so getOne needs no limiting wrapper here.
+  if (databaseType === 'oracle') {
+    return repository.createQueryBuilder('assignment')
+      .where({ tenantRef })
+      .setLock('pessimistic_write')
+      .getOne();
+  }
+  if (!['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(databaseType)) {
+    return repository.findOne({
+      where: { tenantRef },
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+  const current = await repository.findOneBy({ tenantRef });
+  if (!current) return null;
+  // These adapters do not expose SELECT FOR UPDATE. Conditional same-value DML
+  // establishes the transaction write fence without changing the assignment.
+  const fenced = await repository.update(
+    {
+      id: current.id,
+      releaseId: current.releaseId,
+      assignmentEpoch: current.assignmentEpoch,
+      updatedAt: current.updatedAt,
+    },
+    { updatedAt: current.updatedAt },
+  );
+  if (fenced.affected !== 1) throw Errors.conflict('Tenant release assignment changed concurrently; retry the operation');
+  return current;
 }
 
 function response(

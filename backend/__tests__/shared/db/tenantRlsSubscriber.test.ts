@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { BackfillNativeTenantOwnership1700000000125 } from '@enterpriseglue/shared/db/migrations/1700000000125-backfill-native-tenant-ownership.js';
 import { TenantRlsSubscriber } from '@enterpriseglue/shared/infrastructure/persistence/subscribers/TenantRlsSubscriber.js';
-import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import { POSTGRES_TENANT_RLS_TABLES, verifyPostgresTenantRlsRole } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
 
 describe('TenantRlsSubscriber', () => {
@@ -14,22 +13,14 @@ describe('TenantRlsSubscriber', () => {
     (config as any).databaseType = originalDatabase;
   });
 
-  it('sets and clears the tenant on the same query runner', async () => {
+  it('fails closed when a query is not inside the installed runner boundary', async () => {
     (config as any).tenancyMode = 'pooled';
     (config as any).databaseType = 'postgres';
     const subscriber = new TenantRlsSubscriber();
     const queryRunner = { query: vi.fn().mockResolvedValue([]) } as any;
-    const event = { queryRunner, query: 'SELECT * FROM projects' } as any;
-
-    await runWithTenantDatabaseContext({ tenantId: 'tenant-a', tenantSlug: 'a' }, async () => {
-      await subscriber.beforeQuery(event);
-      await subscriber.afterQuery({ ...event, success: true });
-    });
-
-    expect(queryRunner.query).toHaveBeenNthCalledWith(1,
-      expect.stringContaining("set_config('enterpriseglue.tenant_id', $1"), ['tenant-a']);
-    expect(queryRunner.query).toHaveBeenNthCalledWith(2,
-      expect.stringContaining("set_config('enterpriseglue.tenant_id', '', false)"));
+    const event = { connection: { options: { type: 'postgres' } }, queryRunner, query: 'SELECT * FROM projects' } as any;
+    expect(() => subscriber.beforeQuery(event)).toThrow('outside the security context');
+    expect(queryRunner.query).not.toHaveBeenCalled();
   });
 });
 

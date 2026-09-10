@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import { createServer, type Server } from 'node:http';
 import request from 'supertest';
 import express from 'express';
 import { existsSync } from 'fs';
@@ -259,6 +260,25 @@ function transactionalDataSource(getRepository: (entity: any) => any) {
 
 describe('mission-control engines routes', () => {
   let app: express.Application;
+  let server: Server;
+
+  // One explicitly owned listener; each case still gets fresh middleware and
+  // mocks. Avoid repeated implicit server bind/close during the route matrix.
+  beforeAll(async () => {
+    server = createServer((req, res) => app(req, res));
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    if (server?.listening) await new Promise<void>((resolve, reject) =>
+      server.close(error => error ? reject(error) : resolve()));
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -437,7 +457,7 @@ describe('mission-control engines routes', () => {
   it('returns list of engines', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
 
-    const response = await request(app).get('/engines-api/engines');
+    const response = await request(server).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
@@ -458,7 +478,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('rejects an invalid manageable-shared inventory query before authorization', async () => {
-    const response = await request(app)
+    const response = await request(server)
       .get('/engines-api/engines?includeManageableShared=yes');
 
     expect(response.status).toBe(400);
@@ -485,7 +505,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app).get('/engines-api/engines');
+    const response = await request(server).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body[0]).toMatchObject({
@@ -520,7 +540,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app).get('/engines-api/engines');
+    const response = await request(server).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body.map((engine: any) => ({
@@ -560,7 +580,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app).get('/engines-api/engines');
+    const response = await request(server).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
@@ -579,7 +599,7 @@ describe('mission-control engines routes', () => {
       permission === 'engine:instance:view' || permission === 'engine:secrets:view'
     );
 
-    const response = await request(app).get('/engines-api/engines');
+    const response = await request(server).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body[0]).toMatchObject({
@@ -604,7 +624,7 @@ describe('mission-control engines routes', () => {
       permission === 'engine:instance:view' || permission === 'engine:edit'
     );
 
-    const response = await request(app).get('/engines-api/engines');
+    const response = await request(server).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
     expect(response.body[0]).toMatchObject({
@@ -615,7 +635,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('returns engine detail when user has access', async () => {
-    const response = await request(app).get('/engines-api/engines/e1');
+    const response = await request(server).get('/engines-api/engines/e1');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ id: 'e1', name: 'Engine 1' });
@@ -645,7 +665,7 @@ describe('mission-control engines routes', () => {
           : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) },
     });
 
-    const response = await request(app).get('/engines-api/engines/e1/runtime-resources?resourceKind=process_definition');
+    const response = await request(server).get('/engines-api/engines/e1/runtime-resources?resourceKind=process_definition');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({
@@ -674,7 +694,7 @@ describe('mission-control engines routes', () => {
       deployments: { created: 1, updated: 0, artifactsCreated: 2 },
     });
 
-    const response = await request(app).post('/engines-api/engines/e1/runtime-resources/reconcile');
+    const response = await request(server).post('/engines-api/engines/e1/runtime-resources/reconcile');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ created: 1, deployments: { artifactsCreated: 2 } });
@@ -695,7 +715,7 @@ describe('mission-control engines routes', () => {
       draftHash: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, appliedConfigBundleRunId: 'apply-1', rollbackConfigBundleRunId: null, rolledBackAt: null, createdAt: 1, updatedAt: 1,
     }]);
 
-    const response = await request(app).get('/engines-api/engines/e1/camunda-native-grants/imports');
+    const response = await request(server).get('/engines-api/engines/e1/camunda-native-grants/imports');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ runs: [expect.objectContaining({ id: 'run-1', appliedConfigBundleRunId: 'apply-1' })] });
@@ -712,10 +732,10 @@ describe('mission-control engines routes', () => {
     backstopMock.writeMappings.mockResolvedValue({ mappings: [mapping] });
     backstopMock.listMappings.mockResolvedValue([mapping]);
 
-    const created = await request(app).post('/engines-api/engines/e1/backstop/mappings').send({
+    const created = await request(server).post('/engines-api/engines/e1/backstop/mappings').send({
       mappings: [{ authzGroupId: 'group-1', nativeGroupId: 'sensitive-camunda-group', isActive: true }],
     });
-    const listed = await request(app).get('/engines-api/engines/e1/backstop/mappings');
+    const listed = await request(server).get('/engines-api/engines/e1/backstop/mappings');
 
     expect(created.status).toBe(200);
     expect(listed.status).toBe(200);
@@ -737,12 +757,12 @@ describe('mission-control engines routes', () => {
     backstopMock.rollback.mockResolvedValue({ run: { ...run, id: 'rollback-run-1', status: 'rolled_back', rollbackOfRunId: 'backstop-run-1', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
     backstopMock.driftCheck.mockResolvedValue({ run: { ...run, id: 'drift-run-1', status: 'out_of_sync', observedOfRunId: 'backstop-run-1', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
 
-    const preview = await request(app).post('/engines-api/engines/e1/backstop/sync/preview').send({});
-    const rejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64) });
-    const applied = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true });
-    const rollbackRejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({});
-    const rolledBack = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({ acknowledgeOwnedGrantDeletion: true });
-    const drift = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/drift-check').send({});
+    const preview = await request(server).post('/engines-api/engines/e1/backstop/sync/preview').send({});
+    const rejected = await request(server).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64) });
+    const applied = await request(server).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true });
+    const rollbackRejected = await request(server).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({});
+    const rolledBack = await request(server).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({ acknowledgeOwnedGrantDeletion: true });
+    const drift = await request(server).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/drift-check').send({});
 
     expect(preview.status).toBe(201);
     expect(JSON.stringify(preview.body)).not.toContain('sensitive-camunda-group');
@@ -771,7 +791,7 @@ describe('mission-control engines routes', () => {
     nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] });
     nativeGrantMigrationMock.createPreview.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', sourceKind: 'customer_export', inputHash: 'a'.repeat(64), normalizedCounts: { total: 1 }, classifications: [], status: 'previewed' });
 
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
       sourceKind: 'customer_export', customerExport: { apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1', authorizations: [{ id: 'native-1', type: 1, permissions: ['READ'], groupId: 'sensitive-native-group', resourceType: 6, resourceId: 'payments' }] },
     });
 
@@ -789,7 +809,7 @@ describe('mission-control engines routes', () => {
     const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'shared-camunda', type: 'camunda7', tenantId: null, tenancyMode: 'shared' }) };
     (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
 
-    const response = await request(app).post('/engines-api/engines/shared-camunda/camunda-native-grants/imports/preview').send({
+    const response = await request(server).post('/engines-api/engines/shared-camunda/camunda-native-grants/imports/preview').send({
       sourceKind: 'live_api',
     });
 
@@ -808,7 +828,7 @@ describe('mission-control engines routes', () => {
     nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'blocked', reasonCodes: ['unsupported_resource_type'], principal: { type: 'global' }, resourceKind: null, resourceId: null, runtimeTenantId: null, mappedActionIds: [] });
     nativeGrantMigrationMock.createPreview.mockRejectedValue(new nativeGrantMigrationMock.evidenceLimitError('Encrypted native-grant evidence exceeds the cross-database secure evidence limit; narrow the migration scope before retrying'));
 
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
       sourceKind: 'customer_export', customerExport: { apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1', authorizations: [{ id: 'native-1', type: 1, permissions: ['READ'], resourceType: 0 }] },
     });
 
@@ -828,7 +848,7 @@ describe('mission-control engines routes', () => {
     nativeGrantMigrationMock.generate.mockReturnValue({ bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: 'a'.repeat(64), generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 }, manualWorkAuthorizationIds: [] });
     nativeGrantMigrationMock.setDraft.mockResolvedValue({ id: 'run-1', status: 'draft_generated', draftHash: 'a'.repeat(64) });
 
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
       base: {
         bundle: {
           apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
@@ -862,7 +882,7 @@ describe('mission-control engines routes', () => {
       throw new Error('The engine connection or topology changed since the native-grant preview; create and review a new preview');
     });
 
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
       base: {
         bundle: {
           apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
@@ -897,7 +917,7 @@ describe('mission-control engines routes', () => {
     configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-apply-1', canonicalHash: draftHash, created: 4, updated: 0, archived: 0, reconciliation: { status: 'completed' } });
     nativeGrantMigrationMock.markApplied.mockResolvedValue({ id: 'run-1', status: 'applied', draftHash });
 
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
 
     expect(response.status).toBe(200);
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
@@ -925,7 +945,7 @@ describe('mission-control engines routes', () => {
       throw new Error('The runtime-resource inventory changed since the native-grant preview; reconcile resources and create a new preview');
     });
 
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
 
     expect(response.status).toBe(400);
     expect(response.text).toContain('runtime-resource inventory changed');
@@ -952,13 +972,13 @@ describe('mission-control engines routes', () => {
     configBundleRollbackMock.compile.mockReturnValue({ preview: { valid: true, canonicalHash: rollbackHash } });
     configBundleRollbackMock.diff.mockResolvedValue({ valid: true, requiredAcknowledgements: [assignmentAcknowledgement], changes: [{ objectType: 'group', key: 'group.imported', operation: 'archive' }], warnings: [] });
 
-    const preview = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback/preview').send({});
+    const preview = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback/preview').send({});
     expect(preview.status).toBe(200);
     expect(preview.body.rollback).toMatchObject({ canonicalHash: rollbackHash, requiredAcknowledgements: [assignmentAcknowledgement] });
 
     configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-rollback-1', canonicalHash: rollbackHash, created: 0, updated: 0, archived: 4, reconciliation: { status: 'completed' } });
     nativeGrantMigrationMock.markRolledBack.mockResolvedValue({ id: 'run-1', status: 'rolled_back', draftHash, rollbackConfigBundleRunId: 'config-rollback-1' });
-    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback').send({
+    const response = await request(server).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback').send({
       expectedRollbackHash: rollbackHash,
       acknowledgements: [assignmentAcknowledgement],
     });
@@ -981,7 +1001,7 @@ describe('mission-control engines routes', () => {
       permission === 'engine:instance:view' || permission === 'engine:secrets:view'
     );
 
-    const response = await request(app).get('/engines-api/engines/e1');
+    const response = await request(server).get('/engines-api/engines/e1');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -1033,7 +1053,7 @@ describe('mission-control engines routes', () => {
       },
     ]);
 
-    const response = await request(app).get('/engines-api/engines/e1/project-targets');
+    const response = await request(server).get('/engines-api/engines/e1/project-targets');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
@@ -1059,7 +1079,7 @@ describe('mission-control engines routes', () => {
   it('rejects project-engine deployment target reads without engine project access view permission', async () => {
     permissionServiceMock.hasPermission.mockResolvedValue(false);
 
-    const response = await request(app).get('/engines-api/engines/e1/project-targets');
+    const response = await request(server).get('/engines-api/engines/e1/project-targets');
 
     expect(response.status).toBe(403);
     expect(projectEngineTargetService.listTargets).not.toHaveBeenCalled();
@@ -1081,7 +1101,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Updated Engine' });
 
@@ -1109,7 +1129,7 @@ describe('mission-control engines routes', () => {
       getRepository: () => ({ findOne, findOneBy, update }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Updated Engine' });
 
@@ -1134,7 +1154,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ passwordEnc: 'new-secret' });
 
@@ -1159,7 +1179,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ passwordEnc: 'new-secret' });
 
@@ -1190,7 +1210,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ baseUrl: 'https://manual.example.com/engine-rest' });
 
@@ -1207,7 +1227,7 @@ describe('mission-control engines routes', () => {
     const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'external_api', managementMode: 'external_managed', tenantId: null, fieldOwnershipJson: '{}' });
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
 
-    const response = await request(app).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false });
+    const response = await request(server).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false });
 
     expect(response.status).toBe(400);
     expect(String(response.body.error || '')).toContain('metadataDiscoveryEnabled');
@@ -1230,7 +1250,7 @@ describe('mission-control engines routes', () => {
       getRepository: () => ({ findOne, findOneBy, update }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Changed locally' });
 
@@ -1247,7 +1267,7 @@ describe('mission-control engines routes', () => {
     const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'config', ownershipMode: 'config_locked', tenantId: null });
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
 
-    const response = await request(app).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false });
+    const response = await request(server).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false });
 
     expect(response.status).toBe(403);
     expect(String(response.body.error || '')).toContain('metadataDiscoveryEnabled');
@@ -1279,7 +1299,7 @@ describe('mission-control engines routes', () => {
       getRepository: () => ({ findOne, findOneBy, update }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Changed locally' });
 
@@ -1323,7 +1343,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ baseUrl: 'https://manual.example.com/engine-rest' });
 
@@ -1363,7 +1383,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Display Name' });
 
@@ -1408,7 +1428,7 @@ describe('mission-control engines routes', () => {
       transaction,
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ externalId: 'cluster-a/new' });
 
@@ -1428,7 +1448,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({ name: 'Manual engine', baseUrl: 'https://engine.example.com/engine-rest' });
 
@@ -1457,7 +1477,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Updated Manual Engine' });
 
@@ -1495,7 +1515,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ name: 'Display Name' });
 
@@ -1525,7 +1545,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app).delete('/engines-api/engines/e1');
+    const response = await request(server).delete('/engines-api/engines/e1');
 
     expect(response.status).toBe(403);
     expect(String(response.body.error || '')).toContain('Manual engine deletion is disabled');
@@ -1584,7 +1604,7 @@ describe('mission-control engines routes', () => {
       transaction: async (callback: any) => callback({ getRepository }),
     });
 
-    await request(app).delete('/engines-api/engines/e1').expect(204);
+    await request(server).delete('/engines-api/engines/e1').expect(204);
 
     expect(engineDelete).toHaveBeenCalledWith({ id: 'e1' });
     expect(assignmentDelete).toHaveBeenCalledWith({
@@ -1631,7 +1651,7 @@ describe('mission-control engines routes', () => {
       transaction: async (callback: any) => callback({ getRepository }),
     });
 
-    const response = await request(app).delete('/engines-api/engines/e1');
+    const response = await request(server).delete('/engines-api/engines/e1');
 
     expect(response.status).toBe(409);
     expect(response.body.error).toContain('cannot be physically deleted');
@@ -1685,7 +1705,7 @@ describe('mission-control engines routes', () => {
     };
     (getDataSource as any).mockResolvedValue(dataSource);
 
-    const response = await request(app).delete('/engines-api/engines/e1');
+    const response = await request(server).delete('/engines-api/engines/e1');
 
     expect(response.status).toBe(500);
     expect(committed).toEqual(initial);
@@ -1720,7 +1740,7 @@ describe('mission-control engines routes', () => {
       transaction: async (callback: any) => callback({ getRepository }),
     });
 
-    const response = await request(app).delete('/engines-api/engines/e1');
+    const response = await request(server).delete('/engines-api/engines/e1');
 
     expect(response.status).toBe(409);
     expect(String(response.body.error || '')).toContain('Externally registered engines cannot be deleted');
@@ -1749,7 +1769,7 @@ describe('mission-control engines routes', () => {
       transaction: async (callback: any) => callback({ getRepository }),
     });
 
-    const response = await request(app).delete('/engines-api/engines/e1');
+    const response = await request(server).delete('/engines-api/engines/e1');
 
     expect(response.status).toBe(409);
     expect(String(response.body.error || '')).toContain('Decommissioned engines cannot be deleted');
@@ -1775,7 +1795,7 @@ describe('mission-control engines routes', () => {
       },
     });
 
-    const response = await request(app).post('/engines-api/engines/e1/test');
+    const response = await request(server).post('/engines-api/engines/e1/test');
 
     expect(response.status).toBe(400);
     expect(String(response.body.error || '')).toContain('Cannot test a decommissioned engine');
@@ -1802,7 +1822,7 @@ describe('mission-control engines routes', () => {
       },
     });
 
-    const response = await request(app).post('/engines-api/engines/e1/test');
+    const response = await request(server).post('/engines-api/engines/e1/test');
 
     expect(response.status).toBe(400);
     expect(String(response.body.error || '')).toContain('Cannot test a disabled engine');
@@ -1843,7 +1863,7 @@ describe('mission-control engines routes', () => {
       json: vi.fn().mockResolvedValue({ version: '8.7.0' }),
     });
 
-    const response = await request(app).post('/engines-api/engines/e1/test');
+    const response = await request(server).post('/engines-api/engines/e1/test');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -1889,7 +1909,7 @@ describe('mission-control engines routes', () => {
     });
     fetchMock.mockRejectedValueOnce(new Error('TLS handshake failed: downstream-secret-must-not-leak'));
 
-    const response = await request(app).post('/engines-api/engines/e1/test');
+    const response = await request(server).post('/engines-api/engines/e1/test');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -1911,7 +1931,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockResolvedValue(false);
 
-    const response = await request(app).get('/engines-api/engines/__env__/health');
+    const response = await request(server).get('/engines-api/engines/__env__/health');
 
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -1926,7 +1946,7 @@ describe('mission-control engines routes', () => {
       headers: { 'content-type': 'application/json' },
     }));
 
-    const success = await request(app).get('/engines-api/engines/__env__/health');
+    const success = await request(server).get('/engines-api/engines/__env__/health');
 
     expect(success.status).toBe(200);
     expect(success.body).toMatchObject({ status: 'connected', version: '7.23.0' });
@@ -1937,12 +1957,12 @@ describe('mission-control engines routes', () => {
     }));
 
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ version: `private-${'x'.repeat(256)}` }), { status: 200 }));
-    const invalidVersion = await request(app).get('/engines-api/engines/__env__/health');
+    const invalidVersion = await request(server).get('/engines-api/engines/__env__/health');
     expect(invalidVersion.body).toMatchObject({ status: 'connected', version: null });
     expect(JSON.stringify(invalidVersion.body)).not.toContain('private-');
 
     fetchMock.mockResolvedValueOnce(new Response('private upstream detail', { status: 502, statusText: 'secret endpoint failure' }));
-    const rejected = await request(app).get('/engines-api/engines/__env__/health');
+    const rejected = await request(server).get('/engines-api/engines/__env__/health');
     expect(rejected.body).toMatchObject({ status: 'disconnected', message: 'Engine endpoint returned HTTP 502' });
     expect(JSON.stringify(rejected.body)).not.toMatch(/secret|private upstream/i);
 
@@ -1950,11 +1970,11 @@ describe('mission-control engines routes', () => {
       status: 200,
       headers: { 'content-length': String(5 * 1024 * 1024 + 1) },
     }));
-    const oversized = await request(app).get('/engines-api/engines/__env__/health');
+    const oversized = await request(server).get('/engines-api/engines/__env__/health');
     expect(oversized.body).toMatchObject({ status: 'disconnected', message: 'Engine health check failed' });
 
     fetchMock.mockRejectedValueOnce(new Error('Bearer secret at https://private-engine.example/internal'));
-    const failed = await request(app).get('/engines-api/engines/__env__/health');
+    const failed = await request(server).get('/engines-api/engines/__env__/health');
     expect(failed.body).toMatchObject({ status: 'disconnected', message: 'Engine health check failed' });
     expect(JSON.stringify(failed.body)).not.toMatch(/Bearer|private-engine|secret/i);
     delete process.env.CAMUNDA_BASE_URL;
@@ -1980,7 +2000,7 @@ describe('mission-control engines routes', () => {
           },
     });
 
-    const response = await request(app).get('/engines-api/engines/e1/health');
+    const response = await request(server).get('/engines-api/engines/e1/health');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -2022,7 +2042,7 @@ describe('mission-control engines routes', () => {
         : { find: engineFind },
     });
 
-    const response = await request(app).get('/engines-api/saved-filters');
+    const response = await request(server).get('/engines-api/saved-filters');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
@@ -2052,7 +2072,7 @@ describe('mission-control engines routes', () => {
         : { findOne: engineFindOne },
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/saved-filters')
       .send({
         name: 'Open incidents',
@@ -2083,7 +2103,7 @@ describe('mission-control engines routes', () => {
   it('rejects localhost engine URLs when running in Docker', async () => {
     (existsSync as any).mockReturnValue(true);
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({ name: 'Docker local engine', baseUrl: 'http://localhost:8080/engine-rest', type: 'operaton' });
 
@@ -2101,7 +2121,7 @@ describe('mission-control engines routes', () => {
     });
 
     for (const type of ['ion', 'operaton', 'camunda7']) {
-      const response = await request(app)
+      const response = await request(server)
         .post('/engines-api/engines')
         .send({ name: `${type} engine`, baseUrl: `https://${type}.example.com/engine-rest`, type });
 
@@ -2122,7 +2142,7 @@ describe('mission-control engines routes', () => {
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({ name: 'Distributed engine', baseUrl: 'https://distributed.example.com/engine-rest' });
 
@@ -2149,7 +2169,7 @@ describe('mission-control engines routes', () => {
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
 
-    const rejected = await request(app)
+    const rejected = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Unsafe shared engine',
@@ -2163,7 +2183,7 @@ describe('mission-control engines routes', () => {
     });
     expect(insert).not.toHaveBeenCalled();
 
-    const created = await request(app)
+    const created = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Central shared engine',
@@ -2191,7 +2211,7 @@ describe('mission-control engines routes', () => {
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
 
-    const forbidden = await request(app)
+    const forbidden = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Cross-tenant engine',
@@ -2211,7 +2231,7 @@ describe('mission-control engines routes', () => {
         authorized: true,
       }),
     };
-    const created = await request(app)
+    const created = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Resolved engine',
@@ -2227,7 +2247,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('rejects credentialless authentication for a direct engine endpoint', async () => {
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Direct credentialless engine',
@@ -2244,7 +2264,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('rejects a credentialless customer sidecar when platform policy is disabled', async () => {
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Credentialless sidecar',
@@ -2270,7 +2290,7 @@ describe('mission-control engines routes', () => {
       getRepository: () => ({ insert }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Credentialless sidecar',
@@ -2294,7 +2314,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Default engine',
@@ -2336,7 +2356,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({ runtimeAccessScope: 'engine_wide' });
 
@@ -2354,7 +2374,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Keycloak engine',
@@ -2398,7 +2418,7 @@ describe('mission-control engines routes', () => {
       transaction: async (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'External-tagged engine',
@@ -2453,7 +2473,7 @@ describe('mission-control engines routes', () => {
       transaction,
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({
         name: 'Conflicting manual engine',
@@ -2527,7 +2547,7 @@ describe('mission-control engines routes', () => {
       }),
     ));
 
-    const createResponse = await request(app)
+    const createResponse = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -2570,7 +2590,7 @@ describe('mission-control engines routes', () => {
       lastExternalSyncAt: expect.any(Number),
     }));
 
-    const updateResponse = await request(app)
+    const updateResponse = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -2621,7 +2641,7 @@ describe('mission-control engines routes', () => {
       return { findOne: vi.fn().mockResolvedValue(systemAEngine), findOneBy: vi.fn().mockResolvedValue(systemAEngine), update: engineUpdate };
     }));
 
-    const crossSystem = await request(app).post('/engines-api/external/engines')
+    const crossSystem = await request(server).post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
         name: 'Takeover', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'shared-id',
@@ -2637,7 +2657,7 @@ describe('mission-control engines routes', () => {
       if (entity?.name === 'ExternalEngineRegistration') return { findOne: vi.fn().mockResolvedValue(manualRegistration) };
       return { findOne: vi.fn().mockResolvedValue(manualEngine), findOneBy: vi.fn().mockResolvedValue(manualEngine), update: engineUpdate };
     }));
-    const manualTakeover = await request(app).post('/engines-api/external/engines')
+    const manualTakeover = await request(server).post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
         name: 'Takeover', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'shared-id',
@@ -2667,7 +2687,7 @@ describe('mission-control engines routes', () => {
       return { findOne: vi.fn().mockResolvedValue(siblingEngine), findOneBy: vi.fn().mockResolvedValue(siblingEngine), update: engineUpdate };
     }));
 
-    const response = await request(app).post('/engines-api/external/engines')
+    const response = await request(server).post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
         name: 'Sibling engine', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'sibling-prod',
@@ -2708,7 +2728,7 @@ describe('mission-control engines routes', () => {
       },
     });
 
-    const response = await request(app).post('/engines-api/external/engines')
+    const response = await request(server).post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
         name: 'Atomic engine', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'atomic-id',
@@ -2756,8 +2776,8 @@ describe('mission-control engines routes', () => {
       tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
     };
     const [first, second] = await Promise.all([
-      request(app).post('/engines-api/external/engines').set('Authorization', 'Bearer egac_client-1_secret').send(payload),
-      request(app).post('/engines-api/external/engines').set('Authorization', 'Bearer egac_client-1_secret').send(payload),
+      request(server).post('/engines-api/external/engines').set('Authorization', 'Bearer egac_client-1_secret').send(payload),
+      request(server).post('/engines-api/external/engines').set('Authorization', 'Bearer egac_client-1_secret').send(payload),
     ]);
     expect([first.status, second.status].sort()).toEqual([200, 201]);
     expect(engineRepository.insert).toHaveBeenCalledTimes(1);
@@ -2780,7 +2800,7 @@ describe('mission-control engines routes', () => {
       authenticatedAt: 2,
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -2817,7 +2837,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/engines/e1')
       .send({
         tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
@@ -2881,15 +2901,15 @@ describe('mission-control engines routes', () => {
     };
     engineTenantMappingServiceMock.upsert.mockResolvedValue(mappingResult);
 
-    const listed = await request(app).get('/engines-api/engines/e1/tenant-mappings');
+    const listed = await request(server).get('/engines-api/engines/e1/tenant-mappings');
     expect(listed.status).toBe(200);
     expect(listed.body[0]).toMatchObject({ id: 'mapping-1', createdAt: 10, updatedAt: 11 });
 
-    const diagnostics = await request(app).get('/engines-api/engines/e1/tenancy/diagnostics');
+    const diagnostics = await request(server).get('/engines-api/engines/e1/tenancy/diagnostics');
     expect(diagnostics.status).toBe(200);
     expect(diagnostics.body).toMatchObject({ mode: 'shared', resolutionStatus: 'incomplete' });
 
-    const applied = await request(app)
+    const applied = await request(server)
       .put('/engines-api/engines/e1/tenant-mappings')
       .send({
         expectedMappingVersion: 0,
@@ -2918,7 +2938,7 @@ describe('mission-control engines routes', () => {
       permission === 'platform:engine:create'
     );
 
-    const response = await request(app)
+    const response = await request(server)
       .get('/engines-api/engines/tenancy/classification-report');
 
     expect(response.status).toBe(200);
@@ -2998,7 +3018,7 @@ describe('mission-control engines routes', () => {
           },
     });
 
-    const preview = await request(app)
+    const preview = await request(server)
       .post('/engines-api/engines/e1/tenancy/preview')
       .send({ tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' } });
     expect(preview.status).toBe(200);
@@ -3016,7 +3036,7 @@ describe('mission-control engines routes', () => {
       }),
     );
 
-    const applied = await request(app)
+    const applied = await request(server)
       .post('/engines-api/engines/e1/tenancy/apply')
       .send({
         tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
@@ -3063,7 +3083,7 @@ describe('mission-control engines routes', () => {
       deploymentDiscoveryEnabled: true,
       tenantId: 'tenant-default',
     });
-    const configWarnPreview = await request(app)
+    const configWarnPreview = await request(server)
       .post('/engines-api/engines/e1/tenancy/preview')
       .send({ tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' } });
     expect(configWarnPreview.status).toBe(200);
@@ -3084,7 +3104,7 @@ describe('mission-control engines routes', () => {
       }),
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines/e1/tenancy/preview')
       .send({ tenancy: { mode: 'shared', mappingStrategy: 'explicit' } });
 
@@ -3147,7 +3167,7 @@ describe('mission-control engines routes', () => {
       },
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/external/engines/central-1/tenant-mappings')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3192,7 +3212,7 @@ describe('mission-control engines routes', () => {
         : { findOne: vi.fn().mockResolvedValue(engine) },
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .put('/engines-api/external/engines/sibling%2Fprod/tenant-mappings')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3255,7 +3275,7 @@ describe('mission-control engines routes', () => {
       },
     ));
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3312,7 +3332,7 @@ describe('mission-control engines routes', () => {
         : { findOne: vi.fn().mockResolvedValue(null), insert },
     ));
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3422,7 +3442,7 @@ describe('mission-control engines routes', () => {
       },
     ));
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3509,7 +3529,7 @@ describe('mission-control engines routes', () => {
     };
     (getDataSource as any).mockResolvedValue(dataSource);
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines/decommission')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3570,7 +3590,7 @@ describe('mission-control engines routes', () => {
       transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
     });
 
-    const response = await request(app).post('/engines-api/external/engines/decommission')
+    const response = await request(server).post('/engines-api/external/engines/decommission')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({ externalId: 'cluster-a/prod' });
     expect(response.status).toBe(409);
@@ -3601,7 +3621,7 @@ describe('mission-control engines routes', () => {
       transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
     });
 
-    const response = await request(app).post('/engines-api/external/engines/decommission')
+    const response = await request(server).post('/engines-api/external/engines/decommission')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({ externalId: 'sibling/prod', externalSystemId: 'system-1' });
 
@@ -3651,7 +3671,7 @@ describe('mission-control engines routes', () => {
       },
     ));
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3678,7 +3698,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('requires an API client bearer token for external engine registration', async () => {
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .send({
         name: 'External engine',
@@ -3709,7 +3729,7 @@ describe('mission-control engines routes', () => {
     });
     permissionServiceMock.hasPermission.mockResolvedValue(false);
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3797,7 +3817,7 @@ describe('mission-control engines routes', () => {
       diagnostics: { owner: 'cmdb', confidence: 'high' },
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/project-engine-targets')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -3882,7 +3902,7 @@ describe('mission-control engines routes', () => {
       },
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/project-engine-targets')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({ externalSystemId: 'system-1', projectId: 'project-1', engineId: 'e1' });
@@ -3938,7 +3958,7 @@ describe('mission-control engines routes', () => {
       },
     ]);
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/project-engine-targets')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -4001,7 +4021,7 @@ describe('mission-control engines routes', () => {
       },
     ]);
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/external/project-engine-targets/decommission')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -4038,7 +4058,7 @@ describe('mission-control engines routes', () => {
       authenticatedAt: 2,
     });
 
-    const metadataResponse = await request(app)
+    const metadataResponse = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -4053,7 +4073,7 @@ describe('mission-control engines routes', () => {
       expect.objectContaining({ path: 'baseUrl' }),
     ]));
 
-    const credentialsResponse = await request(app)
+    const credentialsResponse = await request(server)
       .post('/engines-api/external/engines')
       .set('Authorization', 'Bearer egac_client-1_secret')
       .send({
@@ -4069,7 +4089,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('rejects unsupported engine type values', async () => {
-    const response = await request(app)
+    const response = await request(server)
       .post('/engines-api/engines')
       .send({ name: 'Unsupported engine', baseUrl: 'https://engine.example.com/engine-rest', type: 'camunda8' });
 

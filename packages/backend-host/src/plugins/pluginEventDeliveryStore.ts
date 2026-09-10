@@ -20,6 +20,12 @@ import {
   TenantReleaseWorkAssignment,
 } from '@enterpriseglue/shared/infrastructure/persistence/entities/PluginPlatform.js';
 import type { DataSource, EntityManager } from 'typeorm';
+import {
+  assertReleaseEffectAdmission,
+  configuredReleaseEffectRuntimeBinding,
+  type ReleaseEffectRuntimeBindingV1,
+} from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
+import { findTenantReleaseWorkAssignmentForUpdate } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 
 import {
   findPluginRowForUpdateV1,
@@ -165,6 +171,7 @@ implements PluginEventDeliveryStoreV1 {
       PluginEventMetricsRegistryV1,
       'recordEnqueue' | 'recordDelivery' | 'recordCircuit'
     >,
+    private readonly runtimeBinding: () => ReleaseEffectRuntimeBindingV1 = configuredReleaseEffectRuntimeBinding,
   ) {
     this.backlogPolicy = {
       maxOutstandingPerPlugin:
@@ -281,6 +288,7 @@ implements PluginEventDeliveryStoreV1 {
       throw error;
     }
     const now = input.now ?? Date.now();
+    const runtime = this.runtimeBinding();
     try {
       for (
         let attempt = 1;
@@ -292,7 +300,6 @@ implements PluginEventDeliveryStoreV1 {
             dataSource,
             async (manager) => {
             const repository = manager.getRepository(PluginEventDelivery);
-            const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef);
             const existing = await repository.findOne({
               where: { deliveryId },
             });
@@ -308,6 +315,11 @@ implements PluginEventDeliveryStoreV1 {
                 outcome: 'duplicate' as const,
               };
             }
+            const releaseAssignment = await requireManagedReleaseAssignment(manager, input.tenantRef, runtime);
+            await assertReleaseEffectAdmission(manager, {
+              sourceId: 'plugin_event_delivery',
+              releaseId: releaseAssignment?.releaseId ?? null,
+            }, runtime);
 
             const queueStateRepository =
               manager.getRepository(PluginEventQueueState);
@@ -466,42 +478,37 @@ implements PluginEventDeliveryStoreV1 {
     }
     const dataSource = await this.dataSourceProvider();
     const now = input.now ?? Date.now();
+    const runtime = this.runtimeBinding();
     const result = await runPluginTransactionV1(
       dataSource,
       async (manager) => {
-      await manager
-        .getRepository(PluginEventDelivery)
-        .createQueryBuilder()
-        .update()
-        .set({
-          status: 'retry_wait',
-          leaseOwner: null,
-          leaseExpiresAt: null,
-          nextAttemptAt: now,
-          reasonCode: 'lease_expired',
-          updatedAt: now,
-        })
-        .where('status = :status', { status: 'delivering' })
-        .andWhere('lease_expires_at <= :now', { now })
-        .execute();
       const repository = manager.getRepository(PluginEventDelivery);
       const query = repository
         .createQueryBuilder('delivery')
-        .where('delivery.status IN (:...statuses)', {
-          statuses: ['pending', 'retry_wait'],
+        .where(`(
+          (delivery.status IN (:...readyStatuses)
+            AND delivery.next_attempt_at <= :now
+            AND (delivery.lease_expires_at IS NULL OR delivery.lease_expires_at <= :now))
+          OR (delivery.status = :deliveringStatus AND delivery.lease_expires_at <= :now)
+        )`, {
+          readyStatuses: ['pending', 'retry_wait'],
+          deliveringStatus: 'delivering',
+          now,
         })
-        .andWhere('delivery.next_attempt_at <= :now', { now })
-        .andWhere(
-          '(delivery.lease_expires_at IS NULL OR delivery.lease_expires_at <= :now)',
-          { now },
-        )
         .orderBy('delivery.next_attempt_at', 'ASC')
-        .addOrderBy('delivery.created_at', 'ASC');
-      if (config.tenantPlacementReleaseId) {
-        query.andWhere('delivery.release_id = :hostReleaseId', { hostReleaseId: config.tenantPlacementReleaseId });
+        .addOrderBy('delivery.created_at', 'ASC')
+        .addOrderBy('delivery.tenant_ref', 'ASC')
+        .addOrderBy('delivery.id', 'ASC');
+      if (runtime.releaseId) {
+        query.andWhere('delivery.release_id = :hostReleaseId', { hostReleaseId: runtime.releaseId });
       }
-      const records =
-        dataSource.options.type === 'oracle'
+      const records = runtime.releaseId
+        ? await query
+          .take(dataSource.options.type === 'oracle'
+            ? oraclePluginClaimCandidateWindowV1(input.limit)
+            : input.limit)
+          .getMany()
+        : dataSource.options.type === 'oracle'
           ? await lockOraclePluginClaimCandidatesV1(
               repository,
               await query
@@ -518,7 +525,39 @@ implements PluginEventDeliveryStoreV1 {
               .getMany();
       const claimed: ClaimedPluginEventV1[] = [];
       const circuitObservations: PluginEventCircuitObservationV1[] = [];
-      for (const record of records) {
+      const releaseAssignments = new Map<string, TenantReleaseWorkAssignment>();
+      if (runtime.releaseId) {
+        const tenantRefs = [...new Set(records.map((candidate) => candidate.tenantRef))].sort();
+        for (const tenantRef of tenantRefs) {
+          const assignment = await findTenantReleaseWorkAssignmentForUpdate(manager, tenantRef);
+          if (assignment?.releaseId === runtime.releaseId) {
+            releaseAssignments.set(tenantRef, assignment);
+          }
+        }
+        if (releaseAssignments.size > 0) {
+          await assertReleaseEffectAdmission(manager, {
+            sourceId: 'plugin_event_delivery',
+            releaseId: runtime.releaseId,
+          }, runtime);
+        }
+      }
+      for (const candidate of records) {
+        let record = candidate;
+        if (runtime.releaseId) {
+          // Canonical batched order is every assignment (tenantRef sorted),
+          // then the cohort, then every effect (candidate order). The preview
+          // is revalidated only after all shared release fences are held.
+          const releaseAssignment = releaseAssignments.get(candidate.tenantRef);
+          if (!releaseAssignment) continue;
+          const locked = await findPluginRowForUpdateV1(repository, { id: candidate.id });
+          if (
+            !locked
+            || !eventClaimEligible(locked, now)
+            || locked.releaseId !== releaseAssignment.releaseId
+            || number(locked.assignmentEpoch ?? 0) !== number(releaseAssignment.assignmentEpoch)
+          ) continue;
+          record = locked;
+        }
         const claimDecision = await subscriptionClaimAllowed(
           manager,
           record,
@@ -687,10 +726,26 @@ implements PluginEventDeliveryStoreV1 {
     }
     const dataSource = await this.dataSourceProvider();
     const now = input.now ?? Date.now();
+    const runtime = this.runtimeBinding();
     const eventSummary = await runPluginTransactionV1(
       dataSource,
       async (manager) => {
       const repository = manager.getRepository(PluginEventDelivery);
+      const preview = await repository.findOneBy({ deliveryId: input.deliveryId });
+      if (
+        !preview ||
+        preview.pluginId !== input.pluginId ||
+        preview.status !== 'dead_letter' ||
+        number(preview.attempt) !== input.expectedAttempt ||
+        preview.eventJson === '{}'
+      ) {
+        throw new Error('plugin_event_requeue_conflict');
+      }
+      const releaseAssignment = await requireManagedReleaseAssignment(manager, preview.tenantRef, runtime);
+      await assertReleaseEffectAdmission(manager, {
+        sourceId: 'plugin_event_delivery',
+        releaseId: releaseAssignment?.releaseId ?? null,
+      }, runtime);
       const record = await findPluginRowForUpdateV1(repository, {
         deliveryId: input.deliveryId,
       });
@@ -703,6 +758,10 @@ implements PluginEventDeliveryStoreV1 {
       ) {
         throw new Error('plugin_event_requeue_conflict');
       }
+      if (releaseAssignment && (
+        record.releaseId !== releaseAssignment.releaseId ||
+        number(record.assignmentEpoch ?? 0) !== number(releaseAssignment.assignmentEpoch)
+      )) throw new Error('plugin_event_release_assignment_changed');
       await repository.update(
         { id: record.id, status: 'dead_letter' },
         {
@@ -1089,6 +1148,11 @@ function eventClaimEligible(
   record: PluginEventDelivery,
   now: number,
 ): boolean {
+  if (record.status === 'delivering') {
+    return record.leaseExpiresAt !== null
+      && record.leaseExpiresAt !== undefined
+      && Number(record.leaseExpiresAt) <= now;
+  }
   return (
     (record.status === 'pending' || record.status === 'retry_wait') &&
     Number(record.nextAttemptAt) <= now &&
@@ -1247,10 +1311,14 @@ function summary(record: EventSummaryRecordV1): PluginEventSafeSummaryV1 {
   };
 }
 
-async function requireManagedReleaseAssignment(manager: EntityManager, tenantRef: string): Promise<TenantReleaseWorkAssignment | null> {
-  if (!config.tenantPlacementReleaseId) return null;
-  const assignment = await manager.getRepository(TenantReleaseWorkAssignment).findOneBy({ tenantRef });
-  if (!assignment || assignment.releaseId !== config.tenantPlacementReleaseId) {
+async function requireManagedReleaseAssignment(
+  manager: EntityManager,
+  tenantRef: string,
+  runtime: ReleaseEffectRuntimeBindingV1,
+): Promise<TenantReleaseWorkAssignment | null> {
+  if (!runtime.releaseId) return null;
+  const assignment = await findTenantReleaseWorkAssignmentForUpdate(manager, tenantRef);
+  if (!assignment || assignment.releaseId !== runtime.releaseId) {
     throw new Error('plugin_event_release_not_assigned');
   }
   return assignment;

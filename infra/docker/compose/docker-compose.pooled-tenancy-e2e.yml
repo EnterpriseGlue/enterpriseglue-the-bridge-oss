@@ -7,6 +7,166 @@ services:
     volumes:
       - ${POOLED_TENANCY_POSTGRES_INIT_FILE}:/docker-entrypoint-initdb.d/10-pooled-tenancy-app-role.sql:ro
 
+  # A fresh disposable database is bootstrapped by the exact published release
+  # whose registered inventory ends at 0130. The bridge under test is not allowed
+  # to reinterpret an empty ledger as its predecessor.
+  schema-predecessor:
+    image: ${POOLED_TENANCY_SCHEMA_PREDECESSOR_IMAGE}
+    restart: "no"
+    init: true
+    entrypoint: ["/usr/bin/node"]
+    command:
+      - --input-type=module
+      - -e
+      - |-
+        import { createHash } from 'node:crypto';
+        const expected = { count: 132, through: 1700000000130, sha256: 'e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16' };
+        const migrations = await import('./dist/packages/shared/dist/db/run-migrations.js');
+        const dataSourceModule = await import('./dist/packages/shared/dist/db/data-source.js');
+        const bootstrap = await import('./dist/packages/shared/dist/db/bootstrap.js');
+        const gitProviders = await import('./dist/packages/shared/dist/db/seed/gitProviders.js');
+        const environmentTags = await import('./dist/packages/shared/dist/services/platform-admin/EnvironmentTagService.js');
+        const tenantContext = await import('./dist/packages/shared/dist/services/tenant-database-context.js');
+        const identity = (migration) => { const name = migration.name || migration.constructor.name; return { name, timestamp: Number(name.slice(-13)) }; };
+        const digest = (inventory) => createHash('sha256').update(JSON.stringify(inventory)).digest('hex');
+        const assertInventory = (label, inventory) => {
+          if (inventory.length !== expected.count || inventory.at(-1)?.timestamp !== expected.through || digest(inventory) !== expected.sha256) throw new Error(`$${label} is not the exact published 0130 predecessor inventory`);
+        };
+        try {
+          const source = await dataSourceModule.getDataSource();
+          const registered = source.migrations.map(identity).sort((left, right) => left.timestamp - right.timestamp || left.name.localeCompare(right.name));
+          assertInventory('Published runtime', registered);
+          await migrations.runMigrations({ mode: 'apply' });
+          const executed = (await source.query('SELECT timestamp, name FROM main.migrations ORDER BY timestamp, name')).map((migration) => ({ name: migration.name, timestamp: Number(migration.timestamp) }));
+          assertInventory('Executed ledger', executed);
+          await migrations.seedInitialData();
+          await bootstrap.bootstrapAdmin();
+          await bootstrap.bootstrapDefaultEmailConfig();
+          await gitProviders.seedGitProviders();
+          await environmentTags.environmentTagService.seedDefaults();
+          const admin = await source.getRepository('User').findOneBy({ email: process.env.ADMIN_EMAIL, authProvider: 'local', isActive: true });
+          const tenant = await source.getRepository('Tenant').findOneBy({ id: 'tenant-default', status: 'active' });
+          const providerCount = await source.getRepository('GitProvider').count();
+          if (!admin || !tenant || providerCount !== 4) throw new Error('Published predecessor did not create the required admin, default tenant, and four Git providers');
+          await tenantContext.runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, async () => {
+            const loginPolicy = await source.getRepository('TenantLoginPolicy').findOneBy({ tenantId: tenant.id });
+            if (!loginPolicy) throw new Error('Published predecessor did not create the required default login policy');
+          });
+          console.log('published-schema-predecessor=exact-0130-with-bootstrap');
+        } finally {
+          await dataSourceModule.closeDataSource();
+        }
+    environment:
+      NODE_ENV: production
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_USER}
+      POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_PASSWORD}
+      POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: "false"
+      EG_TENANCY_MODE: pooled
+      EG_TENANT_RLS_ENFORCED: "true"
+      EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+      EG_POSTGRES_RUNTIME_ROLE: ${POOLED_TENANCY_POSTGRES_APP_USER}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL}
+      GIT_REPOS_PATH: /tmp/enterpriseglue-predecessor-repos
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - enterpriseglue-network
+
+  # Current code owns exactly the 0130 -> 0131 transition. It never executes
+  # the generic application migration/bootstrap path or migration 0132.
+  schema-owner-migration:
+    image: node:24-bookworm-slim
+    user: node
+    working_dir: /repo/backend
+    restart: "no"
+    init: true
+    entrypoint: ["/usr/local/bin/node"]
+    command:
+      - --input-type=module
+      - -e
+      - |-
+        const migrations = await import('./dist/packages/shared/src/db/run-migrations.js');
+        const dataSource = await import('./dist/packages/shared/src/db/data-source.js');
+        try { await migrations.runSchemaEpochOwnerMigrations(); } finally { await dataSource.closeDataSource(); }
+    environment:
+      NODE_ENV: production
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_USER}
+      POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_PASSWORD}
+      POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: "false"
+      EG_TENANCY_MODE: pooled
+      EG_TENANT_RLS_ENFORCED: "true"
+      EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+      EG_POSTGRES_RUNTIME_ROLE: ${POOLED_TENANCY_POSTGRES_APP_USER}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL}
+      GIT_REPOS_PATH: /tmp/enterpriseglue-owner-repos
+    volumes:
+      - .:/repo:ro
+    depends_on:
+      schema-predecessor:
+        condition: service_completed_successfully
+    networks:
+      - enterpriseglue-network
+
+  schema-runtime-verify:
+    image: node:24-bookworm-slim
+    user: node
+    working_dir: /repo/backend
+    restart: "no"
+    init: true
+    entrypoint: ["/usr/local/bin/node"]
+    command:
+      - --input-type=module
+      - -e
+      - |-
+        const migrations = await import('./dist/packages/shared/src/db/run-migrations.js');
+        const dataSource = await import('./dist/packages/shared/src/db/data-source.js');
+        try { await migrations.runMigrations({ mode: 'verify' }); } finally { await dataSource.closeDataSource(); }
+    environment:
+      NODE_ENV: production
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_APP_USER}
+      POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_APP_PASSWORD}
+      POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: "false"
+      EG_TENANCY_MODE: pooled
+      EG_TENANT_RLS_ENFORCED: "true"
+      EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL}
+      GIT_REPOS_PATH: /tmp/enterpriseglue-runtime-verify-repos
+    volumes:
+      - .:/repo:ro
+    depends_on:
+      schema-owner-migration:
+        condition: service_completed_successfully
+    networks:
+      - enterpriseglue-network
+
   backend:
     build: !reset null
     image: node:24-bookworm-slim
@@ -18,6 +178,7 @@ services:
       POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_APP_USER}
       POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_APP_PASSWORD}
       POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
+      EG_DATABASE_STARTUP_MODE: verify
       GIT_REPOS_PATH: /tmp/enterpriseglue-repos
       EG_TENANCY_MODE: pooled
       EG_TENANT_RLS_ENFORCED: "true"
@@ -34,6 +195,9 @@ services:
       ENTERPRISEGLUE_PLUGIN_STATE_FILE: /etc/enterpriseglue/pooled-e2e/plugin-state.json
       ENTERPRISEGLUE_PLUGIN_ASSET_ROOT: /var/lib/enterpriseglue/pooled-e2e/plugins
       ENTERPRISEGLUE_PLUGIN_INVOCATION_PRIVATE_KEY_FILE: /etc/enterpriseglue/pooled-e2e/plugin-invocation-private.pem
+    depends_on:
+      schema-runtime-verify:
+        condition: service_completed_successfully
     volumes: !override
       - .:/repo:ro
       - ${KEYCLOAK_TLS_DIR}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro

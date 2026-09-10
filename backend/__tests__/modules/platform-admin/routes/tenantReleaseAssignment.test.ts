@@ -5,6 +5,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import { tenantReleaseActivationService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseActivationService.js';
+import { releaseEffectSettlementService } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
 import router from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.js';
 
 const originalToken = config.tenantReleaseControllerToken;
@@ -27,6 +28,19 @@ const activationReceipt = {
     requestHash: 'a'.repeat(64), idempotencyKeyHash: 'b'.repeat(64), issuedAt: 1,
   },
   signature: { algorithm: 'ES256' as const, keyId: 'key-1', value: 'A'.repeat(86) },
+};
+const effectEndpoint = '/api/workloads/releases/release-a/effect-cohorts/7';
+const effectStatus = {
+  schemaVersion: 'release-effect-settlement.enterpriseglue.io/v1' as const,
+  releaseId: 'release-a', cohortEpoch: 7, state: 'closing' as const, revision: 2,
+  inventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1' as const,
+  configuredInventoryVersion: 'release-effect-inventory.enterpriseglue.io/v1' as const,
+  inventorySha256: 'a'.repeat(64), configuredInventorySha256: 'a'.repeat(64), inventoryComplete: false,
+  releaseAssignmentsOutstanding: 0, coveredSourcesSettled: true, settled: false, eligibleForShutdown: false,
+  openedAt: 1, closedAt: 2, settledAt: null, updatedAt: 2,
+  sources: [{ sourceId: 'engine_api_mutation', owner: 'api' as const, settlementRequired: true,
+    coverage: 'uncovered' as const, durableTables: [], admissionBoundary: 'request only',
+    settlementBasis: 'not durable', outstanding: null, reasonCode: 'uncovered' as const }],
 };
 
 describe('controller release assignment HTTP contract', () => {
@@ -89,5 +103,31 @@ describe('controller release assignment HTTP contract', () => {
       .send(activationBody);
     expect(res.status).toBe(401);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('routes open, close, status and verify through the exact release cohort binding', async () => {
+    const open = vi.spyOn(releaseEffectSettlementService, 'open').mockResolvedValue({ ...effectStatus, state: 'open', revision: 1, closedAt: null });
+    const close = vi.spyOn(releaseEffectSettlementService, 'close').mockResolvedValue(effectStatus);
+    const status = vi.spyOn(releaseEffectSettlementService, 'status').mockResolvedValue(effectStatus);
+    const verify = vi.spyOn(releaseEffectSettlementService, 'verify').mockResolvedValue(effectStatus);
+    const authorized = (method: 'put' | 'post' | 'get', path: string) => request(app)[method](path).auth(token, { type: 'bearer' });
+
+    expect((await authorized('put', effectEndpoint).send({ expectedRevision: 0 })).status).toBe(200);
+    expect((await authorized('post', `${effectEndpoint}/close`).send({ expectedRevision: 1 })).status).toBe(200);
+    expect((await authorized('get', effectEndpoint)).status).toBe(200);
+    expect((await authorized('post', `${effectEndpoint}/verify`).send({ expectedRevision: 2 })).status).toBe(200);
+    expect(open).toHaveBeenCalledExactlyOnceWith({ releaseId: 'release-a', cohortEpoch: 7, expectedRevision: 0 });
+    expect(close).toHaveBeenCalledExactlyOnceWith({ releaseId: 'release-a', cohortEpoch: 7, expectedRevision: 1 });
+    expect(status).toHaveBeenCalledExactlyOnceWith({ releaseId: 'release-a', cohortEpoch: 7 });
+    expect(verify).toHaveBeenCalledExactlyOnceWith({ releaseId: 'release-a', cohortEpoch: 7, expectedRevision: 2 });
+  });
+
+  it('rejects unauthorized, malformed, or expanded cohort operations before service execution', async () => {
+    const open = vi.spyOn(releaseEffectSettlementService, 'open');
+    expect((await request(app).put(effectEndpoint).send({ expectedRevision: 0 })).status).toBe(401);
+    expect((await request(app).put(effectEndpoint).auth(token, { type: 'bearer' }).send({ expectedRevision: -1 })).status).toBe(400);
+    expect((await request(app).put(effectEndpoint).auth(token, { type: 'bearer' }).query({ force: 'true' }).send({ expectedRevision: 0 })).status).toBe(400);
+    expect((await request(app).put(effectEndpoint).auth(token, { type: 'bearer' }).send({ expectedRevision: 0, ignored: true })).status).toBe(400);
+    expect(open).not.toHaveBeenCalled();
   });
 });

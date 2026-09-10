@@ -97,7 +97,7 @@ vi.mock('@src/enterprise/loadEnterpriseFrontendPlugin', () => ({
 }));
 
 vi.mock('@src/enterprise/extensionRegistry', () => ({
-  extensions: {},
+  extensions: { navItems: [] },
   getNavItemsBySection: () => [],
   isMultiTenantEnabled: () => tenancyState.enabled,
 }));

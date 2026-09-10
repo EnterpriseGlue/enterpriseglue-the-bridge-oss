@@ -116,6 +116,20 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /results\.every\(\(result\) => result === 'success'\)/)
 })
 
+test('candidate signatures bind the schema-epoch manifest in the image, chart, payload and receipt', async () => {
+  const receiptContract = await read('./release-candidate-receipt.mjs')
+  assert.match(stage, /node scripts\/schema-epoch-manifest\.mjs verify/)
+  assert.match(stage, /cp packages\/shared\/src\/schema-epoch-manifest\.json "\$metadata_output\/schema-epoch-manifest\.json"/)
+  assert.match(stage, /find charts packages metadata -type f/)
+  assert.match(receiptContract, /schemaEpoch/)
+  assert.match(dockerReusable, /dist\/packages\/shared\/src\/schema-epoch-manifest\.json/)
+  assert.match(dockerReusable, /dist\/packages\/shared\/dist\/schema-epoch-manifest\.json/)
+  assert.match(dockerReusable, /backend schema-epoch manifest differs from protected source/)
+  assert.match(dockerReusable, /import\('\.\/dist\/packages\/shared\/dist\/db\/run-migrations\.js'\)/)
+  assert.match(dockerReusable, /import\('\.\/dist\/packages\/shared\/dist\/services\/platform-admin\/open-release-effect-cohort\.js'\)/)
+  assert.match(dockerReusable, /backend schema-epoch entrypoints are not executable from the production package layout/)
+})
+
 test('candidate package planning authenticates to GitHub Packages', () => {
   const toolchainStage = stage.slice(
     stage.indexOf('  stage-toolchain:\n'),

@@ -13,6 +13,9 @@ import { classifyChangedFiles } from './ci-change-classifier.mjs';
 
 const secret = 'DO_NOT_EXPORT_AUTH_COOKIE_PASSWORD_SQL_OR_STATE';
 const goodIsolation = { superuser: false, bypass_rls: false, forced_tenant_policy_tables: 19 };
+const schemaPredecessorTag = 'v0.24.2';
+const schemaPredecessorRevision = '785b5ab890aba315f6c3944ace0edcc3ff99d20f';
+const schemaPredecessorImage = 'ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9ece726dac9f6a492cbb030c9dab6efadedf1f3f5ac842219027a3646';
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'eg-pooled-evidence-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -143,9 +146,18 @@ function runnerFixture(t) {
   executable('bin/pnpm', `echo '${secret}'\nif [ "$SCENARIO" = build-failure ]; then exit 23; fi`);
   executable('bin/curl', `printf '%s\\n' "$@" >> "$HARNESS_CURL_ARGS"\necho '${secret}'\nif [ "$SCENARIO" = tls-startup-failure ]; then exit 35; fi`);
   executable('bin/rm', 'if [ "$SCENARIO" = scratch-cleanup-failure ]; then exit 1; fi\nexec /bin/rm "$@"');
+  executable('bin/git', `
+case "$*" in
+  *"rev-parse ${schemaPredecessorTag}^{commit}")
+    if [ "$SCENARIO" = wrong-predecessor-revision ]; then printf '%064d\\n' 0; else printf '%s\\n' '${schemaPredecessorRevision}'; fi;;
+  *) exit 2;;
+esac`);
   executable('bin/docker', `
 case "$*" in
   info) [ "$SCENARIO" != preflight-failure ]; exit $?;;
+  "pull ${schemaPredecessorImage}") exit 0;;
+  "image inspect ${schemaPredecessorImage} --format "*)
+    if [ "$SCENARIO" = wrong-predecessor-label ]; then printf '%s\\n' '${schemaPredecessorRevision} v0.0.0'; else printf '%s\\n' '${schemaPredecessorRevision} ${schemaPredecessorTag}'; fi;;
   *"exec -T backend node -")
     if [ "$SCENARIO" = invalid-isolation ]; then echo '${secret}'; else echo '${JSON.stringify({ ...goodIsolation, role: secret })}'; fi;;
   *"down --volumes"*) touch "$HARNESS_CLEANUP"; [ "$SCENARIO" != cleanup-failure ]; exit $?;;
@@ -167,6 +179,7 @@ esac`);
 
 for (const [scenario, code, stage] of [
   ['success', 0, 'complete'], ['preflight-failure', 2, 'preflight'], ['build-failure', 23, 'build'],
+  ['wrong-predecessor-revision', 2, 'preflight'], ['wrong-predecessor-label', 2, 'preflight'],
   ['tls-startup-failure', 35, 'startup'],
   ['browser-failure', 17, 'browser'], ['signal', 143, 'browser'], ['invalid-isolation', 1, 'complete'],
   ['cleanup-failure', 1, 'cleanup'], ['scratch-cleanup-failure', 1, 'cleanup'],
@@ -187,7 +200,10 @@ for (const [scenario, code, stage] of [
   } else {
     assert.deepEqual(readdirSync(scratch), [], 'owned scratch and raw authentication logs must be removed');
   }
-  assert.equal(existsSync(join(root, 'cleaned')), !['preflight-failure', 'build-failure'].includes(scenario));
+  assert.equal(
+    existsSync(join(root, 'cleaned')),
+    !['preflight-failure', 'build-failure', 'wrong-predecessor-revision', 'wrong-predecessor-label'].includes(scenario),
+  );
 });
 
 test('TLS startup requires bounded CA-verified GETs and never bypasses certificate errors', (t) => {
@@ -247,6 +263,11 @@ test('raw retention is explicit, private and prohibited on CI', (t) => {
 test('protected CI uploads precisely the receipt and runs this regression gate', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const job = workflow.split('\n  native-tenancy-pooled-e2e:')[1].split('\n  saas-upgrade-restore-rollback:')[0];
+  assert.match(
+    job,
+    /- name: Checkout\n\s+uses: actions\/checkout@[0-9a-f]+[^\n]*\n\s+with:\n\s+fetch-depth: 0/,
+    'the physical pooled runner must resolve the immutable schema-predecessor release tag',
+  );
   assert.deepEqual([...job.matchAll(/^\s+path: (.+)$/gm)].map((match) => match[1]), ['.artifacts/pooled-tenancy-e2e/public/receipt.json']);
   assert.match(job, /node --test scripts\/pooled-tenancy-evidence\.test\.mjs/);
   assert.match(job, /scripts\/native-tenancy-postgres-runner\.test\.mjs/);

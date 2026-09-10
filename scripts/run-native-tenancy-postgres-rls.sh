@@ -33,7 +33,7 @@ container_id="$(docker create --name "$container_name" \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=postgres \
   -p "127.0.0.1:${postgres_port}:5432" \
-  postgres:17-alpine)"
+  postgres:16-alpine)"
 docker start "$container_id" >/dev/null
 
 ready=false
@@ -53,6 +53,7 @@ fi
 
 cd "$root_dir"
 SESSION_RACE_DISPOSABLE_POSTGRES=true \
+MIGRATION_TEST_POSTGRES_CONTAINER="$container_id" \
 MIGRATION_TEST_POSTGRES_HOST=127.0.0.1 \
 MIGRATION_TEST_POSTGRES_PORT="$postgres_port" \
 MIGRATION_TEST_POSTGRES_USER=postgres \
@@ -60,6 +61,10 @@ MIGRATION_TEST_POSTGRES_PASSWORD=postgres \
 MIGRATION_TEST_POSTGRES_DATABASE=postgres \
   corepack pnpm --dir backend exec vitest run \
     test/integration/nativeTenantRls.test.ts \
+    test/integration/postgres-context-boundary.test.ts \
+    test/integration/postgres-global-identity.test.ts \
+    test/integration/postgres-shared-inventory-readiness.test.ts \
+    test/integration/postgres-schema-epoch-bridge.test.ts \
     test/qualification/sessionRevocationRace.test.ts \
     --config vitest.config.ts \
     --reporter=dot \

@@ -1,4 +1,5 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { getPlatformDatabaseCapability } from '../platform-database-context.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { SsoSyncEvent } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoSyncEvent.js';
 import { SsoSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoSyncRun.js';
@@ -262,7 +263,10 @@ class SsoSyncDiagnosticsServiceClass {
 
   async startRun(input: StartSsoSyncRunInput): Promise<string | null> {
     try {
-      const id = generateId(); const now = diagnosticNow(); const details = withCorrelation(input.details, input.correlationId);
+      const capability = getPlatformDatabaseCapability();
+      const id = capability?.kind === 'provider-login' && capability.providerId === input.providerId && input.trigger === 'login'
+        ? capability.runId : generateId();
+      const now = diagnosticNow(); const details = withCorrelation(input.details, input.correlationId);
       await (await getDataSource()).getRepository(SsoSyncRun).insert({ id, tenantId: normalizeTenantId(input.tenantId), providerId: input.providerId || null, userId: input.userId || null, trigger: input.trigger, status: 'running', startedAt: now, completedAt: null, groupMembershipsCreated: 0, groupMembershipsUpdated: 0, groupMembershipsRemoved: 0, assignmentsCreated: 0, assignmentsUpdated: 0, assignmentsRemoved: 0, errorCode: null, errorMessage: null, details: stringifyDetails(details) });
       await this.recordEvent(id, { tenantId: input.tenantId, providerId: input.providerId, userId: input.userId, severity: 'info', type: 'identity_provider_sync_started', message: 'Identity provider sync started', details });
       return id;

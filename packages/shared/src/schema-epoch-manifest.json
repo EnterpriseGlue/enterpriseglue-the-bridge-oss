@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "enterpriseglue-schema-epoch/v1",
+  "id": "postgres-explicit-context-bridge-v1",
+  "target": {
+    "databaseType": "postgres",
+    "tenancyMode": "pooled"
+  },
+  "roles": {
+    "applicationStartup": {
+      "mode": "verify-only"
+    },
+    "preflight": {
+      "mode": "verify-runtime-grant"
+    },
+    "ownerMigration": {
+      "mode": "apply-through-executable",
+      "from": {
+        "through": 1700000000130,
+        "count": 132,
+        "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16",
+        "postgresPolicyProfile": "legacy-tenant-context/v1"
+      },
+      "through": 1700000000131,
+      "runtimeGrant": "configured-role-release-effect-cohorts-select-insert-update/v1"
+    }
+  },
+  "runtimeCapability": "postgres-explicit-context/v1",
+  "upgradeContract": {
+    "minimumDatabaseEpoch": {
+      "through": 1700000000130,
+      "count": 132,
+      "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16",
+      "postgresPolicyProfile": "legacy-tenant-context/v1"
+    },
+    "freshDatabase": "requires-separate-signed-bootstrap",
+    "emptyMigrationLedger": "requires-separate-signed-recovery"
+  },
+  "executableMigrationInventory": {
+    "through": 1700000000131,
+    "count": 133,
+    "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1"
+  },
+  "executableImplementationInventory": {
+    "algorithm": "sha256-source-v1",
+    "purpose": "owner-transition-1700000000131-dual-context-closure/v1",
+    "count": 16,
+    "sha256": "74628b550d95489109ef9dc917e3fe05fd75db49c998f826a629d10b678ca097"
+  },
+  "releaseEffectInventory": {
+    "version": "release-effect-inventory.enterpriseglue.io/v1",
+    "sha256": "c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087"
+  },
+  "acceptedDatabaseEpochs": [
+    {
+      "id": "pre-enforcement",
+      "through": 1700000000131,
+      "count": 133,
+      "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1",
+      "postgresPolicyProfile": "dual-context-compatibility/v1"
+    },
+    {
+      "id": "post-enforcement",
+      "through": 1700000000132,
+      "count": 134,
+      "sha256": "fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a",
+      "postgresPolicyProfile": "explicit-context/v1"
+    }
+  ]
+}

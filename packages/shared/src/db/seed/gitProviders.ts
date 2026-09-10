@@ -3,12 +3,24 @@ import { GitProvider } from '../../infrastructure/persistence/entities/GitProvid
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
+import { config } from '../../config/index.js';
+import { Tenant } from '../../infrastructure/persistence/entities/Tenant.js';
+import { runWithTenantDatabaseContext } from '../../services/tenant-database-context.js';
 
 /**
  * Seed default Git providers (GitHub, GitLab, Azure DevOps, Bitbucket)
  * Git providers are stored in the database alongside git_credentials
  */
 export async function seedGitProviders() {
+  if (config.tenancyMode === 'pooled') {
+    const tenant=await (await getDataSource()).getRepository(Tenant).findOneBy({id:'tenant-default',status:'active'});
+    if (!tenant) throw new Error('Git defaults require the canonical active default tenant');
+    return runWithTenantDatabaseContext({tenantId:tenant.id,tenantSlug:tenant.slug}, () => seedGitProvidersScoped(tenant.id));
+  }
+  return seedGitProvidersScoped(null);
+}
+
+async function seedGitProvidersScoped(tenantId: string|null) {
   const dataSource = await getDataSource();
   const providerRepo = dataSource.getRepository(GitProvider);
 
@@ -18,7 +30,7 @@ export async function seedGitProviders() {
     const providers = [
       {
         id: generateId(),
-        tenantId: null,
+        tenantId,
         name: 'GitHub',
         type: 'github',
         baseUrl: 'https://github.com',
@@ -40,7 +52,7 @@ export async function seedGitProviders() {
       },
       {
         id: generateId(),
-        tenantId: null,
+        tenantId,
         name: 'GitLab',
         type: 'gitlab',
         baseUrl: 'https://gitlab.com',
@@ -62,7 +74,7 @@ export async function seedGitProviders() {
       },
       {
         id: generateId(),
-        tenantId: null,
+        tenantId,
         name: 'Azure DevOps',
         type: 'azure-devops',
         baseUrl: 'https://dev.azure.com',
@@ -84,7 +96,7 @@ export async function seedGitProviders() {
       },
       {
         id: generateId(),
-        tenantId: null,
+        tenantId,
         name: 'Bitbucket',
         type: 'bitbucket',
         baseUrl: 'https://bitbucket.org',

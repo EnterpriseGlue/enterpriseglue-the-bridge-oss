@@ -1,0 +1,39 @@
+{
+  "open": {
+    "method": "PUT",
+    "path": "/api/workloads/releases/saas-2026-09/effect-cohorts/31",
+    "headers": {
+      "authorization": "Bearer <release-controller-token>"
+    },
+    "body": {
+      "expectedRevision": 0
+    }
+  },
+  "close": {
+    "method": "POST",
+    "path": "/api/workloads/releases/saas-2026-09/effect-cohorts/31/close",
+    "body": {
+      "expectedRevision": 1
+    }
+  },
+  "verify": {
+    "method": "POST",
+    "path": "/api/workloads/releases/saas-2026-09/effect-cohorts/31/verify",
+    "body": {
+      "expectedRevision": 2
+    }
+  },
+  "responseExcerpt": {
+    "schemaVersion": "release-effect-settlement.enterpriseglue.io/v1",
+    "releaseId": "saas-2026-09",
+    "cohortEpoch": 31,
+    "state": "closing",
+    "revision": 2,
+    "inventoryVersion": "release-effect-inventory.enterpriseglue.io/v1",
+    "configuredInventoryVersion": "release-effect-inventory.enterpriseglue.io/v1",
+    "inventoryComplete": false,
+    "coveredSourcesSettled": true,
+    "settled": false,
+    "eligibleForShutdown": false
+  }
+}

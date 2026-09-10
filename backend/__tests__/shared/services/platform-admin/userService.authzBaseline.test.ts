@@ -23,6 +23,7 @@ import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 
 describe('UserService authorization baseline', () => {
   beforeEach(() => {
@@ -98,6 +99,29 @@ describe('UserService authorization baseline', () => {
     expect(userRepo.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
     expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
+  });
+
+  it.each(['createUser', 'createPendingUser'] as const)('binds %s administrator authority to the newly persisted user only', async method => {
+    mockCreateTransaction('admin');
+    authzGroupService.ensureManualPlatformAdministratorMembershipWithManager.mockImplementation(async (_manager, userId) => {
+      expect(getPlatformDatabaseCapability()).toEqual({ kind: 'manual-administrator-grant', userId });
+      return { id: 'admin-1', created: true };
+    });
+    await userService[method]({ email: 'admin@example.test', platformRole: 'admin', createdByUserId: 'actor-1' });
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it.each(['admin', 'user'] as const)('bounds the %s mutation to the loaded canonical user and revokes capability on failure', async platformRole => {
+    mockCreateTransaction('admin');
+    const mutation = platformRole === 'admin'
+      ? authzGroupService.ensureManualPlatformAdministratorMembershipWithManager
+      : authzGroupService.removeManualPlatformAdministratorMembershipWithManager;
+    mutation.mockImplementationOnce(async () => {
+      expect(getPlatformDatabaseCapability()).toEqual({ kind: platformRole === 'admin' ? 'manual-administrator-grant' : 'manual-administrator-revoke', userId: 'user-1' });
+      throw new Error('membership mutation failed');
+    });
+    await expect(userService.updateUser('user-1', { platformRole })).rejects.toThrow('membership mutation failed');
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
   });
 
   it('removes only the manual administrator membership when a user is demoted', async () => {

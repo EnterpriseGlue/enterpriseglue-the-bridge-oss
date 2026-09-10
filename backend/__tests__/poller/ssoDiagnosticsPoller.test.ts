@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
+import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
 import {
   runScheduledLdapReconciliationOnce,
+  runScheduledSsoProviderIdentityCheckOnce,
   startSsoDiagnosticsPollerIfEnabled,
   stopSsoDiagnosticsPoller,
 } from '../../../packages/backend-host/src/poller/ssoDiagnosticsPoller.js';
@@ -13,12 +18,18 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({
   ldapReconciliationService: { reconcileProvider: vi.fn() },
 }));
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({
+  ssoSyncDiagnosticsService: { runProviderIdentityCheck: vi.fn() },
+}));
 
 describe('ssoDiagnosticsPoller LDAP scheduler', () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalTenancyMode = config.tenancyMode;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    config.tenancyMode = 'single';
     vi.useFakeTimers();
     delete process.env.SSO_DIAGNOSTICS_INTERVAL_MS;
     delete process.env.SSO_DIAGNOSTICS_TENANT_IDS;
@@ -32,6 +43,7 @@ describe('ssoDiagnosticsPoller LDAP scheduler', () => {
   afterEach(() => {
     stopSsoDiagnosticsPoller();
     process.env.NODE_ENV = originalNodeEnv;
+    config.tenancyMode = originalTenancyMode;
     vi.useRealTimers();
   });
 
@@ -84,5 +96,40 @@ describe('ssoDiagnosticsPoller LDAP scheduler', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     expect(identityProviderService.list).toHaveBeenCalledWith(null);
+  });
+
+  it('fans out pooled LDAP and diagnostics under canonical active tenant context', async () => {
+    config.tenancyMode = 'pooled';
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ find: async () => [
+      { id: 'tenant-a', slug: 'alpha', status: 'active' },
+      { id: 'tenant-b', slug: 'beta', status: 'active' },
+      { id: 'tenant-c', slug: 'closed', status: 'suspended' },
+    ] }) } as any);
+    const scopes: unknown[] = [];
+    vi.mocked(identityProviderService.list).mockImplementation(async tenantId => {
+      scopes.push(getTenantDatabaseContext());
+      return [{ key: `ldap-${tenantId}`, protocol: 'ldap', isEnabled: true }] as never;
+    });
+    vi.mocked(ldapReconciliationService.reconcileProvider).mockImplementation(async (_, tenantId) => {
+      expect(getTenantDatabaseContext()?.tenantId).toBe(tenantId);
+      return { processed: 1 };
+    });
+    vi.mocked(ssoSyncDiagnosticsService.runProviderIdentityCheck).mockImplementation(async input => {
+      expect(getTenantDatabaseContext()?.tenantId).toBe(input?.tenantId);
+      return { status: 'checked' } as never;
+    });
+    await expect(runScheduledLdapReconciliationOnce()).resolves.toHaveLength(2);
+    await expect(runScheduledSsoProviderIdentityCheckOnce()).resolves.toHaveLength(2);
+    expect(scopes).toEqual([{ tenantId: 'tenant-a', tenantSlug: 'alpha' }, { tenantId: 'tenant-b', tenantSlug: 'beta' }]);
+    expect(getTenantDatabaseContext()).toBeUndefined();
+  });
+
+  it('rejects explicit global or unknown pooled scopes before provider work', async () => {
+    config.tenancyMode = 'pooled';
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: () => ({ find: async () => [] }) } as any);
+    await expect(runScheduledLdapReconciliationOnce({ tenantIds: [null] })).rejects.toThrow('unavailable');
+    await expect(runScheduledSsoProviderIdentityCheckOnce({ tenantIds: [null] })).rejects.toThrow('unavailable');
+    await expect(runScheduledLdapReconciliationOnce({ tenantIds: ['missing'] })).rejects.toThrow('not registered');
+    expect(identityProviderService.list).not.toHaveBeenCalled();
   });
 });

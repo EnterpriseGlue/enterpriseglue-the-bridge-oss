@@ -13,6 +13,19 @@ images:
 imagePullSecrets: []
 rolloutRevision: ""
 
+# Optional platform bootstrap delivery, exclusively to the split API runtime.
+# The ConfigMap contains a non-secret bundle envelope. Its sole external secret
+# reference is env://EG_CONFIG_BUNDLE_SECRET, backed by a dedicated Secret key.
+apiConfigBundle:
+  enabled: false
+  configMapName: ""
+  configMapKey: config-bundle.json
+  expectedSha256: ""
+  mode: validate
+  secret:
+    name: ""
+    key: ""
+
 frontend:
   replicas: 2
   resources:
@@ -52,6 +65,13 @@ workers:
     targetCPUUtilizationPercentage: 70
 
 database:
+  # Optional chart-validated runtime profile. Leave both values empty to retain
+  # the historical ConfigMap-driven contract. The signed bridge is activated
+  # only by the exact postgres/pooled pair; managed cohort admission also uses
+  # this explicit profile.
+  profile:
+    databaseType: ""
+    tenancyMode: ""
   # Non-secret application configuration (DATABASE_TYPE, host, database,
   # tenancy/RLS settings, public trust material, endpoint policy).
   configMapName: enterpriseglue-config
@@ -60,6 +80,16 @@ database:
   applicationSecretName: enterpriseglue-secrets
   migrationSecretName: enterpriseglue-migration-secrets
   preflightSecretName: enterpriseglue-preflight-secrets
+  releaseEffectCohort:
+    # Managed releases enable this narrow application-credential hook. It opens
+    # the configured durable cohort after migration/preflight and before workloads.
+    enabled: false
+    releaseId: ""
+    cohortEpoch: 0
+    inventoryVersion: ""
+    inventorySha256: ""
+    backoffLimit: 1
+    ttlSecondsAfterFinished: 3600
   migration:
     enabled: true
     # PostgreSQL-only optional post-migration ACL refresh; never sent to application/preflight.
@@ -85,6 +115,7 @@ database:
 serviceAccounts:
   api: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   worker: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  cohort: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   migration: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   preflight: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
 

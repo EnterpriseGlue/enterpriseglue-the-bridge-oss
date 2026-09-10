@@ -61,6 +61,7 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantPlacementV2Audience: z.string().min(1).max(255).optional(),
   tenantPlacementV2ShardId: z.string().min(1).max(160).optional(),
   tenantPlacementReleaseId: z.string().min(1).max(256).optional(),
+  tenantReleaseEffectCohortEpoch: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   tenantCloudIdentityAudience: z.string().min(1).max(256).optional(),
   platformCloudIdentityAudience: z.string().min(1).max(256).optional(),
   cloudAccountIdentityEnabled: z.boolean().default(false),
@@ -226,6 +227,9 @@ function loadConfig(): Config {
     tenantPlacementV2Audience: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_AUDIENCE),
     tenantPlacementV2ShardId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_V2_SHARD_ID),
     tenantPlacementReleaseId: envOrUndefined(process.env.EG_TENANT_PLACEMENT_RELEASE_ID),
+    tenantReleaseEffectCohortEpoch: process.env.EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH
+      ? Number(process.env.EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH)
+      : undefined,
     tenantCloudIdentityAudience: envOrUndefined(process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE),
     platformCloudIdentityAudience: envOrUndefined(process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE),
     cloudAccountIdentityEnabled: process.env.EG_CLOUD_ACCOUNT_IDENTITY_ENABLED === 'true',
@@ -451,6 +455,22 @@ if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
 }
 if (config.cloudAccountIdentityEnabled && (config.tenancyMode !== 'pooled' || !config.tenancyCloudRequired)) {
   throw new Error('EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true requires pooled managed Cloud tenancy.');
+}
+if (config.tenantReleaseEffectCohortEpoch && !config.tenantPlacementReleaseId) {
+  throw new Error('EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH requires EG_TENANT_PLACEMENT_RELEASE_ID.');
+}
+if (config.tenancyCloudRequired
+  && config.tenantPlacementReleaseId
+  && !/^sha256:[a-f0-9]{64}$/.test(config.tenantPlacementReleaseId)) {
+  throw new Error(
+    'Managed pooled Cloud EG_TENANT_PLACEMENT_RELEASE_ID must be the sha256 digest of the verified signed candidate receipt.',
+  );
+}
+if (config.tenancyCloudRequired
+  && config.tenancyMode === 'pooled'
+  && config.tenantPlacementReleaseId
+  && !config.tenantReleaseEffectCohortEpoch) {
+  throw new Error('Managed pooled Cloud release awareness requires EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH.');
 }
 
 if (config.tenancyMode === 'pooled') {

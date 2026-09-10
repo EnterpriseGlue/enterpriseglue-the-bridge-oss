@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, type Mock } from 'vitest';
+import { createServer, type Server } from 'node:http';
 import request from 'supertest';
 import express from 'express';
 import tasksRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/tasks.js';
@@ -84,14 +85,33 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
 }));
 
 describe('mission-control tasks routes', () => {
-  let app: express.Application;
+  let app: Server;
+  let application: express.Application;
+
+  // Keep listener lifetime explicit instead of binding/closing a new socket
+  // per request, while rebuilding middleware and mocks for every test.
+  beforeAll(async () => {
+    app = createServer((req, res) => application(req, res));
+    await new Promise<void>((resolve, reject) => {
+      app.once('error', reject);
+      app.listen(0, '127.0.0.1', () => {
+        app.off('error', reject);
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    if (app?.listening) await new Promise<void>((resolve, reject) =>
+      app.close(error => error ? reject(error) : resolve()));
+  });
 
   beforeEach(() => {
-    app = express();
-    app.disable('x-powered-by');
-    app.use(express.json());
-    app.use(tasksRouter);
-    app.use(errorHandler);
+    application = express();
+    application.disable('x-powered-by');
+    application.use(express.json());
+    application.use(tasksRouter);
+    application.use(errorHandler);
     vi.clearAllMocks();
 
     (getDataSource as unknown as Mock).mockResolvedValue({

@@ -35,7 +35,7 @@ import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
-import { isMultiTenantEnabled, type NavExtension } from '../../../enterprise/extensionRegistry'
+import { extensions, isMultiTenantEnabled, type NavExtension } from '../../../enterprise/extensionRegistry'
 import { evaluateActionSnapshot, GuardedMenuItem } from '../../../shared/auth/guards'
 import {
   ADMIN_NAV_PLATFORM_PERMISSIONS,
@@ -735,7 +735,12 @@ export default function LayoutWithProSidebar() {
           tenantOnly: item.scope === 'tenant',
           scope: item.scope,
         }))
-        setEnterpriseNavItems([...legacyItems, ...nativeItems])
+        // Trusted system modules register independently of the legacy plugin.
+        // Their main navigation must retain its scope and authorization metadata.
+        const registeredMainItems = extensions.navItems.filter((item) => item.section === 'main')
+        const mainItems = new Map(legacyItems.map((item) => [item.id, item]))
+        for (const item of registeredMainItems) mainItems.set(item.id, item)
+        setEnterpriseNavItems([...mainItems.values(), ...nativeItems])
       })
       .catch(() => {
         if (cancelled) return

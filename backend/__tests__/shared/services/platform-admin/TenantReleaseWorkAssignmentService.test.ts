@@ -32,10 +32,14 @@ describe('TenantReleaseWorkAssignmentService', () => {
   it('is idempotent at the same epoch and rejects stale or in-flight transitions', async () => {
     const current = { id: 'assignment-1', tenantRef: 'tenant-alpha', releaseId: 'release-preview', assignmentEpoch: 4, updatedAt: 1 };
     const assignment = { findOne: vi.fn(async () => current), insert: vi.fn(), update: vi.fn() };
-    const events = { count: vi.fn(async () => 0), update: vi.fn() };
-    const schedules = { count: vi.fn(async () => 0), update: vi.fn() };
+    const events = { count: vi.fn(async () => 0), update: vi.fn(async () => ({ affected: 3 })) };
+    const schedules = { count: vi.fn(async () => 0), update: vi.fn(async () => ({ affected: 2 })) };
     const service = new TenantReleaseWorkAssignmentService(async () => dataSource({ assignment, events, schedules }));
-    await expect(service.assign({ tenantId: 'tenant-alpha', releaseId: 'release-preview', assignmentEpoch: 4 })).resolves.toMatchObject({ idempotent: true });
+    await expect(service.assign({ tenantId: 'tenant-alpha', releaseId: 'release-preview', assignmentEpoch: 4 })).resolves.toMatchObject({
+      idempotent: true, updatedEvents: 3, updatedSchedules: 2,
+    });
+    expect(events.update).toHaveBeenCalledOnce();
+    expect(schedules.update).toHaveBeenCalledOnce();
     await expect(service.assign({ tenantId: 'tenant-alpha', releaseId: 'release-preview', assignmentEpoch: 3 })).rejects.toMatchObject({ statusCode: 409 });
 
     assignment.findOne.mockResolvedValueOnce({ ...current, assignmentEpoch: 3 });
@@ -52,8 +56,10 @@ describe('conditional tenant release assignment', () => {
 
   function fixture(type: string = 'postgres', currentEpoch?: number) {
     const tenant = { update: vi.fn(async () => ({ affected: 1 as number | undefined })) };
+    const findAssignment = vi.fn(async () => currentEpoch === undefined ? null : { id: 'a', releaseId: request.releaseId, assignmentEpoch: currentEpoch, updatedAt: 1 });
     const assignment = {
-      findOne: vi.fn(async () => currentEpoch === undefined ? null : { id: 'a', releaseId: request.releaseId, assignmentEpoch: currentEpoch }),
+      findOne: findAssignment,
+      findOneBy: findAssignment,
       insert: vi.fn(), update: vi.fn(),
       createQueryBuilder: vi.fn(),
     };
@@ -75,17 +81,22 @@ describe('conditional tenant release assignment', () => {
     expect(f.tenant.update).toHaveBeenCalledExactlyOnceWith(
       { id: request.tenantId, status: 'active', placementEpoch: 7 }, { placementEpoch: 7 },
     );
-    expect(f.tenant.update.mock.invocationCallOrder[0]).toBeLessThan(f.assignment.findOne.mock.invocationCallOrder[0]);
+    const assignmentRead = ['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(type)
+      ? f.assignment.findOneBy : f.assignment.findOne;
+    expect(f.tenant.update.mock.invocationCallOrder[0]).toBeLessThan(assignmentRead.mock.invocationCallOrder[0]);
     if (type === 'oracle') {
       expect(f.assignment.createQueryBuilder).toHaveBeenCalledExactlyOnceWith('assignment');
       expect(f.query.where).toHaveBeenCalledExactlyOnceWith({ tenantRef: request.tenantId });
       expect(f.query.setLock).toHaveBeenCalledExactlyOnceWith('pessimistic_write');
       expect(f.query.getOne).toHaveBeenCalledExactlyOnceWith();
     } else {
-      expect(f.assignment.findOne).toHaveBeenCalledWith({
-        where: { tenantRef: request.tenantId },
-        lock: ['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(type) ? undefined : { mode: 'pessimistic_write' },
-      });
+      if (['spanner', 'sqljs', 'sqlite', 'better-sqlite3'].includes(type)) {
+        expect(f.assignment.findOneBy).toHaveBeenCalledExactlyOnceWith({ tenantRef: request.tenantId });
+      } else {
+        expect(f.assignment.findOne).toHaveBeenCalledWith({
+          where: { tenantRef: request.tenantId }, lock: { mode: 'pessimistic_write' },
+        });
+      }
       expect(f.assignment.createQueryBuilder).not.toHaveBeenCalled();
     }
   });
@@ -95,6 +106,7 @@ describe('conditional tenant release assignment', () => {
     f.tenant.update.mockResolvedValue({ affected });
     await expect(f.service.assign(request)).rejects.toMatchObject({ statusCode: 409 });
     expect(f.assignment.findOne).not.toHaveBeenCalled();
+    expect(f.assignment.findOneBy).not.toHaveBeenCalled();
     expect(f.assignment.insert).not.toHaveBeenCalled();
     expect(f.events.count).not.toHaveBeenCalled();
     expect(f.schedules.update).not.toHaveBeenCalled();
@@ -115,7 +127,7 @@ describe('conditional tenant release assignment', () => {
     const { expectedPlacementEpoch: _, ...legacy } = request;
     await expect(f.service.assign(legacy)).resolves.toEqual({
       schemaVersion: 'tenant-release-work-assignment.enterpriseglue.io/v1',
-      ...legacy, updatedEvents: 0, updatedSchedules: 0, idempotent: true,
+      ...legacy, updatedEvents: 2, updatedSchedules: 1, idempotent: true,
     });
     expect(f.tenant.update).not.toHaveBeenCalled();
   });
@@ -156,6 +168,7 @@ describe('conditional tenant release assignment', () => {
 
 function dataSource(repositories: { assignment: object; events: object; schedules: object; tenant?: object }, type = 'postgres'): DataSource {
   const manager = {
+    connection: { options: { type } },
     getRepository(entity: unknown) {
       if (entity === Tenant && repositories.tenant) return repositories.tenant;
       if (entity === TenantReleaseWorkAssignment) return repositories.assignment;

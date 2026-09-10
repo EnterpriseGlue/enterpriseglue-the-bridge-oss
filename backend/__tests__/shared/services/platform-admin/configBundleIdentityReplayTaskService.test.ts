@@ -109,6 +109,48 @@ describe('configBundleIdentityReplayTaskService', () => {
     expect(find).toHaveBeenLastCalledWith({ where: { applyRunId: 'run-3' }, order: { createdAt: 'ASC' } });
   });
 
+  it.each(['completed', 'truncated', 'retry'] as const)('does not report %s after losing its task lease', async outcome => {
+    find.mockResolvedValueOnce([{
+      id: 'task-lost', tenantId: 'tenant-a', applyRunId: 'run-lost', providerId: 'provider-1', syncRunId: 'sync-run-1',
+      status: 'queued', cursor: 'page-2', attempts: 0, scanned: 0, created: 0, removed: 0, failed: 0,
+    }]);
+    update.mockResolvedValueOnce({ affected: 1 }).mockResolvedValueOnce({ affected: 1 }).mockResolvedValueOnce({ affected: 0 });
+    if (outcome === 'retry') replayMemberships.mockRejectedValueOnce(new Error('replay failed'));
+    else replayMemberships.mockResolvedValueOnce({ scanned: 1, created: 0, removed: 0, failed: 0, truncated: outcome === 'truncated', nextCursor: null });
+
+    await expect(configBundleIdentityReplayTaskService.runNextPage()).rejects.toThrow('task lease was lost');
+    expect(update).toHaveBeenCalledTimes(3);
+    const leaseId = update.mock.calls[1][1].leaseId;
+    expect(update.mock.calls[2][0]).toMatchObject({ id: 'task-lost', status: 'running', leaseId });
+    expect(syncDiagnostics.completeRun).not.toHaveBeenCalled();
+    expect(syncDiagnostics.failRun).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 2])('requires an exact final CAS count, not %s', async affected => {
+    find.mockResolvedValueOnce([{
+      id: 'task-count', tenantId: null, applyRunId: 'run-count', providerId: 'provider-1', syncRunId: 'sync-run-1',
+      status: 'queued', cursor: 'page-2', attempts: 0, scanned: 0, created: 0, removed: 0, failed: 0,
+    }]);
+    update.mockResolvedValueOnce({ affected: 1 }).mockResolvedValueOnce({ affected: 1 }).mockResolvedValueOnce({ affected });
+    replayMemberships.mockResolvedValueOnce({ scanned: 1, created: 0, removed: 0, failed: 0, truncated: false, nextCursor: null });
+    await expect(configBundleIdentityReplayTaskService.runNextPage()).rejects.toThrow('task lease was lost');
+    expect(syncDiagnostics.completeRun).not.toHaveBeenCalled();
+    expect(syncDiagnostics.failRun).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a completed task when its diagnostic write fails', async () => {
+    find.mockResolvedValueOnce([{
+      id: 'task-diagnostic', tenantId: null, applyRunId: 'run-diagnostic', providerId: 'provider-1', syncRunId: 'sync-run-1',
+      status: 'queued', cursor: 'page-2', attempts: 0, scanned: 0, created: 0, removed: 0, failed: 0,
+    }]);
+    replayMemberships.mockResolvedValueOnce({ scanned: 1, created: 0, removed: 0, failed: 0, truncated: false, nextCursor: null });
+    syncDiagnostics.completeRun.mockRejectedValueOnce(new Error('diagnostic unavailable'));
+    await expect(configBundleIdentityReplayTaskService.runNextPage()).rejects.toThrow('diagnostic unavailable');
+    expect(update).toHaveBeenCalledTimes(3);
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'running' }), expect.objectContaining({ status: 'completed' }));
+    expect(syncDiagnostics.failRun).not.toHaveBeenCalled();
+  });
+
   it('reports pending when selected apply-run tasks are not currently eligible for retry', async () => {
     find
       .mockResolvedValueOnce([])

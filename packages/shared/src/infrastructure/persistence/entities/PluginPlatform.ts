@@ -1067,6 +1067,42 @@ export class PluginManagerAdmission extends AppBaseEntity {
   updatedAt!: number;
 }
 
+@Index('idx_release_effect_cohort_identity', ['releaseId'], {
+  unique: true,
+})
+@Entity({ name: 'release_effect_cohorts', schema: 'main' })
+export class ReleaseEffectCohort extends AppBaseEntity {
+  @Column({ name: 'release_id', type: 'text' })
+  releaseId!: string;
+
+  @Column({ name: 'cohort_epoch', type: 'bigint' })
+  cohortEpoch!: number;
+
+  @Column({ type: 'text' })
+  state!: 'open' | 'closing' | 'settled';
+
+  @Column({ type: 'bigint', default: 1 })
+  revision!: number;
+
+  @Column({ name: 'inventory_version', type: 'text' })
+  inventoryVersion!: string;
+
+  @Column({ name: 'inventory_sha256', type: 'text' })
+  inventorySha256!: string;
+
+  @Column({ name: 'opened_at', type: 'bigint' })
+  openedAt!: number;
+
+  @Column({ name: 'closed_at', type: 'bigint', nullable: true })
+  closedAt!: number | null;
+
+  @Column({ name: 'settled_at', type: 'bigint', nullable: true })
+  settledAt!: number | null;
+
+  @Column({ name: 'updated_at', type: 'bigint' })
+  updatedAt!: number;
+}
+
 export const pluginPlatformEntities = [
   PluginPlatformState,
   PluginEmergencyControlOperation,
@@ -1096,4 +1132,5 @@ export const pluginPlatformEntities = [
   PluginInstallationObservation,
   PluginManagerCapability,
   PluginManagerAdmission,
+  ReleaseEffectCohort,
 ] as const;

@@ -1,8 +1,8 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
-import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
-
-const PLATFORM_ADMINISTRATORS_GROUP_ID = 'system.group.platform_administrators';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import type { DataSource } from 'typeorm';
+import { getActivePlatformAdministratorUserIds, hasActivePlatformAdministrator } from '../platform-admin/PlatformAdministratorMembershipService.js';
 
 export interface SetupStatus {
   isConfigured: boolean;
@@ -15,7 +15,18 @@ export interface SetupStatus {
 }
 
 class SetupStatusServiceImpl {
-  async getSetupStatus(): Promise<SetupStatus> {
+  private async hasPooledAdministrator(dataSource: DataSource, authenticatedUserId?: string): Promise<boolean> {
+    // This optional witness comes only from requireAuth, not request input.
+    // The usual administrator request needs one narrow membership query.
+    if (authenticatedUserId && (await getActivePlatformAdministratorUserIds([authenticatedUserId], dataSource)).size) return true;
+
+    // A delegated settings reader receives one boolean setup witness. The
+    // capability and RLS policy never cross this service boundary as a
+    // platform-administrator membership directory.
+    return hasActivePlatformAdministrator(dataSource);
+  }
+
+  async getSetupStatus(authenticatedUserId?: string): Promise<SetupStatus> {
     const dataSource = await getDataSource();
     const emailConfigRepo = dataSource.getRepository(EmailSendConfig);
 
@@ -23,13 +34,9 @@ class SetupStatusServiceImpl {
     const hasDefaultTenant = true;
 
     // Setup is complete only when an active canonical administrator grant exists.
-    const hasAdminUser = await dataSource.getRepository(AuthzGroupMembership)
-      .createQueryBuilder('membership')
-      .where('membership.groupId = :groupId', {
-        groupId: PLATFORM_ADMINISTRATORS_GROUP_ID,
-      })
-      .andWhere('(membership.expiresAt IS NULL OR membership.expiresAt > :now)', { now: Date.now() })
-      .getExists();
+    const hasAdminUser = config.tenancyMode === 'pooled'
+      ? await this.hasPooledAdministrator(dataSource, authenticatedUserId)
+      : await hasActivePlatformAdministrator(dataSource);
 
     // Check if email config exists (optional but recommended)
     const hasEmailConfig = await emailConfigRepo.count() > 0;

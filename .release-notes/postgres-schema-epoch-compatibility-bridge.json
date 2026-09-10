@@ -1,0 +1,66 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "postgres-schema-epoch-compatibility-bridge",
+  "type": "security",
+  "scope": "database-upgrade",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds a signed PostgreSQL schema-epoch bridge whose owner job stops before explicit-context enforcement while application startup verifies either side of the policy cutover.",
+  "userImpact": [],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Deploy the independently signed bridge release and let its separately credentialed owner job apply exactly through migration 1700000000131 before starting bridge application replicas.",
+      "For pooled PostgreSQL, set the chart profile to database.profile.databaseType=postgres and database.profile.tenancyMode=pooled; confirm the existing ledger is exactly the signed 132-entry inventory through migration 1700000000130.",
+      "After verifying the candidate signature, source, backend/chart subjects, schema manifest, transition implementation and effect inventory, configure the release-effect cohort releaseId as the SHA-256 digest of those exact receipt bytes and use its projected inventory values; the chart orders owner migration, restricted preflight, and cohort opening before workloads.",
+      "Keep the bridge and previous qualified release for the complete 28-day fallback interval; only the later owner-controlled release may apply migration 1700000000132."
+    ]
+  },
+  "configuration": [
+    "The explicit postgres/pooled chart profile activates the signed bridge contract. Other adapters, single-tenancy PostgreSQL, and omitted profiles retain the existing database.migration.enabled behavior.",
+    "No operator migration-skip or schema-epoch selector is added. The application verify role and owner migration ceiling are immutable signed manifest data.",
+    "The managed chart pins DATABASE_TYPE and EG_TENANCY_MODE directly on owner, preflight, API and worker containers, so a missing or drifted ConfigMap cannot select a generic migration path."
+  ],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The bridge owner entrypoint can execute the already introduced release-effect migration 1700000000131 but filters TypeORM before migration 1700000000132.",
+      "The bridge accepts only exact migration-ledger inventories through 1700000000131 with the attested dual legacy-or-capability policy or through 1700000000132 with attested explicit-context policies.",
+      "The owner accepts only the exact 1700000000130 predecessor or an already accepted epoch. Fresh databases and empty or partial ledgers require a separate signed bootstrap/recovery release."
+    ]
+  },
+  "security": [
+    "Application startup rejects apply mode for pooled PostgreSQL before schema repair, synchronization or connection-owned migration work.",
+    "The bounded owner path cannot run synchronize, migration-ledger baselining, policy repair, critical-schema repair, generic grant refresh, RBAC seeding or legacy projection side effects; its optional configured-role action is limited to SELECT, INSERT, and UPDATE on the new 0131 cohort table.",
+    "The signed candidate receipt binds the manifest checksum, exact minimum/accepted epochs, unsupported bootstrap/recovery states, 0131 owner-transition implementation digest, and exact release-effect inventory version/SHA-256; candidate image qualification verifies the same bytes and imports the owner, preflight, and cohort commands from the stable built shared-package layout.",
+    "Application, migration, and membership-free preflight database Secrets are pairwise distinct; migration, preflight, and enabled cohort Kubernetes ServiceAccounts cannot alias one another."
+  ],
+  "documentation": [
+    "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
+    "docs/runbooks/saas-upgrade-restore-rollback.md",
+    "infra/kubernetes/helm/enterpriseglue-host/README.md"
+  ],
+  "knownLimitations": [
+    "Cloud rollout remains responsible for verifying the signed receipt and exact source/image/chart subjects before selecting the bridge; this OSS release does not implement a provider controller.",
+    "The managed Helm bridge accepts only exact 1700000000130 upgrades and has no executable fresh pooled predecessor bootstrap; fresh or empty managed shards remain fail-closed and blocked pending a separate provider-owned bootstrap packet.",
+    "Migration 1700000000131 is a bounded compatibility epoch, not final enforcement: its exact attested policy permits the released legacy tenant-context predicate OR the finite current capability predicate until migration 1700000000132 removes the legacy route."
+  ],
+  "rollback": [
+    "Before migration 1700000000132, a qualified v0.24.2 predecessor may overlap migration 1700000000131 only with EG_DATABASE_STARTUP_MODE=verify; its apply path would recreate the legacy policy and invalidate the exact dual attestation. Database rollback still uses the qualified pre-upgrade backup.",
+    "After migration 1700000000132, use the qualified pre-upgrade backup and compatible runtime; do not edit the TypeORM ledger or recreate permissive policies in place."
+  ],
+  "validation": [
+    "Focused tests prove application apply rejection, the exact owner ceiling, pre-mutation rejection of empty/partial/unexpected owner ledgers, absence of owner repair or policy-lease side effects, exact pre/post ledger acceptance, and exact receipt-bound cohort inventory.",
+    "The populated v0.18.0 recovery and fresh native pooled harnesses hard-pin the published v0.24.2 predecessor by OCI digest and release labels, attest its exact registered 132-entry inventory before mutation, verify its executed ledger through 1700000000130 and owner-created bootstrap prerequisites, invoke current code only through the bounded 1700000000131 owner entrypoint, restart v0.24.2 at 0131 only in verify mode with legacy tenant access, and start the restricted current application in verify-only mode without seeding or applying 1700000000132.",
+    "PostgreSQL integration verifies exact legacy policy at 0130, the attested dual policy at 0131 with legacy tenant access plus current global membership and audit capabilities, the restricted cohort grant through a third membership-free preflight login, and strict explicit-context policy after the real 0132 migration; package, Helm and signed-candidate contracts verify immutable manifest delivery.",
+    "Real PostgreSQL concurrency observes reverse-preview event and schedule claimers queued in one wait chain behind the same first sorted tenant assignment, then verifies deterministic all-assignment-to-cohort-to-effect batch ordering, expired-lease recovery, and exclusion of work moved to a new release."
+  ],
+  "packages": [
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.21.0", "newVersion": "0.21.1", "impact": "patch"},
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.19.0", "newVersion": "0.19.1", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.8", "newVersion": "0.17.9", "impact": "patch"}
+  ]
+}

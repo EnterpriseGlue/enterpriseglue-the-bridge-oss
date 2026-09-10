@@ -10,6 +10,9 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { camundaGet, getDecisionDefinitions } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import { RuntimeResourceObservationSchema, type RuntimeResourceKind, type RuntimeResourceObservation } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 import type { RuntimeResourceSetMaterializationResult as SharedRuntimeResourceSetMaterializationResult } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
+import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
+import { getTenantDatabaseContext, runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 
 export type { RuntimeResourceKind, RuntimeResourceObservation } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 export type RuntimeResourceSetSelector =
@@ -60,25 +63,56 @@ export function matchRuntimeResourceSetSelector(resource: RuntimeResource, selec
 
 /** Shared reconciliation boundary for discovered/reported runtime metadata. */
 class RuntimeResourceInventoryService {
+  private async inTenant<T>(tenantId: string | null | undefined, work: (tenantId: string | null | undefined) => Promise<T>): Promise<T> {
+    if (config.tenancyMode !== 'pooled') return work(tenantId);
+    const current = getTenantDatabaseContext();
+    const id = tenantId || current?.tenantId;
+    if (!id || (current && current.tenantId !== id)) throw new Error('Runtime inventory requires the bound tenant');
+    const tenant = await (await getDataSource()).getRepository(Tenant).findOne({ where: { id } });
+    if (!tenant || tenant.status !== 'active') throw new Error('Runtime inventory tenant is not active');
+    return runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () => work(tenant.id));
+  }
+
   async reconcileEngine(engineId: string, tenantId?: string | null): Promise<{ created: number; updated: number; deactivated: number; materializedSets: number }> {
+    return this.inTenant(tenantId, id => this.reconcileScopedEngine(engineId, id));
+  }
+
+  private async reconcileScopedEngine(engineId: string, tenantId?: string | null): Promise<{ created: number; updated: number; deactivated: number; materializedSets: number }> {
     const [processes, decisions] = await Promise.all([
       camundaGet<Array<{ id?: string; key?: string; version?: number; tenantId?: string | null; deploymentId?: string | null }>>(engineId, '/process-definition'),
       getDecisionDefinitions<Array<{ id?: string; key?: string; version?: number; tenantId?: string | null; deploymentId?: string | null }>>(engineId),
     ]);
-    const observations: RuntimeResourceObservation[] = [
+    let observations: RuntimeResourceObservation[] = [
       ...(processes || []).filter((item) => item.key).map((item) => ({ resourceKind: 'process_definition' as const, resourceKey: item.key!, engineResourceId: item.id || null, version: item.version || null, runtimeTenantId: item.tenantId || null, deploymentId: item.deploymentId || null })),
       ...(decisions || []).filter((item) => item.key).map((item) => ({ resourceKind: 'decision_definition' as const, resourceKey: item.key!, engineResourceId: item.id || null, version: item.version || null, runtimeTenantId: item.tenantId || null, deploymentId: item.deploymentId || null })),
     ];
+    const dataSource = await getDataSource();
+    const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } });
+    if (!engine) throw new Error('Engine not found');
+    if (config.tenancyMode === 'pooled' && engine.tenancyMode === 'shared') {
+      const mappings = await dataSource.getRepository(EngineTenantMapping).find({ where: { engineId, isActive: true } });
+      observations = observations.filter(observation => {
+        const key = engine.tenantMappingStrategy === 'deployment_target' ? observation.projectId || '' : observation.runtimeTenantId?.trim() || '';
+        const matches = mappings.filter(m => m.strategy === engine.tenantMappingStrategy && m.externalTenantId === key);
+        // Unresolved observations cannot be persisted as globally visible rows,
+        // nor treated as a complete authoritative snapshot for revocation.
+        if (matches.length !== 1) throw new Error('Shared runtime inventory mapping is unresolved');
+        return matches[0].enterpriseTenantId === tenantId;
+      });
+    }
     const observed = await this.observe(engineId, tenantId, observations);
     const deactivated = await this.deactivateMissing(engineId, tenantId, observations);
-    const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } });
     const materializations = await this.materializeForEngine(
       engineId,
-      engine?.tenancyMode === 'shared' ? undefined : tenantId,
+      config.tenancyMode !== 'pooled' && engine.tenancyMode === 'shared' ? undefined : tenantId,
     );
     return { ...observed, deactivated, materializedSets: materializations.length };
   }
   async observe(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<{ created: number; updated: number }> {
+    return this.inTenant(tenantId, id => this.observeScoped(engineId, id, observations));
+  }
+
+  private async observeScoped(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<{ created: number; updated: number }> {
     const validatedObservations = RuntimeResourceObservationSchema.array().parse(observations);
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(RuntimeResource);
@@ -87,6 +121,17 @@ class RuntimeResourceInventoryService {
     const mappings = engine.tenancyMode === 'shared'
       ? await dataSource.getRepository(EngineTenantMapping).find({ where: { engineId, isActive: true } })
       : [];
+    if (config.tenancyMode === 'pooled') {
+      if (engine.tenancyMode !== 'shared' && engine.tenantId !== tenantId) throw new Error('Runtime inventory engine tenant does not match');
+      // Validate the whole batch before any insert/update: a foreign or
+      // ambiguous mapping must not leave a partially accepted observation set.
+      for (const observation of validatedObservations) {
+        if (engine.tenancyMode !== 'shared') continue;
+        const key = engine.tenantMappingStrategy === 'deployment_target' ? observation.projectId || '' : observation.runtimeTenantId?.trim() || '';
+        const matches = mappings.filter(m => m.strategy === engine.tenantMappingStrategy && m.externalTenantId === key);
+        if (matches.length !== 1 || matches[0].enterpriseTenantId !== tenantId) throw new Error('Shared runtime inventory mapping does not match the bound tenant');
+      }
+    }
     const now = Date.now();
     let created = 0;
     let updated = 0;
@@ -100,7 +145,8 @@ class RuntimeResourceInventoryService {
         resourceKey,
         runtimeTenantId,
       };
-      const existing = await repo.findOne({ where: identity });
+      const scopedIdentity = config.tenancyMode === 'pooled' ? { ...identity, tenantId: tenantId! } : identity;
+      const existing = await repo.findOne({ where: scopedIdentity });
       const mappingKey = engine.tenantMappingStrategy === 'deployment_target'
         ? observation.projectId || ''
         : runtimeTenantId;
@@ -155,14 +201,14 @@ class RuntimeResourceInventoryService {
           // reconciliation may observe the same new resource concurrently.
           // The unique identity chooses the winner; the loser refreshes that
           // committed row instead of surfacing a transient 500.
-          const concurrent = await repo.findOne({ where: identity });
+          const concurrent = await repo.findOne({ where: scopedIdentity });
           if (!concurrent) throw error;
           await repo.update({ id: concurrent.id }, valuesFor(concurrent));
           updated += 1;
         }
       }
     }
-    if (engine.tenancyMode === 'shared') {
+    if (engine.tenancyMode === 'shared' && config.tenancyMode !== 'pooled') {
       const activeResources = await repo.find({ where: { engineId, isActive: true } });
       const hasConflict = activeResources.some((resource) => resource.tenantResolutionStatus === 'conflict');
       const hasUnmapped = activeResources.some((resource) => resource.tenantResolutionStatus !== 'resolved');
@@ -181,8 +227,10 @@ class RuntimeResourceInventoryService {
     const repo = dataSource.getRepository(RuntimeResource);
     const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } });
     const observed = new Set(observations.map((item) => `${item.resourceKind}|${item.resourceKey.trim()}|${item.runtimeTenantId?.trim() || ''}`));
-    const active = await repo.find({ where: { engineId, isActive: true } });
-    const stale = active.filter((resource) => (engine?.tenancyMode === 'shared' || (resource.tenantId || null) === (engine?.tenantId || tenantId || null))
+    const active = await repo.find({ where: { engineId, isActive: true, ...(config.tenancyMode === 'pooled' ? { tenantId: tenantId! } : {}) } });
+    const stale = active.filter((resource) => (config.tenancyMode === 'pooled'
+      ? resource.tenantId === tenantId
+      : engine?.tenancyMode === 'shared' || (resource.tenantId || null) === (engine?.tenantId || tenantId || null))
       && ['process_definition', 'decision_definition'].includes(resource.resourceKind)
       && !observed.has(`${resource.resourceKind}|${resource.resourceKey}|${resource.runtimeTenantId || ''}`));
     if (stale.length) {
@@ -193,6 +241,10 @@ class RuntimeResourceInventoryService {
   }
 
   async materialize(runtimeResourceSetId: string, tenantId?: string | null): Promise<RuntimeResourceMaterializationResult> {
+    return this.inTenant(tenantId, id => this.materializeScoped(runtimeResourceSetId, id));
+  }
+
+  private async materializeScoped(runtimeResourceSetId: string, tenantId?: string | null): Promise<RuntimeResourceMaterializationResult> {
     const dataSource = await getDataSource();
     const setRepo = dataSource.getRepository(RuntimeResourceSet);
     const resourceRepo = dataSource.getRepository(RuntimeResource);
@@ -230,8 +282,12 @@ class RuntimeResourceInventoryService {
   }
 
   async materializeForEngine(engineId: string, tenantId?: string | null): Promise<RuntimeResourceMaterializationResult[]> {
+    return this.inTenant(tenantId, id => this.materializeScopedEngine(engineId, id));
+  }
+
+  private async materializeScopedEngine(engineId: string, tenantId?: string | null): Promise<RuntimeResourceMaterializationResult[]> {
     const dataSource = await getDataSource();
-    const sets = await dataSource.getRepository(RuntimeResourceSet).find({ where: { engineId, isArchived: false } });
+    const sets = await dataSource.getRepository(RuntimeResourceSet).find({ where: { engineId, isArchived: false, ...(config.tenancyMode === 'pooled' ? { tenantId: tenantId! } : {}) } });
     const visible = sets.filter((set) => tenantId === undefined || (set.tenantId || null) === (tenantId || null));
     const results: RuntimeResourceMaterializationResult[] = [];
     for (const set of visible) results.push(await this.materialize(set.id, tenantId));

@@ -4,11 +4,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-type Pattern = {
-  label: string;
-  regex: RegExp;
-};
+import { RAW_QUERY_PATTERNS } from './raw-sql-guard-policy.js';
 
 type Violation = {
   filePath: string;
@@ -37,22 +33,13 @@ const IGNORED_FILES = new Set(['check-no-raw-sql.ts']);
 const ALLOWED_INFRASTRUCTURE_FILES = new Set([
   'packages/shared/src/db/db-pool.ts',
   'packages/shared/src/db/postgres-tenant-rls.ts',
+  'packages/shared/src/db/postgres-tenant-policy.ts',
+  'packages/shared/src/db/postgres-migration-context.ts',
+  'packages/shared/src/db/release-effect-cohort-schema.ts',
   'packages/shared/src/db/postgres-runtime-grants.ts',
   'packages/shared/src/db/run-migrations.ts',
   'packages/shared/src/infrastructure/persistence/subscribers/TenantRlsSubscriber.ts',
 ]);
-
-const RAW_QUERY_PATTERNS: Pattern[] = [
-  { label: 'dataSource.query(', regex: /\bdataSource\.query\s*\(/ },
-  { label: 'queryRunner.query(', regex: /\bqueryRunner\.query\s*\(/ },
-  { label: 'manager.query(', regex: /\bmanager\.query\s*\(/ },
-  { label: 'repository.query(', regex: /\brepository\.query\s*\(/ },
-  { label: 'pool.query(', regex: /\bpool\.query\s*\(/ },
-  { label: 'client.query(', regex: /\bclient\.query\s*\(/ },
-  { label: 'connection.query(', regex: /\bconnection\.query\s*\(/ },
-  { label: 'getConnectionPool().query(', regex: /\bgetConnectionPool\s*\(\s*\)\.query\s*\(/ },
-  { label: '*.getCreateSchemaSQL(', regex: /\.\s*getCreateSchemaSQL\s*\(/ },
-];
 
 async function collectFiles(dirPath: string, out: string[]): Promise<void> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });

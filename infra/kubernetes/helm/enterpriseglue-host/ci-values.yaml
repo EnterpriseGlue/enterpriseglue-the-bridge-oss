@@ -14,6 +14,12 @@ backend:
 workers:
   autoscaling:
     enabled: true
+database:
+  profile:
+    databaseType: postgres
+    tenancyMode: pooled
+  migration:
+    runtimeRole: eg_runtime
 pluginAssets:
   enabled: true
   existingClaim: enterpriseglue-plugin-assets

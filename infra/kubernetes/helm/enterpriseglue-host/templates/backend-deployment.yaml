@@ -1,3 +1,18 @@
+{{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
+{{- if .Values.apiConfigBundle.enabled }}
+{{- if or (hasKey .Values.podAnnotations "enterpriseglue.io/api-config-bundle-contract") (hasKey .Values.podAnnotations "enterpriseglue.io/api-config-bundle-sha256") }}
+{{- fail "apiConfigBundle rollout annotations cannot be overridden through podAnnotations" }}
+{{- end }}
+{{- if not .Values.workers.enabled }}
+{{- fail "apiConfigBundle requires the split API runtime (workers.enabled=true)" }}
+{{- end }}
+{{- if eq .Values.apiConfigBundle.configMapName .Values.database.configMapName }}
+{{- fail "apiConfigBundle requires a dedicated API-only ConfigMap" }}
+{{- end }}
+{{- if has .Values.apiConfigBundle.secret.name (list .Values.database.applicationSecretName .Values.database.migrationSecretName .Values.database.preflightSecretName .Values.pluginManager.configurationSecret.name) }}
+{{- fail "apiConfigBundle requires a dedicated API-only Secret" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,6 +39,11 @@ spec:
         {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
       annotations:
         enterpriseglue.io/rollout-revision: {{ .Values.rolloutRevision | quote }}
+        {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 8 }}
+        {{- if .Values.apiConfigBundle.enabled }}
+        enterpriseglue.io/api-config-bundle-contract: v1
+        enterpriseglue.io/api-config-bundle-sha256: {{ .Values.apiConfigBundle.expectedSha256 | quote }}
+        {{- end }}
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "api") }}
@@ -41,10 +61,39 @@ spec:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.applicationSecretName }} }
           env:
+            {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
+            {{- if .Values.apiConfigBundle.enabled }}
+            - name: EG_CONFIG_BUNDLE_PATH
+              value: {{ printf "/etc/enterpriseglue/platform-config/%s" .Values.apiConfigBundle.configMapKey | quote }}
+            - name: EG_CONFIG_BOOTSTRAP_MODE
+              value: {{ .Values.apiConfigBundle.mode | quote }}
+            - name: EG_CONFIG_EXPECTED_SHA256
+              value: {{ .Values.apiConfigBundle.expectedSha256 | quote }}
+            - name: EG_CONFIG_EXPECTED_TENANT_SCOPE
+              value: "platform"
+            - name: EG_CONFIG_REQUIRE_SECRET_PREFLIGHT
+              value: "true"
+            - name: EG_CONFIG_FAIL_CLOSED
+              value: "true"
+            - name: EG_CONFIG_SECRET_PROVIDER
+              value: "env"
+            - name: EG_CONFIG_BUNDLE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.apiConfigBundle.secret.name | quote }}
+                  key: {{ .Values.apiConfigBundle.secret.key | quote }}
+                  optional: false
+            {{- end }}
             - name: EG_RUNTIME_ROLE
               value: {{ ternary "api" "all" .Values.workers.enabled | quote }}
+            {{- if .Values.database.profile.databaseType }}
+            - name: DATABASE_TYPE
+              value: {{ .Values.database.profile.databaseType | quote }}
+            - name: EG_TENANCY_MODE
+              value: {{ .Values.database.profile.tenancyMode | quote }}
+            {{- end }}
             - name: EG_DATABASE_STARTUP_MODE
-              value: {{ ternary "verify" "apply" .Values.database.migration.enabled | quote }}
+              value: {{ include "enterpriseglue-host.schemaEpochStartupMode" . | trim | quote }}
             - name: API_UPSTREAM
               value: {{ printf "%s-api:%v" (include "enterpriseglue-host.fullname" .) .Values.backend.service.port | quote }}
             {{- if .Values.pluginAssets.enabled }}
@@ -71,6 +120,11 @@ spec:
             timeoutSeconds: 3
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
+            {{- if .Values.apiConfigBundle.enabled }}
+            - name: api-config-bundle
+              mountPath: /etc/enterpriseglue/platform-config
+              readOnly: true
+            {{- end }}
             {{- if .Values.pluginAssets.enabled }}
             - name: plugin-assets
               mountPath: {{ .Values.pluginAssets.mountPath }}
@@ -78,6 +132,15 @@ spec:
             {{- end }}
       volumes:
         - { name: tmp, emptyDir: {} }
+        {{- if .Values.apiConfigBundle.enabled }}
+        - name: api-config-bundle
+          configMap:
+            name: {{ .Values.apiConfigBundle.configMapName | quote }}
+            optional: false
+            items:
+              - key: {{ .Values.apiConfigBundle.configMapKey | quote }}
+                path: {{ .Values.apiConfigBundle.configMapKey | quote }}
+        {{- end }}
         {{- if .Values.pluginAssets.enabled }}
         - name: plugin-assets
           persistentVolumeClaim:

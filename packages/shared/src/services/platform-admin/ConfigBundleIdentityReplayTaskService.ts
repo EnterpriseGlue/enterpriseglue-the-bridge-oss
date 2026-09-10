@@ -5,6 +5,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
 import { operatorSafeConfigBundleFailure } from './ConfigBundleSafeDiagnostics.js';
+import { assertConfigQueueRowTenant, configQueueTenantFilter, inConfigQueueTenant, runConfigQueueBatch } from './ConfigBundleQueueTenantScope.js';
 
 const ACTIVE_STATUSES: Array<ConfigBundleIdentityReplayTask['status']> = ['queued', 'running'];
 const DEFAULT_PAGE_LIMIT = 500;
@@ -51,14 +52,21 @@ function retryDelay(attempts: number): number {
 }
 
 class ConfigBundleIdentityReplayTaskService {
+  private readonly scanCursor: { lastTenantId?: string } = {};
+
   async enqueue(input: EnqueueConfigBundleIdentityReplayTaskInput): Promise<void> {
+    return inConfigQueueTenant(input.tenantId, tenantId => this.enqueueScoped({ ...input, tenantId }));
+  }
+
+  private async enqueueScoped(input: EnqueueConfigBundleIdentityReplayTaskInput): Promise<void> {
     const providerId = input.providerId.trim();
     if (!providerId || !input.applyRunId || !input.cursor) return;
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(ConfigBundleIdentityReplayTask);
     const tenantId = input.tenantId || null;
     const now = Date.now();
-    const existing = await repo.findOne({ where: { applyRunId: input.applyRunId, providerId } });
+    const existing = await repo.findOne({ where: { ...configQueueTenantFilter(), applyRunId: input.applyRunId, providerId } });
+    if (existing) assertConfigQueueRowTenant(existing);
     const syncRunId = existing?.syncRunId || await ssoSyncDiagnosticsService.startRun({
       tenantId,
       providerId,
@@ -81,7 +89,7 @@ class ConfigBundleIdentityReplayTaskService {
     });
 
     if (existing) {
-      await repo.update({ id: existing.id }, {
+      await repo.update({ ...configQueueTenantFilter(), id: existing.id }, {
         status: 'queued',
         syncRunId: existing.syncRunId || syncRunId,
         cursor: input.cursor,
@@ -110,6 +118,10 @@ class ConfigBundleIdentityReplayTaskService {
   }
 
   async listForApplyRun(applyRunId: string, tenantId?: string | null): Promise<ConfigBundleIdentityReplayTask[]> {
+    return inConfigQueueTenant(tenantId, id => this.listScoped(applyRunId, id));
+  }
+
+  private async listScoped(applyRunId: string, tenantId?: string | null): Promise<ConfigBundleIdentityReplayTask[]> {
     const repo = (await getDataSource()).getRepository(ConfigBundleIdentityReplayTask);
     return repo.find({
       where: tenantId ? { applyRunId, tenantId } : { applyRunId, tenantId: IsNull() },
@@ -118,13 +130,17 @@ class ConfigBundleIdentityReplayTaskService {
   }
 
   async runNextPage(options: { pageLimit?: number; leaseMs?: number; applyRunId?: string } = {}): Promise<ConfigBundleIdentityReplayTaskResult | null> {
+    return (await runConfigQueueBatch(1, () => this.runNextPageScoped(options), Boolean(options.applyRunId), this.scanCursor))[0] ?? null;
+  }
+
+  private async runNextPageScoped(options: { pageLimit?: number; leaseMs?: number; applyRunId?: string }): Promise<ConfigBundleIdentityReplayTaskResult | null> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(ConfigBundleIdentityReplayTask);
     const now = Date.now();
     const pageLimit = normalizePageLimit(options.pageLimit);
     const leaseMs = Math.max(options.leaseMs ?? DEFAULT_LEASE_MS, 1_000);
 
-    const applyRunFilter = options.applyRunId ? { applyRunId: options.applyRunId } : {};
+    const applyRunFilter = { ...configQueueTenantFilter(), ...(options.applyRunId ? { applyRunId: options.applyRunId } : {}) };
     await repo.update({ ...applyRunFilter, status: 'running', leaseExpiresAt: LessThanOrEqual(now) }, {
       status: 'queued', leaseId: null, leaseExpiresAt: null, updatedAt: now,
     });
@@ -139,56 +155,29 @@ class ConfigBundleIdentityReplayTaskService {
     });
 
     for (const candidate of candidates) {
+      assertConfigQueueRowTenant(candidate);
       const leaseId = generateId();
-      const claim = await repo.update({ id: candidate.id, status: 'queued' }, {
+      const claim = await repo.update({ ...configQueueTenantFilter(), id: candidate.id, status: 'queued' }, {
         status: 'running', leaseId, leaseExpiresAt: now + leaseMs, updatedAt: now,
       });
-      if (!claim.affected) continue;
+      if (claim.affected !== 1) continue;
 
+      let replay: Awaited<ReturnType<typeof ssoNormalizedIdentityService.replayMemberships>>;
       try {
-        const replay = await ssoNormalizedIdentityService.replayMemberships({
+        replay = await ssoNormalizedIdentityService.replayMemberships({
           tenantId: candidate.tenantId,
           providerIds: [candidate.providerId],
           cursor: candidate.cursor,
           limit: pageLimit,
         });
-        const completed = !replay.truncated;
-        await repo.update({ id: candidate.id, leaseId }, {
-          status: completed ? 'completed' : 'queued',
-          cursor: replay.nextCursor,
-          leaseId: null,
-          leaseExpiresAt: null,
-          nextAttemptAt: null,
-          scanned: candidate.scanned + replay.scanned,
-          created: candidate.created + replay.created,
-          removed: candidate.removed + replay.removed,
-          failed: candidate.failed + replay.failed,
-          lastError: null,
-          completedAt: completed ? Date.now() : null,
-          updatedAt: Date.now(),
-        });
-        if (completed) {
-          await ssoSyncDiagnosticsService.completeRun(candidate.syncRunId, {
-            tenantId: candidate.tenantId,
-            providerId: candidate.providerId,
-            groupMembershipsCreated: candidate.created + replay.created,
-            groupMembershipsRemoved: candidate.removed + replay.removed,
-            details: { kind: 'config_bundle_identity_replay', applyRunId: candidate.applyRunId, taskId: candidate.id },
-          });
-        }
-        return {
-          taskId: candidate.id, applyRunId: candidate.applyRunId, providerId: candidate.providerId, syncRunId: candidate.syncRunId || null,
-          status: completed ? 'completed' : 'queued', scanned: candidate.scanned + replay.scanned,
-          created: candidate.created + replay.created, removed: candidate.removed + replay.removed,
-          failed: candidate.failed + replay.failed, truncated: replay.truncated, nextCursor: replay.nextCursor,
-        };
       } catch (error) {
         const attempts = candidate.attempts + 1;
         const retryAt = Date.now() + retryDelay(attempts);
-        await repo.update({ id: candidate.id, leaseId }, {
+        const retry = await repo.update({ ...configQueueTenantFilter(), id: candidate.id, status: 'running', leaseId }, {
           status: 'queued', leaseId: null, leaseExpiresAt: null, attempts,
           nextAttemptAt: retryAt, lastError: operatorSafeConfigBundleFailure('identity_replay'), updatedAt: Date.now(),
         });
+        if (retry.affected !== 1) throw new Error('Configuration identity replay task lease was lost');
         await ssoSyncDiagnosticsService.failRun(candidate.syncRunId, error, {
           tenantId: candidate.tenantId,
           providerId: candidate.providerId,
@@ -200,22 +189,53 @@ class ConfigBundleIdentityReplayTaskService {
           failed: candidate.failed + 1, truncated: true, nextCursor: candidate.cursor,
         };
       }
+      // Finalization is outside the replay catch: a lost lease or diagnostic
+      // failure must not retry work whose lease may already belong to another worker.
+      const completed = !replay.truncated;
+      const finalized = await repo.update({ ...configQueueTenantFilter(), id: candidate.id, status: 'running', leaseId }, {
+        status: completed ? 'completed' : 'queued',
+        cursor: replay.nextCursor,
+        leaseId: null,
+        leaseExpiresAt: null,
+        nextAttemptAt: null,
+        scanned: candidate.scanned + replay.scanned,
+        created: candidate.created + replay.created,
+        removed: candidate.removed + replay.removed,
+        failed: candidate.failed + replay.failed,
+        lastError: null,
+        completedAt: completed ? Date.now() : null,
+        updatedAt: Date.now(),
+      });
+      if (finalized.affected !== 1) throw new Error('Configuration identity replay task lease was lost');
+      if (completed) {
+        await ssoSyncDiagnosticsService.completeRun(candidate.syncRunId, {
+          tenantId: candidate.tenantId,
+          providerId: candidate.providerId,
+          groupMembershipsCreated: candidate.created + replay.created,
+          groupMembershipsRemoved: candidate.removed + replay.removed,
+          details: { kind: 'config_bundle_identity_replay', applyRunId: candidate.applyRunId, taskId: candidate.id },
+        });
+      }
+      return {
+        taskId: candidate.id, applyRunId: candidate.applyRunId, providerId: candidate.providerId, syncRunId: candidate.syncRunId || null,
+        status: completed ? 'completed' : 'queued', scanned: candidate.scanned + replay.scanned,
+        created: candidate.created + replay.created, removed: candidate.removed + replay.removed,
+        failed: candidate.failed + replay.failed, truncated: replay.truncated, nextCursor: replay.nextCursor,
+      };
     }
     return null;
   }
 
   async runAvailablePages(options: { maxTasks?: number; pageLimit?: number } = {}): Promise<ConfigBundleIdentityReplayTaskResult[]> {
     const maxTasks = Math.min(Math.max(options.maxTasks ?? 10, 1), 100);
-    const results: ConfigBundleIdentityReplayTaskResult[] = [];
-    for (let index = 0; index < maxTasks; index += 1) {
-      const result = await this.runNextPage({ pageLimit: options.pageLimit });
-      if (!result) break;
-      results.push(result);
-    }
-    return results;
+    return runConfigQueueBatch(maxTasks, () => this.runNextPageScoped({ pageLimit: options.pageLimit }), false, this.scanCursor);
   }
 
   async drainApplyRun(options: { applyRunId: string; maxPages?: number; pageLimit?: number }): Promise<DrainConfigBundleIdentityReplayResult> {
+    return inConfigQueueTenant(undefined, () => this.drainScoped(options));
+  }
+
+  private async drainScoped(options: { applyRunId: string; maxPages?: number; pageLimit?: number }): Promise<DrainConfigBundleIdentityReplayResult> {
     const applyRunId = options.applyRunId.trim();
     if (!applyRunId) return { status: 'failed', pagesProcessed: 0, taskCount: 0, activeTaskCount: 0, failedTaskCount: 1 };
     const maxPages = Math.min(Math.max(options.maxPages ?? 100, 1), 1000);
@@ -225,9 +245,10 @@ class ConfigBundleIdentityReplayTaskService {
       if (!result) break;
     }
     const tasks = await (await getDataSource()).getRepository(ConfigBundleIdentityReplayTask).find({
-      where: { applyRunId },
+      where: { ...configQueueTenantFilter(), applyRunId },
       order: { createdAt: 'ASC' },
     });
+    tasks.forEach(assertConfigQueueRowTenant);
     const activeTaskCount = tasks.filter((task) => ACTIVE_STATUSES.includes(task.status)).length;
     const failedTaskCount = tasks.filter((task) => task.status === 'cancelled' || task.failed > 0).length;
     return {

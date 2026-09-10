@@ -131,6 +131,12 @@ test('CI enforces headless admin parity and the real PostgreSQL persistence life
   assert.match(ciCoreWorkflow, /Run Access Control and headless administration browser e2e[\s\S]*?@access-control-layout\|@headless-admin/);
   assert.match(ciWorkflow, /Run integration tests[\s\S]*?pnpm run test:integration/);
   assert.match(ciCoreWorkflow, /Run integration tests[\s\S]*?pnpm run test:integration/);
+  for (const workflow of [ciWorkflow, ciCoreWorkflow]) {
+    const integrationStep = workflow.match(/- name: Run integration tests\n(?:(?!      - name:)[\s\S])*/)?.[0];
+    assert.ok(integrationStep, 'The PostgreSQL integration step must remain present');
+    assert.match(integrationStep, /MIGRATION_TEST_POSTGRES_CONTAINER: \$\{\{ job\.services\.postgres\.id \}\}/,
+      'Restore acceptance must use the exact job-owned PostgreSQL service, not discover another container');
+  }
 });
 
 test('the pull-request authorization gate keeps decision coverage and focused failure modes explicit', () => {

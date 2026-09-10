@@ -16,6 +16,9 @@ realm_import_file="$temp_dir/enterpriseglue-pooled-realm.json"
 postgres_init_file="$temp_dir/10-pooled-tenancy-app-role.sql"
 playwright_output_dir="$temp_dir/playwright-results"
 project_name="enterpriseglue-pooled-tenancy-${RANDOM}${RANDOM}"
+schema_predecessor_image="ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9ece726dac9f6a492cbb030c9dab6efadedf1f3f5ac842219027a3646"
+schema_predecessor_tag=v0.24.2
+schema_predecessor_revision=785b5ab890aba315f6c3944ace0edcc3ff99d20f
 raw_dir="$temp_dir/raw-diagnostics"
 receipt_file="$artifact_dir/public/receipt.json"
 stage=preflight
@@ -30,7 +33,7 @@ cleanup() {
   set +e
   if [[ "$stack_started" == true ]]; then
     run_compose ps --all > "$raw_dir/compose-status.txt" 2>&1
-    for service in db backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
+    for service in db schema-predecessor schema-owner-migration schema-runtime-verify backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
       run_compose logs --no-color --tail=700 "$service" > "$raw_dir/${service}.log" 2>&1
     done
     run_compose down --volumes --remove-orphans >> "$raw_dir/runner.log" 2>&1
@@ -98,12 +101,27 @@ if ! docker info >/dev/null 2>&1; then
   echo '[pooled-tenancy-e2e] Docker is required.' >&2
   exit 2
 fi
+if [[ "$schema_predecessor_image" != *@sha256:* ]]; then
+  echo '[pooled-tenancy-e2e] Schema predecessor must be pinned by digest.' >&2
+  exit 2
+fi
+if [[ "$(git -C "$root_dir" rev-parse "${schema_predecessor_tag}^{commit}")" != "$schema_predecessor_revision" ]]; then
+  echo '[pooled-tenancy-e2e] Local schema-predecessor tag does not resolve to the published release revision.' >&2
+  exit 2
+fi
+docker pull "$schema_predecessor_image" >/dev/null
+schema_predecessor_labels="$(docker image inspect "$schema_predecessor_image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}} {{index .Config.Labels "org.opencontainers.image.version"}}')"
+if [[ "$schema_predecessor_labels" != "$schema_predecessor_revision $schema_predecessor_tag" ]]; then
+  echo '[pooled-tenancy-e2e] Schema-predecessor image labels do not bind the expected release source.' >&2
+  exit 2
+fi
 
 mkdir -p "$artifact_dir"
 chmod 700 "$artifact_dir"
 
 node - "$root_dir" "$env_file" "$tls_dir" "$identity_secret_dir" "$realm_import_file" "$postgres_init_file" \
-  "$backend_port" "$frontend_port" "$keycloak_port" "$tls_frontend_port" "$postgres_port" <<'NODE'
+  "$backend_port" "$frontend_port" "$keycloak_port" "$tls_frontend_port" "$postgres_port" \
+  "$schema_predecessor_image" <<'NODE'
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const [
@@ -118,6 +136,7 @@ const [
   keycloakPort,
   tlsFrontendPort,
   postgresPort,
+  schemaPredecessorImage,
 ] = process.argv.slice(2);
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 const hostUid = typeof process.getuid === 'function' && process.getuid() > 0
@@ -129,6 +148,8 @@ const hostGid = typeof process.getgid === 'function' && process.getgid() > 0
 const bootstrapPassword = randomHex(24);
 const appPassword = randomHex(24);
 const appUser = 'enterpriseglue_pooled_app';
+const migrationOwnerPassword = randomHex(24);
+const migrationOwnerUser = 'enterpriseglue_pooled_owner';
 const appDatabase = 'enterpriseglue_pooled';
 const adminEmail = 'pooled-tenancy-e2e-admin@example.test';
 const adminPassword = randomHex(24);
@@ -161,6 +182,9 @@ const values = {
   POOLED_TENANCY_POSTGRES_APP_USER: appUser,
   POOLED_TENANCY_POSTGRES_APP_PASSWORD: appPassword,
   POOLED_TENANCY_POSTGRES_APP_DATABASE: appDatabase,
+  POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_USER: migrationOwnerUser,
+  POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_PASSWORD: migrationOwnerPassword,
+  POOLED_TENANCY_SCHEMA_PREDECESSOR_IMAGE: schemaPredecessorImage,
   POOLED_TENANCY_FRONTEND_DIST: `${rootDir}/frontend/dist`,
   POOLED_TENANCY_PLUGIN_STATE_FILE: `${require('node:path').dirname(envFile)}/plugin-state.json`,
   POOLED_TENANCY_PLUGIN_ASSET_ROOT: `${require('node:path').dirname(envFile)}/plugin-assets`,
@@ -230,8 +254,9 @@ fs.writeFileSync(
   { mode: 0o644 },
 );
 fs.writeFileSync(postgresInitFile, [
+  `CREATE ROLE ${migrationOwnerUser} LOGIN PASSWORD '${migrationOwnerPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;`,
   `CREATE ROLE ${appUser} LOGIN PASSWORD '${appPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;`,
-  `CREATE DATABASE ${appDatabase} OWNER ${appUser};`,
+  `CREATE DATABASE ${appDatabase} OWNER ${migrationOwnerUser};`,
   '',
 ].join('\n'), { mode: 0o600 });
 

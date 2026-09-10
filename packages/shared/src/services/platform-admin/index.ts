@@ -80,5 +80,6 @@ export * from './SecretResolver.js';
 export * from './PolicyService.js';
 export * from './UserService.js';
 export * from './UserDirectoryService.js';
+export * from './ReleaseEffectSettlementService.js';
 
 export const LEIA_SERVICE_VERSION = '1.0.0';

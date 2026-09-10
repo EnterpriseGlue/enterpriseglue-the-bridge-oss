@@ -100,6 +100,12 @@ rollback qualification gates pass for the intended deployment.
   When set, the host requires release-aware placement v3 and rejects an assertion
   for any other release. Existing single and self-hosted pooled deployments leave
   it unset and retain placement v1/v2 behavior.
+- `EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH`: Positive admission epoch for the
+  exact managed release. It is required when managed pooled Cloud configures
+  `EG_TENANT_PLACEMENT_RELEASE_ID`; ordinary self-host installations may omit
+  both values. It enables the durable release-effect cohort
+  fence but does not make settlement complete while the returned inventory has
+  uncovered mutating sources. It requires `EG_TENANT_PLACEMENT_RELEASE_ID`.
 - `EG_TENANT_CLOUD_IDENTITY_AUDIENCE`: Exact release-neutral Cloud API audience
   used for the short-lived tenant identity issued by the host. It is required
   when a managed release ID is configured.
@@ -115,7 +121,7 @@ rollback qualification gates pass for the intended deployment.
   It requires pooled, Cloud-required tenancy and remains disabled for ordinary
   self-hosted deployments.
 - `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
-  `PUT /api/workloads/tenants/{tenantId}/release-assignment`. Do not reuse a
+  tenant release assignment and release-effect cohort operations. Do not reuse a
   service-account token or expose it in frontend runtime configuration.
 - `EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS`: Bounded clock tolerance;
   default `5`, maximum `60`.

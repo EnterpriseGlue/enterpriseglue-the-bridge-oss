@@ -1,4 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { config } from '../../config/index.js';
+import { runWithPlatformDatabaseCapability, getPlatformDatabaseCapability } from '../platform-database-context.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
@@ -189,8 +191,9 @@ async function recordGroupAudit(
   }
 ): Promise<void> {
   try {
-    await dataSource.getRepository(AuditLog).insert({
-      id: generateId(),
+    const id=generateId();
+    await runWithPlatformDatabaseCapability({kind:'audit-append',rowId:id}, () => dataSource.getRepository(AuditLog).insert({
+      id,
       tenantId: normalizeTenantId(entry.tenantId),
       userId: entry.userId || null,
       action: entry.action,
@@ -200,7 +203,7 @@ async function recordGroupAudit(
       userAgent: null,
       details: entry.details ? JSON.stringify(entry.details) : null,
       createdAt: Date.now(),
-    });
+    }));
   } catch (error) {
     logger.error('Failed to write authorization group audit log:', error);
   }
@@ -211,6 +214,10 @@ export class AuthzGroupService {
     providedDataSource?: DataSource,
     now: number = Date.now()
   ): Promise<{ groups: number; assignments: number }> {
+    return runWithPlatformDatabaseCapability({kind:'system-group-seed',groupIds:DEFAULT_PLATFORM_GROUPS.map(group => group.id)}, () => this.seedDefaultPlatformGroupsScoped(providedDataSource,now));
+  }
+
+  private async seedDefaultPlatformGroupsScoped(providedDataSource?: DataSource, now: number = Date.now()): Promise<{groups:number;assignments:number}> {
     const dataSource = providedDataSource || await getDataSource();
     const groupRepo = dataSource.getRepository(AuthzGroup);
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
@@ -528,7 +535,7 @@ export class AuthzGroupService {
     manager: EntityManager,
     userId: string
   ): Promise<{ removed: boolean }> {
-    return this.removeSystemGroupMembershipWithManager(
+    const remove = () => this.removeSystemGroupMembershipWithManager(
       manager,
       DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
       userId,
@@ -536,6 +543,13 @@ export class AuthzGroupService {
       'system',
       'authz.group_membership.authenticated_user_remove'
     );
+    if (config.tenancyMode !== 'pooled') return remove();
+    if (!manager.queryRunner?.isTransactionActive) throw Errors.forbidden('Authenticated baseline revocation requires the user deactivation transaction');
+    const user = await manager.getRepository(User).findOne({
+      where: {id:userId,isActive:false}, select:['id'], lock:{mode:'pessimistic_read'},
+    });
+    if (!user) throw Errors.forbidden('Authenticated baseline revocation requires a persisted inactive user');
+    return runWithPlatformDatabaseCapability({kind:'authenticated-baseline-revoke',userId:user.id}, remove);
   }
 
   async ensureLegacyPlatformAdministratorMembershipWithManager(
@@ -579,6 +593,10 @@ export class AuthzGroupService {
     manager: EntityManager,
     userId: string
   ): Promise<{ removed: boolean }> {
+    if (config.tenancyMode === 'pooled') {
+      const capability=getPlatformDatabaseCapability();
+      if (capability?.kind !== 'manual-administrator-revoke' || capability.userId !== userId) throw Errors.forbidden('Explicit manual administrator revoke scope is required');
+    }
     return this.removeSystemGroupMembershipWithManager(
       manager,
       DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS,
@@ -607,6 +625,10 @@ export class AuthzGroupService {
     now: number = Date.now()
   ): Promise<{ scanned: number; created: number }> {
     const dataSource = providedDataSource || await getDataSource();
+    if (config.tenancyMode === 'pooled') return this.backfillSystemGroupMemberships(dataSource, {
+      groupId: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS, sourceRef: AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+      userWhere: {isActive:true}, now, auditAction:'authz.group_membership.backfill',
+    });
     return dataSource.transaction(async (manager) => {
       const group = await manager.getRepository(AuthzGroup).findOneBy({ id: DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS });
       if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {
@@ -687,6 +709,15 @@ export class AuthzGroupService {
       auditAction: string;
     }
   ): Promise<{ scanned: number; created: number }> {
+    if (config.tenancyMode === 'pooled') {
+      const users=await dataSource.getRepository(User).find({where:input.userWhere as any,select:['id']});
+      let created=0;
+      for (const user of users) {
+        const result=await dataSource.transaction(manager => this.ensureSystemGroupMembershipWithManager(manager,input.groupId,user.id,input.sourceRef));
+        if (result.created) created+=1;
+      }
+      return {scanned:users.length,created};
+    }
     return dataSource.transaction(async (manager) => {
       const group = await manager.getRepository(AuthzGroup).findOneBy({ id: input.groupId });
       if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {
@@ -750,6 +781,17 @@ export class AuthzGroupService {
     sourceRef: string,
     source: Extract<AuthzGroupSource, 'manual' | 'sso' | 'system'> = 'system'
   ): Promise<{ id: string; created: boolean }> {
+    if (source === 'manual' && config.tenancyMode === 'pooled') {
+      const capability=getPlatformDatabaseCapability();
+      if (capability?.kind !== 'manual-administrator-grant' || capability.userId !== userId
+        || groupId !== DEFAULT_PLATFORM_GROUP_IDS.PLATFORM_ADMINISTRATORS || sourceRef !== MANUAL_PLATFORM_ADMIN_SOURCE_REF) throw Errors.forbidden('Explicit manual administrator grant scope is required');
+      return this.ensureSystemGroupMembershipScoped(manager,groupId,userId,sourceRef,source);
+    }
+    return runWithPlatformDatabaseCapability({kind:'system-membership',groupId,userId,sourceRef}, () => this.ensureSystemGroupMembershipScoped(manager,groupId,userId,sourceRef,source));
+  }
+
+  private async ensureSystemGroupMembershipScoped(manager: EntityManager, groupId: string, userId: string, sourceRef: string,
+    source: Extract<AuthzGroupSource, 'manual'|'sso'|'system'>): Promise<{id:string;created:boolean}> {
     const groupRepo = manager.getRepository(AuthzGroup);
     const group = await groupRepo.findOneBy({ id: groupId });
     if (!group || group.isArchived || group.source !== 'system' || group.tenantId !== null) {

@@ -19,6 +19,13 @@ import { platformCloudIdentityService } from '@enterpriseglue/shared/services/pl
 import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import { tenantReleaseActivationService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseActivationService.js';
 import { TenantReleaseActivationRequestSchema, SignedTenantReleaseActivationReceiptSchema } from '@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js';
+import { releaseEffectSettlementService } from '@enterpriseglue/shared/services/platform-admin/ReleaseEffectSettlementService.js';
+import {
+  ReleaseEffectCohortEpochSchema,
+  ReleaseEffectCohortMutationRequestSchema,
+  ReleaseEffectReleaseIdSchema,
+  ReleaseEffectSettlementStatusSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/release-effect-settlement.js';
 import { tenantIdentityProviderSecretService } from '@enterpriseglue/shared/services/platform-admin/TenantIdentityProviderSecretService.js';
 import { ServiceAccountScopes } from '@enterpriseglue/shared/services/platform-admin/ServiceAccountService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
@@ -296,6 +303,50 @@ router.post('/api/workloads/tenants/:tenantId/release-assignment-operations', re
   });
   res.setHeader('cache-control', 'no-store');
   res.json(SignedTenantReleaseActivationReceiptSchema.parse(receipt));
+}));
+
+function releaseEffectCohortPath(req: { params: Record<string, unknown> }) {
+  return {
+    releaseId: ReleaseEffectReleaseIdSchema.parse(req.params.releaseId),
+    cohortEpoch: ReleaseEffectCohortEpochSchema.parse(req.params.cohortEpoch),
+  };
+}
+
+router.put('/api/workloads/releases/:releaseId/effect-cohorts/:cohortEpoch', requireTenantReleaseController, validateBody(ReleaseEffectCohortMutationRequestSchema), asyncHandler(async (req, res) => {
+  if (Object.keys(req.query).length) throw Errors.validation('Release effect cohort operations do not accept query parameters');
+  const result = await releaseEffectSettlementService.open({
+    ...releaseEffectCohortPath(req),
+    expectedRevision: req.body.expectedRevision,
+  });
+  res.setHeader('cache-control', 'no-store');
+  res.json(ReleaseEffectSettlementStatusSchema.parse(result));
+}));
+
+router.post('/api/workloads/releases/:releaseId/effect-cohorts/:cohortEpoch/close', requireTenantReleaseController, validateBody(ReleaseEffectCohortMutationRequestSchema), asyncHandler(async (req, res) => {
+  if (Object.keys(req.query).length) throw Errors.validation('Release effect cohort operations do not accept query parameters');
+  const result = await releaseEffectSettlementService.close({
+    ...releaseEffectCohortPath(req),
+    expectedRevision: req.body.expectedRevision,
+  });
+  res.setHeader('cache-control', 'no-store');
+  res.json(ReleaseEffectSettlementStatusSchema.parse(result));
+}));
+
+router.get('/api/workloads/releases/:releaseId/effect-cohorts/:cohortEpoch', requireTenantReleaseController, asyncHandler(async (req, res) => {
+  if (Object.keys(req.query).length) throw Errors.validation('Release effect cohort operations do not accept query parameters');
+  const result = await releaseEffectSettlementService.status(releaseEffectCohortPath(req));
+  res.setHeader('cache-control', 'no-store');
+  res.json(ReleaseEffectSettlementStatusSchema.parse(result));
+}));
+
+router.post('/api/workloads/releases/:releaseId/effect-cohorts/:cohortEpoch/verify', requireTenantReleaseController, validateBody(ReleaseEffectCohortMutationRequestSchema), asyncHandler(async (req, res) => {
+  if (Object.keys(req.query).length) throw Errors.validation('Release effect cohort operations do not accept query parameters');
+  const result = await releaseEffectSettlementService.verify({
+    ...releaseEffectCohortPath(req),
+    expectedRevision: req.body.expectedRevision,
+  });
+  res.setHeader('cache-control', 'no-store');
+  res.json(ReleaseEffectSettlementStatusSchema.parse(result));
 }));
 
 router.put('/api/workloads/tenants/:tenantId/routing-aliases', workloadScope, validateBody(TenantWorkloadAliasReconcileRequestSchema), asyncHandler(async (req, res) => {

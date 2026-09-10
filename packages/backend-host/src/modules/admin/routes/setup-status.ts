@@ -2,8 +2,8 @@
  * Setup Status API Routes
  * Check if the platform has been configured (first-run detection)
  * 
- * Note: In OSS single-tenant mode, tenant checks are skipped.
- * Multi-tenancy is an EE-only feature.
+ * Native pooled mode resolves the current caller first, then one RLS-scoped
+ * administrator-existence witness; single-tenant behavior is unchanged.
  */
 
 import { Router } from 'express';
@@ -21,7 +21,7 @@ const router = Router();
  * Returns setup status and any required actions
  */
 router.get('/api/admin/setup-status', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (req, res) => {
-  res.json(await setupStatusService.getSetupStatus());
+  res.json(await setupStatusService.getSetupStatus(req.user!.userId));
 }));
 
 /**

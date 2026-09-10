@@ -11,6 +11,7 @@ import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.j
 import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
 import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/services/invitations.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
@@ -142,6 +143,13 @@ function requireDirectSaml(provider: { protocol: string; isEnabled: boolean; aut
 function stateDuration(timestamp?: number): number | undefined {
   if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return undefined;
   return Math.max(0, Date.now() - timestamp);
+}
+
+async function readCallbackProvider(state: SsoState): Promise<IdentityProvider | null> {
+  const read = () => identityProviderService.getByKey(state.identityProviderKey!, state.identityProviderTenantId || null);
+  if (config.tenancyMode !== 'pooled' || state.identityProviderTenantId) return read();
+  if (!state.providerId) throw Errors.unauthorized('Global provider callback requires exact provider identity');
+  return runWithPlatformDatabaseCapability({kind:'provider-lookup',providerId:state.providerId}, read);
 }
 
 async function runInSsoCallbackTenantContext<T>(
@@ -489,7 +497,7 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
     res.clearCookie(verifierCookie, { path: '/' });
     if (!parsed?.identityProviderKey || !verifier) throw Errors.unauthorized('Identity provider login has expired');
     await runInSsoCallbackTenantContext(req, parsed, async () => {
-      const provider = await identityProviderService.getByKey(parsed.identityProviderKey!, parsed.identityProviderTenantId || null);
+      const provider = await readCallbackProvider(parsed);
       if (!provider) throw Errors.notFound('Identity provider not found');
       requireDirectOidc(provider);
       selectedProvider.current = provider;
@@ -539,7 +547,7 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
     if (!parsed?.identityProviderKey || !parsed.samlRequestId) throw Errors.unauthorized('Identity provider login has expired');
     if (!browserRequestId || !constantTimeEqual(browserRequestId, parsed.samlRequestId)) throw Errors.unauthorized('Identity provider login does not match this browser');
     await runInSsoCallbackTenantContext(req, parsed, async () => {
-      const provider = await identityProviderService.getByKey(parsed.identityProviderKey!, parsed.identityProviderTenantId || null);
+      const provider = await readCallbackProvider(parsed);
       if (!provider) throw Errors.notFound('Identity provider not found');
       requireDirectSaml(provider);
       selectedProvider.current = provider;
