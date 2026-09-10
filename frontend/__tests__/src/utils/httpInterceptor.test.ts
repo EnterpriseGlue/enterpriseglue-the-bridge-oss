@@ -154,17 +154,20 @@ describe('httpInterceptor', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps OSS signup public when session initialization returns 401', async () => {
-      window.location.pathname = '/signup';
-      const response = new Response(null, { status: 401 });
-      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+    it.each(['/signup', '/signup/'])(
+      'keeps signup route %s public when a request returns 401',
+      async (path) => {
+        window.location.pathname = path;
+        const response = new Response(null, { status: 401 });
+        const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
 
-      const result = await interceptedFetch('/api/auth/me');
+        const result = await interceptedFetch('/api/auth/me');
 
-      expect(result.status).toBe(401);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(window.location.href).toBe('http://localhost/dashboard');
-    });
+        expect(result.status).toBe(401);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(window.location.href).toBe('http://localhost/dashboard');
+      },
+    );
 
     it('does not treat a protected route with a public-looking prefix as public', async () => {
       window.location.pathname = '/login-history';
@@ -179,6 +182,28 @@ describe('httpInterceptor', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(window.location.href).toBe('/t/default/login');
     });
+
+    it.each(['/reset-password', '/t/acme/reset-password'])(
+      'refreshes an expired session on protected password-reset route %s',
+      async (path) => {
+        window.location.pathname = path;
+        const fetchMock = vi.spyOn(globalThis, 'fetch')
+          .mockResolvedValueOnce(new Response(null, { status: 401 }))
+          .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+          .mockResolvedValueOnce(new Response(null, { status: 200 }))
+          .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+        const result = await interceptedFetch('/api/data');
+
+        expect(result.status).toBe(200);
+        expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+          '/api/data',
+          '/api/auth/refresh',
+          '/api/auth/me',
+          '/api/data',
+        ]);
+      },
+    );
 
     it('does not intercept on tenant public routes', async () => {
       window.location.pathname = '/t/acme/login';

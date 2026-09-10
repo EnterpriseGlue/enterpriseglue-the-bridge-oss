@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { captureManualScreenshot } from './utils/manualScreenshots';
+import { monitorBrowserDiagnostics } from './utils/browserDiagnostics';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 
 type LoginProvider = {
@@ -68,6 +69,59 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 }
 
 test.describe('Login experience screenshot gallery', () => {
+  test('opens anonymous signup without probing or refreshing a session @identity-lifecycle', async ({ page }) => {
+    await installBootstrap(page);
+    const diagnostics = monitorBrowserDiagnostics(page);
+    const anonymousBootstrapRequests: string[] = [];
+    const pluginInventoryRequests: string[] = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (path === '/api/plugins/v1/frontend') pluginInventoryRequests.push(path);
+    });
+    await page.route('**/api/auth/me', (route) => {
+      anonymousBootstrapRequests.push(new URL(route.request().url()).pathname);
+      return json(route, { error: 'Not authenticated' }, 401);
+    });
+    await page.route('**/api/auth/refresh', (route) => {
+      anonymousBootstrapRequests.push(new URL(route.request().url()).pathname);
+      return json(route, { error: 'No refresh session' }, 401);
+    });
+    await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, []));
+
+    await page.goto('/signup');
+    await expect(page.getByRole('heading', { name: 'Create your Cloud account' })).toBeVisible();
+    await expect(page.getByText('No signup method configured')).toBeVisible();
+    expect(anonymousBootstrapRequests).toEqual([]);
+    expect(pluginInventoryRequests).toEqual(['/api/plugins/v1/frontend']);
+    await diagnostics.expectClean('anonymous signup bootstrap');
+    diagnostics.dispose();
+  });
+
+  test('restores a valid cookie session from login and redirects into the application @identity-lifecycle', async ({ page }) => {
+    const stack = new MockBrowserIdentityStack();
+    await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5187');
+    await installBootstrap(page);
+    await page.route('**/api/admin/setup-status', (route) => json(route, { isConfigured: true }));
+    await page.route('**/api/notifications?*', (route) => json(route, { notifications: [], unreadCount: 0 }));
+    const diagnostics = monitorBrowserDiagnostics(page);
+    const bootstrapRequests: string[] = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (['/api/auth/me', '/api/auth/refresh', '/api/plugins/v1/frontend'].includes(path)) {
+        bootstrapRequests.push(path);
+      }
+    });
+
+    await page.goto('/login');
+    await expect(page).toHaveURL(/\/t\/default\/?$/);
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    expect(bootstrapRequests).toContain('/api/auth/me');
+    expect(bootstrapRequests).toContain('/api/plugins/v1/frontend');
+    expect(bootstrapRequests).not.toContain('/api/auth/refresh');
+    await diagnostics.expectClean('valid-cookie login restoration');
+    diagnostics.dispose();
+  });
+
   test('keeps the authenticated Carbon header black with working navigation @login-gallery @identity-lifecycle @accessibility', async ({ page }) => {
     const stack = new MockBrowserIdentityStack();
     await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5187');

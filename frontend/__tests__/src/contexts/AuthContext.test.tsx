@@ -35,13 +35,30 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 describe('AuthProvider', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const { authService } = await import('@src/services/auth');
     window.history.replaceState({}, '', '/');
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(authService.getMe).mockRejectedValue(new Error('Not authenticated'));
+    vi.mocked(authService.getMyPermissions).mockResolvedValue({
+      userId: 'user-1',
+      tenantId: null,
+      platform: [],
+      projects: [],
+      engines: [],
+      authorizationVersion: 'test-authz-v1',
+      generatedAt: 123,
+    });
+    vi.mocked(authService.refreshToken).mockRejectedValue(new Error('Not authenticated'));
   });
 
-  it.each(['/invite/token', '/t/alpha/invite/token'])('does not restore a user session on invitation route %s', async (path) => {
+  it.each([
+    '/signup',
+    '/signup/',
+    '/invite/token',
+    '/t/alpha/invite/token',
+  ])('does not probe or restore a user session on sessionless enrollment route %s', async (path) => {
     const { authService } = await import('@src/services/auth');
     window.history.replaceState({}, '', path);
     localStorage.setItem(USER_KEY, JSON.stringify({ id: 'stale-user' }));
@@ -53,6 +70,75 @@ describe('AuthProvider', () => {
     expect(authService.getMyPermissions).not.toHaveBeenCalled();
     expect(localStorage.getItem(USER_KEY)).toBeNull();
   });
+
+  it.each([
+    '/login',
+    '/t/alpha/login',
+    '/admin-recovery',
+    '/t/alpha/admin-recovery',
+    '/verify-email',
+    '/t/alpha/verify-email',
+    '/forgot-password',
+    '/t/alpha/forgot-password',
+    '/password-reset',
+    '/t/alpha/password-reset',
+    '/resend-verification',
+    '/t/alpha/resend-verification',
+  ])('restores a valid cookie session on public authentication route %s', async (path) => {
+    const { authService } = await import('@src/services/auth');
+    window.history.replaceState({}, '', path);
+    const cookieUser = {
+      id: 'cookie-user',
+      email: 'cookie@example.com',
+      platformRole: 'user' as const,
+      isActive: true,
+      isEmailVerified: true,
+      mustResetPassword: false,
+      createdAt: 123,
+    };
+    vi.mocked(authService.getMe).mockResolvedValue(cookieUser);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(authService.getMe).toHaveBeenCalledTimes(1);
+    expect(authService.refreshToken).not.toHaveBeenCalled();
+    expect(authService.getMyPermissions).toHaveBeenCalledTimes(1);
+    expect(result.current.user).toEqual(cookieUser);
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(JSON.parse(localStorage.getItem(USER_KEY) ?? 'null')).toEqual(cookieUser);
+  });
+
+  it.each(['/signup-history', '/reset-password', '/t/alpha/reset-password'])(
+    'keeps exact public-route boundaries and validates the protected route %s',
+    async (path) => {
+      const { authService } = await import('@src/services/auth');
+      window.history.replaceState({}, '', path);
+
+      const refreshedUser = {
+        id: 'user-after-refresh',
+        email: 'refreshed@example.com',
+        platformRole: 'user' as const,
+        isActive: true,
+        isEmailVerified: true,
+        mustResetPassword: false,
+        createdAt: 123,
+      };
+      vi.mocked(authService.getMe)
+        .mockRejectedValueOnce(new Error('Expired access session'))
+        .mockResolvedValueOnce(refreshedUser);
+      vi.mocked(authService.refreshToken).mockResolvedValue({ expiresIn: 3600 });
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      expect(authService.getMe).toHaveBeenCalledTimes(2);
+      expect(authService.refreshToken).toHaveBeenCalledTimes(1);
+      expect(authService.getMyPermissions).toHaveBeenCalledTimes(1);
+      expect(result.current.user).toEqual(refreshedUser);
+      expect(result.current.isAuthenticated).toBe(true);
+    },
+  );
 
   it('initializes without error', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });

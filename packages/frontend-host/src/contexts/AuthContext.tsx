@@ -4,7 +4,7 @@ import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
-import { isInvitationEnrollmentRoute } from '../utils/invitationRoute';
+import { getPublicAuthRoutePolicy } from '../utils/publicAuthRoute';
 import { permissionSnapshotMatchesSession } from './authSessionPermissions';
 import {
   hasAnyEnginePermission as snapshotHasAnyEnginePermission,
@@ -105,9 +105,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
    */
   useEffect(() => {
     const initAuth = async () => {
-      if (isInvitationEnrollmentRoute(window.location.pathname)) {
-        // An invitation does not establish a browser session. Completion
-        // reloads the authenticated shell after the server issues cookies.
+      if (getPublicAuthRoutePolicy(window.location.pathname)?.skipSessionBootstrap) {
+        // Signup and invitation enrollment do not restore an application
+        // session in-place. Successful flows leave this page before protected
+        // application state is needed.
         clearAuth();
         setIsLoading(false);
         return;
