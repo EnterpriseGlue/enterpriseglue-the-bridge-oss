@@ -90,3 +90,27 @@ test('PR AI Assistant does not mutate Release Please-owned pull requests', () =>
   assert.ok(releasePleaseGuard < labelMutation, 'ownership guard must precede label mutation');
   assert.ok(releasePleaseGuard < titleMutation, 'ownership guard must precede title mutation');
 });
+
+test('release-note preflight waits for the actual Release Please breaking label', () => {
+  const preflight = readFileSync(
+    new URL('../.github/workflows/release-notes-preflight-reusable.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    preflight,
+    /String\(pullRequest\.head\?\.ref \|\| ''\)\.startsWith\('release-please--branches--'\)/,
+  );
+  assert.match(
+    preflight,
+    /String\(pullRequest\.head\?\.repo\?\.full_name \|\| ''\) === `\$\{context\.repo\.owner\}\/\$\{context\.repo\.repo\}`/,
+  );
+  assert.match(preflight, /BREAKING CHANGES/);
+  assert.match(
+    preflight,
+    /releaseLabels\.length === 1 && releaseLabels\[0\] === 'release:breaking'/,
+  );
+  assert.match(preflight, /const waitForAutomaticLabel = isRepositoryReleasePlease \|\|/);
+  assert.match(preflight, /attempt <= 6/);
+  assert.doesNotMatch(preflight, /labels\.push\('release:breaking'\)/);
+});

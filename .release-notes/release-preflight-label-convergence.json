@@ -1,0 +1,48 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-preflight-label-convergence",
+  "type": "internal",
+  "scope": "release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Makes release-note preflight wait deterministically for the dedicated labeler to converge a regenerated breaking Release Please pull request.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This preflight-only correction does not change application data or migrations."
+    ]
+  },
+  "security": [
+    "Only a canonical breaking heading on a same-repository Release Please branch activates the convergence wait.",
+    "Preflight continues to validate the actual release:breaking label rather than synthesizing a passing classification."
+  ],
+  "documentation": [
+    "Release workflow contract coverage records the bounded convergence wait and actual-label requirement."
+  ],
+  "knownLimitations": [
+    "Ordinary pull requests still rely exclusively on their explicit release label and conventional metadata."
+  ],
+  "rollback": [
+    "Revert the preflight derivation and contract test, then rerun failed preflight workflows after generated release labels converge."
+  ],
+  "validation": [
+    "Run the release-label workflow contracts, release-note preflight, and CI change-detection suite.",
+    "Regenerate a breaking Release Please pull request and verify first-attempt preflight success before label convergence completes."
+  ],
+  "packages": []
+}
