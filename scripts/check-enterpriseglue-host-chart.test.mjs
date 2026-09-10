@@ -11,6 +11,18 @@ const chart = path.join(root, 'infra/kubernetes/helm/enterpriseglue-host')
 const sha256 = 'a'.repeat(64)
 const releaseEffectInventorySha256 = 'c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087'
 const receiptReleaseId = `sha256:${'1'.repeat(64)}`
+const managedShardBootstrap = {
+  enabled: true,
+  seedSecretName: 'enterpriseglue-bootstrap-seeds',
+  image: {
+    repository: 'ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap',
+    digest: `sha256:${'d'.repeat(64)}`,
+    pullPolicy: 'IfNotPresent',
+  },
+  shardId: 'staging-shard-a1',
+  backoffLimit: 0,
+  ttlSecondsAfterFinished: 3600,
+}
 const enabled = {
   enabled: true,
   configMapName: 'api-platform-bundle-a',
@@ -98,6 +110,74 @@ test('pooled PostgreSQL profile always renders the signed bridge owner and verif
   assert.equal(result.stdout.match(/name: DATABASE_TYPE\n\s+value: "postgres"/g)?.length, 4)
   assert.doesNotMatch(result.stdout, /^\s*- name: TENANCY_MODE$/m)
 })
+
+test('fresh managed-shard bootstrap is default off and renders one bounded pre-install predecessor job only when enabled', async (t) => {
+  const baseline = await render(t)
+  assert.equal(baseline.status, 0, baseline.stderr)
+  assert.doesNotMatch(baseline.stdout, /app\.kubernetes\.io\/component: bootstrap|EG_MANAGED_SHARD_BOOTSTRAP_ENABLED/)
+
+  const result = await render(t, {
+    database: { managedShardBootstrap },
+    serviceAccounts: { bootstrap: { automountServiceAccountToken: true } },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  const rendered = documents(result.stdout)
+  const job = rendered.find((document) => document.includes('kind: Job') && document.includes('app.kubernetes.io/component: bootstrap'))
+  assert.ok(job)
+  assert.match(job, /helm\.sh\/hook: pre-install\n/)
+  assert.doesNotMatch(job, /pre-upgrade/)
+  assert.match(job, /helm\.sh\/hook-weight: "-30"/)
+  assert.match(job, /helm\.sh\/hook-delete-policy: before-hook-creation/)
+  assert.doesNotMatch(job, /hook-succeeded/)
+  assert.match(job, /ttlSecondsAfterFinished: 3600/)
+  assert.match(job, /image: "ghcr\.io\/enterpriseglue\/enterpriseglue-managed-shard-bootstrap@sha256:d{64}"/)
+  assert.match(job, /name: EG_MANAGED_SHARD_BOOTSTRAP_ENABLED\n\s+value: "true"/)
+  assert.match(job, /name: EG_MANAGED_SHARD_TARGET_TENANCY_MODE\n\s+value: "pooled"/)
+  assert.match(job, /name: EG_MANAGED_SHARD_ID\n\s+value: "staging-shard-a1"/)
+  assert.match(job, /name: EG_TENANCY_MODE\n\s+value: "single"/)
+  assert.match(job, /name: EG_POSTGRES_RUNTIME_ROLE\n\s+value: "eg_runtime"/)
+  assert.match(job, /secretRef: \{ name: enterpriseglue-migration-secrets \}/)
+  assert.match(job, /secretRef: \{ name: enterpriseglue-bootstrap-seeds \}/)
+  assert.doesNotMatch(job, /enterpriseglue-secrets|enterpriseglue-preflight-secrets|runSchemaEpochOwnerMigrations|synchronize/)
+  assert.match(job, /name: bootstrap-receipt, emptyDir: \{\}/)
+  assert.match(job, /readOnlyRootFilesystem: true/)
+  const serviceAccount = rendered.find((document) => document.includes('kind: ServiceAccount') && document.includes('app.kubernetes.io/component: bootstrap'))
+  assert.ok(serviceAccount)
+  assert.match(serviceAccount, /helm\.sh\/hook: pre-install\n/)
+  assert.doesNotMatch(serviceAccount, /pre-upgrade/)
+  assert.match(serviceAccount, /automountServiceAccountToken: false/)
+})
+
+for (const [label, database, serviceAccounts] of [
+  ['non-pooled target', { profile: { databaseType: 'postgres', tenancyMode: 'single' } }, {}],
+  ['mutable image', { managedShardBootstrap: { ...managedShardBootstrap, image: { ...managedShardBootstrap.image, digest: '' } } }, {}],
+  ['wrong repository', { managedShardBootstrap: { ...managedShardBootstrap, image: { ...managedShardBootstrap.image, repository: 'registry.example/bootstrap' } } }, {}],
+  ['missing shard identity', { managedShardBootstrap: { ...managedShardBootstrap, shardId: '' } }, {}],
+  ['missing seed Secret', { managedShardBootstrap: { ...managedShardBootstrap, seedSecretName: '' } }, {}],
+  ['application Secret reused for seeds', { managedShardBootstrap: { ...managedShardBootstrap, seedSecretName: 'enterpriseglue-secrets' } }, {}],
+  ['owner Secret reused for seeds', { managedShardBootstrap: { ...managedShardBootstrap, seedSecretName: 'enterpriseglue-migration-secrets' } }, {}],
+  ['preflight Secret reused for seeds', { managedShardBootstrap: { ...managedShardBootstrap, seedSecretName: 'enterpriseglue-preflight-secrets' } }, {}],
+  ['bootstrap/migration ServiceAccount alias', {}, { bootstrap: { name: 'same-sa' }, migration: { name: 'same-sa' } }],
+  ['bootstrap/preflight ServiceAccount alias', {}, { bootstrap: { name: 'same-sa' }, preflight: { name: 'same-sa' } }],
+]) {
+  test(`fresh managed-shard bootstrap rejects ${label}`, async (t) => {
+    const base = {
+      profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      managedShardBootstrap,
+    }
+    const result = await render(t, {
+      database: {
+        ...base,
+        ...database,
+        profile: { ...base.profile, ...database.profile },
+        managedShardBootstrap: { ...base.managedShardBootstrap, ...database.managedShardBootstrap },
+      },
+      serviceAccounts,
+    })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.stdout, '')
+  })
+}
 
 test('non-target profiles retain migration.enabled and never require the bridge owner secret', async (t) => {
   const single = await render(t, {

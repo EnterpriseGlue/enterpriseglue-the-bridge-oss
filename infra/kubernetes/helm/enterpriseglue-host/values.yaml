@@ -80,6 +80,19 @@ database:
   applicationSecretName: enterpriseglue-secrets
   migrationSecretName: enterpriseglue-migration-secrets
   preflightSecretName: enterpriseglue-preflight-secrets
+  managedShardBootstrap:
+    # Fresh managed shards only. A verified provisioning controller must set
+    # enabled and project the exact candidate image digest; ordinary installs
+    # and every upgrade leave this one-shot historical bootstrap disabled.
+    enabled: false
+    seedSecretName: ""
+    image:
+      repository: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+    shardId: ""
+    backoffLimit: 0
+    ttlSecondsAfterFinished: 3600
   releaseEffectCohort:
     # Managed releases enable this narrow application-credential hook. It opens
     # the configured durable cohort after migration/preflight and before workloads.
@@ -116,6 +129,7 @@ serviceAccounts:
   api: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   worker: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   cohort: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+  bootstrap: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   migration: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
   preflight: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
 

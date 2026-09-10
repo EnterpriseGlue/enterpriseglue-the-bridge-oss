@@ -45,8 +45,10 @@ chart and signed candidate bundle.
 
 The executable migration inventory ends before the enforcement migration. The
 implementation inventory covers the 0131 owner-transition closure; it neither
-binds nor authorizes replay of migrations 0000–0130, and it is not the future
-fresh-shard bootstrap closure. Both roles
+binds nor authorizes replay of migrations 0000–0130. Fresh managed shards use
+the separate signed, default-off
+[PostgreSQL managed-shard bootstrap](./postgresql-managed-shard-bootstrap.md),
+whose exact postcondition is this bridge's 0130 owner predecessor. Both roles
 hash the complete ordered `timestamp:name` inventory registered in the image,
 then bind TypeORM to the declared executable subset. Protected candidate
 staging additionally hashes the source bytes that can affect the only
@@ -65,7 +67,8 @@ table for a configured, verified restricted role; this exact helper is included 
 implementation digest. A fresh
 database, the known v0.20 empty-ledger state, a partial ledger, or any other
 starting point fails closed and requires a separately designed and signed
-bootstrap/recovery artifact.
+bootstrap/recovery artifact. The separate fresh-shard bootstrap does not change
+this classifier or add a fresh-database branch to the bridge.
 
 The exact 0130 source requires the released one-policy
 `legacy-tenant-context/v1` FORCE-RLS shape. Migration 0131 atomically replaces

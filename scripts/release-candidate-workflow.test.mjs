@@ -85,6 +85,7 @@ test('candidate staging qualifies every public artifact before recording success
     'qualify-database-matrix',
     'qualify-operaton-browser',
     'stage-application-images',
+    'stage-managed-shard-bootstrap',
     'qualify-application-images',
     'stage-toolchain',
     'publish-receipt',
@@ -112,6 +113,10 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(artifactHelper, /release-candidates\/charts\/\$SOURCE_REF\/\$chart/)
   assert.match(artifactHelper, /helm-chart-archive\.mjs compare "\$archive" "\$pulled" >&2 \|\| return 1/)
   assert.match(stage, /release-candidate-receipt\.mjs create/)
+  assert.match(stage, /infra\/docker\/managed-shard-bootstrap\/Dockerfile/)
+  assert.match(stage, /run-managed-shard-bootstrap-postgres\.sh/)
+  assert.match(stage, /verify-oci-image-metadata\.mjs managedShardBootstrap/)
+  assert.match(stage, /cosign sign --yes --registry-referrers-mode=oci-1-1 "\$BOOTSTRAP_IMAGE@\$BOOTSTRAP_DIGEST"/)
   assert.match(stage, /cosign verify/)
   assert.match(stage, /results\.every\(\(result\) => result === 'success'\)/)
 })
@@ -122,6 +127,10 @@ test('candidate signatures bind the schema-epoch manifest in the image, chart, p
   assert.match(stage, /cp packages\/shared\/src\/schema-epoch-manifest\.json "\$metadata_output\/schema-epoch-manifest\.json"/)
   assert.match(stage, /find charts packages metadata -type f/)
   assert.match(receiptContract, /schemaEpoch/)
+  assert.match(stage, /managed-shard-bootstrap-manifest\.mjs --check/)
+  assert.match(stage, /cp infra\/database\/managed-shard-bootstrap-manifest\.json "\$metadata_output\/managed-shard-bootstrap-manifest\.json"/)
+  assert.match(stage, /--managedShardBootstrap "\$MANAGED_SHARD_BOOTSTRAP_REF"/)
+  assert.match(receiptContract, /managedShardBootstrap/)
   assert.match(dockerReusable, /dist\/packages\/shared\/src\/schema-epoch-manifest\.json/)
   assert.match(dockerReusable, /dist\/packages\/shared\/dist\/schema-epoch-manifest\.json/)
   assert.match(dockerReusable, /backend schema-epoch manifest differs from protected source/)
@@ -178,6 +187,8 @@ test('application release publication promotes candidate digests and delays alia
   assert.match(docker, /mode="promote"/)
   assert.match(docker, /fetch-release-candidate\.sh/)
   assert.match(docker, /Promote without rebuilding/)
+  assert.match(docker, /\.subjects\.managedShardBootstrap\.subject/)
+  assert.match(docker, /promote_or_verify "\$managed_shard_bootstrap_subject"/)
   assert.match(docker, /Immutable release tag \$target already points at/)
   const aliases = docker.slice(docker.indexOf('  promote-public-aliases:\n'))
   const jobSection = (job) => {

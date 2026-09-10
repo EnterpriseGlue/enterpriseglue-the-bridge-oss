@@ -175,7 +175,8 @@ const classifiers = {
     /^backend\/(?:__tests__|test)\/.*(?:nativeTenan|pooled-tenan|tenant-database)/i,
     /^frontend\/__tests__\/.*(?:NativeTenant|pooled-tenan|tenant.*Login)/i,
     /^test\/e2e\/pooled-tenancy/,
-    /^scripts\/(?:run-native-tenancy|native-tenancy-postgres-runner|run-pooled-tenancy|pooled-tenancy-evidence|saas-upgrade-restore-rollback)/,
+    /^infra\/(?:database\/managed-shard-bootstrap-manifest\.json|docker\/managed-shard-bootstrap\/)/,
+    /^scripts\/(?:run-native-tenancy|native-tenancy-postgres-runner|run-pooled-tenancy|pooled-tenancy-evidence|saas-upgrade-restore-rollback|managed-shard-bootstrap|run-managed-shard-bootstrap)/,
   ],
   adapter_backstop: [
     /^test\/e2e\/(?:operaton|camunda7-container)/,

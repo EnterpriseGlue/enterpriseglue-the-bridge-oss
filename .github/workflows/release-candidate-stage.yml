@@ -548,6 +548,121 @@ jobs:
       enable_dockerhub: false
     secrets: inherit
 
+  stage-managed-shard-bootstrap:
+    name: Stage and qualify managed-shard bootstrap image
+    needs: [resolve, validate-source]
+    if: needs.resolve.outputs.should_stage == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      image: ${{ steps.identity.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout protected bootstrap source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify protected bootstrap source
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve.outputs.trusted_ref }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.3
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify immutable bootstrap manifest
+        id: identity
+        run: |
+          node scripts/managed-shard-bootstrap-manifest.mjs --check
+          echo "image=ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap" >> "$GITHUB_OUTPUT"
+
+      - name: Build exact multi-platform bootstrap image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: infra/docker/managed-shard-bootstrap/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          provenance: mode=max
+          sbom: true
+          cache-from: type=registry,ref=ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap:buildcache
+          cache-to: type=registry,ref=ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap:buildcache,mode=max,oci-mediatypes=true,image-manifest=true
+          tags: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap:${{ needs.resolve.outputs.candidate_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.source_ref }}
+            org.opencontainers.image.version=${{ needs.resolve.outputs.release_tag }}
+
+      - name: Verify exact bootstrap image identity and OCI metadata
+        env:
+          BOOTSTRAP_IMAGE: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap
+          BOOTSTRAP_DIGEST: ${{ steps.build.outputs.digest }}
+          EXPECTED_PLATFORMS: linux/amd64,linux/arm64
+          EXPECTED_SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          EXPECTED_REVISION: ${{ needs.resolve.outputs.source_ref }}
+          EXPECTED_VERSION: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$BOOTSTRAP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          metadata="$(docker buildx imagetools inspect "$BOOTSTRAP_IMAGE@$BOOTSTRAP_DIGEST" --format '{{json .}}')"
+          verified_digest="$(node scripts/verify-oci-image-metadata.mjs managedShardBootstrap <<<"$metadata" | sed -n 's/^managedShardBootstrap_digest=//p')"
+          [[ "$verified_digest" == "$BOOTSTRAP_DIGEST" ]]
+
+      - name: Sign and attest exact bootstrap subject
+        env:
+          BOOTSTRAP_IMAGE: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap
+          BOOTSTRAP_DIGEST: ${{ steps.build.outputs.digest }}
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          [[ "$BOOTSTRAP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes --registry-referrers-mode=oci-1-1 "$BOOTSTRAP_IMAGE@$BOOTSTRAP_DIGEST"
+
+      - name: Attest exact bootstrap subject provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.2.0
+        with:
+          subject-name: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Qualify pristine bootstrap and fail-closed drift on real PostgreSQL
+        env:
+          EG_MANAGED_SHARD_BOOTSTRAP_IMAGE: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap@${{ steps.build.outputs.digest }}
+        run: bash scripts/run-managed-shard-bootstrap-postgres.sh
+
+      - name: Scan exact bootstrap image digest
+        env:
+          BOOTSTRAP_REF: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap@${{ steps.build.outputs.digest }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+        run: >-
+          docker run --rm
+          --volume "$HOME/.docker:/root/.docker:ro"
+          --volume "$GITHUB_WORKSPACE/.trivyignore:/workspace/.trivyignore:ro"
+          "$TRIVY_IMAGE" image --quiet --exit-code 1
+          --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN
+          --ignorefile /workspace/.trivyignore "$BOOTSTRAP_REF"
+
   qualify-application-images:
     name: Qualify exact candidate images
     needs: [resolve, stage-application-images]
@@ -804,7 +919,9 @@ jobs:
           metadata_output="$payload/metadata"
           mkdir -p "$chart_output" "$plugin_package_output" "$host_package_output" "$metadata_output"
           node scripts/schema-epoch-manifest.mjs verify
+          node scripts/managed-shard-bootstrap-manifest.mjs --check
           cp packages/shared/src/schema-epoch-manifest.json "$metadata_output/schema-epoch-manifest.json"
+          cp infra/database/managed-shard-bootstrap-manifest.json "$metadata_output/managed-shard-bootstrap-manifest.json"
 
           installer_version="$(node -p "require('./packages/plugin-installer/package.json').version")"
           manager_version="$(node -p "require('./packages/plugin-manager/package.json').version")"
@@ -890,7 +1007,7 @@ jobs:
 
   publish-receipt:
     name: Publish signed candidate receipt
-    needs: [resolve, qualify-database-matrix, qualify-operaton-browser, stage-application-images, qualify-application-images, stage-toolchain]
+    needs: [resolve, qualify-database-matrix, qualify-operaton-browser, stage-application-images, stage-managed-shard-bootstrap, qualify-application-images, stage-toolchain]
     if: needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -935,6 +1052,7 @@ jobs:
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
           BACKEND_REF: ${{ needs.stage-application-images.outputs.backend_image }}@${{ needs.stage-application-images.outputs.backend_digest }}
           FRONTEND_REF: ${{ needs.stage-application-images.outputs.frontend_image }}@${{ needs.stage-application-images.outputs.frontend_digest }}
+          MANAGED_SHARD_BOOTSTRAP_REF: ${{ needs.stage-managed-shard-bootstrap.outputs.image }}@${{ needs.stage-managed-shard-bootstrap.outputs.digest }}
           INSTALLER_REF: ${{ needs.stage-toolchain.outputs.installer_ref }}
           MANAGER_REF: ${{ needs.stage-toolchain.outputs.manager_ref }}
           HOST_CHART_REF: ${{ needs.stage-toolchain.outputs.host_chart_ref }}
@@ -950,6 +1068,7 @@ jobs:
             --output "$receipt" --artifacts "$payload" \
             --source-ref "$SOURCE_REF" --release-tag "$RELEASE_TAG" \
             --backend "$BACKEND_REF" --frontend "$FRONTEND_REF" \
+            --managedShardBootstrap "$MANAGED_SHARD_BOOTSTRAP_REF" \
             --pluginInstaller "$INSTALLER_REF" --pluginManager "$MANAGER_REF" \
             --hostChart "$HOST_CHART_REF" --runtimeChart "$RUNTIME_CHART_REF" \
             --installerRbacChart "$RBAC_CHART_REF" --managerChart "$MANAGER_CHART_REF" >/dev/null
@@ -997,7 +1116,7 @@ jobs:
 
   finalize:
     name: Record required candidate status
-    needs: [resolve, validate-source, qualify-database-adapters, qualify-database-matrix, qualify-operaton-browser, stage-application-images, qualify-application-images, stage-toolchain, publish-receipt]
+    needs: [resolve, validate-source, qualify-database-adapters, qualify-database-matrix, qualify-operaton-browser, stage-application-images, stage-managed-shard-bootstrap, qualify-application-images, stage-toolchain, publish-receipt]
     if: always() && needs.resolve.outputs.should_stage == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -1014,6 +1133,7 @@ jobs:
           DATABASE_MATRIX_RESULT: ${{ needs.qualify-database-matrix.result }}
           OPERATON_BROWSER_RESULT: ${{ needs.qualify-operaton-browser.result }}
           IMAGE_RESULT: ${{ needs.stage-application-images.result }}
+          BOOTSTRAP_RESULT: ${{ needs.stage-managed-shard-bootstrap.result }}
           QUALIFY_RESULT: ${{ needs.qualify-application-images.result }}
           TOOLCHAIN_RESULT: ${{ needs.stage-toolchain.result }}
           RECEIPT_RESULT: ${{ needs.publish-receipt.result }}
@@ -1026,6 +1146,7 @@ jobs:
               process.env.DATABASE_MATRIX_RESULT,
               process.env.OPERATON_BROWSER_RESULT,
               process.env.IMAGE_RESULT,
+              process.env.BOOTSTRAP_RESULT,
               process.env.QUALIFY_RESULT,
               process.env.TOOLCHAIN_RESULT,
               process.env.RECEIPT_RESULT,

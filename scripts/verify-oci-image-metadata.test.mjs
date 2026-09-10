@@ -83,3 +83,21 @@ test('CLI emits safe GitHub step outputs for the requested image prefix', () => 
   assert.match(result.stdout, new RegExp(`^backend_revision=${revision}$`, 'm'));
   assert.match(result.stdout, /^backend_platforms=linux\/amd64,linux\/arm64$/m);
 });
+
+test('CLI accepts the managed-shard bootstrap release subject prefix', () => {
+  const script = fileURLToPath(new URL('./verify-oci-image-metadata.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [script, 'managedShardBootstrap'], {
+    encoding: 'utf8',
+    input: JSON.stringify(inspectionResult()),
+    env: {
+      ...process.env,
+      EXPECTED_PLATFORMS: 'linux/amd64,linux/arm64',
+      EXPECTED_SOURCE: source,
+      EXPECTED_REVISION: revision,
+      EXPECTED_VERSION: version,
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, new RegExp(`^managedShardBootstrap_digest=${digest}$`, 'm'));
+});

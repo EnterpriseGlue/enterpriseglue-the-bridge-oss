@@ -269,7 +269,7 @@ test('protected CI uploads precisely the receipt and runs this regression gate',
     'the physical pooled runner must resolve the immutable schema-predecessor release tag',
   );
   assert.deepEqual([...job.matchAll(/^\s+path: (.+)$/gm)].map((match) => match[1]), ['.artifacts/pooled-tenancy-e2e/public/receipt.json']);
-  assert.match(job, /node --test scripts\/pooled-tenancy-evidence\.test\.mjs/);
+  assert.match(job, /node --test\s+scripts\/pooled-tenancy-evidence\.test\.mjs/);
   assert.match(job, /scripts\/native-tenancy-postgres-runner\.test\.mjs/);
   assert.match(job, /id: pooled-database\s+run: pnpm run test:native-tenancy:postgres-rls/);
   assert.match(job, /if: failure\(\) && steps\.pooled-database\.outcome == 'failure'\s+run: node scripts\/pooled-tenancy-evidence\.mjs \.artifacts\/pooled-tenancy-e2e\/public\/receipt\.json failed database 1/);

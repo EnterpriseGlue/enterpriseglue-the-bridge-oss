@@ -1,6 +1,74 @@
 {{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
+{{- include "enterpriseglue-host.managedShardBootstrapValidate" . }}
 {{- $schemaEpochOwnerMode := include "enterpriseglue-host.schemaEpochOwnerMode" . | trim }}
 {{- $schemaEpochTarget := eq (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" }}
+{{- if .Values.database.managedShardBootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "enterpriseglue-host.fullname" . }}-bootstrap-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "enterpriseglue-host.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-30"
+    helm.sh/hook-delete-policy: before-hook-creation
+    enterpriseglue.io/managed-shard-bootstrap-manifest-sha256: {{ (.Files.Get "files/managed-shard-bootstrap-manifest.json" | sha256sum) | quote }}
+spec:
+  backoffLimit: {{ .Values.database.managedShardBootstrap.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.database.managedShardBootstrap.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "bootstrap") | nindent 8 }}
+      annotations:
+        enterpriseglue.io/managed-shard-bootstrap-manifest-sha256: {{ (.Files.Get "files/managed-shard-bootstrap-manifest.json" | sha256sum) | quote }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "bootstrap") }}
+      {{- include "enterpriseglue-host.commonPodSpec" (dict "root" . "component" "bootstrap") | nindent 6 }}
+      {{- if .Values.database.connectionProxy.enabled }}
+      initContainers:
+        {{- include "enterpriseglue-host.connectionProxy" (dict "root" . "nativeSidecar" true) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap
+          image: {{ include "enterpriseglue-host.managedShardBootstrapImage" . | quote }}
+          imagePullPolicy: {{ .Values.database.managedShardBootstrap.image.pullPolicy }}
+          env:
+            - name: EG_MANAGED_SHARD_BOOTSTRAP_ENABLED
+              value: "true"
+            - name: EG_MANAGED_SHARD_TARGET_TENANCY_MODE
+              value: "pooled"
+            - name: EG_MANAGED_SHARD_ID
+              value: {{ .Values.database.managedShardBootstrap.shardId | quote }}
+            - name: EG_POSTGRES_RUNTIME_ROLE
+              value: {{ .Values.database.migration.runtimeRole | quote }}
+            - name: DATABASE_TYPE
+              value: "postgres"
+            - name: EG_TENANCY_MODE
+              value: "single"
+            - name: EG_MANAGED_SHARD_BOOTSTRAP_RECEIPT_PATH
+              value: /var/run/enterpriseglue-bootstrap/receipt.json
+          envFrom:
+            - configMapRef: { name: {{ .Values.database.configMapName }} }
+            - secretRef: { name: {{ .Values.database.migrationSecretName }} }
+            - secretRef: { name: {{ .Values.database.managedShardBootstrap.seedSecretName }} }
+          securityContext:
+            {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            - { name: bootstrap-receipt, mountPath: /var/run/enterpriseglue-bootstrap }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: bootstrap-receipt, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+---
+{{- end }}
 {{- if ne $schemaEpochOwnerMode "disabled" }}
 apiVersion: batch/v1
 kind: Job

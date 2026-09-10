@@ -26,7 +26,45 @@ different runtime contract. The exact environment name is `EG_TENANCY_MODE`; leg
 owner hook always renders and can apply only the exact signed 0130-to-0131 transition;
 `database.migration.enabled` cannot skip it or extend it to the later enforcement migration.
 The owner rejects a fresh database, empty ledger, partial ledger, or any other predecessor before
-DDL; new managed shards need a separate signed bootstrap/recovery artifact.
+DDL. A fresh managed shard can opt into the separate signed bootstrap described below; that does
+not add a fresh-database path to the owner bridge.
+
+### Fresh managed-shard bootstrap
+
+`database.managedShardBootstrap` is default off and valid only for the explicit
+`postgres`/`pooled` profile. A provisioning controller may enable it for the first install of an
+empty shard, using the exact bootstrap image digest from a verified signed candidate receipt. The
+pre-install-only job runs at hook weight `-30`, produces exact legacy 0130, and then leaves the
+existing owner hook at `-20` to perform the normal bounded bridge transition. It never runs on an
+upgrade.
+
+```yaml
+database:
+  profile: { databaseType: postgres, tenancyMode: pooled }
+  managedShardBootstrap:
+    enabled: true
+    shardId: staging-shard-a1
+    seedSecretName: enterpriseglue-bootstrap-seeds
+    image:
+      repository: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap
+      digest: sha256:<digest-from-verified-candidate-receipt>
+      pullPolicy: IfNotPresent
+  migration:
+    runtimeRole: eg_runtime
+serviceAccounts:
+  bootstrap: { create: true, name: "", annotations: {}, automountServiceAccountToken: false }
+```
+
+The migration Secret supplies the restricted schema-owner connection. The dedicated seed Secret
+supplies bootstrap-only settings such as `ADMIN_PASSWORD`, `JWT_SECRET` and `ENCRYPTION_KEY`; it
+must be distinct from application, migration and preflight database Secrets. The chart creates
+neither Secret nor database roles. Before any schema mutation, the owner must own the target
+database and both owner and runtime identities must be non-inheriting, membership-free logins
+without elevated PostgreSQL attributes. The bootstrap ServiceAccount must also be distinct from the
+migration and preflight accounts. The completed Job is retained until
+`ttlSecondsAfterFinished`; collect its bounded receipt file or final JSON log line before then. See
+[`docs/architecture/postgresql-managed-shard-bootstrap.md`](../../../../docs/architecture/postgresql-managed-shard-bootstrap.md)
+for state classification, signed artifact and exact postcondition details.
 
 Managed PostgreSQL pooled releases may enable `database.releaseEffectCohort`. The chart then
 orders the owner migration at hook weight `-20`, restricted schema/policy preflight at `-10`, and
