@@ -263,6 +263,11 @@ test('raw retention is explicit, private and prohibited on CI', (t) => {
 test('protected CI uploads precisely the receipt and runs this regression gate', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const job = workflow.split('\n  native-tenancy-pooled-e2e:')[1].split('\n  saas-upgrade-restore-rollback:')[0];
+  assert.match(
+    job,
+    /- name: Checkout\n\s+uses: actions\/checkout@[0-9a-f]+[^\n]*\n\s+with:\n\s+fetch-depth: 0/,
+    'the physical pooled runner must resolve the immutable schema-predecessor release tag',
+  );
   assert.deepEqual([...job.matchAll(/^\s+path: (.+)$/gm)].map((match) => match[1]), ['.artifacts/pooled-tenancy-e2e/public/receipt.json']);
   assert.match(job, /node --test scripts\/pooled-tenancy-evidence\.test\.mjs/);
   assert.match(job, /scripts\/native-tenancy-postgres-runner\.test\.mjs/);
