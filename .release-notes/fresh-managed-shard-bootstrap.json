@@ -1,0 +1,53 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "fresh-managed-shard-bootstrap",
+  "type": "security",
+  "scope": "database-bootstrap",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Adds a signed, default-off PostgreSQL managed-shard bootstrap artifact that creates only the exact v0.24.2 schema predecessor and rejects ambiguous or drifted databases.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Existing installations do not enable this artifact; continue to use the signed 0130-to-0131 compatibility bridge.",
+      "A provisioning controller may run the bootstrap once only after verifying its signed release subject and immutable contract, then proceed through the normal owner migration and verify-only runtime gates."
+    ]
+  },
+  "configuration": [
+    "Managed-shard bootstrap is disabled unless EG_MANAGED_SHARD_BOOTSTRAP_ENABLED is exactly true and the target is pooled PostgreSQL.",
+    "The runner requires the exact v0.24.2 predecessor image, a dedicated schema-owner credential, a distinct seed Secret, a stable shard identity, and a bounded receipt destination."
+  ],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {
+    "migrations": [],
+    "rollbackSupported": false,
+    "notes": [
+      "The one-shot runner executes a transactionally bounded TypeORM schema plan only when its canonical SQL digest matches the signed exact-v0.24.2 manifest, then uses the exact predecessor TypeORM MigrationExecutor to fake-record the 132 migrations already represented by that schema in the same transaction; it never calls TypeORM synchronize or writes ledger rows directly.",
+      "It accepts only an object-free pristine schema or the exact bootstrap-produced 0130 state, under one PostgreSQL advisory lock. Restricted owner/runtime role safety is checked before mutation; partial ledgers, an empty ledger with objects, policy/object/owner/ACL drift, seed/catalogue/config drift, ordinary business data, and release-effect cohort objects fail closed."
+    ]
+  },
+  "security": [
+    "Before any database connection or schema mutation, the runner requires an explicit valid ADMIN_EMAIL; the bounded receipt excludes database URLs, passwords, password hashes, OAuth material, and all Secret payloads, and the stored administrator bcrypt hash is verified against ADMIN_PASSWORD without exposing either value.",
+    "The signed contract pins the exact predecessor revision, release tag, backend digest, migration inventory, legacy RLS profile, advisory-lock namespace, seed profile, and receipt schema.",
+    "The existing 0130-to-0131 bridge remains unchanged and continues to reject fresh, empty, partial, and drifted databases."
+  ],
+  "documentation": [
+    "docs/architecture/postgresql-managed-shard-bootstrap.md",
+    "infra/kubernetes/helm/enterpriseglue-host/README.md"
+  ],
+  "knownLimitations": [
+    "This artifact supports only fresh pooled PostgreSQL managed shards and does not provide portability evidence for the other supported database adapters.",
+    "Cloud provisioning remains responsible for signature verification, immutable image selection, shard fencing, receipt retention, and enabling the default-off hook."
+  ],
+  "rollback": [
+    "Delete and recreate a failed brand-new shard from the provider-owned pristine boundary; do not repair its ledger or reuse a partially bootstrapped database.",
+    "No existing installation is modified when the bootstrap remains disabled."
+  ],
+  "validation": [
+    "Focused contract tests cover default-off behavior, immutable predecessor binding, pristine/exact-0130 classification, every fail-closed drift class, bounded receipt redaction, and Helm ordering.",
+    "A PostgreSQL 16 qualification creates an object-free database, applies the exact predecessor migrations without synchronize, verifies every created seed/catalogue/config set plus empty ordinary tables and exact role/RLS/ACL ownership, proves idempotent exact-0130 recognition, and rejects deliberate ledger, object, role, policy, owner, ACL, password, audit-coverage, and data drift; missing or malformed administrator email fails before creating the target schema."
+  ],
+  "packages": []
+}

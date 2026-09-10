@@ -37,6 +37,68 @@ app.kubernetes.io/component: {{ .component }}
 {{ printf "%s@%s" $repository $digest }}
 {{- end }}
 
+{{- define "enterpriseglue-host.managedShardBootstrapManifest" -}}
+{{- $bytes := required "files/managed-shard-bootstrap-manifest.json is required" (.Files.Get "files/managed-shard-bootstrap-manifest.json") -}}
+{{- $manifest := mustFromJson $bytes -}}
+{{- if or (ne $manifest.schemaVersion "enterpriseglue-managed-shard-bootstrap/v1") (ne $manifest.id "postgres-v0.24.2-exact-0130/v1") $manifest.enabledByDefault -}}
+{{- fail "managed-shard bootstrap manifest identity or default-off boundary is invalid" -}}
+{{- end -}}
+{{- if or (ne $manifest.target.databaseType "postgres") (ne $manifest.target.tenancyMode "pooled") (ne $manifest.target.executionTenancyMode "single") -}}
+{{- fail "managed-shard bootstrap manifest target is invalid" -}}
+{{- end -}}
+{{- if or (ne $manifest.predecessor.releaseTag "v0.24.2") (ne $manifest.predecessor.postgresPolicyProfile "legacy-tenant-context/v1") (ne (int $manifest.predecessor.migrationInventory.through) 1700000000130) (ne (int $manifest.predecessor.migrationInventory.count) 132) -}}
+{{- fail "managed-shard bootstrap predecessor is not exact legacy 0130" -}}
+{{- end -}}
+{{- if or (ne $manifest.execution.mode "one-shot-signed-typeorm-schema-plan/v1") (ne $manifest.execution.synchronize "forbidden") (ne $manifest.execution.transaction "all") -}}
+{{- fail "managed-shard bootstrap execution contract is invalid" -}}
+{{- end -}}
+{{- if or (ne (len $manifest.execution.acceptedStartingStates) 2) (ne (index $manifest.execution.acceptedStartingStates 0) "pristine-schema") (ne (index $manifest.execution.acceptedStartingStates 1) "exact-bootstrap-0130") -}}
+{{- fail "managed-shard bootstrap starting-state contract is invalid" -}}
+{{- end -}}
+{{- toJson $manifest -}}
+{{- end }}
+
+{{- define "enterpriseglue-host.managedShardBootstrapImage" -}}
+{{- $repository := required "database.managedShardBootstrap.image.repository is required when enabled" .Values.database.managedShardBootstrap.image.repository -}}
+{{- $digest := required "database.managedShardBootstrap.image.digest is required when enabled" .Values.database.managedShardBootstrap.image.digest -}}
+{{- if ne $repository "ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap" -}}
+{{- fail "database.managedShardBootstrap.image.repository must be the signed EnterpriseGlue bootstrap repository" -}}
+{{- end -}}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) -}}
+{{- fail "database.managedShardBootstrap.image.digest must be a sha256 digest" -}}
+{{- end -}}
+{{ printf "%s@%s" $repository $digest }}
+{{- end }}
+
+{{- define "enterpriseglue-host.managedShardBootstrapValidate" -}}
+{{- if .Values.database.managedShardBootstrap.enabled -}}
+{{- if ne (include "enterpriseglue-host.schemaEpochTarget" . | trim) "true" -}}
+{{- fail "database.managedShardBootstrap requires the explicit postgres/pooled database profile" -}}
+{{- end -}}
+{{- $manifest := include "enterpriseglue-host.managedShardBootstrapManifest" . | fromJson -}}
+{{- $bridge := include "enterpriseglue-host.schemaEpochManifest" . | fromJson -}}
+{{- if or (ne (int $manifest.predecessor.migrationInventory.through) (int $bridge.roles.ownerMigration.from.through)) (ne (int $manifest.predecessor.migrationInventory.count) (int $bridge.roles.ownerMigration.from.count)) (ne $manifest.predecessor.migrationInventory.sha256 $bridge.roles.ownerMigration.from.sha256) (ne $manifest.predecessor.postgresPolicyProfile $bridge.roles.ownerMigration.from.postgresPolicyProfile) -}}
+{{- fail "managed-shard bootstrap output must equal the bridge's exact owner predecessor" -}}
+{{- end -}}
+{{- $image := include "enterpriseglue-host.managedShardBootstrapImage" . -}}
+{{- $shardId := required "database.managedShardBootstrap.shardId is required when enabled" .Values.database.managedShardBootstrap.shardId -}}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{0,62}$" $shardId) -}}
+{{- fail "database.managedShardBootstrap.shardId must be a stable lowercase shard identity" -}}
+{{- end -}}
+{{- $runtimeRole := required "database.migration.runtimeRole is required for managed-shard bootstrap" .Values.database.migration.runtimeRole -}}
+{{- $seedSecret := required "database.managedShardBootstrap.seedSecretName is required when enabled" .Values.database.managedShardBootstrap.seedSecretName -}}
+{{- if or (eq $seedSecret .Values.database.applicationSecretName) (eq $seedSecret .Values.database.migrationSecretName) (eq $seedSecret .Values.database.preflightSecretName) -}}
+{{- fail "managed-shard bootstrap seed Secret must be distinct from application, migration and preflight database Secrets" -}}
+{{- end -}}
+{{- $bootstrapServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "bootstrap") | trim -}}
+{{- $migrationServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "migration") | trim -}}
+{{- $preflightServiceAccount := include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "preflight") | trim -}}
+{{- if or (eq $bootstrapServiceAccount $migrationServiceAccount) (eq $bootstrapServiceAccount $preflightServiceAccount) -}}
+{{- fail "managed-shard bootstrap requires a distinct bootstrap ServiceAccount" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
 {{- define "enterpriseglue-host.releaseEffectCohortValidate" -}}
 {{- if .Values.database.releaseEffectCohort.enabled -}}
 {{- if or (ne .Values.database.profile.databaseType "postgres") (ne .Values.database.profile.tenancyMode "pooled") -}}

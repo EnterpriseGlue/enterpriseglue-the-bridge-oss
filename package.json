@@ -116,6 +116,8 @@
     "test:native-tenancy:postgres-rls": "bash ./scripts/run-native-tenancy-postgres-rls.sh",
     "test:native-tenancy:pooled-e2e": "bash ./scripts/run-pooled-tenancy-e2e.sh",
     "test:saas:qualification-contracts": "node --test scripts/saas-qualification-contracts.test.mjs",
+    "test:saas:managed-shard-bootstrap": "node scripts/managed-shard-bootstrap-manifest.mjs --check && node --test scripts/managed-shard-bootstrap.test.mjs",
+    "test:saas:managed-shard-bootstrap:postgres": "bash ./scripts/run-managed-shard-bootstrap-postgres.sh",
     "test:saas:upgrade-restore-rollback": "bash ./scripts/run-saas-upgrade-restore-rollback.sh",
     "test:saas:combined": "pnpm run test:native-tenancy:pooled-e2e && pnpm run test:plugin-platform:multi-replica && pnpm run test:saas:upgrade-restore-rollback",
     "test:identity-provider-key-identity": "pnpm --dir backend exec vitest run __tests__/shared/db/identityProviderKeyIdentityMigration.test.ts __tests__/shared/services/platform-admin/identityProviderService.test.ts __tests__/shared/services/platform-admin/configBundleApplyService.test.ts --config vitest.config.ts --reporter=dot",

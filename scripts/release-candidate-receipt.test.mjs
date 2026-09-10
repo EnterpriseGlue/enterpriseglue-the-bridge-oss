@@ -12,6 +12,7 @@ const digest = `sha256:${'a'.repeat(64)}`
 const subjectArgs = {
   backend: `ghcr.io/enterpriseglue/backend@${digest}`,
   frontend: `ghcr.io/enterpriseglue/frontend@${digest}`,
+  managedShardBootstrap: `ghcr.io/enterpriseglue/managed-shard-bootstrap@${digest}`,
   pluginInstaller: `ghcr.io/enterpriseglue/plugin-installer@${digest}`,
   pluginManager: `ghcr.io/enterpriseglue/plugin-manager@${digest}`,
   hostChart: `ghcr.io/enterpriseglue/host-chart@${digest}`,
@@ -46,6 +47,10 @@ async function fixture() {
     path.join(artifacts, 'metadata/schema-epoch-manifest.json'),
     await readFile(new URL('../packages/shared/src/schema-epoch-manifest.json', import.meta.url)),
   )
+  await writeFile(
+    path.join(artifacts, 'metadata/managed-shard-bootstrap-manifest.json'),
+    await readFile(new URL('../infra/database/managed-shard-bootstrap-manifest.json', import.meta.url)),
+  )
   return { root, artifacts, output: path.join(root, 'release-candidate.json') }
 }
 
@@ -61,7 +66,7 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   const created = await createReceipt(args)
   assert.equal(created.schemaVersion, 'enterpriseglue-release-candidate/v1')
   assert.equal(created.publicationPerformed, false)
-  assert.equal(created.artifacts.length, 13)
+  assert.equal(created.artifacts.length, 14)
   assert.equal(created.schemaEpoch.applicationStartupMode, 'verify-only')
   assert.equal(created.schemaEpoch.preflightMode, 'verify-runtime-grant')
   assert.equal(created.schemaEpoch.ownerMigrationMode, 'apply-through-executable')
@@ -84,6 +89,12 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
     { id: 'pre-enforcement', through: 1700000000131, postgresPolicyProfile: 'dual-context-compatibility/v1' },
     { id: 'post-enforcement', through: 1700000000132, postgresPolicyProfile: 'explicit-context/v1' },
   ])
+  assert.equal(created.managedShardBootstrap.enabledByDefault, false)
+  assert.equal(created.managedShardBootstrap.id, 'postgres-v0.24.2-exact-0130/v1')
+  assert.equal(created.managedShardBootstrap.predecessor.migrationInventory.through, created.schemaEpoch.ownerMigrationFrom.through)
+  assert.equal(created.managedShardBootstrap.predecessor.migrationInventory.sha256, created.schemaEpoch.ownerMigrationFrom.sha256)
+  assert.equal(created.managedShardBootstrap.predecessor.postgresPolicyProfile, created.schemaEpoch.ownerMigrationFrom.postgresPolicyProfile)
+  assert.equal(created.managedShardBootstrap.execution.synchronize, 'forbidden')
   assert.deepEqual(await verifyReceipt({
     receipt: output,
     artifacts,
@@ -121,6 +132,21 @@ test('rejects a schema-epoch receipt projection that differs from the inventorie
   receipt.schemaEpoch.acceptedDatabaseEpochs[0].postgresPolicyProfile = 'explicit-context/v1'
   await writeFile(output, JSON.stringify(receipt))
   await assert.rejects(verifyReceipt({ receipt: output, artifacts }), /does not match/)
+})
+
+test('rejects a managed-shard bootstrap projection that differs from its inventoried manifest', async () => {
+  const { artifacts, output } = await fixture()
+  await createReceipt({
+    'source-ref': sourceRevision,
+    'release-tag': releaseTag,
+    artifacts,
+    output,
+    ...subjectArgs,
+  })
+  const receipt = JSON.parse(await readFile(output, 'utf8'))
+  receipt.managedShardBootstrap.execution.synchronize = 'allowed'
+  await writeFile(output, JSON.stringify(receipt))
+  await assert.rejects(verifyReceipt({ receipt: output, artifacts }), /managed-shard bootstrap receipt does not match/)
 })
 
 test('rejects a mutable or off-namespace subject', async () => {

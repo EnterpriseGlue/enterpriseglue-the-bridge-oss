@@ -57,7 +57,7 @@
     "database": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "releaseEffectCohort", "migration", "preflight", "connectionProxy"],
+      "required": ["profile", "configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "managedShardBootstrap", "releaseEffectCohort", "migration", "preflight", "connectionProxy"],
       "properties": {
         "profile": {
           "type": "object",
@@ -72,6 +72,34 @@
         "applicationSecretName": { "$ref": "#/$defs/name" },
         "migrationSecretName": { "$ref": "#/$defs/name" },
         "preflightSecretName": { "$ref": "#/$defs/name" },
+        "managedShardBootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "seedSecretName", "image", "shardId", "backoffLimit", "ttlSecondsAfterFinished"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "seedSecretName": { "type": "string", "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)$", "maxLength": 63 },
+            "image": { "$ref": "#/$defs/image" },
+            "shardId": { "type": "string", "pattern": "^(|[a-z0-9][a-z0-9-]{0,62})$" },
+            "backoffLimit": { "type": "integer", "minimum": 0, "maximum": 1 },
+            "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 }
+          },
+          "allOf": [{
+            "if": { "properties": { "enabled": { "const": true } } },
+            "then": {
+              "properties": {
+                "image": {
+                  "properties": {
+                    "repository": { "const": "ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap" },
+                    "digest": { "minLength": 71 }
+                  }
+                },
+                "shardId": { "minLength": 1 },
+                "seedSecretName": { "minLength": 1 }
+              }
+            }
+          }]
+        },
         "releaseEffectCohort": {
           "type": "object",
           "additionalProperties": false,
@@ -115,11 +143,12 @@
     "serviceAccounts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["api", "worker", "cohort", "migration", "preflight"],
+      "required": ["api", "worker", "cohort", "bootstrap", "migration", "preflight"],
       "properties": {
         "api": { "$ref": "#/$defs/serviceAccount" },
         "worker": { "$ref": "#/$defs/serviceAccount" },
         "cohort": { "$ref": "#/$defs/serviceAccount" },
+        "bootstrap": { "$ref": "#/$defs/serviceAccount" },
         "migration": { "$ref": "#/$defs/serviceAccount" },
         "preflight": { "$ref": "#/$defs/serviceAccount" }
       }

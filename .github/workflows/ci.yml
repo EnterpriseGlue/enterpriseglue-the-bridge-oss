@@ -1038,7 +1038,14 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Verify pooled evidence and disposable database runner contracts
-        run: node --test scripts/pooled-tenancy-evidence.test.mjs scripts/native-tenancy-postgres-runner.test.mjs
+        run: >-
+          node --test
+          scripts/pooled-tenancy-evidence.test.mjs
+          scripts/native-tenancy-postgres-runner.test.mjs
+          scripts/managed-shard-bootstrap.test.mjs
+
+      - name: Run managed-shard fresh-bootstrap qualification
+        run: pnpm run test:saas:managed-shard-bootstrap:postgres
 
       - name: Run pooled RLS and session-race qualification
         id: pooled-database

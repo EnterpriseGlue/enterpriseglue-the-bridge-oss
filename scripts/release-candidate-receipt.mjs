@@ -5,10 +5,13 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 
+import { canonicalJson, parseManagedShardBootstrapManifest } from './managed-shard-bootstrap-contract.mjs'
+
 const SCHEMA_VERSION = 'enterpriseglue-release-candidate/v1'
 const REQUIRED_SUBJECTS = [
   'backend',
   'frontend',
+  'managedShardBootstrap',
   'pluginInstaller',
   'pluginManager',
   'hostChart',
@@ -30,8 +33,10 @@ const REQUIRED_ARTIFACTS = [
   /^packages\/host\/enterpriseglue-backend-host-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
   /^packages\/host\/enterpriseglue-frontend-host-[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.tgz$/,
   /^metadata\/schema-epoch-manifest\.json$/,
+  /^metadata\/managed-shard-bootstrap-manifest\.json$/,
 ]
 const SCHEMA_EPOCH_MANIFEST_PATH = 'metadata/schema-epoch-manifest.json'
+const MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH = 'metadata/managed-shard-bootstrap-manifest.json'
 const LEGACY_POLICY_PROFILE = 'legacy-tenant-context/v1'
 const DUAL_POLICY_PROFILE = 'dual-context-compatibility/v1'
 const EXPLICIT_POLICY_PROFILE = 'explicit-context/v1'
@@ -88,7 +93,7 @@ async function digestFile(file) {
 
 async function collectArtifacts(artifactDirectory) {
   const files = (await walkFiles(artifactDirectory))
-    .filter((file) => file.endsWith('.tgz') || file === SCHEMA_EPOCH_MANIFEST_PATH)
+    .filter((file) => file.endsWith('.tgz') || file === SCHEMA_EPOCH_MANIFEST_PATH || file === MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH)
     .sort()
   for (const pattern of REQUIRED_ARTIFACTS) {
     const matches = files.filter((file) => pattern.test(file))
@@ -147,7 +152,54 @@ async function readSchemaEpochManifest(artifactDirectory) {
   return manifest
 }
 
+async function readManagedShardBootstrapManifest(artifactDirectory, schemaEpochManifest) {
+  const manifest = parseManagedShardBootstrapManifest(JSON.parse(await readFile(path.join(artifactDirectory, MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH), 'utf8')))
+  const predecessorEpoch = {
+    ...manifest.predecessor.migrationInventory,
+    postgresPolicyProfile: manifest.predecessor.postgresPolicyProfile,
+  }
+  if (canonicalJson(predecessorEpoch) !== canonicalJson(schemaEpochManifest.roles.ownerMigration.from)) {
+    fail('Managed-shard bootstrap output does not equal the schema bridge owner predecessor')
+  }
+  return manifest
+}
+
 const deepCopy = (value) => JSON.parse(JSON.stringify(value))
+
+function schemaEpochProjection(manifest, artifact) {
+  return {
+    manifestPath: SCHEMA_EPOCH_MANIFEST_PATH,
+    manifestSha256: artifact?.sha256,
+    id: manifest.id,
+    applicationStartupMode: manifest.roles.applicationStartup.mode,
+    preflightMode: manifest.roles.preflight.mode,
+    ownerMigrationMode: manifest.roles.ownerMigration.mode,
+    ownerMigrationFrom: deepCopy(manifest.roles.ownerMigration.from),
+    ownerRuntimeGrant: manifest.roles.ownerMigration.runtimeGrant,
+    freshDatabase: manifest.upgradeContract.freshDatabase,
+    emptyMigrationLedger: manifest.upgradeContract.emptyMigrationLedger,
+    executableThrough: manifest.executableMigrationInventory.through,
+    executableImplementationSha256: manifest.executableImplementationInventory.sha256,
+    executableImplementationPurpose: manifest.executableImplementationInventory.purpose,
+    releaseEffectInventoryVersion: manifest.releaseEffectInventory.version,
+    releaseEffectInventorySha256: manifest.releaseEffectInventory.sha256,
+    acceptedDatabaseEpochs: deepCopy(manifest.acceptedDatabaseEpochs),
+  }
+}
+
+function managedShardBootstrapProjection(manifest, artifact) {
+  return {
+    manifestPath: MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH,
+    manifestSha256: artifact?.sha256,
+    id: manifest.id,
+    enabledByDefault: manifest.enabledByDefault,
+    target: deepCopy(manifest.target),
+    predecessor: deepCopy(manifest.predecessor),
+    execution: deepCopy(manifest.execution),
+    seedProfile: manifest.postcondition.seedProfile,
+    runtimeGrant: manifest.postcondition.runtimeGrant,
+  }
+}
 
 function subjectsFromArgs(args) {
   return Object.fromEntries(REQUIRED_SUBJECTS.map((name) => {
@@ -166,33 +218,21 @@ async function createReceipt(args) {
 
   const artifacts = await collectArtifacts(artifactDirectory)
   const schemaEpochManifest = await readSchemaEpochManifest(artifactDirectory)
+  const managedShardBootstrapManifest = await readManagedShardBootstrapManifest(artifactDirectory, schemaEpochManifest)
   const schemaEpochArtifact = artifacts.find((artifact) => artifact.path === SCHEMA_EPOCH_MANIFEST_PATH)
+  const managedShardBootstrapArtifact = artifacts.find((artifact) => artifact.path === MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH)
   if (!schemaEpochArtifact) fail('Candidate schema-epoch manifest is missing from the artifact inventory')
+  if (!managedShardBootstrapArtifact) fail('Candidate managed-shard bootstrap manifest is missing from the artifact inventory')
+  const subjects = subjectsFromArgs(args)
   const receipt = {
     schemaVersion: SCHEMA_VERSION,
     status: 'qualified',
     sourceRevision,
     releaseTag,
     publicationPerformed: false,
-    subjects: subjectsFromArgs(args),
-    schemaEpoch: {
-      manifestPath: SCHEMA_EPOCH_MANIFEST_PATH,
-      manifestSha256: schemaEpochArtifact.sha256,
-      id: schemaEpochManifest.id,
-      applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
-      preflightMode: schemaEpochManifest.roles.preflight.mode,
-      ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
-      ownerMigrationFrom: deepCopy(schemaEpochManifest.roles.ownerMigration.from),
-      ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
-      freshDatabase: schemaEpochManifest.upgradeContract.freshDatabase,
-      emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
-      executableThrough: schemaEpochManifest.executableMigrationInventory.through,
-      executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
-      executableImplementationPurpose: schemaEpochManifest.executableImplementationInventory.purpose,
-      releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
-      releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
-      acceptedDatabaseEpochs: deepCopy(schemaEpochManifest.acceptedDatabaseEpochs),
-    },
+    subjects,
+    schemaEpoch: schemaEpochProjection(schemaEpochManifest, schemaEpochArtifact),
+    managedShardBootstrap: managedShardBootstrapProjection(managedShardBootstrapManifest, managedShardBootstrapArtifact),
     artifacts,
   }
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`)
@@ -220,27 +260,16 @@ async function verifyReceipt(args) {
     fail('Candidate artifact checksums or inventory do not match the receipt')
   }
   const schemaEpochManifest = await readSchemaEpochManifest(artifactDirectory)
+  const managedShardBootstrapManifest = await readManagedShardBootstrapManifest(artifactDirectory, schemaEpochManifest)
   const schemaEpochArtifact = actualArtifacts.find((artifact) => artifact.path === SCHEMA_EPOCH_MANIFEST_PATH)
-  const expectedSchemaEpoch = {
-    manifestPath: SCHEMA_EPOCH_MANIFEST_PATH,
-    manifestSha256: schemaEpochArtifact?.sha256,
-    id: schemaEpochManifest.id,
-    applicationStartupMode: schemaEpochManifest.roles.applicationStartup.mode,
-    preflightMode: schemaEpochManifest.roles.preflight.mode,
-    ownerMigrationMode: schemaEpochManifest.roles.ownerMigration.mode,
-    ownerMigrationFrom: deepCopy(schemaEpochManifest.roles.ownerMigration.from),
-    ownerRuntimeGrant: schemaEpochManifest.roles.ownerMigration.runtimeGrant,
-    freshDatabase: schemaEpochManifest.upgradeContract.freshDatabase,
-    emptyMigrationLedger: schemaEpochManifest.upgradeContract.emptyMigrationLedger,
-    executableThrough: schemaEpochManifest.executableMigrationInventory.through,
-    executableImplementationSha256: schemaEpochManifest.executableImplementationInventory.sha256,
-    executableImplementationPurpose: schemaEpochManifest.executableImplementationInventory.purpose,
-    releaseEffectInventoryVersion: schemaEpochManifest.releaseEffectInventory.version,
-    releaseEffectInventorySha256: schemaEpochManifest.releaseEffectInventory.sha256,
-    acceptedDatabaseEpochs: deepCopy(schemaEpochManifest.acceptedDatabaseEpochs),
-  }
+  const managedShardBootstrapArtifact = actualArtifacts.find((artifact) => artifact.path === MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH)
+  const expectedSchemaEpoch = schemaEpochProjection(schemaEpochManifest, schemaEpochArtifact)
   if (JSON.stringify(receipt.schemaEpoch) !== JSON.stringify(expectedSchemaEpoch)) {
     fail('Candidate schema-epoch receipt does not match the immutable manifest')
+  }
+  const expectedManagedShardBootstrap = managedShardBootstrapProjection(managedShardBootstrapManifest, managedShardBootstrapArtifact)
+  if (JSON.stringify(receipt.managedShardBootstrap) !== JSON.stringify(expectedManagedShardBootstrap)) {
+    fail('Candidate managed-shard bootstrap receipt does not match the immutable manifest')
   }
   return receipt
 }

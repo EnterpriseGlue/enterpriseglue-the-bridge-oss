@@ -166,6 +166,21 @@ test('independent heavy workflows select only their owning change surfaces', () 
   assert.equal(deployment.run_identity_rehearsal, false);
 });
 
+test('managed-shard bootstrap changes select the focused PostgreSQL tenancy and image lanes', () => {
+  for (const path of [
+    'infra/database/managed-shard-bootstrap-manifest.json',
+    'infra/docker/managed-shard-bootstrap/Dockerfile',
+    'scripts/managed-shard-bootstrap.mjs',
+    'scripts/run-managed-shard-bootstrap-postgres.sh',
+  ]) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.run_native_tenancy, true, path);
+    assert.deepEqual(result.test_databases, ['postgres'], path);
+    assert.equal(result.run_oracle, false, path);
+    if (path.includes('infra/docker/')) assert.equal(result.run_ci_images, true, path);
+  }
+});
+
 test('tenant activation and lifecycle services select database qualification without broad service fan-out', () => {
   for (const name of ['TenantService', 'TenantReleaseWorkAssignmentService']) {
     const result = classifyChangedFiles([`packages/shared/src/services/platform-admin/${name}.ts`]);

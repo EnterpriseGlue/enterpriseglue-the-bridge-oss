@@ -36,6 +36,7 @@ jobs:
     outputs:
       backend_image: ${{ steps.meta.outputs.backend_image }}
       frontend_image: ${{ steps.meta.outputs.frontend_image }}
+      managed_shard_bootstrap_image: ${{ steps.meta.outputs.managed_shard_bootstrap_image }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_platforms: ${{ steps.meta.outputs.image_platforms }}
       source_ref: ${{ steps.meta.outputs.source_ref }}
@@ -61,6 +62,7 @@ jobs:
           owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
           backend_default="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-backend"
           frontend_default="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-frontend"
+          managed_shard_bootstrap_image="ghcr.io/${owner_lc}/enterpriseglue-managed-shard-bootstrap"
 
           backend_image="${INPUT_BACKEND_IMAGE:-$backend_default}"
           frontend_image="${INPUT_FRONTEND_IMAGE:-$frontend_default}"
@@ -93,6 +95,7 @@ jobs:
 
           echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
           echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
+          echo "managed_shard_bootstrap_image=${managed_shard_bootstrap_image}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "image_platforms=${image_platforms}" >> "$GITHUB_OUTPUT"
           echo "source_ref=${source_ref}" >> "$GITHUB_OUTPUT"
@@ -128,6 +131,7 @@ jobs:
       image_platforms: ${{ needs.resolve.outputs.image_platforms }}
       backend_digest: ${{ steps.promote.outputs.backend_digest }}
       frontend_digest: ${{ steps.promote.outputs.frontend_digest }}
+      managed_shard_bootstrap_digest: ${{ steps.promote.outputs.managed_shard_bootstrap_digest }}
       candidate_qualified: ${{ steps.promote.outputs.candidate_qualified }}
     steps:
       - name: Checkout exact release source
@@ -177,6 +181,7 @@ jobs:
           RELEASE_TAG: ${{ needs.resolve.outputs.image_tag }}
           BACKEND_IMAGE: ${{ needs.resolve.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.resolve.outputs.frontend_image }}
+          MANAGED_SHARD_BOOTSTRAP_IMAGE: ${{ needs.resolve.outputs.managed_shard_bootstrap_image }}
           IMAGE_PLATFORMS: ${{ needs.resolve.outputs.image_platforms }}
           COSIGN_EXPERIMENTAL: '1'
         run: |
@@ -185,17 +190,26 @@ jobs:
             candidate_qualified=true
             backend_subject="$(jq -er '.subjects.backend.subject' "$CANDIDATE_RECEIPT")"
             frontend_subject="$(jq -er '.subjects.frontend.subject' "$CANDIDATE_RECEIPT")"
+            managed_shard_bootstrap_subject="$(jq -er '.subjects.managedShardBootstrap.subject // empty' "$CANDIDATE_RECEIPT" || true)"
             [[ "${backend_subject%@*}" == "$BACKEND_IMAGE" ]]
             [[ "${frontend_subject%@*}" == "$FRONTEND_IMAGE" ]]
+            if [[ -e infra/docker/managed-shard-bootstrap/Dockerfile ]]; then
+              [[ "${managed_shard_bootstrap_subject%@*}" == "$MANAGED_SHARD_BOOTSTRAP_IMAGE" ]]
+            fi
           else
             candidate_qualified=false
             backend_digest="$(oras resolve "$BACKEND_IMAGE:$RELEASE_TAG")"
             frontend_digest="$(oras resolve "$FRONTEND_IMAGE:$RELEASE_TAG")"
             backend_subject="$BACKEND_IMAGE@$backend_digest"
             frontend_subject="$FRONTEND_IMAGE@$frontend_digest"
+            managed_shard_bootstrap_subject=''
           fi
           backend_digest="${backend_subject##*@}"
           frontend_digest="${frontend_subject##*@}"
+          managed_shard_bootstrap_digest=''
+          if [[ -n "$managed_shard_bootstrap_subject" ]]; then
+            managed_shard_bootstrap_digest="${managed_shard_bootstrap_subject##*@}"
+          fi
 
           promote_or_verify() {
             local source="$1" target="$2" expected_digest="$3"
@@ -211,6 +225,9 @@ jobs:
           }
           promote_or_verify "$backend_subject" "$BACKEND_IMAGE:$RELEASE_TAG" "$backend_digest"
           promote_or_verify "$frontend_subject" "$FRONTEND_IMAGE:$RELEASE_TAG" "$frontend_digest"
+          if [[ -n "$managed_shard_bootstrap_subject" ]]; then
+            promote_or_verify "$managed_shard_bootstrap_subject" "$MANAGED_SHARD_BOOTSTRAP_IMAGE:$RELEASE_TAG" "$managed_shard_bootstrap_digest"
+          fi
 
           export EXPECTED_PLATFORMS="$IMAGE_PLATFORMS"
           export EXPECTED_SOURCE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
@@ -222,12 +239,19 @@ jobs:
             docker buildx imagetools inspect "$ref" --format '{{json .}}' |
               node scripts/verify-oci-image-metadata.mjs "$prefix" >/dev/null
           done
-          for subject in "$BACKEND_IMAGE@$backend_digest" "$FRONTEND_IMAGE@$frontend_digest"; do
+          if [[ -n "$managed_shard_bootstrap_subject" ]]; then
+            docker buildx imagetools inspect "$MANAGED_SHARD_BOOTSTRAP_IMAGE:$RELEASE_TAG" --format '{{json .}}' |
+              node scripts/verify-oci-image-metadata.mjs managedShardBootstrap >/dev/null
+          fi
+          subjects=("$BACKEND_IMAGE@$backend_digest" "$FRONTEND_IMAGE@$frontend_digest")
+          if [[ -n "$managed_shard_bootstrap_subject" ]]; then subjects+=("$MANAGED_SHARD_BOOTSTRAP_IMAGE@$managed_shard_bootstrap_digest"); fi
+          for subject in "${subjects[@]}"; do
             cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
           done
           {
             echo "backend_digest=$backend_digest"
             echo "frontend_digest=$frontend_digest"
+            echo "managed_shard_bootstrap_digest=$managed_shard_bootstrap_digest"
             echo "candidate_qualified=$candidate_qualified"
           } >> "$GITHUB_OUTPUT"
 
@@ -238,8 +262,10 @@ jobs:
           {
             "backend_image": "${{ needs.resolve.outputs.backend_image }}:${{ needs.resolve.outputs.image_tag }}",
             "frontend_image": "${{ needs.resolve.outputs.frontend_image }}:${{ needs.resolve.outputs.image_tag }}",
+            "managed_shard_bootstrap_image": "${{ needs.resolve.outputs.managed_shard_bootstrap_image }}:${{ needs.resolve.outputs.image_tag }}",
             "backend_digest": "${{ steps.promote.outputs.backend_digest }}",
             "frontend_digest": "${{ steps.promote.outputs.frontend_digest }}",
+            "managed_shard_bootstrap_digest": "${{ steps.promote.outputs.managed_shard_bootstrap_digest }}",
             "source": "${{ github.server_url }}/${{ github.repository }}",
             "revision": "${{ needs.resolve.outputs.source_ref }}",
             "version": "${{ needs.resolve.outputs.image_tag }}",
@@ -264,10 +290,12 @@ jobs:
     outputs:
       backend_image: ${{ steps.select.outputs.backend_image }}
       frontend_image: ${{ steps.select.outputs.frontend_image }}
+      managed_shard_bootstrap_image: ${{ steps.select.outputs.managed_shard_bootstrap_image }}
       image_tag: ${{ steps.select.outputs.image_tag }}
       image_platforms: ${{ steps.select.outputs.image_platforms }}
       backend_digest: ${{ steps.select.outputs.backend_digest }}
       frontend_digest: ${{ steps.select.outputs.frontend_digest }}
+      managed_shard_bootstrap_digest: ${{ steps.select.outputs.managed_shard_bootstrap_digest }}
       candidate_qualified: ${{ steps.select.outputs.candidate_qualified }}
     steps:
       - name: Select candidate promotion or explicit rebuild
@@ -279,12 +307,14 @@ jobs:
           PROMOTE_RESULT: ${{ needs.promote.result }}
           BACKEND_IMAGE: ${{ needs.resolve.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.resolve.outputs.frontend_image }}
+          MANAGED_SHARD_BOOTSTRAP_IMAGE: ${{ needs.resolve.outputs.managed_shard_bootstrap_image }}
           IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
           IMAGE_PLATFORMS: ${{ needs.resolve.outputs.image_platforms }}
           BUILD_BACKEND_DIGEST: ${{ needs.build.outputs.backend_digest }}
           BUILD_FRONTEND_DIGEST: ${{ needs.build.outputs.frontend_digest }}
           PROMOTE_BACKEND_DIGEST: ${{ needs.promote.outputs.backend_digest }}
           PROMOTE_FRONTEND_DIGEST: ${{ needs.promote.outputs.frontend_digest }}
+          PROMOTE_MANAGED_SHARD_BOOTSTRAP_DIGEST: ${{ needs.promote.outputs.managed_shard_bootstrap_digest }}
           PROMOTE_CANDIDATE_QUALIFIED: ${{ needs.promote.outputs.candidate_qualified }}
         run: |
           set -euo pipefail
@@ -293,21 +323,25 @@ jobs:
             backend_digest="$PROMOTE_BACKEND_DIGEST"
             frontend_digest="$PROMOTE_FRONTEND_DIGEST"
             candidate_qualified="$PROMOTE_CANDIDATE_QUALIFIED"
+            managed_shard_bootstrap_digest="$PROMOTE_MANAGED_SHARD_BOOTSTRAP_DIGEST"
           else
             [[ "$BUILD_RESULT" == "success" ]]
             backend_digest="$BUILD_BACKEND_DIGEST"
             frontend_digest="$BUILD_FRONTEND_DIGEST"
             candidate_qualified=false
+            managed_shard_bootstrap_digest=''
           fi
           [[ "$backend_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$frontend_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           {
             echo "backend_image=$BACKEND_IMAGE"
             echo "frontend_image=$FRONTEND_IMAGE"
+            echo "managed_shard_bootstrap_image=$MANAGED_SHARD_BOOTSTRAP_IMAGE"
             echo "image_tag=$IMAGE_TAG"
             echo "image_platforms=$IMAGE_PLATFORMS"
             echo "backend_digest=$backend_digest"
             echo "frontend_digest=$frontend_digest"
+            echo "managed_shard_bootstrap_digest=$managed_shard_bootstrap_digest"
             echo "candidate_qualified=$candidate_qualified"
           } >> "$GITHUB_OUTPUT"
 
@@ -678,10 +712,15 @@ jobs:
           FRONTEND_REF: ${{ needs.publish.outputs.frontend_image }}:${{ needs.publish.outputs.image_tag }}
           BACKEND_DIGEST: ${{ needs.publish.outputs.backend_digest }}
           FRONTEND_DIGEST: ${{ needs.publish.outputs.frontend_digest }}
+          MANAGED_SHARD_BOOTSTRAP_REF: ${{ needs.publish.outputs.managed_shard_bootstrap_image }}:${{ needs.publish.outputs.image_tag }}
+          MANAGED_SHARD_BOOTSTRAP_DIGEST: ${{ needs.publish.outputs.managed_shard_bootstrap_digest }}
         run: |
           set -euo pipefail
           [[ "$(oras resolve "$BACKEND_REF")" == "$BACKEND_DIGEST" ]]
           [[ "$(oras resolve "$FRONTEND_REF")" == "$FRONTEND_DIGEST" ]]
+          if [[ -n "$MANAGED_SHARD_BOOTSTRAP_DIGEST" ]]; then
+            [[ "$(oras resolve "$MANAGED_SHARD_BOOTSTRAP_REF")" == "$MANAGED_SHARD_BOOTSTRAP_DIGEST" ]]
+          fi
 
   promote-public-aliases:
     name: Promote latest and Docker Hub after qualification

@@ -102,8 +102,8 @@ function parseExpectedPlatforms(value) {
 }
 
 function renderGitHubOutputs(prefix, metadata) {
-  if (!/^(backend|frontend)$/.test(prefix)) {
-    throw new Error('Output prefix must be backend or frontend');
+  if (!/^(backend|frontend|managedShardBootstrap)$/.test(prefix)) {
+    throw new Error('Output prefix must be backend, frontend, or managedShardBootstrap');
   }
   return [
     `${prefix}_digest=${metadata.digest}`,
