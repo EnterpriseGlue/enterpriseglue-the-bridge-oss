@@ -41,3 +41,31 @@ test('release policy refreshes labels for concurrent label mutation events', () 
   assert.match(workflow, /github\.rest\.pulls\.get/);
   assert.match(workflow, /labels = \(freshPR\.labels \|\| \[\]\)\.map/);
 });
+
+test('Release Please breaking changelog headings select the breaking label', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/pr-release-labeler.yml', import.meta.url),
+    'utf8',
+  );
+  const patternMatch = workflow.match(
+    /const breakingChangelogHeading = \/(\^\\\+[^/]+)\/i;/,
+  );
+
+  assert.ok(patternMatch, 'expected an inline breaking-changelog heading contract');
+  const breakingChangelogHeading = new RegExp(patternMatch[1], 'i');
+
+  assert.equal(breakingChangelogHeading.test('+### ⚠ BREAKING CHANGES'), true);
+  assert.equal(breakingChangelogHeading.test('+### ⚠️ BREAKING CHANGES'), true);
+  assert.equal(breakingChangelogHeading.test('+### BREAKING CHANGES'), true);
+  assert.equal(breakingChangelogHeading.test(' ### ⚠ BREAKING CHANGES'), false);
+  assert.equal(breakingChangelogHeading.test('+### Bug Fixes'), false);
+  assert.match(
+    workflow,
+    /const releasePleaseDeclaresBreaking = isReleasePleaseBranch && files\.some/,
+  );
+  assert.match(workflow, /file\.filename === 'CHANGELOG\.md'/);
+  assert.match(
+    workflow,
+    /const isBreaking = [^;]+\|\| releasePleaseDeclaresBreaking;/,
+  );
+});

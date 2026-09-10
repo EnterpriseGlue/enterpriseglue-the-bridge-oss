@@ -317,7 +317,9 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   )
   assert.match(prepare, /enterpriseglue-detailed-release-notes/)
   assert.match(prepare, /issues\/\$\{RELEASE_PR_NUMBER\}\/comments/)
-  assert.match(prepare, /git show "\$\{base_tag\}:\$\{chart_file\}"/)
+  assert.match(prepare, /RELEASE_PR_BASE_REF/)
+  assert.match(prepare, /git show "origin\/\$\{RELEASE_PR_BASE_REF\}:\$\{chart_file\}"/)
+  assert.doesNotMatch(prepare, /git show "\$\{base_tag\}:\$\{chart_file\}"/)
   assert.match(prepare, /node scripts\/sync-host-chart-release-version\.mjs/)
   assert.match(prepare, /dedupe-release-changelog\.mjs --file CHANGELOG\.md/)
   assert.match(prepare, /git add "\$release_file" "\$chart_file" CHANGELOG\.md/)
@@ -379,6 +381,16 @@ test('release preparation advances the host chart once and binds it to the OSS r
     }),
     /exactly one top-level version/,
   )
+})
+
+test('release workflows bind chart preparation to the protected PR base', () => {
+  for (const workflowPath of ['release-please.yml', 'release-hotfix.yml']) {
+    const workflow = readFileSync(new URL(`../.github/workflows/${workflowPath}`, import.meta.url), 'utf8')
+    assert.match(workflow, /const baseRef = String\(pull\.base\?\.ref \|\| ''\)/)
+    assert.match(workflow, /baseRef !== 'main'/)
+    assert.match(workflow, /core\.setOutput\('base_ref', baseRef\)/)
+    assert.match(workflow, /RELEASE_PR_BASE_REF: \$\{\{ steps\.(?:notes|resolve)\.outputs\.base_ref \}\}/)
+  }
 })
 
 test('pull request template requests the release fragment and an explicit exemption reason', () => {

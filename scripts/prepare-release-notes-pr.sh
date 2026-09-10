@@ -6,6 +6,7 @@ set -euo pipefail
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required.}"
 : "${RELEASE_PR_NUMBER:?RELEASE_PR_NUMBER is required.}"
 : "${RELEASE_PR_HEAD_REF:?RELEASE_PR_HEAD_REF is required.}"
+: "${RELEASE_PR_BASE_REF:?RELEASE_PR_BASE_REF is required.}"
 : "${RELEASE_VERSION:?RELEASE_VERSION is required.}"
 
 if [[ ! "$RELEASE_PR_NUMBER" =~ ^[0-9]+$ ]]; then
@@ -16,12 +17,17 @@ if [[ ! "$RELEASE_PR_HEAD_REF" =~ ^release-please--branches--[A-Za-z0-9._/-]+$ ]
   echo "Refusing to update unexpected release PR branch: $RELEASE_PR_HEAD_REF" >&2
   exit 1
 fi
+if [[ "$RELEASE_PR_BASE_REF" != "main" ]]; then
+  echo "Refusing to prepare a release PR against unexpected base: $RELEASE_PR_BASE_REF" >&2
+  exit 1
+fi
 if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Invalid release version: $RELEASE_VERSION" >&2
   exit 1
 fi
 
 git fetch --no-tags origin \
+  "+refs/heads/${RELEASE_PR_BASE_REF}:refs/remotes/origin/${RELEASE_PR_BASE_REF}" \
   "+refs/heads/${RELEASE_PR_HEAD_REF}:refs/remotes/origin/${RELEASE_PR_HEAD_REF}"
 git checkout -B "$RELEASE_PR_HEAD_REF" "origin/$RELEASE_PR_HEAD_REF"
 
@@ -41,7 +47,7 @@ node scripts/release-notes.mjs render \
   --version "$RELEASE_VERSION" \
   --output "$release_file"
 base_chart_version="$(
-  git show "${base_tag}:${chart_file}" |
+  git show "origin/${RELEASE_PR_BASE_REF}:${chart_file}" |
     sed -n 's/^version:[[:space:]]*//p'
 )"
 node scripts/sync-host-chart-release-version.mjs \
