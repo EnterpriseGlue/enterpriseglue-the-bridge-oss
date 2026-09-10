@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.26.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.25.0...v0.26.0) (2026-09-10)
+
+
+### Features
+
+* **database:** bootstrap fresh managed shards ([0f37560](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0f3756041d84f9cacc43ac549ecdcda95837d89c))
+* **release:** align fragment version semantics ([cd46e05](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cd46e05ca482e70bc9d80fac622e68f16a3fdb18))
+
+
+### Bug Fixes
+
+* **auth:** avoid signup session bootstrap probes ([067d818](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/067d8189ccc4687bcfba9d22eda9de2c27216b65))
+
 ## [0.25.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.24.2...v0.25.0) (2026-09-10)
 
 
