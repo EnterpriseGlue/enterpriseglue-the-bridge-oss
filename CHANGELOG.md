@@ -21,10 +21,8 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **ci:** await release label convergence ([8b4b740](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8b4b74041fcfcc7cff970c8de67bb254ad74d93e))
-* **ci:** await release label convergence ([008ce96](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/008ce96c3cd5d63c7f8fe8dd779f0b57750e004e))
 * **ci:** harden generated release metadata ([99c7859](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/99c785943dc2d905f23ddc41ce65fbe4d4a15f3e))
 * **ci:** preserve Release Please classification ([a472947](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a4729472638097eddf939ed1114a82d5a7ba1c4e))
-* **ci:** preserve Release Please classification ([0d4eb98](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0d4eb98452e5ef15998b7bbeff25a5516cb5c217))
 * **database:** bind bridge runtime cohort grants ([ce5ca35](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ce5ca35ff8f737f27c2ae14f05d576e263151ac6))
 * **database:** close schema bridge rollout gaps ([20e43b8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/20e43b8a250a3dfba9df68a2ecdab9f3cbcc336d))
 * **database:** harden exact schema bridge transition ([79e4f64](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/79e4f64590c253874314a0a152ccf23d31df60d5))
