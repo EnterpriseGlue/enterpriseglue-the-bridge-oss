@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.25.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.24.2...v0.25.0) (2026-09-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **identity-runtime:** upgrade or drain every shared-schema API and worker before applying PostgreSQL policy migration 1700000000131; use separate owner and restricted runtime identities. Old runtimes cannot serve the expanded schema, and rollback requires the pre-upgrade backup.
+
+### Features
+
+* **database:** add signed schema epoch bridge ([8cafba0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8cafba05d7a3791b9e43bde4f33cd01135d121ba))
+* **release:** add durable effect settlement foundation ([8ff1800](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8ff180006b0630a512ee425b0a9e1481da6bc8db))
+* **release:** open effect cohort before workloads ([1326a7c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1326a7ccfb87b50aee5bb9b095c561c95eadc17f))
+
+
+### Bug Fixes
+
+* **ci:** await release label convergence ([8b4b740](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8b4b74041fcfcc7cff970c8de67bb254ad74d93e))
+* **ci:** harden generated release metadata ([99c7859](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/99c785943dc2d905f23ddc41ce65fbe4d4a15f3e))
+* **ci:** preserve Release Please classification ([a472947](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a4729472638097eddf939ed1114a82d5a7ba1c4e))
+* **database:** bind bridge runtime cohort grants ([ce5ca35](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ce5ca35ff8f737f27c2ae14f05d576e263151ac6))
+* **database:** close schema bridge rollout gaps ([20e43b8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/20e43b8a250a3dfba9df68a2ecdab9f3cbcc336d))
+* **database:** harden exact schema bridge transition ([79e4f64](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/79e4f64590c253874314a0a152ccf23d31df60d5))
+* **db:** govern schema epoch grant SQL ([67f23ee](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/67f23ee5907889b3b9088c24d2b7062a64692ce6))
+* **frontend:** surface trusted system main navigation ([4194826](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4194826755f44f600aad67fefb85b8dc0e741ba7))
+* **identity-runtime:** close protected PostgreSQL regressions ([6249191](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6249191e5c259b742b04311b63875cf58a16819c))
+* **identity-runtime:** enforce PostgreSQL context and isolate API bootstrap ([67a5ada](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/67a5ada6b0fd33c2ba72c6efaf1bbfec58a1f44b))
+* qualify bounded schema bridge upgrades ([3b781d1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3b781d1105ad69b69d97c1a790ebebaab4618f0c))
+* **release:** bind schema bridge cohort inventory ([5260aec](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5260aece87bde53549d2cd1791b366995fa7182f))
+* **release:** order batched effect claims ([31a214c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/31a214c3bfc88d622a911012f7495dcdfc31efb8))
+* **release:** serialize expired effect recovery ([f905d6a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f905d6aba2dd08a7531b043488c6afbb8c88f1d6))
+* serialize release effect admission ([aeeab56](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/aeeab5670ec0d4e8981fb8d486b8c65255a42761))
+
 ## [0.24.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.24.1...v0.24.2) (2026-09-09)
 
 
