@@ -1,0 +1,51 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "signup-public-session-bootstrap",
+  "type": "security",
+  "scope": "frontend-authentication",
+  "breaking": false,
+  "audiences": ["users", "operators", "developers", "security"],
+  "summary": "Prevents anonymous signup from probing or refreshing a browser session while preserving login restoration and protected-route session recovery.",
+  "userImpact": [
+    "Anonymous signup no longer emits expected unauthorized session requests or related browser-console noise.",
+    "Login pages still restore valid cookie sessions, and protected application routes continue to refresh expired access before redirecting to login."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Public authentication routing uses one shared exact-path policy for session bootstrap and unauthorized-response handling so newly supported public paths cannot silently drift between those controls.",
+    "Only root signup and established invitation enrollment suppress the initial session probe; login remains session-aware and protected routes retain fail-closed validation, refresh, and redirection."
+  ],
+  "documentation": [
+    "The generated technical release notes describe the public authentication session-bootstrap correction and protected-route compatibility."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend image or frontend host package; no API, configuration, or database rollback is required."
+  ],
+  "validation": [
+    "Focused frontend tests cover root signup, established invitation enrollment, session-aware login and recovery pages, protected-route session validation, expired-session refresh, and exact path-boundary matching.",
+    "Browser coverage verifies that anonymous signup renders without authentication or refresh probes and that a valid cookie session on login is restored and redirected without browser diagnostics."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.9",
+      "newVersion": "0.17.10",
+      "impact": "patch"
+    }
+  ]
+}

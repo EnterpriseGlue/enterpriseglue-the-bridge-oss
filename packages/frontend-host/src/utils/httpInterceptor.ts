@@ -12,6 +12,7 @@ import { USER_KEY } from '../constants/storageKeys.js';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils.js';
 import { config } from '../config.js';
 import { getTenancyCapabilities } from '../services/tenancy.js';
+import { getPublicAuthRoutePolicy } from './publicAuthRoute.js';
 
 const API_BASE_URL = '/api';
 const DEFAULT_TENANT_SLUG = 'default';
@@ -223,26 +224,6 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 /**
- * Check if we're on a public route that doesn't require authentication
- */
-function isPublicRoute(): boolean {
-  const pathname = window.location.pathname;
-  const publicRoutes = [
-    '/login',
-    '/admin-recovery',
-    '/invite',
-    '/verify-email',
-    '/reset-password',
-    '/forgot-password',
-    '/password-reset',
-    '/resend-verification',
-    '/signup',
-  ];
-  if (publicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) return true;
-  return /^\/t\/[^/]+\/(login|admin-recovery|invite|verify-email|reset-password|forgot-password|password-reset|resend-verification)(?:\/|$)/.test(pathname);
-}
-
-/**
  * Intercepted fetch function with automatic token refresh on 401
  * Also handles automatic tenant URL prefixing for unified routing (Option A)
  */
@@ -260,7 +241,7 @@ export async function interceptedFetch(
   );
 
   // Don't intercept on public routes - let them handle 401s naturally
-  const onPublicRoute = isPublicRoute();
+  const onPublicRoute = getPublicAuthRoutePolicy(window.location.pathname) !== null;
 
   // Ensure credentials are included so cookies are sent
   const fetchOptions: RequestInit = { ...options, credentials: 'include' };
