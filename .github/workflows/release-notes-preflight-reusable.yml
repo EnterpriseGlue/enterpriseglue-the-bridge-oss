@@ -85,21 +85,31 @@ jobs:
               return;
             }
 
-            const waitForAutomaticLabel = ['opened', 'reopened', 'ready_for_review']
-              .includes(context.payload.action);
             let pullRequest;
 
-            for (let attempt = 1; attempt <= 4; attempt += 1) {
+            for (let attempt = 1; attempt <= 6; attempt += 1) {
               ({ data: pullRequest } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: pullNumber,
               }));
               const labels = (pullRequest.labels || []).map((label) => label.name);
+              const releaseLabels = labels.filter((label) => label.startsWith('release:'));
               const hasReleaseClassification = labels.some((label) =>
                 label.startsWith('release:') || label === 'release-note:none');
-              if (!waitForAutomaticLabel || hasReleaseClassification || attempt === 4) break;
-              core.info(`Waiting for automatic release classification (attempt ${attempt}/4).`);
+              const isRepositoryReleasePlease =
+                String(pullRequest.head?.ref || '').startsWith('release-please--branches--') &&
+                String(pullRequest.head?.repo?.full_name || '') === `${context.repo.owner}/${context.repo.repo}`;
+              const releasePleaseDeclaresBreaking =
+                isRepositoryReleasePlease &&
+                /(?:^|\n)\s*###\s+(?:⚠\uFE0F?\s*)?BREAKING CHANGES\s*(?:\n|$)/i.test(String(pullRequest.body || ''));
+              const hasExpectedClassification = releasePleaseDeclaresBreaking
+                ? releaseLabels.length === 1 && releaseLabels[0] === 'release:breaking'
+                : hasReleaseClassification;
+              const waitForAutomaticLabel = isRepositoryReleasePlease ||
+                ['opened', 'reopened', 'ready_for_review'].includes(context.payload.action);
+              if (!waitForAutomaticLabel || hasExpectedClassification || attempt === 6) break;
+              core.info(`Waiting for automatic release classification (attempt ${attempt}/6).`);
               await new Promise((resolve) => setTimeout(resolve, 5000));
             }
 
