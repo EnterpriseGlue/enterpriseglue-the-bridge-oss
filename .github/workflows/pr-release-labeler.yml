@@ -70,7 +70,12 @@ jobs:
             const bodyDeclaresBreaking =
               /(?:^|\n)\s*[-*]\s*\[[xX]\]\s*breaking change\b/i.test(body) ||
               /(?:^|\n)\s*BREAKING[ -]CHANGE\s*:/i.test(body);
-            const isBreaking = /\)!:|!:/.test(normalizedTitle) || bodyDeclaresBreaking;
+            const breakingChangelogHeading = /^\+\s*###\s+(?:⚠\uFE0F?\s*)?BREAKING CHANGES\s*$/i;
+            const releasePleaseDeclaresBreaking = isReleasePleaseBranch && files.some((file) =>
+              file.filename === 'CHANGELOG.md' &&
+              String(file.patch || '').split('\n').some((line) => breakingChangelogHeading.test(line))
+            );
+            const isBreaking = /\)!:|!:/.test(normalizedTitle) || bodyDeclaresBreaking || releasePleaseDeclaresBreaking;
             const isSecurity = /security|vuln|cve/.test(title) || /security|vuln|cve/.test(body);
             const isDeprecation = /deprecat/.test(title) || /deprecat/.test(body);
             const isCompatibility = /compat|backward/.test(title) || /compat|backward/.test(body);

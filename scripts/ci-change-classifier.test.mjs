@@ -106,7 +106,10 @@ test('release hardening helpers do not fan out into unrelated heavyweight matric
 });
 
 test('classifier contract tests stay on the workflow verification path', () => {
-  const result = classifyChangedFiles(['scripts/ci-change-detection.test.mjs']);
+  const result = classifyChangedFiles([
+    'scripts/ci-change-detection.test.mjs',
+    'scripts/pr-release-label-workflows.test.mjs',
+  ]);
 
   assert.equal(result.workflow_or_release, true);
   assert.equal(result.unknown_high_risk, false);

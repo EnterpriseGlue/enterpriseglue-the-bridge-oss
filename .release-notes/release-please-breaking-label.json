@@ -1,0 +1,48 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-please-breaking-label",
+  "type": "internal",
+  "scope": "release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Classifies generated Release Please pull requests from their changelog heading and advances the host chart from the current protected base.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This release-workflow correction does not change application data or migrations."
+    ]
+  },
+  "security": [
+    "Only an added breaking-change heading in the generated changelog patch is considered, and only for the repository's Release Please branch.",
+    "Release preparation accepts only a generated release pull request targeting the protected main branch."
+  ],
+  "documentation": [
+    "Release workflow contract coverage records breaking-heading classification and protected-base chart versioning."
+  ],
+  "knownLimitations": [
+    "Manual pull requests continue to use title, checked checklist, or BREAKING-CHANGE declaration classification."
+  ],
+  "rollback": [
+    "Revert the labeler, chart preparation, and contract-test changes; manually label and correct any affected generated release pull request before protected checks."
+  ],
+  "validation": [
+    "Run the release-label and release-note workflow contract tests and deterministic CI change-detection suite.",
+    "Verify the release-label contract test selects only release-readiness workflow evidence rather than unrelated application, database, image, or engine lanes."
+  ],
+  "packages": []
+}

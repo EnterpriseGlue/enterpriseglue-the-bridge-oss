@@ -154,12 +154,14 @@ jobs:
               });
               const version = String(pull.title || '').match(/release (\d+\.\d+\.\d+)\b/i)?.[1] || '';
               const headRef = String(pull.head?.ref || '');
-              if (!version || !headRef.startsWith('release-please--branches--')) {
+              const baseRef = String(pull.base?.ref || '');
+              if (!version || !headRef.startsWith('release-please--branches--') || baseRef !== 'main') {
                 core.setFailed(`Could not resolve a safe version/ref for release PR #${pullNumber}.`);
                 return;
               }
               core.setOutput('pull_number', pullNumber);
               core.setOutput('head_ref', headRef);
+              core.setOutput('base_ref', baseRef);
               core.setOutput('pr_version', version);
             }
 
@@ -174,6 +176,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           RELEASE_PR_NUMBER: ${{ steps.notes.outputs.pull_number }}
           RELEASE_PR_HEAD_REF: ${{ steps.notes.outputs.head_ref }}
+          RELEASE_PR_BASE_REF: ${{ steps.notes.outputs.base_ref }}
           RELEASE_VERSION: ${{ steps.notes.outputs.pr_version }}
         run: bash scripts/prepare-release-notes-pr.sh
 
