@@ -136,11 +136,11 @@ jobs:
             if (conventionalTitleMatch) {
               const titleHasBreakingMarker = Boolean(conventionalTitleMatch[3]);
               const allowedLabelsByType = {
-                feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
+                feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:deprecation', 'release:compat']),
                 fix: new Set(['release:fix', 'release:breaking', 'release:security', 'release:compat']),
                 docs: new Set(['release:docs', 'release:internal']),
                 perf: new Set(['release:feature', 'release:fix', 'release:internal', 'release:breaking']),
-                refactor: new Set(['release:internal', 'release:compat', 'release:deprecation', 'release:breaking']),
+                refactor: new Set(['release:internal', 'release:compat', 'release:breaking']),
                 test: new Set(['release:internal']),
                 chore: new Set(['release:internal']),
                 ci: new Set(['release:internal']),

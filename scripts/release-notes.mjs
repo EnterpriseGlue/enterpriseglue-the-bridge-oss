@@ -282,6 +282,16 @@ export function validatePrClassification(fragments, { title = '', labels = [], i
   if (titleBreaking || releaseLabels.includes('release:breaking')) {
     fail('The PR declares a breaking release, but no changed release-note fragment has breaking=true.')
   }
+  if (canonicalReleasePleaseTitle) return
+
+  const featureRelease = fragments.some((fragment) => fragment.type === 'feature' || fragment.type === 'deprecation')
+  const titleFeature = /^feat(?:\([a-z0-9._/-]+\))?:/i.test(title.trim())
+  if (titleFeature && !featureRelease) {
+    fail('Non-breaking feat PR titles require at least one feature or deprecation release-note fragment so Release Please and fragment versioning agree.')
+  }
+  if (!titleFeature && featureRelease) {
+    fail('Non-breaking feature or deprecation release-note fragments require a conventional feat PR title so Release Please and fragment versioning agree.')
+  }
 }
 
 function isReleaseRelevantPath(file) {

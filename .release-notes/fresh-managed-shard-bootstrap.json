@@ -2,7 +2,7 @@
   "$schema": "./schema.json",
   "schemaVersion": 1,
   "id": "fresh-managed-shard-bootstrap",
-  "type": "security",
+  "type": "feature",
   "scope": "database-bootstrap",
   "breaking": false,
   "audiences": ["operators", "developers", "security"],

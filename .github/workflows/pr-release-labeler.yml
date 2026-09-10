@@ -77,7 +77,8 @@ jobs:
             );
             const isBreaking = /\)!:|!:/.test(normalizedTitle) || bodyDeclaresBreaking || releasePleaseDeclaresBreaking;
             const isSecurity = /security|vuln|cve/.test(title) || /security|vuln|cve/.test(body);
-            const isDeprecation = /deprecat/.test(title) || /deprecat/.test(body);
+            const describesDeprecation = /deprecat/.test(title) || /deprecat/.test(body);
+            const isDeprecation = titleType === 'feat' && describesDeprecation;
             const isCompatibility = /compat|backward/.test(title) || /compat|backward/.test(body);
             const isFeature = /^feat(\(|:)|\bfeature\b|\badd\b|\bintroduc/.test(title);
             const isFix = /^fix(\(|:)|\bbug\b|\bhotfix\b|\bregress/.test(title);
