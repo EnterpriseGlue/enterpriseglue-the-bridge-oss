@@ -504,6 +504,12 @@ jobs:
               pull_number: pr.number,
             });
 
+            const isReleasePleaseBranch = String(freshPR.head?.ref || '').startsWith('release-please--branches--');
+            if (isReleasePleaseBranch) {
+              core.notice('Skipping AI title and label mutation for a Release Please-owned pull request.');
+              return;
+            }
+
             const labels = (freshPR.labels || []).map((l) => l.name);
             const hasApplyLabel = labels.includes('ai:apply');
             const autofixEnabled = String(process.env.AUTOFIX_ENABLED || 'false').toLowerCase() === 'true';

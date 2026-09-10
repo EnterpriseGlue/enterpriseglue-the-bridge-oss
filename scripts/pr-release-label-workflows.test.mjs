@@ -69,3 +69,24 @@ test('Release Please breaking changelog headings select the breaking label', () 
     /const isBreaking = [^;]+\|\| releasePleaseDeclaresBreaking;/,
   );
 });
+
+test('PR AI Assistant does not mutate Release Please-owned pull requests', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/pr-ai-assistant.yml', import.meta.url),
+    'utf8',
+  );
+  const autoApplyStep = workflow.split('- name: Auto-apply title and label (optional)')[1] ?? '';
+  const releasePleaseGuard = autoApplyStep.indexOf(
+    "const isReleasePleaseBranch = String(freshPR.head?.ref || '').startsWith('release-please--branches--');",
+  );
+  const labelMutation = autoApplyStep.indexOf('github.rest.issues.removeLabel');
+  const titleMutation = autoApplyStep.indexOf('github.rest.pulls.update');
+
+  assert.ok(releasePleaseGuard >= 0, 'expected a Release Please ownership guard');
+  assert.match(
+    autoApplyStep.slice(releasePleaseGuard, labelMutation),
+    /if \(isReleasePleaseBranch\) \{[\s\S]*?return;/,
+  );
+  assert.ok(releasePleaseGuard < labelMutation, 'ownership guard must precede label mutation');
+  assert.ok(releasePleaseGuard < titleMutation, 'ownership guard must precede title mutation');
+});

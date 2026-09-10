@@ -1,0 +1,47 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-please-ai-label-race",
+  "type": "internal",
+  "scope": "release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Prevents the advisory PR assistant from overwriting Release Please-owned titles and release classifications after generated release metadata changes.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This workflow ownership correction does not change application data or migrations."
+    ]
+  },
+  "security": [
+    "The guard relies on the repository-owned Release Please branch namespace and runs before any label or title mutation."
+  ],
+  "documentation": [
+    "Release-label workflow contract coverage records the exclusive Release Please ownership boundary."
+  ],
+  "knownLimitations": [
+    "The PR assistant remains advisory for generated release pull requests; the dedicated release labeler owns their classification."
+  ],
+  "rollback": [
+    "Revert the ownership guard and contract test, then manually normalize generated release pull request labels after every metadata refresh."
+  ],
+  "validation": [
+    "Run the focused release-label workflow contract tests and release-note preflight.",
+    "Verify the generated release pull request retains release:breaking after Release Please edits its body and branch."
+  ],
+  "packages": []
+}
