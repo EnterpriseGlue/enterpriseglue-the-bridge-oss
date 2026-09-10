@@ -42,6 +42,41 @@ test('release policy refreshes labels for concurrent label mutation events', () 
   assert.match(workflow, /labels = \(freshPR\.labels \|\| \[\]\)\.map/);
 });
 
+test('deprecations use feat titles and minor impact across release automation', () => {
+  const policy = readFileSync(new URL('../.github/workflows/release-policy.yml', import.meta.url), 'utf8');
+  const assistant = readFileSync(new URL('../.github/workflows/pr-ai-assistant.yml', import.meta.url), 'utf8');
+  const labeler = readFileSync(new URL('../.github/workflows/pr-release-labeler.yml', import.meta.url), 'utf8');
+  const mappedLabels = (source, type) => [
+    ...source.matchAll(new RegExp(`${type}: new Set\\(\\[([^\\]]*)\\]\\)`, 'g')),
+  ].map((match) => match[1]);
+
+  const policyFeat = mappedLabels(policy, 'feat');
+  const policyRefactor = mappedLabels(policy, 'refactor');
+  assert.equal(policyFeat.length, 1);
+  assert.equal(policyRefactor.length, 1);
+  assert.match(policyFeat[0], /'release:deprecation'/);
+  assert.doesNotMatch(policyRefactor[0], /'release:deprecation'/);
+
+  const assistantFeat = mappedLabels(assistant, 'feat');
+  const assistantRefactor = mappedLabels(assistant, 'refactor');
+  assert.equal(assistantFeat.length, 2);
+  assert.equal(assistantRefactor.length, 2);
+  assistantFeat.forEach((labels) => assert.match(labels, /'release:deprecation'/));
+  assistantRefactor.forEach((labels) => assert.doesNotMatch(labels, /'release:deprecation'/));
+  assert.deepEqual(
+    [...assistant.matchAll(/'release:deprecation': '([a-z]+)'/g)].map((match) => match[1]),
+    ['feat', 'feat'],
+  );
+  assert.match(assistant, /Deprecations use release:deprecation, minor impact, and a feat title/);
+  assert.match(assistant, /else if \(deprecation\) \{\s+releaseLabel = 'release:deprecation';\s+impact = 'minor';\s+type = 'feat';/);
+  assert.match(assistant, /if \(safeLabel === 'release:deprecation'\) safeImpact = 'minor';/);
+
+  assert.match(
+    labeler,
+    /const describesDeprecation = [^;]+;\s+const isDeprecation = titleType === 'feat' && describesDeprecation;/,
+  );
+});
+
 test('Release Please breaking changelog headings select the breaking label', () => {
   const workflow = readFileSync(
     new URL('../.github/workflows/pr-release-labeler.yml', import.meta.url),

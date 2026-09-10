@@ -141,6 +141,7 @@ jobs:
                 /(?:^|\n)\s*[-*]\s*\[[xX]\]\s*breaking change\b/i.test(body || '') ||
                 /(?:^|\n)\s*BREAKING[ -]CHANGE\s*:/i.test(body || '');
               const breaking = /breaking|!:/i.test(title || '') || bodyDeclaresBreaking;
+              const deprecation = /deprecat/i.test(lowerTitle) || /deprecat/i.test(lowerBody);
               const security = /security|vuln|cve/i.test(lowerTitle) || /security|vuln|cve/i.test(lowerBody);
               const feature = /feat|feature|add|introduce|implement/i.test(lowerTitle);
               const fix = /fix|bug|regress|hotfix/i.test(lowerTitle);
@@ -152,6 +153,10 @@ jobs:
               if (breaking) {
                 releaseLabel = 'release:breaking';
                 impact = 'major';
+                type = 'feat';
+              } else if (deprecation) {
+                releaseLabel = 'release:deprecation';
+                impact = 'minor';
                 type = 'feat';
               } else if (security) {
                 releaseLabel = 'release:security';
@@ -182,6 +187,7 @@ jobs:
                 if (automationOnly) return 'refine CI/release automation';
                 if (docsOnly) return 'refresh documentation';
                 if (breaking) return `introduce ${scope} breaking changes`;
+                if (deprecation) return `deprecate ${scope} behavior`;
                 if (security) return `harden ${scope} security`; 
                 if (feature) return `add ${scope} capability`;
                 if (fix) return `resolve ${scope} issue`;
@@ -194,13 +200,15 @@ jobs:
               const suggestedTitle = `${type}(${scope})${bang}: ${summary}`;
               const confidence = breaking
                 ? 0.92
-                : security
-                  ? 0.84
-                  : docsOnly
-                    ? 0.86
-                    : (feature || fix)
-                      ? 0.74
-                      : 0.62;
+                : deprecation
+                  ? 0.86
+                  : security
+                    ? 0.84
+                    : docsOnly
+                      ? 0.86
+                      : (feature || fix)
+                        ? 0.74
+                        : 0.62;
 
               return {
                 title: suggestedTitle,
@@ -253,6 +261,7 @@ jobs:
               'Prefer concrete verbs (add, refine, resolve, streamline, harden).',
               'Allowed release_label values: ' + releaseLabels.join(', ') + '.',
               'Allowed impact values: patch, minor, major.',
+              'Deprecations use release:deprecation, minor impact, and a feat title.',
               'confidence must be a number between 0 and 1.',
               'Use major only for clearly breaking changes.',
               'Keep summary concise (max 90 chars).',
@@ -305,6 +314,7 @@ jobs:
             const safeTitle = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallback.title;
             let safeLabel = releaseLabels.includes(parsed.release_label) ? parsed.release_label : fallback.release_label;
             let safeImpact = ['patch', 'minor', 'major'].includes(parsed.impact) ? parsed.impact : fallback.impact;
+            if (safeLabel === 'release:deprecation') safeImpact = 'minor';
             const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
             const parsedConfidence = Number(parsed.confidence);
             const safeConfidence = Number.isFinite(parsedConfidence)
@@ -326,11 +336,11 @@ jobs:
             }
 
             const allowedLabelsByType = {
-              feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
+              feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:deprecation', 'release:compat']),
               fix: new Set(['release:fix', 'release:breaking', 'release:security', 'release:compat']),
               docs: new Set(['release:docs', 'release:internal']),
               perf: new Set(['release:feature', 'release:fix', 'release:internal', 'release:breaking']),
-              refactor: new Set(['release:internal', 'release:compat', 'release:deprecation', 'release:breaking']),
+              refactor: new Set(['release:internal', 'release:compat', 'release:breaking']),
               test: new Set(['release:internal']),
               chore: new Set(['release:internal']),
               ci: new Set(['release:internal']),
@@ -345,7 +355,7 @@ jobs:
               'release:security': 'fix',
               'release:docs': 'docs',
               'release:internal': 'chore',
-              'release:deprecation': 'refactor',
+              'release:deprecation': 'feat',
               'release:compat': 'fix'
             };
             const coerceTitleForReleaseLabel = (title, releaseLabel) => {
@@ -621,11 +631,11 @@ jobs:
             effectiveReleaseLabel = targetReleaseLabel;
 
             const allowedLabelsByType = {
-              feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:compat']),
+              feat: new Set(['release:feature', 'release:breaking', 'release:security', 'release:deprecation', 'release:compat']),
               fix: new Set(['release:fix', 'release:breaking', 'release:security', 'release:compat']),
               docs: new Set(['release:docs', 'release:internal']),
               perf: new Set(['release:feature', 'release:fix', 'release:internal', 'release:breaking']),
-              refactor: new Set(['release:internal', 'release:compat', 'release:deprecation', 'release:breaking']),
+              refactor: new Set(['release:internal', 'release:compat', 'release:breaking']),
               test: new Set(['release:internal']),
               chore: new Set(['release:internal']),
               ci: new Set(['release:internal']),
@@ -640,7 +650,7 @@ jobs:
               'release:security': 'fix',
               'release:docs': 'docs',
               'release:internal': 'chore',
-              'release:deprecation': 'refactor',
+              'release:deprecation': 'feat',
               'release:compat': 'fix'
             };
             const normalizeTitleSummary = (title) => {

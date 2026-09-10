@@ -130,6 +130,58 @@ test('breaking fragments require matching title and release label', () => {
   }))
 })
 
+test('non-breaking fragments and conventional titles require the same release impact', () => {
+  const feature = structuredClone(fragment)
+  feature.breaking = false
+  feature.api.compatibility = 'additive'
+  const deprecation = structuredClone(feature)
+  deprecation.type = 'deprecation'
+  const patchFragments = ['fix', 'security', 'performance', 'docs', 'internal'].map((type) => ({
+    ...structuredClone(feature),
+    type,
+  }))
+
+  assert.throws(
+    () => validatePrClassification([patchFragments[1]], {
+      title: 'feat(database): bootstrap fresh managed shards',
+      labels: ['release:feature'],
+    }),
+    /feat PR titles require at least one feature or deprecation release-note fragment/,
+  )
+  assert.throws(
+    () => validatePrClassification([feature], {
+      title: 'fix(database): bootstrap fresh managed shards',
+      labels: ['release:fix'],
+    }),
+    /feature or deprecation release-note fragments require a conventional feat PR title/,
+  )
+  assert.throws(
+    () => validatePrClassification([deprecation], {
+      title: 'refactor(api): deprecate legacy endpoint',
+      labels: ['release:deprecation'],
+    }),
+    /feature or deprecation release-note fragments require a conventional feat PR title/,
+  )
+
+  for (const candidate of [feature, deprecation]) {
+    assert.doesNotThrow(() => validatePrClassification([candidate], {
+      title: 'feat(api): deprecate legacy endpoint',
+      labels: [candidate.type === 'deprecation' ? 'release:deprecation' : 'release:feature'],
+    }))
+  }
+  for (const candidate of patchFragments) {
+    assert.doesNotThrow(() => validatePrClassification([candidate], {
+      title: 'fix(database): harden managed shard bootstrap',
+      labels: ['release:fix'],
+    }))
+  }
+  assert.doesNotThrow(() => validatePrClassification([feature, deprecation], {
+    title: 'chore(main): release 0.26.0',
+    labels: ['release:internal'],
+    isReleasePlease: true,
+  }))
+})
+
 test('low-risk internal changes can be exempted only with a reason', () => {
   assert.throws(
     () => validatePathCoverage(['scripts/format-fixtures.mjs'], [], { exempt: true }),
