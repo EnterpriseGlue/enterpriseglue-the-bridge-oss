@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "mission-control-engine-context-voyager",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": ["users", "administrators", "developers", "security"],
+  "summary": "Preserves the selected workflow engine throughout Mission Control navigation and restores Voyager access for authorized multi-tenant platform administrators.",
+  "userImpact": [
+    "Process, subprocess, called-instance, parent-instance, and decision navigation stays on the engine selected in Mission Control.",
+    "Pending instance modifications, variable edits and uploads, retries, terminations, starts, bulk selections, Starbase edit authorization, and migration plans are cleared or ignored instead of being retargeted when the selected engine changes.",
+    "Engine-qualified links now show an explicit unavailable state when the requested engine is outside the authorized inventory.",
+    "Authorized multi-tenant platform administrators can open Voyager and Mission Control instead of being redirected away from the product navigation."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This frontend-only correction does not change TypeORM entities, migrations, or database-specific behavior."
+    ]
+  },
+  "security": [
+    "Mission Control remains permission-gated; the correction removes a blanket platform-settings redirect without granting any engine permission or weakening unauthorized denial.",
+    "Destructive UI state, migration caches, and explicit engine-qualified URLs fail closed across engine-selection changes.",
+    "Accessible-engine inventory, persisted selections, and Mission Control runtime caches are isolated by authenticated principal and tenant so one session cannot reuse another principal's engine data or authorization decisions."
+  ],
+  "documentation": [
+    "The generated technical release notes describe engine-context navigation and authorized Voyager access."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend host package or frontend image; no database rollback is required."
+  ],
+  "validation": [
+    "Focused frontend regressions cover engine-aware process and decision navigation, same-engine A-to-logout-to-B cache isolation, A-to-B-to-A selection invalidation, switch-while-open and in-flight mutation handling, stale Starbase bridge success and error suppression, migration execution binding, explicit unauthorized-engine denial, authorized platform-administrator sidebar access, and continued unauthorized denial."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.10",
+      "newVersion": "0.17.11",
+      "impact": "patch"
+    }
+  ]
+}

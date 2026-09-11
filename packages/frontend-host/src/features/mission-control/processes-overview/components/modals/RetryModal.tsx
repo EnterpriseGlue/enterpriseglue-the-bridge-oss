@@ -29,6 +29,7 @@ interface RetryModalProps {
   retryExtTasksQRefetch: () => void
   instQRefetch: () => void
   engineId?: string
+  interactionKey?: string
   retryDecision?: UiAuthzDecision | null
 }
 
@@ -57,8 +58,11 @@ export function RetryModal({
   retryExtTasksQRefetch,
   instQRefetch,
   engineId,
+  interactionKey,
   retryDecision,
 }: RetryModalProps) {
+  const currentInteractionKeyRef = React.useRef(interactionKey)
+  currentInteractionKeyRef.current = interactionKey
   const retryDeniedReason = retryDecision && !retryDecision.allowed ? retryDecision.reason || 'Action unavailable' : null
 
   const handleSubmit = async () => {
@@ -85,6 +89,11 @@ export function RetryModal({
     setRetryModalBusy(true)
     setRetryModalError(null)
     setRetryModalSuccess(false)
+    const requestInteractionKey = interactionKey
+    const isCurrentRequest = () => (
+      Boolean(requestInteractionKey)
+      && currentInteractionKeyRef.current === requestInteractionKey
+    )
 
     try {
       const payload: any = {}
@@ -99,22 +108,25 @@ export function RetryModal({
 
       if (engineId) payload.engineId = engineId
       await apiClient.post(`/mission-control-api/process-instances/${instanceId}/retry`, payload, { credentials: 'include' })
+      if (!isCurrentRequest()) return
 
       // Refresh data
       await Promise.allSettled([retryJobsQRefetch(), retryExtTasksQRefetch(), instQRefetch()])
+      if (!isCurrentRequest()) return
 
       setRetryModalSuccess(true)
       setRetryModalError(null)
 
       // Auto-close after 1.5 seconds
       setTimeout(() => {
-        onClose()
+        if (isCurrentRequest()) onClose()
       }, 1500)
     } catch (e: any) {
+      if (!isCurrentRequest()) return
       setRetryModalError(getUiErrorMessage(e, 'Failed to retry instance'))
       setRetryModalSuccess(false)
     } finally {
-      setRetryModalBusy(false)
+      if (isCurrentRequest()) setRetryModalBusy(false)
     }
   }
 

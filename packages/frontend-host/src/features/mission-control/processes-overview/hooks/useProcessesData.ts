@@ -145,7 +145,7 @@ export function useProcessesData({
 
   // Resolve definition ID for selected version
   const defIdQ = useQuery({
-    queryKey: ['mission-control', 'definition-id', currentKey, selectedVersion],
+    queryKey: ['mission-control', 'definition-id', selectedEngineId, currentKey, selectedVersion],
     queryFn: async () => {
       if (!currentKey || !selectedVersion) return null
       const match = (defsQ.data || []).find(x => x.key === currentKey && x.version === selectedVersion)
@@ -202,13 +202,13 @@ export function useProcessesData({
       body.variables = [{ name, operator: varOp, value }]
     }
     return body
-  }, [defIdForVersion, currentKey, active, suspended, incidents, varName, varType, varOp, varValue])
+  }, [selectedEngineId, defIdForVersion, currentKey, active, suspended, incidents, varName, varType, varOp, varValue])
 
   // Preview count for advanced filters
   const previewCountQ = useQuery({
-    queryKey: ['mission-control', 'proc', 'preview-count', defIdForVersion, currentKey, active, suspended, incidents, varName, varType, varOp, varValue],
+    queryKey: ['mission-control', 'proc', 'preview-count', selectedEngineId, defIdForVersion, currentKey, active, suspended, incidents, varName, varType, varOp, varValue],
     queryFn: () => fetchPreviewCount(previewBody),
-    enabled: processInstancesEnabled && advancedOpen && (!!defIdForVersion || !!currentKey),
+    enabled: processInstancesEnabled && advancedOpen && !!selectedEngineId && (!!defIdForVersion || !!currentKey),
   })
 
   // Fetch process instances based on filters (filtered by engine)

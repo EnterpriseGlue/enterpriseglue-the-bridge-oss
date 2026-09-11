@@ -4,9 +4,11 @@ import { Button } from '@carbon/react'
 import { Pause, Play, TrashCan, Copy } from '@carbon/icons-react'
 import { WrenchIcon } from './Icons'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import { withEngineContext } from '../../shared/engineContext'
 
 interface InstanceHeaderProps {
   instanceId: string
+  engineId?: string | null
   defName: string
   defKey: string
   defVersion: number
@@ -37,6 +39,7 @@ function getDeniedReason(decision?: UiAuthzDecision | null): string | null {
  */
 export function InstanceHeader({
   instanceId,
+  engineId,
   defName,
   defKey,
   defVersion,
@@ -110,7 +113,7 @@ export function InstanceHeader({
             <button
               className="cds--link"
               style={{ border: 'none', background: 'transparent', padding: 0, color: 'white', fontSize: 'var(--text-14)', fontWeight: 500 }}
-              onClick={() => tenantNavigate(`/mission-control/processes/instances/${instanceId}`)}
+              onClick={() => tenantNavigate(withEngineContext(`/mission-control/processes/instances/${instanceId}`, engineId))}
               title={instanceId}
             >
               {instanceId.length > 15 ? `${instanceId.slice(0, 6)}...${instanceId.slice(-6)}` : instanceId}
@@ -165,7 +168,7 @@ export function InstanceHeader({
                 <button
                   className="cds--link"
                   style={{ border: 'none', background: 'transparent', padding: 0, color: 'white', fontSize: 'var(--text-14)', fontWeight: 500 }}
-                  onClick={() => tenantNavigate(`/mission-control/processes/instances/${parentId}`)}
+                  onClick={() => tenantNavigate(withEngineContext(`/mission-control/processes/instances/${parentId}`, engineId))}
                   title={parentId}
                 >
                   {parentId.length > 15 ? `${parentId.slice(0, 6)}...${parentId.slice(-6)}` : parentId}

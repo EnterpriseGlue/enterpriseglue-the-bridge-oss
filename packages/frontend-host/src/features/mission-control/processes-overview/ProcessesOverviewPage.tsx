@@ -32,7 +32,6 @@ import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { useSelectedEngine } from '../../../components/EngineSelector'
-import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { LoadingState } from '../../shared/components/LoadingState'
 import { evaluateActionSnapshot, summarizeBulkActionUnavailableReasons, WhyUnavailableLink } from '../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
@@ -40,6 +39,7 @@ import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
+import { useGuardedEngineTask, withEngineContext } from '../shared/engineContext'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -224,7 +224,19 @@ export default function ProcessesOverviewPage() {
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const selectedEngineId = useSelectedEngine()
-  const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
+  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
+  React.useEffect(() => {
+    setBridgeError(null)
+    setBridgeDecision(null)
+  }, [selectedEngineId])
+  const withSelectedEngine = React.useCallback(
+    (path: string) => withEngineContext(path, selectedEngineId),
+    [selectedEngineId],
+  )
+  const navigateWithSelectedEngine = React.useCallback(
+    (path: string) => tenantNavigate(withSelectedEngine(path)),
+    [tenantNavigate, withSelectedEngine],
+  )
   const { clearViewports } = useDiagramViewStore()
   const authContext = React.useContext(AuthContext)
   const selectedEngineResource = React.useMemo(
@@ -292,28 +304,94 @@ export default function ProcessesOverviewPage() {
   const [isResetting, setIsResetting] = React.useState(false)
 
   // Local UI state
-  const [selectedMap, setSelectedMap] = React.useState<Record<string, boolean>>({})
+  const currentEngineIdRef = React.useRef(selectedEngineId)
+  const lastRenderedEngineIdRef = React.useRef(selectedEngineId)
+  const engineRevisionRef = React.useRef(0)
+  if (lastRenderedEngineIdRef.current !== selectedEngineId) {
+    lastRenderedEngineIdRef.current = selectedEngineId
+    engineRevisionRef.current += 1
+  }
+  currentEngineIdRef.current = selectedEngineId
+  const [engineSelection, setEngineSelection] = React.useState<{
+    engineId: string | null
+    selectedMap: Record<string, boolean>
+  }>({ engineId: selectedEngineId ?? null, selectedMap: {} })
+  const selectedMap = engineSelection.engineId === (selectedEngineId ?? null)
+    ? engineSelection.selectedMap
+    : {}
+  const setSelectedMap = React.useCallback<React.Dispatch<React.SetStateAction<Record<string, boolean>>>>((update) => {
+    const originEngineId = selectedEngineId ?? null
+    const originEngineRevision = engineRevisionRef.current
+    setEngineSelection((previous) => {
+      // Ignore completions from callbacks captured before an engine switch.
+      if (
+        (currentEngineIdRef.current ?? null) !== originEngineId
+        || engineRevisionRef.current !== originEngineRevision
+      ) return previous
+      const currentMap = previous.engineId === originEngineId ? previous.selectedMap : {}
+      const nextMap = typeof update === 'function' ? update(currentMap) : update
+      return { engineId: originEngineId, selectedMap: nextMap }
+    })
+  }, [selectedEngineId])
   const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
   const [retryingMap, setRetryingMap] = React.useState<Record<string, boolean>>({})
   const [retryModalInstanceId, setRetryModalInstanceId] = React.useState<string | null>(null)
+  const [retryModalEngineId, setRetryModalEngineId] = React.useState<string | null>(null)
+  const [retryModalEngineRevision, setRetryModalEngineRevision] = React.useState<number | null>(null)
   const [startProcessOpen, setStartProcessOpen] = React.useState(false)
+  const [startProcessEngineId, setStartProcessEngineId] = React.useState<string | null>(null)
   const [startBusinessKey, setStartBusinessKey] = React.useState('')
   const [startVariablesJson, setStartVariablesJson] = React.useState('')
   const [startBusy, setStartBusy] = React.useState(false)
   const [startError, setStartError] = React.useState<string | null>(null)
   const [saveFilterOpen, setSaveFilterOpen] = React.useState(false)
+  const [saveFilterEngineId, setSaveFilterEngineId] = React.useState<string | null>(null)
   const [saveFilterName, setSaveFilterName] = React.useState('')
   const [saveFilterError, setSaveFilterError] = React.useState<string | null>(null)
   const [selectedSavedFilterId, setSelectedSavedFilterId] = React.useState<string | null>(null)
   // tableSearchValue now comes from the store as searchValue
 
   // Modal hooks
-  const terminateModal = useModal<string>()
+  const terminateModal = useModal<{ instanceId: string; engineId: string; engineRevision: number }>()
   const bulkRetryModal = useModal()
   const bulkSuspendModal = useModal()
   const bulkActivateModal = useModal()
   const bulkDeleteModal = useModal()
-  const detailsModal = useModal<string>()
+  const detailsModal = useModal<{ instanceId: string; engineId: string; engineRevision: number }>()
+
+  const previousInteractionEngineIdRef = React.useRef(selectedEngineId)
+  React.useEffect(() => {
+    if (previousInteractionEngineIdRef.current === selectedEngineId) return
+    setEngineSelection({ engineId: selectedEngineId ?? null, selectedMap: {} })
+    setRetryModalInstanceId(null)
+    setRetryModalEngineId(null)
+    setRetryModalEngineRevision(null)
+    setStartProcessOpen(false)
+    setStartProcessEngineId(null)
+    setStartBusinessKey('')
+    setStartVariablesJson('')
+    setStartError(null)
+    setSaveFilterOpen(false)
+    setSaveFilterEngineId(null)
+    setSaveFilterName('')
+    setSaveFilterError(null)
+    setSelectedSavedFilterId(null)
+    detailsModal.closeModal()
+    terminateModal.closeModal()
+    bulkRetryModal.closeModal()
+    bulkSuspendModal.closeModal()
+    bulkActivateModal.closeModal()
+    bulkDeleteModal.closeModal()
+    previousInteractionEngineIdRef.current = selectedEngineId
+  }, [
+    bulkActivateModal.closeModal,
+    bulkDeleteModal.closeModal,
+    bulkRetryModal.closeModal,
+    bulkSuspendModal.closeModal,
+    detailsModal.closeModal,
+    selectedEngineId,
+    terminateModal.closeModal,
+  ])
 
   // Data fetching hooks
   const processesData = useProcessesData({
@@ -342,9 +420,16 @@ export default function ProcessesOverviewPage() {
   })
 
   const modalData = useProcessesModalData({
-    detailsModalInstanceId: detailsModal.data || null,
+    detailsModalInstanceId: detailsModal.data
+      && detailsModal.data.engineId === selectedEngineId
+      && detailsModal.data.engineRevision === engineRevisionRef.current
+      ? detailsModal.data.instanceId
+      : null,
     detailsModalOpen: detailsModal.isOpen,
-    retryModalInstanceId,
+    retryModalInstanceId: retryModalEngineId === selectedEngineId
+      && retryModalEngineRevision === engineRevisionRef.current
+      ? retryModalInstanceId
+      : null,
     engineId: selectedEngineId,
     variablesEnabled: true,
     activityHistoryEnabled: true,
@@ -393,16 +478,28 @@ export default function ProcessesOverviewPage() {
   }, [selectedProcess?.key, selectedProcess?.label, selectedVersion])
 
   const saveFilterMutation = useMutation({
-    mutationFn: createSavedProcessFilter,
-    onSuccess: async (filter) => {
+    mutationFn: async ({ request, engineRevision }: {
+      request: Parameters<typeof createSavedProcessFilter>[0]
+      engineRevision: number
+    }) => ({ filter: await createSavedProcessFilter(request), engineRevision }),
+    onSuccess: async ({ filter, engineRevision }, { request }) => {
+      await queryClient.invalidateQueries({ queryKey: ['mission-control', 'saved-filters', request.engineId] })
+      if (
+        currentEngineIdRef.current !== request.engineId
+        || engineRevisionRef.current !== engineRevision
+      ) return
       setSelectedSavedFilterId(filter.id)
       setSaveFilterOpen(false)
+      setSaveFilterEngineId(null)
       setSaveFilterName('')
       setSaveFilterError(null)
-      await queryClient.invalidateQueries({ queryKey: ['mission-control', 'saved-filters', selectedEngineId] })
       showAlert('Saved filter created', 'info')
     },
-    onError: (error) => {
+    onError: (error, { request, engineRevision }) => {
+      if (
+        currentEngineIdRef.current !== request.engineId
+        || engineRevisionRef.current !== engineRevision
+      ) return
       setSaveFilterError(getUiErrorMessage(error, 'Failed to save filter'))
     },
   })
@@ -455,6 +552,7 @@ export default function ProcessesOverviewPage() {
     }
     setSaveFilterName(defaultSavedFilterName)
     setSaveFilterError(null)
+    setSaveFilterEngineId(selectedEngineId)
     setSaveFilterOpen(true)
   }, [defaultSavedFilterName, notifyDeniedAction, savedFiltersManageDecision, selectedEngineId, showAlert])
 
@@ -465,21 +563,24 @@ export default function ProcessesOverviewPage() {
       setSaveFilterError('Filter name is required')
       return
     }
-    if (!selectedEngineId) {
+    if (!selectedEngineId || saveFilterEngineId !== selectedEngineId) {
       setSaveFilterError('Select an engine before saving a filter')
       return
     }
 
     setSaveFilterError(null)
     await saveFilterMutation.mutateAsync({
-      name,
-      engineId: selectedEngineId,
-      defKeys: selectedProcess?.key ? [selectedProcess.key] : [],
-      version: selectedVersion !== null ? String(selectedVersion) : null,
-      active,
-      incidents,
-      completed,
-      canceled,
+      request: {
+        name,
+        engineId: saveFilterEngineId,
+        defKeys: selectedProcess?.key ? [selectedProcess.key] : [],
+        version: selectedVersion !== null ? String(selectedVersion) : null,
+        active,
+        incidents,
+        completed,
+        canceled,
+      },
+      engineRevision: engineRevisionRef.current,
     })
   }, [
     active,
@@ -489,6 +590,7 @@ export default function ProcessesOverviewPage() {
     notifyDeniedAction,
     saveFilterMutation,
     saveFilterName,
+    saveFilterEngineId,
     savedFiltersManageDecision,
     selectedEngineId,
     selectedProcess?.key,
@@ -500,18 +602,6 @@ export default function ProcessesOverviewPage() {
     if (!selectedSavedFilter) return
     deleteFilterMutation.mutate(selectedSavedFilter.id)
   }, [deleteFilterMutation, notifyDeniedAction, savedFiltersManageDecision, selectedSavedFilter])
-
-  React.useEffect(() => {
-    const engineIdParam = String(searchParams.get('engineId') || '')
-    if (!engineIdParam) return
-    if (!selectedEngineId || selectedEngineId !== engineIdParam) {
-      setSelectedEngineId(engineIdParam)
-      return
-    }
-
-    searchParams.delete('engineId')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, selectedEngineId, setSelectedEngineId, setSearchParams])
 
   // If we were navigated here from a call activity link pill, auto-select the process from the URL
   React.useEffect(() => {
@@ -588,41 +678,36 @@ export default function ProcessesOverviewPage() {
     if (!processEditTarget?.fileId || selectedVersion === null || !selectedProcess?.key) return
     setBridgeError(null)
     setBridgeDecision(null)
-    try {
-      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
-        engineId: String(selectedEngineId || processEditTarget.engineId || ''),
+    await runForCurrentEngine(
+      (requestEngineId) => evaluateMissionControlStarbaseBridge({
+        engineId: requestEngineId,
         projectId: processEditTarget.projectId,
         fileId: processEditTarget.fileId,
         definitionKey: selectedProcess.key,
         kind: 'process',
-      })
-      if (!bridgeDecision.allowed) {
-        setBridgeDecision(bridgeDecision)
-        return
-      }
-    } catch (error) {
-      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
-      return
-    }
-
-    const params = new URLSearchParams({
-      source: 'mission-control',
-      engineId: String(selectedEngineId || processEditTarget.engineId || ''),
-      process: selectedProcess.key,
-      version: String(selectedVersion),
-      deploymentId: String(processEditTarget.engineDeploymentId || ''),
-      mappingSource: String(processEditTarget.mappingSource || ''),
-    })
-
-    if (processEditTarget.commitId) {
-      params.set('commitId', String(processEditTarget.commitId))
-    }
-    if (typeof processEditTarget.fileVersionNumber === 'number') {
-      params.set('fileVersion', String(processEditTarget.fileVersionNumber))
-    }
-
-    tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-  }, [processEditTarget, selectedVersion, selectedProcess?.key, selectedEngineId, tenantNavigate])
+      }),
+      {
+        onSuccess: (bridgeDecision, requestEngineId) => {
+          if (!bridgeDecision.allowed) {
+            setBridgeDecision(bridgeDecision)
+            return
+          }
+          const params = new URLSearchParams({
+            source: 'mission-control',
+            engineId: requestEngineId,
+            process: selectedProcess.key,
+            version: String(selectedVersion),
+            deploymentId: String(processEditTarget.engineDeploymentId || ''),
+            mappingSource: String(processEditTarget.mappingSource || ''),
+          })
+          if (processEditTarget.commitId) params.set('commitId', String(processEditTarget.commitId))
+          if (typeof processEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(processEditTarget.fileVersionNumber))
+          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
+        },
+        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
+      },
+    )
+  }, [processEditTarget, selectedVersion, selectedProcess?.key, runForCurrentEngine, tenantNavigate])
 
   // Viewer API for managing BPMN diagram
   const [viewerApi, setViewerApi] = React.useState<any>(null)
@@ -993,15 +1078,22 @@ export default function ProcessesOverviewPage() {
   const closeStartProcessModal = React.useCallback(() => {
     if (startBusy) return
     setStartProcessOpen(false)
+    setStartProcessEngineId(null)
     setStartError(null)
   }, [startBusy])
 
   const handleStartProcess = React.useCallback(async () => {
     if (!selectedProcess?.key) return
-    if (!selectedEngineId) {
+    if (!selectedEngineId || startProcessEngineId !== selectedEngineId) {
       setStartError('Select an engine')
       return
     }
+    const requestEngineId = startProcessEngineId
+    const requestEngineRevision = engineRevisionRef.current
+    const isCurrentRequest = () => (
+      currentEngineIdRef.current === requestEngineId
+      && engineRevisionRef.current === requestEngineRevision
+    )
 
     let variables: unknown
     const trimmedVariables = startVariablesJson.trim()
@@ -1017,7 +1109,7 @@ export default function ProcessesOverviewPage() {
     setStartBusy(true)
     setStartError(null)
     try {
-      const payload: Record<string, unknown> = { engineId: selectedEngineId }
+      const payload: Record<string, unknown> = { engineId: requestEngineId }
       const businessKey = startBusinessKey.trim()
       if (businessKey) payload.businessKey = businessKey
       if (variables !== undefined) payload.variables = variables
@@ -1026,21 +1118,30 @@ export default function ProcessesOverviewPage() {
         payload,
         { credentials: 'include' }
       )
+      if (!isCurrentRequest()) return
       setStartProcessOpen(false)
+      setStartProcessEngineId(null)
       setStartBusinessKey('')
       setStartVariablesJson('')
       await instQ.refetch()
+      if (!isCurrentRequest()) return
       const startedId = started?.id ? ` ${started.id}` : ''
       showAlert(`Process instance started${startedId}`, 'info')
     } catch (error) {
-      setStartError(getUiErrorMessage(error, 'Failed to start process instance'))
+      if (isCurrentRequest()) {
+        setStartError(getUiErrorMessage(error, 'Failed to start process instance'))
+      }
     } finally {
-      setStartBusy(false)
+      if (isCurrentRequest()) setStartBusy(false)
     }
-  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startVariablesJson])
+  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startProcessEngineId, startVariablesJson])
 
   const onRowClick = (rowId: string) => {
-    detailsModal.openModal(rowId)
+    if (selectedEngineId) detailsModal.openModal({
+      instanceId: rowId,
+      engineId: selectedEngineId,
+      engineRevision: engineRevisionRef.current,
+    })
   }
 
   // Destructure modal data from hooks
@@ -1121,6 +1222,7 @@ export default function ProcessesOverviewPage() {
                 renderIcon={Play}
                 onClick={() => {
                   setStartError(null)
+                  setStartProcessEngineId(selectedEngineId ?? null)
                   setStartProcessOpen(true)
                 }}
                 disabled={!selectedProcess?.key || !startProcessDecision.allowed}
@@ -1145,17 +1247,17 @@ export default function ProcessesOverviewPage() {
         ) : null}
       >
         <BreadcrumbItem>
-          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
+          <a href={toTenantPath(withSelectedEngine('/mission-control'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         {fromInstanceId && (
           <BreadcrumbItem>
             <a
-              href={toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)}
+              href={toTenantPath(withSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`))}
               onClick={(e) => {
                 e.preventDefault()
-                tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)
+                navigateWithSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)
               }}
             >
               Instance {sanitizePathParam(fromInstanceId).substring(0, 8)}...
@@ -1164,7 +1266,7 @@ export default function ProcessesOverviewPage() {
         )}
         <BreadcrumbItem isCurrentPage={!selectedProcess}>
           {selectedProcess ? (
-            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); setSelectedProcess(null); }}>
+            <a href={toTenantPath(withSelectedEngine('/mission-control/processes'))} onClick={(e) => { e.preventDefault(); setSelectedProcess(null); }}>
               Processes
             </a>
           ) : (
@@ -1376,7 +1478,14 @@ export default function ProcessesOverviewPage() {
                     return
                   }
                   const selectedVersion = uniqueVers[0]
-                  tenantNavigate('/mission-control/migration/new', { state: { instanceIds: ids, selectedKey: unique[0] || currentKey, selectedVersion } })
+                  tenantNavigate(withSelectedEngine('/mission-control/migration/new'), {
+                    state: {
+                      instanceIds: ids,
+                      selectedKey: unique[0] || currentKey,
+                      selectedVersion,
+                      engineId: selectedEngineId,
+                    },
+                  })
                 }}
                 aria-label="Migrate"
                 title={migrateTitle}
@@ -1449,16 +1558,27 @@ export default function ProcessesOverviewPage() {
             <ProcessesDataTable
               data={instQ.data || []}
               onTerminate={(id) => {
-                terminateModal.openModal(id)
+                if (selectedEngineId) terminateModal.openModal({
+                  instanceId: id,
+                  engineId: selectedEngineId,
+                  engineRevision: engineRevisionRef.current,
+                })
               }}
               onRetry={(id) => {
+                if (!selectedEngineId) return
+                setRetryModalEngineId(selectedEngineId)
+                setRetryModalEngineRevision(engineRevisionRef.current)
                 setRetryModalInstanceId(id)
               }}
               onActivate={(id) => {
-                return callAction('PUT', `/mission-control-api/process-instances/${id}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
+                return callAction('PUT', `/mission-control-api/process-instances/${id}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then((completedForCurrentEngine) => (
+                  completedForCurrentEngine ? instQ.refetch() : undefined
+                ))
               }}
               onSuspend={(id) => {
-                return callAction('PUT', `/mission-control-api/process-instances/${id}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
+                return callAction('PUT', `/mission-control-api/process-instances/${id}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then((completedForCurrentEngine) => (
+                  completedForCurrentEngine ? instQ.refetch() : undefined
+                ))
               }}
               selectedMap={selectedMap}
               setSelectedMap={setSelectedMap}
@@ -1467,6 +1587,7 @@ export default function ProcessesOverviewPage() {
               setHoveredRowId={setHoveredRowId}
               processNameMap={processNameMap}
               searchValue={searchValue}
+              engineId={selectedEngineId}
             />
           </div>
         </div>
@@ -1477,7 +1598,11 @@ export default function ProcessesOverviewPage() {
       {/* Modals */}
       <InstanceDetailsModal
         open={detailsModal.isOpen}
-        instanceId={detailsModal.data || null}
+        instanceId={detailsModal.data
+          && detailsModal.data.engineId === selectedEngineId
+          && detailsModal.data.engineRevision === engineRevisionRef.current
+          ? detailsModal.data.instanceId
+          : null}
         onClose={detailsModal.closeModal}
         histQLoading={histQ.isLoading}
         histQData={histQ.data}
@@ -1486,9 +1611,15 @@ export default function ProcessesOverviewPage() {
       />
 
       <RetryModal
-        open={!!retryModalInstanceId}
+        open={!!retryModalInstanceId
+          && retryModalEngineId === selectedEngineId
+          && retryModalEngineRevision === engineRevisionRef.current}
         instanceId={retryModalInstanceId}
-        onClose={() => setRetryModalInstanceId(null)}
+        onClose={() => {
+          setRetryModalInstanceId(null)
+          setRetryModalEngineId(null)
+          setRetryModalEngineRevision(null)
+        }}
         allRetryItems={allRetryItems}
         retryJobsQLoading={retryJobsQ.isLoading}
         retryExtTasksQLoading={retryExtTasksQ.isLoading}
@@ -1509,7 +1640,10 @@ export default function ProcessesOverviewPage() {
         retryJobsQRefetch={() => retryJobsQ.refetch()}
         retryExtTasksQRefetch={() => retryExtTasksQ.refetch()}
         instQRefetch={() => instQ.refetch()}
-        engineId={selectedEngineId}
+        engineId={retryModalEngineId ?? undefined}
+        interactionKey={retryModalInstanceId && retryModalEngineId && retryModalEngineRevision !== null
+          ? `${retryModalEngineId}:${retryModalEngineRevision}:${retryModalInstanceId}`
+          : undefined}
         retryDecision={retryModalDecision}
       />
 
@@ -1539,16 +1673,32 @@ export default function ProcessesOverviewPage() {
         onBulkActivateConfirm={async (reason) => {
           await bulkOps.bulkActivate(reason)
         }}
-        terminateOpen={terminateModal.isOpen}
+        terminateOpen={terminateModal.isOpen
+          && terminateModal.data?.engineId === selectedEngineId
+          && terminateModal.data?.engineRevision === engineRevisionRef.current}
         onTerminateClose={terminateModal.closeModal}
         onTerminateConfirm={async (reason) => {
-          if (!terminateModal.data) return
+          const target = terminateModal.data
+          if (
+            !target
+            || target.engineId !== selectedEngineId
+            || target.engineRevision !== engineRevisionRef.current
+          ) {
+            terminateModal.closeModal()
+            return
+          }
           try {
-            await bulkOps.callAction(
+            const completedForCurrentEngine = await bulkOps.callAction(
               'DELETE',
-              `/mission-control-api/process-instances/${terminateModal.data}?deleteReason=${encodeURIComponent(reason || 'Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true${selectedEngineId ? `&engineId=${encodeURIComponent(selectedEngineId)}` : ''}`
+              `/mission-control-api/process-instances/${target.instanceId}?deleteReason=${encodeURIComponent(reason || 'Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true&engineId=${encodeURIComponent(target.engineId)}`
             )
+            if (!completedForCurrentEngine) return
+            if (
+              currentEngineIdRef.current !== target.engineId
+              || engineRevisionRef.current !== target.engineRevision
+            ) return
             await instQ.refetch()
+            if (engineRevisionRef.current !== target.engineRevision) return
             terminateModal.closeModal()
           } catch (e) {
             console.error('Failed to terminate instance:', e)
@@ -1558,7 +1708,7 @@ export default function ProcessesOverviewPage() {
       />
 
       <Modal
-        open={saveFilterOpen}
+        open={saveFilterOpen && saveFilterEngineId === selectedEngineId}
         modalHeading="Save filter"
         primaryButtonText={saveFilterMutation.isPending ? 'Saving...' : 'Save'}
         secondaryButtonText="Cancel"
@@ -1566,6 +1716,7 @@ export default function ProcessesOverviewPage() {
         onRequestClose={() => {
           if (saveFilterMutation.isPending) return
           setSaveFilterOpen(false)
+          setSaveFilterEngineId(null)
           setSaveFilterError(null)
         }}
         onRequestSubmit={handleSaveFilter}

@@ -5,7 +5,7 @@ interface TerminateConfirmModalProps {
   open: boolean
   instanceId: string
   onClose: () => void
-  onTerminate: (instanceId: string, reason: string) => Promise<void>
+  onTerminate: (instanceId: string, reason: string) => Promise<boolean | void>
 }
 
 /**
@@ -32,7 +32,8 @@ export function TerminateConfirmModal({
   const handleTerminate = async () => {
     if (reasonMissing) return
     try {
-      await onTerminate(instanceId, reasonValue)
+      const completedForCurrentEngine = await onTerminate(instanceId, reasonValue)
+      if (completedForCurrentEngine === false) return
       onClose()
       // Navigate back to process list after successful termination
       window.history.back()

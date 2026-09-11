@@ -1,7 +1,10 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetryModal } from '@src/features/mission-control/processes-overview/components/modals/RetryModal';
+import { apiClient } from '@src/shared/api/client';
+
+vi.mock('@src/shared/api/client', () => ({ apiClient: { post: vi.fn() } }));
 
 vi.mock('@carbon/react', () => ({
   Modal: ({ open, modalHeading, primaryButtonText, primaryButtonDisabled, onRequestSubmit, children }: any) => open ? (
@@ -49,9 +52,15 @@ const baseProps = {
   retryExtTasksQRefetch: vi.fn(),
   instQRefetch: vi.fn(),
   engineId: 'engine-1',
+  interactionKey: 'engine-1:0:pi-1',
 };
 
 describe('ProcessesOverview RetryModal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiClient.post).mockResolvedValue(undefined);
+  });
+
   it('exports RetryModal', () => {
     expect(RetryModal).toBeDefined();
     expect(typeof RetryModal).toBe('function');
@@ -76,5 +85,37 @@ describe('ProcessesOverview RetryModal', () => {
     expect(screen.getByText(/Retry unavailable/)).toBeInTheDocument();
     expect(screen.getByText(/Missing permission engine:instance:retry/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeDisabled();
+  });
+
+  it('ignores an in-flight result after the engine interaction changes', async () => {
+    let resolveRequest!: () => void;
+    vi.mocked(apiClient.post).mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveRequest = resolve; }),
+    );
+    const setRetryModalSuccess = vi.fn();
+    const retryJobsQRefetch = vi.fn();
+    const retryExtTasksQRefetch = vi.fn();
+    const instQRefetch = vi.fn();
+    const view = render(
+      <RetryModal
+        {...baseProps}
+        setRetryModalSuccess={setRetryModalSuccess}
+        retryJobsQRefetch={retryJobsQRefetch}
+        retryExtTasksQRefetch={retryExtTasksQRefetch}
+        instQRefetch={instQRefetch}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledOnce());
+    view.rerender(<RetryModal {...baseProps} interactionKey="engine-2:1:pi-1" open={false} />);
+    view.rerender(<RetryModal {...baseProps} interactionKey="engine-1:2:pi-1" />);
+    await act(async () => resolveRequest());
+
+    expect(retryJobsQRefetch).not.toHaveBeenCalled();
+    expect(retryExtTasksQRefetch).not.toHaveBeenCalled();
+    expect(instQRefetch).not.toHaveBeenCalled();
+    expect(setRetryModalSuccess).not.toHaveBeenCalledWith(true);
+    expect(baseProps.onClose).not.toHaveBeenCalled();
   });
 });

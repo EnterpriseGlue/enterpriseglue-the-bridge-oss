@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ModificationOperation, ModificationVariable } from '../types'
 import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
@@ -28,6 +28,37 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const [applyBusy, setApplyBusy] = useState(false)
   const [queuedModActivityId, setQueuedModActivityId] = useState<string | null>(null)
+  const currentEngineIdRef = useRef(engineId)
+  const modificationEngineIdRef = useRef<string | undefined>(undefined)
+  const modificationRevisionRef = useRef(0)
+  currentEngineIdRef.current = engineId
+
+  const bindModificationToCurrentEngine = useCallback(() => {
+    if (!modificationEngineIdRef.current) {
+      modificationRevisionRef.current += 1
+      modificationEngineIdRef.current = currentEngineIdRef.current
+    }
+  }, [])
+
+  const clearModificationState = useCallback(() => {
+    modificationRevisionRef.current += 1
+    modificationEngineIdRef.current = undefined
+    setModPlan([])
+    setIsModMode(false)
+    setSelectedActivityId(null)
+    setMoveSourceActivityId(null)
+    setShowModIntro(false)
+    setDiscardConfirmOpen(false)
+    setQueuedModActivityId(null)
+    setApplyBusy(false)
+  }, [])
+
+  // Activity IDs and instructions belong to the engine where the operator
+  // prepared the plan. A selector change invalidates that state.
+  useEffect(() => {
+    const boundEngineId = modificationEngineIdRef.current
+    if (boundEngineId && boundEngineId !== engineId) clearModificationState()
+  }, [clearModificationState, engineId])
 
   // Clear selection when exiting mod mode
   useEffect(() => {
@@ -38,7 +69,8 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
   }, [isModMode])
 
   const openModificationIntro = useCallback(() => {
-    if (status !== 'ACTIVE') return
+    if (status !== 'ACTIVE' || !engineId) return
+    bindModificationToCurrentEngine()
     try {
       if (typeof window !== 'undefined') {
         const suppressed = window.localStorage.getItem('vt_mod_intro_suppressed') === '1'
@@ -50,7 +82,7 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
     } catch {}
     setSuppressIntroNext(false)
     setShowModIntro(true)
-  }, [status])
+  }, [bindModificationToCurrentEngine, engineId, status])
 
   const requestExitModificationMode = useCallback(() => {
     if (modPlan.length > 0) {
@@ -65,6 +97,7 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
   const addPlanOperation = useCallback(
     (kind: 'add' | 'addAfter' | 'cancel') => {
       if (!selectedActivityId) return
+      bindModificationToCurrentEngine()
       setModPlan(prev => {
         const alreadyExists = prev.some(op => op.kind === kind && op.activityId === selectedActivityId)
         if (alreadyExists) return prev
@@ -76,11 +109,12 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
         return [...filtered, { kind, activityId: selectedActivityId }]
       })
     },
-    [selectedActivityId]
+    [bindModificationToCurrentEngine, selectedActivityId]
   )
 
   const toggleMoveForSelection = useCallback(() => {
     if (!selectedActivityId) return
+    bindModificationToCurrentEngine()
     if (!moveSourceActivityId) {
       setMoveSourceActivityId(selectedActivityId)
       return
@@ -91,7 +125,7 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
     }
     setModPlan(prev => [...prev, { kind: 'move', fromActivityId: moveSourceActivityId, toActivityId: selectedActivityId }])
     setMoveSourceActivityId(null)
-  }, [selectedActivityId, moveSourceActivityId])
+  }, [bindModificationToCurrentEngine, selectedActivityId, moveSourceActivityId])
 
   const removePlanItem = useCallback((index: number) => {
     setModPlan(prev => prev.filter((_, i) => i !== index))
@@ -112,16 +146,18 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
   }, [])
 
   const updatePlanItemVariables = useCallback((index: number, variables: ModificationVariable[]) => {
+    bindModificationToCurrentEngine()
     setModPlan(prev => {
       if (index < 0 || index >= prev.length) return prev
       const next = [...prev]
       next[index] = { ...next[index], variables }
       return next
     })
-  }, [])
+  }, [bindModificationToCurrentEngine])
 
   const addMoveToHere = useCallback((targetActivityId: string, sourceActivityIds: string[]) => {
     if (sourceActivityIds.length === 0) return
+    bindModificationToCurrentEngine()
     setModPlan(prev => {
       const newOps = sourceActivityIds
         .filter(sourceId => !prev.some(op => op.kind === 'move' && op.fromActivityId === sourceId && op.toActivityId === targetActivityId))
@@ -133,10 +169,20 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
       if (newOps.length === 0) return prev
       return [...prev, ...newOps]
     })
-  }, [])
+  }, [bindModificationToCurrentEngine])
 
   const applyModifications = useCallback(async (options?: { skipCustomListeners?: boolean; skipIoMappings?: boolean; annotation?: string }) => {
     if (modPlan.length === 0) return
+    if (!engineId || modificationEngineIdRef.current !== engineId) {
+      clearModificationState()
+      return
+    }
+    const requestEngineId = modificationEngineIdRef.current
+    const requestRevision = modificationRevisionRef.current
+    const isCurrentRequest = () => (
+      modificationRevisionRef.current === requestRevision
+      && currentEngineIdRef.current === requestEngineId
+    )
     setApplyBusy(true)
     try {
       const instructions: ModificationInstruction[] = []
@@ -166,26 +212,30 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
         setApplyBusy(false)
         return
       }
-      const payload: ProcessInstanceModification = { instructions, engineId }
+      const payload: ProcessInstanceModification = { instructions, engineId: requestEngineId }
       if (options?.skipCustomListeners) payload.skipCustomListeners = true
       if (options?.skipIoMappings) payload.skipIoMappings = true
       if (options?.annotation) payload.annotation = options.annotation
       await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/modify`, payload, { credentials: 'include' })
+      if (!isCurrentRequest()) return
       await Promise.allSettled([actQ.refetch(), incidentsQ.refetch(), runtimeQ.refetch()])
+      if (!isCurrentRequest()) return
       const opCount = modPlan.length
       notify({ kind: 'success', title: `Successfully applied ${opCount} modification${opCount === 1 ? '' : 's'}` })
       setModPlan([])
+      modificationEngineIdRef.current = undefined
       setIsModMode(false)
       setSelectedActivityId(null)
       setMoveSourceActivityId(null)
     } catch (e: any) {
+      if (!isCurrentRequest()) return
       const message = getUiErrorMessage(e, 'Failed to apply modifications')
       notify({ kind: 'error', title: 'Modification failed', subtitle: message })
       throw e
     } finally {
-      setApplyBusy(false)
+      if (isCurrentRequest()) setApplyBusy(false)
     }
-  }, [modPlan, instanceId, actQ, incidentsQ, runtimeQ])
+  }, [modPlan, instanceId, engineId, actQ, incidentsQ, runtimeQ, notify, clearModificationState])
 
   const confirmModIntro = useCallback(() => {
     if (suppressIntroNext) {
@@ -200,6 +250,7 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
   }, [suppressIntroNext])
 
   const discardModifications = useCallback(() => {
+    modificationEngineIdRef.current = undefined
     setModPlan([])
     setIsModMode(false)
     setSelectedActivityId(null)

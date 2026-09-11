@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Copy } from "@carbon/icons-react"
 import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
+import { withEngineContext } from '../engineContext'
 
 interface CopyableLinkProps {
   /** Full value to copy and use for navigation */
@@ -11,6 +12,8 @@ interface CopyableLinkProps {
   navigateTo?: string
   /** Whether the row is currently hovered (controls copy icon visibility) */
   isHovered: boolean
+  /** Engine context retained when navigating to another Mission Control view. */
+  engineId?: string | null
   /** Max length before truncation (default: 19) */
   maxLength?: number
   /** If true, opens the link in a new tab instead of navigating */
@@ -26,6 +29,7 @@ export function CopyableLink({
   displayValue,
   navigateTo,
   isHovered,
+  engineId,
   maxLength = 19,
   openInNewTab = false,
 }: CopyableLinkProps) {
@@ -39,10 +43,11 @@ export function CopyableLink({
 
   const handleClick = () => {
     if (navigateTo) {
+      const contextualPath = withEngineContext(navigateTo, engineId)
       if (openInNewTab) {
-        window.open(toTenantPath(navigateTo), '_blank')
+        window.open(toTenantPath(contextualPath), '_blank')
       } else {
-        tenantNavigate(navigateTo)
+        tenantNavigate(contextualPath)
       }
     }
   }

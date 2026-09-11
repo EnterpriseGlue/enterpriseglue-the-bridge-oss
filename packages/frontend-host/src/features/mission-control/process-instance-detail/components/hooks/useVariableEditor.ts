@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
 import { modifyProcessInstanceVariables } from '../../api/processInstances'
 
@@ -15,8 +15,30 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
   const [editingVarValue, setEditingVarValue] = useState<string>('')
   const [editVarBusy, setEditVarBusy] = useState(false)
   const [editVarError, setEditVarError] = useState<string | null>(null)
+  const currentEngineIdRef = useRef(engineId)
+  const editingEngineIdRef = useRef<string | undefined>(undefined)
+  const editorRevisionRef = useRef(0)
+  currentEngineIdRef.current = engineId
+
+  const resetVariableEditor = useCallback(() => {
+    editorRevisionRef.current += 1
+    editingEngineIdRef.current = undefined
+    setEditingVarKey(null)
+    setEditingVarValue('')
+    setEditingVarType('String')
+    setEditVarBusy(false)
+    setEditVarError(null)
+  }, [])
+
+  useEffect(() => {
+    const boundEngineId = editingEngineIdRef.current
+    if (boundEngineId && boundEngineId !== engineId) resetVariableEditor()
+  }, [engineId, resetVariableEditor])
 
   const openVariableEditor = useCallback((name: string, variable?: { value: any; type: string }) => {
+    if (!currentEngineIdRef.current) return
+    editorRevisionRef.current += 1
+    editingEngineIdRef.current = currentEngineIdRef.current
     setEditingVarKey(name)
     setEditingVarType(variable?.type || 'String')
     try {
@@ -34,14 +56,21 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
   }, [])
 
   const closeVariableEditor = useCallback(() => {
-    setEditingVarKey(null)
-    setEditingVarValue('')
-    setEditingVarType('String')
-    setEditVarError(null)
-  }, [])
+    resetVariableEditor()
+  }, [resetVariableEditor])
 
   const submitVariableEdit = useCallback(async () => {
     if (!instanceId || !editingVarKey) return
+    if (!engineId || editingEngineIdRef.current !== engineId) {
+      resetVariableEditor()
+      return
+    }
+    const requestEngineId = editingEngineIdRef.current
+    const requestRevision = editorRevisionRef.current
+    const isCurrentRequest = () => (
+      editorRevisionRef.current === requestRevision
+      && currentEngineIdRef.current === requestEngineId
+    )
     setEditVarBusy(true)
     setEditVarError(null)
     try {
@@ -66,17 +95,19 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
       }
       await modifyProcessInstanceVariables(instanceId, {
         modifications: { [editingVarKey]: { value: parsed, type: editingVarType } },
-        engineId,
+        engineId: requestEngineId,
       })
+      if (!isCurrentRequest()) return
       await varsQ.refetch()
+      if (!isCurrentRequest()) return
       onVariableSaved?.(editingVarKey, { value: parsed, type: editingVarType })
       closeVariableEditor()
     } catch (e: any) {
-      setEditVarError(getUiErrorMessage(e, 'Failed to update variable'))
+      if (isCurrentRequest()) setEditVarError(getUiErrorMessage(e, 'Failed to update variable'))
     } finally {
-      setEditVarBusy(false)
+      if (isCurrentRequest()) setEditVarBusy(false)
     }
-  }, [instanceId, editingVarKey, editingVarValue, editingVarType, varsQ, onVariableSaved, closeVariableEditor])
+  }, [instanceId, editingVarKey, editingVarValue, editingVarType, engineId, varsQ, onVariableSaved, closeVariableEditor, resetVariableEditor])
 
   return {
     // State

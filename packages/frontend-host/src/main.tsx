@@ -107,17 +107,17 @@ export async function startApp() {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <AuthProvider>
-          <FeatureFlagsProvider>
-            <QueryClientProvider client={qc}>
+        <QueryClientProvider client={qc}>
+          <AuthProvider>
+            <FeatureFlagsProvider>
               <ToastProvider>
                 <HostContextualFlowProviderV1>
                   <RouterProvider router={createBrowserRouter(routes)} />
                 </HostContextualFlowProviderV1>
               </ToastProvider>
-            </QueryClientProvider>
-          </FeatureFlagsProvider>
-        </AuthProvider>
+            </FeatureFlagsProvider>
+          </AuthProvider>
+        </QueryClientProvider>
       </ErrorBoundary>
     </React.StrictMode>
   )

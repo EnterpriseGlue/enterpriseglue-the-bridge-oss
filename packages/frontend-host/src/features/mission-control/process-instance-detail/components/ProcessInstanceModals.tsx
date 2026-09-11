@@ -69,7 +69,7 @@ interface ProcessInstanceModalsProps {
   terminateConfirmOpen: boolean
   instanceId: string
   setTerminateConfirmOpen: (open: boolean) => void
-  onTerminate: (id: string, reason: string) => Promise<void>
+  onTerminate: (id: string, reason: string) => Promise<boolean | void>
   // Retry modal
   retryModalOpen: boolean
   retryBusy: boolean
