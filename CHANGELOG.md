@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.26.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.26.0...v0.26.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **mission-control:** preserve engine context and Voyager access ([0abe4c5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0abe4c5c64754c06acc2f3d0a0129fd1355d3201))
+* **mission-control:** preserve engine context and Voyager access ([85ed1c1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/85ed1c1805ee38442bdd3e1274fdd498982fdecc))
+
 ## [0.26.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.25.0...v0.26.0) (2026-09-10)
 
 
