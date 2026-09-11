@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProcessesData } from '@src/features/mission-control/processes-overview/hooks/useProcessesData';
 import {
@@ -12,8 +12,10 @@ import {
   listProcessInstances,
 } from '@src/features/mission-control/processes-overview/api/processDefinitions';
 
+let selectedEngineId = 'engine-1';
+
 vi.mock('@src/components/EngineSelector', () => ({
-  useSelectedEngine: () => 'engine-1',
+  useSelectedEngine: () => selectedEngineId,
 }));
 
 vi.mock('@src/features/mission-control/processes-overview/api/processDefinitions', () => ({
@@ -67,6 +69,7 @@ function renderProcessesData(options: Partial<Parameters<typeof useProcessesData
 describe('useProcessesData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    selectedEngineId = 'engine-1';
     vi.mocked(listProcessDefinitions).mockResolvedValue([]);
     vi.mocked(fetchProcessDefinitionXml).mockResolvedValue('');
     vi.mocked(getActiveActivityCounts).mockResolvedValue({});
@@ -93,5 +96,22 @@ describe('useProcessesData', () => {
     expect(fetchActivityCountsByState).not.toHaveBeenCalled();
     expect(listProcessInstances).not.toHaveBeenCalled();
     expect(fetchPreviewCount).not.toHaveBeenCalled();
+  });
+
+  it('isolates process previews and collection requests when the selected engine changes', async () => {
+    const { rerender } = renderProcessesData();
+
+    await waitFor(() => {
+      expect(fetchPreviewCount).toHaveBeenCalledWith(expect.objectContaining({ engineId: 'engine-1' }));
+      expect(listProcessInstances).toHaveBeenCalledWith(expect.objectContaining({ engineId: 'engine-1' }));
+    });
+
+    selectedEngineId = 'engine-2';
+    rerender();
+
+    await waitFor(() => {
+      expect(fetchPreviewCount).toHaveBeenCalledWith(expect.objectContaining({ engineId: 'engine-2' }));
+      expect(listProcessInstances).toHaveBeenCalledWith(expect.objectContaining({ engineId: 'engine-2' }));
+    });
   });
 });

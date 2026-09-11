@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@src/contexts/AuthContext';
 import { useAuth } from '@src/shared/hooks/useAuth';
 import { USER_KEY } from '@src/constants/storageKeys';
@@ -30,8 +31,12 @@ vi.mock('@src/shared/hooks/useActivityMonitor', () => ({
   useActivityMonitor: vi.fn(),
 }));
 
+let queryClient: QueryClient;
+
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <AuthProvider>{children}</AuthProvider>
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>{children}</AuthProvider>
+  </QueryClientProvider>
 );
 
 describe('AuthProvider', () => {
@@ -39,6 +44,7 @@ describe('AuthProvider', () => {
     const { authService } = await import('@src/services/auth');
     window.history.replaceState({}, '', '/');
     localStorage.clear();
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.clearAllMocks();
     vi.mocked(authService.getMe).mockRejectedValue(new Error('Not authenticated'));
     vi.mocked(authService.getMyPermissions).mockResolvedValue({
@@ -195,6 +201,38 @@ describe('AuthProvider', () => {
     });
 
     expect(localStorage.getItem(USER_KEY)).toBeNull();
+  });
+
+  it('clears all old-session caches across A to logout to B on the same engine', async () => {
+    const { authService } = await import('@src/services/auth');
+    const userA = { id: 'user-a', email: 'a@example.com', session: { principal: { type: 'user', id: 'user-a' }, tenant: { id: 'tenant-1' } } } as any;
+    const userB = { id: 'user-b', email: 'b@example.com', session: { principal: { type: 'user', id: 'user-b' }, tenant: { id: 'tenant-1' } } } as any;
+    vi.mocked(authService.getMe).mockResolvedValue(userA);
+    vi.mocked(authService.logout).mockResolvedValue({ message: 'Logged out successfully', federatedLogoutUrl: null });
+    vi.mocked(authService.login).mockResolvedValue({ user: userB, expiresIn: 3600 });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.user?.id).toBe('user-a'));
+
+    const runtimeKey = ['mission-control', 'instances', 'engine-1'];
+    const selectorKey = ['engines-selector', 'user-a:tenant-1:tenant-1'];
+    queryClient.setQueryData(runtimeKey, [{ id: 'private-to-a' }]);
+    queryClient.setQueryData(selectorKey, [{ id: 'engine-1' }]);
+    queryClient.setQueryData(['notifications'], { unreadCount: 1 });
+
+    await act(async () => result.current.logout());
+    expect(queryClient.getQueryData(runtimeKey)).toBeUndefined();
+    expect(queryClient.getQueryData(selectorKey)).toBeUndefined();
+    expect(queryClient.getQueryData(['notifications'])).toBeUndefined();
+
+    // A late old-session cache entry must also be removed when B becomes the
+    // authenticated principal, even though both principals use engine-1.
+    queryClient.setQueryData(runtimeKey, [{ id: 'late-private-to-a' }]);
+    await act(async () => { await result.current.login({ email: 'b@example.com', password: 'Password1!' }); });
+
+    expect(result.current.user?.id).toBe('user-b');
+    expect(queryClient.getQueryData(runtimeKey)).toBeUndefined();
+    expect(queryClient.getQueryData(['notifications'])).toBeUndefined();
   });
 
   it('syncs authenticated user state from storage events across tabs', async () => {

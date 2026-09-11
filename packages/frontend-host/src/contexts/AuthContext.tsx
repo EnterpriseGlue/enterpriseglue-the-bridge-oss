@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
@@ -57,12 +58,35 @@ const readStoredUser = (raw: string | null): User | null => {
   }
 };
 
+function authenticatedSessionScope(user: User | null): string | null {
+  if (!user) return null;
+  const principalId = user.session?.principal?.id || user.id;
+  const tenantId = user.session?.tenant?.id || 'root';
+  return `${principalId}:${tenantId}`;
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<CurrentUserPermissions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const sessionScopeRef = useRef<string | null>(null);
+
+  const clearPreviousSessionRuntimeState = useCallback((nextUser: User | null) => {
+    const nextScope = authenticatedSessionScope(nextUser);
+    if (sessionScopeRef.current === nextScope) return;
+    sessionScopeRef.current = nextScope;
+
+    // Cached responses throughout the application can contain principal- and
+    // tenant-filtered resources or action decisions under many feature-owned
+    // key prefixes. Cancel first so an in-flight response from the old session
+    // cannot repopulate state after the rare authentication-scope transition.
+    void queryClient.cancelQueries();
+    queryClient.clear();
+  }, [queryClient]);
 
   const persistUser = useCallback((nextUser: User | null) => {
+    clearPreviousSessionRuntimeState(nextUser);
     setUser(nextUser);
     setPermissions((currentPermissions) =>
       permissionSnapshotMatchesSession(nextUser, currentPermissions) ? currentPermissions : null,
@@ -75,7 +99,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch {
     }
-  }, []);
+  }, [clearPreviousSessionRuntimeState]);
 
   const refreshPermissions = useCallback(async (): Promise<CurrentUserPermissions | null> => {
     try {
@@ -91,13 +115,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== USER_KEY) return;
-      setUser(readStoredUser(event.newValue));
+      const nextUser = readStoredUser(event.newValue);
+      clearPreviousSessionRuntimeState(nextUser);
+      setUser(nextUser);
       setPermissions(null);
     };
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+  }, [clearPreviousSessionRuntimeState]);
 
   /**
    * Load user from localStorage and validate token

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -14,10 +14,27 @@ import {
 } from '@src/features/mission-control/processes-overview/api/processDefinitions';
 import { useProcessesFilterStore } from '@src/features/mission-control/shared/stores/processesFilterStore';
 
+const engineSelectorMocks = vi.hoisted(() => ({ selectedEngineId: 'engine-1' }));
+const tenantNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock('@src/shared/hooks/useTenantNavigate', () => ({
+  useTenantNavigate: () => ({
+    tenantNavigate,
+    toTenantPath: (path: string) => path,
+  }),
+}));
+
 vi.mock('@carbon/react', async () => {
   const actual = await vi.importActual<any>('@carbon/react');
   return {
     ...actual,
+    Modal: ({ open, modalHeading, primaryButtonText, secondaryButtonText, onRequestSubmit, onRequestClose, children }: any) => open ? (
+      <div role="dialog" aria-label={modalHeading}>
+        {children}
+        <button type="button" onClick={onRequestClose}>{secondaryButtonText}</button>
+        <button type="button" onClick={onRequestSubmit}>{primaryButtonText}</button>
+      </div>
+    ) : null,
     Checkbox: ({ id, checked, indeterminate, labelText, onChange }: any) => (
       <input
         id={id}
@@ -38,7 +55,7 @@ vi.mock('react-split-pane', () => ({
 }));
 
 vi.mock('@src/components/EngineSelector', () => ({
-  useSelectedEngine: () => 'engine-1',
+  useSelectedEngine: () => engineSelectorMocks.selectedEngineId,
 }));
 
 vi.mock('@src/features/mission-control/processes-overview/api/processDefinitions', () => ({
@@ -91,6 +108,7 @@ const bulkAuthContext: AuthContextValue = {
           'engine:instance:delete',
           'engine:instance:retry',
           'engine:process:modify',
+          'engine:process:start',
         ],
         runtimePermissions: [],
       },
@@ -190,6 +208,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
 describe('ProcessesOverviewPage selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    engineSelectorMocks.selectedEngineId = 'engine-1';
     useProcessesFilterStore.getState().reset();
     vi.mocked(listSavedProcessFilters).mockResolvedValue([]);
     vi.mocked(createSavedProcessFilter).mockResolvedValue({
@@ -226,6 +245,107 @@ describe('ProcessesOverviewPage selection', () => {
     await waitFor(() => {
       expect(screen.getByText('2 of 2 Process Instances selected')).toBeInTheDocument();
     });
+  });
+
+  it('invalidates selected instance IDs when the selected engine changes', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/mission-control/processes?engineId=engine-1']}>
+          <ProcessesOverviewPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'select-inst-1' }), { target: { checked: true } });
+    await screen.findByText('1 of 2 Process Instances selected');
+
+    await act(async () => {
+      engineSelectorMocks.selectedEngineId = 'engine-2';
+      view.rerender(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/mission-control/processes?engineId=engine-2']}>
+            <ProcessesOverviewPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+    });
+
+    expect(await screen.findByText('2 Process Instances')).toBeInTheDocument();
+    expect(screen.queryByText(/Process Instances selected/)).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'select-inst-1' })).not.toBeChecked();
+
+    await act(async () => {
+      engineSelectorMocks.selectedEngineId = 'engine-1';
+      view.rerender(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/mission-control/processes?engineId=engine-1']}>
+            <ProcessesOverviewPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+    });
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'select-inst-1' })).not.toBeChecked());
+    expect(screen.queryByText(/Process Instances selected/)).not.toBeInTheDocument();
+  });
+
+  it('binds migration navigation state and URL to the selected engine', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <AuthContext.Provider value={bulkAuthContext}>
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/mission-control/processes?process=order-process&engineId=engine-1']}>
+            <ProcessesOverviewPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </AuthContext.Provider>
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'select-inst-1' }), { target: { checked: true } });
+    await screen.findByText('1 of 2 Process Instances selected');
+    fireEvent.click(screen.getByRole('button', { name: /^Migrate$/i }));
+
+    expect(tenantNavigate).toHaveBeenCalledWith(
+      '/mission-control/migration/new?engineId=engine-1',
+      {
+        state: {
+          instanceIds: ['inst-1'],
+          selectedKey: 'order-process',
+          selectedVersion: undefined,
+          engineId: 'engine-1',
+        },
+      },
+    );
+  });
+
+  it('closes engine-bound start state on a switch and does not resurrect it', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const renderPage = () => (
+      <AuthContext.Provider value={bulkAuthContext}>
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/mission-control/processes?process=order-process&engineId=engine-1']}>
+            <ProcessesOverviewPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </AuthContext.Provider>
+    );
+    const view = render(renderPage());
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Start$/i }));
+    expect(await screen.findByRole('dialog', { name: /Start Order Process/i })).toBeInTheDocument();
+
+    await act(async () => {
+      engineSelectorMocks.selectedEngineId = 'engine-2';
+      view.rerender(renderPage());
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Start Order Process/i })).not.toBeInTheDocument());
+
+    await act(async () => {
+      engineSelectorMocks.selectedEngineId = 'engine-1';
+      view.rerender(renderPage());
+    });
+    expect(screen.queryByRole('dialog', { name: /Start Order Process/i })).not.toBeInTheDocument();
   });
 
   it('disables process start when start permission is missing', async () => {

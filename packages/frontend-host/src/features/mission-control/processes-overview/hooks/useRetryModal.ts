@@ -20,14 +20,12 @@ export function useRetryModal({
 
   // Reset state when modal opens
   useEffect(() => {
-    if (retryModalInstanceId) {
-      setRetrySelectionMap({})
-      setRetryDueMode('keep')
-      setRetryDueInput('')
-      setRetryModalBusy(false)
-      setRetryModalError(null)
-      setRetryModalSuccess(false)
-    }
+    setRetrySelectionMap({})
+    setRetryDueMode('keep')
+    setRetryDueInput('')
+    setRetryModalBusy(false)
+    setRetryModalError(null)
+    setRetryModalSuccess(false)
   }, [retryModalInstanceId])
 
   // Auto-select all items when they load

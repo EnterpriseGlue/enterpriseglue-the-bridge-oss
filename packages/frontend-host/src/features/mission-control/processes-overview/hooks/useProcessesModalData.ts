@@ -30,30 +30,30 @@ export function useProcessesModalData({
 }: UseProcessesModalDataProps) {
   // Fetch variables for instance details modal
   const varsQ = useQuery({
-    queryKey: ['mission-control', 'vars', detailsModalInstanceId],
+    queryKey: ['mission-control', 'vars', detailsModalInstanceId, engineId],
     queryFn: () => fetchInstanceVariables(detailsModalInstanceId!, engineId),
-    enabled: variablesEnabled && !!detailsModalInstanceId && detailsModalOpen,
+    enabled: variablesEnabled && !!detailsModalInstanceId && detailsModalOpen && !!engineId,
   })
 
   // Fetch activity history for instance details modal
   const histQ = useQuery({
-    queryKey: ['mission-control', 'hist', detailsModalInstanceId],
+    queryKey: ['mission-control', 'hist', detailsModalInstanceId, engineId],
     queryFn: () => listInstanceActivityHistory(detailsModalInstanceId!, engineId),
-    enabled: activityHistoryEnabled && !!detailsModalInstanceId && detailsModalOpen,
+    enabled: activityHistoryEnabled && !!detailsModalInstanceId && detailsModalOpen && !!engineId,
   })
 
   // Fetch failed jobs for retry modal
   const retryJobsQ = useQuery({
-    queryKey: ['mission-control', 'jobs', retryModalInstanceId],
+    queryKey: ['mission-control', 'jobs', retryModalInstanceId, engineId],
     queryFn: () => listInstanceJobs(retryModalInstanceId!, engineId),
-    enabled: jobsEnabled && !!retryModalInstanceId,
+    enabled: jobsEnabled && !!retryModalInstanceId && !!engineId,
   })
 
   // Fetch failed external tasks for retry modal
   const retryExtTasksQ = useQuery({
-    queryKey: ['mission-control', 'external-tasks', retryModalInstanceId],
+    queryKey: ['mission-control', 'external-tasks', retryModalInstanceId, engineId],
     queryFn: () => listInstanceExternalTasks(retryModalInstanceId!, engineId),
-    enabled: externalTasksEnabled && !!retryModalInstanceId,
+    enabled: externalTasksEnabled && !!retryModalInstanceId && !!engineId,
   })
 
   // Combine jobs and external tasks for retry modal

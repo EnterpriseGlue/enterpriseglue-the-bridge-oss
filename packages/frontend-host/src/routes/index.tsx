@@ -69,7 +69,7 @@ const OAuthCallback = React.lazy(() => import('../features/git/pages/OAuthCallba
 
 import { useAuth } from '../shared/hooks/useAuth'
 import { useFeatureFlag } from '../shared/hooks/useFeatureFlag'
-import { EngineAccessError } from '../features/mission-control/shared'
+import { EngineAccessError, MissionControlEngineContextBoundary } from '../features/mission-control/shared'
 import {
   ACCESS_CONTROL_PLATFORM_PERMISSIONS,
   hasEnginesUiAccess,
@@ -150,26 +150,18 @@ function MissionControlRoleGuard({
   const missionControlAllowed = requiredEnginePermissions?.length
     ? hasMissionControlSectionAccess(permissions, user, requiredEnginePermissions)
     : hasMissionControlUiAccess(permissions, user)
-  const platformSettingsAllowed = hasPlatformPermission(permissions, PlatformPermission.SETTINGS_MANAGE)
-  const isMultiTenant = isMultiTenantEnabled()
-  const hideVoyagerForPlatformAdmin = isMultiTenant && platformSettingsAllowed
-
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
   const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
 
-  if (hideVoyagerForPlatformAdmin) {
-    return <Navigate to="/admin/tenants" replace />
-  }
-
   if (isMissionControlEnabled && !missionControlAllowed) {
     const defaultMessage = 'You need Mission Control permission on at least one engine to open this section. Create an engine or ask an engine owner to grant you access.'
     return <EngineAccessError status={403} message={message || defaultMessage} actionPath={toTenantPath('/engines')} actionLabel="Go to Engines" />
   }
 
-  return <>{children}</>
+  return <MissionControlEngineContextBoundary>{children}</MissionControlEngineContextBoundary>
 }
 
 function EnginesRouteGuard({ children }: { children: React.ReactNode }) {

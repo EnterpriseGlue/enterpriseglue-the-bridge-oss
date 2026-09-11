@@ -49,6 +49,7 @@ import {
   USER_MANAGEMENT_PLATFORM_PERMISSIONS,
 } from '../../../shared/auth/permissions'
 import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
+import { resolveVoyagerNavigationVisibility } from '../../../shared/auth/voyagerNavigation'
 import {
   getNativePluginNavigationV1,
   NativePluginSlotV1,
@@ -344,8 +345,6 @@ export default function LayoutWithProSidebar() {
   const isMissionControlEnabled = useFeatureFlag('missionControl')
   const isEnginesEnabled = useFeatureFlag('engines')
 
-  const hideVoyagerForPlatformAdmin = isMultiTenant && platformSettingsManager
-
   const nativePluginNavItems = getNativePluginNavigationV1()
     .filter((item) => item.section === 'main' || item.section === 'tenant')
     .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
@@ -356,11 +355,16 @@ export default function LayoutWithProSidebar() {
   const nativeAdminNavItems = nativePluginNavItems.filter((item) => item.destination === 'admin')
   const nativeFallbackNavItems = nativePluginNavItems.filter((item) => !item.destination)
 
-  const showVoyagerMenuBase = isVoyagerEnabled && !hideVoyagerForPlatformAdmin
-  const showStarbaseMenu = showVoyagerMenuBase && isStarbaseEnabled && canViewStarbaseMenu
-  const showEnginesMenu = showVoyagerMenuBase && isEnginesEnabled && canViewEnginesMenu
-  const showMissionControlMenu = showVoyagerMenuBase && isMissionControlEnabled && missionControlMenuVisible
-  const showVoyagerMenu = showVoyagerMenuBase && (showStarbaseMenu || showEnginesMenu || showMissionControlMenu || nativeVoyagerRootNavItems.length > 0)
+  const { showVoyagerMenu, showStarbaseMenu, showMissionControlMenu, showEnginesMenu } = resolveVoyagerNavigationVisibility({
+    voyagerEnabled: isVoyagerEnabled,
+    starbaseEnabled: isStarbaseEnabled,
+    missionControlEnabled: isMissionControlEnabled,
+    enginesEnabled: isEnginesEnabled,
+    starbaseAllowed: canViewStarbaseMenu,
+    missionControlAllowed: missionControlMenuVisible,
+    enginesAllowed: canViewEnginesMenu,
+    hasNativeVoyagerItems: nativeVoyagerRootNavItems.length > 0,
+  })
   const visibleEnterpriseNavItems = useFilteredExtensionNavItems({
     items: enterpriseNavItems,
     capabilities: user?.capabilities,

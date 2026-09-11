@@ -6,6 +6,7 @@ import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
 import { fetchProcessDefinitionXml } from '../../shared/api/definitions'
+import { withEngineContext } from '../../shared/engineContext'
 import type {
   MigrationActiveSourcesRequest,
   MigrationActiveSourcesResponse,
@@ -21,14 +22,27 @@ import type {
 
 export interface MigrationDataParams {
   instanceIds: string[]
+  originEngineId?: string
   preselectedKey?: string
   preselectedVersion?: number
 }
 
-export function useMigrationData({ instanceIds, preselectedKey, preselectedVersion }: MigrationDataParams) {
+export function useMigrationData({ instanceIds: candidateInstanceIds, originEngineId, preselectedKey, preselectedVersion }: MigrationDataParams) {
   const { tenantNavigate } = useTenantNavigate()
   const selectedEngineId = useSelectedEngine()
   const { notify } = useToast()
+  const currentEngineIdRef = React.useRef(selectedEngineId)
+  const lastRenderedEngineIdRef = React.useRef(selectedEngineId)
+  const engineRevisionRef = React.useRef(0)
+  if (lastRenderedEngineIdRef.current !== selectedEngineId) {
+    lastRenderedEngineIdRef.current = selectedEngineId
+    engineRevisionRef.current += 1
+  }
+  currentEngineIdRef.current = selectedEngineId
+  const originMatchesEngine = Boolean(selectedEngineId && originEngineId === selectedEngineId)
+  const instanceIds = originMatchesEngine ? candidateInstanceIds : []
+  const initialSelectedKey = originMatchesEngine ? preselectedKey : undefined
+  const initialSelectedVersion = originMatchesEngine ? preselectedVersion : undefined
 
   // Process definitions query
   const defsQ = useQuery({
@@ -71,19 +85,21 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   }
 
   // Selection state
-  const [srcKey, setSrcKey] = React.useState<string | undefined>(preselectedKey)
-  const [srcVer, setSrcVer] = React.useState<number | undefined>(preselectedVersion)
-  const [tgtKey, setTgtKey] = React.useState<string | undefined>(preselectedKey)
+  const [srcKey, setSrcKey] = React.useState<string | undefined>(initialSelectedKey)
+  const [srcVer, setSrcVer] = React.useState<number | undefined>(initialSelectedVersion)
+  const [tgtKey, setTgtKey] = React.useState<string | undefined>(initialSelectedKey)
   const [tgtVer, setTgtVer] = React.useState<number | undefined>(undefined)
   const [updateEventTriggers, setUpdateEventTriggers] = React.useState(false)
 
   // Plan state
   const [plan, setPlan] = React.useState<MigrationPlan | null>(null)
+  const [planEngineId, setPlanEngineId] = React.useState<string | null>(null)
   const [validation, setValidation] = React.useState<MigrationValidationResult | null>(null)
   const [overrides, setOverrides] = React.useState<Record<number, string>>({})
   const [triggerOverrides, setTriggerOverrides] = React.useState<Record<number, boolean>>({})
   const [removed, setRemoved] = React.useState<Record<number, boolean>>({})
   const [generating, setGenerating] = React.useState(false)
+  const generationRequestRef = React.useRef(0)
 
   // Filter state
   const [showErrorsOnly, setShowErrorsOnly] = React.useState(false)
@@ -101,6 +117,28 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   const [skipCustomListeners, setSkipCustomListeners] = React.useState(false)
   const [skipIoMappings, setSkipIoMappings] = React.useState(false)
   const [pinnedIdx, setPinnedIdx] = React.useState<number | null>(null)
+
+  const previousEngineIdRef = React.useRef(selectedEngineId)
+  React.useEffect(() => {
+    if (previousEngineIdRef.current === selectedEngineId) return
+    const canRestoreOrigin = Boolean(selectedEngineId && selectedEngineId === originEngineId)
+    setSrcKey(canRestoreOrigin ? preselectedKey : undefined)
+    setSrcVer(canRestoreOrigin ? preselectedVersion : undefined)
+    setTgtKey(canRestoreOrigin ? preselectedKey : undefined)
+    setTgtVer(undefined)
+    setPlan(null)
+    setPlanEngineId(null)
+    setValidation(null)
+    setOverrides({})
+    setTriggerOverrides({})
+    setRemoved({})
+    setVarRows([])
+    setVarsOpen(false)
+    setPinnedIdx(null)
+    generationRequestRef.current += 1
+    setGenerating(false)
+    previousEngineIdRef.current = selectedEngineId
+  }, [originEngineId, preselectedKey, preselectedVersion, selectedEngineId])
 
   // Auto-pick or fix versions when definitions load
   React.useEffect(() => {
@@ -121,9 +159,17 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   // Generate plan handler
   async function handleGeneratePlan() {
+    const requestEngineId = selectedEngineId
+    const requestEngineRevision = engineRevisionRef.current
+    const requestId = ++generationRequestRef.current
+    const isCurrentRequest = () => (
+      generationRequestRef.current === requestId
+      && engineRevisionRef.current === requestEngineRevision
+      && currentEngineIdRef.current === requestEngineId
+    )
     try {
       setGenerating(true)
-      if (!selectedEngineId) throw new Error('Select an engine')
+      if (!requestEngineId) throw new Error('Select an engine')
       const sourceDefinitionId = idFor(srcKey, srcVer)
       const targetDefinitionId = idFor(tgtKey, tgtVer)
       if (!sourceDefinitionId || !targetDefinitionId)
@@ -131,19 +177,23 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       const next = await apiClient.post<MigrationPlan>(
         '/mission-control-api/migration/generate',
         {
-          engineId: selectedEngineId,
+          engineId: requestEngineId,
           sourceProcessDefinitionId: sourceDefinitionId,
           targetProcessDefinitionId: targetDefinitionId,
         },
         { credentials: 'include' }
       )
+      if (!isCurrentRequest()) return
       setPlan(next)
+      setPlanEngineId(requestEngineId)
       setOverrides({})
       setValidation(null)
     } catch (e: any) {
-      notify({ kind: 'error', title: 'Failed to generate plan', subtitle: getUiErrorMessage(e, 'Failed to generate plan') })
+      if (isCurrentRequest()) {
+        notify({ kind: 'error', title: 'Failed to generate plan', subtitle: getUiErrorMessage(e, 'Failed to generate plan') })
+      }
     } finally {
-      setGenerating(false)
+      if (isCurrentRequest()) setGenerating(false)
     }
   }
 
@@ -153,14 +203,14 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     if (generating) return
     if (!idFor(srcKey, srcVer) || !idFor(tgtKey, tgtVer)) return
     handleGeneratePlan()
-  }, [srcKey, srcVer, tgtKey, tgtVer, defsQ.data])
+  }, [srcKey, srcVer, tgtKey, tgtVer, defsQ.data, selectedEngineId])
 
   // Normalize plan object
   const basePlan = React.useMemo(() => {
-    if (!plan) return null
+    if (!plan || !selectedEngineId || planEngineId !== selectedEngineId) return null
     const p = Array.isArray((plan as any).instructions) ? plan : (plan as any)?.migrationPlan
     return p || null
-  }, [plan])
+  }, [plan, planEngineId, selectedEngineId])
 
   // Plan with overrides applied
   const planWithOverrides = React.useMemo(() => {
@@ -193,6 +243,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       'mission-control',
       'migration',
       'preview',
+      selectedEngineId,
       (planWithOverrides as any)?.sourceProcessDefinitionId,
       instanceIds.join(','),
     ],
@@ -217,18 +268,35 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   // Validate mutation — result handling is done by the component via mutateAsync
   const validateMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedEngineId) throw new Error('An engine must be selected to validate a migration plan')
-      const request: MigrationPlanValidationRequest = {
-        engineId: selectedEngineId,
-        plan: planWithOverrides,
+      const requestEngineId = selectedEngineId
+      const requestEngineRevision = engineRevisionRef.current
+      try {
+        if (!requestEngineId) throw new Error('An engine must be selected to validate a migration plan')
+        if (!planWithOverrides || planEngineId !== requestEngineId) throw new Error('The migration plan belongs to a different engine')
+        const request: MigrationPlanValidationRequest = {
+          engineId: requestEngineId,
+          plan: planWithOverrides,
+        }
+        const response = await apiClient.post<MigrationValidationResult>(
+          '/mission-control-api/migration/plan/validate',
+          request,
+          { credentials: 'include' }
+        )
+        const stale = (
+          currentEngineIdRef.current !== requestEngineId
+          || engineRevisionRef.current !== requestEngineRevision
+        )
+        return { response, stale }
+      } catch (e: any) {
+        if (
+          currentEngineIdRef.current === requestEngineId
+          && engineRevisionRef.current === requestEngineRevision
+        ) {
+          notify({ kind: 'error', title: 'Validation failed', subtitle: getUiErrorMessage(e, 'Failed to validate plan') })
+        }
+        throw e
       }
-      return apiClient.post<MigrationValidationResult>(
-        '/mission-control-api/migration/plan/validate',
-        request,
-        { credentials: 'include' }
-      )
     },
-    onError: (e: any) => notify({ kind: 'error', title: 'Validation failed', subtitle: getUiErrorMessage(e, 'Failed to validate plan') }),
   })
 
   // Variables object
@@ -254,53 +322,86 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   // Execute mutations
   const executeMutation = useMutation({
     mutationFn: async (auditReason?: string) => {
-      if (!auditReason?.trim()) {
-        throw new Error('Audit reason is required')
+      const requestEngineId = selectedEngineId
+      const requestEngineRevision = engineRevisionRef.current
+      try {
+        if (!auditReason?.trim()) throw new Error('Audit reason is required')
+        if (!requestEngineId || !planWithOverrides || planEngineId !== requestEngineId) {
+          throw new Error('The migration plan belongs to a different engine')
+        }
+        const request: MigrationExecuteRequest = {
+          engineId: requestEngineId,
+          plan: planWithOverrides,
+          processInstanceIds: instanceIds,
+          skipCustomListeners,
+          skipIoMappings,
+          variables: varsObj,
+          auditReason: auditReason.trim(),
+        }
+        const response = await apiClient.post<MigrationAsyncExecuteResponse>(
+          '/mission-control-api/migration/execute-async',
+          request,
+          { credentials: 'include' }
+        )
+        return { response, engineId: requestEngineId, engineRevision: requestEngineRevision }
+      } catch (e: any) {
+        if (
+          currentEngineIdRef.current === requestEngineId
+          && engineRevisionRef.current === requestEngineRevision
+        ) {
+          notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to start migration') })
+        }
+        throw e
       }
-      const request: MigrationExecuteRequest = {
-        engineId: selectedEngineId,
-        plan: planWithOverrides,
-        processInstanceIds: instanceIds,
-        skipCustomListeners,
-        skipIoMappings,
-        variables: varsObj,
-        auditReason: auditReason.trim(),
-      }
-      return apiClient.post<MigrationAsyncExecuteResponse>(
-        '/mission-control-api/migration/execute-async',
-        request,
-        { credentials: 'include' }
-      )
     },
-    onSuccess: (data) => tenantNavigate(`/mission-control/batches/${data.id}`),
-    onError: (e: any) => notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to start migration') }),
+    onSuccess: ({ response, engineId, engineRevision }) => {
+      if (currentEngineIdRef.current !== engineId || engineRevisionRef.current !== engineRevision) return
+      tenantNavigate(withEngineContext(`/mission-control/batches/${response.id}`, engineId))
+    },
   })
 
   const executeDirectMutation = useMutation({
     mutationFn: async (auditReason?: string) => {
-      if (!auditReason?.trim()) {
-        throw new Error('Audit reason is required')
+      const requestEngineId = selectedEngineId
+      const requestEngineRevision = engineRevisionRef.current
+      try {
+        if (!auditReason?.trim()) throw new Error('Audit reason is required')
+        if (!requestEngineId || !planWithOverrides || planEngineId !== requestEngineId) {
+          throw new Error('The migration plan belongs to a different engine')
+        }
+        const request: MigrationExecuteRequest = {
+          engineId: requestEngineId,
+          plan: planWithOverrides,
+          processInstanceIds: instanceIds,
+          skipCustomListeners,
+          skipIoMappings,
+          variables: varsObj,
+          auditReason: auditReason.trim(),
+        }
+        const response = await apiClient.post<MigrationDirectExecuteResponse>(
+          '/mission-control-api/migration/execute-direct',
+          request,
+          { credentials: 'include' }
+        )
+        return { response, engineId: requestEngineId, engineRevision: requestEngineRevision }
+      } catch (e: any) {
+        if (
+          currentEngineIdRef.current === requestEngineId
+          && engineRevisionRef.current === requestEngineRevision
+        ) {
+          notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to execute migration directly') })
+        }
+        throw e
       }
-      const request: MigrationExecuteRequest = {
-        engineId: selectedEngineId,
-        plan: planWithOverrides,
-        processInstanceIds: instanceIds,
-        skipCustomListeners,
-        skipIoMappings,
-        variables: varsObj,
-        auditReason: auditReason.trim(),
-      }
-      return apiClient.post<MigrationDirectExecuteResponse>(
-        '/mission-control-api/migration/execute-direct',
-        request,
-        { credentials: 'include' }
-      )
     },
-    onSuccess: () => {
+    onSuccess: ({ engineId, engineRevision }) => {
+      if (currentEngineIdRef.current !== engineId || engineRevisionRef.current !== engineRevision) return
       notify({ kind: 'success', title: 'Migration completed' })
-      setTimeout(() => tenantNavigate('/mission-control/processes'), 1200)
+      setTimeout(() => {
+        if (currentEngineIdRef.current !== engineId || engineRevisionRef.current !== engineRevision) return
+        tenantNavigate(withEngineContext('/mission-control/processes', engineId))
+      }, 1200)
     },
-    onError: (e: any) => notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to execute migration directly') }),
   })
 
   // Fetch XML for source and target
@@ -321,7 +422,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   // Active source activities
   const activeCountsQ = useQuery({
-    queryKey: ['mission-control', 'migration', 'active-src', instanceIds.join(',')],
+    queryKey: ['mission-control', 'migration', 'active-src', selectedEngineId, instanceIds.join(',')],
     queryFn: async () => {
       if (instanceIds.length === 0) return {} as Record<string, number>
       if (!selectedEngineId) return {} as Record<string, number>
@@ -368,9 +469,9 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   const lockSource =
     instanceIds.length > 0 &&
-    !!preselectedKey &&
-    preselectedVersion !== undefined &&
-    preselectedVersion !== null
+    !!initialSelectedKey &&
+    initialSelectedVersion !== undefined &&
+    initialSelectedVersion !== null
 
   return {
     // Queries
@@ -396,6 +497,8 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     varsObj,
     lockSource,
     generating,
+    selectedEngineId,
+    instanceIds,
     // State and setters
     srcKey,
     setSrcKey,

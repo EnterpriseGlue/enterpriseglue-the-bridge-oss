@@ -38,6 +38,7 @@ import { ApplyModificationsModal } from './components/modals/ApplyModificationsM
 import { useActionDecision } from '../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
+import { useGuardedEngineTask, withEngineContext } from '../shared/engineContext'
 import {
   SPLIT_PANE_STORAGE_KEY,
   SPLIT_PANE_VERTICAL_STORAGE_KEY,
@@ -75,8 +76,21 @@ export default function ProcessInstanceDetailPage() {
   const { alertState, showAlert, closeAlert } = useAlert()
   const engineSelection = useEngineSelection()
   const selectedEngineId = engineSelection.selectedEngineId
+  const currentEngineIdRef = React.useRef(selectedEngineId)
+  const lastRenderedEngineIdRef = React.useRef(selectedEngineId)
+  const engineRevisionRef = React.useRef(0)
+  if (lastRenderedEngineIdRef.current !== selectedEngineId) {
+    lastRenderedEngineIdRef.current = selectedEngineId
+    engineRevisionRef.current += 1
+  }
+  currentEngineIdRef.current = selectedEngineId
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
+  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
+  React.useEffect(() => {
+    setBridgeError(null)
+    setBridgeDecision(null)
+  }, [selectedEngineId])
 
 
   // Early return if no instanceId
@@ -333,6 +347,7 @@ export default function ProcessInstanceDetailPage() {
     retryBusy,
     filteredRetryItems,
     submitRetrySelection,
+    openRetryModal,
   } = retry
 
   // 4. Modification Mode Hook
@@ -427,11 +442,13 @@ export default function ProcessInstanceDetailPage() {
   const [filterFlowNode, setFilterFlowNode] = React.useState('')
   const [filterIncidentType, setFilterIncidentType] = React.useState('')
   const [terminateConfirmOpen, setTerminateConfirmOpen] = React.useState(false)
+  const [terminateEngineId, setTerminateEngineId] = React.useState<string | null>(null)
   const [hoveredActivityId, setHoveredActivityId] = React.useState<string | null>(null)
   const [historyContext, setHistoryContext] = React.useState<any | null>(null)
   const [selectedActivityInstanceId, setSelectedActivityInstanceId] = React.useState<string | null>(null)
 
   const [addVariableOpen, setAddVariableOpen] = React.useState(false)
+  const [addVariableEngineId, setAddVariableEngineId] = React.useState<string | null>(null)
   const [addVariableName, setAddVariableName] = React.useState('')
   const [addVariableType, setAddVariableType] = React.useState<string>('String')
   const [addVariableValue, setAddVariableValue] = React.useState('')
@@ -440,9 +457,37 @@ export default function ProcessInstanceDetailPage() {
 
   const [applyModalOpen, setApplyModalOpen] = React.useState(false)
   const [bulkUploadOpen, setBulkUploadOpen] = React.useState(false)
+  const [bulkUploadEngineId, setBulkUploadEngineId] = React.useState<string | null>(null)
   const [bulkUploadValue, setBulkUploadValue] = React.useState('')
   const [bulkUploadBusy, setBulkUploadBusy] = React.useState(false)
   const [bulkUploadError, setBulkUploadError] = React.useState<string | null>(null)
+
+  const previousInteractionEngineIdRef = React.useRef(selectedEngineId)
+  React.useEffect(() => {
+    if (previousInteractionEngineIdRef.current === selectedEngineId) return
+    setIncidentDetails(null)
+    setHistoryContext(null)
+    setHoveredActivityId(null)
+    setVariableHistoryTarget(null)
+    setTerminateConfirmOpen(false)
+    setTerminateEngineId(null)
+    setAddVariableOpen(false)
+    setAddVariableEngineId(null)
+    setAddVariableName('')
+    setAddVariableType('String')
+    setAddVariableValue('')
+    setAddVariableBusy(false)
+    setAddVariableError(null)
+    setBulkUploadOpen(false)
+    setBulkUploadEngineId(null)
+    setBulkUploadValue('')
+    setBulkUploadBusy(false)
+    setBulkUploadError(null)
+    setApplyModalOpen(false)
+    setSelectedActivityId(null)
+    setSelectedActivityInstanceId(null)
+    previousInteractionEngineIdRef.current = selectedEngineId
+  }, [selectedEngineId, setSelectedActivityId])
 
   const parseTypedValue = React.useCallback((raw: string, type: string) => {
     if (type === 'String') return raw
@@ -468,21 +513,36 @@ export default function ProcessInstanceDetailPage() {
   }, [])
 
   const openAddVariableModal = React.useCallback(() => {
+    if (!selectedEngineId) return
     setAddVariableName('')
     setAddVariableType('String')
     setAddVariableValue('')
     setAddVariableError(null)
+    setAddVariableEngineId(selectedEngineId)
     setAddVariableOpen(true)
-  }, [])
+  }, [selectedEngineId])
 
   const openBulkUploadModal = React.useCallback(() => {
+    if (!selectedEngineId) return
     setBulkUploadValue('')
     setBulkUploadError(null)
+    setBulkUploadEngineId(selectedEngineId)
     setBulkUploadOpen(true)
-  }, [])
+  }, [selectedEngineId])
 
   const submitAddVariable = React.useCallback(async () => {
     if (!instanceId) return
+    if (!selectedEngineId || addVariableEngineId !== selectedEngineId) {
+      setAddVariableOpen(false)
+      setAddVariableEngineId(null)
+      return
+    }
+    const requestEngineId = addVariableEngineId
+    const requestEngineRevision = engineRevisionRef.current
+    const isCurrentRequest = () => (
+      currentEngineIdRef.current === requestEngineId
+      && engineRevisionRef.current === requestEngineRevision
+    )
     const key = addVariableName.trim()
     if (!key) {
       setAddVariableError('Variable name is required')
@@ -494,20 +554,36 @@ export default function ProcessInstanceDetailPage() {
       const parsed = parseTypedValue(addVariableValue, addVariableType)
       await modifyProcessInstanceVariables(instanceId, {
         modifications: { [key]: { value: parsed, type: addVariableType } },
-        engineId: selectedEngineId || undefined,
+        engineId: requestEngineId,
       })
+      if (!isCurrentRequest()) return
       await varsQ.refetch()
+      if (!isCurrentRequest()) return
       mergeKnownVariables({ [key]: { value: parsed, type: addVariableType } })
       setAddVariableOpen(false)
+      setAddVariableEngineId(null)
     } catch (e: any) {
-      setAddVariableError(getUiErrorMessage(e, 'Failed to add variable'))
+      if (isCurrentRequest()) {
+        setAddVariableError(getUiErrorMessage(e, 'Failed to add variable'))
+      }
     } finally {
-      setAddVariableBusy(false)
+      if (isCurrentRequest()) setAddVariableBusy(false)
     }
-  }, [instanceId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, parseTypedValue, selectedEngineId, varsQ])
+  }, [instanceId, addVariableEngineId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, parseTypedValue, selectedEngineId, varsQ])
 
   const submitBulkUpload = React.useCallback(async () => {
     if (!instanceId) return
+    if (!selectedEngineId || bulkUploadEngineId !== selectedEngineId) {
+      setBulkUploadOpen(false)
+      setBulkUploadEngineId(null)
+      return
+    }
+    const requestEngineId = bulkUploadEngineId
+    const requestEngineRevision = engineRevisionRef.current
+    const isCurrentRequest = () => (
+      currentEngineIdRef.current === requestEngineId
+      && engineRevisionRef.current === requestEngineRevision
+    )
     setBulkUploadBusy(true)
     setBulkUploadError(null)
     try {
@@ -543,17 +619,22 @@ export default function ProcessInstanceDetailPage() {
 
       await modifyProcessInstanceVariables(instanceId, {
         modifications,
-        engineId: selectedEngineId || undefined,
+        engineId: requestEngineId,
       })
+      if (!isCurrentRequest()) return
       await varsQ.refetch()
+      if (!isCurrentRequest()) return
       mergeKnownVariables(modifications)
       setBulkUploadOpen(false)
+      setBulkUploadEngineId(null)
     } catch (e: any) {
-      setBulkUploadError(getUiErrorMessage(e, 'Failed to upload variables'))
+      if (isCurrentRequest()) {
+        setBulkUploadError(getUiErrorMessage(e, 'Failed to upload variables'))
+      }
     } finally {
-      setBulkUploadBusy(false)
+      if (isCurrentRequest()) setBulkUploadBusy(false)
     }
-  }, [instanceId, bulkUploadValue, mergeKnownVariables, selectedEngineId, varsQ])
+  }, [instanceId, bulkUploadEngineId, bulkUploadValue, mergeKnownVariables, selectedEngineId, varsQ])
 
   // Incident filtering (keeping local for now - could be extracted later)
   const flowNodeOptions = React.useMemo(() => {
@@ -631,14 +712,17 @@ export default function ProcessInstanceDetailPage() {
     ? getUiErrorMessage(variableHistoryQ.error, 'Failed to load variable history')
     : null
 
-  const withEngineId = (path: string) => {
-    if (!selectedEngineId) return path
-    const joiner = path.includes('?') ? '&' : '?'
-    return `${path}${joiner}engineId=${encodeURIComponent(selectedEngineId)}`
-  }
+  const withSelectedEngine = React.useCallback(
+    (path: string) => withEngineContext(path, selectedEngineId),
+    [selectedEngineId],
+  )
+  const navigateWithSelectedEngine = React.useCallback(
+    (path: string) => tenantNavigate(withSelectedEngine(path)),
+    [tenantNavigate, withSelectedEngine],
+  )
 
   const selectedDecisionInstanceQ = useQuery<HistoricDecisionInstanceLite | null>({
-    queryKey: ['mission-control', 'selected-decision', instanceId, selectedActivityId, selectedActivityInstanceId, selectedNodeMeta?.decisionRef || ''],
+    queryKey: ['mission-control', 'selected-decision', selectedEngineId, instanceId, selectedActivityId, selectedActivityInstanceId, selectedNodeMeta?.decisionRef || ''],
     queryFn: async () => {
       if (!instanceId || (!selectedActivityId && !selectedActivityInstanceId && !selectedNodeMeta?.decisionRef)) return null
       const params = new URLSearchParams()
@@ -646,7 +730,7 @@ export default function ProcessInstanceDetailPage() {
       params.set('sortBy', 'evaluationTime')
       params.set('sortOrder', 'desc')
       params.set('maxResults', '50')
-      const all = await fetchList<HistoricDecisionInstanceLite>(withEngineId(`/mission-control-api/history/decisions?${params.toString()}`), undefined, { credentials: 'include' })
+      const all = await fetchList<HistoricDecisionInstanceLite>(withSelectedEngine(`/mission-control-api/history/decisions?${params.toString()}`), undefined, { credentials: 'include' })
       if (!all || all.length === 0) return null
 
       let candidates: HistoricDecisionInstanceLite[] = []
@@ -666,22 +750,22 @@ export default function ProcessInstanceDetailPage() {
       if (!candidates || candidates.length === 0) return null
       return candidates[0]
     },
-    enabled: !!instanceId && (!!selectedActivityId || !!selectedNodeMeta?.decisionRef || !!selectedActivityInstanceId),
+    enabled: !!selectedEngineId && !!instanceId && (!!selectedActivityId || !!selectedNodeMeta?.decisionRef || !!selectedActivityInstanceId),
   })
 
   const selectedDecisionInstance = selectedDecisionInstanceQ.data || null
   const shouldShowDecisionPanel = React.useMemo(() => !!selectedDecisionInstance, [selectedDecisionInstance])
 
   const decisionInputsQ = useQuery<DecisionIo[]>({
-    queryKey: ['mission-control', 'selected-decision-inputs', selectedDecisionInstance?.id],
-    queryFn: () => fetchList<DecisionIo>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`), undefined, { credentials: 'include' }),
-    enabled: !!selectedDecisionInstance?.id,
+    queryKey: ['mission-control', 'selected-decision-inputs', selectedEngineId, selectedDecisionInstance?.id],
+    queryFn: () => fetchList<DecisionIo>(withSelectedEngine(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/inputs`), undefined, { credentials: 'include' }),
+    enabled: !!selectedEngineId && !!selectedDecisionInstance?.id,
   })
 
   const decisionOutputsQ = useQuery<DecisionIo[]>({
-    queryKey: ['mission-control', 'selected-decision-outputs', selectedDecisionInstance?.id],
-    queryFn: () => fetchList<DecisionIo>(withEngineId(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`), undefined, { credentials: 'include' }),
-    enabled: !!selectedDecisionInstance?.id,
+    queryKey: ['mission-control', 'selected-decision-outputs', selectedEngineId, selectedDecisionInstance?.id],
+    queryFn: () => fetchList<DecisionIo>(withSelectedEngine(`/mission-control-api/history/decisions/${selectedDecisionInstance?.id}/outputs`), undefined, { credentials: 'include' }),
+    enabled: !!selectedEngineId && !!selectedDecisionInstance?.id,
   })
 
   // Hover highlight marker (Camunda-like): highlight BPMN element when hovering history list
@@ -821,42 +905,37 @@ export default function ProcessInstanceDetailPage() {
     if (!processEditTarget?.fileId || processVersion === null || !defKey) return
     setBridgeError(null)
     setBridgeDecision(null)
-    try {
-      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
-        engineId: String(selectedEngineId || processEditTarget.engineId || ''),
+    await runForCurrentEngine(
+      (requestEngineId) => evaluateMissionControlStarbaseBridge({
+        engineId: requestEngineId,
         projectId: processEditTarget.projectId,
         fileId: processEditTarget.fileId,
         definitionId: defId || undefined,
         definitionKey: defKey,
         kind: 'process',
-      })
-      if (!bridgeDecision.allowed) {
-        setBridgeDecision(bridgeDecision)
-        return
-      }
-    } catch (error) {
-      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
-      return
-    }
-
-    const params = new URLSearchParams({
-      source: 'mission-control',
-      engineId: String(selectedEngineId || processEditTarget.engineId || ''),
-      process: defKey,
-      version: String(processVersion),
-      deploymentId: String(processEditTarget.engineDeploymentId || ''),
-      mappingSource: String(processEditTarget.mappingSource || ''),
-    })
-
-    if (processEditTarget.commitId) {
-      params.set('commitId', String(processEditTarget.commitId))
-    }
-    if (typeof processEditTarget.fileVersionNumber === 'number') {
-      params.set('fileVersion', String(processEditTarget.fileVersionNumber))
-    }
-
-    tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-  }, [processEditTarget, processVersion, defKey, defId, selectedEngineId, tenantNavigate])
+      }),
+      {
+        onSuccess: (bridgeDecision, requestEngineId) => {
+          if (!bridgeDecision.allowed) {
+            setBridgeDecision(bridgeDecision)
+            return
+          }
+          const params = new URLSearchParams({
+            source: 'mission-control',
+            engineId: requestEngineId,
+            process: defKey,
+            version: String(processVersion),
+            deploymentId: String(processEditTarget.engineDeploymentId || ''),
+            mappingSource: String(processEditTarget.mappingSource || ''),
+          })
+          if (processEditTarget.commitId) params.set('commitId', String(processEditTarget.commitId))
+          if (typeof processEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(processEditTarget.fileVersionNumber))
+          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
+        },
+        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
+      },
+    )
+  }, [processEditTarget, processVersion, defKey, defId, runForCurrentEngine, tenantNavigate])
 
   // Handle navigation to linked resources
   const handleElementNavigate = React.useCallback((linkInfo: ElementLinkInfo) => {
@@ -878,7 +957,7 @@ export default function ProcessInstanceDetailPage() {
         if (calledPid) {
           const params = new URLSearchParams()
           params.set('fromInstance', instanceId)
-          tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(calledPid)}?${params.toString()}`)
+          navigateWithSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(calledPid)}?${params.toString()}`)
           break
         }
 
@@ -887,7 +966,7 @@ export default function ProcessInstanceDetailPage() {
         params.set('process', defKey)
         params.set('node', linkInfo.elementId)
         params.set('fromInstance', instanceId)
-        tenantNavigate(`/mission-control/processes?${params.toString()}`)
+        navigateWithSelectedEngine(`/mission-control/processes?${params.toString()}`)
         break
         }
 
@@ -902,33 +981,23 @@ export default function ProcessInstanceDetailPage() {
           const params = new URLSearchParams()
           params.set('fromInstance', instanceId)
           if (processLabel) params.set('processLabel', processLabel)
-          tenantNavigate(`/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`)
+          navigateWithSelectedEngine(`/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`)
           break
         }
 
-        // Fallback: Navigate to the decisions page with decision key filter
-        {
-          const formKey = linkInfo.targetKey
-          if (formKey.startsWith('embedded:app:')) {
-            // Extract form path: embedded:app:forms/approve-invoice.html -> forms/approve-invoice.html
-            const formPath = formKey.replace('embedded:app:', '')
-            // Open in Starbase forms viewer (if exists) or show alert
-            window.open(`/starbase/forms?form=${encodeURIComponent(formPath)}`, '_blank')
-          } else if (formKey.startsWith('embedded:deployment:')) {
-            // Deployment-based form
-            const formPath = formKey.replace('embedded:deployment:', '')
-            window.open(`/starbase/forms?form=${encodeURIComponent(formPath)}`, '_blank')
-          } else {
-            // External form URL - open directly
-            window.open(formKey, '_blank')
-          }
-        }
+        // No historic evaluation is available yet. Keep the operator on the
+        // same engine and open the referenced decision definition instead.
+        const params = new URLSearchParams()
+        params.set('decision', linkInfo.targetKey)
+        params.set('node', linkInfo.elementId)
+        params.set('fromInstance', instanceId)
+        navigateWithSelectedEngine(`/mission-control/decisions?${params.toString()}`)
         break
       }
       case 'externalTopic':
         // Navigate to external tasks filtered by topic
         // TODO: Add external tasks page with topic filter when available
-        window.open(`/mission-control/batches?topic=${encodeURIComponent(linkInfo.targetKey)}`, '_blank')
+        window.open(toTenantPath(withSelectedEngine(`/mission-control/batches?topic=${encodeURIComponent(linkInfo.targetKey)}`)), '_blank')
         break
 
       case 'script':
@@ -938,7 +1007,7 @@ export default function ProcessInstanceDetailPage() {
         showAlert(`Script (${linkInfo.metadata?.scriptFormat}): ${linkInfo.targetKey}`, 'info')
         break
     }
-  }, [actQ.data, defKey, instanceId, processLabel, showAlert, selectedDecisionInstanceQ.data])
+  }, [actQ.data, defKey, instanceId, navigateWithSelectedEngine, processLabel, selectedDecisionInstanceQ.data, showAlert, toTenantPath, withSelectedEngine])
 
   // Show a bottom-center clickable link pill on navigable elements when selected
   useElementLinkPillOverlay({
@@ -1011,18 +1080,18 @@ export default function ProcessInstanceDetailPage() {
         ) : null}
       >
         <BreadcrumbItem>
-          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
+          <a href={toTenantPath(withSelectedEngine('/mission-control'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         <BreadcrumbItem>
-          <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
+          <a href={toTenantPath(withSelectedEngine('/mission-control/processes'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control/processes'); }}>
             Processes
           </a>
         </BreadcrumbItem>
         {processLabel && (
           <BreadcrumbItem>
-            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
+            <a href={toTenantPath(withSelectedEngine('/mission-control/processes'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control/processes'); }}>
               {processLabel}
             </a>
           </BreadcrumbItem>
@@ -1033,10 +1102,10 @@ export default function ProcessInstanceDetailPage() {
           return (
             <BreadcrumbItem>
               <a
-                href={toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstance))}`)}
+                href={toTenantPath(withSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstance))}`))}
                 onClick={(e) => {
                   e.preventDefault()
-                  tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstance))}`)
+                  navigateWithSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstance))}`)
                 }}
               >
                 Instance {sanitizePathParam(fromInstance).substring(0, 8)}...
@@ -1084,7 +1153,7 @@ export default function ProcessInstanceDetailPage() {
           status={status}
           showModifyAction={showModifyAction}
           fmt={fmt}
-          onNavigate={tenantNavigate}
+          onNavigate={navigateWithSelectedEngine}
           onCopy={(value) => navigator.clipboard.writeText(value)}
           onSuspend={() => {
             if (notifyDeniedAction(suspensionDecision)) return
@@ -1100,6 +1169,7 @@ export default function ProcessInstanceDetailPage() {
           }}
           onTerminate={() => {
             if (notifyDeniedAction(terminateDecision)) return
+            setTerminateEngineId(selectedEngineId ?? null)
             setTerminateConfirmOpen(true)
           }}
           suspensionDecision={suspensionDecision}
@@ -1109,7 +1179,7 @@ export default function ProcessInstanceDetailPage() {
           incidentCount={incidentCount}
           onRetry={() => {
             if (notifyDeniedAction(retryDecision)) return
-            setRetryModalOpen(true)
+            openRetryModal()
           }}
           retryDecision={retryDecision}
           onViewIncident={() => {
@@ -1146,7 +1216,7 @@ export default function ProcessInstanceDetailPage() {
             setShowTokenPassCounts,
             onActivityHover: (id) => setHoveredActivityId(id),
             onHistoryContextChange: (ctx) => setHistoryContext(ctx),
-            onNavigateToProcessInstance: (calledInstanceId: string) => tenantNavigate(`/mission-control/processes/instances/${calledInstanceId}`),
+            onNavigateToProcessInstance: (calledInstanceId: string) => navigateWithSelectedEngine(`/mission-control/processes/instances/${calledInstanceId}`),
             rightTab,
             setRightTab,
             varsQ,
@@ -1222,7 +1292,7 @@ export default function ProcessInstanceDetailPage() {
         variableHistoryLoading={variableHistoryQ.isLoading}
         variableHistoryError={variableHistoryError}
         closeVariableHistory={closeVariableHistory}
-        addVariableOpen={addVariableOpen}
+        addVariableOpen={addVariableOpen && addVariableEngineId === selectedEngineId}
         addVariableName={addVariableName}
         addVariableType={addVariableType}
         addVariableValue={addVariableValue}
@@ -1232,17 +1302,23 @@ export default function ProcessInstanceDetailPage() {
         setAddVariableType={setAddVariableType}
         setAddVariableValue={setAddVariableValue}
         setAddVariableError={setAddVariableError}
-        setAddVariableOpen={setAddVariableOpen}
+        setAddVariableOpen={(open) => {
+          setAddVariableOpen(open)
+          if (!open) setAddVariableEngineId(null)
+        }}
         submitAddVariable={() => {
           if (!notifyDeniedAction(variablesUpdateDecision)) void submitAddVariable()
         }}
-        bulkUploadOpen={bulkUploadOpen}
+        bulkUploadOpen={bulkUploadOpen && bulkUploadEngineId === selectedEngineId}
         bulkUploadValue={bulkUploadValue}
         bulkUploadBusy={bulkUploadBusy}
         bulkUploadError={bulkUploadError}
         setBulkUploadValue={setBulkUploadValue}
         setBulkUploadError={setBulkUploadError}
-        setBulkUploadOpen={setBulkUploadOpen}
+        setBulkUploadOpen={(open) => {
+          setBulkUploadOpen(open)
+          if (!open) setBulkUploadEngineId(null)
+        }}
         submitBulkUpload={() => {
           if (!notifyDeniedAction(variablesUpdateDecision)) void submitBulkUpload()
         }}
@@ -1254,14 +1330,28 @@ export default function ProcessInstanceDetailPage() {
         discardConfirmOpen={discardConfirmOpen}
         setDiscardConfirmOpen={setDiscardConfirmOpen}
         discardModifications={discardModifications}
-        terminateConfirmOpen={terminateConfirmOpen}
+        terminateConfirmOpen={terminateConfirmOpen && terminateEngineId === selectedEngineId}
         instanceId={instanceId}
-        setTerminateConfirmOpen={setTerminateConfirmOpen}
+        setTerminateConfirmOpen={(open) => {
+          setTerminateConfirmOpen(open)
+          if (!open) setTerminateEngineId(null)
+        }}
         onTerminate={async (id, reason) => {
-          if (notifyDeniedAction(terminateDecision)) return
+          if (notifyDeniedAction(terminateDecision)) return false
+          if (!selectedEngineId || terminateEngineId !== selectedEngineId) {
+            setTerminateConfirmOpen(false)
+            setTerminateEngineId(null)
+            return false
+          }
+          const requestEngineId = terminateEngineId
+          const requestEngineRevision = engineRevisionRef.current
           await callAction(
             'DELETE',
-            `/mission-control-api/process-instances/${id}?deleteReason=${encodeURIComponent(reason || 'Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true${selectedEngineId ? `&engineId=${encodeURIComponent(selectedEngineId)}` : ''}`
+            `/mission-control-api/process-instances/${id}?deleteReason=${encodeURIComponent(reason || 'Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true&engineId=${encodeURIComponent(requestEngineId)}`
+          )
+          return (
+            currentEngineIdRef.current === requestEngineId
+            && engineRevisionRef.current === requestEngineRevision
           )
         }}
         retryModalOpen={retryModalOpen}

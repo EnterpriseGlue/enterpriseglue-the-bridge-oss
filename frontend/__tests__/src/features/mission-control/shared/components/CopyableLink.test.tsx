@@ -6,7 +6,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { CopyableLink } from '@src/features/mission-control/shared/components/CopyableLink';
 
 function LocationProbe() {
-  return <output data-testid="location">{useLocation().pathname}</output>;
+  const location = useLocation();
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
 describe('CopyableLink', () => {
@@ -26,6 +27,26 @@ describe('CopyableLink', () => {
 
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/t/default/mission-control/processes/instances/instance-1'
+    );
+  });
+
+  it('keeps the selected engine when navigating to a process instance', () => {
+    render(
+      <MemoryRouter initialEntries={['/t/default/mission-control/processes?engineId=engine-2']}>
+        <CopyableLink
+          fullValue="instance-2"
+          navigateTo="/mission-control/processes/instances/instance-2"
+          engineId="engine-2"
+          isHovered={false}
+        />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'instance-2' }));
+
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/t/default/mission-control/processes/instances/instance-2?engineId=engine-2'
     );
   });
 });

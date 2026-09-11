@@ -28,10 +28,18 @@ import styles from './MigrationWizard.module.css'
 import { useMigrationData } from '../hooks'
 import { typeCategory, toHumanName, parseActivities, normalizeName } from '../utils'
 import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
+import { withEngineContext } from '../../shared/engineContext'
 
 const MIGRATION_SESSION_KEY = 'migration-wizard-state'
 
-function loadMigrationSession(): { instanceIds: string[]; selectedKey?: string; selectedVersion?: number } {
+export interface MigrationSessionState {
+  instanceIds: string[]
+  engineId?: string
+  selectedKey?: string
+  selectedVersion?: number
+}
+
+export function loadMigrationSession(): MigrationSessionState {
   try {
     const raw = sessionStorage.getItem(MIGRATION_SESSION_KEY)
     if (raw) return JSON.parse(raw)
@@ -39,7 +47,7 @@ function loadMigrationSession(): { instanceIds: string[]; selectedKey?: string; 
   return { instanceIds: [] }
 }
 
-function saveMigrationSession(data: { instanceIds: string[]; selectedKey?: string; selectedVersion?: number }) {
+export function saveMigrationSession(data: MigrationSessionState) {
   try { sessionStorage.setItem(MIGRATION_SESSION_KEY, JSON.stringify(data)) } catch {}
 }
 
@@ -65,30 +73,38 @@ export default function MigrationWizard() {
   }
 
   // Persist navigation state in sessionStorage so it survives page refresh
-  const { instanceIds, preselectedKey, preselectedVersion } = React.useMemo(() => {
-    if (state?.instanceIds?.length) {
+  const { candidateInstanceIds, originEngineId, preselectedKey, preselectedVersion } = React.useMemo(() => {
+    if (state?.instanceIds?.length && typeof state.engineId === 'string' && state.engineId.trim()) {
       const data = {
         instanceIds: state.instanceIds as string[],
+        engineId: state.engineId.trim(),
         selectedKey: state.selectedKey as string | undefined,
         selectedVersion: toVersion(state.selectedVersion),
       }
       saveMigrationSession(data)
       return {
-        instanceIds: data.instanceIds,
+        candidateInstanceIds: data.instanceIds,
+        originEngineId: data.engineId,
         preselectedKey: data.selectedKey,
         preselectedVersion: data.selectedVersion,
       }
     }
     const saved = loadMigrationSession()
     return {
-      instanceIds: saved.instanceIds || [],
+      candidateInstanceIds: saved.instanceIds || [],
+      originEngineId: saved.engineId,
       preselectedKey: saved.selectedKey,
       preselectedVersion: toVersion(saved.selectedVersion),
     }
   }, [state])
 
   // Use extracted data hook
-  const migrationData = useMigrationData({ instanceIds, preselectedKey, preselectedVersion })
+  const migrationData = useMigrationData({
+    instanceIds: candidateInstanceIds,
+    originEngineId,
+    preselectedKey,
+    preselectedVersion,
+  })
   const {
     defsQ,
     sourceXmlQ,
@@ -149,7 +165,15 @@ export default function MigrationWizard() {
     setSkipIoMappings,
     pinnedIdx,
     setPinnedIdx,
+    instanceIds,
+    selectedEngineId,
   } = migrationData
+
+  const previousEngineIdRef = React.useRef(selectedEngineId)
+  React.useEffect(() => {
+    if (previousEngineIdRef.current !== selectedEngineId) setReviewModalOpen(false)
+    previousEngineIdRef.current = selectedEngineId
+  }, [selectedEngineId])
 
   // Diagram control APIs
   const srcViewerApi = React.useRef<any>(null)
@@ -266,7 +290,8 @@ export default function MigrationWizard() {
   // Gated Review & Execute: validate first, open modal only if clean
   const handleReviewAndExecute = React.useCallback(async () => {
     try {
-      const data = await validateMutation.mutateAsync()
+      const { response: data, stale } = await validateMutation.mutateAsync()
+      if (stale) return
       const reports = data.instructionReports
       const hasIssues = reports.some((rep) => (rep.failures?.length || 0) > 0 || (rep.warnings?.length || 0) > 0)
       if (hasIssues) {
@@ -660,7 +685,7 @@ export default function MigrationWizard() {
           >
             Set variables
           </Button>
-          <Button size="md" kind="ghost" onClick={() => tenantNavigate('/mission-control/processes')}>Cancel</Button>
+          <Button size="md" kind="ghost" onClick={() => tenantNavigate(withEngineContext('/mission-control/processes', selectedEngineId))}>Cancel</Button>
         </div>
       </div>
 

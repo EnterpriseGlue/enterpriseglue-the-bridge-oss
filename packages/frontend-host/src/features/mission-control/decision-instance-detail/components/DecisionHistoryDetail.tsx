@@ -36,6 +36,7 @@ import { LoadingState } from '../../../shared/components/LoadingState'
 import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 import type { HistoricDecisionIo, HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
+import { useGuardedEngineTask, withEngineContext } from '../../shared/engineContext'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -54,6 +55,14 @@ export default function DecisionHistoryDetail() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const selectedEngineId = useSelectedEngine()
+  const withSelectedEngine = React.useCallback(
+    (path: string) => withEngineContext(path, selectedEngineId),
+    [selectedEngineId],
+  )
+  const navigateWithSelectedEngine = React.useCallback(
+    (path: string) => tenantNavigate(withSelectedEngine(path)),
+    [tenantNavigate, withSelectedEngine],
+  )
   const selectedEngineResource = React.useMemo(
     () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
     [selectedEngineId],
@@ -61,6 +70,11 @@ export default function DecisionHistoryDetail() {
   const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
+  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
+  React.useEffect(() => {
+    setBridgeError(null)
+    setBridgeDecision(null)
+  }, [selectedEngineId])
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
@@ -231,9 +245,9 @@ export default function DecisionHistoryDetail() {
     if (!decisionEditTarget?.fileId || decisionVersion === null || !decisionKey) return
     setBridgeError(null)
     setBridgeDecision(null)
-    try {
-      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
-        engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
+    await runForCurrentEngine(
+      (requestEngineId) => evaluateMissionControlStarbaseBridge({
+        engineId: requestEngineId,
         projectId: decisionEditTarget.projectId,
         fileId: decisionEditTarget.fileId,
         definitionId: decision?.decisionDefinitionId || undefined,
@@ -241,34 +255,29 @@ export default function DecisionHistoryDetail() {
         decisionDefinitionId: decision?.decisionDefinitionId || undefined,
         decisionDefinitionKey: decisionKey,
         kind: 'decision',
-      })
-      if (!bridgeDecision.allowed) {
-        setBridgeDecision(bridgeDecision)
-        return
-      }
-    } catch (error) {
-      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
-      return
-    }
-
-    const params = new URLSearchParams({
-      source: 'mission-control',
-      engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
-      decision: decisionKey,
-      version: String(decisionVersion),
-      deploymentId: String(decisionEditTarget.engineDeploymentId || ''),
-      mappingSource: String(decisionEditTarget.mappingSource || ''),
-    })
-
-    if (decisionEditTarget.commitId) {
-      params.set('commitId', String(decisionEditTarget.commitId))
-    }
-    if (typeof decisionEditTarget.fileVersionNumber === 'number') {
-      params.set('fileVersion', String(decisionEditTarget.fileVersionNumber))
-    }
-
-    tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-  }, [decisionEditTarget, decisionVersion, decisionKey, decision?.decisionDefinitionId, selectedEngineId, tenantNavigate])
+      }),
+      {
+        onSuccess: (bridgeDecision, requestEngineId) => {
+          if (!bridgeDecision.allowed) {
+            setBridgeDecision(bridgeDecision)
+            return
+          }
+          const params = new URLSearchParams({
+            source: 'mission-control',
+            engineId: requestEngineId,
+            decision: decisionKey,
+            version: String(decisionVersion),
+            deploymentId: String(decisionEditTarget.engineDeploymentId || ''),
+            mappingSource: String(decisionEditTarget.mappingSource || ''),
+          })
+          if (decisionEditTarget.commitId) params.set('commitId', String(decisionEditTarget.commitId))
+          if (typeof decisionEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(decisionEditTarget.fileVersionNumber))
+          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
+        },
+        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
+      },
+    )
+  }, [decisionEditTarget, decisionVersion, decisionKey, decision?.decisionDefinitionId, runForCurrentEngine, tenantNavigate])
 
   // Check if initial data is loading
   const isInitialLoading = histQ.isLoading || xmlQ.isLoading
@@ -306,20 +315,20 @@ export default function DecisionHistoryDetail() {
         ) : null}
       >
         <BreadcrumbItem>
-          <a href={toTenantPath('/mission-control')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control'); }}>
+          <a href={toTenantPath(withSelectedEngine('/mission-control'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control'); }}>
             Mission Control
           </a>
         </BreadcrumbItem>
         {fromInstanceId && (
           <BreadcrumbItem>
-            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
+            <a href={toTenantPath(withSelectedEngine('/mission-control/processes'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control/processes'); }}>
               Processes
             </a>
           </BreadcrumbItem>
         )}
         {fromInstanceId && processLabel && (
           <BreadcrumbItem>
-            <a href={toTenantPath('/mission-control/processes')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/processes'); }}>
+            <a href={toTenantPath(withSelectedEngine('/mission-control/processes'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control/processes'); }}>
               <span>{processLabel}</span>
             </a>
           </BreadcrumbItem>
@@ -327,10 +336,10 @@ export default function DecisionHistoryDetail() {
         {fromInstanceId && (
           <BreadcrumbItem>
             <a
-              href={toTenantPath(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)}
+              href={toTenantPath(withSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`))}
               onClick={(e) => {
                 e.preventDefault()
-                tenantNavigate(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)
+                navigateWithSelectedEngine(`/mission-control/processes/instances/${encodeURIComponent(sanitizePathParam(fromInstanceId))}`)
               }}
             >
               Instance {sanitizePathParam(fromInstanceId).substring(0, 8)}...
@@ -344,14 +353,14 @@ export default function DecisionHistoryDetail() {
         )}
         {!fromInstanceId && (
           <BreadcrumbItem>
-            <a href={toTenantPath('/mission-control/decisions')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/decisions'); }}>
+            <a href={toTenantPath(withSelectedEngine('/mission-control/decisions'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control/decisions'); }}>
               Decisions
             </a>
           </BreadcrumbItem>
         )}
         {!fromInstanceId && title && title !== 'Decision' && (
           <BreadcrumbItem>
-            <a href={toTenantPath('/mission-control/decisions')} onClick={(e) => { e.preventDefault(); tenantNavigate('/mission-control/decisions'); }}>
+            <a href={toTenantPath(withSelectedEngine('/mission-control/decisions'))} onClick={(e) => { e.preventDefault(); navigateWithSelectedEngine('/mission-control/decisions'); }}>
               {title}{versionLabel ? ` (${versionLabel})` : ''}
             </a>
           </BreadcrumbItem>
@@ -493,7 +502,7 @@ export default function DecisionHistoryDetail() {
                     <button
                       className={styles.linkButton}
                       style={{ textDecoration: 'underline', cursor: 'pointer' }}
-                      onClick={() => window.open(`/mission-control/processes/instances/${decision.processInstanceId}`, '_blank')}
+                      onClick={() => window.open(toTenantPath(withSelectedEngine(`/mission-control/processes/instances/${decision.processInstanceId}`)), '_blank')}
                     >
                       {decision.processInstanceId}
                     </button>
@@ -523,7 +532,11 @@ export default function DecisionHistoryDetail() {
                   onChange={({ selectedIndex }) => {
                     const next = relatedInstances[selectedIndex]
                     if (next?.id && next.id !== decision?.id) {
-                      tenantNavigate(`/mission-control/decisions/instances/${next.id}`)
+                      const params = new URLSearchParams()
+                      if (fromInstanceId) params.set('fromInstance', fromInstanceId)
+                      if (processLabel) params.set('processLabel', processLabel)
+                      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+                      navigateWithSelectedEngine(`/mission-control/decisions/instances/${next.id}${suffix}`)
                     }
                   }}
                 >

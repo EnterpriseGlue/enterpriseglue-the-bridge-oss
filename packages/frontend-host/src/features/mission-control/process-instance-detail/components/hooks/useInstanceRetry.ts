@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useAlert } from '../../../../../shared/hooks/useAlert'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
 import { retryProcessInstance } from '../../api/processInstances'
@@ -33,6 +33,25 @@ export function useInstanceRetry({
   const [retryDueMode, setRetryDueMode] = useState<'keep' | 'set'>('keep')
   const [retryDueInput, setRetryDueInput] = useState('')
   const [retryBusy, setRetryBusy] = useState(false)
+  const [retryEngineId, setRetryEngineId] = useState<string | null>(null)
+  const currentEngineIdRef = useRef(engineId)
+  const retryRevisionRef = useRef(0)
+  currentEngineIdRef.current = engineId
+
+  const closeRetryModal = useCallback(() => {
+    retryRevisionRef.current += 1
+    setRetryModalOpen(false)
+    setRetryEngineId(null)
+    setRetryActivityFilter(null)
+    setRetrySelectionMap({})
+    setRetryDueMode('keep')
+    setRetryDueInput('')
+    setRetryBusy(false)
+  }, [])
+
+  useEffect(() => {
+    if (retryEngineId && retryEngineId !== engineId) closeRetryModal()
+  }, [closeRetryModal, engineId, retryEngineId])
 
   // Auto-select all items when modal opens
   useEffect(() => {
@@ -61,6 +80,16 @@ export function useInstanceRetry({
 
   const submitRetrySelection = useCallback(async () => {
     if (!instanceId) return
+    if (!engineId || retryEngineId !== engineId) {
+      closeRetryModal()
+      return
+    }
+    const requestEngineId = retryEngineId
+    const requestRevision = retryRevisionRef.current
+    const isCurrentRequest = () => (
+      retryRevisionRef.current === requestRevision
+      && currentEngineIdRef.current === requestEngineId
+    )
     if (retryDecision && !retryDecision.allowed) {
       showAlert(retryDecision.reason || 'Action unavailable', 'warning')
       return
@@ -82,22 +111,36 @@ export function useInstanceRetry({
         const dt = new Date(retryDueInput)
         if (!isNaN(dt.getTime())) payload.dueDate = dt.toISOString()
       }
-      if (engineId) payload.engineId = engineId
+      payload.engineId = requestEngineId
       await retryProcessInstance(instanceId, payload)
+      if (!isCurrentRequest()) return
       await Promise.allSettled([retryJobsQ.refetch(), retryExtTasksQ.refetch(), incidentsQ.refetch(), actQ.refetch()])
-      setRetryModalOpen(false)
+      if (!isCurrentRequest()) return
+      closeRetryModal()
     } catch (e: any) {
+      if (!isCurrentRequest()) return
       const message = getUiErrorMessage(e, 'Failed to retry')
       showAlert(`Failed to retry: ${message}`, 'error')
     } finally {
-      setRetryBusy(false)
+      if (isCurrentRequest()) setRetryBusy(false)
     }
-  }, [instanceId, retryDecision, showAlert, allRetryItems, retrySelectionMap, retryDueMode, retryDueInput, engineId, retryJobsQ, retryExtTasksQ, incidentsQ, actQ])
+  }, [instanceId, retryDecision, showAlert, allRetryItems, retrySelectionMap, retryDueMode, retryDueInput, engineId, retryEngineId, retryJobsQ, retryExtTasksQ, incidentsQ, actQ, closeRetryModal])
 
   const openRetryModal = useCallback((activityId?: string) => {
+    if (!currentEngineIdRef.current) return
+    retryRevisionRef.current += 1
+    setRetryEngineId(currentEngineIdRef.current)
     setRetryActivityFilter(activityId || null)
     setRetryModalOpen(true)
   }, [])
+
+  const setRetryModalOpenBound = useCallback((open: boolean) => {
+    if (!open) {
+      closeRetryModal()
+      return
+    }
+    openRetryModal()
+  }, [closeRetryModal, openRetryModal])
 
   return {
     // State
@@ -107,10 +150,11 @@ export function useInstanceRetry({
     retryDueMode,
     retryDueInput,
     retryBusy,
+    retryEngineId,
     filteredRetryItems,
 
     // Setters
-    setRetryModalOpen,
+    setRetryModalOpen: setRetryModalOpenBound,
     setRetryActivityFilter,
     setRetrySelectionMap,
     setRetryDueMode,

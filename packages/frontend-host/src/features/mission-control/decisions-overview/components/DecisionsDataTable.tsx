@@ -17,9 +17,10 @@ type DecisionRow = {
 interface DecisionsDataTableProps {
   data: DecisionRow[]
   searchValue?: string
+  engineId?: string | null
 }
 
-export function DecisionsDataTable({ data, searchValue }: DecisionsDataTableProps) {
+export function DecisionsDataTable({ data, searchValue, engineId }: DecisionsDataTableProps) {
   const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
 
   // Format date to DD-MM-YYYY HH:mm:ss with styled output
@@ -82,6 +83,7 @@ export function DecisionsDataTable({ data, searchValue }: DecisionsDataTableProp
           <CopyableLink
             fullValue={fullKey}
             navigateTo={`/mission-control/decisions/instances/${fullKey}`}
+            engineId={engineId}
             isHovered={isHovered}
           />
         )
@@ -117,6 +119,7 @@ export function DecisionsDataTable({ data, searchValue }: DecisionsDataTableProp
           <CopyableLink
             fullValue={procInst}
             navigateTo={`/mission-control/processes/instances/${procInst}`}
+            engineId={engineId}
             isHovered={isHovered}
             openInNewTab
           />

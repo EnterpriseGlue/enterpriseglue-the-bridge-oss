@@ -29,11 +29,9 @@ import { STATE_COLORS } from './viewer/viewerConstants'
 import {
   hasMissionControlSectionAccess,
   hasMissionControlUiAccess,
-  hasPlatformPermission,
   MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS,
   MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS,
   MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS,
-  PlatformPermission,
 } from '../../../shared/auth/permissions'
 import { getNativePluginNavigationV1 } from '../../../plugins/nativePluginRuntime'
 
@@ -80,9 +78,7 @@ export default function ProSidebar() {
   const canViewProcessesMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS)
   const canViewDecisionsMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS)
   const canViewBatchesMenu = hasMissionControlSectionAccess(permissions, user, MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS)
-  const platformSettingsAllowed = hasPlatformPermission(permissions, PlatformPermission.SETTINGS_MANAGE)
   const isMultiTenant = isMultiTenantEnabled()
-  const hideVoyagerForPlatformAdmin = isMultiTenant && platformSettingsAllowed
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -354,7 +350,7 @@ export default function ProSidebar() {
     }
   }
 
-  if (!inMissionControl || !isMissionControlEnabled || hideVoyagerForPlatformAdmin || !missionControlAllowed) {
+  if (!inMissionControl || !isMissionControlEnabled || !missionControlAllowed) {
     return null
   }
 

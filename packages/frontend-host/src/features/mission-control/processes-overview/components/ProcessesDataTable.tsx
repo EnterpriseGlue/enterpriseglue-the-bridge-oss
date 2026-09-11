@@ -34,6 +34,7 @@ interface ProcessesDataTableProps {
   setHoveredRowId: (id: string | null) => void
   processNameMap?: Record<string, string>
   searchValue?: string
+  engineId?: string | null
 }
 
 export function ProcessesDataTable({
@@ -49,6 +50,7 @@ export function ProcessesDataTable({
   setHoveredRowId,
   processNameMap = {},
   searchValue,
+  engineId,
 }: ProcessesDataTableProps) {
   const columns: ColumnDef<ProcInst>[] = [
     {
@@ -95,7 +97,7 @@ export function ProcessesDataTable({
         const key = row.processDefinitionKey
         if (!key) return ''
         const resolvedName = processNameMap[key] || key
-        return `${resolvedName} ${key}`
+        return `${resolvedName} ${key} ${row.businessKey || ''}`
       },
       header: () => <span>Name</span>,
       cell: ({ row }) => {
@@ -181,6 +183,7 @@ export function ProcessesDataTable({
             fullValue={fullKey}
             displayValue={truncatedKey}
             navigateTo={`/mission-control/processes/instances/${fullKey}`}
+            engineId={engineId}
             isHovered={isHovered}
           />
         )
@@ -273,6 +276,7 @@ export function ProcessesDataTable({
             fullValue={parent}
             displayValue={truncatedParent}
             navigateTo={`/mission-control/processes/instances/${parent}`}
+            engineId={engineId}
             isHovered={isHovered}
           />
         )
@@ -389,7 +393,7 @@ export function ProcessesDataTable({
       getRowId={(row) => row.id}
       enableSearch
       searchPlaceholder="Search by ID, name, parent, or business key..."
-      searchableColumns={["id", "name", "parent", "businessKey"]}
+      searchableColumns={["id", "name", "parent"]}
       externalSearchValue={searchValue}
     />
   )

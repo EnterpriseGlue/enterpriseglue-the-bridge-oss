@@ -1,8 +1,8 @@
 import React from 'react';
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { ProcessesDataTable } from '../../../../../../../packages/frontend-host/src/features/mission-control/processes-overview/components/ProcessesDataTable';
 
 type ProcessesDataTableData = React.ComponentProps<typeof ProcessesDataTable>['data'];
@@ -24,7 +24,8 @@ function renderTable(
     retry?: { allowed: boolean; reason?: string }
     suspension?: { allowed: boolean; reason?: string }
     terminate?: { allowed: boolean; reason?: string }
-  }
+  },
+  engineId?: string,
 ) {
   const onActivate = vi.fn(async () => undefined);
   const onSuspend = vi.fn(async () => undefined);
@@ -47,7 +48,7 @@ function renderTable(
     : rows) as ProcessesDataTableData;
 
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/t/default/mission-control/processes']}>
       <ProcessesDataTable
         data={tableData}
         onTerminate={vi.fn()}
@@ -64,9 +65,16 @@ function renderTable(
           'order-process': 'Order Process',
         }}
         searchValue={searchValue}
+        engineId={engineId}
       />
+      <LocationProbe />
     </MemoryRouter>
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
 describe('ProcessesDataTable', () => {
@@ -90,6 +98,27 @@ describe('ProcessesDataTable', () => {
 
     expect(screen.getByText('parent-123')).toBeInTheDocument();
     expect(screen.queryByText('Order Process')).not.toBeInTheDocument();
+  });
+
+  it('filters by business key without requesting a missing table column', () => {
+    renderTable('order-42', [{
+      id: 'pi-1',
+      processDefinitionKey: 'invoice-receipt',
+      businessKey: 'order-42',
+      state: 'ACTIVE',
+    }]);
+
+    expect(screen.getByText('Invoice Receipt')).toBeInTheDocument();
+  });
+
+  it('keeps the selected engine when opening an instance from the overview', () => {
+    renderTable('', undefined, undefined, 'engine-2');
+
+    fireEvent.click(screen.getByRole('button', { name: 'pi-1' }));
+
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/t/default/mission-control/processes/instances/pi-1?engineId=engine-2',
+    );
   });
 
   it('renders duration using the shared execution-trail format', () => {

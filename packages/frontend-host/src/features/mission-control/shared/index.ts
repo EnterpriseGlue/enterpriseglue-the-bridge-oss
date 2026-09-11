@@ -3,3 +3,4 @@
 // Components
 export { CopyableLink } from './components/CopyableLink'
 export { EngineAccessError, isEngineAccessError } from './components/EngineAccessError'
+export { MissionControlEngineContextBoundary } from './components/MissionControlEngineContextBoundary'
