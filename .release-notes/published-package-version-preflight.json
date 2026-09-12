@@ -1,0 +1,40 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "published-package-version-preflight",
+  "type": "fix",
+  "scope": "delivery-workflows",
+  "breaking": false,
+  "audiences": ["developers"],
+  "summary": "Detects missing published-package version bumps locally before the first push and protected CI run.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Reinstall EnterpriseGlue Dev Workflows 0.1.7 to use the updated new-change and ship guidance."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [],
+  "documentation": [
+    "The contributor release-note process and versioned EnterpriseGlue workflow skills now require the package guard before commit and again before push."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the guard and workflow guidance; no application or database rollback is required."
+  ],
+  "validation": [
+    "A disposable Git fixture proves the guard rejects an uncommitted published-package source change without a version bump and accepts it after the manifest is corrected.",
+    "The versioned EnterpriseGlue plugin and all bundled skills pass their repository validators."
+  ],
+  "packages": []
+}

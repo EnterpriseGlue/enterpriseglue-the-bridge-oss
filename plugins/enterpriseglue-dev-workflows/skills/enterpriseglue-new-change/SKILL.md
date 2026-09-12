@@ -26,6 +26,9 @@ description: Use when the user says /new-change, newchange, start a new change, 
    Follow `.release-notes/schema.json` and
    `docs/development/release-notes-process.md`. Update the fragment as scope,
    compatibility, migrations, packages, validation, and rollback evolve.
+   When a published package changes, inventory its published workspace
+   consumers, bump every affected package manifest once in the same change,
+   and list each exact old/new version in the fragment.
 7. Use `release-note:none` only for genuinely internal work. Record
    `Release-note exemption: <reason>` in the PR body; never exempt
    authentication, authorization, migration, or public API/schema changes.
@@ -36,5 +39,13 @@ description: Use when the user says /new-change, newchange, start a new change, 
    deterministic classifier and positive/negative fixtures. Unknown paths must
    continue to select the broad fail-closed lane; metadata-only changes must
    not select unrelated application, database, browser, or image work.
-10. Implement and verify in proportion to risk. Hand off shipping to the
+10. Before the first commit, run the repository's working-tree-aware published
+    package guard when present:
+
+    ```bash
+    bash ./scripts/check-published-package-version-discipline.sh origin/main
+    ```
+
+    Resolve every package and fragment mismatch locally. Implement and verify
+    in proportion to risk, then hand off shipping to the
    `enterpriseglue-ship` skill rather than merging from this workflow.
