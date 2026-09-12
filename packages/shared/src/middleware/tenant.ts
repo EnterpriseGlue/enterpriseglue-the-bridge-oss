@@ -88,20 +88,28 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const requestedSlug = routeTenantSlug(req);
+      const authenticatedTenant = req.tenant?.tenantId && !isOssDefaultTenantId(req.tenant.tenantId)
+        ? req.tenant
+        : undefined;
+      const signedPlacement = config.tenancyMode === 'pooled' ? placementHeaders(req) : null;
       // Retain the established EE bridge contract while OSS and EE migrate to
       // the native authority. A route-bound request must still agree with the
       // authenticated context; otherwise an alpha session could address a
-      // beta tenant route while the data layer continued using alpha.
-      if (req.tenant?.tenantId && !isOssDefaultTenantId(req.tenant.tenantId)) {
+      // beta tenant route while the data layer continued using alpha. A signed
+      // pooled placement must still be verified: it carries the release-aware
+      // identity that an authenticated SaaS request needs for Cloud APIs.
+      if (authenticatedTenant) {
         if (
           config.tenancyMode === 'pooled'
           && requestedSlug
-          && requestedSlug !== req.tenant.tenantSlug.trim().toLowerCase()
+          && requestedSlug !== authenticatedTenant.tenantSlug.trim().toLowerCase()
         ) {
           throw Errors.forbidden('Tenant route does not match authenticated tenant context');
         }
-        activateTenantContext(req, next, req.tenant);
-        return;
+        if (!signedPlacement) {
+          activateTenantContext(req, next, authenticatedTenant);
+          return;
+        }
       }
 
       if (config.tenancyMode !== 'pooled') {
@@ -117,8 +125,8 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
         return;
       }
 
-      const signedPlacement = placementHeaders(req);
       let tenant = null as Awaited<ReturnType<typeof tenantService.getById>>;
+      let verifiedPlacementContext: Partial<TenantContext> = {};
       if (signedPlacement) {
         if (signedPlacement.version === 'v1') {
           const claim = tenantService.verifyPlacementClaim(signedPlacement.payload, signedPlacement.signature);
@@ -130,6 +138,7 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
           ) {
             throw Errors.unauthorized('Stale or mismatched tenant placement assertion');
           }
+          verifiedPlacementContext = { placementAssertionVersion: 'v1' };
         } else {
           const claim = signedPlacement.version === 'v3'
             ? tenantService.verifyPlacementClaimV3(signedPlacement.compactJws, req.hostname || '', req.originalUrl || req.url || '/')
@@ -142,11 +151,7 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
           ) {
             throw Errors.unauthorized(`Stale or mismatched tenant placement ${signedPlacement.version} assertion`);
           }
-          req.tenant = {
-            tenantId: tenant.id,
-            tenantSlug: tenant.slug,
-            placementKey: tenant.placementKey,
-            placementEpoch: Number(tenant.placementEpoch),
+          verifiedPlacementContext = {
             placementAssertionVersion: signedPlacement.version,
             placementCorrelationId: claim.correlationId,
             ...('releaseId' in claim ? { releaseId: claim.releaseId, assignmentEpoch: claim.assignmentEpoch } : {}),
@@ -156,6 +161,13 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
         tenant = await tenantService.getBySlug(requestedSlug);
       } else if (req.hostname) {
         tenant = await tenantService.getByHostname(req.hostname);
+      }
+
+      if (tenant && authenticatedTenant && (
+        tenant.id !== authenticatedTenant.tenantId
+        || tenant.slug !== authenticatedTenant.tenantSlug.trim().toLowerCase()
+      )) {
+        throw Errors.forbidden('Tenant placement does not match authenticated tenant context');
       }
 
       if (tenant && req.hostname && (signedPlacement || requestedSlug)) {
@@ -175,10 +187,7 @@ export function resolveTenantContext(options: { required?: boolean } = {}) {
         tenantSlug: tenant.slug,
         placementKey: tenant.placementKey,
         placementEpoch: Number(tenant.placementEpoch),
-        ...(signedPlacement ? { placementAssertionVersion: signedPlacement.version } : {}),
-        ...(req.tenant?.placementCorrelationId ? { placementCorrelationId: req.tenant.placementCorrelationId } : {}),
-        ...(req.tenant?.releaseId ? { releaseId: req.tenant.releaseId } : {}),
-        ...(req.tenant?.assignmentEpoch ? { assignmentEpoch: req.tenant.assignmentEpoch } : {}),
+        ...verifiedPlacementContext,
       });
     } catch (error) {
       next(error);

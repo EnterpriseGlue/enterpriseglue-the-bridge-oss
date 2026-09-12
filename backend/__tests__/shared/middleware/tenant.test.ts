@@ -6,6 +6,7 @@ const tenantServiceMock = vi.hoisted(() => ({
   getByHostname: vi.fn(),
   verifyPlacementClaim: vi.fn(),
   verifyPlacementClaimV2: vi.fn(),
+  verifyPlacementClaimV3: vi.fn(),
   listForUser: vi.fn(),
 }));
 const getActivePlatformAdministratorUserIds = vi.hoisted(() => vi.fn());
@@ -121,8 +122,59 @@ describe('tenant middleware', () => {
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('rejects mixed placement v1 and v2 headers before tenant lookup', async () => {
+  it('enriches an authenticated pooled tenant with its verified release placement', async () => {
     (config as any).tenancyMode = 'pooled';
+    req.params = { tenantSlug: 'alpha' };
+    req.hostname = 'app.enterpriseglue.test';
+    req.originalUrl = '/api/t/alpha/tenant/cloud-identity';
+    req.tenant = {
+      tenantId: 'tenant-alpha', tenantSlug: 'alpha', placementKey: 'shard-a', placementEpoch: 7,
+    };
+    req.headers['x-eg-tenant-placement-v3'] = 'header.payload.signature';
+    tenantServiceMock.verifyPlacementClaimV3.mockReturnValue({
+      tenantId: 'tenant-alpha', tenantSlug: 'alpha', shardId: 'shard-a', placementEpoch: 7,
+      releaseId: 'release-stable', assignmentEpoch: 4, correlationId: 'correlation-release-001',
+    });
+    tenantServiceMock.getById.mockResolvedValue({
+      id: 'tenant-alpha', slug: 'alpha', status: 'active', placementKey: 'shard-a', placementEpoch: 7,
+    });
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(tenantServiceMock.verifyPlacementClaimV3).toHaveBeenCalledWith(
+      'header.payload.signature', 'app.enterpriseglue.test', '/api/t/alpha/tenant/cloud-identity',
+    );
+    expect(req.tenant).toEqual({
+      tenantId: 'tenant-alpha', tenantSlug: 'alpha', placementKey: 'shard-a', placementEpoch: 7,
+      placementAssertionVersion: 'v3', placementCorrelationId: 'correlation-release-001',
+      releaseId: 'release-stable', assignmentEpoch: 4,
+    });
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('rejects a release placement that conflicts with the authenticated tenant', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.params = { tenantSlug: 'alpha' };
+    req.hostname = 'app.enterpriseglue.test';
+    req.originalUrl = '/api/t/alpha/tenant/cloud-identity';
+    req.tenant = { tenantId: 'tenant-alpha', tenantSlug: 'alpha' };
+    req.headers['x-eg-tenant-placement-v3'] = 'header.payload.signature';
+    tenantServiceMock.verifyPlacementClaimV3.mockReturnValue({
+      tenantId: 'tenant-other', tenantSlug: 'alpha', shardId: 'shard-a', placementEpoch: 7,
+      releaseId: 'release-stable', assignmentEpoch: 4, correlationId: 'correlation-release-002',
+    });
+    tenantServiceMock.getById.mockResolvedValue({
+      id: 'tenant-other', slug: 'alpha', status: 'active', placementKey: 'shard-a', placementEpoch: 7,
+    });
+
+    await resolveTenantContext()(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+  });
+
+  it('rejects mixed placement v1 and v2 headers before an authenticated tenant can bypass verification', async () => {
+    (config as any).tenancyMode = 'pooled';
+    req.tenant = { tenantId: 'tenant-alpha', tenantSlug: 'alpha' };
     req.headers = {
       'x-eg-tenant-placement': 'payload',
       'x-eg-tenant-placement-signature': 'signature',

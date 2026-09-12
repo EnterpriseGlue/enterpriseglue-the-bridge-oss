@@ -1,0 +1,63 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "saas-authenticated-release-context",
+  "type": "fix",
+  "scope": "authentication",
+  "breaking": false,
+  "audiences": ["users", "administrators", "operators", "developers", "security"],
+  "summary": "Preserves verified release-aware placement identity when an authenticated SaaS tenant calls Cloud APIs.",
+  "userImpact": [
+    "Authenticated tenant administrators can open the Cloud release and managed-engine console without a release-aware identity unavailable error."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The correction is confined to request context verification and does not change TypeORM entities, migrations, schemas, or database-specific behavior."
+    ]
+  },
+  "security": [
+    "A session-restored tenant must match the tenant in the signed placement assertion before release identity is accepted.",
+    "Mixed, stale, mismatched, or unverified placement assertions remain rejected before tenant-scoped Cloud access."
+  ],
+  "documentation": [
+    "The generated technical release notes describe the authenticated SaaS release-context correction."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous backend host image; no database rollback is required."
+  ],
+  "validation": [
+    "Focused middleware tests cover authenticated v3 enrichment, session-to-placement mismatch rejection, v2 compatibility, and authenticated mixed-assertion rejection."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.21.1",
+      "newVersion": "0.21.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.1",
+      "newVersion": "0.19.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.11",
+      "newVersion": "0.17.12",
+      "impact": "patch"
+    }
+  ]
+}
