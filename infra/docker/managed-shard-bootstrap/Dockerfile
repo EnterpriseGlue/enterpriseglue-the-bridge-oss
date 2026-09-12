@@ -2,6 +2,13 @@
 FROM ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9ece726dac9f6a492cbb030c9dab6efadedf1f3f5ac842219027a3646
 
 USER root
+RUN apk add --no-cache --upgrade \
+      glibc-2.44 \
+      glibc-2.44-dev \
+      glibc-2.44-locale-posix \
+      ld-linux-2.44 \
+      libcrypt1-2.44
+
 COPY --chown=65532:65532 scripts/managed-shard-bootstrap.mjs /opt/enterpriseglue-bootstrap/managed-shard-bootstrap.mjs
 COPY --chown=65532:65532 scripts/managed-shard-bootstrap-contract.mjs /opt/enterpriseglue-bootstrap/managed-shard-bootstrap-contract.mjs
 COPY --chown=65532:65532 infra/database/managed-shard-bootstrap-manifest.json /opt/enterpriseglue-bootstrap/managed-shard-bootstrap-manifest.json
