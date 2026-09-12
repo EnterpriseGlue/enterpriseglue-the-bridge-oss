@@ -1,0 +1,41 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "managed-shard-bootstrap-runtime-refresh",
+  "type": "security",
+  "scope": "database-bootstrap",
+  "breaking": false,
+  "audiences": ["operators", "security", "developers"],
+  "summary": "Refreshes operating-system packages in the managed-shard bootstrap derivative while preserving its exact signed predecessor contract.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The signed v0.24.2 predecessor, TypeORM migration inventory, schema plan, and bootstrap behavior remain unchanged."
+    ]
+  },
+  "security": [
+    "The managed-shard bootstrap image upgrades Wolfi packages after inheriting the immutable predecessor backend so fixed glibc packages are present without changing the signed database contract."
+  ],
+  "documentation": [
+    "The generated technical release notes record the bootstrap derivative runtime refresh and scanner evidence."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous bootstrap image only if required; no database rollback is involved."
+  ],
+  "validation": [
+    "A focused contract test requires the derivative-image package refresh, and the real PostgreSQL bootstrap plus zero-tolerance release-candidate scan validate the rebuilt image."
+  ],
+  "packages": []
+}
