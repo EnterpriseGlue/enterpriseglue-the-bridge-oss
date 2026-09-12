@@ -1,0 +1,39 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "runtime-base-glibc-refresh",
+  "type": "security",
+  "scope": "container-runtime",
+  "breaking": false,
+  "audiences": ["operators", "security", "developers"],
+  "summary": "Refreshes the pinned Chainguard application runtime bases to consume the fixed glibc packages detected by protected image scanning.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Backend and frontend application images now use current immutable Chainguard runtime-base indexes containing the fixed glibc packages for CVE-2026-18374."
+  ],
+  "documentation": [
+    "The generated technical release notes record the immutable runtime-base refresh and scanner evidence."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous application images only if required; no database rollback is involved."
+  ],
+  "validation": [
+    "Protected image and release-candidate scans verify the refreshed backend and frontend runtime bases against the current vulnerability database."
+  ],
+  "packages": []
+}
