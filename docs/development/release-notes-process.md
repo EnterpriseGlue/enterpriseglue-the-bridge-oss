@@ -20,7 +20,19 @@ feature pull request.
    request. Use a stable lowercase kebab-case name, not a pull-request number.
 2. Complete every field from `.release-notes/schema.json`. Empty arrays are
    allowed only when the topic is genuinely not applicable.
-3. Run:
+3. If the change touches a published package, bump that package and each
+   published workspace consumer whose packed dependency version changes. List
+   every bumped package in the fragment, then run the working-tree-aware guard
+   before the first commit:
+
+   ```bash
+   bash ./scripts/check-published-package-version-discipline.sh origin/main
+   ```
+
+   Run the same guard once more against the committed revision before pushing.
+   This prevents a locally green release-note preview from deferring a missing
+   manifest bump to hosted CI.
+4. Run:
 
    ```bash
    pnpm run release-notes:preflight -- --base-ref origin/main
@@ -30,9 +42,9 @@ feature pull request.
    path coverage, recommends the next version, and always writes
    `.artifacts/release-notes-preview.md`, including when validation fails.
 
-4. Review the generated preview as user, administrator, operator, developer,
+5. Review the generated preview as user, administrator, operator, developer,
    and security communication—not only as an implementation summary.
-5. Keep the PR title, `release:*` label, package versions, and fragment
+6. Keep the PR title, `release:*` label, package versions, and fragment
    classification consistent. Breaking fragments require both a conventional
    `!` title and the `release:breaking` label.
 

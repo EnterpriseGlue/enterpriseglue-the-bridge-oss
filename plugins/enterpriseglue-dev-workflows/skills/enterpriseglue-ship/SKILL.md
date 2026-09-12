@@ -47,11 +47,19 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
    a low-risk exemption and the PR body contains the required explanation.
 7. Confirm every changed fragment matches the conventional PR title,
    `release:*` label, package version bumps, migration/rollback behavior, and
-   actual test evidence. Breaking fragments require `!` and
-   `release:breaking`.
-8. Run the repository's appropriate verification level, commit coherent
-   changes, and push only the active branch. Create or update the PR without
-   rewriting unrelated metadata.
+   actual test evidence. In OSS, run the working-tree-aware package guard before
+   committing so direct and packed-workspace consumer bumps are found together:
+
+   ```bash
+   bash ./scripts/check-published-package-version-discipline.sh origin/main
+   ```
+
+   Breaking fragments require `!` and `release:breaking`.
+8. Run the repository's appropriate verification level and commit coherent
+   changes. Before the first push, rerun the package guard against committed
+   `HEAD`; amend locally if it reports a mismatch. Push only the active branch
+   after it passes. Create or update the PR without rewriting unrelated
+   metadata.
 9. For CI or release-control changes, require the deterministic classifier
    fixtures, workflow contracts, and self-validating `ci-complete` aggregate.
    Confirm metadata-only changes avoid unrelated expensive lanes and selected

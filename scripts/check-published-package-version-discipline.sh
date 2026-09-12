@@ -14,7 +14,15 @@ if [ -z "$MERGE_BASE" ]; then
   exit 1
 fi
 
-CHANGED_FILES="$(git diff --name-only "$MERGE_BASE"...HEAD)"
+# Compare the base directly with the working tree so this guard is useful both
+# before the first commit and in clean CI. Include untracked paths as well;
+# otherwise a newly added published package source can escape local discovery.
+CHANGED_FILES="$(
+  {
+    git diff --name-only "$MERGE_BASE" --
+    git ls-files --others --exclude-standard
+  } | sort -u
+)"
 if [ -z "$CHANGED_FILES" ]; then
   echo "[package-version-discipline] No changed files detected."
   exit 0
@@ -105,7 +113,7 @@ check_package() {
     return 0
   fi
 
-  if git diff --quiet "$MERGE_BASE"...HEAD -- "$manifest"; then
+  if git diff --quiet "$MERGE_BASE" -- "$manifest"; then
     echo "::error file=${manifest}::${package_name} changed without a version bump in ${manifest}. Bump the published package version in the same PR."
     failures=1
     return 0
