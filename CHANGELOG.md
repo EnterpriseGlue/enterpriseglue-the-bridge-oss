@@ -10,10 +10,8 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **auth:** preserve authenticated release context ([34873e1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/34873e1d42820937b925c7348759555af97cc743))
-* **auth:** preserve authenticated release context ([cba3171](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cba317171cc88e45f26666095e6b6329306785d2))
 * **delivery:** catch package bumps before push ([53323ae](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/53323ae68272759ae1c1b09cad5c770efcaad136))
 * **security:** refresh bootstrap runtime packages ([a1e2c71](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a1e2c71b92da3903e79eb17c226488dedb433a0a))
-* **security:** refresh bootstrap runtime packages ([ec56437](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ec56437416d30ac1a401db18ab8b52eba1d422ae))
 * **security:** refresh runtime image bases ([0e3c7d7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0e3c7d737664689c7228b68c584a8f70221d13ad))
 
 ## [0.26.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.26.0...v0.26.1) (2026-09-11)
