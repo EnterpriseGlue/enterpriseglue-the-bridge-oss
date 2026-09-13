@@ -129,6 +129,13 @@ Public aliases advance only after the semantic release tags are verified to
 resolve to those exact candidate digests. Explicit non-candidate image builds
 continue to run the full post-build gates.
 
+Publishing a stable OSS release also sends a wake-up event to the Cloud repository's fixed
+staging/demo reconciler. The notification resolves the authoritative release and recursively
+dereferences its tag before dispatch; the receiver treats the payload only as a wake-up and
+independently resolves the latest published release and signed candidate. A manual
+`release-notify.yml` dispatch can replay the wake-up for an exact published tag, while the Cloud
+side's six-hour reconciliation schedule repairs missed events. This path has no production target.
+
 The signed candidate also carries the exact shared, backend-host, and
 frontend-host package tarballs. These packages no longer publish merely
 because their source reaches `main`. The release event verifies the Git tag,

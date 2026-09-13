@@ -1,0 +1,33 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "automatic-staging-demo-delivery",
+  "type": "internal",
+  "scope": "release-and-staging-delivery",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Published OSS releases now wake the fixed cloud staging/demo reconciliation path automatically.",
+  "userImpact": [],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [
+    "RELEASE_PLEASE_TOKEN must retain permission to create repository dispatch events in EnterpriseGlue/enterpriseglue-cloud."
+  ],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "The receiver independently resolves authoritative release and candidate identities; event payload fields do not select deployment inputs."
+  ],
+  "documentation": [
+    "Documents the release wake-up, manual replay, and scheduled staging reconciliation behavior."
+  ],
+  "knownLimitations": [
+    "A missing cross-repository token delays immediate wake-up until the Cloud repository's scheduled reconciliation."
+  ],
+  "rollback": [
+    "Remove the staging reconciliation step from release-notify.yml; this does not change published release artifacts."
+  ],
+  "validation": [
+    "Release readiness and release-note contract suites verify the exact release, tag dereference, token, destination repository, and event type."
+  ],
+  "packages": []
+}

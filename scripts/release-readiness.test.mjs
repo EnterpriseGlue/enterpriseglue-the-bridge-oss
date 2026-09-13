@@ -29,6 +29,28 @@ const toolchainLocal = await readFile(
   new URL('./check-plugin-toolchain-oci-local.sh', import.meta.url),
   'utf8',
 )
+const releaseNotify = await readFile(
+  new URL('../.github/workflows/release-notify.yml', import.meta.url),
+  'utf8',
+)
+
+test('published OSS releases wake fixed cloud staging reconciliation', () => {
+  for (const boundary of [
+    'types:\n      - published',
+    'release_tag:',
+    'if: github.event_name == \'release\'',
+    'name: Wake cloud staging demo reconciliation',
+    'if: always()',
+    'github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}',
+    'github.rest.repos.getReleaseByTag',
+    "release.draft || release.prerelease || !release.published_at",
+    'github.rest.git.getRef',
+    'github.rest.git.getTag',
+    "repo: 'enterpriseglue-cloud'",
+    "event_type: 'enterpriseglue-oss-release-published'",
+  ]) assert.ok(releaseNotify.includes(boundary), `missing staging notification boundary: ${boundary}`)
+  assert.doesNotMatch(releaseNotify, /production-deploy|deploy-production/)
+})
 
 test('release candidate detection works for pull requests, manual runs, and merge groups', () => {
   assert.match(preflight, /is_release_pull_request:/)
