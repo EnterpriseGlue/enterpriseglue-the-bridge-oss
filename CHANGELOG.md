@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Features
 
 * **identity:** add multi-provider cloud signup ([9ae5dfd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9ae5dfd59799add8654f98e260a583756e2b6d2c))
-* **identity:** add multi-provider cloud signup ([5e6bfc9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5e6bfc9d6d4f86615e9684dd8c1747d9ebf14e5a))
 
 
 ### Bug Fixes
@@ -20,7 +19,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 * **security:** patch zlib and reduce Actions usage ([37ac73c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/37ac73c23df91812641ed15432cfb4bb4ad8df4f))
 * **security:** patch zlib CVE-2026-85091 ([aabc241](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/aabc24111aa9989279149b4154fc7dd16af9b525))
 * **security:** refresh managed bootstrap packages ([f6989f3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f6989f35ff36b2df74ac6eca18661a6068d33c34))
-* **security:** refresh managed bootstrap packages ([9fdb62b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9fdb62b9cda8dc906ca2e4d0d8295dfb808796b2))
 
 ## [0.26.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.26.1...v0.26.2) (2026-09-12)
 
