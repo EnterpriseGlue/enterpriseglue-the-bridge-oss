@@ -63,6 +63,14 @@ browser journey on exact PostgreSQL images, packages, charts, and multi-platform
 images before publication. The required `Release candidate staged` status
 cannot pass until that exact-SHA qualification completes.
 
+CodeQL runs both JavaScript/TypeScript and Actions analysis on pull requests,
+protected `main`, and the weekly backstop. A merge group does not upload another
+SARIF result from its short-lived queue ref. Instead, the required CodeQL gate
+queries every alert from the exact pull request, including its already-completed
+Actions and JavaScript/TypeScript analyses. This keeps queue validation inside
+the repository's short merge-group window without removing either language from
+pull-request qualification.
+
 ## Expensive evidence
 
 - Frontend-only shell/component changes run frontend typechecks, unit tests,
@@ -128,6 +136,13 @@ browser, or vulnerability qualification after the signed candidate passes.
 Public aliases advance only after the semantic release tags are verified to
 resolve to those exact candidate digests. Explicit non-candidate image builds
 continue to run the full post-build gates.
+
+Publishing a stable OSS release also sends a wake-up event to the Cloud repository's fixed
+staging/demo reconciler. The notification resolves the authoritative release and recursively
+dereferences its tag before dispatch; the receiver treats the payload only as a wake-up and
+independently resolves the latest published release and signed candidate. A manual
+`release-notify.yml` dispatch can replay the wake-up for an exact published tag, while the Cloud
+side's six-hour reconciliation schedule repairs missed events. This path has no production target.
 
 The signed candidate also carries the exact shared, backend-host, and
 frontend-host package tarballs. These packages no longer publish merely
