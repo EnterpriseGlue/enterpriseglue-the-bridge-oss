@@ -7,6 +7,8 @@ RUN apk add --no-cache --upgrade \
       glibc-2.44-dev \
       glibc-2.44-locale-posix \
       ld-linux-2.44 \
+      libcurl-openssl4 \
+      wget \
       libcrypt1-2.44
 
 COPY --chown=65532:65532 scripts/managed-shard-bootstrap.mjs /opt/enterpriseglue-bootstrap/managed-shard-bootstrap.mjs
