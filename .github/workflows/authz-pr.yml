@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   schedule:
-    - cron: "15 3 * * *"
+    - cron: "15 3 * * 4"
   workflow_dispatch:
 
 permissions:

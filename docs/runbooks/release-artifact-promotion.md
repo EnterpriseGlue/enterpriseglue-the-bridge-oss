@@ -107,7 +107,7 @@ application images run on `ubuntu-24.04-arm` and amd64 application images on
 native runner capacity as a release blocker rather than silently reintroducing
 an emulated critical path.
 
-The nightly `Release Canary` invokes this same reusable image path in dedicated
+The weekly `Release Canary` invokes this same reusable image path in dedicated
 scratch repositories and runs the non-publishing release-readiness drill. It
 must be green before enabling a material release-control change. It is evidence
 for workflow permissions and control flow, not permission to skip the exact

@@ -12,7 +12,7 @@ const frontendDockerfile = await readFile(
 )
 
 test('release canary is scheduled, manual, immutable, and non-cancelling', () => {
-  assert.match(workflow, /schedule:/)
+  assert.match(workflow, /schedule:\n\s+- cron: "20 2 \* \* 3"/)
   assert.match(workflow, /workflow_dispatch:/)
   assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/)
   assert.match(workflow, /source_ref: \$\{\{ github\.sha \}\}/)
