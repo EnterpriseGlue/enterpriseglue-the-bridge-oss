@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.27.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.0...v0.27.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **frontend:** enforce lean public signup bundles ([e1f517f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e1f517fb6d05584be9ca92f393cc06ac610c8811))
+
 ## [0.27.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.26.2...v0.27.0) (2026-09-13)
 
 
