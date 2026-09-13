@@ -5,6 +5,7 @@ import { Login } from '@carbon/icons-react';
 import { ExtensionSlot } from '../enterprise/ExtensionSlot';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
+import LoginProviderButton from '../shared/components/LoginProviderButton';
 import { apiClient, ApiError } from '../shared/api/client';
 
 type CloudSignupProvider = { id: string; displayName: string; protocol: 'oidc' | 'saml' };
@@ -48,11 +49,15 @@ export default function Signup() {
         <Stack gap={5}>
           {error ? <InlineNotification kind="error" lowContrast hideCloseButton title="Signup unavailable" subtitle={error} /> : null}
           {!error && providers?.length === 0 ? <InlineNotification kind="info" lowContrast hideCloseButton title="No signup method configured" subtitle="A Cloud account identity provider must be configured before signup can continue." /> : null}
-          {providers?.map((provider) => (
-            <Button key={provider.id} onClick={() => window.location.assign(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/cloud/onboarding')}`)}>
-              Continue with {provider.displayName}
-            </Button>
-          ))}
+          {providers?.length ? <div className="eg-login-provider-list">
+            {providers.map((provider, index) => <LoginProviderButton
+              key={provider.id}
+              provider={{ ...provider, key: provider.id, organization: null, loginMethod: 'redirect', preferred: index === 0, loginDomains: [] }}
+              primary={index === 0}
+              disabled={false}
+              onClick={() => window.location.assign(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/cloud/onboarding')}`)}
+            />)}
+          </div> : null}
           {error ? <Button kind="secondary" onClick={() => void load()}>Retry</Button> : null}
           <Button as={Link} kind="ghost" to="/login" renderIcon={Login}>Already have an account?</Button>
         </Stack>

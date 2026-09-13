@@ -741,6 +741,15 @@ leave group claims incomplete; EnterpriseGlue rejects `hasgroups`,
 `_claim_names`, and `_claim_sources` fail closed instead of treating them as an
 empty group set.
 
+For a global, multi-organization signup provider, use the exact issuer
+`https://login.microsoftonline.com/organizations/v2.0` and omit
+`directoryTenantId`. EnterpriseGlue accepts only the corresponding Entra
+discovery issuer template, requires a UUID `tid` claim, reconstructs the exact
+tenant-specific issuer from that claim, and verifies the token signature,
+issuer, and client audience before persisting the external identity. Do not use
+`common` for this path; global signup is for Microsoft work or school accounts,
+not personal Microsoft accounts.
+
 The OIDC `groups` claim is configured at the identity provider. Do not add a
 non-standard `groups` OAuth scope unless that provider explicitly requires it;
 the portable default remains `openid`, `profile`, and `email`. The local
