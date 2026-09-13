@@ -52,6 +52,14 @@ function runner() {
   } as any;
 }
 
+function preflightPolicyRunner() {
+  const ownerRunner = runner();
+  return {
+    connection: ownerRunner.connection,
+    query: (sql: string, parameters?: unknown[]) => preflightDataSource.query(sql, parameters),
+  } as any;
+}
+
 describe('PostgreSQL schema-epoch bridge policy readiness', () => {
   beforeAll(async () => {
     const pgModule = await import('pg');
@@ -228,5 +236,22 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
     ).rejects.toThrow(/restricted, nonowning/);
     await unsafeRunner.release();
     await pool.query(`REVOKE CREATE ON SCHEMA ${quoteIdentifier(schema)} FROM ${quoteIdentifier(runtimeRole)}`);
+  });
+
+  it('verifies RLS through catalogs without granting the preflight login business-table access', async () => {
+    const informationSchemaVisibility = await preflightDataSource.query(
+      `SELECT count(*)::int AS count FROM information_schema.tables
+       WHERE table_schema=$1 AND table_name=$2`,
+      [schema, 'projects'],
+    );
+    expect(informationSchemaVisibility).toEqual([{ count: 0 }]);
+    const privileges = await pool.query(
+      `SELECT has_table_privilege($1, $2, 'SELECT') AS select_ok`,
+      [preflightRole, tablePath],
+    );
+    expect(privileges.rows).toEqual([{ select_ok: false }]);
+    await expect(
+      verifyPostgresTenantRlsForPolicyProfile(preflightPolicyRunner(), 'explicit-context/v1'),
+    ).resolves.toEqual({ expected: 3, enforced: 3 });
   });
 });

@@ -324,7 +324,7 @@ describe('runMigrations bootstrap behavior', () => {
     vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
     const previousTenancyMode = config.tenancyMode;
     (config as { tenancyMode: string }).tenancyMode = 'pooled';
-    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(false));
     const epochRunner = { release: vi.fn().mockResolvedValue(undefined) };
     const legacyPredicate = "((COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode'::text, true), ''::text), 'single'::text) <> 'pooled'::text) OR (tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id'::text, true), ''::text)))";
     const integrityRunner = {
@@ -382,6 +382,8 @@ describe('runMigrations bootstrap behavior', () => {
       );
       expect(dataSource.runMigrations).not.toHaveBeenCalled();
       expect(dataSource.synchronize).not.toHaveBeenCalled();
+      expect(bootstrapRunner.hasTable).not.toHaveBeenCalled();
+      expect(integrityRunner.getTable).not.toHaveBeenCalled();
       expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
       expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).not.toHaveBeenCalled();
     } finally {

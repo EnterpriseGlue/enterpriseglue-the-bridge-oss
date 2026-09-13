@@ -28,6 +28,25 @@ interface LegacyPostgresTenantPolicyCatalogRow {
   check_expression: string | null;
 }
 
+async function hasPostgresTableForPolicyVerification(
+  queryRunner: QueryRunner,
+  schema: string,
+  tableName: string,
+): Promise<boolean> {
+  // information_schema hides relations from the membership-free preflight
+  // login because it deliberately has no business-table grants. pg_catalog
+  // exposes relation metadata without granting any table data access.
+  const rows: Array<{ relation_exists: boolean }> = await queryRunner.query(
+    `SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname=$1 AND c.relname=$2 AND c.relkind IN ('r','p')
+    ) AS relation_exists`,
+    [schema, tableName],
+  );
+  return rows.length === 1 && rows[0].relation_exists === true;
+}
+
 /** PostgreSQL adds harmless text casts and parentheses while deparsing. Strip
  * only those two presentation details; all function, setting, literal,
  * operator and column tokens remain byte-sensitive. */
@@ -58,9 +77,9 @@ async function verifyLegacyPostgresTenantRls(queryRunner: QueryRunner): Promise<
   let enforced = 0;
   for (const metadata of queryRunner.connection.entityMetadatas) {
     if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
-    if (!await queryRunner.hasTable(metadata.tablePath)) continue;
-    expected += 1;
     const schema = metadata.schema || String((queryRunner.connection.options as { schema?: string }).schema || 'public');
+    if (!await hasPostgresTableForPolicyVerification(queryRunner, schema, metadata.tableName)) continue;
+    expected += 1;
     const rows: Array<{
       relrowsecurity: boolean;
       relforcerowsecurity: boolean;
@@ -121,9 +140,9 @@ export async function verifyPostgresTenantRls(
   let enforced = 0;
   for (const metadata of queryRunner.connection.entityMetadatas) {
     if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
-    if (!await queryRunner.hasTable(metadata.tablePath)) continue;
-    expected += 1;
     const schema = metadata.schema || String((queryRunner.connection.options as { schema?: string }).schema || 'public');
+    if (!await hasPostgresTableForPolicyVerification(queryRunner, schema, metadata.tableName)) continue;
+    expected += 1;
     const capability = getPlatformDatabaseCapability();
     const migrationLease = capability?.kind === 'migration-execution' && capability.schema === schema;
     const rows: Array<{ relrowsecurity: boolean; relforcerowsecurity: boolean; policy_count: string | number; expected_count: string | number }> = await queryRunner.query(

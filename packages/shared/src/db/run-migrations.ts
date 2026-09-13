@@ -684,75 +684,83 @@ async function runMigrationsForInvocation(
         }
       }
 
-      const coreBootstrapEntities = [
-        User,
-        RefreshToken,
-        EnvironmentTag,
-        PlatformSettings,
-        EmailTemplate,
-        GitProvider,
-        GitCredential,
-        Invitation,
-        Tenant,
-        TenantLoginPolicy,
-      ];
+      // The separately credentialed schema-epoch preflight is intentionally
+      // denied business-table access. PostgreSQL's information_schema (and
+      // therefore TypeORM hasTable) hides those relations from that login.
+      // Its readiness boundary is the signed migration ledger plus the exact
+      // catalog-backed epoch, policy, cohort-shape and runtime-grant checks
+      // below; generic bootstrap inspection remains on application/owner runs.
+      if (!schemaEpochPreflight) {
+        const coreBootstrapEntities = [
+          User,
+          RefreshToken,
+          EnvironmentTag,
+          PlatformSettings,
+          EmailTemplate,
+          GitProvider,
+          GitCredential,
+          Invitation,
+          Tenant,
+          TenantLoginPolicy,
+        ];
 
-      const missingTables: string[] = [];
-      for (const entity of coreBootstrapEntities) {
-        const tablePath = dataSource.getMetadata(entity).tablePath;
-        const hasTable = await queryRunner.hasTable(tablePath);
-        if (!hasTable) {
-          missingTables.push(tablePath);
-        }
-      }
-
-      let hadCanonicalTableBeforeBootstrap =
-        missingTables.length < coreBootstrapEntities.length;
-      if (
-        !hadCanonicalTableBeforeBootstrap
-        && dataSource.entityMetadatas?.length
-      ) {
-        const coreTablePaths = new Set(
-          coreBootstrapEntities.map((entity) => dataSource.getMetadata(entity).tablePath),
-        );
-        for (const metadata of dataSource.entityMetadatas) {
-          if (
-            !coreTablePaths.has(metadata.tablePath)
-            && await queryRunner.hasTable(metadata.tablePath)
-          ) {
-            hadCanonicalTableBeforeBootstrap = true;
-            break;
+        const missingTables: string[] = [];
+        for (const entity of coreBootstrapEntities) {
+          const tablePath = dataSource.getMetadata(entity).tablePath;
+          const hasTable = await queryRunner.hasTable(tablePath);
+          if (!hasTable) {
+            missingTables.push(tablePath);
           }
         }
-      }
 
-      if (missingTables.length > 0) {
-        if (mode === 'verify') {
-          throw new Error(
-            `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
+        let hadCanonicalTableBeforeBootstrap =
+          missingTables.length < coreBootstrapEntities.length;
+        if (
+          !hadCanonicalTableBeforeBootstrap
+          && dataSource.entityMetadatas?.length
+        ) {
+          const coreTablePaths = new Set(
+            coreBootstrapEntities.map((entity) => dataSource.getMetadata(entity).tablePath),
           );
+          for (const metadata of dataSource.entityMetadatas) {
+            if (
+              !coreTablePaths.has(metadata.tablePath)
+              && await queryRunner.hasTable(metadata.tablePath)
+            ) {
+              hadCanonicalTableBeforeBootstrap = true;
+              break;
+            }
+          }
         }
-        console.log(
-          `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
-        );
-        await dataSource.synchronize();
-        if (!hadCanonicalTableBeforeBootstrap) {
-          // A fully empty database was created directly from the current
-          // entity model. Historical migrations are already represented in
-          // that schema and must be recorded without replaying legacy-only
-          // transformations against it.
-          await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
-          initializedFreshSchema = true;
-          console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
-        }
-      }
 
-      if (
-        mode === 'apply'
-        && !initializedFreshSchema
-        && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
-      ) {
-        initializedFreshSchema = true;
+        if (missingTables.length > 0) {
+          if (mode === 'verify') {
+            throw new Error(
+              `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
+            );
+          }
+          console.log(
+            `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
+          );
+          await dataSource.synchronize();
+          if (!hadCanonicalTableBeforeBootstrap) {
+            // A fully empty database was created directly from the current
+            // entity model. Historical migrations are already represented in
+            // that schema and must be recorded without replaying legacy-only
+            // transformations against it.
+            await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
+            initializedFreshSchema = true;
+            console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
+          }
+        }
+
+        if (
+          mode === 'apply'
+          && !initializedFreshSchema
+          && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
+        ) {
+          initializedFreshSchema = true;
+        }
       }
 
     } finally {
@@ -821,7 +829,9 @@ async function runMigrationsForInvocation(
           await verifySchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, integrityRunner, runtimeRole);
         }
       }
-      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
+      if (!schemaEpochPreflight) {
+        await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
+      }
       if (runtimeRole !== undefined && mode === 'apply') await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
     } finally {
       await integrityRunner.release();

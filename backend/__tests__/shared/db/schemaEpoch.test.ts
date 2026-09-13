@@ -182,11 +182,14 @@ describe('immutable schema-epoch compatibility bridge', () => {
         }],
       },
       hasTable: vi.fn().mockResolvedValue(true),
-      query: vi.fn().mockResolvedValue([{
-        relrowsecurity: true,
-        relforcerowsecurity: true,
-        policies: [row],
-      }]),
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('relation_exists')) return [{ relation_exists: true }];
+        return [{
+          relrowsecurity: true,
+          relforcerowsecurity: true,
+          policies: [row],
+        }];
+      }),
     } as any;
     await expect(
       verifyPostgresTenantRlsForPolicyProfile(queryRunner, 'legacy-tenant-context/v1'),
