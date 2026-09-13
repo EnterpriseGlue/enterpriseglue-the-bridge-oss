@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { databaseConfig as config } from '@enterpriseglue/shared/config/database.js';
 import { TenantRlsSubscriber } from '../subscribers/TenantRlsSubscriber.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,

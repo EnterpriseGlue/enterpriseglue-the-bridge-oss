@@ -1,0 +1,73 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "migration-database-config-boundary",
+  "type": "security",
+  "scope": "database-migration-runtime",
+  "breaking": false,
+  "audiences": ["administrators", "operators", "developers", "security"],
+  "summary": "Separates database migration configuration from application authentication and encryption secrets for least-privilege deployment jobs.",
+  "userImpact": [
+    "Database migration and readiness jobs can start with only their database-scoped configuration and credentials."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Redeploy the matching host chart and backend image so database jobs use the database-only configuration boundary."
+    ]
+  },
+  "configuration": [
+    "No new environment variables are required; existing database, tenancy, schema-epoch, and adapter settings retain their names and defaults.",
+    "Migration and preflight jobs must continue to mount their dedicated database Secrets and must not receive JWT_SECRET, ADMIN_PASSWORD, or ENCRYPTION_KEY."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema migration is added and the PostgreSQL, MySQL, SQL Server, Oracle, and Spanner TypeORM adapter contracts are unchanged.",
+      "Pooled-tenancy, owner migration, schema-epoch preflight, RLS, and runtime-grant behavior remain enabled through database-scoped configuration."
+    ]
+  },
+  "security": [
+    "Application authentication, administrator, and encryption secrets are no longer prerequisites of the migration module graph or inputs to database migration and preflight jobs.",
+    "The application runtime retains full production validation of JWT_SECRET, ADMIN_PASSWORD, and ENCRYPTION_KEY."
+  ],
+  "documentation": [
+    "The host chart operator documentation describes the database-only configuration boundary for migration and preflight jobs."
+  ],
+  "knownLimitations": [
+    "Database credentials remain adapter-specific and must still be scoped separately for owner migration, preflight, and application runtime identities."
+  ],
+  "rollback": [
+    "Redeploy the prior matching backend image and host chart; no database rollback or data restoration is required."
+  ],
+  "validation": [
+    "Focused configuration and module-boundary tests prove production migration imports succeed without application secrets.",
+    "Negative configuration tests prove every supported adapter still rejects missing required connection fields and PostgreSQL still rejects the public application schema.",
+    "TypeORM adapter, migration orchestration, Helm rendering, PostgreSQL integration, and database portability gates cover the unchanged database behavior."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.0",
+      "newVersion": "0.22.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.3",
+      "newVersion": "0.19.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.13",
+      "newVersion": "0.17.14",
+      "impact": "patch"
+    }
+  ]
+}

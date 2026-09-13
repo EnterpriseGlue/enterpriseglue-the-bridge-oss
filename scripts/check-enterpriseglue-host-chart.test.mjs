@@ -138,31 +138,33 @@ test('pooled PostgreSQL profile always renders the signed bridge owner and verif
   assert.doesNotMatch(result.stdout, /^\s*- name: TENANCY_MODE$/m)
 })
 
-test('database hooks satisfy shared config validation without application Secret access', async (t) => {
+test('database jobs mount only their database-scoped Secrets and no application secret values', async (t) => {
   const result = await render(t, {
     database: {
       profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      applicationSecretName: 'runtime-application-secrets',
+      migrationSecretName: 'schema-owner-database-secrets',
+      preflightSecretName: 'runtime-database-secrets',
       migration: { runtimeRole: 'eg_runtime' },
     },
   })
   assert.equal(result.status, 0, result.stderr)
   const rendered = documents(result.stdout)
-  for (const component of ['migration', 'preflight']) {
-    const job = rendered.find((document) => document.includes('kind: Job') &&
-      document.includes(`app.kubernetes.io/component: ${component}`))
-    assert.ok(job, component)
-    assert.match(job, /enterpriseglue.io\/database-hook-config-profile: validation-only-v1/)
-    for (const [name, value] of Object.entries({
-      EG_TENANCY_CLOUD_REQUIRED: 'false',
-      EG_CLOUD_ACCOUNT_IDENTITY_ENABLED: 'false',
-      JWT_SECRET: '0123456789abcdef0123456789abcdef',
-      ADMIN_PASSWORD: 'validation-only',
-      ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-    })) assert.match(job, new RegExp(`name: ${name}\\n\\s+value: "${value}"`), `${component}:${name}`)
-    assert.doesNotMatch(job, /secretRef: \{ name: enterpriseglue-secrets \}/)
+  const jobs = {
+    migration: rendered.find((document) => document.includes('kind: Job') &&
+      document.includes('app.kubernetes.io/component: migration')),
+    preflight: rendered.find((document) => document.includes('kind: Job') &&
+      document.includes('app.kubernetes.io/component: preflight')),
   }
-  assert.match(result.stdout, /app\.kubernetes\.io\/component: api/)
-  assert.match(result.stdout, /secretRef: \{ name: enterpriseglue-secrets \}/)
+  for (const [component, job] of Object.entries(jobs)) {
+    assert.ok(job, component)
+    assert.doesNotMatch(job, /runtime-application-secrets/)
+    assert.doesNotMatch(job, /(?:name:|secretKeyRef:)[\s\S]*(?:JWT_SECRET|ADMIN_PASSWORD|ENCRYPTION_KEY)/)
+  }
+  assert.match(jobs.migration, /secretRef: \{ name: schema-owner-database-secrets \}/)
+  assert.doesNotMatch(jobs.migration, /runtime-database-secrets/)
+  assert.match(jobs.preflight, /secretRef: \{ name: runtime-database-secrets \}/)
+  assert.doesNotMatch(jobs.preflight, /schema-owner-database-secrets/)
 })
 
 test('fresh managed-shard bootstrap is default off and renders one bounded pre-install predecessor job only when enabled', async (t) => {

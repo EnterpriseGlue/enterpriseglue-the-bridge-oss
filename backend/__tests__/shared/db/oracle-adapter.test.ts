@@ -2,9 +2,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
 import { OracleAdapter } from '@enterpriseglue/shared/db/adapters/OracleAdapter.js';
 
-vi.mock('@enterpriseglue/shared/config/index.js', () => ({
-  shouldUseSecureCookies: () => false,
-  config: {
+vi.mock('@enterpriseglue/shared/config/database.js', () => ({
+  databaseConfig: {
     nodeEnv: 'test',
     oracleSchema: 'enterpriseglue',
     oracleHost: 'db',

@@ -7,7 +7,6 @@ import { User } from '../infrastructure/persistence/entities/User.js';
 import { Tenant } from '../infrastructure/persistence/entities/Tenant.js';
 import { TenantLoginPolicy } from '../infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { EmailTemplate } from '../infrastructure/persistence/entities/EmailTemplate.js';
-import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 import { permissionService } from '../services/platform-admin/permissions.js';
 import { RefreshToken } from '../infrastructure/persistence/entities/RefreshToken.js';
 import { GitProvider } from '../infrastructure/persistence/entities/GitProvider.js';
@@ -22,7 +21,7 @@ import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledge
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
 import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
 import type { PostgresTenantPolicyProfile } from './postgres-tenant-rls.js';
-import { config } from '../config/index.js';
+import { databaseConfig as config } from '../config/database.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
 import { withPostgresMigrationContext } from './postgres-migration-context.js';
 import {
@@ -875,6 +874,7 @@ export async function runSchemaEpochPreflight() {
  */
 export async function seedInitialData() {
   console.log('🌱 Seeding initial data...');
+  const { authzGroupService } = await import('../services/platform-admin/AuthzGroupService.js');
   
   const dataSource = await getDataSource();
   const now = Date.now();

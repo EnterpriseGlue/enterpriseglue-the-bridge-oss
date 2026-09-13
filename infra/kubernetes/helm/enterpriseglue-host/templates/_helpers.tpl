@@ -338,23 +338,3 @@ tolerations:
     periodSeconds: 2
 {{- end }}
 {{- end }}
-
-{{/*
-Database hooks import the shared configuration module before running their
-bounded database entrypoints. Keep application credentials out of the
-migration and preflight identities while satisfying production-mode schema
-validation with non-secret, validation-only values. The application-only cloud
-identity requirements are disabled explicitly for these short-lived hooks.
-*/}}
-{{- define "enterpriseglue-host.databaseHookValidationEnvironment" -}}
-- name: EG_TENANCY_CLOUD_REQUIRED
-  value: "false"
-- name: EG_CLOUD_ACCOUNT_IDENTITY_ENABLED
-  value: "false"
-- name: JWT_SECRET
-  value: "0123456789abcdef0123456789abcdef"
-- name: ADMIN_PASSWORD
-  value: "validation-only"
-- name: ENCRYPTION_KEY
-  value: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-{{- end -}}

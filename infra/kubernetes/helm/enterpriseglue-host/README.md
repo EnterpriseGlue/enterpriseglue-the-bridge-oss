@@ -18,11 +18,11 @@ migration is pending. API and worker pods use `database.applicationSecretName` a
 migrations or install RLS. Give the migration identity DDL privileges and application/preflight
 identities only the least database authority they need.
 
-Both database hooks keep application credentials out of their identities. Because their bounded
-entrypoints import the shared production configuration module, the chart supplies fixed
-validation-only JWT, administrator, and encryption values and disables application-only cloud
-identity requirements for those short-lived Pods. These values are not application secrets and
-must never be used by the API or worker Deployments.
+The migration and preflight entrypoints load a database-only configuration boundary. They accept
+the existing adapter connection, schema, startup, tenancy, RLS, runtime-grant and schema-epoch
+settings without loading application authentication or encryption configuration. Do not copy
+`JWT_SECRET`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY` or the application Secret into either Job; those
+values remain application-runtime concerns and are not migration prerequisites.
 
 Set `database.profile.databaseType=postgres` and
 `database.profile.tenancyMode=pooled` together to activate the schema-epoch bridge. The chart

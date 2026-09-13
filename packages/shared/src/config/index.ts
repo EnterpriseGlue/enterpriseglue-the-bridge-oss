@@ -1,34 +1,6 @@
 import { z } from 'zod';
-import dotenv from 'dotenv';
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
-
-// Tests are hermetic by default: a developer's .env or .env.selfhost must not
-// change unit behavior or leak infrastructure metadata into CI output. A
-// protocol rehearsal may explicitly opt in with EG_LOAD_ENV_IN_TESTS=true.
-const shouldLoadEnvironmentFile = process.env.NODE_ENV !== 'test'
-  || process.env.EG_LOAD_ENV_IN_TESTS === 'true';
-
-if (shouldLoadEnvironmentFile) {
-  // Load the first matching env file before reading any environment variables.
-  // Prefer self-host config so a single .env.selfhost file can drive the runtime.
-  const envFileCandidates = [
-    process.env.EG_ENV_FILE,
-    path.resolve(process.cwd(), '.env.selfhost'),
-    path.resolve(process.cwd(), '..', '.env.selfhost'),
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), '..', '.env'),
-  ];
-
-  const envFilePath = envFileCandidates.find(candidate => candidate && fs.existsSync(candidate));
-
-  if (envFilePath) {
-    dotenv.config({ path: envFilePath });
-  } else {
-    dotenv.config();
-  }
-}
+import { databaseConfig } from './database.js';
 
 /**
  * Application configuration with validation
@@ -93,7 +65,7 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   postgresDatabase: z.string().optional(),
   postgresSchema: schemaName.default('public'),
   postgresSsl: z.boolean().default(false),
-  postgresSslRejectUnauthorized: z.enum(['true', 'false']).default('false').transform(v => v === 'true'),
+  postgresSslRejectUnauthorized: z.boolean().default(false),
 
   // Oracle configuration (when databaseType=oracle)
   // Either ORACLE_CONNECTION_STRING (Easy Connect Plus / TNS descriptor for multi-host)
@@ -204,19 +176,10 @@ function loadConfig(): Config {
     ? undefined
     : crypto.randomBytes(18).toString('base64url');
 
-  // Parse POSTGRES_URL connection string as fallback for individual vars.
-  // Individual vars always take priority over the URL.
-  let pgUrlParsed: URL | null = null;
-  if (process.env.POSTGRES_URL) {
-    try { pgUrlParsed = new URL(process.env.POSTGRES_URL); } catch {}
-  }
-
   const raw = {
+    ...databaseConfig,
     port: process.env.API_PORT ? Number(process.env.API_PORT) : undefined,
-    databaseType: process.env.DATABASE_TYPE,
-    databaseStartupMode: envOrUndefined(process.env.EG_DATABASE_STARTUP_MODE),
     runtimeRole: envOrUndefined(process.env.EG_RUNTIME_ROLE),
-    tenancyMode: envOrUndefined(process.env.EG_TENANCY_MODE),
     tenantBaseDomain: envOrUndefined(process.env.EG_TENANT_BASE_DOMAIN)?.toLowerCase(),
     tenantPlacementKey: envOrUndefined(process.env.EG_TENANT_PLACEMENT_KEY),
     tenantPlacementMaxAgeSeconds: process.env.EG_TENANT_PLACEMENT_MAX_AGE_SECONDS
@@ -253,43 +216,6 @@ function loadConfig(): Config {
     tenantWorkloadReceiptKeyId: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_KEY_ID),
     tenantWorkloadReceiptIssuer: envOrUndefined(process.env.EG_TENANT_WORKLOAD_RECEIPT_ISSUER),
     managedEngineInternalDnsSuffix: envOrUndefined(process.env.EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX),
-    tenantRlsEnforced: process.env.EG_TENANT_RLS_ENFORCED === 'true',
-    postgresUrl: process.env.POSTGRES_URL,
-    postgresHost: process.env.POSTGRES_HOST || pgUrlParsed?.hostname || undefined,
-    postgresPort: process.env.POSTGRES_PORT
-      ? Number(process.env.POSTGRES_PORT)
-      : pgUrlParsed?.port ? Number(pgUrlParsed.port) : undefined,
-    postgresUser: process.env.POSTGRES_USER || (pgUrlParsed?.username ? decodeURIComponent(pgUrlParsed.username) : undefined),
-    postgresPassword: process.env.POSTGRES_PASSWORD || (pgUrlParsed?.password ? decodeURIComponent(pgUrlParsed.password) : undefined),
-    postgresDatabase: process.env.POSTGRES_DATABASE || (pgUrlParsed?.pathname ? pgUrlParsed.pathname.replace(/^\//, '') : undefined),
-    postgresSchema: envOrUndefined(process.env.POSTGRES_SCHEMA || pgUrlParsed?.searchParams.get('schema') || undefined),
-    postgresSsl: process.env.POSTGRES_SSL === 'true',
-    postgresSslRejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED,
-    oracleConnectionString: envOrUndefined(process.env.ORACLE_CONNECTION_STRING),
-    oracleHost: process.env.ORACLE_HOST,
-    oraclePort: process.env.ORACLE_PORT ? Number(process.env.ORACLE_PORT) : undefined,
-    oracleUser: process.env.ORACLE_USER,
-    oraclePassword: process.env.ORACLE_PASSWORD,
-    oracleServiceName: process.env.ORACLE_SERVICE_NAME,
-    oracleSid: process.env.ORACLE_SID,
-    oracleSchema: envOrUndefined(process.env.ORACLE_SCHEMA),
-    mssqlHost: process.env.MSSQL_HOST,
-    mssqlPort: process.env.MSSQL_PORT ? Number(process.env.MSSQL_PORT) : undefined,
-    mssqlUser: process.env.MSSQL_USER,
-    mssqlPassword: process.env.MSSQL_PASSWORD,
-    mssqlDatabase: process.env.MSSQL_DATABASE,
-    mssqlSchema: envOrUndefined(process.env.MSSQL_SCHEMA),
-    mssqlEncrypt: process.env.MSSQL_ENCRYPT === 'true',
-    mssqlTrustServerCertificate: process.env.MSSQL_TRUST_SERVER_CERTIFICATE === 'true',
-    spannerProjectId: process.env.SPANNER_PROJECT_ID,
-    spannerInstanceId: process.env.SPANNER_INSTANCE_ID,
-    spannerDatabaseId: process.env.SPANNER_DATABASE_ID,
-    mysqlHost: process.env.MYSQL_HOST,
-    mysqlPort: process.env.MYSQL_PORT ? Number(process.env.MYSQL_PORT) : undefined,
-    mysqlUser: process.env.MYSQL_USER,
-    mysqlPassword: process.env.MYSQL_PASSWORD,
-    mysqlDatabase: process.env.MYSQL_DATABASE,
-
     enterpriseSchema: envOrUndefined(process.env.ENTERPRISE_SCHEMA || process.env.ENTERPRISE_POSTGRES_SCHEMA), // ENTERPRISE_POSTGRES_SCHEMA is deprecated
     jwtSecret: process.env.JWT_SECRET || generatedJwtSecret,
     jwtAccessTokenExpires: process.env.JWT_ACCESS_TOKEN_EXPIRES ? Number(process.env.JWT_ACCESS_TOKEN_EXPIRES) : undefined,
@@ -337,11 +263,11 @@ function loadConfig(): Config {
       : undefined,
     tenantSecretBrokerRequired: process.env.EG_TENANT_SECRET_BROKER_REQUIRED === 'true',
     tenantSecretBreakGlassEnabled: process.env.EG_TENANT_SECRET_BREAK_GLASS_ENABLED === 'true',
-    nodeEnv: inferredNodeEnv,
   };
 
   try {
-    return configSchema.parse(raw);
+    const parsed = configSchema.parse(raw);
+    return Object.assign(databaseConfig, parsed);
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('❌ Configuration validation failed:');
@@ -526,65 +452,6 @@ export function shouldUseSecureCookies(): boolean {
     return new URL(config.frontendUrl).protocol === 'https:';
   } catch {
     return config.nodeEnv === 'production';
-  }
-}
-
-const requireConfig = (name: string, value: unknown, dbType: string): void => {
-  if (value === undefined || value === null || String(value).trim() === '') {
-    throw new Error(`${name} is required when DATABASE_TYPE=${dbType}.`);
-  }
-};
-
-switch (config.databaseType) {
-  case 'postgres': {
-    if (!config.postgresUrl) {
-      requireConfig('POSTGRES_HOST', config.postgresHost, 'postgres');
-      requireConfig('POSTGRES_USER', config.postgresUser, 'postgres');
-      requireConfig('POSTGRES_PASSWORD', config.postgresPassword, 'postgres');
-      requireConfig('POSTGRES_DATABASE', config.postgresDatabase, 'postgres');
-    }
-
-    if (config.postgresSchema === 'public') {
-      throw new Error(
-        'Schema mode requires POSTGRES_SCHEMA to be set to a non-public schema name when DATABASE_TYPE=postgres.'
-      );
-    }
-    break;
-  }
-
-  case 'oracle': {
-    requireConfig('ORACLE_USER', config.oracleUser, 'oracle');
-    requireConfig('ORACLE_PASSWORD', config.oraclePassword, 'oracle');
-    if (!config.oracleConnectionString) {
-      requireConfig('ORACLE_HOST', config.oracleHost, 'oracle');
-      if (!config.oracleServiceName && !config.oracleSid) {
-        throw new Error('Either ORACLE_SERVICE_NAME, ORACLE_SID, or ORACLE_CONNECTION_STRING is required when DATABASE_TYPE=oracle.');
-      }
-    }
-    break;
-  }
-
-  case 'mssql': {
-    requireConfig('MSSQL_HOST', config.mssqlHost, 'mssql');
-    requireConfig('MSSQL_USER', config.mssqlUser, 'mssql');
-    requireConfig('MSSQL_PASSWORD', config.mssqlPassword, 'mssql');
-    requireConfig('MSSQL_DATABASE', config.mssqlDatabase, 'mssql');
-    break;
-  }
-
-  case 'mysql': {
-    requireConfig('MYSQL_HOST', config.mysqlHost, 'mysql');
-    requireConfig('MYSQL_USER', config.mysqlUser, 'mysql');
-    requireConfig('MYSQL_PASSWORD', config.mysqlPassword, 'mysql');
-    requireConfig('MYSQL_DATABASE', config.mysqlDatabase, 'mysql');
-    break;
-  }
-
-  case 'spanner': {
-    requireConfig('SPANNER_PROJECT_ID', config.spannerProjectId, 'spanner');
-    requireConfig('SPANNER_INSTANCE_ID', config.spannerInstanceId, 'spanner');
-    requireConfig('SPANNER_DATABASE_ID', config.spannerDatabaseId, 'spanner');
-    break;
   }
 }
 

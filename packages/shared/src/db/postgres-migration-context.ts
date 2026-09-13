@@ -1,5 +1,5 @@
 import type { DataSource } from 'typeorm';
-import { config } from '../config/index.js';
+import { databaseConfig as config } from '../config/database.js';
 import { runWithPlatformDatabaseCapability } from '../services/platform-database-context.js';
 import { POSTGRES_TENANT_RLS_TABLES } from './tenant-ownership-inventory.js';
 import { logger } from '../utils/logger.js';
