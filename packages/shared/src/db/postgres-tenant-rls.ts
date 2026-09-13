@@ -28,6 +28,44 @@ interface LegacyPostgresTenantPolicyCatalogRow {
   check_expression: string | null;
 }
 
+interface PostgresTableIdentity {
+  tableName: string;
+  tablePath: string;
+  schema?: string;
+}
+
+export type PostgresTableExistenceProbe = (
+  queryRunner: QueryRunner,
+  table: PostgresTableIdentity,
+) => Promise<boolean>;
+
+const typeormTableExists: PostgresTableExistenceProbe = (queryRunner, table) =>
+  queryRunner.hasTable(table.tablePath);
+
+/** Detect an owner-schema table without requiring privileges on its rows. */
+export const postgresCatalogTableExists: PostgresTableExistenceProbe = async (
+  queryRunner: QueryRunner,
+  table: PostgresTableIdentity,
+): Promise<boolean> => {
+  // information_schema hides relations from the membership-free preflight
+  // login because it deliberately has no business-table grants. pg_catalog
+  // exposes relation metadata without granting any table data access.
+  const schema = table.schema
+    || String((queryRunner.connection.options as { schema?: string }).schema || 'public');
+  const rows: Array<{ relation_exists: boolean }> = await queryRunner.query(
+    `SELECT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname=$1 AND c.relname=$2 AND c.relkind IN ('r','p')
+    ) AS relation_exists`,
+    [schema, table.tableName],
+  );
+  if (rows.length !== 1 || typeof rows[0]?.relation_exists !== 'boolean') {
+    throw new Error('PostgreSQL table catalog probe returned an invalid result');
+  }
+  return rows[0].relation_exists;
+};
+
 /** PostgreSQL adds harmless text casts and parentheses while deparsing. Strip
  * only those two presentation details; all function, setting, literal,
  * operator and column tokens remain byte-sensitive. */
@@ -52,15 +90,18 @@ export function legacyPostgresTenantPolicyMatches(row: LegacyPostgresTenantPolic
     && normalizeLegacyPostgresTenantPolicyExpression(row.check_expression) === expected;
 }
 
-async function verifyLegacyPostgresTenantRls(queryRunner: QueryRunner): Promise<{ expected: number; enforced: number }> {
+async function verifyLegacyPostgresTenantRls(
+  queryRunner: QueryRunner,
+  tableExists: PostgresTableExistenceProbe,
+): Promise<{ expected: number; enforced: number }> {
   assertTenantPersistenceOwnershipV1(queryRunner.connection.entityMetadatas);
   let expected = 0;
   let enforced = 0;
   for (const metadata of queryRunner.connection.entityMetadatas) {
     if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
-    if (!await queryRunner.hasTable(metadata.tablePath)) continue;
-    expected += 1;
+    if (!await tableExists(queryRunner, metadata)) continue;
     const schema = metadata.schema || String((queryRunner.connection.options as { schema?: string }).schema || 'public');
+    expected += 1;
     const rows: Array<{
       relrowsecurity: boolean;
       relforcerowsecurity: boolean;
@@ -90,11 +131,12 @@ async function verifyLegacyPostgresTenantRls(queryRunner: QueryRunner): Promise<
 export async function verifyPostgresTenantRlsForPolicyProfile(
   queryRunner: QueryRunner,
   profile: PostgresTenantPolicyProfile,
+  tableExists: PostgresTableExistenceProbe = typeormTableExists,
 ): Promise<{ expected: number; enforced: number }> {
   if (queryRunner.connection.options.type !== 'postgres') return { expected: 0, enforced: 0 };
   return profile === 'legacy-tenant-context/v1'
-    ? verifyLegacyPostgresTenantRls(queryRunner)
-    : verifyPostgresTenantRls(queryRunner, profile);
+    ? verifyLegacyPostgresTenantRls(queryRunner, tableExists)
+    : verifyPostgresTenantRls(queryRunner, profile, tableExists);
 }
 
 /** Runtime verification is independent of the optional migration grant hook. */
@@ -114,6 +156,7 @@ export async function assertRestrictedPostgresRuntimeRole(queryRunner: QueryRunn
 export async function verifyPostgresTenantRls(
   queryRunner: QueryRunner,
   profile: Exclude<PostgresTenantPolicyProfile, 'legacy-tenant-context/v1'> = 'explicit-context/v1',
+  tableExists: PostgresTableExistenceProbe = typeormTableExists,
 ): Promise<{ expected: number; enforced: number }> {
   if (queryRunner.connection.options.type !== 'postgres') return { expected: 0, enforced: 0 };
   assertTenantPersistenceOwnershipV1(queryRunner.connection.entityMetadatas);
@@ -121,9 +164,9 @@ export async function verifyPostgresTenantRls(
   let enforced = 0;
   for (const metadata of queryRunner.connection.entityMetadatas) {
     if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some((column) => column.databaseName === 'tenant_id')) continue;
-    if (!await queryRunner.hasTable(metadata.tablePath)) continue;
-    expected += 1;
+    if (!await tableExists(queryRunner, metadata)) continue;
     const schema = metadata.schema || String((queryRunner.connection.options as { schema?: string }).schema || 'public');
+    expected += 1;
     const capability = getPlatformDatabaseCapability();
     const migrationLease = capability?.kind === 'migration-execution' && capability.schema === schema;
     const rows: Array<{ relrowsecurity: boolean; relforcerowsecurity: boolean; policy_count: string | number; expected_count: string | number }> = await queryRunner.query(

@@ -21,7 +21,7 @@ import { AddPostgresTenantRls1700000000126 } from '@enterpriseglue/shared/db/mig
 import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { verifyExecutedSchemaEpoch, verifyOwnerMigrationStartingEpoch } from '@enterpriseglue/shared/db/schema-epoch.js';
-import { verifyPostgresTenantRlsForPolicyProfile } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
+import { postgresCatalogTableExists, verifyPostgresTenantRlsForPolicyProfile } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
 
 vi.mock('@enterpriseglue/shared/db/schema-epoch.js', async () => {
   const actual = await vi.importActual<typeof import('@enterpriseglue/shared/db/schema-epoch.js')>(
@@ -324,7 +324,11 @@ describe('runMigrations bootstrap behavior', () => {
     vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
     const previousTenancyMode = config.tenancyMode;
     (config as { tenancyMode: string }).tenancyMode = 'pooled';
-    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(true));
+    const bootstrapRunner = {
+      ...createBootstrapRunner(vi.fn().mockResolvedValue(false)),
+      connection: { options: { type: 'postgres', schema: 'public' } },
+      query: vi.fn().mockResolvedValue([{ relation_exists: true }]),
+    };
     const epochRunner = { release: vi.fn().mockResolvedValue(undefined) };
     const legacyPredicate = "((COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode'::text, true), ''::text), 'single'::text) <> 'pooled'::text) OR (tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id'::text, true), ''::text)))";
     const integrityRunner = {
@@ -359,9 +363,11 @@ describe('runMigrations bootstrap behavior', () => {
         .mockReturnValueOnce(bootstrapRunner)
         .mockReturnValueOnce(epochRunner)
         .mockReturnValueOnce(integrityRunner),
-      getMetadata: vi.fn((entity: { name: string } | string) => ({
-        tablePath: `public.${(typeof entity === 'string' ? entity : entity.name).toLowerCase()}`,
-      })),
+      getMetadata: vi.fn((entity: { name: string } | string) => {
+        const entityName = typeof entity === 'string' ? entity : entity.name;
+        const tableName = entityName === 'RefreshToken' ? 'refresh_tokens' : entityName.toLowerCase();
+        return { tableName, tablePath: `public.${tableName}`, schema: 'public' };
+      }),
       entityMetadatas: [],
       showMigrations: vi.fn().mockResolvedValue(false),
       runMigrations: vi.fn(),
@@ -382,8 +388,58 @@ describe('runMigrations bootstrap behavior', () => {
       );
       expect(dataSource.runMigrations).not.toHaveBeenCalled();
       expect(dataSource.synchronize).not.toHaveBeenCalled();
+      expect(bootstrapRunner.hasTable).not.toHaveBeenCalled();
+      expect(bootstrapRunner.query).toHaveBeenCalledTimes(10);
+      expect(integrityRunner.getTable).not.toHaveBeenCalled();
+      expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenCalledWith(
+        integrityRunner,
+        'dual-context-compatibility/v1',
+        postgresCatalogTableExists,
+      );
       expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
       expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).not.toHaveBeenCalled();
+    } finally {
+      (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('schema-epoch preflight rejects a missing core table through the restricted catalog probe', async () => {
+    vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
+    vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
+    const previousTenancyMode = config.tenancyMode;
+    (config as { tenancyMode: string }).tenancyMode = 'pooled';
+    const bootstrapRunner = {
+      ...createBootstrapRunner(vi.fn().mockResolvedValue(false)),
+      connection: { options: { type: 'postgres', schema: 'public' } },
+      query: vi.fn(async (_sql: string, parameters?: unknown[]) => [{
+        relation_exists: parameters?.[1] !== 'refresh_tokens',
+      }]),
+    };
+    const dataSource = {
+      migrations: registeredMigrationIdentities(),
+      createQueryRunner: vi.fn().mockReturnValueOnce(bootstrapRunner),
+      getMetadata: vi.fn((entity: { name: string }) => {
+        const tableName = entity.name === 'RefreshToken' ? 'refresh_tokens' : entity.name.toLowerCase();
+        return { tableName, tablePath: `public.${tableName}`, schema: 'public' };
+      }),
+      entityMetadatas: [],
+      showMigrations: vi.fn(),
+      runMigrations: vi.fn(),
+      synchronize: vi.fn(),
+    };
+    vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
+
+    try {
+      await expect(runSchemaEpochPreflight()).rejects.toThrow(
+        /migration identity must create public\.refresh_tokens/,
+      );
+      expect(bootstrapRunner.hasTable).not.toHaveBeenCalled();
+      expect(dataSource.showMigrations).not.toHaveBeenCalled();
+      expect(dataSource.synchronize).not.toHaveBeenCalled();
+      expect(verifyExecutedSchemaEpoch).not.toHaveBeenCalled();
+      expect(verifySchemaEpochReleaseEffectCohortRuntimePrivileges).not.toHaveBeenCalled();
+      expect(bootstrapRunner.release).toHaveBeenCalledOnce();
     } finally {
       (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
       vi.unstubAllEnvs();

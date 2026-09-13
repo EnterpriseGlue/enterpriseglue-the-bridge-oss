@@ -1,0 +1,66 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "postgres-schema-preflight-catalog",
+  "type": "fix",
+  "scope": "database",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Lets the least-privilege PostgreSQL schema-epoch preflight verify existing tables and RLS policies without business-data access.",
+  "userImpact": [
+    "Pooled PostgreSQL upgrades no longer reject a ready schema because the dedicated preflight login cannot see protected tables through information_schema."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Deploy the matching backend image and host chart through the normal migration and schema-epoch preflight sequence."
+    ]
+  },
+  "configuration": [
+    "No configuration or additional PostgreSQL grants are required; the preflight login retains SELECT only on the migration ledger and no business-table access."
+  ],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema, policy, role, or grant is changed; verification reads PostgreSQL system catalogs and the signed migration ledger only."
+    ]
+  },
+  "security": [
+    "The membership-free preflight login retains zero business-table privileges while verifying relation presence and exact RLS policy catalogs.",
+    "Generic bootstrap and data-integrity reads remain on application and owner invocations and are excluded from the dedicated schema-epoch preflight."
+  ],
+  "documentation": [
+    "docs/architecture/postgresql-schema-epoch-compatibility-bridge.md",
+    "infra/kubernetes/helm/enterpriseglue-host/README.md"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the preceding backend image and chart; no database rollback or credential change is required."
+  ],
+  "validation": [
+    "Unit tests preserve migration orchestration and verify that the schema-epoch preflight skips business-table inspection.",
+    "A PostgreSQL 16 integration test proves the preflight login has no business-table SELECT or DML privileges and no information_schema visibility while catalog-backed relation and RLS verification succeeds."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.2",
+      "newVersion": "0.22.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.5",
+      "newVersion": "0.19.6",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.15",
+      "newVersion": "0.17.16",
+      "impact": "patch"
+    }
+  ]
+}

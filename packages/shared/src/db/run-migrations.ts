@@ -19,7 +19,7 @@ import { AuthzMigrationState } from '../infrastructure/persistence/entities/Auth
 import { generateId } from '../utils/id.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
-import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
+import { postgresCatalogTableExists, verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
 import type { PostgresTenantPolicyProfile } from './postgres-tenant-rls.js';
 import { databaseConfig as config } from '../config/database.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
@@ -699,60 +699,72 @@ async function runMigrationsForInvocation(
 
       const missingTables: string[] = [];
       for (const entity of coreBootstrapEntities) {
-        const tablePath = dataSource.getMetadata(entity).tablePath;
-        const hasTable = await queryRunner.hasTable(tablePath);
+        const metadata = dataSource.getMetadata(entity);
+        // The separately credentialed schema-epoch preflight is intentionally
+        // denied business-table access. PostgreSQL information_schema (and
+        // therefore TypeORM hasTable) hides those relations from that login,
+        // so this one path uses the parameterized pg_catalog probe.
+        const hasTable = schemaEpochPreflight
+          ? await postgresCatalogTableExists(queryRunner, metadata)
+          : await queryRunner.hasTable(metadata.tablePath);
         if (!hasTable) {
-          missingTables.push(tablePath);
+          missingTables.push(metadata.tablePath);
         }
       }
 
-      let hadCanonicalTableBeforeBootstrap =
-        missingTables.length < coreBootstrapEntities.length;
-      if (
-        !hadCanonicalTableBeforeBootstrap
-        && dataSource.entityMetadatas?.length
-      ) {
-        const coreTablePaths = new Set(
-          coreBootstrapEntities.map((entity) => dataSource.getMetadata(entity).tablePath),
+      if (missingTables.length > 0 && mode === 'verify') {
+        throw new Error(
+          `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
         );
-        for (const metadata of dataSource.entityMetadatas) {
-          if (
-            !coreTablePaths.has(metadata.tablePath)
-            && await queryRunner.hasTable(metadata.tablePath)
-          ) {
-            hadCanonicalTableBeforeBootstrap = true;
-            break;
+      }
+
+      // Only application and ordinary owner invocations can inspect or repair
+      // business rows. Schema-epoch preflight continues with its signed ledger,
+      // catalog-backed policy, cohort-shape and runtime-grant checks below.
+      if (!schemaEpochPreflight) {
+        let hadCanonicalTableBeforeBootstrap =
+          missingTables.length < coreBootstrapEntities.length;
+        if (
+          !hadCanonicalTableBeforeBootstrap
+          && dataSource.entityMetadatas?.length
+        ) {
+          const coreTablePaths = new Set(
+            coreBootstrapEntities.map((entity) => dataSource.getMetadata(entity).tablePath),
+          );
+          for (const metadata of dataSource.entityMetadatas) {
+            if (
+              !coreTablePaths.has(metadata.tablePath)
+              && await queryRunner.hasTable(metadata.tablePath)
+            ) {
+              hadCanonicalTableBeforeBootstrap = true;
+              break;
+            }
           }
         }
-      }
 
-      if (missingTables.length > 0) {
-        if (mode === 'verify') {
-          throw new Error(
-            `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
+        if (missingTables.length > 0) {
+          console.log(
+            `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
           );
+          await dataSource.synchronize();
+          if (!hadCanonicalTableBeforeBootstrap) {
+            // A fully empty database was created directly from the current
+            // entity model. Historical migrations are already represented in
+            // that schema and must be recorded without replaying legacy-only
+            // transformations against it.
+            await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
+            initializedFreshSchema = true;
+            console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
+          }
         }
-        console.log(
-          `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
-        );
-        await dataSource.synchronize();
-        if (!hadCanonicalTableBeforeBootstrap) {
-          // A fully empty database was created directly from the current
-          // entity model. Historical migrations are already represented in
-          // that schema and must be recorded without replaying legacy-only
-          // transformations against it.
-          await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
-          initializedFreshSchema = true;
-          console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
-        }
-      }
 
-      if (
-        mode === 'apply'
-        && !initializedFreshSchema
-        && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
-      ) {
-        initializedFreshSchema = true;
+        if (
+          mode === 'apply'
+          && !initializedFreshSchema
+          && await recoverV020PublishedImageMigrationLedger(dataSource, queryRunner, dbType)
+        ) {
+          initializedFreshSchema = true;
+        }
       }
 
     } finally {
@@ -803,9 +815,10 @@ async function runMigrationsForInvocation(
           }
           const rls = acceptedDatabaseEpoch
             ? await verifyPostgresTenantRlsForPolicyProfile(
-                integrityRunner,
-                acceptedDatabaseEpoch.postgresPolicyProfile,
-              )
+              integrityRunner,
+              acceptedDatabaseEpoch.postgresPolicyProfile,
+              schemaEpochPreflight ? postgresCatalogTableExists : undefined,
+            )
             : await verifyPostgresTenantRls(integrityRunner);
           if (rls.expected === 0 || rls.enforced !== rls.expected) {
             throw new Error(`Pooled tenancy requires enforced PostgreSQL RLS policies (expected ${rls.expected}, found ${rls.enforced}).`);
@@ -821,7 +834,9 @@ async function runMigrationsForInvocation(
           await verifySchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, integrityRunner, runtimeRole);
         }
       }
-      await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
+      if (!schemaEpochPreflight) {
+        await ensureCriticalVersioningSchemaIntegrity(integrityRunner, mode === 'apply');
+      }
       if (runtimeRole !== undefined && mode === 'apply') await refreshPostgresRuntimeGrants(integrityRunner, runtimeRole);
     } finally {
       await integrityRunner.release();

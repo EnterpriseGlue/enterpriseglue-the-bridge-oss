@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import type { Pool } from 'pg';
 import {
+  postgresCatalogTableExists,
   verifyPostgresTenantRlsForPolicyProfile,
 } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
 import { applyDualContextPostgresTenantPolicies } from '@enterpriseglue/shared/db/postgres-tenant-policy.js';
@@ -49,6 +50,14 @@ function runner() {
     },
     hasTable: async (value: string) => tenantTables.some(({ tableName }) => value === `${schema}.${tableName}`),
     query: async (sql: string, parameters?: unknown[]) => (await pool.query(sql, parameters)).rows,
+  } as any;
+}
+
+function preflightPolicyRunner() {
+  const ownerRunner = runner();
+  return {
+    connection: ownerRunner.connection,
+    query: (sql: string, parameters?: unknown[]) => preflightDataSource.query(sql, parameters),
   } as any;
 }
 
@@ -228,5 +237,46 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
     ).rejects.toThrow(/restricted, nonowning/);
     await unsafeRunner.release();
     await pool.query(`REVOKE CREATE ON SCHEMA ${quoteIdentifier(schema)} FROM ${quoteIdentifier(runtimeRole)}`);
+  });
+
+  it('verifies RLS through catalogs without granting the preflight login business-table access', async () => {
+    const informationSchemaVisibility = await preflightDataSource.query(
+      `SELECT count(*)::int AS count FROM information_schema.tables
+       WHERE table_schema=$1 AND table_name=$2`,
+      [schema, 'projects'],
+    );
+    expect(informationSchemaVisibility).toEqual([{ count: 0 }]);
+    const privileges = await pool.query(
+      `SELECT
+        has_table_privilege($1, $2, 'SELECT') AS select_ok,
+        has_table_privilege($1, $2, 'INSERT') AS insert_ok,
+        has_table_privilege($1, $2, 'UPDATE') AS update_ok,
+        has_table_privilege($1, $2, 'DELETE') AS delete_ok,
+        has_table_privilege($1, $2, 'TRUNCATE') AS truncate_ok,
+        has_table_privilege($1, $2, 'REFERENCES') AS references_ok,
+        has_table_privilege($1, $2, 'TRIGGER') AS trigger_ok`,
+      [preflightRole, tablePath],
+    );
+    expect(privileges.rows).toEqual([{
+      select_ok: false,
+      insert_ok: false,
+      update_ok: false,
+      delete_ok: false,
+      truncate_ok: false,
+      references_ok: false,
+      trigger_ok: false,
+    }]);
+    await expect(preflightDataSource.query(`SELECT * FROM ${tableRef}`)).rejects.toMatchObject({ code: '42501' });
+    await expect(postgresCatalogTableExists(preflightPolicyRunner(), {
+      tableName: 'projects', tablePath, schema,
+    })).resolves.toBe(true);
+    await expect(postgresCatalogTableExists(preflightPolicyRunner(), {
+      tableName: 'refresh_tokens', tablePath: `${schema}.refresh_tokens`, schema,
+    })).resolves.toBe(false);
+    await expect(verifyPostgresTenantRlsForPolicyProfile(
+      preflightPolicyRunner(),
+      'explicit-context/v1',
+      postgresCatalogTableExists,
+    )).resolves.toEqual({ expected: 3, enforced: 3 });
   });
 });

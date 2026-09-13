@@ -44,7 +44,7 @@
     "algorithm": "sha256-source-v1",
     "purpose": "owner-transition-1700000000131-dual-context-closure/v1",
     "count": 16,
-    "sha256": "a57728401780fed9a60a8f8d66e6915d5726b66b7f4da52c05dcc6f22f55591a"
+    "sha256": "510c60f51ca0920820bec86a9a7413169ee9e5ddd108a96ef3fc8ed11b678bcb"
   },
   "releaseEffectInventory": {
     "version": "release-effect-inventory.enterpriseglue.io/v1",
