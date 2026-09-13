@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **helm:** validate least-privilege database hooks ([b21dfaa](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b21dfaa738211a960988454aafe1e5d6e7997f0b))
-* **helm:** validate least-privilege database hooks ([dc08124](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/dc08124ddf7a2a8fdd6094fbe9b06f108ec1b171))
 
 ## [0.27.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.0...v0.27.1) (2026-09-13)
 
