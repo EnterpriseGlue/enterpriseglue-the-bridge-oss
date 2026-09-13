@@ -1,0 +1,74 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "multi-provider-global-signup",
+  "type": "feature",
+  "scope": "identity-runtime",
+  "breaking": false,
+  "audiences": ["users", "operators", "developers", "security"],
+  "summary": "Adds branded Google, Microsoft, and Apple cloud-signup choices, isolated multi-secret API configuration delivery, and verified Microsoft Entra multi-organization OIDC support.",
+  "userImpact": [
+    "Cloud signup presents the existing branded Google, Microsoft, and Apple controls when those independently configured providers are available, without sharing provider credentials.",
+    "Microsoft work or school accounts can use a multi-organization Entra registration while personal Microsoft accounts remain excluded."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use apiConfigBundle.secrets only with a signed host chart that advertises the v2 contract; the legacy single-secret form remains supported."
+    ]
+  },
+  "configuration": [
+    "apiConfigBundle.secrets accepts up to 16 unique EG_CONFIG_BUNDLE_* environment bindings backed by dedicated non-optional Secret keys in the API container only."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The generic OIDC runtime recognizes the exact Microsoft Entra organizations issuer and validates each signed token against its UUID tenant claim and reconstructed tenant-specific issuer."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Each provider credential remains in a dedicated Kubernetes Secret key and is projected only as its declared EG_CONFIG_BUNDLE_* environment variable in the split API container.",
+    "The chart rejects shared runtime Secret aliases, duplicate environment names, arbitrary environment namespaces, mixed legacy/v2 forms, and credential inheritance by workers or jobs.",
+    "Entra organizations tokens require a UUID tid whose reconstructed tenant issuer exactly matches the signed iss claim before JWT verification succeeds."
+  ],
+  "documentation": [
+    "infra/kubernetes/helm/enterpriseglue-host/README.md",
+    "docs/how-to/auth-sso.md"
+  ],
+  "knownLimitations": [
+    "External Google, Microsoft, and Apple application registrations and live consent journeys remain deployment acceptance steps."
+  ],
+  "rollback": [
+    "Redeploy the previous host chart and shared package, then use the legacy single-secret bundle form; no database rollback is required."
+  ],
+  "validation": [
+    "Focused Helm tests cover v1 compatibility, v2 multi-secret rendering, schema rejection, and API-only isolation.",
+    "Focused OIDC tests cover Entra organizations discovery, tenant-specific signed-token acceptance, and issuer/tid mismatch rejection.",
+    "The signup page regression test covers all three branded provider controls and preserves the fail-closed no-provider state."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.21.2",
+      "newVersion": "0.22.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.2",
+      "newVersion": "0.19.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.12",
+      "newVersion": "0.17.13",
+      "impact": "patch"
+    }
+  ]
+}

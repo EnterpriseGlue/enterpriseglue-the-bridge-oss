@@ -14,12 +14,21 @@ vi.mock('@src/shared/api/client', () => ({
 describe('Signup', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('offers only sanitized managed Cloud identity methods when enabled', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue([{ id: 'google-workspace', displayName: 'Google Workspace', protocol: 'oidc' }]);
+  it('offers each sanitized managed Cloud identity method when enabled', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue([
+      { id: 'cloud-signup-google', displayName: 'Google', protocol: 'oidc' },
+      { id: 'cloud-signup-microsoft', displayName: 'Microsoft', protocol: 'oidc' },
+      { id: 'cloud-signup-apple', displayName: 'Apple', protocol: 'oidc' },
+    ]);
     render(<MemoryRouter><Signup /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'Create your Cloud account' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue with Google Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Microsoft' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
+    expect(document.querySelector('.eg-login-provider-button--google')).toBeInTheDocument();
+    expect(document.querySelector('.eg-login-provider-button--microsoft')).toBeInTheDocument();
+    expect(document.querySelector('.eg-login-provider-button--apple')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Already have an account/i })).toHaveAttribute('href', '/login');
   });
 

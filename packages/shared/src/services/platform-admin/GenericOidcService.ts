@@ -57,6 +57,9 @@ export interface OidcBackChannelLogoutClaims extends JwtPayload {
 }
 
 const BACK_CHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
+const ENTRA_ORGANIZATIONS_ISSUER = 'https://login.microsoftonline.com/organizations/v2.0';
+const ENTRA_TENANT_ISSUER_TEMPLATE = 'https://login.microsoftonline.com/{tenantid}/v2.0';
+const ENTRA_TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function base64Url(value: Buffer): string {
   return value.toString('base64url');
@@ -125,7 +128,10 @@ async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
   const document = await fetchJson(new URL('.well-known/openid-configuration', `${issuer.toString().replace(/\/$/, '')}/`));
   const expectedIssuer = normalizeIssuer(issuer.toString());
   const discoveredIssuer = typeof document.issuer === 'string' ? normalizeIssuer(document.issuer) : '';
-  if (discoveredIssuer !== expectedIssuer) throw new Error('OIDC discovery issuer does not match the configured issuer');
+  if (discoveredIssuer !== expectedIssuer && !(
+    expectedIssuer === ENTRA_ORGANIZATIONS_ISSUER
+    && discoveredIssuer === ENTRA_TENANT_ISSUER_TEMPLATE
+  )) throw new Error('OIDC discovery issuer does not match the configured issuer');
   const authorizationEndpoint = typeof document.authorization_endpoint === 'string' ? document.authorization_endpoint : '';
   const tokenEndpoint = typeof document.token_endpoint === 'string' ? document.token_endpoint : '';
   const jwksUri = typeof document.jwks_uri === 'string' ? document.jwks_uri : '';
@@ -136,6 +142,27 @@ async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
     ? validateIdentityProviderEndpointUrl(document.end_session_endpoint, 'OIDC end-session endpoint', ['https:']).toString()
     : undefined;
   return { issuer: discoveredIssuer, authorization_endpoint: authorizationEndpoint, token_endpoint: tokenEndpoint, jwks_uri: jwksUri, end_session_endpoint: endSessionEndpoint };
+}
+
+function verifiedTokenIssuer(
+  metadataIssuer: string,
+  provider: GenericOidcProviderConfiguration,
+  decodedPayload: string | JwtPayload,
+): string {
+  if (normalizeIssuer(provider.issuerUrl) !== ENTRA_ORGANIZATIONS_ISSUER) return metadataIssuer;
+  if (metadataIssuer !== ENTRA_TENANT_ISSUER_TEMPLATE || typeof decodedPayload === 'string') {
+    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra organizations issuer is invalid');
+  }
+  const tenantId = typeof decodedPayload.tid === 'string' ? decodedPayload.tid.trim() : '';
+  const claimedIssuer = typeof decodedPayload.iss === 'string' ? normalizeIssuer(decodedPayload.iss) : '';
+  if (!ENTRA_TENANT_ID.test(tenantId)) {
+    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra organization tenant is invalid');
+  }
+  const expectedIssuer = ENTRA_TENANT_ISSUER_TEMPLATE.replace('{tenantid}', tenantId);
+  if (claimedIssuer.toLowerCase() !== expectedIssuer.toLowerCase()) {
+    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra token issuer does not match its organization tenant');
+  }
+  return expectedIssuer;
 }
 
 async function resolveSecretReference(
@@ -347,7 +374,7 @@ export class GenericOidcService {
     if (!jwk) throw new Error('OIDC signing key was not found in the provider JWKS');
     const key = createPublicKey({ key: jwk, format: 'jwk' });
     const claims = jwt.verify(token, key, {
-      algorithms: ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], issuer: metadata.issuer,
+      algorithms: ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], issuer: verifiedTokenIssuer(metadata.issuer, provider, decoded.payload),
       audience: provider.clientId,
     }) as JwtPayload;
     const audiences = typeof claims.aud === 'string'

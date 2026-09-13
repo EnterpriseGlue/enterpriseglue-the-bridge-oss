@@ -140,7 +140,7 @@ setting to application containers; preflight receives only the role name for rea
 ## API-only platform configuration bootstrap
 
 `apiConfigBundle` is disabled by default. It delivers an existing non-secret JSON configuration
-bundle envelope and exactly one dedicated Secret key only to the split API container. It is not
+bundle envelope and one or more dedicated Secret keys only to the split API container. It is not
 a new configuration administration API, does not create Kubernetes credentials, and does not
 change identity-provider verification or database permissions. The existing bootstrap owns
 preview, secret preflight, hash checking, apply receipts and readiness behavior.
@@ -157,11 +157,27 @@ apiConfigBundle:
     key: client-secret
 ```
 
+The legacy `secret` form exposes `EG_CONFIG_BUNDLE_SECRET`. For bundles with
+multiple independent credentials, leave `secret.name` and `secret.key` empty
+and use the v2 list form:
+
+```yaml
+apiConfigBundle:
+  secrets:
+    - environment: EG_CONFIG_BUNDLE_PROVIDER_A_SECRET
+      name: api-platform-provider-a-<version>
+      key: credential
+    - environment: EG_CONFIG_BUNDLE_PROVIDER_B_SECRET
+      name: api-platform-provider-b-<version>
+      key: credential
+```
+
 The deployment operator creates the immutable, version-specific ConfigMap and dedicated Secret
 before rollout. Secret bytes must not appear in Helm values, the ConfigMap or rollout artifacts.
-The API receives `EG_CONFIG_BUNDLE_SECRET` through a non-optional `secretKeyRef`; the envelope
-references it as `env://EG_CONFIG_BUNDLE_SECRET` (without a leading `ref:`). No arbitrary
-environment names, additional credentials or extra volumes are accepted through this setting.
+The API receives each declared environment variable through a non-optional `secretKeyRef`; the
+envelope references it as `env://<environment>` (without a leading `ref:`). Environment names
+must use the `EG_CONFIG_BUNDLE_` namespace, must be unique, and cannot be mixed with the legacy
+single-secret form. No credential values or extra volumes are accepted through this setting.
 
 Only `configMapKey` is projected read-only at
 `/etc/enterpriseglue/platform-config/<configMapKey>`. The API receives
@@ -170,7 +186,8 @@ fixed platform scope, required secret preflight, fail-closed behavior and the en
 provider. The same file hash is recorded in `enterpriseglue.io/api-config-bundle-sha256` on the
 API pod, so a changed approved hash triggers rollout. Reserved bootstrap annotations cannot be
 overridden by global `podAnnotations`. The chart advertises
-`enterpriseglue.io/api-config-bundle-contract: v1`; consumers must also verify its actual schema
+`enterpriseglue.io/api-config-bundle-contract: v1` for the legacy form and `v2` for the multi-secret
+form; consumers must also verify its actual schema
 and rendered mount/environment isolation, not trust the annotation alone.
 
 First qualify `mode: validate`, then explicitly select `mode: apply` with the same approved file
