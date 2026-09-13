@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.27.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.1...v0.27.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* **helm:** validate least-privilege database hooks ([b21dfaa](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b21dfaa738211a960988454aafe1e5d6e7997f0b))
+
 ## [0.27.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.0...v0.27.1) (2026-09-13)
 
 
