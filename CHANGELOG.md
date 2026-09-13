@@ -11,7 +11,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 * **postgres:** preserve restricted preflight readiness ([0166607](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/01666074b20e06bb47183a233c2efcd058f637b3))
 * **postgres:** verify schema epoch through catalogs ([e8ca7c2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e8ca7c2bf0eb0ccc40bcdcffb534b0aa948e2a65))
-* **postgres:** verify schema epoch through catalogs ([388e963](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/388e9638a8c3abd76b44c1500d6f3dc6ef18eef0))
 
 ## [0.27.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.2...v0.27.3) (2026-09-13)
 
