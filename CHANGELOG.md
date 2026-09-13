@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.27.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.2...v0.27.3) (2026-09-13)
+
+
+### Bug Fixes
+
+* **database:** isolate migration runtime config ([130a11c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/130a11cf38a6f0df67df2b1bc1afa9c0dc2b64f4))
+* **database:** isolate migration runtime config ([dee5c2d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/dee5c2d228a09359227c939ff3fff02195297a13))
+* **database:** retain adapter config validation ([cae7f96](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cae7f962f59bc20641996a2214f52a3f976533ba))
+* **release:** regenerate schema epoch manifest ([c65e1b4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c65e1b412e3018258dc738941620a8b8eebc916c))
+* **release:** regenerate schema epoch manifest deterministically ([5ed7491](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5ed749139b46c15330b9c0f0017df8897952c183))
+
 ## [0.27.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.1...v0.27.2) (2026-09-13)
 
 
