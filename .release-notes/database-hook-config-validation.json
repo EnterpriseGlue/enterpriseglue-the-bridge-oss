@@ -1,0 +1,51 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "database-hook-config-validation",
+  "type": "fix",
+  "scope": "helm",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Allows the least-privilege database migration and preflight hooks to start when the shared production configuration module validates application-only settings.",
+  "userImpact": [
+    "Managed Helm installations no longer fail before migration because JWT, administrator, and encryption settings are intentionally absent from the database hook Secrets."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "The chart supplies fixed validation-only values to the short-lived database hooks; operators do not need to add application credentials to migration or preflight Secrets."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The fix changes only hook startup configuration and does not alter migration contents or database schemas."
+    ]
+  },
+  "security": [
+    "Migration and preflight identities retain least privilege and still cannot read the application Secret.",
+    "The injected values are fixed validation-only placeholders and are never used by API or worker workloads."
+  ],
+  "documentation": [
+    "The Helm chart operator guide documents the database hook validation-only configuration profile."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the previous chart templates; no data rollback is required."
+  ],
+  "validation": [
+    "The complete enterpriseglue-host chart contract suite passes 57 tests and helm lint.",
+    "Rendered migration and preflight Jobs contain every required validation-only setting and no application Secret reference."
+  ],
+  "packages": []
+}
