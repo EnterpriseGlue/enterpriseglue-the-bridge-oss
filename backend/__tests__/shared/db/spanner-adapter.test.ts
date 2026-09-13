@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
 import { SpannerAdapter } from '@enterpriseglue/shared/db/adapters/SpannerAdapter.js';
 
-vi.mock('@enterpriseglue/shared/config/index.js', () => ({
-  shouldUseSecureCookies: () => false,
-  config: {
+vi.mock('@enterpriseglue/shared/config/database.js', () => ({
+  databaseConfig: {
     nodeEnv: 'test',
     spannerProjectId: 'local-project',
     spannerInstanceId: 'local-instance',

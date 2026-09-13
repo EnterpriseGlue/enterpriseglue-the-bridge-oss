@@ -46,6 +46,12 @@ function applyBaseEnv(schema: string) {
   process.env.POSTGRES_SCHEMA = schema;
 }
 
+function removeApplicationSecrets() {
+  delete process.env.JWT_SECRET;
+  delete process.env.ADMIN_PASSWORD;
+  delete process.env.ENCRYPTION_KEY;
+}
+
 async function cleanupSchemas(...targetSchemas: string[]) {
   const pool = await createPool();
   try {
@@ -200,8 +206,12 @@ describe('Postgres schema auto-migration', () => {
     }
   }, migrationCaseTimeout);
 
-  it('repairs critical versioning schema drift even when migrations are already recorded', async () => {
+  it('repairs critical versioning schema drift with database-only configuration', async () => {
     applyBaseEnv(versioningDriftSchema);
+    // The production migration executable intentionally receives no
+    // application Secret. Exercise the real Postgres migration path with the
+    // same boundary even when the invoking shell has application values.
+    removeApplicationSecrets();
     vi.resetModules();
 
     const { runMigrations } = await import('@enterpriseglue/shared/db/run-migrations.js');
@@ -258,6 +268,7 @@ describe('Postgres schema auto-migration', () => {
     }
 
     applyBaseEnv(versioningDriftSchema);
+    removeApplicationSecrets();
     vi.resetModules();
 
     const { runMigrations: runMigrationsNext } = await import('@enterpriseglue/shared/db/run-migrations.js');

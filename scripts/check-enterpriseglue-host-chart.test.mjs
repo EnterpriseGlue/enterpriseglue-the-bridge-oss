@@ -138,6 +138,35 @@ test('pooled PostgreSQL profile always renders the signed bridge owner and verif
   assert.doesNotMatch(result.stdout, /^\s*- name: TENANCY_MODE$/m)
 })
 
+test('database jobs mount only their database-scoped Secrets and no application secret values', async (t) => {
+  const result = await render(t, {
+    database: {
+      profile: { databaseType: 'postgres', tenancyMode: 'pooled' },
+      applicationSecretName: 'runtime-application-secrets',
+      migrationSecretName: 'schema-owner-database-secrets',
+      preflightSecretName: 'runtime-database-secrets',
+      migration: { runtimeRole: 'eg_runtime' },
+    },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  const rendered = documents(result.stdout)
+  const jobs = {
+    migration: rendered.find((document) => document.includes('kind: Job') &&
+      document.includes('app.kubernetes.io/component: migration')),
+    preflight: rendered.find((document) => document.includes('kind: Job') &&
+      document.includes('app.kubernetes.io/component: preflight')),
+  }
+  for (const [component, job] of Object.entries(jobs)) {
+    assert.ok(job, component)
+    assert.doesNotMatch(job, /runtime-application-secrets/)
+    assert.doesNotMatch(job, /(?:name:|secretKeyRef:)[\s\S]*(?:JWT_SECRET|ADMIN_PASSWORD|ENCRYPTION_KEY)/)
+  }
+  assert.match(jobs.migration, /secretRef: \{ name: schema-owner-database-secrets \}/)
+  assert.doesNotMatch(jobs.migration, /runtime-database-secrets/)
+  assert.match(jobs.preflight, /secretRef: \{ name: runtime-database-secrets \}/)
+  assert.doesNotMatch(jobs.preflight, /schema-owner-database-secrets/)
+})
+
 test('fresh managed-shard bootstrap is default off and renders one bounded pre-install predecessor job only when enabled', async (t) => {
   const baseline = await render(t)
   assert.equal(baseline.status, 0, baseline.stderr)

@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
 import { MySQLAdapter } from '@enterpriseglue/shared/infrastructure/persistence/adapters/MySQLAdapter.js';
 
-vi.mock('@enterpriseglue/shared/config/index.js', () => ({
-  shouldUseSecureCookies: () => false,
-  config: {
+vi.mock('@enterpriseglue/shared/config/database.js', () => ({
+  databaseConfig: {
     nodeEnv: 'test', mysqlHost: 'db', mysqlPort: 3306, mysqlUser: 'user', mysqlPassword: 'password', mysqlDatabase: 'enterpriseglue',
   },
 }));

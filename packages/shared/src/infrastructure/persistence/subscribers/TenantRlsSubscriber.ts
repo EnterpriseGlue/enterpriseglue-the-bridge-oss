@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventSubscriber, type DataSource, type EntitySubscriberInterface, type QueryRunner } from 'typeorm';
 import type { BeforeQueryEvent } from 'typeorm/subscriber/event/QueryEvent.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { databaseConfig as config } from '@enterpriseglue/shared/config/database.js';
 import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 

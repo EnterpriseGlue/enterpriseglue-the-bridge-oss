@@ -13,7 +13,7 @@ const mockConfig = vi.hoisted(() => ({
   postgresDatabase: undefined as string | undefined,
 }));
 
-vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config: mockConfig, shouldUseSecureCookies: () => false }));
+vi.mock('@enterpriseglue/shared/config/database.js', () => ({ databaseConfig: mockConfig }));
 
 import { PostgresAdapter } from '@enterpriseglue/shared/db/adapters/PostgresAdapter.js';
 

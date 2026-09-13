@@ -7,7 +7,7 @@ import {
   isPluginLargeTextColumn,
   pluginKeyColumnLength,
 } from '../pluginColumnPolicy.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { databaseConfig as config } from '@enterpriseglue/shared/config/database.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,

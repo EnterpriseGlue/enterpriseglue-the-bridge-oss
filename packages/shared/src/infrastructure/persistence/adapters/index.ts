@@ -1,4 +1,4 @@
-import { config } from '@enterpriseglue/shared/config/index.js';
+import { databaseConfig } from '@enterpriseglue/shared/config/database.js';
 import { DatabaseAdapter } from './DatabaseAdapter.js';
 import { PostgresAdapter } from './PostgresAdapter.js';
 import { OracleAdapter } from './OracleAdapter.js';
@@ -32,7 +32,7 @@ let adapterInstance: DatabaseAdapter | null = null;
  */
 export function getAdapter(): DatabaseAdapter {
   if (!adapterInstance) {
-    adapterInstance = createAdapter(config.databaseType);
+    adapterInstance = createAdapter(databaseConfig.databaseType);
   }
   return adapterInstance;
 }
