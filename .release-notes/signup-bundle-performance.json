@@ -1,0 +1,52 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "signup-bundle-performance",
+  "type": "performance",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers"
+  ],
+  "summary": "Reduces the public login and signup transfer cost by restoring pnpm-aware frontend chunk boundaries and serving immutable assets with compression.",
+  "userImpact": [
+    "Public login and signup visits download smaller compressed JavaScript and CSS responses while preserving existing authentication behavior."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This frontend delivery change does not alter database schemas or persistence behavior."
+    ]
+  },
+  "security": [
+    "Compression is limited to static JavaScript and CSS responses; existing content-security and immutable-cache headers remain enforced."
+  ],
+  "documentation": [
+    "The release notes record the new frontend bundle budgets and compressed immutable-asset delivery behavior."
+  ],
+  "knownLimitations": [
+    "This change improves transfer and cache behavior but does not remove the application bootstrap dependencies shared by public and authenticated routes."
+  ],
+  "rollback": [
+    "Restore the previous Vite chunk classifier and Nginx static-asset block; no data rollback is required."
+  ],
+  "validation": [
+    "Focused pnpm module-ID chunk-classification, frontend bundle-budget, Nginx delivery, and CI-classifier contract tests pass.",
+    "The production public login/signup graph passes with 1,143,171 gzip bytes of initial JavaScript and CSS; its largest initial JavaScript chunk is 2,319,552 raw bytes and 550,813 gzip bytes.",
+    "The pinned Nginx runtime returns Content-Encoding gzip and Vary Accept-Encoding for immutable JavaScript while preserving the one-year immutable cache policy.",
+    "The complete frontend suite passes 1,544 tests in 314 files, and the frontend-host suite passes 52 tests in 14 files."
+  ],
+  "packages": []
+}
