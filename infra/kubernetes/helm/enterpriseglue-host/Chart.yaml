@@ -6,7 +6,7 @@ version: 0.1.26
 appVersion: "0.26.2"
 kubeVersion: ">=1.29.0-0"
 annotations:
-  enterpriseglue.io/api-config-bundle-contract: v1
+  enterpriseglue.io/api-config-bundle-contract: v2
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: security

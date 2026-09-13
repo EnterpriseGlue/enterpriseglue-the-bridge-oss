@@ -31,6 +31,14 @@ const enabled = {
   mode: 'validate',
   secret: { name: 'api-platform-credential-a', key: 'client-secret' },
 }
+const multiSecret = {
+  ...enabled,
+  secret: { name: '', key: '' },
+  secrets: [
+    { environment: 'EG_CONFIG_BUNDLE_PROVIDER_A_SECRET', name: 'api-platform-provider-a', key: 'credential' },
+    { environment: 'EG_CONFIG_BUNDLE_PROVIDER_B_SECRET', name: 'api-platform-provider-b', key: 'credential' },
+  ],
+}
 
 async function render(t, values = {}) {
   const directory = await mkdtemp(path.join(tmpdir(), 'eg-api-config-chart-'))
@@ -79,6 +87,25 @@ for (const mode of ['validate', 'apply']) {
     }
   })
 }
+
+test('apiConfigBundle v2 mounts multiple independent credentials only in the split API', async (t) => {
+  const result = await render(t, { apiConfigBundle: multiSecret })
+  assert.equal(result.status, 0, result.stderr)
+  const rendered = documents(result.stdout)
+  const api = rendered.find((document) => document.includes('# Source: enterpriseglue-host/templates/backend-deployment.yaml'))
+  assert.ok(api)
+  assert.match(api, /enterpriseglue.io\/api-config-bundle-contract: v2/)
+  for (const [environment, name] of [
+    ['EG_CONFIG_BUNDLE_PROVIDER_A_SECRET', 'api-platform-provider-a'],
+    ['EG_CONFIG_BUNDLE_PROVIDER_B_SECRET', 'api-platform-provider-b'],
+  ]) {
+    assert.match(api, new RegExp(`name: ${environment}\\n\\s+valueFrom:\\n\\s+secretKeyRef:\\n\\s+name: "${name}"\\n\\s+key: "credential"\\n\\s+optional: false`))
+  }
+  assert.doesNotMatch(api, /name: EG_CONFIG_BUNDLE_SECRET\n/)
+  for (const document of rendered.filter((document) => document !== api)) {
+    assert.doesNotMatch(document, /EG_CONFIG_BUNDLE_PROVIDER_|api-platform-provider-/)
+  }
+})
 
 test('disabled API bundle delivery leaves every rendered workload unchanged', async (t) => {
   const baseline = await render(t)
@@ -237,6 +264,9 @@ for (const [label, override] of [
   ['overlong Secret DNS label', { secret: { name: 'a'.repeat(64), key: 'client-secret' } }],
   ['unsafe secret key', { secret: { name: 'api-only', key: 'bad/key' } }],
   ['arbitrary env override', { secret: { name: 'api-only', key: 'client-secret', env: 'NODE_OPTIONS' } }],
+  ['legacy and v2 secrets together', { secrets: multiSecret.secrets }],
+  ['unsafe v2 environment', { secret: { name: '', key: '' }, secrets: [{ environment: 'NODE_OPTIONS', name: 'api-only', key: 'credential' }] }],
+  ['duplicate v2 environment', { secret: { name: '', key: '' }, secrets: [multiSecret.secrets[0], { ...multiSecret.secrets[1], environment: multiSecret.secrets[0].environment }] }],
   ['unknown bundle setting', { failClosed: false }],
   ['unknown volume mount', { mountPath: '/tmp' }],
 ]) {
@@ -262,6 +292,9 @@ test('bootstrap rejects shared ConfigMap and all existing shared/job Secret alia
     assert.notEqual(result.status, 0, name)
     assert.match(result.stderr, /dedicated API-only Secret/)
   }
+  const multi = await render(t, { apiConfigBundle: { ...multiSecret, secrets: [{ ...multiSecret.secrets[0], name: 'enterpriseglue-secrets' }] } })
+  assert.notEqual(multi.status, 0)
+  assert.match(multi.stderr, /dedicated API-only Secrets/)
 })
 
 test('bootstrap rollout annotations cannot be overridden by global pod annotations', async (t) => {
@@ -274,7 +307,7 @@ test('bootstrap rollout annotations cannot be overridden by global pod annotatio
 
 test('signed chart publishes its generic capability without provider-specific configuration', async () => {
   const metadata = await readFile(path.join(chart, 'Chart.yaml'), 'utf8')
-  assert.match(metadata, /enterpriseglue.io\/api-config-bundle-contract: v1/)
+  assert.match(metadata, /enterpriseglue.io\/api-config-bundle-contract: v2/)
   const schema = JSON.parse(await readFile(path.join(chart, 'values.schema.json'), 'utf8'))
   assert.equal(schema.properties.apiConfigBundle.additionalProperties, false)
   assert.deepEqual(schema.properties.apiConfigBundle.properties.mode.enum, ['validate', 'apply'])

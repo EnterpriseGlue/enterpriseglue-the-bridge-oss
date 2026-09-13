@@ -14,8 +14,8 @@ imagePullSecrets: []
 rolloutRevision: ""
 
 # Optional platform bootstrap delivery, exclusively to the split API runtime.
-# The ConfigMap contains a non-secret bundle envelope. Its sole external secret
-# reference is env://EG_CONFIG_BUNDLE_SECRET, backed by a dedicated Secret key.
+# The ConfigMap contains a non-secret bundle envelope. External secret references
+# are backed by dedicated Secret keys and exposed only to the split API runtime.
 apiConfigBundle:
   enabled: false
   configMapName: ""
@@ -25,6 +25,7 @@ apiConfigBundle:
   secret:
     name: ""
     key: ""
+  secrets: []
 
 frontend:
   replicas: 2
