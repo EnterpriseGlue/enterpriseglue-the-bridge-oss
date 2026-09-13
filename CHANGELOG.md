@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.27.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.3...v0.27.4) (2026-09-13)
+
+
+### Bug Fixes
+
+* **postgres:** preserve restricted preflight readiness ([0166607](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/01666074b20e06bb47183a233c2efcd058f637b3))
+* **postgres:** verify schema epoch through catalogs ([e8ca7c2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e8ca7c2bf0eb0ccc40bcdcffb534b0aa948e2a65))
+
 ## [0.27.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.2...v0.27.3) (2026-09-13)
 
 
