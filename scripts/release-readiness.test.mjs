@@ -29,6 +29,41 @@ const toolchainLocal = await readFile(
   new URL('./check-plugin-toolchain-oci-local.sh', import.meta.url),
   'utf8',
 )
+const releaseNotify = await readFile(
+  new URL('../.github/workflows/release-notify.yml', import.meta.url),
+  'utf8',
+)
+const codeql = await readFile(
+  new URL('../.github/workflows/codeql.yml', import.meta.url),
+  'utf8',
+)
+
+test('published OSS releases wake fixed cloud staging reconciliation', () => {
+  for (const boundary of [
+    'types:\n      - published',
+    'release_tag:',
+    'if: github.event_name == \'release\'',
+    'name: Wake cloud staging demo reconciliation',
+    'if: always()',
+    'github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}',
+    'github.rest.repos.getReleaseByTag',
+    "release.draft || release.prerelease || !release.published_at",
+    'github.rest.git.getRef',
+    'github.rest.git.getTag',
+    "repo: 'enterpriseglue-cloud'",
+    "event_type: 'enterpriseglue-oss-release-published'",
+  ]) assert.ok(releaseNotify.includes(boundary), `missing staging notification boundary: ${boundary}`)
+  assert.doesNotMatch(releaseNotify, /production-deploy|deploy-production/)
+})
+
+test('merge queue reuses the exact PR JavaScript scan and completes its CodeQL gate within the queue window', () => {
+  assert.match(codeql, /analyze:[\s\S]*?if: github\.event_name != 'merge_group'/)
+  assert.match(codeql, /language: \[actions, javascript-typescript\]/)
+  assert.match(codeql, /if \[\[ "\$\{GITHUB_EVENT_NAME\}" == "merge_group" \]\]/)
+  assert.match(codeql, /-F pr="\$\{PR_NUMBER\}" -f tool_name=CodeQL/)
+  assert.match(codeql, /needs: \[release-notes-preflight, analyze\]/)
+  assert.match(codeql, /github\.event_name == 'merge_group' \|\| needs\.analyze\.result == 'success'/)
+})
 
 test('release candidate detection works for pull requests, manual runs, and merge groups', () => {
   assert.match(preflight, /is_release_pull_request:/)

@@ -44,7 +44,7 @@
   ],
   "validation": [
     "Focused pnpm module-ID chunk-classification, frontend bundle-budget, Nginx delivery, and CI-classifier contract tests pass.",
-    "The production public login/signup graph passes with 1,143,171 gzip bytes of initial JavaScript and CSS; its largest initial JavaScript chunk is 2,319,552 raw bytes and 550,813 gzip bytes.",
+    "The production public login/signup graph passes with 1,143,241 gzip bytes of initial JavaScript and CSS; its largest initial JavaScript chunk is 2,319,552 raw bytes and 550,813 gzip bytes.",
     "The pinned Nginx runtime returns Content-Encoding gzip and Vary Accept-Encoding for immutable JavaScript while preserving the one-year immutable cache policy.",
     "The complete frontend suite passes 1,544 tests in 314 files, and the frontend-host suite passes 52 tests in 14 files."
   ],

@@ -9,8 +9,27 @@
 {{- if eq .Values.apiConfigBundle.configMapName .Values.database.configMapName }}
 {{- fail "apiConfigBundle requires a dedicated API-only ConfigMap" }}
 {{- end }}
-{{- if has .Values.apiConfigBundle.secret.name (list .Values.database.applicationSecretName .Values.database.migrationSecretName .Values.database.preflightSecretName .Values.pluginManager.configurationSecret.name) }}
+{{- $bundleSecrets := .Values.apiConfigBundle.secrets | default (list) }}
+{{- $legacySecretConfigured := or .Values.apiConfigBundle.secret.name .Values.apiConfigBundle.secret.key }}
+{{- if and (gt (len $bundleSecrets) 0) $legacySecretConfigured }}
+{{- fail "apiConfigBundle cannot combine legacy secret and secrets" }}
+{{- end }}
+{{- if and (eq (len $bundleSecrets) 0) (not (and .Values.apiConfigBundle.secret.name .Values.apiConfigBundle.secret.key)) }}
+{{- fail "apiConfigBundle requires at least one dedicated API-only Secret" }}
+{{- end }}
+{{- $sharedSecrets := list .Values.database.applicationSecretName .Values.database.migrationSecretName .Values.database.preflightSecretName .Values.pluginManager.configurationSecret.name }}
+{{- if and (eq (len $bundleSecrets) 0) (has .Values.apiConfigBundle.secret.name $sharedSecrets) }}
 {{- fail "apiConfigBundle requires a dedicated API-only Secret" }}
+{{- end }}
+{{- $seenBundleEnvironments := dict }}
+{{- range $bundleSecret := $bundleSecrets }}
+{{- if has $bundleSecret.name $sharedSecrets }}
+{{- fail "apiConfigBundle requires dedicated API-only Secrets" }}
+{{- end }}
+{{- if hasKey $seenBundleEnvironments $bundleSecret.environment }}
+{{- fail "apiConfigBundle secret environment names must be unique" }}
+{{- end }}
+{{- $_ := set $seenBundleEnvironments $bundleSecret.environment true }}
 {{- end }}
 {{- end }}
 apiVersion: apps/v1
@@ -41,7 +60,7 @@ spec:
         enterpriseglue.io/rollout-revision: {{ .Values.rolloutRevision | quote }}
         {{- include "enterpriseglue-host.releaseEffectCohortAnnotations" . | nindent 8 }}
         {{- if .Values.apiConfigBundle.enabled }}
-        enterpriseglue.io/api-config-bundle-contract: v1
+        enterpriseglue.io/api-config-bundle-contract: {{ ternary "v2" "v1" (gt (len (.Values.apiConfigBundle.secrets | default (list))) 0) }}
         enterpriseglue.io/api-config-bundle-sha256: {{ .Values.apiConfigBundle.expectedSha256 | quote }}
         {{- end }}
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
@@ -77,12 +96,23 @@ spec:
               value: "true"
             - name: EG_CONFIG_SECRET_PROVIDER
               value: "env"
+            {{- if gt (len (.Values.apiConfigBundle.secrets | default (list))) 0 }}
+            {{- range $bundleSecret := .Values.apiConfigBundle.secrets }}
+            - name: {{ $bundleSecret.environment }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $bundleSecret.name | quote }}
+                  key: {{ $bundleSecret.key | quote }}
+                  optional: false
+            {{- end }}
+            {{- else }}
             - name: EG_CONFIG_BUNDLE_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.apiConfigBundle.secret.name | quote }}
                   key: {{ .Values.apiConfigBundle.secret.key | quote }}
                   optional: false
+            {{- end }}
             {{- end }}
             - name: EG_RUNTIME_ROLE
               value: {{ ternary "api" "all" .Values.workers.enabled | quote }}

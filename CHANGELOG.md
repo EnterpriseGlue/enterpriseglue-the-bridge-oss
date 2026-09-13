@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.27.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.26.2...v0.27.0) (2026-09-13)
+
+
+### Features
+
+* **identity:** add multi-provider cloud signup ([9ae5dfd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9ae5dfd59799add8654f98e260a583756e2b6d2c))
+
+
+### Bug Fixes
+
+* **ci:** gate merge groups on completed PR scans ([6affa09](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6affa09b00a21f9f3cbd4e50a36f7f1012773dfd))
+* **ci:** keep merge-group CodeQL within queue window ([6a1b013](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6a1b0133354a1f23ad2332d17bde9d56ce27d19e))
+* **security:** patch zlib and reduce Actions usage ([37ac73c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/37ac73c23df91812641ed15432cfb4bb4ad8df4f))
+* **security:** patch zlib CVE-2026-85091 ([aabc241](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/aabc24111aa9989279149b4154fc7dd16af9b525))
+* **security:** refresh managed bootstrap packages ([f6989f3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f6989f35ff36b2df74ac6eca18661a6068d33c34))
+
 ## [0.26.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.26.1...v0.26.2) (2026-09-12)
 
 

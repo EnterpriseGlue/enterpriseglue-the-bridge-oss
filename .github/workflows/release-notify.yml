@@ -4,12 +4,18 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published OSS release tag to reconcile into staging/demo
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-notify-${{ github.event.release.tag_name }}
+  group: release-notify-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: true
 
 jobs:
@@ -17,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send release notification webhook (optional)
+        if: github.event_name == 'release'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RELEASE_NOTIFICATIONS_ENABLED: ${{ vars.RELEASE_NOTIFICATIONS_ENABLED || 'false' }}
@@ -65,3 +72,57 @@ jobs:
             }
 
             core.notice(`Release notification sent for ${release.tag_name}.`);
+      - name: Wake cloud staging demo reconciliation
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        with:
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          script: |
+            const tag = String(process.env.RELEASE_TAG || '').trim();
+            if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+              core.setFailed(`Expected a stable semantic release tag, received ${JSON.stringify(tag)}.`);
+              return;
+            }
+
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag,
+            });
+            if (release.draft || release.prerelease || !release.published_at || release.tag_name !== tag) {
+              core.setFailed(`Release ${tag} is not an exact published stable release.`);
+              return;
+            }
+
+            const { data: tagRef } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `tags/${tag}`,
+            });
+            let object = tagRef.object;
+            for (let depth = 0; depth < 4 && object.type === 'tag'; depth += 1) {
+              const { data: annotatedTag } = await github.rest.git.getTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_sha: object.sha,
+              });
+              object = annotatedTag.object;
+            }
+            if (object.type !== 'commit' || !/^[0-9a-f]{40}$/.test(object.sha)) {
+              core.setFailed(`Release ${tag} does not resolve to one exact commit.`);
+              return;
+            }
+
+            await github.request('POST /repos/{owner}/{repo}/dispatches', {
+              owner: 'EnterpriseGlue',
+              repo: 'enterpriseglue-cloud',
+              event_type: 'enterpriseglue-oss-release-published',
+              client_payload: {
+                release_tag: tag,
+                source_sha: object.sha,
+                release_id: release.id,
+              },
+            });
+            core.notice(`Cloud staging reconciliation requested for ${tag} (${object.sha}).`);
