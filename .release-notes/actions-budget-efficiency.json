@@ -1,0 +1,29 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "actions-budget-efficiency",
+  "type": "internal",
+  "scope": "ci",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Reduces GitHub Actions compute and storage usage while preserving protected admission, security, and release evidence.",
+  "userImpact": [],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "Required CodeQL, merge-queue, release-policy, database, authorization, and browser admission gates remain enabled."
+  ],
+  "documentation": [
+    "Documents weekly maintenance backstops, daily security and observability coverage, and bounded artifact retention."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the prior cron expressions and artifact paths if fresher unchanged-main evidence or longer transient retention is required."
+  ],
+  "validation": [
+    "CI routing, aggregate, release-canary, authorization, release-note, and workflow contract suites pass locally."
+  ],
+  "packages": []
+}
