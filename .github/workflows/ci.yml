@@ -404,6 +404,11 @@ jobs:
           pnpm --filter webmodeler-frontend run test:unit
           pnpm --dir packages/frontend-host exec vitest run --config vitest.config.ts
 
+      - name: Build frontend and enforce public bundle budgets
+        run: |
+          pnpm --filter frontend-host run build
+          pnpm --filter webmodeler-frontend run build
+
       - name: Lint frontend sources
         run: pnpm exec eslint frontend packages/frontend-host --max-warnings=0
 

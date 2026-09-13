@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { classifyChangedFiles, renderClassifierSummary } from './ci-change-classifier.mjs';
 
@@ -228,6 +229,39 @@ test('frontend-only shell changes use the focused frontend lane without a databa
   assert.equal(result.run_oracle, false);
   assert.equal(result.run_engine_browser, false);
   assert.equal(result.run_package_discipline, true);
+});
+
+test('frontend bundle delivery changes retain focused acceptance and execute the real budgeted build', () => {
+  const result = classifyChangedFiles([
+    '.github/workflows/ci.yml',
+    '.release-notes/signup-bundle-performance.json',
+    'frontend/__tests__/build/frontend-performance.test.ts',
+    'frontend/build/bundle-budget.mjs',
+    'frontend/build/manual-chunks.mjs',
+    'frontend/nginx.conf',
+    'frontend/package.json',
+    'frontend/vite.config.ts',
+  ]);
+
+  assert.equal(result.frontend, true);
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.run_native_tenancy, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.run_frontend_tests, true);
+  assert.equal(result.run_release_readiness, true);
+  for (const lane of [
+    'run_tests',
+    'run_postgres',
+    'run_oracle',
+    'run_ci_images',
+    'run_database_matrix',
+    'run_engine_browser',
+  ]) {
+    assert.equal(result[lane], false, `${lane} must stay off for frontend delivery performance`);
+  }
+
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /- name: Build frontend and enforce public bundle budgets[\s\S]*?pnpm --filter frontend-host run build[\s\S]*?pnpm --filter webmodeler-frontend run build/);
 });
 
 test('diagram-readiness release fixes select focused UI, engine-browser, and image contracts', () => {
