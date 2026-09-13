@@ -192,6 +192,8 @@ manifest under an existing release identity is unsupported.
 Focused source checks are:
 
 ```sh
+node scripts/schema-epoch-manifest.mjs --write
+node scripts/schema-epoch-manifest.mjs --check
 pnpm --dir backend exec vitest run \
   __tests__/shared/db/schemaEpoch.test.ts \
   __tests__/shared/db/run-migrations.test.ts \
@@ -200,6 +202,12 @@ node --test scripts/release-candidate-receipt.test.mjs
 node --test scripts/schema-epoch-manifest.test.mjs
 bash scripts/check-enterpriseglue-host-chart.sh
 ```
+
+Run `--write` whenever one of the inventoried executable source files changes.
+It deterministically replaces only the computed executable and release-effect
+inventories, then writes byte-identical shared-package and host-chart manifest
+copies. Review that generated diff before running `--check`; never hand-edit a
+digest in either manifest copy.
 
 `scripts/run-native-tenancy-postgres-rls.sh` includes a real PostgreSQL test of
 both policy profiles. Exact candidate qualification must additionally verify

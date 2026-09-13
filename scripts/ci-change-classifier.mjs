@@ -92,13 +92,15 @@ const classifiers = {
   ],
   persistence: [
     /^packages\/shared\/src\/(?:db|config|infrastructure\/persistence)\//,
+    /^packages\/shared\/src\/schema-epoch-manifest\.json$/,
+    /^infra\/kubernetes\/helm\/enterpriseglue-host\/files\/schema-epoch-manifest\.json$/,
     /^packages\/shared\/src\/services\/platform-admin\/(?:TenantService|TenantReleaseWorkAssignmentService)\.ts$/,
     /^backend\/src\/shared\/(?:db|config)\//,
     /^backend\/(?:__tests__\/shared\/db|test\/integration\/engine-tenancy-database)/,
     /^backend\/src\/modules\/.*(?:db|migration)/,
     /^backend\/.*migration/,
     /^test\/database\//,
-    /^scripts\/(?:run-engine-tenancy-database-matrix|engine-tenancy-database-matrix|check-migration-identifiers)/,
+    /^scripts\/(?:run-engine-tenancy-database-matrix|engine-tenancy-database-matrix|check-migration-identifiers|schema-epoch-manifest)/,
     /^\.github\/workflows\/engine-tenancy-database\.yml$/,
   ],
   engine_integration: [

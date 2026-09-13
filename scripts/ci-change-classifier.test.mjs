@@ -321,6 +321,19 @@ test('TypeORM persistence changes select both database adapters and engine regre
   assert.deepEqual(result.test_databases, ['postgres', 'oracle']);
 });
 
+test('schema-epoch manifest surfaces select database qualification before release staging', () => {
+  for (const path of [
+    'packages/shared/src/schema-epoch-manifest.json',
+    'infra/kubernetes/helm/enterpriseglue-host/files/schema-epoch-manifest.json',
+    'scripts/schema-epoch-manifest.mjs',
+    'scripts/schema-epoch-manifest.test.mjs',
+  ]) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.persistence, true, path);
+    assert.equal(result.run_database_matrix, true, path);
+  }
+});
+
 test('plugin contracts select compatibility, packaging, and plugin image lanes only', () => {
   const result = classifyChangedFiles([
     'packages/plugin-sdk/src/platform.ts',

@@ -101,6 +101,7 @@ test('runs every database in an isolated disposable localhost container', () => 
     /test:database-portability:unit/,
   );
   assert.match(packageJson.scripts['test:database-portability:unit'], /guard:no-raw-sql/);
+  assert.match(packageJson.scripts['test:database-portability:unit'], /schema-epoch-manifest\.mjs --check/);
   assert.match(packageJson.scripts['test:database-portability:unit'], /migrationPortability\.test\.ts/);
   assert.match(packageJson.scripts['test:database-portability:unit'], /lazyConnectionPool\.test\.ts/);
   for (const database of databases) {
@@ -127,6 +128,9 @@ test('runs every database in an isolated disposable localhost container', () => 
   assert.match(workflow, /backend\/scripts\/check-no-raw-sql\.ts/);
   assert.match(workflow, /packages\/backend-host\/src\/server\.ts/);
   assert.match(workflow, /packages\/shared\/src\/infrastructure\/persistence\/migrations\/\*\*/);
+  assert.match(workflow, /packages\/shared\/src\/schema-epoch-manifest\.json/);
+  assert.match(workflow, /infra\/kubernetes\/helm\/enterpriseglue-host\/files\/schema-epoch-manifest\.json/);
+  assert.match(workflow, /scripts\/schema-epoch-manifest\.mjs/);
   assert.match(workflow, /test\/results\/engine-tenancy-release\/database-matrix\.json/);
   assert.match(workflow, /if: always\(\)/);
 });

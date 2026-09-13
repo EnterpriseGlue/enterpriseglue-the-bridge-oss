@@ -1,0 +1,72 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "schema-epoch-manifest-regeneration",
+  "type": "fix",
+  "scope": "release-and-database-upgrade",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Regenerates the signed schema-epoch executable digest after the migration configuration boundary changed an inventoried source file.",
+  "userImpact": [
+    "Release candidates can verify and publish the database-only migration runtime without weakening the signed schema-epoch bridge."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use the matching host package, backend image, and Helm chart so every copy contains the same regenerated schema-epoch manifest."
+    ]
+  },
+  "configuration": [
+    "No configuration changes are required; migration and preflight jobs continue to use only their database-scoped configuration and credentials."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The executable migration ceiling, accepted ledger digests, PostgreSQL policy profiles, and all five TypeORM adapter behaviors are unchanged.",
+      "Only the source-content digest of the existing 16-file owner-transition implementation inventory changes."
+    ]
+  },
+  "security": [
+    "The regenerated digest binds the database-only configuration import and deferred application-only seeding dependency introduced by the migration configuration boundary.",
+    "The manifest update command deterministically updates the canonical package copy and byte-identical Helm chart copy together."
+  ],
+  "documentation": [
+    "The schema-epoch architecture documentation records the deterministic manifest write and verification workflow."
+  ],
+  "knownLimitations": [
+    "Changing any of the 16 inventoried executable sources requires running the manifest write workflow and reviewing the resulting digest before candidate publication."
+  ],
+  "rollback": [
+    "Revert this change together with the migration configuration boundary; do not combine the previous manifest digest with the updated migration runtime bytes."
+  ],
+  "validation": [
+    "Manifest generation tests prove deterministic output, canonical/chart byte identity, source-mutation sensitivity, and verification against the regenerated digest.",
+    "The focused database-portability gate now verifies schema-epoch manifest integrity, and deterministic path classification sends manifest and generator changes through database qualification before release staging.",
+    "Focused schema-epoch, release-receipt, package, migration-boundary, and five-adapter tests preserve the existing runtime contract."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.1",
+      "newVersion": "0.22.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.4",
+      "newVersion": "0.19.5",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.14",
+      "newVersion": "0.17.15",
+      "impact": "patch"
+    }
+  ]
+}
