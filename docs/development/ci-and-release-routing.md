@@ -64,11 +64,12 @@ images before publication. The required `Release candidate staged` status
 cannot pass until that exact-SHA qualification completes.
 
 CodeQL runs both JavaScript/TypeScript and Actions analysis on pull requests,
-protected `main`, and the weekly backstop. A merge group reruns the fast Actions
-analysis, then the required CodeQL gate queries every alert from the exact pull
-request, including its already-completed JavaScript/TypeScript analysis. This
-keeps queue validation inside the repository's short merge-group window without
-removing either language from pull-request qualification.
+protected `main`, and the weekly backstop. A merge group does not upload another
+SARIF result from its short-lived queue ref. Instead, the required CodeQL gate
+queries every alert from the exact pull request, including its already-completed
+Actions and JavaScript/TypeScript analyses. This keeps queue validation inside
+the repository's short merge-group window without removing either language from
+pull-request qualification.
 
 ## Expensive evidence
 

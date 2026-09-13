@@ -57,13 +57,12 @@ test('published OSS releases wake fixed cloud staging reconciliation', () => {
 })
 
 test('merge queue reuses the exact PR JavaScript scan and completes its CodeQL gate within the queue window', () => {
-  assert.match(
-    codeql,
-    /github\.event_name == 'merge_group' && fromJSON\('\["actions"\]'\) \|\| fromJSON\('\["actions", "javascript-typescript"\]'\)/,
-  )
+  assert.match(codeql, /analyze:[\s\S]*?if: github\.event_name != 'merge_group'/)
+  assert.match(codeql, /language: \[actions, javascript-typescript\]/)
   assert.match(codeql, /if \[\[ "\$\{GITHUB_EVENT_NAME\}" == "merge_group" \]\]/)
   assert.match(codeql, /-F pr="\$\{PR_NUMBER\}" -f tool_name=CodeQL/)
-  assert.match(codeql, /needs: analyze/)
+  assert.match(codeql, /needs: \[release-notes-preflight, analyze\]/)
+  assert.match(codeql, /github\.event_name == 'merge_group' \|\| needs\.analyze\.result == 'success'/)
 })
 
 test('release candidate detection works for pull requests, manual runs, and merge groups', () => {
