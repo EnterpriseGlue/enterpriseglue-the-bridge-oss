@@ -45,6 +45,35 @@ test('canonical TypeORM persistence and configuration paths select database qual
   assert.equal(result.run_oracle, true);
 });
 
+test('schema-epoch manifest drift is rejected by the focused persistence gate', () => {
+  assert.match(
+    packageManifest.scripts?.['test:database-portability:unit'] ?? '',
+    /node scripts\/schema-epoch-manifest\.mjs --check/,
+  );
+
+  for (const path of [
+    'packages/shared/src/schema-epoch-manifest.json',
+    'infra/kubernetes/helm/enterpriseglue-host/files/schema-epoch-manifest.json',
+    'scripts/schema-epoch-manifest.mjs',
+    'scripts/schema-epoch-manifest.test.mjs',
+  ]) {
+    assert.equal(classifyChangedFiles([path]).run_database_matrix, true, path);
+  }
+
+  for (const pathPattern of [
+    /packages\/shared\/src\/schema-epoch-manifest\.json/g,
+    /infra\/kubernetes\/helm\/enterpriseglue-host\/files\/schema-epoch-manifest\.json/g,
+    /scripts\/schema-epoch-manifest\.mjs/g,
+    /scripts\/schema-epoch-manifest\.test\.mjs/g,
+  ]) {
+    assert.equal(
+      databaseWorkflow.match(pathPattern)?.length,
+      2,
+      `${pathPattern.source} must trigger both pull-request and main-branch database qualification`,
+    );
+  }
+});
+
 test('Mission Control engine, database, and diagram regressions remain explicit CI gates', () => {
   const regressionCommand = packageManifest.scripts?.['test:mission-control-regressions'];
   assert.equal(typeof regressionCommand, 'string');

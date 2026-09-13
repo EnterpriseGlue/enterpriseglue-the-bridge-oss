@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -10,6 +10,8 @@ import {
 } from '../packages/shared/src/contracts/release-effect-inventory.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+const manifestRelativePath = 'packages/shared/src/schema-epoch-manifest.json'
+const chartManifestRelativePath = 'infra/kubernetes/helm/enterpriseglue-host/files/schema-epoch-manifest.json'
 
 export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/db/run-migrations.ts',
@@ -60,7 +62,10 @@ export async function readExecutableImplementationInventory(base = root) {
 }
 
 export async function verifySchemaEpochManifest(base = root) {
-  const manifest = JSON.parse(await readFile(path.join(base, 'packages/shared/src/schema-epoch-manifest.json'), 'utf8'))
+  const manifestPath = path.join(base, manifestRelativePath)
+  const chartManifestPath = path.join(base, chartManifestRelativePath)
+  const manifestBytes = await readFile(manifestPath)
+  const manifest = JSON.parse(manifestBytes)
   const actual = await readExecutableImplementationInventory(base)
   assert.deepEqual(
     manifest.executableImplementationInventory,
@@ -72,11 +77,38 @@ export async function verifySchemaEpochManifest(base = root) {
     releaseEffectInventoryFromSources(),
     'schema-epoch release-effect inventory differs from the canonical runtime inventory',
   )
+  assert.deepEqual(
+    await readFile(chartManifestPath),
+    manifestBytes,
+    'host chart schema-epoch manifest differs from the canonical shared-package manifest',
+  )
   return actual
 }
 
+export async function writeSchemaEpochManifest(base = root) {
+  const manifestPath = path.join(base, manifestRelativePath)
+  const chartManifestPath = path.join(base, chartManifestRelativePath)
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  const executableImplementationInventory = await readExecutableImplementationInventory(base)
+  manifest.executableImplementationInventory = executableImplementationInventory
+  manifest.releaseEffectInventory = releaseEffectInventoryFromSources()
+  const bytes = `${JSON.stringify(manifest, null, 2)}\n`
+  await Promise.all([
+    writeFile(manifestPath, bytes),
+    writeFile(chartManifestPath, bytes),
+  ])
+  await verifySchemaEpochManifest(base)
+  return executableImplementationInventory
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv[2] !== 'verify') throw new Error('Usage: node scripts/schema-epoch-manifest.mjs verify')
-  const inventory = await verifySchemaEpochManifest()
-  console.log(`[schema-epoch-manifest] verified ${inventory.count} source files (${inventory.sha256})`)
+  const mode = process.argv[2] || '--check'
+  if (!['verify', '--check', '--write'].includes(mode)) {
+    throw new Error('Usage: node scripts/schema-epoch-manifest.mjs [verify|--check|--write]')
+  }
+  const inventory = mode === '--write'
+    ? await writeSchemaEpochManifest()
+    : await verifySchemaEpochManifest()
+  const action = mode === '--write' ? 'updated' : 'verified'
+  console.log(`[schema-epoch-manifest] ${action} ${inventory.count} source files (${inventory.sha256})`)
 }
