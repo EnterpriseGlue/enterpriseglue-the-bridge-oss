@@ -161,7 +161,7 @@ test('database hooks satisfy shared config validation without application Secret
     })) assert.match(job, new RegExp(`name: ${name}\\n\\s+value: "${value}"`), `${component}:${name}`)
     assert.doesNotMatch(job, /secretRef: \{ name: enterpriseglue-secrets \}/)
   }
-  assert.match(result.stdout, /app.kubernetes.io\/component: api/)
+  assert.match(result.stdout, /app\.kubernetes\.io\/component: api/)
   assert.match(result.stdout, /secretRef: \{ name: enterpriseglue-secrets \}/)
 })
 
