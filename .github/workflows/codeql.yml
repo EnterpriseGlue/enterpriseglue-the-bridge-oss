@@ -35,7 +35,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, javascript-typescript]
+        # Merge groups have a short repository-configured queue window. The
+        # full JavaScript analysis already ran on the exact PR head; keep the
+        # fast Actions analysis and query all PR alerts in the gate below.
+        language: ${{ github.event_name == 'merge_group' && fromJSON('["actions"]') || fromJSON('["actions", "javascript-typescript"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -63,6 +63,13 @@ browser journey on exact PostgreSQL images, packages, charts, and multi-platform
 images before publication. The required `Release candidate staged` status
 cannot pass until that exact-SHA qualification completes.
 
+CodeQL runs both JavaScript/TypeScript and Actions analysis on pull requests,
+protected `main`, and the weekly backstop. A merge group reruns the fast Actions
+analysis, then the required CodeQL gate queries every alert from the exact pull
+request, including its already-completed JavaScript/TypeScript analysis. This
+keeps queue validation inside the repository's short merge-group window without
+removing either language from pull-request qualification.
+
 ## Expensive evidence
 
 - Frontend-only shell/component changes run frontend typechecks, unit tests,

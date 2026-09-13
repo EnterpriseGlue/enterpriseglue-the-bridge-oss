@@ -33,6 +33,10 @@ const releaseNotify = await readFile(
   new URL('../.github/workflows/release-notify.yml', import.meta.url),
   'utf8',
 )
+const codeql = await readFile(
+  new URL('../.github/workflows/codeql.yml', import.meta.url),
+  'utf8',
+)
 
 test('published OSS releases wake fixed cloud staging reconciliation', () => {
   for (const boundary of [
@@ -50,6 +54,16 @@ test('published OSS releases wake fixed cloud staging reconciliation', () => {
     "event_type: 'enterpriseglue-oss-release-published'",
   ]) assert.ok(releaseNotify.includes(boundary), `missing staging notification boundary: ${boundary}`)
   assert.doesNotMatch(releaseNotify, /production-deploy|deploy-production/)
+})
+
+test('merge queue reuses the exact PR JavaScript scan and completes its CodeQL gate within the queue window', () => {
+  assert.match(
+    codeql,
+    /github\.event_name == 'merge_group' && fromJSON\('\["actions"\]'\) \|\| fromJSON\('\["actions", "javascript-typescript"\]'\)/,
+  )
+  assert.match(codeql, /if \[\[ "\$\{GITHUB_EVENT_NAME\}" == "merge_group" \]\]/)
+  assert.match(codeql, /-F pr="\$\{PR_NUMBER\}" -f tool_name=CodeQL/)
+  assert.match(codeql, /needs: analyze/)
 })
 
 test('release candidate detection works for pull requests, manual runs, and merge groups', () => {
