@@ -191,7 +191,7 @@ test('the pull-request workflow retains browser and database evidence when autho
       );
     }
   }
-  assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
+  assert.match(authzPrWorkflow, /cron: "15 3 \* \* 4"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);
   assert.match(authzPrWorkflow, /\["firefox", "webkit"\]/);
   assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=\$\{\{ matrix\.browser \}\}/);

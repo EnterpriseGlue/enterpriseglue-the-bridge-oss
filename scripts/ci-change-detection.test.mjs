@@ -10,6 +10,7 @@ const reusableCiWorkflow = readFileSync(new URL('../.github/workflows/ci-core-re
 const databaseWorkflow = readFileSync(new URL('../.github/workflows/engine-tenancy-database.yml', import.meta.url), 'utf8');
 const identityWorkflow = readFileSync(new URL('../.github/workflows/identity-protocol-rehearsal.yml', import.meta.url), 'utf8');
 const deploymentWorkflow = readFileSync(new URL('../.github/workflows/access-governance-deployment-evidence.yml', import.meta.url), 'utf8');
+const toolchainWorkflow = readFileSync(new URL('../.github/workflows/plugin-toolchain-release.yml', import.meta.url), 'utf8');
 const packageManifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('the reusable workflow delegates path policy to the tested deterministic classifier', () => {
@@ -193,6 +194,27 @@ test('Trivy wrapper changes select image smoke and security qualification', () =
 test('draft pull requests use the normal change-aware gates', () => {
   assert.doesNotMatch(workflow, /changed_files_count=draft/);
   assert.doesNotMatch(workflow, /PR_DRAFT/);
+});
+
+test('large intra-workflow image handoffs expire after one day', () => {
+  for (const source of [ciWorkflow, reusableCiWorkflow]) {
+    const upload = source.slice(source.indexOf('name: ci-images'), source.indexOf('\n\n', source.indexOf('name: ci-images')));
+    assert.match(upload, /retention-days: 1/);
+  }
+});
+
+test('the retained toolchain artifact excludes the released air-gap payload', () => {
+  const retained = toolchainWorkflow.slice(toolchainWorkflow.indexOf('- name: Retain the non-secret toolchain receipt'));
+  assert.match(retained, /enterpriseglue-plugin-toolchain-receipt\/release\.json/);
+  assert.match(retained, /toolchain-airgap-import-receipt\.json/);
+  assert.match(retained, /toolchain-airgap\/toolchain-airgap\.sigstore\.json/);
+  assert.match(retained, /retention-days: 30/);
+  assert.doesNotMatch(retained, /path: \$\{\{ runner\.temp \}\}\/enterpriseglue-plugin-toolchain-receipt\s*$/m);
+});
+
+test('expensive unchanged-main backstops are weekly and staggered', () => {
+  assert.match(ciWorkflow, /cron: "0 2 \* \* 1"/);
+  assert.match(identityWorkflow, /cron: '25 4 \* \* 5'/);
 });
 
 test('independent database, identity, and deployment workflows honor classifier relevance', () => {

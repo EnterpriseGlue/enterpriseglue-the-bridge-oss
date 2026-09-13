@@ -149,6 +149,7 @@ flowchart TD
 - **Trivy image scanning in PR CI**
   - The CI pipeline builds backend and frontend images from the pull request source and scans both images with Trivy.
   - This acts as a blocking security gate in PR validation with a zero-tolerance posture across reported severities unless findings are explicitly handled via `.trivyignore`.
+  - When an upstream runtime package has no released fix, a temporary exception is permitted only after the final image replaces the affected runtime bytes with a checksum-pinned, tested security backport. The exception must identify the owner, explain the scanner metadata mismatch, expire, and be removed when a trusted fixed package is available.
 
 - **Trivy scanning for published images**
   - After image publication, the pipeline also scans the published backend and frontend image references.

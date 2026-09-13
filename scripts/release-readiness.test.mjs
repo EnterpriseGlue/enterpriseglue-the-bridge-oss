@@ -113,6 +113,43 @@ test('the production image gate scans every release image', () => {
   assert.match(readiness, /applicationVulnerabilityScan: "CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN"/)
 })
 
+test('patches the production zlib runtime before accepting the temporary scanner metadata exception', async () => {
+  const [dockerfile, securityPatch, trivyIgnore] = await Promise.all([
+    readFile(new URL('../backend/Dockerfile.prod', import.meta.url), 'utf8'),
+    readFile(new URL('../backend/patches/zlib/CVE-2026-85091.patch', import.meta.url), 'utf8'),
+    readFile(new URL('../.trivyignore', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(
+    dockerfile,
+    /ADD --checksum=sha256:bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16[\s\S]*zlib-1\.3\.2\.tar\.gz/,
+    'the security rebuild must consume the checksum-pinned upstream release archive',
+  )
+  assert.match(
+    dockerfile,
+    /ADD --checksum=sha256:f3bde5714d3ae4ab735f9628827180af5683bb864370456364f4b143815c06ad[\s\S]*madler\/zlib\/4d03c63b8648ab83053a6f00d304a5d6f9aa1ed7\/test\/gznonblock\.c/,
+    'the security rebuild must run the checksum-pinned upstream regression source',
+  )
+  assert.match(dockerfile, /patch --strip=1 < \/tmp\/CVE-2026-85091\.patch/)
+  assert.match(dockerfile, /CFLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -O1 -g"/)
+  assert.match(dockerfile, /-I\. test\/gznonblock\.c libz\.a -o \/tmp\/gznonblock/)
+  assert.match(dockerfile, /ASAN_OPTIONS=detect_leaks=0 \/tmp\/gznonblock/)
+  assert.match(dockerfile, /make test/)
+  assert.match(
+    dockerfile,
+    /COPY --from=zlib-security-build --chown=0:0[\s\S]*\/patched-zlib\/usr\/lib\/libz\.so\.1\.3\.2[\s\S]*\/usr\/lib\/libz\.so\.1\.3\.2/,
+    'the final runtime must replace the vulnerable shared-library bytes',
+  )
+  assert.match(securityPatch, /Upstream-Commit: https:\/\/github\.com\/madler\/zlib\/commit\/4d03c63b8648ab83053a6f00d304a5d6f9aa1ed7/)
+  assert.equal((securityPatch.match(/^\+\s+state->strm\.next_in = Z_NULL;$/gm) ?? []).length, 2)
+  assert.equal((securityPatch.match(/^\+\s+state->strm\.avail_in = 0;$/gm) ?? []).length, 1)
+  assert.match(
+    trivyIgnore,
+    /owner: security-team \| reason: The final backend libz bytes are rebuilt[\s\S]*expires: 2026-10-15\nCVE-2026-85091/,
+    'the scanner metadata exception must remain owned, justified, and time bounded',
+  )
+})
+
 test('local scanner actually applies the candidate threshold to each image type', () => {
   const start = productionImages.indexOf('for image in "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$INSTALLER_IMAGE" "$MANAGER_IMAGE"; do')
   const end = productionImages.indexOf('\ncleanup_trivy_cache', start)

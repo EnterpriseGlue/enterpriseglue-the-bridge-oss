@@ -16,3 +16,6 @@ CVE-2026-54285
 
 # owner: security-team | reason: EnterpriseGlue is a client-side SPA and does not enable React Router RSC mode or server actions, so the RSC action CSRF path is absent. Remove after react-router-dom publishes a compatible React Router 8 release. | expires: 2026-11-01
 GHSA-qwww-vcr4-c8h2
+
+# owner: security-team | reason: The final backend libz bytes are rebuilt from the signed zlib 1.3.2 source with the complete stale-pointer remediation and regression test from madler/zlib#1286. Trivy sees the retained Chainguard APK metadata rather than the patched shared-library bytes. Remove when Chainguard publishes a fixed trusted zlib package. | expires: 2026-10-15
+CVE-2026-85091

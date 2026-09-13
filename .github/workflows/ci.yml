@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 2 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -756,6 +756,7 @@ jobs:
           path: |
             eg-local-backend-pr.tar.gz
             eg-local-frontend-pr.tar.gz
+          retention-days: 1
 
 
   smoke-postgres-image-deploy:

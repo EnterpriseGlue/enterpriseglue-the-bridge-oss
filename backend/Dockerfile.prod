@@ -55,13 +55,52 @@ COPY frontend/package.json frontend/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile --filter webmodeler-backend...
 
-FROM cgr.dev/chainguard/node:latest-dev@sha256:9df8062d1bc926d1eafd0be518d308bf92adde1b13093905cdf8dd45e4beaf9e AS runtime-base
+FROM cgr.dev/chainguard/node:latest-dev@sha256:9df8062d1bc926d1eafd0be518d308bf92adde1b13093905cdf8dd45e4beaf9e AS runtime-root
+
+# Chainguard's current trusted package feed still carries zlib 1.3.2-r5.
+# Rebuild the signed upstream 1.3.2 source with the complete stale-pointer fix
+# proposed upstream for CVE-2026-85091, then copy only the patched shared library
+# into the final image. Both immutable downloads are checksum pinned.
+FROM runtime-root AS zlib-security-build
+USER root
+ADD --checksum=sha256:bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16 \
+    https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz \
+    /tmp/zlib-1.3.2.tar.gz
+ADD --checksum=sha256:f3bde5714d3ae4ab735f9628827180af5683bb864370456364f4b143815c06ad \
+    https://raw.githubusercontent.com/madler/zlib/4d03c63b8648ab83053a6f00d304a5d6f9aa1ed7/test/gznonblock.c \
+    /tmp/gznonblock.c
+COPY backend/patches/zlib/CVE-2026-85091.patch /tmp/CVE-2026-85091.patch
+RUN set -eux; \
+    apk add --no-cache build-base patch; \
+    tar -xzf /tmp/zlib-1.3.2.tar.gz -C /tmp; \
+    cd /tmp/zlib-1.3.2; \
+    patch --strip=1 < /tmp/CVE-2026-85091.patch; \
+    cp /tmp/gznonblock.c test/gznonblock.c; \
+    CC=gcc CFLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -O1 -g" \
+      ./configure --static; \
+    make -j2; \
+    gcc -fsanitize=address,undefined -fno-sanitize-recover=all -O1 -g \
+      -I. test/gznonblock.c libz.a -o /tmp/gznonblock; \
+    ASAN_OPTIONS=detect_leaks=0 /tmp/gznonblock; \
+    make distclean; \
+    CFLAGS="-O2 -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIC" \
+      LDFLAGS="-Wl,-z,relro,-z,now" \
+      ./configure --prefix=/usr --libdir=/usr/lib --shared; \
+    make -j2; \
+    make test; \
+    make install DESTDIR=/patched-zlib; \
+    test -f /patched-zlib/usr/lib/libz.so.1.3.2
+
+FROM runtime-root AS runtime-base
 USER root
 RUN set -eux; \
     apk upgrade --no-cache; \
     npm_packages="$(awk -F: '$1 == "P" && $2 ~ /^npm(-[0-9]+)?$/ { print $2 }' /lib/apk/db/installed)"; \
     if [ -n "${npm_packages}" ]; then apk del --no-network ${npm_packages}; fi; \
     rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
+COPY --from=zlib-security-build --chown=0:0 \
+    /patched-zlib/usr/lib/libz.so.1.3.2 \
+    /usr/lib/libz.so.1.3.2
 USER 65532
 
 FROM runtime-base

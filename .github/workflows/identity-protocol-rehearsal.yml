@@ -15,7 +15,7 @@ on:
       - 'infra/docker/keycloak/**'
       - 'test/e2e/local-*-rehearsal.spec.ts'
   schedule:
-    - cron: '25 4 * * *'
+    - cron: '25 4 * * 5'
   workflow_dispatch:
 
 permissions:

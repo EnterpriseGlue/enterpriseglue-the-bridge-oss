@@ -1,0 +1,32 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "actions-budget-efficiency",
+  "type": "security",
+  "scope": "ci-and-backend-runtime",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Reduces GitHub Actions compute and storage usage while preserving protected evidence, and patches the backend runtime for CVE-2026-85091.",
+  "userImpact": [],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "Required CodeQL, merge-queue, release-policy, database, authorization, and browser admission gates remain enabled.",
+    "The backend image replaces the affected zlib 1.3.2-r5 runtime bytes with a checksum-pinned build carrying the complete proposed CVE-2026-85091 stale-pointer remediation and regression test; its time-bounded Trivy exception covers only the retained APK metadata until Chainguard publishes a fixed trusted package."
+  ],
+  "documentation": [
+    "Documents weekly maintenance backstops, daily security and observability coverage, and bounded artifact retention."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the prior cron expressions and artifact paths if fresher unchanged-main evidence or longer transient retention is required.",
+    "Do not restore the vulnerable backend runtime image; replace the vendored zlib backport only with a trusted runtime package that passes the all-severity candidate scan."
+  ],
+  "validation": [
+    "CI routing, aggregate, release-canary, authorization, release-note, and workflow contract suites pass locally.",
+    "The patched zlib source passes its upstream test suite, the backend runtime contract, and the repository's exact all-severity image scan."
+  ],
+  "packages": []
+}

@@ -140,7 +140,7 @@ available only to the non-publishing legacy verification path.
 
 ## Release canary
 
-`.github/workflows/release-canary.yml` runs nightly and supports manual
+`.github/workflows/release-canary.yml` runs weekly and supports manual
 dispatch. It invokes the production reusable image workflow against dedicated
 GHCR scratch repositories, verifies exact ORAS and Cosign identities, and runs
 the package, chart, image, plugin-payload, and receipt readiness drill with
@@ -162,6 +162,23 @@ cancellations remain separately classified and do not become failures.
 
 Treat a failed canary as a release-control defect. Repair and rerun it before a
 material release workflow change is allowed to publish.
+
+## Schedule and artifact budget
+
+Change-aware pull-request and merge-queue gates remain event-driven. The full
+CI unchanged-main backstop runs on Monday, the release canary on Wednesday, the
+cross-browser authorization backstop on Thursday, and the advisory identity
+protocol rehearsal on Friday. Maintainers may manually dispatch any of them
+when a release or investigation needs fresher evidence. The daily security and
+CI-observability workflows remain daily because they detect time-sensitive
+dependency, advisory, and operational changes.
+
+The `ci-images` artifact is only an intra-workflow handoff to downstream smoke
+jobs and expires after one day. Plugin-toolchain releases upload the complete
+air-gap archive and distribution assets to the immutable GitHub Release; the
+Actions artifact retains only the small release, import, manifest, and signing
+receipts for 30 days. Do not copy already-published payload blobs into a second
+long-lived Actions artifact.
 
 ## Observability and targets
 

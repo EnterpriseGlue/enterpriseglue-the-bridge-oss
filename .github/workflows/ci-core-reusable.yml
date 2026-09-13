@@ -547,6 +547,7 @@ jobs:
           path: |
             eg-local-backend-pr.tar.gz
             eg-local-frontend-pr.tar.gz
+          retention-days: 1
 
   smoke-postgres-image-deploy:
     runs-on: ubuntu-latest
