@@ -89,6 +89,8 @@ spec:
     metadata:
       labels:
         {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "migration") | nindent 8 }}
+      annotations:
+        enterpriseglue.io/database-hook-config-profile: validation-only-v1
     spec:
       restartPolicy: Never
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "migration") }}
@@ -108,8 +110,8 @@ spec:
             {{- else }}
             - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'apply'}))"
             {{- end }}
-          {{- if or .Values.database.migration.runtimeRole .Values.database.profile.databaseType }}
           env:
+            {{- include "enterpriseglue-host.databaseHookValidationEnvironment" . | nindent 12 }}
             {{- if .Values.database.migration.runtimeRole }}
             - name: EG_POSTGRES_RUNTIME_ROLE
               value: {{ .Values.database.migration.runtimeRole | quote }}
@@ -120,7 +122,6 @@ spec:
             - name: EG_TENANCY_MODE
               value: {{ .Values.database.profile.tenancyMode | quote }}
             {{- end }}
-          {{- end }}
           envFrom:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.migrationSecretName }} }
@@ -213,6 +214,8 @@ spec:
     metadata:
       labels:
         {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "preflight") | nindent 8 }}
+      annotations:
+        enterpriseglue.io/database-hook-config-profile: validation-only-v1
     spec:
       restartPolicy: Never
       serviceAccountName: {{ include "enterpriseglue-host.serviceAccountName" (dict "root" . "component" "preflight") }}
@@ -232,11 +235,9 @@ spec:
             {{- else }}
             - "import('./dist/packages/shared/dist/db/run-migrations.js').then(({runMigrations}) => runMigrations({mode:'verify'}))"
             {{- end }}
-          envFrom:
-            - configMapRef: { name: {{ .Values.database.configMapName }} }
-            - secretRef: { name: {{ .Values.database.preflightSecretName }} }
-          {{- if .Values.database.profile.databaseType }}
           env:
+            {{- include "enterpriseglue-host.databaseHookValidationEnvironment" . | nindent 12 }}
+            {{- if .Values.database.profile.databaseType }}
             {{- if $schemaEpochTarget }}
             - name: EG_POSTGRES_RUNTIME_ROLE
               value: {{ .Values.database.migration.runtimeRole | quote }}
@@ -245,7 +246,10 @@ spec:
               value: {{ .Values.database.profile.databaseType | quote }}
             - name: EG_TENANCY_MODE
               value: {{ .Values.database.profile.tenancyMode | quote }}
-          {{- end }}
+            {{- end }}
+          envFrom:
+            - configMapRef: { name: {{ .Values.database.configMapName }} }
+            - secretRef: { name: {{ .Values.database.preflightSecretName }} }
           securityContext:
             {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
           resources:
