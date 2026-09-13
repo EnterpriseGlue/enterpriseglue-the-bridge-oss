@@ -52,6 +52,12 @@
       "previousVersion": "0.19.5",
       "newVersion": "0.19.6",
       "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.15",
+      "newVersion": "0.17.16",
+      "impact": "patch"
     }
   ]
 }
