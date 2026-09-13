@@ -47,6 +47,7 @@
   ],
   "validation": [
     "Focused configuration and module-boundary tests prove production migration imports succeed without application secrets.",
+    "Negative configuration tests prove every supported adapter still rejects missing required connection fields and PostgreSQL still rejects the public application schema.",
     "TypeORM adapter, migration orchestration, Helm rendering, PostgreSQL integration, and database portability gates cover the unchanged database behavior."
   ],
   "packages": [

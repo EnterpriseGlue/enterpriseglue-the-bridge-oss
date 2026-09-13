@@ -58,6 +58,66 @@ const optional = (value: string | undefined): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const requireConfig = (name: string, value: unknown, databaseType: string): void => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    throw new Error(`${name} is required when DATABASE_TYPE=${databaseType}.`);
+  }
+};
+
+function validateDatabaseConfig(config: DatabaseConfig): void {
+  switch (config.databaseType) {
+    case 'postgres': {
+      // POSTGRES_URL is the complete connection alternative. Without it, all
+      // four discrete connection fields remain mandatory.
+      if (!config.postgresUrl) {
+        requireConfig('POSTGRES_HOST', config.postgresHost, 'postgres');
+        requireConfig('POSTGRES_USER', config.postgresUser, 'postgres');
+        requireConfig('POSTGRES_PASSWORD', config.postgresPassword, 'postgres');
+        requireConfig('POSTGRES_DATABASE', config.postgresDatabase, 'postgres');
+      }
+      if (config.postgresSchema === 'public') {
+        throw new Error(
+          'Schema mode requires POSTGRES_SCHEMA to be set to a non-public schema name when DATABASE_TYPE=postgres.',
+        );
+      }
+      break;
+    }
+    case 'oracle': {
+      requireConfig('ORACLE_USER', config.oracleUser, 'oracle');
+      requireConfig('ORACLE_PASSWORD', config.oraclePassword, 'oracle');
+      if (!config.oracleConnectionString) {
+        requireConfig('ORACLE_HOST', config.oracleHost, 'oracle');
+        if (!config.oracleServiceName && !config.oracleSid) {
+          throw new Error(
+            'Either ORACLE_SERVICE_NAME, ORACLE_SID, or ORACLE_CONNECTION_STRING is required when DATABASE_TYPE=oracle.',
+          );
+        }
+      }
+      break;
+    }
+    case 'mssql': {
+      requireConfig('MSSQL_HOST', config.mssqlHost, 'mssql');
+      requireConfig('MSSQL_USER', config.mssqlUser, 'mssql');
+      requireConfig('MSSQL_PASSWORD', config.mssqlPassword, 'mssql');
+      requireConfig('MSSQL_DATABASE', config.mssqlDatabase, 'mssql');
+      break;
+    }
+    case 'mysql': {
+      requireConfig('MYSQL_HOST', config.mysqlHost, 'mysql');
+      requireConfig('MYSQL_USER', config.mysqlUser, 'mysql');
+      requireConfig('MYSQL_PASSWORD', config.mysqlPassword, 'mysql');
+      requireConfig('MYSQL_DATABASE', config.mysqlDatabase, 'mysql');
+      break;
+    }
+    case 'spanner': {
+      requireConfig('SPANNER_PROJECT_ID', config.spannerProjectId, 'spanner');
+      requireConfig('SPANNER_INSTANCE_ID', config.spannerInstanceId, 'spanner');
+      requireConfig('SPANNER_DATABASE_ID', config.spannerDatabaseId, 'spanner');
+      break;
+    }
+  }
+}
+
 /**
  * Parse only settings needed to connect, migrate, verify, and enforce the
  * database tenancy boundary. Application authentication, administrator,
@@ -127,6 +187,8 @@ export function loadDatabaseConfig(environment: NodeJS.ProcessEnv = process.env)
       'EG_TENANCY_MODE=pooled requires EG_TENANT_RLS_ENFORCED=true so tenant isolation cannot start without PostgreSQL row policies.',
     );
   }
+
+  validateDatabaseConfig(parsed);
 
   return parsed;
 }
