@@ -108,7 +108,9 @@ opening a cohort does not establish maintenance or shutdown eligibility.
 For the managed bridge, application, migration, and preflight Secret names are pairwise distinct.
 Migration and preflight ServiceAccounts are distinct, and an enabled cohort opener uses a third
 distinct ServiceAccount. The preflight database login is membership-free and reads PostgreSQL
-relation ACL catalogues without inheriting either owner or runtime privileges.
+relation ACL catalogues without inheriting either owner or runtime privileges. It needs schema
+`USAGE` and ledger-only `SELECT`; the signed preflight uses `pg_catalog` for business-table and
+RLS-policy presence because `information_schema` correctly hides those relations from this identity.
 
 For PostgreSQL, `database.migration.runtimeRole` names an existing restricted runtime login. Outside
 the bridge profile it refreshes ordinary grants after successful owner migrations. In the bridge

@@ -19,7 +19,7 @@ import { AuthzMigrationState } from '../infrastructure/persistence/entities/Auth
 import { generateId } from '../utils/id.js';
 import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 import { AddPostgresTenantRls1700000000126 } from './migrations/1700000000126-add-postgres-tenant-rls.js';
-import { verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
+import { postgresCatalogTableExists, verifyPostgresTenantRls, verifyPostgresTenantRlsForPolicyProfile, verifyPostgresTenantRlsRole, assertRestrictedPostgresRuntimeRole } from './postgres-tenant-rls.js';
 import type { PostgresTenantPolicyProfile } from './postgres-tenant-rls.js';
 import { databaseConfig as config } from '../config/database.js';
 import { refreshPostgresRuntimeGrants } from './postgres-runtime-grants.js';
@@ -684,35 +684,44 @@ async function runMigrationsForInvocation(
         }
       }
 
-      // The separately credentialed schema-epoch preflight is intentionally
-      // denied business-table access. PostgreSQL's information_schema (and
-      // therefore TypeORM hasTable) hides those relations from that login.
-      // Its readiness boundary is the signed migration ledger plus the exact
-      // catalog-backed epoch, policy, cohort-shape and runtime-grant checks
-      // below; generic bootstrap inspection remains on application/owner runs.
-      if (!schemaEpochPreflight) {
-        const coreBootstrapEntities = [
-          User,
-          RefreshToken,
-          EnvironmentTag,
-          PlatformSettings,
-          EmailTemplate,
-          GitProvider,
-          GitCredential,
-          Invitation,
-          Tenant,
-          TenantLoginPolicy,
-        ];
+      const coreBootstrapEntities = [
+        User,
+        RefreshToken,
+        EnvironmentTag,
+        PlatformSettings,
+        EmailTemplate,
+        GitProvider,
+        GitCredential,
+        Invitation,
+        Tenant,
+        TenantLoginPolicy,
+      ];
 
-        const missingTables: string[] = [];
-        for (const entity of coreBootstrapEntities) {
-          const tablePath = dataSource.getMetadata(entity).tablePath;
-          const hasTable = await queryRunner.hasTable(tablePath);
-          if (!hasTable) {
-            missingTables.push(tablePath);
-          }
+      const missingTables: string[] = [];
+      for (const entity of coreBootstrapEntities) {
+        const metadata = dataSource.getMetadata(entity);
+        // The separately credentialed schema-epoch preflight is intentionally
+        // denied business-table access. PostgreSQL information_schema (and
+        // therefore TypeORM hasTable) hides those relations from that login,
+        // so this one path uses the parameterized pg_catalog probe.
+        const hasTable = schemaEpochPreflight
+          ? await postgresCatalogTableExists(queryRunner, metadata)
+          : await queryRunner.hasTable(metadata.tablePath);
+        if (!hasTable) {
+          missingTables.push(metadata.tablePath);
         }
+      }
 
+      if (missingTables.length > 0 && mode === 'verify') {
+        throw new Error(
+          `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
+        );
+      }
+
+      // Only application and ordinary owner invocations can inspect or repair
+      // business rows. Schema-epoch preflight continues with its signed ledger,
+      // catalog-backed policy, cohort-shape and runtime-grant checks below.
+      if (!schemaEpochPreflight) {
         let hadCanonicalTableBeforeBootstrap =
           missingTables.length < coreBootstrapEntities.length;
         if (
@@ -734,11 +743,6 @@ async function runMigrationsForInvocation(
         }
 
         if (missingTables.length > 0) {
-          if (mode === 'verify') {
-            throw new Error(
-              `Database schema is not ready; migration identity must create ${missingTables.join(', ')}`,
-            );
-          }
           console.log(
             `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
           );
@@ -811,9 +815,10 @@ async function runMigrationsForInvocation(
           }
           const rls = acceptedDatabaseEpoch
             ? await verifyPostgresTenantRlsForPolicyProfile(
-                integrityRunner,
-                acceptedDatabaseEpoch.postgresPolicyProfile,
-              )
+              integrityRunner,
+              acceptedDatabaseEpoch.postgresPolicyProfile,
+              schemaEpochPreflight ? postgresCatalogTableExists : undefined,
+            )
             : await verifyPostgresTenantRls(integrityRunner);
           if (rls.expected === 0 || rls.enforced !== rls.expected) {
             throw new Error(`Pooled tenancy requires enforced PostgreSQL RLS policies (expected ${rls.expected}, found ${rls.enforced}).`);

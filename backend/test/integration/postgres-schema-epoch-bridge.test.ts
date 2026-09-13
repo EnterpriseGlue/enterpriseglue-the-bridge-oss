@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import type { Pool } from 'pg';
 import {
+  postgresCatalogTableExists,
   verifyPostgresTenantRlsForPolicyProfile,
 } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
 import { applyDualContextPostgresTenantPolicies } from '@enterpriseglue/shared/db/postgres-tenant-policy.js';
@@ -246,12 +247,36 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
     );
     expect(informationSchemaVisibility).toEqual([{ count: 0 }]);
     const privileges = await pool.query(
-      `SELECT has_table_privilege($1, $2, 'SELECT') AS select_ok`,
+      `SELECT
+        has_table_privilege($1, $2, 'SELECT') AS select_ok,
+        has_table_privilege($1, $2, 'INSERT') AS insert_ok,
+        has_table_privilege($1, $2, 'UPDATE') AS update_ok,
+        has_table_privilege($1, $2, 'DELETE') AS delete_ok,
+        has_table_privilege($1, $2, 'TRUNCATE') AS truncate_ok,
+        has_table_privilege($1, $2, 'REFERENCES') AS references_ok,
+        has_table_privilege($1, $2, 'TRIGGER') AS trigger_ok`,
       [preflightRole, tablePath],
     );
-    expect(privileges.rows).toEqual([{ select_ok: false }]);
-    await expect(
-      verifyPostgresTenantRlsForPolicyProfile(preflightPolicyRunner(), 'explicit-context/v1'),
-    ).resolves.toEqual({ expected: 3, enforced: 3 });
+    expect(privileges.rows).toEqual([{
+      select_ok: false,
+      insert_ok: false,
+      update_ok: false,
+      delete_ok: false,
+      truncate_ok: false,
+      references_ok: false,
+      trigger_ok: false,
+    }]);
+    await expect(preflightDataSource.query(`SELECT * FROM ${tableRef}`)).rejects.toMatchObject({ code: '42501' });
+    await expect(postgresCatalogTableExists(preflightPolicyRunner(), {
+      tableName: 'projects', tablePath, schema,
+    })).resolves.toBe(true);
+    await expect(postgresCatalogTableExists(preflightPolicyRunner(), {
+      tableName: 'refresh_tokens', tablePath: `${schema}.refresh_tokens`, schema,
+    })).resolves.toBe(false);
+    await expect(verifyPostgresTenantRlsForPolicyProfile(
+      preflightPolicyRunner(),
+      'explicit-context/v1',
+      postgresCatalogTableExists,
+    )).resolves.toEqual({ expected: 3, enforced: 3 });
   });
 });

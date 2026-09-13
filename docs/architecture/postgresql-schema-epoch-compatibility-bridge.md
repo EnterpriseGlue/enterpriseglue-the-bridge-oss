@@ -160,6 +160,13 @@ release-mode value.
 The managed bridge requires pairwise-distinct application, owner-migration and
 membership-free preflight database Secrets. Migration and preflight Kubernetes
 ServiceAccounts are distinct; the enabled opener has a third distinct account.
+The preflight login receives schema `USAGE` and `SELECT` only on the TypeORM
+migration ledger. Because PostgreSQL `information_schema.tables` hides
+business relations from that identity, the signed preflight resolves table and
+RLS-policy presence through a parameterized `pg_catalog` probe limited to
+ordinary and partitioned tables. It does not run generic bootstrap or
+business-data integrity reads. Application, owner, single-tenancy and
+non-PostgreSQL paths keep their ordinary TypeORM discovery behavior.
 Every hook imports the stable built shared-package output under
 `dist/packages/shared/dist`; candidate-image qualification executes those
 imports so a source-only path cannot pass release qualification.

@@ -16,6 +16,7 @@ import {
 import {
   legacyPostgresTenantPolicyMatches,
   normalizeLegacyPostgresTenantPolicyExpression,
+  postgresCatalogTableExists,
   verifyPostgresTenantRlsForPolicyProfile,
 } from '@enterpriseglue/shared/db/postgres-tenant-rls.js';
 import {
@@ -182,17 +183,65 @@ describe('immutable schema-epoch compatibility bridge', () => {
         }],
       },
       hasTable: vi.fn().mockResolvedValue(true),
-      query: vi.fn(async (sql: string) => {
-        if (sql.includes('relation_exists')) return [{ relation_exists: true }];
-        return [{
-          relrowsecurity: true,
-          relforcerowsecurity: true,
-          policies: [row],
-        }];
-      }),
+      query: vi.fn().mockResolvedValue([{
+        relrowsecurity: true,
+        relforcerowsecurity: true,
+        policies: [row],
+      }]),
     } as any;
     await expect(
       verifyPostgresTenantRlsForPolicyProfile(queryRunner, 'legacy-tenant-context/v1'),
     ).resolves.toEqual({ expected: 1, enforced: 1 });
+    expect(queryRunner.hasTable).toHaveBeenCalledWith('main.projects');
+    expect(queryRunner.query).toHaveBeenCalledOnce();
+  });
+
+  it('uses the parameterized PostgreSQL catalog probe only when explicitly selected', async () => {
+    const legacy = "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy_mode', true), ''), 'single') <> 'pooled' OR tenant_id = NULLIF(current_setting('enterpriseglue.tenant_id', true), '')";
+    const hasTable = vi.fn().mockRejectedValue(new Error('information_schema must not be used'));
+    const query = vi.fn(async (sql: string, parameters?: unknown[]) => {
+      if (sql.includes('relation_exists')) {
+        expect(parameters).toEqual(['main', 'projects']);
+        expect(sql).toContain("c.relkind IN ('r','p')");
+        return [{ relation_exists: true }];
+      }
+      return [{
+        relrowsecurity: true,
+        relforcerowsecurity: true,
+        policies: [{
+          policy_name: 'eg_tenant_isolation', command: 'ALL', permissive: 'PERMISSIVE', roles: ['public'],
+          using_expression: legacy, check_expression: legacy,
+        }],
+      }];
+    });
+    const queryRunner = {
+      connection: {
+        options: { type: 'postgres', schema: 'main' },
+        entityMetadatas: [{
+          tableName: 'projects', tablePath: 'main.projects', schema: 'main',
+          columns: [{ databaseName: 'tenant_id' }],
+        }],
+      },
+      hasTable,
+      query,
+    } as any;
+
+    await expect(verifyPostgresTenantRlsForPolicyProfile(
+      queryRunner,
+      'legacy-tenant-context/v1',
+      postgresCatalogTableExists,
+    )).resolves.toEqual({ expected: 1, enforced: 1 });
+    expect(hasTable).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(2);
+
+    const missingRunner = { ...queryRunner, query: vi.fn().mockResolvedValue([{ relation_exists: false }]) } as any;
+    await expect(postgresCatalogTableExists(missingRunner, {
+      tableName: 'missing', tablePath: 'main.missing', schema: 'main',
+    })).resolves.toBe(false);
+
+    const malformedRunner = { ...queryRunner, query: vi.fn().mockResolvedValue([]) } as any;
+    await expect(postgresCatalogTableExists(malformedRunner, {
+      tableName: 'projects', tablePath: 'main.projects', schema: 'main',
+    })).rejects.toThrow(/invalid result/);
   });
 });
