@@ -62,6 +62,13 @@ EE-sync triggers remain only as safe redirects and do not authorize EE writes.
 The staging-delivery workflow treats EnterpriseGlue Cloud as an independently
 evidenced delivery target and reports publication, image assembly, candidate
 installation, staging default promotion, and production promotion separately.
+For staging-only early retirement it also distinguishes lifecycle
+classification from actual drain compatibility: stale or missing compatibility
+must be refreshed through exact retained-release probes and an atomic
+control-plane record before the ordinary drain begins. If a mutation retains
+the shared lock, the workflow requires incident-bound failed-run artifacts and
+fresh live-state proof before a generation-conditional takeover; it never
+releases a lock merely because it is old.
 `agents/openai.yaml` metadata is generated and validated for every skill.
 
 Repository scripts and tests remain the authority for deterministic behavior;
