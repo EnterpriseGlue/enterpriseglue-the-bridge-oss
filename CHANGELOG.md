@@ -11,7 +11,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 * **auth:** preserve pooled linking error contract ([245c0cb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/245c0cb083a24a09de972dac15c70f68d9b27a34))
 * **auth:** securely link secondary OIDC providers ([d2b93df](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d2b93df6345aaab22a84228ea421e7ca800d969a))
-* **auth:** securely link secondary OIDC providers ([ac37a0e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ac37a0e4ad562c9d835fff95303f73ff5213df6e))
 
 ## [0.28.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.0...v0.28.1) (2026-09-15)
 
