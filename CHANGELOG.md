@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.28.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.6...v0.28.0) (2026-09-15)
+
+
+### Features
+
+* **codex:** add cloud staging delivery workflow ([be2f3bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/be2f3bc88b2962ff5435caf70991c9f940776b9e))
+* **codex:** add cloud staging delivery workflow ([0d584cd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0d584cd109a0210618f658fbbe2ae4bdf7ba639d))
+
 ## [0.27.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.5...v0.27.6) (2026-09-15)
 
 
