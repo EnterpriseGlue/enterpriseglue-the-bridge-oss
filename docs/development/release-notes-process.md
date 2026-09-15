@@ -20,10 +20,22 @@ feature pull request.
    request. Use a stable lowercase kebab-case name, not a pull-request number.
 2. Complete every field from `.release-notes/schema.json`. Empty arrays are
    allowed only when the topic is genuinely not applicable.
-3. If the change touches a published package, bump that package and each
-   published workspace consumer whose packed dependency version changes. List
-   every bumped package in the fragment, then run the working-tree-aware guard
-   before the first commit:
+3. If the change touches a published package, choose the semantic impact only
+   for the directly changed package and let the version planner update the
+   complete package set, release-note rows, and bound chart versions together:
+
+   ```bash
+   node ./scripts/package-version-plan.mjs apply \
+     --base-ref origin/main \
+     --fragment .release-notes/<change-id>.json \
+     --bump @enterpriseglue/<package>=patch
+   ```
+
+   Repeat `--bump` for multiple directly changed packages. Use `minor` or
+   `major` where the public package contract requires it. The planner assigns
+   patch changes to packed workspace consumers; do not chase or hand-edit those
+   transitive versions. Review the resulting plan, then run the working-tree-
+   aware guard before the first commit:
 
    ```bash
    bash ./scripts/check-published-package-version-discipline.sh origin/main
@@ -47,6 +59,41 @@ feature pull request.
 6. Keep the PR title, `release:*` label, package versions, and fragment
    classification consistent. Breaking fragments require both a conventional
    `!` title and the `release:breaking` label.
+
+## Package version authority
+
+`scripts/package-version-authority.json` is the single maintained inventory of
+published OSS packages. It defines each package manifest and source root, the
+atomic publication sets and dependency-safe publication order, packed workspace
+dependency propagation, and package-to-chart version bindings. Release-note
+validation and both package publishers read this inventory; they must not keep
+parallel package lists.
+
+Use the read-only plan command at any point while developing:
+
+```bash
+node ./scripts/package-version-plan.mjs plan --base-ref origin/main
+```
+
+The plan compares the working tree with the merge base, shows direct and
+transitive package changes before CI, and reports the exact expected versions
+and reasons. `check` is the fail-closed form used by
+`guard:published-package-versions` and CI. It rejects missing or unexplained
+bumps, stale release-note rows, dependency-order mistakes, and mismatched bound
+chart versions.
+
+The application version, host chart version, and developer-workflow plugin
+version remain independent artifacts. Application versions continue to be
+owned by Release Please. A change to one independent artifact never implies an
+EE synchronization or release step; the OSS repository is the only application
+host authority.
+
+Dependency updates use serialized trains: combine compatible patch and minor
+updates for one ecosystem and lockfile into one reviewed change, allow only one
+such train to mutate that lockfile at a time, and isolate major upgrades by
+dependency or tightly coupled family. A dependency train that changes a
+published package runs through this same planner. Product-specific plugins keep
+their own dependency and release train in their owning repositories.
 
 For an internal-only change, `release-note:none` may be used with a PR-body
 line in this exact form:

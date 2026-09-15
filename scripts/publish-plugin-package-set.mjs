@@ -12,16 +12,17 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import {
+  loadPackageVersionAuthority,
+  publicationOrder,
+} from './lib/package-version-authority.mjs';
 
 const DEFAULT_REGISTRY = 'https://npm.pkg.github.com';
 const MODES = new Set(['plan', 'dry-run', 'publish', 'verify']);
-export const PLUGIN_PACKAGE_ORDER = [
-  '@enterpriseglue/enterprise-plugin-api',
-  '@enterpriseglue/plugin-sdk',
-  '@enterpriseglue/plugin-runtime',
-  '@enterpriseglue/plugin-installer',
-  '@enterpriseglue/plugin-manager',
-];
+export const PLUGIN_PACKAGE_ORDER = publicationOrder(
+  loadPackageVersionAuthority(),
+  'plugin-platform-packages',
+);
 
 export function sha512Integrity(payload) {
   return `sha512-${createHash('sha512').update(payload).digest('base64')}`;

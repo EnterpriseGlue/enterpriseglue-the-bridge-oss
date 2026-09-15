@@ -13,6 +13,10 @@ const versionDiscipline = await readFile(
   new URL('./check-published-package-version-discipline.sh', import.meta.url),
   'utf8',
 );
+const versionAuthority = JSON.parse(await readFile(
+  new URL('./package-version-authority.json', import.meta.url),
+  'utf8',
+));
 
 assert.match(workflow, /\bon:\n  release:\n/);
 assert.match(workflow, /workflow_dispatch:/);
@@ -53,14 +57,20 @@ assert.doesNotMatch(
   tarballVerifier,
   /\['@enterpriseglue\/plugin-(?:sdk|runtime|installer|manager)',\s*'\d+\.\d+\.\d+'/,
 );
-assert.match(versionDiscipline, /check-workspace-dependency-version-drift\.mjs/);
+assert.match(versionDiscipline, /package-version-plan\.mjs check/);
 assert.ok(
-  versionDiscipline.includes('Dockerfile(\\..*)?'),
+  versionAuthority.sourceChangeExcludes.includes('^Dockerfile(?:\\..*)?$'),
   'container-only Dockerfiles must not force an npm package release',
 );
-assert.match(
-  versionDiscipline,
-  /check_package "@enterpriseglue\/plugin-manager" "packages\/plugin-manager"/,
+assert.deepEqual(
+  versionAuthority.publicationSets.find(({ id }) => id === 'plugin-platform-packages')?.packages,
+  [
+    '@enterpriseglue/enterprise-plugin-api',
+    '@enterpriseglue/plugin-sdk',
+    '@enterpriseglue/plugin-runtime',
+    '@enterpriseglue/plugin-installer',
+    '@enterpriseglue/plugin-manager',
+  ],
 );
 
 const packageSetPublisher = await readFile(
@@ -74,5 +84,14 @@ assert.match(packageSetPublisher, /canonicalJsonValue/);
 assert.match(packageSetPublisher, /npm[\s\S]*pack/);
 assert.match(packageSetPublisher, /different immutable payload/);
 assert.match(packageSetPublisher, /registry payload differs after publication/);
+assert.match(packageSetPublisher, /publicationOrder/);
+assert.match(packageSetPublisher, /plugin-platform-packages/);
+
+const hostPackageSetPublisher = await readFile(
+  new URL('./publish-host-package-set.mjs', import.meta.url),
+  'utf8',
+);
+assert.match(hostPackageSetPublisher, /publicationOrder/);
+assert.match(hostPackageSetPublisher, /host-packages/);
 
 console.log(JSON.stringify({ status: 'passed', packages: 5, customerCiRequired: false }));

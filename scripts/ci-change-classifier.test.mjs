@@ -315,6 +315,60 @@ test('published package source changes require same-PR package version disciplin
   }
 });
 
+test('package version authority changes select packaging and release contracts without application fan-out', () => {
+  for (const path of [
+    'scripts/package-version-authority.json',
+    'scripts/package-version-plan.mjs',
+    'scripts/package-version-plan.test.mjs',
+    'scripts/lib/package-version-authority.mjs',
+  ]) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.plugin_packaging, true, path);
+    assert.equal(result.workflow_or_release, true, path);
+    assert.equal(result.unknown_high_risk, false, path);
+    assert.equal(result.run_package_discipline, true, path);
+    assert.equal(result.run_plugin_package, true, path);
+    assert.equal(result.run_release_readiness, true, path);
+    assert.equal(result.run_tests, false, path);
+    assert.equal(result.run_postgres, false, path);
+    assert.equal(result.run_ci_images, false, path);
+  }
+});
+
+test('the complete package-authority change stays off unrelated application matrices', () => {
+  const result = classifyChangedFiles([
+    '.release-notes/package-version-authority.json',
+    'docs/development/ci-and-release-routing.md',
+    'docs/development/release-notes-process.md',
+    'scripts/check-plugin-package-release-policy.mjs',
+    'scripts/check-published-package-version-discipline.sh',
+    'scripts/ci-change-classifier.mjs',
+    'scripts/ci-change-classifier.test.mjs',
+    'scripts/lib/package-version-authority.mjs',
+    'scripts/package-version-authority.json',
+    'scripts/package-version-plan.mjs',
+    'scripts/package-version-plan.test.mjs',
+    'scripts/publish-host-package-set.mjs',
+    'scripts/publish-plugin-package-set.mjs',
+    'scripts/published-package-version-discipline.test.mjs',
+    'scripts/release-notes.mjs',
+  ]);
+
+  assert.equal(result.unknown_high_risk, false);
+  assert.equal(result.plugin_packaging, true);
+  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.run_package_discipline, true);
+  assert.equal(result.run_plugin_package, true);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_documentation_guard, true);
+  assert.equal(result.run_tests, false);
+  assert.equal(result.run_postgres, false);
+  assert.equal(result.run_oracle, false);
+  assert.equal(result.run_ci_images, false);
+  assert.equal(result.run_plugin_images, false);
+  assert.equal(result.run_database_matrix, false);
+});
+
 test('TypeORM persistence changes select both database adapters and engine regressions', () => {
   const result = classifyChangedFiles([
     'packages/shared/src/infrastructure/persistence/transformers/BigIntNumberTransformer.ts',
