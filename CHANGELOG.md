@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **codex:** document staging pruning recovery ([e49d7c2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e49d7c256399da8482c59e62408edb6316487580))
-* **codex:** document staging pruning recovery ([49918ec](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/49918ecb0977564c6af3fb03ce53db9b13b27df3))
 
 ## [0.28.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.1...v0.28.2) (2026-09-15)
 
