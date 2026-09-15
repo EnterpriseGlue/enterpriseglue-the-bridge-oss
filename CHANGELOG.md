@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **codex:** harden staging drain recovery guidance ([8365bc5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8365bc53e3d7dda154b47408f701acd48ee7b564))
-* **codex:** harden staging drain recovery guidance ([fe94f96](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fe94f96a8f5f8148516332abccf7a73c66a695e2))
 
 ## [0.28.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.6...v0.28.0) (2026-09-15)
 
