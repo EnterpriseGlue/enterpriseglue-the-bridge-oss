@@ -1,0 +1,46 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "staging-delivery-pruning-guidance",
+  "type": "fix",
+  "scope": "developer-workflows",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Updates staging delivery guidance for signed retained runtimes, the current retirement plan contract, and post-route residual pruning recovery.",
+  "userImpact": [
+    "Staging retirement guidance no longer relies on a remembered retained release version or Node's strip-only TypeScript parser.",
+    "A failure after sole-route publication can resume through an exact incident-bound residual cleanup without replaying completed lifecycle effects."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Reinstall version 0.1.11 of the EnterpriseGlue development-workflows plugin after merging this change."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The guidance limits post-route recovery to the exact failed run, retained lock generation, signed runtime and original UID/resourceVersion-bound residuals."
+  ],
+  "documentation": [
+    "Updates the staging-delivery skill and maintained workflow-plugin guide."
+  ],
+  "knownLimitations": [
+    "Executable recovery identities remain fixed in the independently maintained EnterpriseGlue Cloud repository."
+  ],
+  "rollback": [
+    "Revert the plugin guidance and version bump; this does not alter deployed Cloud resources."
+  ],
+  "validation": [
+    "Run the bundled plugin tests, official Codex skill and plugin validators, documentation-boundary guard, and release-note validation."
+  ],
+  "packages": []
+}
