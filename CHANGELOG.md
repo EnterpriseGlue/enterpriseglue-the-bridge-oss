@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **release:** centralize package version authority ([fdfc293](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fdfc2939dc9087066bab62f40de978755ff24346))
-* **release:** centralize package version authority ([e7541fc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e7541fc875cf5235f41d82ae74554f16a981067c))
 
 ## [0.27.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.4...v0.27.5) (2026-09-15)
 
