@@ -42,15 +42,24 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    server-generated drain request, ordinary tenant return-to-current
    transitions, immutable sealed receipt, fresh route compare-and-set request,
    database retirement authorization, exact resource pruning, lock release,
-   then intake redispatch.
+   then intake redispatch. Derive the retained version, chart and images from its
+   signed deployment identity; never substitute a remembered release constant.
+   The normal pruning boundary must validate the current retirement-plan schema
+   and run TypeScript-backed deletion code through the repository's supported
+   TSX loader, not Node's strip-only TypeScript parser.
 9. A failed or cancelled mutation retains the shared lock. Do not delete or
    release it based on age. Recovery must prove the exact failed run and retained
-   artifacts, recheck the same live lock generation, unchanged route and failed
-   execution, and exclude later active admin work before a single
-   generation-conditional takeover. Roll forward only signed source-bound
-   control-plane images, rerun the ordinary reconciliation, and release the new
-   lock only after retained success evidence. Incident-specific recovery is not
-   a reusable override for another failure.
+   artifacts and recheck the same live lock generation before a single
+   generation-conditional takeover. At a pre-route failure, require the unchanged
+   route, failed execution and absence of later active admin work, then roll
+   forward only signed source-bound control-plane images and resume the ordinary
+   reconciliation. If database retirement, sole-route publication and gateway
+   rollout already completed before the first Kubernetes deletion, require the
+   latest failed-run proof, current signed retained runtime, sole route and exact
+   original plan residuals; prune only those UID/resourceVersion-bound objects
+   without replaying database, tenant, route, gateway or control-plane effects.
+   Release the new lock only after retained success evidence. Incident-specific
+   recovery is not a reusable override for another failure.
 10. Keep `STAGING_FAST_DELIVERY_READY` false while the API/admin capability and
    workflow identity are being qualified. Enabling it authorizes future
    staging capacity pressure to move staging test tenants and retire Previous;

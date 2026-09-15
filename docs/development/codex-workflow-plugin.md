@@ -69,6 +69,15 @@ control-plane record before the ordinary drain begins. If a mutation retains
 the shared lock, the workflow requires incident-bound failed-run artifacts and
 fresh live-state proof before a generation-conditional takeover; it never
 releases a lock merely because it is old.
+Retained runtime identity is derived from the signed deployment evidence rather
+than a remembered version. The normal retirement deletion boundary validates the
+current plan schema and uses the repository's supported TSX loader. If a run has
+already completed database retirement, sole-route publication and gateway
+rollout but stopped before its first Kubernetes deletion, the staging workflow
+selects a narrower incident-bound continuation: it re-attests the signed sole
+runtime and exact original residuals, prunes only those UID/resourceVersion-bound
+objects, and cannot replay the completed database, tenant, route, gateway or
+control-plane effects.
 `agents/openai.yaml` metadata is generated and validated for every skill.
 
 Repository scripts and tests remain the authority for deterministic behavior;
