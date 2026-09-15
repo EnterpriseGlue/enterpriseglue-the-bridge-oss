@@ -1,0 +1,43 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-staging-delivery-skills",
+  "type": "feature",
+  "scope": "developer-workflows",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Adds a Cloud staging-delivery skill and makes EnterpriseGlue status, shipping, and release watchers distinguish publication from actual staging and production state.",
+  "userImpact": [],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Reinstall enterpriseglue-dev-workflows 0.1.9 from the repository marketplace and start a new Codex task so the updated skills are loaded."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The staging workflow remains read-only unless the user explicitly requests a mutation, excludes the retired EE repository, and requires the protected receipt-bound Cloud workflow for tenant movement or release retirement."
+  ],
+  "documentation": [
+    "Updates the versioned Codex workflow plugin guide and the status, ship, post-ship, publication, and staging-delivery skills."
+  ],
+  "knownLimitations": [
+    "Reinstalling the plugin does not alter an already-running Codex task; open a new task to load the new skill version."
+  ],
+  "rollback": [
+    "Reinstall plugin version 0.1.8 to restore the previous skill set; this does not change repository or Cloud deployment state."
+  ],
+  "validation": [
+    "The repository plugin contract tests, official Codex skill validator, official plugin validator, release-note checks, and documentation boundary guard pass locally."
+  ],
+  "packages": []
+}

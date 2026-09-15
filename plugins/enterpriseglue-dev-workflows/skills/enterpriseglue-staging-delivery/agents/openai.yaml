@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Staging Delivery"
+  short_description: "Inspect and reconcile Cloud staging delivery"
+  default_prompt: "Use $enterpriseglue-staging-delivery to inspect the exact EnterpriseGlue staging delivery state and recommend the next safe action."

@@ -30,3 +30,8 @@ description: Use when the user says /release-publish-watch, watch release publis
 9. Report the current rolling SLO assessment, tagged-release rebuild count,
    image retry count, and recovery-canary status when diagnosing slow or
    partial publication.
+10. End publication status at the verified registry and release receipts.
+    EnterpriseGlue Cloud image assembly, staging candidate installation,
+    default-route promotion, and production promotion are downstream states;
+    inspect them only when requested and never claim them from publication
+    success alone.

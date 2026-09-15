@@ -81,3 +81,7 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
    use a merge commit—not squash. Do not delete or recreate published tags.
 13. Do not remove worktrees or branches without satisfying cleanup conditions
    and any required user confirmation.
+14. Report merge, package publication, downstream Cloud intake, staging
+    candidate installation, staging default promotion, and production promotion
+    as separate outcomes. Shipping a PR does not prove any later delivery state;
+    use the post-ship or staging-delivery workflow when the user asks to follow it.
