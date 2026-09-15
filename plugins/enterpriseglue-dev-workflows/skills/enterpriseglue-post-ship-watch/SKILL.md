@@ -1,6 +1,6 @@
 ---
 name: enterpriseglue-post-ship-watch
-description: Use when the user says /post-ship-watch, watch after ship, monitor a shipped EnterpriseGlue PR, keep an eye on merge queue, verify OSS package publication, follow Release Please creation, or inspect plugin-consumer compatibility after a merge.
+description: Use when the user says /post-ship-watch, watch after ship, monitor a shipped EnterpriseGlue PR, keep an eye on merge queue, verify OSS package publication, follow Release Please creation, inspect downstream Cloud staging intake, or check plugin-consumer compatibility after a merge.
 ---
 
 # EnterpriseGlue /post-ship-watch
@@ -22,8 +22,15 @@ description: Use when the user says /post-ship-watch, watch after ship, monitor 
    three host packages, their registry payload receipts, the signed toolchain
    artifacts, and supported plugin-consumer compatibility lanes. Do not wait
    for or create an EE synchronization follow-up.
-6. Report concrete failed job names and log excerpts. Do not mutate PRs, rerun
+6. If the shipped change can wake EnterpriseGlue Cloud intake, inspect the
+   downstream composition selection, signed image/build receipt, candidate
+   installation, route-capacity disposition and staging default separately.
+   “Published,” “built,” “installed,” and “default” are not synonyms. A
+   protected Previous-release no-op is a capacity state, not a publication
+   failure. Do not dispatch or mutate Cloud staging unless the user asked for
+   staging reconciliation.
+7. Report concrete failed job names and log excerpts. Do not mutate PRs, rerun
    jobs, or close follow-up PRs unless the user requested automatic recovery or
    the safe action is explicit.
-7. If asked to keep watching later, use a thread heartbeat automation rather
+8. If asked to keep watching later, use a thread heartbeat automation rather
    than a permanent cron.

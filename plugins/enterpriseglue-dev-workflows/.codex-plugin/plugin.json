@@ -1,7 +1,7 @@
 {
   "name": "enterpriseglue-dev-workflows",
-  "version": "0.1.8",
-  "description": "Versioned OSS host and plugin development, validation, delivery, and release workflows for EnterpriseGlue.",
+  "version": "0.1.9",
+  "description": "Versioned OSS host, Cloud staging, and plugin development, validation, delivery, and release workflows for EnterpriseGlue.",
   "author": {
     "name": "EnterpriseGlue"
   },
@@ -13,7 +13,7 @@
   "interface": {
     "displayName": "EnterpriseGlue Dev Workflows",
     "shortDescription": "Build, validate, ship, and release EnterpriseGlue safely.",
-    "longDescription": "Version-controlled Codex workflows for the EnterpriseGlue OSS host and independently delivered plugins, including worktrees, testing, CI diagnosis, documentation governance, release notes, access governance, UI evidence, contract parity, shipping, and releases.",
+    "longDescription": "Version-controlled Codex workflows for the EnterpriseGlue OSS host, EnterpriseGlue Cloud staging, and independently delivered plugins, including worktrees, testing, CI diagnosis, documentation governance, release notes, access governance, UI evidence, contract parity, shipping, delivery status, and releases.",
     "developerName": "EnterpriseGlue",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Write"],
@@ -22,6 +22,7 @@
       "Select the right EnterpriseGlue tests for this change.",
       "Route this EnterpriseGlue document to the correct publication boundary.",
       "Validate release notes and contract parity.",
+      "Inspect the exact EnterpriseGlue Cloud staging delivery state.",
       "Route this EnterpriseGlue host or plugin change to the correct repository."
     ]
   }

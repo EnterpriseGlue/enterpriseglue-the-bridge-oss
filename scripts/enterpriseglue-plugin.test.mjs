@@ -32,6 +32,7 @@ const expectedSkills = [
   'enterpriseglue-release-publish-watch',
   'enterpriseglue-security-check',
   'enterpriseglue-ship',
+  'enterpriseglue-staging-delivery',
   'enterpriseglue-status',
   'enterpriseglue-sync-ee',
   'enterpriseglue-test',
@@ -145,6 +146,7 @@ test('lifecycle-sensitive skills consult the shared repository registry', () => 
     'enterpriseglue-release-publish-watch',
     'enterpriseglue-security-check',
     'enterpriseglue-ship',
+    'enterpriseglue-staging-delivery',
     'enterpriseglue-status',
     'enterpriseglue-sync-ee',
     'enterpriseglue-test',
@@ -154,6 +156,19 @@ test('lifecycle-sensitive skills consult the shared repository registry', () => 
     const instructions = readFileSync(join(pluginRoot, 'skills', skill, 'SKILL.md'), 'utf8')
     assert.match(instructions, /repository-lifecycle\.json/, `${skill} lifecycle registry`)
   }
+})
+
+test('delivery skills distinguish package publication from staging and production state', () => {
+  const status = readFileSync(join(pluginRoot, 'skills/enterpriseglue-status/SKILL.md'), 'utf8')
+  const watch = readFileSync(join(pluginRoot, 'skills/enterpriseglue-post-ship-watch/SKILL.md'), 'utf8')
+  const staging = readFileSync(join(pluginRoot, 'skills/enterpriseglue-staging-delivery/SKILL.md'), 'utf8')
+  for (const boundary of ['published OSS version', 'installed staging candidate', 'staging default', 'production promotion']) {
+    assert.match(`${status}\n${staging}`, new RegExp(boundary, 'i'))
+  }
+  assert.match(watch, /“Published,” “built,” “installed,” and “default” are not synonyms/)
+  assert.match(staging, /STAGING_FAST_DELIVERY_READY/)
+  assert.match(staging, /sealed-drain authorization/)
+  assert.match(staging, /never shortens production's fallback window/)
 })
 
 test('PR readiness classifies contract, persistence, UI, and release surfaces', () => {

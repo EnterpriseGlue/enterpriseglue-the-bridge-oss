@@ -59,6 +59,9 @@ verification, contract-parity, and plugin-development skills. The OSS
 repository is the sole product-host workflow target; product-specific
 capabilities route to their owning plugin repositories. Legacy OSS-to-EE and
 EE-sync triggers remain only as safe redirects and do not authorize EE writes.
+The staging-delivery workflow treats EnterpriseGlue Cloud as an independently
+evidenced delivery target and reports publication, image assembly, candidate
+installation, staging default promotion, and production promotion separately.
 `agents/openai.yaml` metadata is generated and validated for every skill.
 
 Repository scripts and tests remain the authority for deterministic behavior;
