@@ -56,7 +56,7 @@ export interface AuthenticatedIdentityLinkContext {
 /** A safe public signal that the provider subject needs existing-account control before it can be linked. */
 export class IdentityProviderAccountLinkRequiredError extends Error {
   constructor() {
-    super('Sign in with an existing method, then connect this provider from your profile');
+    super('Existing account control is required for pooled identity linking');
     this.name = 'IdentityProviderAccountLinkRequiredError';
   }
 }
