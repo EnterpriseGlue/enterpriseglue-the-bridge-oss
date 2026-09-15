@@ -5,15 +5,18 @@ description: Use when the user says /status, status dashboard, show EnterpriseGl
 
 # EnterpriseGlue /status
 
-1. Keep this workflow read-only. Resolve the OSS host and relevant owning
+1. Read `../../references/repository-lifecycle.json` before selecting repository
+   scope. Exclude retired repositories. Only an explicitly requested historical
+   audit may use `historical-read`; never include retired repositories in the
+   normal dashboard.
+2. Keep this workflow read-only. Resolve the OSS host and relevant owning
    plugin repositories, active worktrees, branches, PRs, release PRs, CI runs,
    Dependabot, package publication, and compatibility status. Read
-   `.windsurf/workflows/status.md` when present. Omit the retired EE repository
-   unless the user explicitly requests a historical audit.
-2. When release-note tooling exists, report latest stable tag, Release Please
+   `.windsurf/workflows/status.md` when present.
+3. When release-note tooling exists, report latest stable tag, Release Please
    manifest, changelog baseline, changed fragments, expected next version, PR
    release classification, and reusable preflight result/preview.
-3. Separate required, advisory, skipped, pending, failed, and externally
+4. Separate required, advisory, skipped, pending, failed, and externally
    deferred checks. Include the head SHA so stale runs are visible.
-4. Summarize in a compact table with concrete next actions. Do not edit files,
+5. Summarize in a compact table with concrete next actions. Do not edit files,
    labels, branches, PR state, workflow runs, or merge settings.

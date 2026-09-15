@@ -5,23 +5,26 @@ description: Use when the user says /new-change, newchange, start a new change, 
 
 # EnterpriseGlue /new-change
 
-1. Resolve the repository with `git rev-parse --show-toplevel` and identify the
+1. Read `../../references/repository-lifecycle.json` and run the plugin-root
+   lifecycle guard for the `write` operation before creating a branch or
+   worktree. Stop when the repository is retired.
+2. Resolve the repository with `git rev-parse --show-toplevel` and identify the
    OSS host versus an owning plugin repository from its remote. Never assume
    the main checkout is the active worktree.
-2. Route shared host, runtime, SDK, installer, manager, deployment, and
+3. Route shared host, runtime, SDK, installer, manager, deployment, and
    reference-plugin work to OSS, the sole product host. Route proprietary
    product behavior to its owning plugin repository against public OSS
    contracts. Do not create standalone EE changes.
-3. Create or reuse an isolated worktree and preserve that absolute path for all
+4. Create or reuse an isolated worktree and preserve that absolute path for all
    later commands in the task. Do not overwrite local environment files.
-4. Inspect repository instructions, branch state, and relevant documentation
+5. Inspect repository instructions, branch state, and relevant documentation
    before editing.
-5. Before creating documentation, classify its audience and publication
+6. Before creating documentation, classify its audience and publication
    boundary. Keep internal product and customer-documentation drafts outside
    every Git worktree; include only repository-appropriate technical material
    in the change. Split mixed documents instead of publishing private product
    context with a technical specification.
-6. For a release-impacting OSS change, create a stable kebab-case
+7. For a release-impacting OSS change, create a stable kebab-case
    `.release-notes/<change-id>.json` fragment at the start of implementation.
    Follow `.release-notes/schema.json` and
    `docs/development/release-notes-process.md`. Update the fragment as scope,
@@ -29,17 +32,17 @@ description: Use when the user says /new-change, newchange, start a new change, 
    When a published package changes, inventory its published workspace
    consumers, bump every affected package manifest once in the same change,
    and list each exact old/new version in the fragment.
-7. Use `release-note:none` only for genuinely internal work. Record
+8. Use `release-note:none` only for genuinely internal work. Record
    `Release-note exemption: <reason>` in the PR body; never exempt
    authentication, authorization, migration, or public API/schema changes.
-8. Keep the expected PR title, `release:*` classification, and package version
+9. Keep the expected PR title, `release:*` classification, and package version
    impact consistent with the fragment. Breaking work uses `!` in the
    conventional title and `release:breaking`.
-9. If the change adds a top-level path or changes CI/release routing, update the
+10. If the change adds a top-level path or changes CI/release routing, update the
    deterministic classifier and positive/negative fixtures. Unknown paths must
    continue to select the broad fail-closed lane; metadata-only changes must
    not select unrelated application, database, browser, or image work.
-10. Before the first commit, run the repository's working-tree-aware published
+11. Before the first commit, run the repository's working-tree-aware published
     package guard when present:
 
     ```bash

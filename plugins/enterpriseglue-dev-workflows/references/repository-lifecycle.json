@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "updatedOn": "2026-09-15",
+  "rules": {
+    "active": {
+      "includeByDefault": true,
+      "permittedOperations": ["read", "write", "status", "ci", "dependencies", "release", "deploy"]
+    },
+    "retired": {
+      "includeByDefault": false,
+      "permittedOperations": ["historical-read"]
+    }
+  },
+  "repositories": [
+    {
+      "fullName": "EnterpriseGlue/enterpriseglue-the-bridge-oss",
+      "status": "active",
+      "roles": ["product-host", "plugin-platform", "public-contracts"]
+    },
+    {
+      "fullName": "EnterpriseGlue/enterpriseglue-cloud",
+      "status": "active",
+      "roles": ["managed-saas-control-plane", "cloud-delivery"]
+    },
+    {
+      "fullName": "EnterpriseGlue/enterpriseglue-the-bridge-ee",
+      "status": "retired",
+      "retiredOn": "2026-09-15",
+      "archived": true,
+      "roles": ["historical-reference"],
+      "replacements": [
+        "EnterpriseGlue/enterpriseglue-the-bridge-oss",
+        "The independently owned repository for each proprietary plugin"
+      ],
+      "policy": "Exclude from status, CI, dependency, release, deployment, roadmap, and implementation work unless the user explicitly requests a read-only historical audit. Never create EE branches, worktrees, package bumps, pull requests, workflow dispatches, releases, or deployments."
+    }
+  ]
+}

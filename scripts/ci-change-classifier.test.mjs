@@ -119,17 +119,24 @@ test('classifier contract tests stay on the workflow verification path', () => {
   assert.equal(result.run_plugin_images, false);
 });
 
-test('workflow plugin source is known release tooling, not an unknown high-risk surface', () => {
+test('developer workflow plugin source uses its contract-only fast path', () => {
   const result = classifyChangedFiles([
     'plugins/enterpriseglue-dev-workflows/.codex-plugin/plugin.json',
     'plugins/enterpriseglue-dev-workflows/skills/enterpriseglue-release/SKILL.md',
+    'scripts/enterpriseglue-plugin.test.mjs',
   ]);
 
-  assert.equal(result.workflow_or_release, true);
+  assert.equal(result.workflow_or_release, false);
   assert.equal(result.unknown_high_risk, false);
-  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_release_readiness, false);
+  assert.deepEqual(result.selected_classes, ['developer_workflow']);
   assert.equal(result.run_tests, false);
+  assert.equal(result.run_postgres, false);
+  assert.equal(result.run_oracle, false);
   assert.equal(result.run_ci_images, false);
+  assert.equal(result.run_plugin_images, false);
+  assert.equal(result.run_native_tenancy, false);
+  assert.equal(result.run_adapter_backstop, false);
   assert.equal(result.run_database_matrix, false);
   assert.equal(result.run_identity_rehearsal, false);
   assert.equal(result.run_deployment_evidence, false);

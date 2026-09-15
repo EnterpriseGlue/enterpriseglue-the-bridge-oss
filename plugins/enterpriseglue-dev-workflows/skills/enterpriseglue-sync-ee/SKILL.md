@@ -5,6 +5,9 @@ description: Use when the user invokes the legacy /sync-ee workflow or asks to b
 
 # EnterpriseGlue /sync-ee (retired)
 
+Read `../../references/repository-lifecycle.json`. The lifecycle registry is
+authoritative and permits only an explicitly requested `historical-read` for EE.
+
 The standalone EE repository is not a package consumer or release target for
 forward development. Do not create or modify EE worktrees, dependency bumps,
 lockfiles, pull requests, dispatches, or releases.

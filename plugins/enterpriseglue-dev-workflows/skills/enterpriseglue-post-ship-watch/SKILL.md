@@ -5,22 +5,25 @@ description: Use when the user says /post-ship-watch, watch after ship, monitor 
 
 # EnterpriseGlue /post-ship-watch
 
-1. Monitor the shipped PR, merge queue, package publication, Release Please
+1. Read `../../references/repository-lifecycle.json` before selecting the
+   repository. Never monitor, rerun, or create follow-up work for a retired
+   repository unless the user explicitly requests a read-only historical audit.
+2. Monitor the shipped PR, merge queue, package publication, Release Please
    run, and resulting release PR with `gh`.
-2. Confirm the release PR generator committed `docs/releases/vX.Y.Z.md` and
+3. Confirm the release PR generator committed `docs/releases/vX.Y.Z.md` and
    copied it into the managed
    `<!-- enterpriseglue-detailed-release-notes -->` issue comment while leaving
    Release Please's machine-readable PR body intact. Treat missing or stale
    detailed notes as a release blocker.
-3. Confirm package versions in the generated document match the exact tarballs
+4. Confirm package versions in the generated document match the exact tarballs
    retained in the signed release candidate. Do not accept a package rebuilt
    from a later `main` checkout.
-4. For plugin-platform changes, verify the five plugin/API packages before the
+5. For plugin-platform changes, verify the five plugin/API packages before the
    three host packages, their registry payload receipts, the signed toolchain
    artifacts, and supported plugin-consumer compatibility lanes. Do not wait
    for or create an EE synchronization follow-up.
-5. Report concrete failed job names and log excerpts. Do not mutate PRs, rerun
+6. Report concrete failed job names and log excerpts. Do not mutate PRs, rerun
    jobs, or close follow-up PRs unless the user requested automatic recovery or
    the safe action is explicit.
-6. If asked to keep watching later, use a thread heartbeat automation rather
+7. If asked to keep watching later, use a thread heartbeat automation rather
    than a permanent cron.

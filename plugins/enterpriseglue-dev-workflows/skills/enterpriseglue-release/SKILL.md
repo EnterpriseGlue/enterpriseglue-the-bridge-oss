@@ -5,36 +5,39 @@ description: Use when the user says /release, release the EnterpriseGlue OSS hos
 
 # EnterpriseGlue /release
 
-1. Resolve the OSS host versus an owning plugin repository and the exact
-   release PR. The standalone EE repository is not a release target. Ask only
+1. Read `../../references/repository-lifecycle.json` and run the plugin-root
+   lifecycle guard for the `release` operation. A retired result is a hard
+   stop; historical-audit permission never authorizes a release.
+2. Resolve the OSS host versus an owning plugin repository and the exact
+   release PR. Ask only
    when the intended current repository cannot be inferred safely.
-2. Verify the latest stable tag, `.github/.release-please-manifest.json`, and
+3. Verify the latest stable tag, `.github/.release-please-manifest.json`, and
    `CHANGELOG.md` agree. Run `pnpm run guard:release-baseline` when available.
-3. Require the Release Please PR to contain `docs/releases/vX.Y.Z.md`; find the
+4. Require the Release Please PR to contain `docs/releases/vX.Y.Z.md`; find the
    managed issue comment beginning
    `<!-- enterpriseglue-detailed-release-notes -->` and confirm the content
    after that marker matches the generated document. Preserve Release Please's
    machine-readable PR body. Confirm the detailed document covers users,
    operators, upgrade, compatibility, API/configuration, migrations, packages,
    security, limitations, rollback, and evidence.
-4. Confirm every relevant merged change since the previous stable tag has a
+5. Confirm every relevant merged change since the previous stable tag has a
    fragment or a permitted documented exemption. Confirm the proposed semantic
    version matches `release-notes:assert-version` for the previous stable tag.
-5. Require `Release candidate readiness` and the self-validating `ci-complete`
+6. Require `Release candidate readiness` and the self-validating `ci-complete`
    aggregate on the exact candidate SHA. Download the readiness receipt and
    verify its source revision, comparison tag, package and chart plans,
    production image scan, toolchain rehearsal, five-database aggregate,
    pinned supported-Operaton browser evidence, and
    `publicationPerformed: false` result. A supported database shard that is
    missing or skipped blocks the release.
-6. Inspect every workflow for the candidate SHA, not only branch protection's
+7. Inspect every workflow for the candidate SHA, not only branch protection's
    required contexts. Failure, cancellation, timeout, action-required, pending,
    or an unexpectedly skipped readiness job blocks release. Treat intentionally
    deferred external evidence as a recorded release decision, not as silently
    passing evidence.
-7. Merge Release Please PRs with a merge commit. Do not squash them. Never
+8. Merge Release Please PRs with a merge commit. Do not squash them. Never
    create a release by manually tagging around the manifest workflow.
-8. Monitor GitHub release creation, Docker Images, `Publish Plugin/API
+9. Monitor GitHub release creation, Docker Images, `Publish Plugin/API
    Packages`, `Publish Host Packages`, and the downstream signed plugin
    toolchain. The two package workflows must consume the eight exact tarballs
    from the signed candidate; host publication must wait for the five
@@ -43,12 +46,12 @@ description: Use when the user says /release, release the EnterpriseGlue OSS hos
    image tags, `latest`, source revision, digests, smoke tests, vulnerability
    results, registry visibility, signatures, and release receipts. Do not
    dispatch or require an EE package synchronization.
-9. Before enabling a material release-workflow change, require a successful
+10. Before enabling a material release-workflow change, require a successful
    non-publishing canary using the production reusable control flow, scratch
    repositories, exact ORAS digest checks, partial-alias detection/restoration,
    and non-publisher verification. A canary must never advance semantic tags,
    production `latest`, Docker Hub, or packages. Review the rolling release-SLO
    issue before declaring recovery complete.
-10. Verify the published GitHub release body matches
+11. Verify the published GitHub release body matches
    `docs/releases/vX.Y.Z.md`. Never delete, recreate, or repoint a published
    `v*` tag; repair mistakes with a reviewed forward release.
