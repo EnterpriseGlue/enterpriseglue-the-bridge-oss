@@ -1,0 +1,46 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "staging-delivery-recovery-guidance",
+  "type": "fix",
+  "scope": "developer-workflows",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Makes staging delivery guidance require exact retained-release compatibility refresh and incident-bound recovery for retained mutation locks.",
+  "userImpact": [
+    "Staging drain preparation no longer treats a lifecycle classification as compatibility evidence.",
+    "A retained staging mutation lock is recovered only after the exact failed run, artifacts, live generation, route and failed execution are reverified."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Reinstall version 0.1.10 of the EnterpriseGlue development-workflows plugin after merging this change."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The guidance preserves retained locks on uncertain failure and permits takeover only for exact reviewed incident evidence."
+  ],
+  "documentation": [
+    "Updates the staging-delivery skill and maintained workflow-plugin guide."
+  ],
+  "knownLimitations": [
+    "The skill selects the maintained Cloud workflows; executable recovery identities remain fixed in the Cloud repository."
+  ],
+  "rollback": [
+    "Revert the plugin guidance and version bump; this does not alter deployed Cloud resources."
+  ],
+  "validation": [
+    "Run the bundled plugin tests, official Codex skill and plugin validators, documentation-boundary guard, and release-note validation."
+  ],
+  "packages": []
+}
