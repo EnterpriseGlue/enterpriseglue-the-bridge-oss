@@ -1,0 +1,76 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "secure-secondary-oidc-link",
+  "type": "security",
+  "scope": "authentication",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Let an authenticated tenant user securely connect an additional OIDC sign-in provider without relying on email-only account merging.",
+  "userImpact": [
+    "Users can connect another configured OIDC provider from their profile and then use it for future sign-ins.",
+    "A login collision with an existing account returns an actionable conflict instead of a generic internal-server error."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds authenticated endpoints that list and connect the current user's tenant-scoped OIDC providers."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The existing external identity schema stores additional provider links; no migration is required."
+    ]
+  },
+  "security": [
+    "A second provider is linked only after a current, non-revoked tenant session and a fresh provider authorization are both verified.",
+    "Signed state binds the link to the current user, tenant, provider, exact session ID and version, browser state cookie, PKCE verifier, and short expiry.",
+    "Pooled deployments continue to reject unauthenticated email-only account linking."
+  ],
+  "documentation": [
+    "Documents the authenticated secondary-provider linking flow and its pooled-tenancy trust boundary."
+  ],
+  "knownLimitations": [
+    "This change supports direct OIDC providers; SAML and LDAP account linking remain administrator-led."
+  ],
+  "rollback": [
+    "Roll back the host release to remove the linking UI and endpoints; existing valid identity links remain usable and can be explicitly unlinked by an administrator."
+  ],
+  "validation": [
+    "Focused OIDC route, signed-state, provisioning-service, frontend profile, OpenAPI, identity persistence, and host build checks.",
+    "Protected CI plus staging browser acceptance against the PostgreSQL SaaS environment are required before release."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.6",
+      "newVersion": "0.19.7",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.16",
+      "newVersion": "0.17.17",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.3",
+      "newVersion": "0.22.4",
+      "impact": "patch"
+    }
+  ]
+}

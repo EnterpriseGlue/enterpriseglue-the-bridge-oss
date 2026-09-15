@@ -48,6 +48,19 @@ interface ReconciliationLeaseFence {
   leaseId: string;
 }
 
+export interface AuthenticatedIdentityLinkContext {
+  userId: string;
+  tenantId: string;
+}
+
+/** A safe public signal that the provider subject needs existing-account control before it can be linked. */
+export class IdentityProviderAccountLinkRequiredError extends Error {
+  constructor() {
+    super('Sign in with an existing method, then connect this provider from your profile');
+    this.name = 'IdentityProviderAccountLinkRequiredError';
+  }
+}
+
 function requiredEmail(claims: OidcIdentityClaims): string {
   const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : typeof claims.preferred_username === 'string' ? claims.preferred_username.trim().toLowerCase() : '';
   if (!email.includes('@')) throw new Error('OIDC ID token must contain an email address');
@@ -136,6 +149,17 @@ class IdentityProviderProvisioningService {
     return this.reconcileLogin(provider, this.oidcInput(provider, claims));
   }
 
+  async linkOidcIdentity(
+    provider: IdentityProvider,
+    claims: OidcIdentityClaims,
+    context: AuthenticatedIdentityLinkContext,
+  ): Promise<ProvisionedIdentityUser> {
+    if (!provider.tenantId || provider.tenantId !== context.tenantId) {
+      throw new Error('Identity provider does not match the authenticated tenant');
+    }
+    return (await this.provision(provider, this.oidcInput(provider, claims), undefined, undefined, context)).user;
+  }
+
   async provisionLdapUser(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
     return (await this.provisionLdapUserForReconciliation(provider, input)).user;
   }
@@ -190,13 +214,19 @@ class IdentityProviderProvisioningService {
     }
   }
 
-  private async provision(provider: IdentityProvider, input: ProvisionIdentityInput, leaseFence?: ReconciliationLeaseFence): Promise<ProvisioningResult> {
+  private async provision(
+    provider: IdentityProvider,
+    input: ProvisionIdentityInput,
+    leaseFence?: ReconciliationLeaseFence,
+    enrollment?: InvitationEnrollment,
+    accountLink?: AuthenticatedIdentityLinkContext,
+  ): Promise<ProvisioningResult> {
     // A new subject can arrive through a direct login while a scheduled directory
     // page is creating the same link. Retry the full transaction once after the
     // database's unique constraint resolves that first-writer race.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.provisionOnce(provider, input, leaseFence);
+        return await this.provisionOnce(provider, input, leaseFence, enrollment, accountLink);
       } catch (error) {
         if (attempt === 0 && isUniqueConstraintError(error)) continue;
         throw error;
@@ -205,7 +235,13 @@ class IdentityProviderProvisioningService {
     throw new Error('Identity provisioning retry exhausted');
   }
 
-  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput, leaseFence?: ReconciliationLeaseFence, enrollment?: InvitationEnrollment): Promise<ProvisioningResult> {
+  private async provisionOnce(
+    provider: IdentityProvider,
+    input: ProvisionIdentityInput,
+    leaseFence?: ReconciliationLeaseFence,
+    enrollment?: InvitationEnrollment,
+    accountLink?: AuthenticatedIdentityLinkContext,
+  ): Promise<ProvisioningResult> {
     // A group-overage marker means the provider did not supply a complete group
     // result. Reject it before creating or updating any local identity state so
     // an authoritative mapping can never interpret it as an empty entitlement set.
@@ -238,6 +274,9 @@ class IdentityProviderProvisioningService {
       if (enrollment && !await manager.getRepository(Tenant).existsBy({ id: enrollment.context.tenantId, slug: enrollment.context.tenantSlug, status: 'active' })) {
         throw new Error('Invitation tenant is no longer active');
       }
+      if (accountLink && provider.tenantId !== accountLink.tenantId) {
+        throw new Error('Identity provider does not match the authenticated tenant');
+      }
       if (leaseFence) {
         if (leaseFence.providerId !== provider.id) throw new Error('LDAP reconciliation lease does not match the identity provider');
         const leaseClaim = await manager.getRepository(IdentityReconciliationCheckpoint).update({
@@ -254,6 +293,9 @@ class IdentityProviderProvisioningService {
       const identityKey = externalIdentityKey({ tenantId: provider.tenantId, providerId: provider.id, subjectId: input.subjectId });
       const externalIdentity = await externalIdentityRepo.findOne({ where: { identityKey } });
       if (enrollment && externalIdentity) throw new Error('Invitation cannot replace an existing external identity');
+      if (accountLink && externalIdentity && (externalIdentity.status !== 'active' || externalIdentity.userId !== accountLink.userId)) {
+        throw new Error('External identity cannot be linked to this account');
+      }
       let recoveredUnlinkedIdentity = false;
       if (externalIdentity?.status === 'unlinked') {
         // An administrator must first explicitly unlink the conflict. Recovery
@@ -265,22 +307,31 @@ class IdentityProviderProvisioningService {
         }
         recoveredUnlinkedIdentity = true;
       }
-      let user = enrollment
+      let user = accountLink
+        ? await userRepo.findOneBy({ id: accountLink.userId, isActive: true })
+        : enrollment
         ? await invitationService.enrollSsoAccountWithManager(manager, enrollment.context, {
           email, emailVerified, authProvider: input.providerType, firstName: input.firstName, lastName: input.lastName,
         })
         : externalIdentity && !recoveredUnlinkedIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
+      if (accountLink && !user) throw new Error('Authenticated account is no longer active');
+      if (accountLink && user && user.email.trim().toLowerCase() !== email) {
+        throw new Error('Identity provider email does not match the authenticated account');
+      }
       if (externalIdentity && !recoveredUnlinkedIdentity && !user) throw new Error('External identity references a missing user account');
-      if (!enrollment && (!externalIdentity || recoveredUnlinkedIdentity)) {
-        if (!emailVerified) throw new Error('Identity provider email must be verified before a new identity can be linked');
+      if (!enrollment && !accountLink && (!externalIdentity || recoveredUnlinkedIdentity)) {
+        if (!emailVerified && config.tenancyMode !== 'pooled') {
+          throw new Error('Identity provider email must be verified before a new identity can be linked');
+        }
         const matchingEmailUser = await userRepo.findOneBy({ email });
         // A pooled provider is controlled by one tenant, not by the owner of
         // a shared account. Its email assertion (even with provider opt-in or
         // tenant membership) cannot authorize adopting that account. This also
         // fences the unlinked-identity recovery path below.
         if (matchingEmailUser && config.tenancyMode === 'pooled') {
-          throw new Error('Existing account control is required for pooled identity linking');
+          throw new IdentityProviderAccountLinkRequiredError();
         }
+        if (!emailVerified) throw new Error('Identity provider email must be verified before a new identity can be linked');
         if (matchingEmailUser && !allowsVerifiedEmailLinking(provider)) {
           throw new Error('Verified email account linking is disabled for this identity provider');
         }

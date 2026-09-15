@@ -57,6 +57,49 @@ describe('provider-neutral SSO state', () => {
     const req = request(); req.query.enrollment = JSON.stringify(enrollment);
     expect(parseSignedOidcState(buildSignedOidcState(req, 'provider-1', { key: 'identity.main', tenantId: 'tenant-1' }))).not.toHaveProperty('enrollment');
   });
+
+  it('binds authenticated account linking to the exact user, tenant, provider, and session version', () => {
+    const accountLink = { userId: 'user-1', tenantId: 'tenant-1', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555' };
+    const parsed = parseSignedOidcState(buildSignedOidcState(
+      request(),
+      'provider-1',
+      { key: 'identity.oidc.main', tenantId: 'tenant-1' },
+      undefined,
+      accountLink,
+    ));
+
+    expect(parsed).toMatchObject({
+      tenantSlug: 'acme',
+      providerId: 'provider-1',
+      identityProviderTenantId: 'tenant-1',
+      accountLink,
+    });
+    expect(parsed).not.toHaveProperty('enrollment');
+  });
+
+  it.each([
+    null,
+    {},
+    { userId: 'user-1', tenantId: 'other-tenant', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555' },
+    { userId: '', tenantId: 'tenant-1', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555' },
+    { userId: 'user-1', tenantId: 'tenant-1', authSessionVersion: -1, sessionId: '11111111-2222-4333-8444-555555555555' },
+    { userId: 'user-1', tenantId: 'tenant-1', authSessionVersion: 7, sessionId: 'not-a-session' },
+    { userId: 'user-1', tenantId: 'tenant-1', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555', accessToken: 'forbidden' },
+  ])('rejects malformed or cross-tenant account-link state (%j)', (accountLink) => {
+    const raw = Buffer.from(JSON.stringify({
+      timestamp: Date.now(), nonce: 'nonce', providerId: 'provider-1',
+      identityProviderKey: 'identity.oidc.main', identityProviderTenantId: 'tenant-1',
+      tenantSlug: 'acme', accountLink,
+    })).toString('base64url');
+    expect(parseSignedOidcState(signOidcState(raw))).toBeNull();
+    expect(() => buildSignedOidcState(
+      request(),
+      'provider-1',
+      { key: 'identity.oidc.main', tenantId: 'tenant-1' },
+      undefined,
+      accountLink as any,
+    )).toThrow();
+  });
   it('uses independent cryptographic nonces and preserves safe tenant return state', () => {
     const first = parseSsoState(buildSsoState(request(), 'provider-1', { key: 'identity.oidc.main', tenantId: 'tenant-1' }));
     const second = parseSsoState(buildSsoState(request(), 'provider-1', { key: 'identity.oidc.main', tenantId: 'tenant-1' }));

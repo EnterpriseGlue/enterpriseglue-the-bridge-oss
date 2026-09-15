@@ -24,7 +24,7 @@ import {
   MultiSelect,
   Tag,
 } from '@carbon/react'
-import { Close, Logout, Notification, UserAvatar } from '@carbon/icons-react'
+import { Close, Link as LinkIcon, Logout, Notification, UserAvatar } from '@carbon/icons-react'
 import ProSidebar from './ProSidebar'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import logoPng from '../../../assets/logo.png'
@@ -49,6 +49,7 @@ import {
   USER_MANAGEMENT_PLATFORM_PERMISSIONS,
 } from '../../../shared/auth/permissions'
 import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
+import type { AuthenticatedIdentityProviderLinks } from '@enterpriseglue/shared/schemas/auth/session.js'
 import { resolveVoyagerNavigationVisibility } from '../../../shared/auth/voyagerNavigation'
 import {
   getNativePluginNavigationV1,
@@ -211,6 +212,18 @@ export default function LayoutWithProSidebar() {
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
+
+  const identityProviderLinksQ = useQuery({
+    queryKey: ['auth', 'me', 'identity-providers', user?.id, tenantSlug],
+    queryFn: () => apiClient.get<AuthenticatedIdentityProviderLinks>('/api/auth/me/identity-providers'),
+    enabled: isProfileModalOpen && Boolean(user) && (!isMultiTenant || Boolean(tenantSlug)),
+    staleTime: 15_000,
+  })
+
+  const connectIdentityProvider = (providerId: string) => {
+    const returnTo = pathname.startsWith('/') ? pathname : toTenantPath('/')
+    window.location.assign(`/api/auth/me/identity-providers/${encodeURIComponent(providerId)}/link?returnTo=${encodeURIComponent(returnTo)}`)
+  }
 
   const isNotificationsEnabled = useFeatureFlag('notifications')
   const notificationsAvailable = notificationContextEnabled(isNotificationsEnabled, Boolean(user), isMultiTenant, tenantSlug)
@@ -803,6 +816,45 @@ export default function LayoutWithProSidebar() {
             value={profileLastName}
             onChange={(e) => setProfileLastName(e.target.value)}
           />
+
+          <section aria-labelledby="profile-sign-in-methods-heading">
+            <h3 id="profile-sign-in-methods-heading" className="cds--type-heading-compact-01" style={{ marginBottom: 'var(--spacing-3)' }}>
+              Sign-in methods
+            </h3>
+            {identityProviderLinksQ.isLoading ? (
+              <InlineLoading description="Loading sign-in methods" />
+            ) : identityProviderLinksQ.isError ? (
+              <InlineNotification
+                kind="error"
+                lowContrast
+                hideCloseButton
+                title="Sign-in methods unavailable"
+                subtitle="Refresh the page and try again."
+              />
+            ) : identityProviderLinksQ.data?.providers.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+                {identityProviderLinksQ.data.providers.map((provider) => (
+                  <div key={provider.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-4)' }}>
+                    <div>
+                      <div className="cds--type-body-compact-01">{provider.displayName}</div>
+                      {provider.organization && <div className="cds--type-label-01" style={{ color: 'var(--cds-text-secondary)' }}>{provider.organization}</div>}
+                    </div>
+                    {provider.linked ? (
+                      <Tag type="green" size="sm">Connected</Tag>
+                    ) : (
+                      <Button kind="tertiary" size="sm" renderIcon={LinkIcon} onClick={() => connectIdentityProvider(provider.id)}>
+                        Connect
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="cds--type-body-compact-01" style={{ color: 'var(--cds-text-secondary)' }}>
+                No additional sign-in methods are configured for this organization.
+              </p>
+            )}
+          </section>
 
           {/* Git Connections moved to Project → (⋯) → Git Settings */}
         </div>

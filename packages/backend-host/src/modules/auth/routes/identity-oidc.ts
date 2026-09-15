@@ -8,7 +8,7 @@ import { AppError, asyncHandler, Errors } from '@enterpriseglue/shared/middlewar
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { enforceParsedPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
-import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
+import { optionalAuth, requireAuth, requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
 import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/services/invitations.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
@@ -16,24 +16,25 @@ import { loginMethodService } from '@enterpriseglue/shared/services/platform-adm
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
-import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
+import { IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
 import { authSessionService, type IssuedAuthSession, type IssueAuthSessionInput } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
-import { IsNull, type FindOptionsWhere } from 'typeorm';
+import { In, IsNull, type FindOptionsWhere } from 'typeorm';
 import { verifyFederatedLogoutState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
-import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
+import { AuthenticatedIdentityProviderLinksSchema, AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { PublicLoginMethodsResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
 import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
-import { buildSignedOidcState, buildSignedSamlState, createSamlRequestId, getSsoRedirectUrl, parseSignedOidcState, parseSignedSamlState, parseInvitationEnrollmentContext, type SsoState } from './sso-state.js';
+import { buildSignedOidcState, buildSignedSamlState, createSamlRequestId, getSsoRedirectUrl, parseSignedOidcState, parseSignedSamlState, parseInvitationEnrollmentContext, type AccountLinkContext, type SsoState } from './sso-state.js';
 
 const router = Router();
 const stateCookie = 'identity_oidc_state';
@@ -187,9 +188,15 @@ async function runInSsoCallbackTenantContext<T>(
   return runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, callback);
 }
 
-async function startOidcLogin(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
+async function startOidcLogin(
+  req: Request,
+  res: Response,
+  provider: IdentityProvider,
+  enrollment?: InvitationEnrollmentContext,
+  accountLink?: AccountLinkContext,
+): Promise<void> {
   requireDirectOidc(provider);
-  const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, enrollment);
+  const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, enrollment, accountLink);
   const parsed = parseSignedOidcState(state);
   if (!parsed) throw Errors.internal('Unable to initialize identity provider state');
   const request = await genericOidcService.createAuthorizationRequest(configuration(provider), state, parsed.nonce);
@@ -415,6 +422,43 @@ async function loginProviderById(req: Request, res: Response): Promise<void> {
   await authenticateMeasuredDirectLdap(req, res, provider);
 }
 
+router.get('/api/auth/me/identity-providers', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId;
+  if (!tenantId) throw Errors.forbidden('Tenant-scoped session required');
+  const providers = (await identityProviderService.listEnabledDirectLoginProviders(tenantId))
+    .filter((candidate) => candidate.protocol === 'oidc' && candidate.tenantId === tenantId);
+  const providerIds = providers.map((candidate) => candidate.id);
+  const linked = providerIds.length === 0 ? [] : await (await getDataSource()).getRepository(ExternalIdentity).find({
+    where: { tenantId, userId: req.user!.userId, providerId: In(providerIds), status: 'active' },
+    select: ['providerId'],
+  });
+  const linkedProviderIds = new Set(linked.map((identity) => identity.providerId));
+  res.json(AuthenticatedIdentityProviderLinksSchema.parse({
+    providers: providers.map((candidate) => ({
+      id: candidate.id,
+      displayName: candidate.displayName?.trim() || candidate.key,
+      organization: candidate.organization?.trim() || null,
+      protocol: 'oidc' as const,
+      linked: linkedProviderIds.has(candidate.id),
+    })),
+  }));
+}));
+
+router.get('/api/auth/me/identity-providers/:providerId/link', apiLimiter, identityFlowLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenant?.tenantId;
+  const tenantSlug = req.tenant?.tenantSlug;
+  if (!tenantId || !tenantSlug) throw Errors.forbidden('Tenant-scoped session required');
+  const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), tenantId);
+  if (!provider || provider.tenantId !== tenantId || provider.protocol !== 'oidc') throw Errors.notFound('Identity provider not found');
+  if (!req.user?.sessionId) throw Errors.unauthorized('Sign in again to connect another identity provider');
+  await startOidcLogin(req, res, provider, undefined, {
+    userId: req.user!.userId,
+    tenantId,
+    authSessionVersion: req.user!.authSessionVersion ?? 0,
+    sessionId: req.user.sessionId,
+  });
+}));
+
 function onboardingEnrollment(req: Request): InvitationEnrollmentContext {
   const onboarding = req.onboarding;
   const enrollment = parseInvitationEnrollmentContext({ invitationId: onboarding?.invitationId, userId: onboarding?.userId,
@@ -502,6 +546,14 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       requireDirectOidc(provider);
       selectedProvider.current = provider;
       if (parsed.providerId && parsed.providerId !== provider.id) throw Errors.unauthorized('Identity provider state does not match the selected provider');
+      if (parsed.accountLink && (!req.user
+        || req.user.userId !== parsed.accountLink.userId
+        || (req.user.authSessionVersion ?? 0) !== parsed.accountLink.authSessionVersion
+        || req.user.sessionId !== parsed.accountLink.sessionId
+        || req.tenant?.tenantId !== parsed.accountLink.tenantId
+        || provider.tenantId !== parsed.accountLink.tenantId)) {
+        throw Errors.unauthorized('Account linking requires the current authenticated tenant session');
+      }
       const rawConfiguration = configuration(provider);
       const verifiedClaims = await genericOidcService.exchangeCode(rawConfiguration, { code: callback.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider));
       const claims = genericOidcService.withCallbackUser(rawConfiguration, verifiedClaims, callback?.user);
@@ -513,23 +565,42 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       };
       const enrolled = parsed.enrollment ? await identityProviderProvisioningService.enrollOidcInvitation(provider, claims, parsed.enrollment,
         enrollmentEvidence(req, { subjectId: evidence.subjectId, sessionId: evidence.sessionId }, evidence.mfaVerified)) : null;
-      const user = enrolled ? enrolled.user : await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
+      const user = enrolled
+        ? enrolled.user
+        : parsed.accountLink
+          ? await identityProviderProvisioningService.linkOidcIdentity(provider, claims, {
+            userId: parsed.accountLink.userId,
+            tenantId: parsed.accountLink.tenantId,
+          })
+          : await identityProviderProvisioningService.reconcileOidcLogin(provider, claims);
       if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-      if (enrolled) setSessionCookies(res, enrolled.session, true);
-      else await setProviderSession(req, res, user, provider, evidence);
-      await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
-      recordLoginExperienceMetric({ method: 'oidc', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
+      if (parsed.accountLink) {
+        await logAudit(auditFromRequest(req, { action: 'identity.provider.account_linked', resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
+      } else {
+        if (enrolled) setSessionCookies(res, enrolled.session, true);
+        else await setProviderSession(req, res, user, provider, evidence);
+        await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
+        recordLoginExperienceMetric({ method: 'oidc', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
+      }
       res.redirect(getSsoRedirectUrl(parsed));
     });
   } catch (error) {
     if (selectedProvider.current) {
-      await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: selectedProvider.current.id, details: { providerKey: selectedProvider.current.key, protocol: 'oidc', reason: 'session_not_issued' } }));
+      await logAudit(auditFromRequest(req, {
+        action: parsed?.accountLink ? 'identity.provider.account_link_failed' : AuditActions.LOGIN_FAILED,
+        resourceType: 'identity_provider', resourceId: selectedProvider.current.id,
+        details: { providerKey: selectedProvider.current.key, protocol: 'oidc', reason: parsed?.accountLink ? 'link_not_created' : 'session_not_issued' },
+      }));
     }
-    recordLoginExperienceMetric({
-      method: 'oidc',
-      event: redirectRejected ? 'redirect_failed' : 'failed',
-      durationMs: stateDuration(parsed?.timestamp),
+    if (!parsed?.accountLink) recordLoginExperienceMetric({
+      method: 'oidc', event: redirectRejected ? 'redirect_failed' : 'failed', durationMs: stateDuration(parsed?.timestamp),
     });
+    if (error instanceof IdentityProviderAccountLinkRequiredError && parsed) {
+      const tenantPrefix = parsed.tenantSlug ? `/t/${encodeURIComponent(parsed.tenantSlug)}` : '';
+      const message = encodeURIComponent('This sign-in method is not connected yet. Sign in with an existing method, then connect it from your profile.');
+      res.redirect(`${config.frontendUrl.replace(/\/$/, '')}${tenantPrefix}/login?error=account_link_required&message=${message}`);
+      return;
+    }
     throw error;
   }
 }
@@ -594,11 +665,11 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
 // A tenant-scoped callback is required by release-aware pooled deployments so
 // the edge can select the tenant's assigned host release before any provider
 // state is consumed. The global callbacks remain backward-compatible aliases.
-router.get('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, asyncHandler(completeOidcLogin));
-router.post('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, oidcCallbackFormPayloadLimit, asyncHandler(completeOidcLogin));
+router.get('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, optionalAuth, asyncHandler(completeOidcLogin));
+router.post('/api/t/:tenantSlug/auth/identity/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, oidcCallbackFormPayloadLimit, optionalAuth, asyncHandler(completeOidcLogin));
 router.post('/api/t/:tenantSlug/auth/providers/saml/callback', resolveTenantContext({ required: true }), apiLimiter, identityFlowLimiter, asyncHandler(completeSamlLogin));
-router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, asyncHandler(completeOidcLogin));
-router.post('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, oidcCallbackFormPayloadLimit, asyncHandler(completeOidcLogin));
+router.get('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, optionalAuth, asyncHandler(completeOidcLogin));
+router.post('/api/auth/identity/callback', apiLimiter, identityFlowLimiter, oidcCallbackFormPayloadLimit, optionalAuth, asyncHandler(completeOidcLogin));
 router.post('/api/auth/providers/saml/callback', apiLimiter, identityFlowLimiter, asyncHandler(completeSamlLogin));
 
 router.post('/api/auth/identity/:key/ldap/login', apiLimiter, identityFlowLimiter, authLimiter, resolveRootLoginTenant, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {

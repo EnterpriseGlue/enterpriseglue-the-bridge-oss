@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LayoutWithProSidebar from '@src/features/shared/components/LayoutWithProSidebar';
@@ -183,6 +183,30 @@ describe('LayoutWithProSidebar', () => {
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main-content');
     expect(screen.getByRole('button', { name: 'Open global navigation' })).toHaveAttribute('aria-controls', 'enterpriseglue-global-navigation');
     await waitFor(() => expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content'));
+  });
+
+  it('shows configured identity providers and their link state in My Profile', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/auth/me/identity-providers') {
+        return { providers: [
+          { id: 'microsoft-provider', displayName: 'Microsoft', organization: 'EnterpriseGlue', protocol: 'oidc', linked: false },
+          { id: 'google-provider', displayName: 'Google', organization: 'Google', protocol: 'oidc', linked: true },
+        ] };
+      }
+      if (url === '/api/notifications') return { notifications: [], unreadCount: 0 };
+      if (url === '/api/auth/branding') return {};
+      return [];
+    });
+
+    renderLayout();
+    fireEvent.click(screen.getByRole('button', { name: 'User' }));
+
+    expect(await screen.findByRole('heading', { name: 'Sign-in methods' })).toBeInTheDocument();
+    expect(screen.getByText('Microsoft')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
+    expect(screen.getAllByText('Google')).toHaveLength(2);
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/auth/me/identity-providers');
   });
 
   it('does not render an empty Enterprise navigation group in OSS', async () => {

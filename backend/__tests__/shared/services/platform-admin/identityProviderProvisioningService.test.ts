@@ -20,7 +20,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentitySer
 vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({ authzGroupService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService }));
 
-import { identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
+import { IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 describe('IdentityProviderProvisioningService', () => {
   beforeEach(() => {
@@ -123,6 +124,74 @@ describe('IdentityProviderProvisioningService', () => {
 
     expect(stores.user.findOneBy).not.toHaveBeenCalled();
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
+  it('links a realistic Entra subject to the authenticated account without relying on email_verified', async () => {
+    const currentUser = {
+      id: 'user-1', email: 'person@example.test', firstName: 'Person', lastName: 'Example',
+      authProvider: 'oidc', passwordHash: null, isActive: true, isEmailVerified: true, authSessionVersion: 7,
+    };
+    stores.user.findOneBy.mockResolvedValueOnce(currentUser);
+    const provider = {
+      id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: '11111111-2222-3333-4444-555555555555',
+      protocol: 'oidc', authenticationMode: 'direct', isEnabled: true, updatedAt: 50, configurationJson: '{}',
+    } as any;
+
+    await expect(identityProviderProvisioningService.linkOidcIdentity(provider, {
+      sub: 'entra-subject-1', oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      tid: provider.directoryTenantId, preferred_username: 'person@example.test',
+    } as any, { userId: currentUser.id, tenantId: 'tenant-1' })).resolves.toMatchObject({
+      id: currentUser.id,
+      email: currentUser.email,
+    });
+
+    expect(stores.externalIdentity.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-1', providerId: provider.id, subjectId: 'entra-subject-1',
+      userId: currentUser.id, emailHint: currentUser.email, status: 'active',
+    }));
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      userId: currentUser.id,
+      providerSubject: 'entra-subject-1',
+    }));
+  });
+
+  it('rejects authenticated linking when the provider email does not match the current account', async () => {
+    stores.user.findOneBy.mockResolvedValueOnce({ id: 'user-1', email: 'owner@example.test', isActive: true });
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
+
+    await expect(identityProviderProvisioningService.linkOidcIdentity(provider, {
+      sub: 'subject-1', preferred_username: 'attacker@example.test',
+    } as any, { userId: 'user-1', tenantId: 'tenant-1' })).rejects.toThrow('does not match the authenticated account');
+    expect(stores.externalIdentity.insert).not.toHaveBeenCalled();
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
+  it('rejects authenticated linking across tenants or when the subject belongs to another account', async () => {
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
+    await expect(identityProviderProvisioningService.linkOidcIdentity(provider, {
+      sub: 'subject-1', preferred_username: 'person@example.test',
+    } as any, { userId: 'user-1', tenantId: 'tenant-2' })).rejects.toThrow('does not match the authenticated tenant');
+
+    stores.externalIdentity.findOne.mockResolvedValueOnce({ userId: 'other-user', status: 'active' });
+    await expect(identityProviderProvisioningService.linkOidcIdentity(provider, {
+      sub: 'subject-1', preferred_username: 'person@example.test',
+    } as any, { userId: 'user-1', tenantId: 'tenant-1' })).rejects.toThrow('cannot be linked to this account');
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
+  });
+
+  it('requires authenticated account control for a pooled email collision', async () => {
+    const originalMode = config.tenancyMode;
+    config.tenancyMode = 'pooled';
+    stores.user.findOneBy.mockResolvedValueOnce({ id: 'existing-user', email: 'person@example.test', isActive: true });
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
+    try {
+      await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+        sub: 'new-subject', preferred_username: 'person@example.test',
+      } as any)).rejects.toBeInstanceOf(IdentityProviderAccountLinkRequiredError);
+    } finally {
+      config.tenancyMode = originalMode;
+    }
+    expect(stores.externalIdentity.insert).not.toHaveBeenCalled();
   });
 
   it('fails closed before identity writes when OIDC reports an incomplete group result', async () => {

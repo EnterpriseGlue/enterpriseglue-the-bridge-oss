@@ -14,6 +14,14 @@ export interface SsoState {
   returnTo?: string;
   samlRequestId?: string;
   enrollment?: InvitationEnrollmentContext;
+  accountLink?: AccountLinkContext;
+}
+
+export interface AccountLinkContext {
+  userId: string;
+  tenantId: string;
+  authSessionVersion: number;
+  sessionId: string;
 }
 
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -33,6 +41,23 @@ export function parseInvitationEnrollmentContext(value: unknown): InvitationEnro
     || context.tenantSlug.length > 63 || context.authSessionVersion !== 0) return null;
   return { invitationId: context.invitationId as string, userId: context.userId as string,
     tenantId: context.tenantId as string, tenantSlug: context.tenantSlug, authSessionVersion: 0 };
+}
+
+/** Server-derived, short-lived account-control evidence for connecting another provider. */
+export function parseAccountLinkContext(value: unknown): AccountLinkContext | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const context = value as Record<string, unknown>;
+  const keys = ['userId', 'tenantId', 'authSessionVersion', 'sessionId'];
+  if (Object.keys(context).length !== keys.length || !keys.every((key) => Object.prototype.hasOwnProperty.call(context, key))) return null;
+  if (!['userId', 'tenantId'].every((key) => typeof context[key] === 'string' && PROVIDER_ID_PATTERN.test(context[key] as string))
+    || !Number.isInteger(context.authSessionVersion) || Number(context.authSessionVersion) < 0
+    || typeof context.sessionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(context.sessionId)) return null;
+  return {
+    userId: context.userId as string,
+    tenantId: context.tenantId as string,
+    authSessionVersion: Number(context.authSessionVersion),
+    sessionId: context.sessionId,
+  };
 }
 
 function sanitizeTenantSlug(value: unknown): string | undefined {
@@ -70,11 +95,24 @@ export function createSamlRequestId(): string {
   return `_${randomBytes(32).toString('base64url')}`;
 }
 
-export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }, samlRequestId?: string, enrollment?: InvitationEnrollmentContext): string {
+export function buildSsoState(
+  req: Request,
+  providerId?: string,
+  identityProvider?: { key: string; tenantId?: string | null },
+  samlRequestId?: string,
+  enrollment?: InvitationEnrollmentContext,
+  accountLink?: AccountLinkContext,
+): string {
   const verifiedEnrollment = enrollment === undefined ? undefined : parseInvitationEnrollmentContext(enrollment);
   if (enrollment !== undefined && (!verifiedEnrollment || verifiedEnrollment.tenantId !== identityProvider?.tenantId
     || !sanitizeProviderId(providerId) || !sanitizeProviderId(identityProvider?.key))) {
     throw new Error('Invalid invitation enrollment state');
+  }
+  const verifiedAccountLink = accountLink === undefined ? undefined : parseAccountLinkContext(accountLink);
+  if (accountLink !== undefined && (!verifiedAccountLink || enrollment !== undefined
+    || verifiedAccountLink.tenantId !== identityProvider?.tenantId
+    || !sanitizeProviderId(providerId) || !sanitizeProviderId(identityProvider?.key))) {
+    throw new Error('Invalid account link state');
   }
   const tenantSlug = verifiedEnrollment?.tenantSlug || sanitizeTenantSlug(req.params?.tenantSlug)
     || sanitizeTenantSlug(req.query.tenantSlug)
@@ -90,6 +128,7 @@ export function buildSsoState(req: Request, providerId?: string, identityProvide
     ...(returnTo ? { returnTo } : {}),
     ...(samlRequestId && SAML_REQUEST_ID_PATTERN.test(samlRequestId) ? { samlRequestId } : {}),
     ...(verifiedEnrollment ? { enrollment: verifiedEnrollment } : {}),
+    ...(verifiedAccountLink ? { accountLink: verifiedAccountLink } : {}),
   };
 
   return Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -105,8 +144,14 @@ export function buildSignedSamlState(req: Request, providerId: string, identityP
   return signSamlRelayState(state);
 }
 
-export function buildSignedOidcState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }, enrollment?: InvitationEnrollmentContext): string {
-  return signOidcState(buildSsoState(req, providerId, identityProvider, undefined, enrollment));
+export function buildSignedOidcState(
+  req: Request,
+  providerId: string,
+  identityProvider: { key: string; tenantId?: string | null },
+  enrollment?: InvitationEnrollmentContext,
+  accountLink?: AccountLinkContext,
+): string {
+  return signOidcState(buildSsoState(req, providerId, identityProvider, undefined, enrollment, accountLink));
 }
 
 export function parseSsoState(rawState: unknown): SsoState | null {
@@ -129,6 +174,10 @@ export function parseSsoState(rawState: unknown): SsoState | null {
     const enrollment = hasEnrollment ? parseInvitationEnrollmentContext(parsed.enrollment) : undefined;
     if (hasEnrollment && (!enrollment || !providerId || !identityProviderKey
       || enrollment.tenantId !== identityProviderTenantId || enrollment.tenantSlug !== tenantSlug)) return null;
+    const hasAccountLink = Object.prototype.hasOwnProperty.call(parsed, 'accountLink');
+    const accountLink = hasAccountLink ? parseAccountLinkContext(parsed.accountLink) : undefined;
+    if (hasAccountLink && (!accountLink || hasEnrollment || !providerId || !identityProviderKey
+      || accountLink.tenantId !== identityProviderTenantId || !tenantSlug)) return null;
     return {
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,
@@ -139,6 +188,7 @@ export function parseSsoState(rawState: unknown): SsoState | null {
       ...(returnTo ? { returnTo } : {}),
       ...(samlRequestId ? { samlRequestId } : {}),
       ...(enrollment ? { enrollment } : {}),
+      ...(accountLink ? { accountLink } : {}),
     };
   } catch {
     return null;

@@ -50,6 +50,7 @@ const {
   AuthenticatedSessionLoginResponseSchema,
   AuthenticatedSessionOnboardingResponseSchema,
   AuthenticatedSessionUserSchema,
+  AuthenticatedIdentityProviderLinksSchema,
   RefreshAccessTokenResponseSchema,
   LogoutResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/auth/session.js');
@@ -606,6 +607,31 @@ registry.registerPath({
       content: { 'application/json': { schema: z.object({ id: z.string(), name: z.string() }) } },
     },
     404: { description: 'Not found' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/me/identity-providers',
+  ...authzExemption('GET', '/api/auth/me/identity-providers'),
+  responses: {
+    200: { description: 'Current user identity-provider links', content: { 'application/json': { schema: AuthenticatedIdentityProviderLinksSchema } } },
+    401: { description: 'Not authenticated' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/me/identity-providers/{providerId}/link',
+  ...authzExemption('GET', '/api/auth/me/identity-providers/:providerId/link'),
+  request: {
+    params: z.object({ providerId: z.string() }),
+    query: z.object({ returnTo: z.string().optional() }),
+  },
+  responses: {
+    302: { description: 'Redirect to the selected OIDC provider for authenticated account linking' },
+    401: { description: 'Not authenticated' },
+    404: { description: 'Identity provider not found' },
   },
 });
 

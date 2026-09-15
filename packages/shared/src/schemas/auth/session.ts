@@ -59,9 +59,23 @@ export const LogoutResponseSchema = z.object({
   federatedLogoutUrl: z.string().url().nullable(),
 }).strict();
 
+export const AuthenticatedIdentityProviderLinkSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  organization: z.string().nullable(),
+  protocol: z.literal('oidc'),
+  linked: z.boolean(),
+}).strict();
+
+export const AuthenticatedIdentityProviderLinksSchema = z.object({
+  providers: z.array(AuthenticatedIdentityProviderLinkSchema),
+}).strict();
+
 export type AuthenticatedSessionContext = z.infer<typeof AuthenticatedSessionContextSchema>;
 export type AuthenticatedSessionUser = z.infer<typeof AuthenticatedSessionUserSchema>;
 export type AuthenticatedSessionLoginResponse = z.infer<typeof AuthenticatedSessionLoginResponseSchema>;
 export type AuthenticatedSessionOnboardingResponse = z.infer<typeof AuthenticatedSessionOnboardingResponseSchema>;
 export type RefreshAccessTokenResponse = z.infer<typeof RefreshAccessTokenResponseSchema>;
 export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
+export type AuthenticatedIdentityProviderLink = z.infer<typeof AuthenticatedIdentityProviderLinkSchema>;
+export type AuthenticatedIdentityProviderLinks = z.infer<typeof AuthenticatedIdentityProviderLinksSchema>;

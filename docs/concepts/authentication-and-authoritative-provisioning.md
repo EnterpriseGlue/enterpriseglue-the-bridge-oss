@@ -39,6 +39,22 @@ profile and lifecycle fields after the authentication source changes.
 
 Email alone is never sufficient to link an existing account.
 
+For interactive OIDC, a signed-in tenant user can connect another configured
+provider from **My Profile → Sign-in methods**. EnterpriseGlue keeps the current
+session active while it performs a fresh authorization-code exchange, and the
+signed state binds the operation to that user, tenant, provider, exact session
+ID and version, browser state cookie, PKCE verifier, and ten-minute expiry. The
+provider email must match the current account as an additional guard, but the
+existing authenticated session—not that mutable email claim—is the
+account-control evidence. A subject already linked to another account or
+explicitly unlinked by an administrator remains blocked.
+
+An ordinary logged-out OIDC callback never performs this merge. When its
+verified subject is new but its email belongs to an existing pooled account,
+the login page directs the person to authenticate with an existing method and
+connect the provider from their profile. This avoids both unsafe email-only
+linking and a generic server-error response.
+
 EnterpriseGlue can reuse an existing account during SCIM creation only when:
 
 1. the provisioning directory is associated with a configured identity
