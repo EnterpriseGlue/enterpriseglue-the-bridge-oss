@@ -8,7 +8,7 @@ import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimit
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
 import onboardingRoute from '../../../../../packages/backend-host/src/modules/auth/routes/onboarding.js';
 import { buildSignedOidcState, parseSignedOidcState, parseSignedSamlState } from '../../../../../packages/backend-host/src/modules/auth/routes/sso-state.js';
-import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { generateAccessToken, generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 
@@ -16,20 +16,23 @@ const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: 
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), withCallbackUser: vi.fn(), authenticationAssurance: vi.fn(), verifyBackChannelLogoutToken: vi.fn() }));
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn(), authenticationAssurance: vi.fn(), validatePostLogoutRequest: vi.fn(), createLogoutResponse: vi.fn(), validatePostLogoutResponse: vi.fn(), validateRedirectLogoutResponse: vi.fn() }));
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
-const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn(), enrollOidcInvitation: vi.fn(), enrollSamlInvitation: vi.fn(), enrollLdapInvitation: vi.fn() }));
+const IdentityProviderAccountLinkRequiredError = vi.hoisted(() => class IdentityProviderAccountLinkRequiredError extends Error {});
+const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), linkOidcIdentity: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn(), enrollOidcInvitation: vi.fn(), enrollSamlInvitation: vi.fn(), enrollLdapInvitation: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 const auditService = vi.hoisted(() => ({ auditFromRequest: vi.fn((_req: unknown, input: unknown) => input), logAudit: vi.fn() }));
 const loginMethodService = vi.hoisted(() => ({ get: vi.fn() }));
 const recordLoginExperienceMetric = vi.hoisted(() => vi.fn());
 const identityProviderRepository = vi.hoisted(() => ({ findOne: vi.fn(), find: vi.fn(), update: vi.fn() }));
-const refreshTokenRepository = vi.hoisted(() => ({ update: vi.fn() }));
+const refreshTokenRepository = vi.hoisted(() => ({ findOneBy: vi.fn(), update: vi.fn() }));
+const externalIdentityRepository = vi.hoisted(() => ({ find: vi.fn() }));
 const userRepository = vi.hoisted(() => ({ findOneBy: vi.fn() }));
 const tenantService = vi.hoisted(() => ({
   getById: vi.fn(),
   getBySlug: vi.fn(),
   getByHostname: vi.fn(),
   ensureSsoMember: vi.fn(),
+  hasMembership: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
@@ -37,7 +40,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', 
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericSamlService.js', () => ({ genericSamlService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js', () => ({ samlAssertionReplayService }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js', () => ({ directLdapIdentityService }));
 vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/TenantService.js', () => ({ tenantService }));
@@ -47,7 +50,13 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMem
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success', LOGIN_FAILED: 'auth.login.failed' }, ...auditService }));
 vi.mock('@enterpriseglue/shared/auth/login-experience-metrics.js', () => ({ recordLoginExperienceMetric }));
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn(async () => ({
-  getRepository: (entity: { name?: string }) => entity?.name === 'User' ? userRepository : entity?.name === 'IdentityProvider' ? identityProviderRepository : refreshTokenRepository,
+  getRepository: (entity: { name?: string }) => entity?.name === 'User'
+    ? userRepository
+    : entity?.name === 'IdentityProvider'
+      ? identityProviderRepository
+      : entity?.name === 'ExternalIdentity'
+        ? externalIdentityRepository
+        : refreshTokenRepository,
   transaction: async (work: any) => work({ getRepository: (entity: { name?: string }) => entity?.name === 'IdentityProvider' ? identityProviderRepository : refreshTokenRepository }),
 })) }));
 
@@ -80,6 +89,7 @@ describe('provider-neutral OIDC routes', () => {
     genericOidcService.authenticationAssurance.mockReturnValue({ mfaVerified: false });
     genericOidcService.verifyBackChannelLogoutToken.mockResolvedValue({ sub: 'subject-1', sid: 'session-1', events: {} });
     identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
+    identityProviderProvisioningService.linkOidcIdentity.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
     identityProviderProvisioningService.reconcileLdapLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
     identityProviderProvisioningService.reconcileSamlLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
     const enrolled = { user: { id: 'pending-user', email: 'person@example.test', isActive: true, authSessionVersion: 1 },
@@ -103,10 +113,13 @@ describe('provider-neutral OIDC routes', () => {
     identityProviderRepository.find.mockResolvedValue([]);
     identityProviderRepository.update.mockResolvedValue({ affected: 1 });
     refreshTokenRepository.update.mockResolvedValue({ affected: 1 });
+    refreshTokenRepository.findOneBy.mockResolvedValue({ deviceInfo: null });
+    externalIdentityRepository.find.mockResolvedValue([]);
     tenantService.getById.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active' });
     tenantService.getBySlug.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active' });
     tenantService.getByHostname.mockResolvedValue(null);
     tenantService.ensureSsoMember.mockResolvedValue(undefined);
+    tenantService.hasMembership.mockResolvedValue(true);
     app = express();
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
@@ -563,6 +576,144 @@ describe('provider-neutral OIDC routes', () => {
     expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith('provider-1', null);
     expect(response.headers.location).toBe('https://issuer.example.test/authorize');
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith({ method: 'oidc', event: 'selected' });
+  });
+
+  it('lists tenant OIDC providers and their current authenticated link status', async () => {
+    const originalMode = config.tenancyMode;
+    config.tenancyMode = 'pooled';
+    const tenantProvider = { ...provider, tenantId: 'tenant-default', displayName: 'Microsoft', organization: 'EnterpriseGlue' };
+    identityProviderService.listEnabledDirectLoginProviders.mockResolvedValueOnce([tenantProvider]);
+    externalIdentityRepository.find.mockResolvedValueOnce([{ providerId: tenantProvider.id }]);
+    const sessionId = randomUUID();
+    const currentUser = { id: 'user-1', email: 'person@example.test', isActive: true, isEmailVerified: true, authSessionVersion: 7 };
+    userRepository.findOneBy.mockResolvedValueOnce(currentUser);
+    const accessToken = generateAccessToken(currentUser, {
+      sessionId, tenantId: 'tenant-default', tenantSlug: 'default', authenticationMethod: 'oidc',
+    });
+    try {
+      const response = await request(app).get('/api/auth/me/identity-providers').set('Cookie', `accessToken=${accessToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ providers: [{
+        id: tenantProvider.id, displayName: 'Microsoft', organization: 'EnterpriseGlue', protocol: 'oidc', linked: true,
+      }] });
+      expect(externalIdentityRepository.find).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ tenantId: 'tenant-default', userId: currentUser.id, status: 'active' }),
+      }));
+    } finally {
+      config.tenancyMode = originalMode;
+    }
+  });
+
+  it('links an exact OIDC subject only while the initiating tenant session remains current', async () => {
+    const originalMode = config.tenancyMode;
+    config.tenancyMode = 'pooled';
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValueOnce(tenantProvider);
+    identityProviderService.getByKey.mockResolvedValueOnce(tenantProvider);
+    const sessionId = randomUUID();
+    const currentUser = { id: 'user-1', email: 'person@example.test', isActive: true, isEmailVerified: true, authSessionVersion: 7 };
+    userRepository.findOneBy.mockResolvedValue(currentUser);
+    const accessToken = generateAccessToken(currentUser, {
+      sessionId, tenantId: 'tenant-default', tenantSlug: 'default', authenticationMethod: 'oidc',
+    });
+    try {
+      const started = await request(app)
+        .get(`/api/auth/me/identity-providers/${tenantProvider.id}/link?returnTo=%2Ft%2Fdefault%2F`)
+        .set('Cookie', `accessToken=${accessToken}`)
+        .redirects(0);
+      expect(started.status).toBe(302);
+      const authorizationCalls = genericOidcService.createAuthorizationRequest.mock.calls;
+      const state = authorizationCalls[authorizationCalls.length - 1]?.[1];
+      expect(parseSignedOidcState(state)).toMatchObject({
+        providerId: tenantProvider.id,
+        tenantSlug: 'default',
+        accountLink: { userId: currentUser.id, tenantId: 'tenant-default', authSessionVersion: 7, sessionId },
+      });
+      const protocolCookies = (started.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split(';')[0]);
+      const completed = await request(app)
+        .get(`/api/t/default/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+        .set('Cookie', [...protocolCookies, `accessToken=${accessToken}`])
+        .redirects(0);
+      expect(completed.status).toBe(302);
+      expect(completed.headers.location).toBe(`${config.frontendUrl.replace(/\/$/, '')}/t/default/`);
+      expect(identityProviderProvisioningService.linkOidcIdentity).toHaveBeenCalledWith(
+        expect.objectContaining({ id: tenantProvider.id }),
+        expect.objectContaining({ sub: 'subject-1' }),
+        { userId: currentUser.id, tenantId: 'tenant-default' },
+      );
+      expect(authSessionService.issue).not.toHaveBeenCalled();
+      expect(auditService.logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.account_linked' }));
+    } finally {
+      config.tenancyMode = originalMode;
+    }
+  });
+
+  it('rejects an account-link callback after the initiating session is absent', async () => {
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    identityProviderService.getByKey.mockResolvedValueOnce(tenantProvider);
+    const state = buildSignedOidcState(
+      { params: { tenantSlug: 'default' }, query: { returnTo: '/t/default/' } } as any,
+      tenantProvider.id,
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+      undefined,
+      { userId: 'user-1', tenantId: 'tenant-default', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555' },
+    );
+    const response = await request(app)
+      .get(`/api/t/default/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+    expect(response.status).toBe(401);
+    expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.linkOidcIdentity).not.toHaveBeenCalled();
+  });
+
+  it('rejects an account-link callback from a different current session for the same user', async () => {
+    const originalMode = config.tenancyMode;
+    config.tenancyMode = 'pooled';
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    identityProviderService.getByKey.mockResolvedValueOnce(tenantProvider);
+    const currentUser = { id: 'user-1', email: 'person@example.test', isActive: true, isEmailVerified: true, authSessionVersion: 7 };
+    userRepository.findOneBy.mockResolvedValue(currentUser);
+    const otherSessionId = randomUUID();
+    const accessToken = generateAccessToken(currentUser, {
+      sessionId: otherSessionId, tenantId: 'tenant-default', tenantSlug: 'default', authenticationMethod: 'oidc',
+    });
+    const state = buildSignedOidcState(
+      { params: { tenantSlug: 'default' }, query: { returnTo: '/t/default/' } } as any,
+      tenantProvider.id,
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+      undefined,
+      { userId: currentUser.id, tenantId: 'tenant-default', authSessionVersion: 7, sessionId: randomUUID() },
+    );
+    try {
+      const response = await request(app)
+        .get(`/api/t/default/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+        .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier', `accessToken=${accessToken}`])
+        .redirects(0);
+      expect(response.status).toBe(401);
+      expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
+      expect(identityProviderProvisioningService.linkOidcIdentity).not.toHaveBeenCalled();
+    } finally {
+      config.tenancyMode = originalMode;
+    }
+  });
+
+  it('redirects a pooled account collision to a safe account-linking instruction', async () => {
+    const tenantProvider = { ...provider, tenantId: 'tenant-default' };
+    identityProviderService.getByKey.mockResolvedValueOnce(tenantProvider);
+    identityProviderProvisioningService.reconcileOidcLogin.mockRejectedValueOnce(new IdentityProviderAccountLinkRequiredError());
+    const state = buildSignedOidcState(
+      { params: { tenantSlug: 'default' }, query: {} } as any,
+      tenantProvider.id,
+      { key: tenantProvider.key, tenantId: tenantProvider.tenantId },
+    );
+    const response = await request(app)
+      .get(`/api/t/default/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toContain('/t/default/login?error=account_link_required');
+    expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 
   it('completes only when callback state is bound to the exact provider', async () => {

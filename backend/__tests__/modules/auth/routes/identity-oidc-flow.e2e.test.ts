@@ -13,11 +13,12 @@ const identityProviderService = vi.hoisted(() => ({
   listEnabledDirectLoginProviders: vi.fn(),
   listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn(),
 }));
-const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn() }));
+const IdentityProviderAccountLinkRequiredError = vi.hoisted(() => class IdentityProviderAccountLinkRequiredError extends Error {});
+const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), linkOidcIdentity: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ identityProviderProvisioningService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService }));
 vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
   getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),

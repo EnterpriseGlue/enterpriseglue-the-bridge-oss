@@ -159,6 +159,18 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
     owner: 'platform-auth',
     reason: 'Authenticated users may update safe self-profile fields; admin-controlled fields are not accepted here.',
   },
+  tokenAuthenticatedRoute(
+    'GET',
+    '/api/auth/me/identity-providers',
+    'low',
+    'Authenticated users may list only configured sign-in providers and link status for their own current tenant account.',
+  ),
+  tokenAuthenticatedRoute(
+    'GET',
+    '/api/auth/me/identity-providers/:providerId/link',
+    'high',
+    'A current non-revoked tenant session starts a signed, browser-bound provider authorization flow that can link only that same account.',
+  ),
   {
     method: 'GET',
     route: '/api/auth/platform-settings',
