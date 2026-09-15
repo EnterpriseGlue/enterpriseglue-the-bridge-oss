@@ -4,6 +4,10 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import {
+  loadPackageVersionAuthority,
+  publishedPackageForChangedPath,
+} from './lib/package-version-authority.mjs'
 
 const FRAGMENT_DIR = '.release-notes'
 const FRAGMENT_SCHEMA_VERSION = 1
@@ -32,16 +36,7 @@ const REQUIRED_FIELDS = [
   'packages',
 ]
 
-const PUBLISHED_PACKAGES = new Map([
-  ['packages/shared/', '@enterpriseglue/shared'],
-  ['packages/backend-host/', '@enterpriseglue/backend-host'],
-  ['packages/frontend-host/', '@enterpriseglue/frontend-host'],
-  ['packages/enterprise-plugin-api/', '@enterpriseglue/enterprise-plugin-api'],
-  ['packages/plugin-sdk/', '@enterpriseglue/plugin-sdk'],
-  ['packages/plugin-runtime/', '@enterpriseglue/plugin-runtime'],
-  ['packages/plugin-installer/', '@enterpriseglue/plugin-installer'],
-  ['packages/plugin-manager/', '@enterpriseglue/plugin-manager'],
-])
+const PACKAGE_VERSION_AUTHORITY = loadPackageVersionAuthority()
 
 function fail(message) {
   throw new Error(message)
@@ -250,16 +245,15 @@ export function validatePathCoverage(changedFiles, fragments, { exempt = false, 
   }
 
   const packageRecords = new Set(fragments.flatMap((fragment) => fragment.packages.map((entry) => entry.name)))
-  for (const [prefix, packageName] of PUBLISHED_PACKAGES) {
-    const packageChanged = relevant.some((file) => {
-      if (!file.startsWith(prefix)) return false
-      const packagePath = file.slice(prefix.length)
-      if (/^Dockerfile(?:\..+)?$/.test(packagePath)) return false
-      return !/(?:^|\/)(?:__tests__|test|docs)(?:\/|$)/.test(packagePath)
-    })
+  for (const { name: packageName, sourceRoot } of PACKAGE_VERSION_AUTHORITY.packages) {
+    const packageChanged = relevant.some(
+      (file) => publishedPackageForChangedPath(PACKAGE_VERSION_AUTHORITY, file) === packageName,
+    )
     if (packageChanged) {
       requirements.push(`${packageName} version`)
-      if (!packageRecords.has(packageName)) fail(`Changes to ${prefix} require a packages entry for ${packageName}.`)
+      if (!packageRecords.has(packageName)) {
+        fail(`Changes to ${sourceRoot}/ require a packages entry for ${packageName}.`)
+      }
     }
   }
 

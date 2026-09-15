@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "dependencyPolicy": {
+    "workspaceFields": [
+      "dependencies",
+      "optionalDependencies",
+      "peerDependencies",
+      "devDependencies"
+    ],
+    "propagatedConsumerImpact": "patch"
+  },
+  "sourceChangeExcludes": [
+    "^Dockerfile(?:\\..*)?$",
+    "^third_party_licenses\\.json$",
+    "^(?:README(?:\\.md)?|CHANGELOG\\.md)$",
+    "^docs/",
+    "(?:^|/)(?:__tests__|test|tests)(?:/|$)",
+    "(?:^|/)fixtures(?:/|$)",
+    "\\.(?:test|spec)\\.[cm]?[jt]sx?$"
+  ],
+  "publicationSets": [
+    {
+      "id": "plugin-platform-packages",
+      "workflow": ".github/workflows/plugin-package-release.yml",
+      "atomic": true,
+      "packages": [
+        "@enterpriseglue/enterprise-plugin-api",
+        "@enterpriseglue/plugin-sdk",
+        "@enterpriseglue/plugin-runtime",
+        "@enterpriseglue/plugin-installer",
+        "@enterpriseglue/plugin-manager"
+      ]
+    },
+    {
+      "id": "host-packages",
+      "workflow": ".github/workflows/host-package-release.yml",
+      "atomic": true,
+      "packages": [
+        "@enterpriseglue/shared",
+        "@enterpriseglue/backend-host",
+        "@enterpriseglue/frontend-host"
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "manifest": "packages/shared/package.json",
+      "sourceRoot": "packages/shared",
+      "publicationSet": "host-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "manifest": "packages/backend-host/package.json",
+      "sourceRoot": "packages/backend-host",
+      "publicationSet": "host-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "manifest": "packages/frontend-host/package.json",
+      "sourceRoot": "packages/frontend-host",
+      "publicationSet": "host-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "manifest": "packages/enterprise-plugin-api/package.json",
+      "sourceRoot": "packages/enterprise-plugin-api",
+      "publicationSet": "plugin-platform-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/plugin-sdk",
+      "manifest": "packages/plugin-sdk/package.json",
+      "sourceRoot": "packages/plugin-sdk",
+      "publicationSet": "plugin-platform-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/plugin-runtime",
+      "manifest": "packages/plugin-runtime/package.json",
+      "sourceRoot": "packages/plugin-runtime",
+      "publicationSet": "plugin-platform-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "manifest": "packages/plugin-installer/package.json",
+      "sourceRoot": "packages/plugin-installer",
+      "publicationSet": "plugin-platform-packages",
+      "versionPolicy": "independent"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "manifest": "packages/plugin-manager/package.json",
+      "sourceRoot": "packages/plugin-manager",
+      "publicationSet": "plugin-platform-packages",
+      "versionPolicy": "independent"
+    }
+  ],
+  "versionBindings": [
+    {
+      "id": "plugin-installer-toolchain-charts",
+      "source": {
+        "type": "package",
+        "name": "@enterpriseglue/plugin-installer"
+      },
+      "targets": [
+        {
+          "path": "infra/kubernetes/helm/enterpriseglue-plugin-runtime/Chart.yaml",
+          "format": "yaml",
+          "fields": ["version", "appVersion"]
+        },
+        {
+          "path": "infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac/Chart.yaml",
+          "format": "yaml",
+          "fields": ["version", "appVersion"]
+        }
+      ]
+    },
+    {
+      "id": "plugin-manager-chart",
+      "source": {
+        "type": "package",
+        "name": "@enterpriseglue/plugin-manager"
+      },
+      "targets": [
+        {
+          "path": "infra/kubernetes/helm/enterpriseglue-plugin-manager/Chart.yaml",
+          "format": "yaml",
+          "fields": ["version", "appVersion"]
+        }
+      ]
+    },
+    {
+      "id": "host-chart-application",
+      "source": {
+        "type": "json",
+        "path": ".github/.release-please-manifest.json",
+        "field": "."
+      },
+      "targets": [
+        {
+          "path": "infra/kubernetes/helm/enterpriseglue-host/Chart.yaml",
+          "format": "yaml",
+          "fields": ["appVersion"]
+        }
+      ]
+    }
+  ],
+  "independentArtifacts": [
+    {
+      "id": "host-chart",
+      "manifest": "infra/kubernetes/helm/enterpriseglue-host/Chart.yaml",
+      "format": "yaml",
+      "versionField": "version"
+    },
+    {
+      "id": "developer-workflows-plugin",
+      "manifest": "plugins/enterpriseglue-dev-workflows/.codex-plugin/plugin.json",
+      "format": "json",
+      "versionField": "version"
+    }
+  ]
+}

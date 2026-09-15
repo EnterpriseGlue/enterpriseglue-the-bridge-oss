@@ -50,6 +50,13 @@ persistence, authorization, Mission Control engine integration, or an unknown
 surface continues to use the broader application lane. Package-version and
 documentation guards remain independently selected when applicable.
 
+Package-version authority and planner changes select the package publication
+and release-contract lanes without starting application, database, or image
+qualification. The package guard reads
+`scripts/package-version-authority.json`, so CI, release-note validation, and
+the host and plugin publishers use the same package groups and dependency-safe
+order.
+
 The exact generated Release Please delta is also explicit: the version
 manifest, top-level changelog, versioned release document, and host chart
 metadata select documentation, boundary, Helm render, and release-readiness

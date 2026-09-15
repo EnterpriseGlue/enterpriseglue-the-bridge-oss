@@ -1,0 +1,45 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "package-version-authority",
+  "type": "fix",
+  "scope": "release-and-packaging",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Centralizes published-package groups, dependency propagation, and chart version bindings in one validated release manifest.",
+  "userImpact": [
+    "Package and chart version mismatches are rejected before hosted release work starts.",
+    "Developers receive one deterministic version plan instead of discovering follow-up package bumps across repeated CI runs."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Release publication remains protected and continues to promote only exact qualified artifacts."
+  ],
+  "documentation": [
+    "Documents the package-group manifest, generated version-plan workflow, dependency trains, and independent plugin release boundary."
+  ],
+  "knownLimitations": [
+    "The planner validates and explains package changes but does not choose semantic impact for an author."
+  ],
+  "rollback": [
+    "Revert the version-authority manifest and planner; existing immutable release receipts and published artifacts remain unchanged."
+  ],
+  "validation": [
+    "Version-authority fixtures cover direct package changes, transitive packed-workspace consumers, semantic bumps, continuous release-range histories, chart bindings, and unrelated changes.",
+    "CI contract tests verify that the package-discipline lane invokes the deterministic planner."
+  ],
+  "packages": []
+}

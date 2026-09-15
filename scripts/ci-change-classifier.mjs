@@ -3,6 +3,17 @@
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import {
+  loadPackageVersionAuthority,
+  publishedPackageForChangedPath,
+} from './lib/package-version-authority.mjs';
+
+const packageVersionAuthority = loadPackageVersionAuthority();
+const pluginPackageManifests = new Set(
+  packageVersionAuthority.packages
+    .filter(({ publicationSet }) => publicationSet === 'plugin-platform-packages')
+    .map(({ manifest }) => manifest),
+);
 
 const booleanOutputs = [
   'metadata_only',
@@ -55,8 +66,6 @@ const metadataPatterns = [
 ];
 
 const rootDependencyPattern = /^(?:package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/;
-
-const publishedPackageSourcePattern = /^packages\/(?:shared|backend-host|frontend-host|enterprise-plugin-api|plugin-sdk|plugin-runtime|plugin-installer|plugin-manager)\/(?!Dockerfile(?:\..*)?$|third_party_licenses\.json$|README(?:\.md)?$|CHANGELOG\.md$|docs\/)/;
 
 const identityRehearsalPatterns = [
   /^\.github\/workflows\/(?:identity-protocol-rehearsal|entra-id-rehearsal)\.yml$/,
@@ -128,7 +137,9 @@ const classifiers = {
     /^test\/e2e\/plugin-platform/,
   ],
   plugin_packaging: [
-    /^packages\/(?:enterprise-plugin-api|plugin-sdk|plugin-runtime|plugin-installer|plugin-manager)\/package\.json$/,
+    (path) => pluginPackageManifests.has(path),
+    /^scripts\/(?:lib\/)?package-version-(?:authority|plan)(?:\.|$)/,
+    /^scripts\/published-package-version-discipline\.test\.mjs$/,
     /^scripts\/(?:publish-(?:plugin|host)-package-set|verify-(?:plugin|host)-package-tarballs|package-tarball-contract|check-published-package-version-discipline|check-workspace-dependency-version-drift|enterpriseglue-distribution-lock)/,
     /^\.github\/workflows\/(?:plugin-package-release|publish-(?:backend-host|frontend-host|plugin-api|shared))\.yml$/,
     rootDependencyPattern,
@@ -157,6 +168,8 @@ const classifiers = {
   workflow_or_release: [
     /^\.github\/(?:workflows|actions)\//,
     /^\.release-notes\/schema\.json$/,
+    /^scripts\/(?:lib\/)?package-version-(?:authority|plan)(?:\.|$)/,
+    /^scripts\/published-package-version-discipline\.test\.mjs$/,
     /^scripts\/(?:check-ci-aggregate-contract|ci-(?:change-classifier|change-detection|observability)|dedupe-release-changelog|engine-compatibility-workflow|published-package-workflow|security-workflow-contract|evaluate-ci-needs|(?:pr-)?release-|run-release-|prepare-release-|fetch-release-candidate|publish-(?:plugin|host)-package-set|verify-(?:plugin|host)-package-tarballs|package-tarball-contract|check-(?:release|plugin-package-release|plugin-toolchain-release|host-chart-release|published-package-version-discipline|workspace-dependency-version-drift)|plan-plugin-toolchain-charts|helm-chart-archive)/,
     /^docs\/runbooks\/release-artifact-promotion\.md$/,
     /^docs\/development\/(?:ci-and-release-routing|release-notes-process)\.md$/,
@@ -200,7 +213,9 @@ function normalizePath(value) {
 }
 
 function matches(path, patterns) {
-  return patterns.some((pattern) => pattern.test(path));
+  return patterns.some((pattern) => (
+    typeof pattern === 'function' ? pattern(path) : pattern.test(path)
+  ));
 }
 
 function fullClassification({ enablePluginPackage }) {
@@ -253,7 +268,7 @@ export function classifyChangedFiles(rawPaths, {
   const runPluginPackage = enablePluginPackage && (raw.plugin_packaging || raw.plugin_contract || unknownHighRisk);
   const runPluginImages = raw.toolchain_container || raw.plugin_contract || unknownHighRisk;
   const runPackageDiscipline = raw.plugin_packaging || unknownHighRisk
-    || paths.some((path) => publishedPackageSourcePattern.test(path));
+    || paths.some((path) => publishedPackageForChangedPath(packageVersionAuthority, path));
   const runComposeRender = raw.application_container || raw.helm || unknownHighRisk;
   const runSecurityScan = securityScanOnSmokeOnly ? runCiImages : (runCiImages || raw.toolchain_container);
   const runReleaseReadiness = raw.workflow_or_release || raw.plugin_packaging || raw.toolchain_container

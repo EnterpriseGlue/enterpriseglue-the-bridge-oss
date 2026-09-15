@@ -6,12 +6,15 @@ import {
   createNpmRegistryClient,
   processPackageSet,
 } from './publish-plugin-package-set.mjs';
+import {
+  loadPackageVersionAuthority,
+  publicationOrder,
+} from './lib/package-version-authority.mjs';
 
-export const HOST_PACKAGE_ORDER = [
-  '@enterpriseglue/shared',
-  '@enterpriseglue/backend-host',
-  '@enterpriseglue/frontend-host',
-];
+export const HOST_PACKAGE_ORDER = publicationOrder(
+  loadPackageVersionAuthority(),
+  'host-packages',
+);
 
 async function main() {
   const [mode, directoryArgument] = process.argv.slice(2);
