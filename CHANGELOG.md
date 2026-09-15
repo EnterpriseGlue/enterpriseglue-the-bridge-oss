@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.28.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.0...v0.28.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **codex:** harden staging drain recovery guidance ([8365bc5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8365bc53e3d7dda154b47408f701acd48ee7b564))
+
 ## [0.28.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.6...v0.28.0) (2026-09-15)
 
 
