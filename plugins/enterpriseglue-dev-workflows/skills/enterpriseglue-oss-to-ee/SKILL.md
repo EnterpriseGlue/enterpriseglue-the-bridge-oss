@@ -5,6 +5,9 @@ description: Use when the user invokes the legacy /oss-to-ee workflow or asks fo
 
 # EnterpriseGlue /oss-to-ee (retired)
 
+Read `../../references/repository-lifecycle.json`. The lifecycle registry is
+authoritative and permits only an explicitly requested `historical-read` for EE.
+
 The standalone EE repository is not a forward-development or release target.
 Do not create or modify EE worktrees, branches, package bumps, pull requests,
 dispatches, or releases.

@@ -7,6 +7,7 @@ import { classifyChangedFiles } from '../plugins/enterpriseglue-dev-workflows/sk
 import { pngDimensions } from '../plugins/enterpriseglue-dev-workflows/skills/enterpriseglue-ui-evidence/scripts/audit-screenshots.mjs'
 import { selectAuthzLanes } from '../plugins/enterpriseglue-dev-workflows/skills/enterpriseglue-access-governance-verify/scripts/select-authz-lanes.mjs'
 import { analyzeParity } from '../plugins/enterpriseglue-dev-workflows/skills/enterpriseglue-contract-parity/scripts/check-contract-parity.mjs'
+import { evaluateRepositoryLifecycle, loadRepositoryLifecycle } from '../plugins/enterpriseglue-dev-workflows/scripts/check-repository-lifecycle.mjs'
 
 const root = new URL('..', import.meta.url).pathname
 const pluginRoot = join(root, 'plugins/enterpriseglue-dev-workflows')
@@ -93,6 +94,65 @@ test('OSS delivery has no write path to the retired EE repository', () => {
     const instructions = readFileSync(join(pluginRoot, 'skills', skill, 'SKILL.md'), 'utf8')
     assert.match(instructions, /Do not create or modify EE worktrees/)
     assert.match(instructions, /owning plugin repository/)
+  }
+})
+
+test('repository lifecycle blocks retired EE except for explicit historical reads', () => {
+  const registry = loadRepositoryLifecycle()
+  const ee = registry.repositories.find(
+    (repository) => repository.fullName === 'EnterpriseGlue/enterpriseglue-the-bridge-ee',
+  )
+
+  assert.equal(ee.status, 'retired')
+  assert.equal(ee.archived, true)
+  for (const operation of ['read', 'write', 'status', 'ci', 'dependencies', 'release', 'deploy']) {
+    assert.equal(
+      evaluateRepositoryLifecycle(ee.fullName, { operation, registry }).allowed,
+      false,
+      `${operation} must be blocked for retired EE`,
+    )
+  }
+  assert.equal(
+    evaluateRepositoryLifecycle(ee.fullName, {
+      operation: 'historical-read',
+      allowHistorical: true,
+      registry,
+    }).allowed,
+    true,
+  )
+  assert.equal(
+    evaluateRepositoryLifecycle('EnterpriseGlue/enterpriseglue-the-bridge-oss', {
+      operation: 'release',
+      registry,
+    }).allowed,
+    true,
+  )
+})
+
+test('lifecycle-sensitive skills consult the shared repository registry', () => {
+  const lifecycleSensitiveSkills = [
+    'enterpriseglue-changelog',
+    'enterpriseglue-ci-compare',
+    'enterpriseglue-ci-debug',
+    'enterpriseglue-deps',
+    'enterpriseglue-hotfix',
+    'enterpriseglue-local-deploy',
+    'enterpriseglue-new-change',
+    'enterpriseglue-oss-to-ee',
+    'enterpriseglue-plugin-development',
+    'enterpriseglue-post-ship-watch',
+    'enterpriseglue-release',
+    'enterpriseglue-release-publish-watch',
+    'enterpriseglue-security-check',
+    'enterpriseglue-ship',
+    'enterpriseglue-status',
+    'enterpriseglue-sync-ee',
+    'enterpriseglue-test',
+  ]
+
+  for (const skill of lifecycleSensitiveSkills) {
+    const instructions = readFileSync(join(pluginRoot, 'skills', skill, 'SKILL.md'), 'utf8')
+    assert.match(instructions, /repository-lifecycle\.json/, `${skill} lifecycle registry`)
   }
 })
 

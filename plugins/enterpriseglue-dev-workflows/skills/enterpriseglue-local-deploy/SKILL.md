@@ -11,6 +11,8 @@ and `scripts/deploy-localhost.sh` before deploying. Use
 
 Codex adaptation:
 - Treat `/local-deploy` as the explicit workflow trigger.
+- Read `../../references/repository-lifecycle.json` and run the plugin-root
+  lifecycle guard for the `deploy` operation. Never deploy a retired repository.
 - Only run from the active worktree unless the user explicitly chooses another path.
 - Free only the ports described by the workflow or ports the user explicitly chooses.
 - Ensure workspace dependencies and any required plugin registry auth before

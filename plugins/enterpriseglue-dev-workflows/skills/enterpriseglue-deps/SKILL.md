@@ -9,6 +9,9 @@ Read `.windsurf/workflows/deps.md` from the resolved repository root when presen
 
 Codex adaptation:
 - Treat `/deps` as the explicit workflow trigger.
+- Read `../../references/repository-lifecycle.json` before selecting repositories.
+  Do not inspect or update dependencies for a retired repository unless the user
+  explicitly requests a read-only historical audit.
 - Do not update dependencies on `main`; require an isolated worktree branch.
 - Always produce the version map before changing dependency versions.
 - Major upgrades require explicit user approval per package or approved grouped peer-unblock set.

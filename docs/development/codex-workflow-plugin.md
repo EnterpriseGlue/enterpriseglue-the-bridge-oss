@@ -34,7 +34,22 @@ codex plugin add enterpriseglue-dev-workflows@enterpriseglue
 
 After pulling an updated plugin, reinstall it and start a new Codex thread so
 the updated skills are loaded. Do not hand-edit the marketplace or installed
-plugin cache.
+plugin cache. Remove or move aside legacy personal `~/.codex/skills/enterpriseglue-*`
+copies before reinstalling because personal skills can shadow the maintained
+plugin.
+
+## Repository lifecycle guard
+
+The shared `references/repository-lifecycle.json` file is the source of truth
+for active and retired core repositories. Lifecycle-sensitive skills read that
+registry before selecting repository scope. The bundled
+`scripts/check-repository-lifecycle.mjs` guard blocks status, CI, dependency,
+release, deployment, and write operations against retired repositories. Only an
+explicit `historical-read` operation can inspect a retired repository, and it
+must also pass `--allow-historical`.
+
+The standalone EE repository is retired and excluded by default. Forward work
+belongs in the OSS host or the independently owned plugin repository.
 
 ## Included workflows
 

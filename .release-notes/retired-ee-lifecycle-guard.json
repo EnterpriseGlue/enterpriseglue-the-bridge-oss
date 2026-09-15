@@ -1,0 +1,47 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "retired-ee-lifecycle-guard",
+  "type": "fix",
+  "scope": "developer-workflows",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Adds a shared repository-lifecycle guard for retired EE and prevents workflow-plugin tests from selecting unrelated heavyweight CI lanes.",
+  "userImpact": [
+    "EnterpriseGlue status, CI, dependency, release, deployment, and implementation workflows no longer include standalone EE unless a read-only historical audit is explicitly requested.",
+    "Workflow-plugin-only changes use contract and policy validation without selecting host release readiness or unrelated application, database, browser, and image matrices."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Reinstall the EnterpriseGlue development-workflows plugin and remove legacy personal EnterpriseGlue skill copies that shadow it."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The lifecycle guard blocks accidental write, release, synchronization, and deployment actions against the archived EE repository."
+  ],
+  "documentation": [
+    "Updates the versioned Codex workflow plugin guide with lifecycle-registry and personal-skill precedence guidance."
+  ],
+  "knownLimitations": [
+    "Repositories not listed in the core lifecycle registry continue to be routed by their owning workflow and repository instructions."
+  ],
+  "rollback": [
+    "Revert the workflow-plugin change; reactivating the EE repository remains a separate explicitly authorized governance decision."
+  ],
+  "validation": [
+    "Codex plugin tests assert that retired EE is blocked for status, CI, dependencies, release, deployment, and writes, while explicit historical reads remain available.",
+    "CI classifier fixtures assert that workflow-plugin tests use the developer-workflow fast path and do not fan out to host release readiness, PostgreSQL, Oracle, application-image, plugin-image, tenancy, backstop, identity, or deployment lanes."
+  ],
+  "packages": []
+}
