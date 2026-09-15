@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Features
 
 * **codex:** add cloud staging delivery workflow ([be2f3bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/be2f3bc88b2962ff5435caf70991c9f940776b9e))
-* **codex:** add cloud staging delivery workflow ([0d584cd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0d584cd109a0210618f658fbbe2ae4bdf7ba639d))
 
 ## [0.27.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.27.5...v0.27.6) (2026-09-15)
 
