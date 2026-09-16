@@ -1,0 +1,46 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "staging-runtime-config-ownership",
+  "type": "fix",
+  "scope": "developer-workflows",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Prevents staging infrastructure work from overwriting release-owned provisioning, readiness and heartbeat configuration.",
+  "userImpact": [
+    "Staging delivery guidance now distinguishes first-bootstrap metadata from release-owned serving configuration.",
+    "Future staging troubleshooting fails closed on API/worker disagreement and retains incident locks until tenant routing is restored."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Reinstall version 0.1.12 of the EnterpriseGlue development-workflows plugin after merging this change."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The guidance requires exact serving configuration, incident-bound evidence and generation-conditional retained-lock recovery."
+  ],
+  "documentation": [
+    "Updates the staging-delivery skill and maintained workflow-plugin guide."
+  ],
+  "knownLimitations": [
+    "Executable staging recovery identities remain fixed in the independently maintained EnterpriseGlue Cloud repository."
+  ],
+  "rollback": [
+    "Revert the plugin guidance and version bump; this does not alter deployed Cloud resources."
+  ],
+  "validation": [
+    "Run the bundled plugin tests, official Codex skill and plugin validators, documentation-boundary guard, and release-note validation."
+  ],
+  "packages": []
+}
