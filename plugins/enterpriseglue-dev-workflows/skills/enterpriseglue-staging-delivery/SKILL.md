@@ -64,10 +64,19 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    workflow identity are being qualified. Enabling it authorizes future
    staging capacity pressure to move staging test tenants and retire Previous;
    it never shortens production's fallback window or authorizes production.
-11. When asked to push a quick change, explain that targeted local checks happen
+11. Treat tenant provisioning registrations, release-readiness targets and the
+   shard heartbeat as release-activation-owned configuration after the control
+   plane exists. Protected Terraform metadata may seed a first bootstrap and
+   remain a recovery mirror, but an ordinary plan must resolve the exact serving
+   API/worker values and fail closed if the pair is missing, unhealthy,
+   inconsistent or malformed. Never let an unrelated infrastructure apply copy
+   an older metadata snapshot over a promoted release. A retained-lock repair
+   must be incident-bound, generation-conditional and prove restored public
+   tenant routing before releasing the lock.
+12. When asked to push a quick change, explain that targeted local checks happen
    during development, protected CI still verifies the proposed revision, and
    staging deployment remains separate from publication and merge. Do not call
    an OSS tag or passing CI “deployed.”
-12. Finish with the exact current state, blocker or protected disposition, the
+13. Finish with the exact current state, blocker or protected disposition, the
     next safe action, and whether that action is read-only, staging-mutating, or
     production-mutating.

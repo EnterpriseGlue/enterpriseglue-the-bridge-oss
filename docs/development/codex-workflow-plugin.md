@@ -78,6 +78,12 @@ selects a narrower incident-bound continuation: it re-attests the signed sole
 runtime and exact original residuals, prunes only those UID/resourceVersion-bound
 objects, and cannot replay the completed database, tenant, route, gateway or
 control-plane effects.
+After the staging control plane exists, provisioning registrations, release
+readiness targets and the shard heartbeat are release-activation-owned. The
+staging skill requires Terraform to read and preserve the serving API/worker
+values, reject disagreement or partial service state, and use protected
+environment metadata only as a bootstrap seed and recovery mirror. This keeps
+an unrelated infrastructure apply from silently restoring an older release.
 `agents/openai.yaml` metadata is generated and validated for every skill.
 
 Repository scripts and tests remain the authority for deterministic behavior;
