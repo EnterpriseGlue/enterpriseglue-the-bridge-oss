@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **codex:** preserve staging runtime config ownership ([4ba9fc7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4ba9fc79b0e77b2954e52199ea1ea9976fd961d9))
-* **codex:** preserve staging runtime config ownership ([2443346](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/24433461091e90b584370982af5dd6dd887a42e6))
 
 ## [0.28.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.2...v0.28.3) (2026-09-15)
 
