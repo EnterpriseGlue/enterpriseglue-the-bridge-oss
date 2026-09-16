@@ -72,7 +72,12 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    inconsistent or malformed. Never let an unrelated infrastructure apply copy
    an older metadata snapshot over a promoted release. A retained-lock repair
    must be incident-bound, generation-conditional and prove restored public
-   tenant routing before releasing the lock.
+   tenant routing before releasing the lock. When deployment keeps worker
+   admission closed longer than the release-readiness lifetime, complete all
+   rollout mutations, reopen only the receipt-bound epoch while retaining the
+   shared lock, and wait for the real worker probes before tenant-routed
+   acceptance. Never fabricate or directly extend readiness to break that
+   circular wait.
 12. When asked to push a quick change, explain that targeted local checks happen
    during development, protected CI still verifies the proposed revision, and
    staging deployment remains separate from publication and merge. Do not call
