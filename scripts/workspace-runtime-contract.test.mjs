@@ -180,20 +180,22 @@ test('derives published plugin host identity from the immutable release tag', as
     /default_host_version=.*packages\/plugin-sdk\/src\/platform\.ts/,
     'non-release image builds must derive host identity from the checked-in platform contract',
   );
-  assert.match(workflow, /host_version="\$\{default_host_version\}"/);
+  assert.match(workflow, /host_version="\$default_host_version"/);
   assert.match(
     workflow,
     /host_version="\$\{image_version#v\}"/,
     'release builds must derive host identity from the immutable release version',
   );
   assert.equal(
-    [...workflow.matchAll(/ENTERPRISEGLUE_HOST_VERSION=\$\{\{ steps\.meta\.outputs\.host_version \}\}/g)].length,
+    [...workflow.matchAll(/build-args: \$\{\{ steps\.component\.outputs\.build_args \}\}/g)].length,
     2,
     'both protected backend image build attempts must inject the release host version',
   );
+  assert.match(workflow, /HOST_VERSION: \$\{\{ needs\.prepare\.outputs\.host_version \}\}/);
+  assert.match(workflow, /build_args="ENTERPRISEGLUE_HOST_VERSION=\$HOST_VERSION"/);
   assert.match(
     workflow,
-    /process\.env\.ENTERPRISEGLUE_HOST_VERSION !== '\$\{\{ steps\.meta\.outputs\.host_version \}\}'/,
+    /process\.env\.ENTERPRISEGLUE_HOST_VERSION !== '\$HOST_VERSION'/,
   );
 });
 
@@ -246,4 +248,11 @@ test('packages compiled shared migrations in the production backend image', asyn
     /COPY --from=build \/repo\/packages\/shared\/src\/db\/migrations/,
     'raw TypeScript migrations are not executable in the production image',
   );
+});
+
+test('removes build-only node-gyp from the production backend runtime', async () => {
+  const dockerfile = await readFile(new URL('backend/Dockerfile.prod', rootUrl), 'utf8');
+
+  assert.match(dockerfile, /apk del --no-network node-gyp \$\{npm_packages\}/);
+  assert.match(dockerfile, /! apk info -e node-gyp/);
 });

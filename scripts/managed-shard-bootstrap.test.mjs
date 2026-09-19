@@ -118,6 +118,7 @@ test('runner never invokes TypeORM synchronize and executes only the signed sche
   assert.match(dockerfile, /^RUN apk add --no-cache --upgrade \\\n(?:\s+[a-z0-9.-]+ \\\n){6}\s+libcrypt1-2\.44$/m)
   assert.match(dockerfile, /^\s+libcurl-openssl4 \\$/m)
   assert.match(dockerfile, /^\s+wget \\$/m)
+  assert.match(dockerfile, /RUN apk del --no-network node-gyp && ! apk info -e node-gyp/)
   assert.doesNotMatch(dockerfile, /EG_MANAGED_SHARD_BOOTSTRAP_ENABLED/)
   assert.match(postgresHarness, /postgres:16\.15-alpine3\.24@sha256:cf78e766/)
   assert.match(postgresHarness, /Rejected superuser mutated the pristine schema/)

@@ -11,6 +11,10 @@ RUN apk add --no-cache --upgrade \
       wget \
       libcrypt1-2.44
 
+# The pinned predecessor retains a build-only tool with vulnerable Undici.
+# Bootstrap executes Node scripts but never compiles native addons at runtime.
+RUN apk del --no-network node-gyp && ! apk info -e node-gyp
+
 COPY --chown=65532:65532 scripts/managed-shard-bootstrap.mjs /opt/enterpriseglue-bootstrap/managed-shard-bootstrap.mjs
 COPY --chown=65532:65532 scripts/managed-shard-bootstrap-contract.mjs /opt/enterpriseglue-bootstrap/managed-shard-bootstrap-contract.mjs
 COPY --chown=65532:65532 infra/database/managed-shard-bootstrap-manifest.json /opt/enterpriseglue-bootstrap/managed-shard-bootstrap-manifest.json
