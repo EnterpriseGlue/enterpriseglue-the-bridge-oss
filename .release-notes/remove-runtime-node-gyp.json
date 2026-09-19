@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "remove-runtime-node-gyp",
+  "type": "security",
+  "scope": "OSS host and managed-shard runtime images",
+  "breaking": false,
+  "audiences": ["operators", "security"],
+  "summary": "Remove the unused node-gyp build tool from production runtime images so fixed-version Undici advisories do not block exact-candidate security qualification.",
+  "userImpact": [],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": ["The plugin-manager Compose example now names the current 0.1.9 package version; no runtime setting changes."],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "Remove runtime node-gyp rather than suppressing CVE-2026-84961 and related Undici findings in the candidate image scan.",
+    "The backend and managed-shard bootstrap images remain subject to the full exact-image vulnerability gate."
+  ],
+  "documentation": ["The release notes record the runtime image security remediation and its verification."],
+  "knownLimitations": [],
+  "rollback": ["Reverting to the preceding images restores the vulnerable runtime package and requires a separate security decision."],
+  "validation": [
+    "Build and scan the backend and managed-shard bootstrap runtime images with the exact release-candidate Trivy severity gate.",
+    "Run the managed-shard bootstrap PostgreSQL smoke and protected candidate readiness pipeline."
+  ],
+  "packages": []
+}

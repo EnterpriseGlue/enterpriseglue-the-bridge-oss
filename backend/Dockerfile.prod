@@ -96,7 +96,8 @@ USER root
 RUN set -eux; \
     apk upgrade --no-cache; \
     npm_packages="$(awk -F: '$1 == "P" && $2 ~ /^npm(-[0-9]+)?$/ { print $2 }' /lib/apk/db/installed)"; \
-    if [ -n "${npm_packages}" ]; then apk del --no-network ${npm_packages}; fi; \
+    apk del --no-network node-gyp ${npm_packages}; \
+    ! apk info -e node-gyp; \
     rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
 COPY --from=zlib-security-build --chown=0:0 \
     /patched-zlib/usr/lib/libz.so.1.3.2 \
