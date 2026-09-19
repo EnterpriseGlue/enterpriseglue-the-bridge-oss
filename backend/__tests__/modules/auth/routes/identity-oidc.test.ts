@@ -115,8 +115,8 @@ describe('provider-neutral OIDC routes', () => {
     refreshTokenRepository.update.mockResolvedValue({ affected: 1 });
     refreshTokenRepository.findOneBy.mockResolvedValue({ deviceInfo: null });
     externalIdentityRepository.find.mockResolvedValue([]);
-    tenantService.getById.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active' });
-    tenantService.getBySlug.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active' });
+    tenantService.getById.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active', placementKey: 'shard-a', placementEpoch: 1 });
+    tenantService.getBySlug.mockResolvedValue({ id: 'tenant-default', slug: 'default', status: 'active', placementKey: 'shard-a', placementEpoch: 1 });
     tenantService.getByHostname.mockResolvedValue(null);
     tenantService.ensureSsoMember.mockResolvedValue(undefined);
     tenantService.hasMembership.mockResolvedValue(true);

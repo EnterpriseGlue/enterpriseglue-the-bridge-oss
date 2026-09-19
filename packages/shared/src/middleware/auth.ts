@@ -110,13 +110,19 @@ async function establishNativeSessionTenant(req: Request, payload: UserJwtPayloa
   if (!tenant || tenant.status !== 'active' || tenant.slug !== payload.tenantSlug) {
     throw Errors.unauthorized('Session tenant is no longer active');
   }
-  if (req.tenant && req.tenant.tenantId !== tenant.id) {
+  const routedTenant = req.tenant;
+  if (routedTenant && (routedTenant.tenantId !== tenant.id || routedTenant.tenantSlug !== tenant.slug)) {
     throw Errors.forbidden('Session tenant does not match the requested tenant');
+  }
+  if (routedTenant && ((routedTenant.placementKey !== undefined && routedTenant.placementKey !== tenant.placementKey)
+    || (routedTenant.placementEpoch !== undefined && routedTenant.placementEpoch !== Number(tenant.placementEpoch)))) {
+    throw Errors.unauthorized('Session tenant placement is no longer current');
   }
   if (!await tenantService.hasMembership(payload.userId, tenant.id)) {
     throw Errors.forbidden('Tenant membership is no longer active');
   }
   req.tenant = {
+    ...routedTenant,
     tenantId: tenant.id,
     tenantSlug: tenant.slug,
     placementKey: tenant.placementKey,

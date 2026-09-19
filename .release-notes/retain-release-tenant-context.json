@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "retain-release-tenant-context",
+  "type": "fix",
+  "scope": "pooled SaaS tenant authentication",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "security"
+  ],
+  "summary": "Preserve verified tenant release placement through browser session authentication so Cloud administration can issue release-aware identities.",
+  "userImpact": [
+    "Tenant administrators can open Cloud Releases and managed engine controls after signing in."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Session authentication still checks tenant membership and now rejects stale routed placement while retaining only server-verified release assertion metadata."
+  ],
+  "documentation": [
+    "The release note records the authentication-context fix and its targeted regression checks."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous OSS host release if needed; no tenant data rollback is involved."
+  ],
+  "validation": [
+    "Run pooled tenant authentication and placement middleware regression tests, package checks, and the protected CI gate."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.7",
+      "newVersion": "0.19.8",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.17",
+      "newVersion": "0.17.18",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.4",
+      "newVersion": "0.22.5",
+      "impact": "patch"
+    }
+  ]
+}
