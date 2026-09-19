@@ -12,6 +12,7 @@ import { Request, Response, NextFunction } from 'express';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
+import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 
 const bpmnRequestContext = vi.hoisted(() => ({
   updateBpmnEngineRequestContext: vi.fn(),
@@ -180,6 +181,71 @@ describe('auth middleware', () => {
   });
 
   describe('requireAuth', () => {
+    async function withPooledSession(work: () => Promise<void>) {
+      const originalMode = config.tenancyMode;
+      config.tenancyMode = 'pooled';
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      vi.mocked(jwt.verifyToken).mockReturnValue({
+        userId: 'user-1', type: 'access', tenantId: 'alpha-id', tenantSlug: 'alpha',
+        sessionId: '00000000-0000-0000-0000-000000000001',
+      });
+      vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
+        if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, isEmailVerified: true, email: 'user@example.test' }) };
+        if (entity === RefreshToken) return { findOneBy: vi.fn().mockResolvedValue({ id: '00000000-0000-0000-0000-000000000001' }) };
+        throw new Error('Unexpected repository');
+      } } as any);
+      const tenantRead = vi.spyOn(tenantService, 'getById').mockResolvedValue({ id: 'alpha-id', slug: 'alpha',
+        status: 'active', placementKey: 'shard-a', placementEpoch: 7 } as any);
+      const membershipRead = vi.spyOn(tenantService, 'hasMembership').mockResolvedValue(true);
+      try { await work(); } finally {
+        tenantRead.mockRestore();
+        membershipRead.mockRestore();
+        config.tenancyMode = originalMode;
+      }
+    }
+
+    it('retains verified v3 release placement through a tenant-scoped browser session', async () => {
+      await withPooledSession(async () => {
+        req.params = { tenantSlug: 'alpha' };
+        req.hostname = 'app.enterpriseglue.test';
+        req.originalUrl = '/api/t/alpha/tenant/cloud-identity';
+        req.headers!['x-eg-tenant-placement-v3'] = 'header.payload.signature';
+        const placementVerification = vi.spyOn(tenantService, 'verifyPlacementClaimV3').mockReturnValue({
+          tenantId: 'alpha-id', tenantSlug: 'alpha', shardId: 'shard-a', placementEpoch: 7,
+          releaseId: 'release-a', assignmentEpoch: 9, correlationId: 'route-correlation',
+        } as any);
+        const hostnameRead = vi.spyOn(tenantService, 'getByHostname').mockResolvedValue(null);
+        try {
+          const routeNext = vi.fn();
+          await resolveTenantContext()(req as Request, res as Response, routeNext);
+          expect(routeNext).toHaveBeenCalledExactlyOnceWith();
+          next = vi.fn(() => expect(getTenantDatabaseContext()).toEqual(req.tenant));
+
+          await requireAuth(req as Request, res as Response, next);
+
+          expect(next).toHaveBeenCalledExactlyOnceWith();
+          expect(req.tenant).toMatchObject({ placementAssertionVersion: 'v3', placementCorrelationId: 'route-correlation',
+            releaseId: 'release-a', assignmentEpoch: 9 });
+          expect(tenantService.hasMembership).toHaveBeenCalledWith('user-1', 'alpha-id');
+        } finally {
+          placementVerification.mockRestore();
+          hostnameRead.mockRestore();
+        }
+      });
+    });
+
+    it.each([{ placementKey: 'old-shard', placementEpoch: 7 }, { placementKey: 'shard-a', placementEpoch: 6 }])('rejects stale routed placement during browser session authentication (%j)', async (placement) => {
+      await withPooledSession(async () => {
+        req.tenant = { tenantId: 'alpha-id', tenantSlug: 'alpha', ...placement,
+          placementAssertionVersion: 'v3', releaseId: 'release-a', assignmentEpoch: 9 };
+
+        await requireAuth(req as Request, res as Response, next);
+
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+        expect(tenantService.hasMembership).not.toHaveBeenCalled();
+      });
+    });
+
     it('accepts valid bearer token', async () => {
       req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
       (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', platformRole: 'user', email: 'user@example.com' });
