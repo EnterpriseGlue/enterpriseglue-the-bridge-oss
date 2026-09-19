@@ -10,9 +10,7 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **auth:** retain verified tenant release context ([74078f9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/74078f98245ffd40bec16c3410abdcc558818741))
-* **auth:** retain verified tenant release context ([74815b9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/74815b9c7260002f25fb52e1775da3863620d29c))
 * **security:** remove node-gyp from runtime images ([f87ed41](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f87ed41d2888c9d8150a7635f5092ccb86981943))
-* **security:** remove node-gyp from runtime images ([975a5d6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/975a5d621f0732f0c2ef1f3a8acd48fea2aec399))
 
 ## [0.28.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.3...v0.28.4) (2026-09-16)
 
