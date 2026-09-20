@@ -10,15 +10,20 @@ export interface DatabaseStartupBootstrapOperations {
 }
 
 /**
- * Run application-owned bootstrap work only when the application explicitly
- * owns schema/data initialization. Verify-mode replicas are read-only during
- * startup; a separately credentialed predecessor/owner job must prepare them.
+ * Run application-owned schema and seed work only when the application
+ * explicitly owns database initialization. Configuration-bundle bootstrap has
+ * its own validate/apply authority and must run in both database startup modes;
+ * otherwise a verify-mode release silently ignores an explicitly authorized
+ * configuration apply.
  */
 export async function runDatabaseStartupBootstraps(
   mode: DatabaseStartupMode,
   operations: DatabaseStartupBootstrapOperations,
 ) {
-  if (mode === 'verify') return false;
+  if (mode === 'verify') {
+    await operations.applyConfigBundle();
+    return false;
+  }
 
   await operations.migrateEnterpriseDatabase?.();
   await operations.bootstrapAdmin();

@@ -14,14 +14,31 @@ function operations() {
 }
 
 describe('runDatabaseStartupBootstraps', () => {
-  it('does not invoke any bootstrap writer for verify-only replicas', async () => {
+  it('keeps schema and seed writers disabled while honoring config bootstrap authority in verify mode', async () => {
     const bootstrapOperations = operations();
 
     await expect(runDatabaseStartupBootstraps('verify', bootstrapOperations)).resolves.toBe(false);
 
-    for (const operation of Object.values(bootstrapOperations)) {
-      expect(operation).not.toHaveBeenCalled();
-    }
+    expect(bootstrapOperations.applyConfigBundle).toHaveBeenCalledOnce();
+    expect(bootstrapOperations.migrateEnterpriseDatabase).not.toHaveBeenCalled();
+    expect(bootstrapOperations.bootstrapAdmin).not.toHaveBeenCalled();
+    expect(bootstrapOperations.bootstrapDefaultEmailConfig).not.toHaveBeenCalled();
+    expect(bootstrapOperations.seedGitProviders).not.toHaveBeenCalled();
+    expect(bootstrapOperations.seedEnvironmentTags).not.toHaveBeenCalled();
+  });
+
+  it('fails verify-mode startup when the independently authorized config bootstrap fails', async () => {
+    const bootstrapOperations = operations();
+    bootstrapOperations.applyConfigBundle.mockRejectedValue(new Error('config bootstrap failed'));
+
+    await expect(runDatabaseStartupBootstraps('verify', bootstrapOperations)).rejects.toThrow('config bootstrap failed');
+
+    expect(bootstrapOperations.applyConfigBundle).toHaveBeenCalledOnce();
+    expect(bootstrapOperations.migrateEnterpriseDatabase).not.toHaveBeenCalled();
+    expect(bootstrapOperations.bootstrapAdmin).not.toHaveBeenCalled();
+    expect(bootstrapOperations.bootstrapDefaultEmailConfig).not.toHaveBeenCalled();
+    expect(bootstrapOperations.seedGitProviders).not.toHaveBeenCalled();
+    expect(bootstrapOperations.seedEnvironmentTags).not.toHaveBeenCalled();
   });
 
   it('preserves application-owned bootstrap work in apply mode', async () => {
