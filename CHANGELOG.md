@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **config:** honor bootstrap authority in verify mode ([2cf705d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2cf705df63e1033cccd62771156fb91650e0a43b))
-* **config:** honor bootstrap authority in verify mode ([df393de](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/df393ded6af6b825a9f10b433462b72ee2e0a013))
 
 ## [0.28.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.4...v0.28.5) (2026-09-19)
 
