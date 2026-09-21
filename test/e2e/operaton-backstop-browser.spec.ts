@@ -94,7 +94,7 @@ async function openPanel(page: Page, engineName: string) {
   await row.getByRole('button', { name: 'Options' }).click();
   await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Edit engine' });
-  await expect(dialog.getByRole('heading', { name: 'Native authorization backstop' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Optional engine read-access backup' })).toBeVisible();
   return dialog;
 }
 
@@ -238,11 +238,11 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
         }
 
         const dialog = await openPanel(page, engine.name);
-        const backstop = dialog.getByRole('region', { name: 'Native authorization backstop' });
+        const backstop = dialog.getByRole('region', { name: 'Optional engine read-access backup' });
         await expect(backstop).toBeVisible();
-        await backstop.getByLabel('EnterpriseGlue group ID').fill(groupId);
-        await backstop.getByLabel('Engine group ID (write-only)').fill(nativeGroupId);
-        const inputGeometry = await backstop.getByLabel('Engine group ID (write-only)').evaluate((element) => {
+        await backstop.getByLabel('EnterpriseGlue access group ID (required)').fill(groupId);
+        await backstop.getByLabel('Matching engine group ID (required, write-only)').fill(nativeGroupId);
+        const inputGeometry = await backstop.getByLabel('Matching engine group ID (required, write-only)').evaluate((element) => {
           const peer = document.getElementById('backstop-authz-group-id');
           const own = element.getBoundingClientRect();
           const other = peer?.getBoundingClientRect();

@@ -87,9 +87,10 @@ describe('EngineBackstopPanel', () => {
     })
 
     renderPanel(connectionMode)
-    expect(await screen.findByText('Native authorization backstop')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('EnterpriseGlue group ID'), { target: { value: 'group-ops' } })
-    fireEvent.change(screen.getByLabelText('Engine group ID (write-only)'), { target: { value: 'camunda-operators' } })
+    expect(await screen.findByText('Optional engine read-access backup')).toBeInTheDocument()
+    expect(screen.getByText(/it does not decide tenant ownership and is separate from tenant mappings and SSO mappings/i)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('EnterpriseGlue access group ID (required)'), { target: { value: 'group-ops' } })
+    fireEvent.change(screen.getByLabelText('Matching engine group ID (required, write-only)'), { target: { value: 'camunda-operators' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save manual mapping' }))
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(expect.stringContaining('/backstop/mappings'), expect.anything(), expect.anything()))
     expect(screen.queryByDisplayValue('camunda-operators')).not.toBeInTheDocument()

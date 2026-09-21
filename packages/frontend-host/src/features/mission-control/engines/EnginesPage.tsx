@@ -83,6 +83,229 @@ type EngineTypeId = 'ion' | 'operaton' | 'camunda7'
 type RuntimeAccessScope = 'engine_wide' | 'resource_aware'
 type DeploymentIntegration = 'enterpriseglue_proxy' | 'direct_engine'
 
+type EngineChoice = {
+  id: string
+  label: string
+  description: string
+}
+
+type FieldRequirement = 'Required' | 'Optional' | 'Conditional'
+
+const ENGINE_TYPE_ITEMS: EngineChoice[] = [
+  { id: 'ion', label: 'ION Engine', description: 'Connect to an EnterpriseGlue ION workflow engine.' },
+  { id: 'operaton', label: 'Operaton', description: 'Connect through an Operaton-compatible REST API.' },
+  { id: 'camunda7', label: 'Camunda 7', description: 'Connect through a Camunda 7-compatible REST API.' },
+]
+
+const AUTH_ITEMS: EngineChoice[] = [
+  {
+    id: 'basic',
+    label: 'Username and password',
+    description: 'EnterpriseGlue sends HTTP Basic credentials to the endpoint on every request.',
+  },
+  {
+    id: 'bearer',
+    label: 'Bearer token',
+    description: 'EnterpriseGlue sends a fixed API token to the endpoint on every request.',
+  },
+  {
+    id: 'oauth2-client-credentials',
+    label: 'OAuth 2.0 client credentials',
+    description: 'EnterpriseGlue obtains short-lived access tokens using a client ID, client secret, and token URL.',
+  },
+  {
+    id: 'none',
+    label: 'No EnterpriseGlue-managed credentials',
+    description: 'Available only for an approved customer-managed sidecar or gateway that authenticates the downstream engine itself.',
+  },
+]
+
+const CONNECTION_MODE_ITEMS: EngineChoice[] = [
+  {
+    id: 'direct',
+    label: 'Connect directly to the engine',
+    description: 'The endpoint URL is the engine REST API. EnterpriseGlue authenticates directly with the engine.',
+  },
+  {
+    id: 'customer_sidecar',
+    label: 'Connect through a customer gateway or sidecar',
+    description: 'The endpoint URL is a customer-managed gateway. The gateway owns the separate connection and credentials to the engine.',
+  },
+]
+
+const RUNTIME_ACCESS_SCOPE_ITEMS: EngineChoice[] = [
+  {
+    id: 'engine_wide',
+    label: 'Grant access to the whole engine',
+    description: 'A person with engine access can use every process, decision, and runtime resource visible through this engine.',
+  },
+  {
+    id: 'resource_aware',
+    label: 'Grant access to selected runtime resources',
+    description: 'Use Access Control to grant specific processes, decisions, or Runtime Resource Sets after saving the engine.',
+  },
+]
+
+const TENANCY_MODE_ITEMS: EngineChoice[] = [
+  {
+    id: 'dedicated',
+    label: 'One tenant — this tenant',
+    description: 'Use this engine only for the tenant you are currently administering. No tenant mapping is needed.',
+  },
+  {
+    id: 'shared',
+    label: 'Multiple tenants — map each runtime resource',
+    description: 'Share one engine across tenants. Every runtime resource must resolve to exactly one tenant before it becomes visible.',
+  },
+]
+
+const TENANT_MAPPING_STRATEGY_ITEMS: EngineChoice[] = [
+  {
+    id: 'engine_tenant_id',
+    label: 'Use the engine tenant ID',
+    description: 'Match the tenant identifier reported by the engine to an EnterpriseGlue tenant.',
+  },
+  {
+    id: 'deployment_target',
+    label: 'Use the project deployment target',
+    description: 'Resolve the tenant from the EnterpriseGlue project and deployment target that produced the runtime resource.',
+  },
+  {
+    id: 'explicit',
+    label: 'Maintain explicit tenant mappings',
+    description: 'An operator maps each external engine tenant identifier to a specific EnterpriseGlue tenant.',
+  },
+]
+
+const DEPLOYMENT_INTEGRATION_ITEMS: EngineChoice[] = [
+  {
+    id: 'enterpriseglue_proxy',
+    label: 'Deploy through EnterpriseGlue',
+    description: 'Authorized users deploy project files through EnterpriseGlue, which forwards them to the engine and records lineage.',
+  },
+  {
+    id: 'direct_engine',
+    label: 'Deploy from an external pipeline',
+    description: 'A customer pipeline deploys directly to the engine and sends EnterpriseGlue a deployment receipt for lineage and inventory.',
+  },
+]
+
+function requirementTagType(requirement: FieldRequirement): 'blue' | 'purple' | 'cool-gray' {
+  if (requirement === 'Required') return 'blue'
+  if (requirement === 'Conditional') return 'purple'
+  return 'cool-gray'
+}
+
+function SettingExplanation({
+  description,
+  requirement,
+  id,
+}: {
+  description: string
+  requirement: FieldRequirement
+  id?: string
+}) {
+  return (
+    <div
+      id={id}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-2)', marginTop: 'var(--spacing-2)' }}
+    >
+      <Tag size="sm" type={requirementTagType(requirement)}>{requirement}</Tag>
+      <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.8125rem', lineHeight: 1.4 }}>
+        {description}
+      </span>
+    </div>
+  )
+}
+
+function ExplainedDropdown({
+  id,
+  title,
+  placeholder,
+  items,
+  selectedId,
+  onChange,
+  disabled = false,
+  requirement = 'Required',
+}: {
+  id: string
+  title: string
+  placeholder: string
+  items: EngineChoice[]
+  selectedId: string
+  onChange: (id: string) => void
+  disabled?: boolean
+  requirement?: FieldRequirement
+}) {
+  const selectedItem = items.find((item) => item.id === selectedId) || null
+  const descriptionId = `${id}-description`
+  return (
+    <div className="eg-explained-dropdown">
+      <Dropdown
+        id={id}
+        aria-describedby={descriptionId}
+        titleText={`${title} (${requirement.toLowerCase()})`}
+        label={placeholder}
+        items={items}
+        itemToString={(item: EngineChoice | null) => item?.label || ''}
+        itemToElement={(item: EngineChoice | null) => (
+          <div style={{ display: 'grid', gap: '0.125rem', paddingBlock: '0.125rem', whiteSpace: 'normal' }}>
+            <span style={{ fontWeight: 500 }}>{item?.label || ''}</span>
+            <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', lineHeight: 1.35 }}>
+              {item?.description || ''}
+            </span>
+          </div>
+        )}
+        selectedItem={selectedItem}
+        onChange={({ selectedItem: nextItem }: { selectedItem?: EngineChoice | null }) => {
+          if (nextItem?.id) onChange(nextItem.id)
+        }}
+        disabled={disabled}
+      />
+      <SettingExplanation
+        id={descriptionId}
+        requirement={requirement}
+        description={selectedItem?.description || 'Choose the option that matches your environment.'}
+      />
+    </div>
+  )
+}
+
+function EngineFormSection({
+  id,
+  title,
+  description,
+  children,
+}: {
+  id: string
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  const headingId = `${id}-heading`
+  return (
+    <section
+      aria-labelledby={headingId}
+      style={{
+        display: 'grid',
+        gap: 'var(--spacing-5)',
+        padding: 'var(--spacing-5)',
+        border: '1px solid var(--cds-border-subtle)',
+        borderRadius: 8,
+        background: 'var(--cds-layer-01)',
+      }}
+    >
+      <div>
+        <h3 id={headingId} style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{title}</h3>
+        <p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)', fontSize: '0.875rem', lineHeight: 1.45 }}>
+          {description}
+        </p>
+      </div>
+      {children}
+    </section>
+  )
+}
+
 export type EngineMutationForm = {
   name: string
   baseUrl: string
@@ -108,6 +331,14 @@ export type EngineMutationForm = {
 type EngineMutationPayload = CreateEngineRequest | UpdateEngineRequest
 type EngineOnboardingSettings = Pick<PlatformSettings,
   'engineOnboardingMode' | 'engineAccessAuthority' | 'credentiallessCustomerSidecarsEnabled' | 'governanceBehavior'>
+
+export function isOAuth2ClientCredentialsFormIncomplete(
+  form: Pick<EngineMutationForm, 'authType' | 'username' | 'passwordEnc' | 'oauthTokenUrl'>,
+  editing?: { hasCredential?: boolean } | null,
+): boolean {
+  return form.authType === 'oauth2-client-credentials'
+    && (!form.username || (!form.passwordEnc && !editing?.hasCredential) || !form.oauthTokenUrl)
+}
 
 const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
   ion: 'ION-Engine',
@@ -1237,16 +1468,16 @@ function EngineRegistrationSection({ engine }: { engine: EngineInventory }) {
         <EngineRegistrationDetail label="Configuration ownership" value={engine.ownershipMode ? formatEngineRegistrationStatus(engine.ownershipMode) : '-'} />
         <EngineRegistrationDetail label="Last configuration apply" value={formatEngineTimestamp(engine.lastAppliedAt)} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
-        <EngineRegistrationDetail label="Tenancy topology" value={engine.tenancyMode === 'shared' ? 'Shared' : 'Dedicated'} tagValue={engine.tenancyMode || 'dedicated'} />
-        <EngineRegistrationDetail label="Owning tenant" value={engine.tenantId || (engine.tenancyMode === 'shared' ? 'Per runtime resource' : '-')} />
-        <EngineRegistrationDetail label="Tenant mapping strategy" value={formatEngineRegistrationStatus(engine.tenantMappingStrategy)} />
+        <EngineRegistrationDetail label="Who can use this engine" value={engine.tenancyMode === 'shared' ? 'Multiple tenants' : 'One tenant'} tagValue={engine.tenancyMode || 'dedicated'} />
+        <EngineRegistrationDetail label="Tenant owner" value={engine.tenantId || (engine.tenancyMode === 'shared' ? 'Set per runtime resource' : '-')} />
+        <EngineRegistrationDetail label="How resources map to tenants" value={formatEngineRegistrationStatus(engine.tenantMappingStrategy)} />
         <EngineRegistrationDetail label="Tenant mapping version" value={String(engine.tenantMappingVersion || 0)} />
         <EngineRegistrationDetail label="Tenant resolution" value={formatEngineRegistrationStatus(engine.tenantResolutionStatus)} tagValue={engine.tenantResolutionStatus || undefined} />
         <EngineRegistrationDetail label="Last tenant reconciliation" value={formatEngineTimestamp(engine.lastTenantReconciledAt)} />
-        <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
-        <EngineRegistrationDetail label="Connection mode" value={engine.connectionMode === 'customer_sidecar' ? 'Customer sidecar' : 'Direct'} />
-        <EngineRegistrationDetail label="Endpoint authentication" value={formatEngineAuthentication(engine)} />
-        <EngineRegistrationDetail label="Deployment integration" value={engine.deploymentIntegration === 'direct_engine' ? 'Direct engine deployment' : 'EnterpriseGlue proxy'} />
+        <EngineRegistrationDetail label="How access is granted" value={engine.runtimeAccessScope === 'resource_aware' ? 'Selected runtime resources' : 'Whole engine'} />
+        <EngineRegistrationDetail label="How EnterpriseGlue connects" value={engine.connectionMode === 'customer_sidecar' ? 'Customer gateway or sidecar' : 'Directly to the engine'} />
+        <EngineRegistrationDetail label="How EnterpriseGlue authenticates" value={formatEngineAuthentication(engine)} />
+        <EngineRegistrationDetail label="How deployments reach the engine" value={engine.deploymentIntegration === 'direct_engine' ? 'External pipeline' : 'Through EnterpriseGlue'} />
         <EngineRegistrationDetail label="Runtime metadata discovery" value={engine.metadataDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
         <EngineRegistrationDetail label="Deployment discovery" value={engine.deploymentDiscoveryEnabled === false ? 'Disabled' : 'Enabled'} />
         <EngineRegistrationDetail label="Discovery cadence" value={`${engine.reconciliationIntervalSeconds || 300} seconds`} />
@@ -1394,38 +1625,6 @@ export default function Engines() {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [selectedEngine, setSelectedEngine] = React.useState<EngineInventory | null>(null)
 
-  const TYPE_ITEMS = React.useMemo(() => ([
-    { id: 'ion', label: ENGINE_TYPE_LABELS.ion },
-    { id: 'operaton', label: ENGINE_TYPE_LABELS.operaton },
-    { id: 'camunda7', label: ENGINE_TYPE_LABELS.camunda7 },
-  ]), [])
-  const AUTH_ITEMS = React.useMemo(() => ([
-    { id: 'none', label: 'No EnterpriseGlue-managed credentials' },
-    { id: 'basic', label: 'Basic Auth (Username/Password)' },
-    { id: 'bearer', label: 'Bearer Token' },
-    { id: 'oauth2-client-credentials', label: 'OAuth2 Client Credentials' },
-  ]), [])
-  const CONNECTION_MODE_ITEMS = React.useMemo(() => ([
-    { id: 'direct' as const, label: 'Direct engine endpoint' },
-    { id: 'customer_sidecar' as const, label: 'Customer-managed sidecar or gateway' },
-  ]), [])
-  const RUNTIME_ACCESS_SCOPE_ITEMS = React.useMemo(() => ([
-    { id: 'engine_wide' as const, label: 'Engine-wide (distributed)' },
-    { id: 'resource_aware' as const, label: 'Resource-aware (central)' },
-  ]), [])
-  const TENANCY_MODE_ITEMS = React.useMemo(() => ([
-    { id: 'dedicated' as const, label: 'Dedicated — current tenant' },
-    { id: 'shared' as const, label: 'Shared — mapped runtime resources' },
-  ]), [])
-  const TENANT_MAPPING_STRATEGY_ITEMS = React.useMemo(() => ([
-    { id: 'engine_tenant_id' as const, label: 'Engine tenant ID' },
-    { id: 'deployment_target' as const, label: 'Deployment target' },
-    { id: 'explicit' as const, label: 'Explicit mapping' },
-  ]), [])
-  const DEPLOYMENT_INTEGRATION_ITEMS = React.useMemo(() => ([
-    { id: 'enterpriseglue_proxy' as const, label: 'EnterpriseGlue proxy' },
-    { id: 'direct_engine' as const, label: 'Direct engine with pipeline receipt' },
-  ]), [])
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
   // Fetch environment tags (read-only, used by engine owners/delegates too)
@@ -1554,8 +1753,7 @@ export default function Engines() {
   const canManageEditingSecrets = editing ? Boolean(editingActions?.canManageSecrets) : true
   const canSetEditingEnvironment = editing ? Boolean(editingActions?.canSetEnvironment || editingActions?.canEdit) : true
   const areAuthFieldsReadOnly = areSourceOwnedFieldsReadOnly || Boolean(editing && !canManageEditingSecrets)
-  const isOAuth2ClientCredentialsIncomplete = form.authType === 'oauth2-client-credentials'
-    && (!form.username || !form.passwordEnc || !form.oauthTokenUrl)
+  const isOAuth2ClientCredentialsIncomplete = isOAuth2ClientCredentialsFormIncomplete(form, editing)
   const isCredentiallessEndpointInvalid = form.authType === 'none'
     && (form.connectionMode !== 'customer_sidecar' || platformSettingsQ.data?.credentiallessCustomerSidecarsEnabled !== true)
   const deploymentTargetsQ = useQuery({
@@ -1673,7 +1871,7 @@ export default function Engines() {
   const tableHeaders = React.useMemo(
     () => [
       { key: 'name', header: 'Name' },
-      { key: 'baseUrl', header: 'Base URL' },
+      { key: 'baseUrl', header: 'Endpoint URL' },
       { key: 'type', header: 'Type' },
       { key: 'environment', header: 'Environment' },
       { key: 'health', header: 'Health' },
@@ -2199,21 +2397,6 @@ export default function Engines() {
           />
         )}
         {editing && engineDetailSections.includes('runtime') && <EngineRuntimeResourcesSection resources={runtimeResourcesQ.data || []} loading={runtimeResourcesQ.isLoading} error={runtimeResourcesQ.error} />}
-        <TextInput
-          id="eng-name"
-          labelText="Name"
-          value={form.name}
-          onChange={(e) => setForm((f: any) => ({ ...f, name: (e.target as any).value }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        <TextInput
-          id="eng-url"
-          labelText="Base URL"
-          placeholder="http://localhost:8080/engine-rest"
-          value={form.baseUrl}
-          onChange={(e) => setForm((f: any) => ({ ...f, baseUrl: (e.target as any).value }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
         {editing && isExternallyManagedEngine(editing) && (
           <InlineNotification
             lowContrast
@@ -2259,281 +2442,346 @@ export default function Engines() {
             hideCloseButton
           />
         )}
-        {dockerLoopbackSuggestion && (
-          <InlineNotification
-            lowContrast
-            kind="warning"
-            title="Docker runtime warning"
-            subtitle={`If EnterpriseGlue is running in Docker and your engine is running on your host machine, localhost points to the container. Use ${dockerLoopbackSuggestion} instead.`}
-            hideCloseButton
-          />
-        )}
-        <Dropdown
-          id="eng-type"
-          titleText="Type"
-          label="Select type"
-          items={TYPE_ITEMS}
-          itemToString={(it: any) => it ? it.label : ''}
-          selectedItem={TYPE_ITEMS.find(i => i.id === form.type)}
-          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, type: selectedItem?.id }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        <Dropdown
-          id="eng-connection-mode"
-          titleText="Connection mode"
-          label="Select connection mode"
-          items={CONNECTION_MODE_ITEMS}
-          itemToString={(it: any) => it ? it.label : ''}
-          selectedItem={CONNECTION_MODE_ITEMS.find((item) => item.id === form.connectionMode)}
-          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, connectionMode: selectedItem?.id || 'direct' }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        {form.connectionMode === 'customer_sidecar' && (
+        {!editing && (
           <InlineNotification
             lowContrast
             kind="info"
-            title="Customer-managed endpoint authentication"
-            subtitle="The base URL must point to the customer sidecar or gateway. EnterpriseGlue runtime authorization remains active."
+            title="Required settings and defaults"
+            subtitle="Engine name and endpoint URL must be entered. Every required choice already has a default; review it before creating the engine. Optional and conditional settings are labelled, and shared engines require tenant mappings after creation."
             hideCloseButton
           />
         )}
-        <Dropdown
-          id="eng-tenancy-mode"
-          titleText="Tenancy topology"
-          label="Select tenancy topology"
-          items={TENANCY_MODE_ITEMS}
-          itemToString={(item: any) => item ? item.label : ''}
-          selectedItem={TENANCY_MODE_ITEMS.find((item) => item.id === form.tenancyMode)}
-          onChange={({ selectedItem }: any) => setForm((current: any) => ({
-            ...current,
-            tenancyMode: selectedItem?.id || 'dedicated',
-            runtimeAccessScope: selectedItem?.id === 'shared' ? 'resource_aware' : current.runtimeAccessScope,
-          }))}
-          disabled={Boolean(editing) || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        {!editing && form.tenancyMode === 'shared' && (
-          <>
-            <Dropdown
-              id="eng-tenant-mapping-strategy"
-              titleText="Tenant mapping strategy"
-              label="Select tenant mapping strategy"
-              items={TENANT_MAPPING_STRATEGY_ITEMS}
-              itemToString={(item: any) => item ? item.label : ''}
-              selectedItem={TENANT_MAPPING_STRATEGY_ITEMS.find((item) => item.id === form.tenantMappingStrategy)}
-              onChange={({ selectedItem }: any) => setForm((current: any) => ({
-                ...current,
-                tenantMappingStrategy: selectedItem?.id || 'engine_tenant_id',
-              }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending}
-            />
+        <EngineFormSection
+          id="engine-connection-settings"
+          title="Engine and connection"
+          description="Identify the engine and tell EnterpriseGlue which endpoint it should call."
+        >
+          <TextInput
+            id="eng-name"
+            labelText="Engine name (required)"
+            helperText="A recognizable name for engine selectors, access rules, and diagnostics."
+            value={form.name}
+            onChange={(e) => setForm((f: any) => ({ ...f, name: (e.target as any).value }))}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          />
+          <ExplainedDropdown
+            id="eng-type"
+            title="Engine product"
+            placeholder="Choose an engine product"
+            items={ENGINE_TYPE_ITEMS}
+            selectedId={form.type}
+            onChange={(type) => setForm((current: EngineMutationForm) => ({ ...current, type: type as EngineType }))}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          />
+          <ExplainedDropdown
+            id="eng-connection-mode"
+            title="How EnterpriseGlue connects"
+            placeholder="Choose a connection path"
+            items={CONNECTION_MODE_ITEMS}
+            selectedId={form.connectionMode}
+            onChange={(connectionMode) => setForm((current: EngineMutationForm) => ({ ...current, connectionMode: connectionMode as EngineConnectionMode }))}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          />
+          <TextInput
+            id="eng-url"
+            labelText="Endpoint URL (required)"
+            helperText={form.connectionMode === 'customer_sidecar'
+              ? 'Enter the customer-managed gateway or sidecar URL that EnterpriseGlue can reach.'
+              : 'Enter the engine REST API URL that EnterpriseGlue can reach.'}
+            placeholder={form.connectionMode === 'customer_sidecar'
+              ? 'https://gateway.example.com/engine'
+              : 'http://localhost:8080/engine-rest'}
+            value={form.baseUrl}
+            onChange={(e) => setForm((f: any) => ({ ...f, baseUrl: (e.target as any).value }))}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          />
+          {dockerLoopbackSuggestion && (
             <InlineNotification
               lowContrast
               kind="warning"
-              title="Shared engines start fail closed"
-              subtitle="Runtime resources remain hidden until a tenant mapping resolves exactly one tenant. Configure mappings after creating the engine."
+              title="Docker cannot reach this localhost URL"
+              subtitle={`When EnterpriseGlue runs in Docker and the engine runs on the host machine, use ${dockerLoopbackSuggestion} instead.`}
               hideCloseButton
             />
-          </>
-        )}
-        {!editing && form.tenancyMode === 'dedicated' && (
-          <InlineNotification
-            lowContrast
-            kind="info"
-            title="Dedicated engine"
-            subtitle="The engine is assigned to your current tenant. No raw tenant ID is required."
-            hideCloseButton
-          />
-        )}
-        <Dropdown
-          id="eng-runtime-access-scope"
-          titleText="Runtime access"
-          label="Select runtime access"
-          items={RUNTIME_ACCESS_SCOPE_ITEMS}
-          itemToString={(it: any) => it ? it.label : ''}
-          selectedItem={RUNTIME_ACCESS_SCOPE_ITEMS.find((item) => item.id === form.runtimeAccessScope)}
-          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, runtimeAccessScope: selectedItem?.id || 'engine_wide' }))}
-          disabled={form.tenancyMode === 'shared' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        {form.runtimeAccessScope === 'resource_aware' && (
-          <InlineNotification
-            lowContrast
-            kind="info"
-            title="Resource-aware runtime access"
-            subtitle="Use Access Control after saving to assign access to exact runtime resources or Runtime Resource Sets."
-            hideCloseButton
-          />
-        )}
-        <Dropdown
-          id="eng-deployment-integration"
-          titleText="Deployment integration"
-          label="Select deployment integration"
-          items={DEPLOYMENT_INTEGRATION_ITEMS}
-          itemToString={(it: any) => it ? it.label : ''}
-          selectedItem={DEPLOYMENT_INTEGRATION_ITEMS.find((item) => item.id === form.deploymentIntegration)}
-          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, deploymentIntegration: selectedItem?.id || 'enterpriseglue_proxy' }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        {form.deploymentIntegration === 'direct_engine' && (
-          <InlineNotification
-            lowContrast
-            kind="info"
-            title="Direct engine deployment"
-            subtitle="EnterpriseGlue deployment is disabled for this engine. Customer pipelines deploy directly and submit a deployment receipt for lineage and inventory."
-            hideCloseButton
-          />
-        )}
-        <Toggle
-          id="eng-metadata-discovery"
-          labelText="Runtime metadata discovery"
-          labelA="Disabled"
-          labelB="Enabled"
-          toggled={form.metadataDiscoveryEnabled}
-          onToggle={(checked) => setForm((f: any) => ({ ...f, metadataDiscoveryEnabled: checked }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        <Toggle
-          id="eng-deployment-discovery"
-          labelText="Deployment history discovery"
-          labelA="Disabled"
-          labelB="Enabled"
-          toggled={form.deploymentDiscoveryEnabled}
-          onToggle={(checked) => setForm((f: any) => ({ ...f, deploymentDiscoveryEnabled: checked }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        <TextInput
-          id="eng-reconciliation-interval"
-          type="number"
-          min={60}
-          max={86400}
-          step={60}
-          labelText="Discovery interval (seconds)"
-          value={form.reconciliationIntervalSeconds}
-          onChange={(event) => setForm((f: any) => ({ ...f, reconciliationIntervalSeconds: Number(event.target.value) }))}
-          disabled={!form.metadataDiscoveryEnabled || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        <Toggle id="eng-pipeline-receipts" labelText="Pipeline receipts" labelA="Disabled" labelB="Enabled" toggled={form.pipelineReceiptEnabled} onToggle={(checked) => setForm((f: any) => ({ ...f, pipelineReceiptEnabled: checked }))} disabled={form.deploymentIntegration !== 'direct_engine' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable} />
-        <Dropdown
-          id="eng-auth"
-          titleText="Auth"
-          label="Select auth"
-          items={AUTH_ITEMS}
-          itemToString={(it: any) => it ? it.label : ''}
-          selectedItem={AUTH_ITEMS.find(i => i.id === form.authType)}
-          onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, authType: selectedItem?.id }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-        />
-        {form.authType === 'none' && (
-          <InlineNotification
-            lowContrast
-            kind={isCredentiallessEndpointInvalid ? 'warning' : 'info'}
-            title={isCredentiallessEndpointInvalid ? 'Peer-authenticated sidecar is not permitted' : 'Peer-authenticated customer sidecar'}
-            subtitle={form.connectionMode !== 'customer_sidecar'
-              ? 'An endpoint without engine credentials is valid only for a customer-managed sidecar or gateway authenticated with peer-to-peer service tokens.'
-              : platformSettingsQ.data?.credentiallessCustomerSidecarsEnabled !== true
-                ? 'A platform administrator must allow peer-authenticated customer sidecars before this engine can be saved.'
-                : 'The sidecar uses peer-to-peer service tokens and stores no engine credentials. EnterpriseGlue still makes every authorization decision.'}
-            hideCloseButton
-          />
-        )}
-        {/* Environment Tag - only show dropdown if multiple tags exist */}
-        {hasMultipleTags && (
-          <Dropdown
-            id="eng-env"
-            titleText="Environment"
-            label="Select environment"
-            items={envTags!.map(t => ({ id: t.id, label: t.name, color: t.color }))}
-            itemToString={(it: any) => it ? it.label : ''}
-            selectedItem={envTags!.map(t => ({ id: t.id, label: t.name, color: t.color })).find(i => i.id === form.environmentTagId)}
-            onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, environmentTagId: selectedItem?.id || '' }))}
-            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || (editing && editing.environmentLocked) || !canSetEditingEnvironment}
-          />
-        )}
-        {/* Show read-only environment info when single tag */}
-        {hasSingleTag && (
-          <div style={{ marginBottom: 'var(--spacing-4)' }}>
-            <label style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>
-              Environment
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', padding: '8px 0' }}>
-              <div style={{ width: 12, height: 12, borderRadius: '50%', background: envTags![0].color || undefined }} />
-              <span style={{ fontSize: '14px' }}>{envTags![0].name}</span>
-              <Tag type="gray" size="sm">Auto-assigned</Tag>
+          )}
+          {hasMultipleTags && (
+            <div>
+              <Dropdown
+                id="eng-env"
+                titleText="Environment label (optional)"
+                label="Choose an environment"
+                items={envTags!.map(t => ({ id: t.id, label: t.name, color: t.color }))}
+                itemToString={(it: any) => it ? it.label : ''}
+                selectedItem={envTags!.map(t => ({ id: t.id, label: t.name, color: t.color })).find(i => i.id === form.environmentTagId)}
+                onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, environmentTagId: selectedItem?.id || '' }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || (editing && editing.environmentLocked) || !canSetEditingEnvironment}
+              />
+              <SettingExplanation requirement="Optional" description="Use an environment label such as Development, Test, or Production to organize engines and deployment targets." />
             </div>
-          </div>
-        )}
-        {form.authType === 'basic' && (
-          <>
-            <TextInput
-              id="eng-user"
-              labelText="Username"
-              value={form.username}
-              onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-            />
-            <TextInput
-              id="eng-pass"
-              type="password"
-              labelText="Password"
-              placeholder={editing?.hasCredential ? 'Enter a replacement password' : undefined}
-              value={form.passwordEnc}
-              onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
-            />
-          </>
-        )}
-        {form.authType === 'bearer' && (
-          <TextInput
-            id="eng-token"
-            type="password"
-            labelText="Bearer Token"
-            placeholder={editing?.hasCredential ? 'Enter a replacement API token' : 'Enter your API token'}
-            value={form.passwordEnc}
-            onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
+          )}
+          {hasSingleTag && (
+            <div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--cds-text-secondary)', display: 'block', marginBottom: 'var(--spacing-2)' }}>
+                Environment label (automatically assigned)
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: envTags![0].color || undefined }} />
+                <span style={{ fontSize: '0.875rem' }}>{envTags![0].name}</span>
+                <Tag type="gray" size="sm">Automatic</Tag>
+              </div>
+            </div>
+          )}
+        </EngineFormSection>
+
+        <EngineFormSection
+          id="engine-authentication-settings"
+          title="Endpoint authentication"
+          description="Choose how EnterpriseGlue proves its identity to the endpoint URL above. This is separate from user access inside EnterpriseGlue."
+        >
+          <ExplainedDropdown
+            id="eng-auth"
+            title="How EnterpriseGlue authenticates"
+            placeholder="Choose an authentication method"
+            items={AUTH_ITEMS}
+            selectedId={form.authType}
+            onChange={(authType) => setForm((current: EngineMutationForm) => ({ ...current, authType: authType as EngineAuthType }))}
             disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
           />
-        )}
-        {form.authType === 'oauth2-client-credentials' && (
-          <>
-            <TextInput
-              id="eng-oauth-client"
-              labelText="Client ID"
-              value={form.username}
-              onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          {form.authType === 'none' && (
+            <InlineNotification
+              lowContrast
+              kind={isCredentiallessEndpointInvalid ? 'warning' : 'info'}
+              title={isCredentiallessEndpointInvalid ? 'This authentication choice cannot be saved' : 'Customer gateway authentication is allowed'}
+              subtitle={form.connectionMode !== 'customer_sidecar'
+                ? 'No credentials is valid only when the connection goes through a customer-managed sidecar or gateway.'
+                : platformSettingsQ.data?.credentiallessCustomerSidecarsEnabled !== true
+                  ? 'A platform administrator must first allow peer-authenticated customer sidecars in Platform Settings.'
+                  : 'The gateway authenticates the downstream engine. EnterpriseGlue still makes every user and runtime authorization decision.'}
+              hideCloseButton
             />
+          )}
+          {form.authType === 'basic' && (
+            <>
+              <TextInput
+                id="eng-user"
+                labelText="Username (conditional)"
+                helperText="Enter the username required by this endpoint."
+                value={form.username}
+                onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+              <TextInput
+                id="eng-pass"
+                type="password"
+                labelText="Password (conditional)"
+                helperText={editing?.hasCredential
+                  ? 'Leave blank to keep the stored password, or enter a replacement.'
+                  : 'Enter the password required by this endpoint.'}
+                placeholder={editing?.hasCredential ? 'Keep stored password' : undefined}
+                value={form.passwordEnc}
+                onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+            </>
+          )}
+          {form.authType === 'bearer' && (
             <TextInput
-              id="eng-oauth-secret"
+              id="eng-token"
               type="password"
-              labelText="Client Secret"
-              placeholder={editing?.hasCredential ? 'Enter a replacement client secret' : undefined}
+              labelText="Bearer token (conditional)"
+              helperText={editing?.hasCredential
+                ? 'Leave blank to keep the stored token, or enter a replacement.'
+                : 'Required when Bearer token authentication is selected.'}
+              placeholder={editing?.hasCredential ? 'Keep stored token' : 'Enter the endpoint API token'}
               value={form.passwordEnc}
               onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
               disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
-            <TextInput
-              id="eng-oauth-token-url"
-              labelText="Token URL"
-              placeholder="https://keycloak.example.com/realms/acme/protocol/openid-connect/token"
-              value={form.oauthTokenUrl}
-              onChange={(e) => setForm((f: any) => ({ ...f, oauthTokenUrl: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          )}
+          {form.authType === 'oauth2-client-credentials' && (
+            <>
+              <TextInput
+                id="eng-oauth-client"
+                labelText="Client ID (required for OAuth 2.0)"
+                value={form.username}
+                onChange={(e) => setForm((f: any) => ({ ...f, username: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+              <TextInput
+                id="eng-oauth-secret"
+                type="password"
+                labelText={editing?.hasCredential ? 'Client secret (optional replacement)' : 'Client secret (required for OAuth 2.0)'}
+                helperText={editing?.hasCredential ? 'Leave blank to keep the stored client secret.' : undefined}
+                placeholder={editing?.hasCredential ? 'Keep stored client secret' : undefined}
+                value={form.passwordEnc}
+                onChange={(e) => setForm((f: any) => ({ ...f, passwordEnc: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+              <TextInput
+                id="eng-oauth-token-url"
+                labelText="Token URL (required for OAuth 2.0)"
+                helperText="The OAuth 2.0 endpoint used to obtain access tokens."
+                placeholder="https://identity.example.com/oauth2/token"
+                value={form.oauthTokenUrl}
+                onChange={(e) => setForm((f: any) => ({ ...f, oauthTokenUrl: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+              <TextInput
+                id="eng-oauth-scopes"
+                labelText="Scopes (optional)"
+                helperText="Space-separated scopes requested from the token endpoint."
+                value={form.oauthScopes}
+                onChange={(e) => setForm((f: any) => ({ ...f, oauthScopes: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+              <TextInput
+                id="eng-oauth-audience"
+                labelText="Audience (optional)"
+                helperText="Set only when the identity provider requires an audience value."
+                value={form.oauthAudience}
+                onChange={(e) => setForm((f: any) => ({ ...f, oauthAudience: (e.target as any).value }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+            </>
+          )}
+        </EngineFormSection>
+
+        <EngineFormSection
+          id="engine-access-settings"
+          title="Tenant ownership and runtime access"
+          description="Tenant ownership decides which tenant owns runtime data. Runtime access decides whether access is granted for the whole engine or for selected resources. Neither setting creates user-group mappings."
+        >
+          {!editing && (
+            <ExplainedDropdown
+              id="eng-tenancy-mode"
+              title="Who will use this engine?"
+              placeholder="Choose tenant ownership"
+              items={TENANCY_MODE_ITEMS}
+              selectedId={form.tenancyMode}
+              onChange={(tenancyMode) => setForm((current: EngineMutationForm) => ({
+                ...current,
+                tenancyMode: tenancyMode as 'dedicated' | 'shared',
+                runtimeAccessScope: tenancyMode === 'shared' ? 'resource_aware' : current.runtimeAccessScope,
+              }))}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
-            <TextInput
-              id="eng-oauth-scopes"
-              labelText="Scopes"
-              value={form.oauthScopes}
-              onChange={(e) => setForm((f: any) => ({ ...f, oauthScopes: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          )}
+          {!editing && form.tenancyMode === 'shared' && (
+            <>
+              <ExplainedDropdown
+                id="eng-tenant-mapping-strategy"
+                title="How runtime resources map to tenants"
+                placeholder="Choose a tenant mapping method"
+                items={TENANT_MAPPING_STRATEGY_ITEMS}
+                selectedId={form.tenantMappingStrategy}
+                onChange={(tenantMappingStrategy) => setForm((current: EngineMutationForm) => ({
+                  ...current,
+                  tenantMappingStrategy: tenantMappingStrategy as EngineTenantMappingStrategy,
+                }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending}
+                requirement="Conditional"
+              />
+              <InlineNotification
+                lowContrast
+                kind="warning"
+                title="Shared engines hide unmapped resources"
+                subtitle="After creating the engine, configure tenant mappings in its Tenancy panel. A runtime resource remains hidden until it resolves to exactly one tenant."
+                hideCloseButton
+              />
+            </>
+          )}
+          {editing && (
+            <InlineNotification
+              lowContrast
+              kind="info"
+              title="Change tenant ownership in the Tenancy panel above"
+              subtitle="Topology changes require a preview and explicit acknowledgement, so they are kept separate from ordinary engine settings."
+              hideCloseButton
             />
-            <TextInput
-              id="eng-oauth-audience"
-              labelText="Audience"
-              value={form.oauthAudience}
-              onChange={(e) => setForm((f: any) => ({ ...f, oauthAudience: (e.target as any).value }))}
-              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areAuthFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          )}
+          <ExplainedDropdown
+            id="eng-runtime-access-scope"
+            title="How access is granted"
+            placeholder="Choose an access scope"
+            items={RUNTIME_ACCESS_SCOPE_ITEMS}
+            selectedId={form.runtimeAccessScope}
+            onChange={(runtimeAccessScope) => setForm((current: EngineMutationForm) => ({ ...current, runtimeAccessScope: runtimeAccessScope as RuntimeAccessScope }))}
+            disabled={form.tenancyMode === 'shared' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          />
+          {form.tenancyMode === 'shared' && (
+            <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.8125rem' }}>
+              Shared engines always use selected-resource access so tenant boundaries can be enforced.
+            </p>
+          )}
+        </EngineFormSection>
+
+        <EngineFormSection
+          id="engine-deployment-settings"
+          title="Deployments and discovery"
+          description="Choose how deployments arrive, then decide which metadata EnterpriseGlue should keep synchronized."
+        >
+          <ExplainedDropdown
+            id="eng-deployment-integration"
+            title="How deployments reach the engine"
+            placeholder="Choose a deployment path"
+            items={DEPLOYMENT_INTEGRATION_ITEMS}
+            selectedId={form.deploymentIntegration}
+            onChange={(deploymentIntegration) => setForm((current: EngineMutationForm) => ({ ...current, deploymentIntegration: deploymentIntegration as DeploymentIntegration }))}
+            disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          />
+          <div>
+            <Toggle
+              id="eng-metadata-discovery"
+              labelText="Discover processes, decisions, and runtime resources"
+              labelA="Off"
+              labelB="On"
+              toggled={form.metadataDiscoveryEnabled}
+              onToggle={(checked) => setForm((f: any) => ({ ...f, metadataDiscoveryEnabled: checked }))}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
             />
-          </>
-        )}
+            <SettingExplanation requirement="Optional" description="Keeps EnterpriseGlue's runtime inventory synchronized with the engine. Enabled by default." />
+          </div>
+          {form.metadataDiscoveryEnabled && (
+            <TextInput
+              id="eng-reconciliation-interval"
+              type="number"
+              min={60}
+              max={86400}
+              step={60}
+              labelText="Discovery refresh interval in seconds (required while discovery is on)"
+              helperText="Allowed range: 60 seconds to 86,400 seconds. Default: 300 seconds."
+              value={form.reconciliationIntervalSeconds}
+              onChange={(event) => setForm((f: any) => ({ ...f, reconciliationIntervalSeconds: Number(event.target.value) }))}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+            />
+          )}
+          <div>
+            <Toggle
+              id="eng-deployment-discovery"
+              labelText="Discover deployment history"
+              labelA="Off"
+              labelB="On"
+              toggled={form.deploymentDiscoveryEnabled}
+              onToggle={(checked) => setForm((f: any) => ({ ...f, deploymentDiscoveryEnabled: checked }))}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+            />
+            <SettingExplanation requirement="Optional" description="Imports deployment history from the engine when the adapter supports it. Enabled by default." />
+          </div>
+          {form.deploymentIntegration === 'direct_engine' && (
+            <div>
+              <Toggle
+                id="eng-pipeline-receipts"
+                labelText="Accept deployment receipts from external pipelines"
+                labelA="Off"
+                labelB="On"
+                toggled={form.pipelineReceiptEnabled}
+                onToggle={(checked) => setForm((f: any) => ({ ...f, pipelineReceiptEnabled: checked }))}
+                disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+              />
+              <SettingExplanation requirement="Conditional" description="Used only for external-pipeline deployments. Receipts let EnterpriseGlue record lineage without performing the deployment." />
+            </div>
+          )}
+        </EngineFormSection>
       </FormModal>
     </PageLayout>
   )

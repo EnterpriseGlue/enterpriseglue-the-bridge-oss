@@ -1502,8 +1502,8 @@ test.describe('Engine tenancy provisioning journeys', () => {
       await page.getByRole('button', { name: /Add (?:your first )?engine/ }).click();
       const modal = page.getByRole('dialog', { name: 'Add engine' });
       await expect(modal).toBeVisible();
-      await modal.getByLabel('Name', { exact: true }).fill(originalName);
-      await modal.getByLabel('Base URL', { exact: true }).fill(
+      await modal.getByLabel('Engine name (required)', { exact: true }).fill(originalName);
+      await modal.getByLabel('Endpoint URL (required)', { exact: true }).fill(
         'http://camunda-mock:9080/engine-rest',
       );
       await modal.locator('#eng-type').click();
@@ -1549,9 +1549,9 @@ test.describe('Engine tenancy provisioning journeys', () => {
       await row.getByRole('button', { name: 'Options' }).click();
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       const editModal = page.getByRole('dialog', { name: 'Edit engine' });
-      await expect(editModal.getByRole('heading', { name: 'Tenancy and tenant mappings' })).toBeVisible();
-      await expect(editModal.getByLabel('Proposed topology')).toHaveValue('dedicated');
-      await editModal.getByLabel('Name', { exact: true }).fill(updatedName);
+      await expect(editModal.getByRole('heading', { name: 'Tenant ownership and tenant mappings' })).toBeVisible();
+      await expect(editModal.getByLabel('Who will use this engine? (required)')).toContainText('One tenant — this tenant');
+      await editModal.getByLabel('Engine name (required)', { exact: true }).fill(updatedName);
 
       const updateResponsePromise = page.waitForResponse(
         (response) =>
@@ -2308,17 +2308,14 @@ test.describe('Engine tenancy provisioning journeys', () => {
       await page.getByRole('button', { name: /Add (?:your first )?engine/ }).click();
       const modal = page.getByRole('dialog', { name: 'Add engine' });
       await expect(modal).toBeVisible();
-      await modal.getByLabel('Name', { exact: true }).fill(name);
-      await modal.getByLabel('Base URL', { exact: true }).fill(runtimeBaseUrl);
+      await modal.getByLabel('Engine name (required)', { exact: true }).fill(name);
+      await modal.getByLabel('Endpoint URL (required)', { exact: true }).fill(runtimeBaseUrl);
       await modal.locator('#eng-type').click();
       await page.getByRole('option', { name: 'Camunda 7', exact: true }).click();
       if (mode === 'shared') {
         await modal.locator('#eng-tenancy-mode').click();
-        await page.getByRole('option', {
-          name: 'Shared — mapped runtime resources',
-          exact: true,
-        }).click();
-        await expect(modal.getByText('Shared engines start fail closed')).toBeVisible();
+        await page.getByText('Multiple tenants — map each runtime resource', { exact: true }).click();
+        await expect(modal.getByText('Shared engines hide unmapped resources')).toBeVisible();
       }
       const deploymentDiscovery = modal.getByRole('switch', {
         name: 'Deployment history discovery',
@@ -2441,7 +2438,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
       await sharedRow.getByRole('button', { name: 'Options' }).click();
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       const editModal = page.getByRole('dialog', { name: 'Edit engine' });
-      await expect(editModal.getByRole('heading', { name: 'Tenancy and tenant mappings' })).toBeVisible();
+      await expect(editModal.getByRole('heading', { name: 'Tenant ownership and tenant mappings' })).toBeVisible();
       await expect(editModal.getByText('No tenant mappings')).toBeVisible();
 
       const applyMappingThroughUi = async (
