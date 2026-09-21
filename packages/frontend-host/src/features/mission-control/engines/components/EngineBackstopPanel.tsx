@@ -141,11 +141,11 @@ export default function EngineBackstopPanel({
   if (readDecision.state === 'hidden') return null
 
   return (
-    <section aria-label="Native authorization backstop" style={{ display: 'grid', gap: 12, borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 16 }}>
+    <section aria-label="Optional engine read-access backup" style={{ display: 'grid', gap: 12, borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 16 }}>
       <div>
-        <h3 style={{ margin: 0 }}>Native authorization backstop</h3>
+        <h3 style={{ margin: 0 }}>Optional engine read-access backup</h3>
         <p style={{ margin: '6px 0 0', color: 'var(--cds-text-secondary)' }}>
-          Optionally mirrors exact EnterpriseGlue group READ access into a Camunda 7 or Operaton engine. EnterpriseGlue remains the authority; only grants owned by a successful backstop run can be removed by rollback.
+          When enabled in Platform Settings, this copies reviewed EnterpriseGlue group read access into a compatible Camunda 7 or Operaton engine. EnterpriseGlue remains the authority; only grants created by a successful backup run can be removed here.
         </p>
       </div>
       {!readDecision.allowed && <InlineNotification kind="warning" title="Backstop status unavailable" subtitle={readDecision.reason || 'You need permission to view the mirrored authorization backstop.'} hideCloseButton />}
@@ -156,8 +156,10 @@ export default function EngineBackstopPanel({
         {history.error && <InlineNotification kind="warning" title="Backstop history unavailable" subtitle={getUiErrorMessage(history.error, 'The latest receipt may still be visible above.')} hideCloseButton />}
 
         <div style={{ display: 'grid', gap: 8 }}>
-          <h4 style={{ margin: 0 }}>Group mappings</h4>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--cds-text-secondary)' }}>Native engine group IDs are write-only. Stored mappings are shown only as opaque references.</p>
+          <h4 style={{ margin: 0 }}>Authorization group mappings (optional)</h4>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--cds-text-secondary)' }}>
+            Link an EnterpriseGlue access group to the matching group in the engine. This copies read access only; it does not decide tenant ownership and is separate from tenant mappings and SSO mappings. Engine group IDs are write-only and stored mappings are shown only as opaque references.
+          </p>
           {status.data?.mappings?.length ? <div style={{ display: 'grid', gap: 6 }}>
             {status.data.mappings.map((mapping) => <div key={mapping.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Tag type={mapping.isActive ? 'green' : 'cool-gray'}>{mapping.isActive ? 'active' : 'inactive'}</Tag>
@@ -169,8 +171,8 @@ export default function EngineBackstopPanel({
           {!manageDecision.allowed && <InlineNotification kind="info" title="Mapping changes unavailable" subtitle={manageDecision.reason || 'You need the mapping-management permission to add a manual mapping.'} hideCloseButton />}
           {manageDecision.allowed && <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
-              <TextInput id="backstop-authz-group-id" labelText="EnterpriseGlue group ID" value={authzGroupId} onChange={(event) => setAuthzGroupId(event.target.value)} />
-              <TextInput id="backstop-native-group-id" type="password" labelText="Engine group ID (write-only)" value={nativeGroupId} onChange={(event) => setNativeGroupId(event.target.value)} helperText="The native ID is encrypted and is never returned to this screen." />
+              <TextInput id="backstop-authz-group-id" labelText="EnterpriseGlue access group ID (required)" helperText="The group whose reviewed read access should be copied." value={authzGroupId} onChange={(event) => setAuthzGroupId(event.target.value)} />
+              <TextInput id="backstop-native-group-id" type="password" labelText="Matching engine group ID (required, write-only)" value={nativeGroupId} onChange={(event) => setNativeGroupId(event.target.value)} helperText="The native ID is encrypted and is never returned to this screen." />
             </div>
             {writeMapping.error && <InlineNotification kind="error" title="Could not save mapping" subtitle={getUiErrorMessage(writeMapping.error, 'Check the group IDs, engine tenancy, and mapping ownership.')} hideCloseButton />}
             <Button size="sm" kind="secondary" disabled={!canWriteMapping || writeMapping.isPending} title={!manageDecision.allowed ? manageDecision.reason : undefined} onClick={() => writeMapping.mutate()}>{writeMapping.isPending ? 'Saving mapping…' : 'Save manual mapping'}</Button>

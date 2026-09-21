@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Button,
+  Dropdown,
   InlineLoading,
   InlineNotification,
   Tag,
@@ -33,20 +34,42 @@ import {
 const MAPPING_STRATEGIES: Array<{ id: EngineTenantMappingStrategy; label: string; description: string }> = [
   {
     id: 'engine_tenant_id',
-    label: 'Engine tenant ID',
-    description: 'Map the tenant identifier reported by the engine.',
+    label: 'Use the engine tenant ID',
+    description: 'Match the tenant identifier reported by the engine to an EnterpriseGlue tenant.',
   },
   {
     id: 'deployment_target',
-    label: 'Deployment target',
-    description: 'Resolve tenancy from the EnterpriseGlue project deployment target.',
+    label: 'Use the project deployment target',
+    description: 'Resolve the tenant from the EnterpriseGlue project and deployment target that produced the runtime resource.',
   },
   {
     id: 'explicit',
-    label: 'Explicit mapping',
-    description: 'Use an operator-managed external-to-enterprise tenant mapping.',
+    label: 'Maintain explicit tenant mappings',
+    description: 'An operator maps each external engine tenant identifier to a specific EnterpriseGlue tenant.',
   },
 ]
+
+const TOPOLOGY_OPTIONS: Array<{ id: 'dedicated' | 'shared'; label: string; description: string }> = [
+  {
+    id: 'dedicated',
+    label: 'One tenant — this tenant',
+    description: 'The engine belongs only to the tenant you are currently administering. No tenant mapping is needed.',
+  },
+  {
+    id: 'shared',
+    label: 'Multiple tenants — map each runtime resource',
+    description: 'The engine is shared. Every runtime resource must resolve to exactly one tenant before it becomes visible.',
+  },
+]
+
+function optionElement(item: { label: string; description: string }) {
+  return (
+    <div style={{ display: 'grid', gap: 2, paddingBlock: 2, whiteSpace: 'normal' }}>
+      <span style={{ fontWeight: 500 }}>{item.label}</span>
+      <span style={{ color: 'var(--cds-text-secondary)', fontSize: 12, lineHeight: 1.35 }}>{item.description}</span>
+    </div>
+  )
+}
 
 const ACKNOWLEDGEMENT_LABELS: Record<EngineTenancyTransitionAcknowledgement, string> = {
   acknowledge_topology_change: 'I reviewed the topology change.',
@@ -433,7 +456,7 @@ export default function EngineTenancyPanel({
 
   return (
     <section
-      aria-label="Engine tenancy"
+      aria-label="Tenant ownership and tenant mappings"
       style={{
         border: '1px solid var(--color-border-primary)',
         borderRadius: 8,
@@ -445,9 +468,9 @@ export default function EngineTenancyPanel({
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Tenancy and tenant mappings</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Tenant ownership and tenant mappings</h3>
           <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            Dedicated engines belong to one tenant. Shared engines expose only explicitly resolved same-tenant runtime resources.
+            This controls which EnterpriseGlue tenant owns each runtime resource. It does not map users or authorization groups.
           </p>
         </div>
         <Tag type={statusTagType(currentDiagnostics.resolutionStatus)}>
@@ -468,36 +491,50 @@ export default function EngineTenancyPanel({
       )}
 
       <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-        <h4 style={{ margin: 0, fontSize: 14 }}>Topology transition</h4>
+        <div>
+          <h4 style={{ margin: 0, fontSize: 14 }}>Change who can use this engine</h4>
+          <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
+            Previewing a change shows which resources, assignments, and mappings will be affected before anything is updated.
+          </p>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-3)' }}>
-          <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-            Proposed topology
-            <select
-              aria-label="Proposed topology"
-              value={proposedMode}
-              onChange={(event) => setProposedMode(event.target.value as 'dedicated' | 'shared')}
+          <div className="eg-explained-dropdown">
+            <Dropdown
+              id={`engine-${engine.id}-proposed-topology`}
+              titleText="Who will use this engine? (required)"
+              label="Choose tenant ownership"
+              items={TOPOLOGY_OPTIONS}
+              itemToString={(item) => item?.label || ''}
+              itemToElement={optionElement}
+              selectedItem={TOPOLOGY_OPTIONS.find((item) => item.id === proposedMode)}
+              onChange={({ selectedItem }) => {
+                if (selectedItem) setProposedMode(selectedItem.id)
+              }}
               disabled={!canManage || previewTransitionM.isPending || applyTransitionM.isPending}
-              style={{ minHeight: 40, padding: '0 12px' }}
-            >
-              <option value="dedicated">Dedicated — current tenant</option>
-              <option value="shared">Shared — mapped runtime resources</option>
-            </select>
-          </label>
+            />
+            <p style={{ margin: '8px 0 0', color: 'var(--color-text-secondary)', fontSize: 13, lineHeight: 1.4 }}>
+              {TOPOLOGY_OPTIONS.find((item) => item.id === proposedMode)?.description}
+            </p>
+          </div>
           {proposedMode === 'shared' && (
-            <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-              Mapping strategy
-              <select
-                aria-label="Proposed mapping strategy"
-                value={proposedStrategy}
-                onChange={(event) => setProposedStrategy(event.target.value as EngineTenantMappingStrategy)}
+            <div className="eg-explained-dropdown">
+              <Dropdown
+                id={`engine-${engine.id}-proposed-mapping-strategy`}
+                titleText="How runtime resources map to tenants (required)"
+                label="Choose a tenant mapping method"
+                items={MAPPING_STRATEGIES}
+                itemToString={(item) => item?.label || ''}
+                itemToElement={optionElement}
+                selectedItem={MAPPING_STRATEGIES.find((item) => item.id === proposedStrategy)}
+                onChange={({ selectedItem }) => {
+                  if (selectedItem) setProposedStrategy(selectedItem.id)
+                }}
                 disabled={!canManage || previewTransitionM.isPending || applyTransitionM.isPending}
-                style={{ minHeight: 40, padding: '0 12px' }}
-              >
-                {MAPPING_STRATEGIES.map((strategy) => (
-                  <option key={strategy.id} value={strategy.id}>{strategy.label}</option>
-                ))}
-              </select>
-            </label>
+              />
+              <p style={{ margin: '8px 0 0', color: 'var(--color-text-secondary)', fontSize: 13, lineHeight: 1.4 }}>
+                {MAPPING_STRATEGIES.find((item) => item.id === proposedStrategy)?.description}
+              </p>
+            </div>
           )}
         </div>
         {proposedMode === 'shared' && (
@@ -505,8 +542,8 @@ export default function EngineTenancyPanel({
             lowContrast
             hideCloseButton
             kind="warning"
-            title="Shared topology is fail closed"
-            subtitle="The transition quarantines runtime inventory until the selected strategy resolves exactly one tenant. Engine Set access does not authorize shared runtime resources."
+            title="Shared engines hide unresolved resources"
+            subtitle="The transition quarantines runtime inventory until the selected method resolves exactly one tenant. Engine Set access alone does not authorize shared runtime resources."
           />
         )}
         <div>

@@ -35,6 +35,7 @@ import EnginesPage, {
   isConfigWarnEngine,
   isExternallyManagedEngine,
   isExternallyRegisteredEngine,
+  isOAuth2ClientCredentialsFormIncomplete,
 } from '@src/features/mission-control/engines/EnginesPage';
 import type { EngineMutationForm } from '@src/features/mission-control/engines/EnginesPage';
 import { apiClient } from '@src/shared/api/client';
@@ -162,6 +163,50 @@ describe('EnginesPage', () => {
       { includeManageableShared: 'true' },
       { credentials: 'include' },
     );
+  });
+
+  it('explains required, optional, and conditional engine settings in plain language', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /add your first engine/i }));
+
+    expect(await screen.findByText('Required settings and defaults')).toBeInTheDocument();
+    expect(screen.getByLabelText('Engine name (required)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Endpoint URL (required)')).toBeInTheDocument();
+    expect(screen.getByText('Engine and connection')).toBeInTheDocument();
+    expect(screen.getByText('Endpoint authentication')).toBeInTheDocument();
+    expect(screen.getByText('Tenant ownership and runtime access')).toBeInTheDocument();
+    expect(screen.getByText('Deployments and discovery')).toBeInTheDocument();
+    expect(screen.getByText('The endpoint URL is the engine REST API. EnterpriseGlue authenticates directly with the engine.')).toBeInTheDocument();
+    expect(screen.getByText('Use this engine only for the tenant you are currently administering. No tenant mapping is needed.')).toBeInTheDocument();
+    expect(screen.getByText('A person with engine access can use every process, decision, and runtime resource visible through this engine.')).toBeInTheDocument();
+    expect(screen.getByText('Authorized users deploy project files through EnterpriseGlue, which forwards them to the engine and records lineage.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Username (conditional)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password (conditional)')).toBeInTheDocument();
+    expect(screen.getAllByText('Required').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Optional').length).toBeGreaterThan(0);
+  });
+
+  it('shows every tenant-mapping option with an explanation only when the engine is shared', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /add your first engine/i }));
+    const tenancyDropdown = screen.getByText('One tenant — this tenant').closest('button');
+    expect(tenancyDropdown).not.toBeNull();
+    fireEvent.click(tenancyDropdown!);
+    fireEvent.click(await screen.findByText('Multiple tenants — map each runtime resource'));
+
+    expect(screen.getByText('How runtime resources map to tenants (conditional)')).toBeInTheDocument();
+    expect(screen.getByText('Match the tenant identifier reported by the engine to an EnterpriseGlue tenant.')).toBeInTheDocument();
+    expect(screen.getByText('Shared engines hide unmapped resources')).toBeInTheDocument();
+
+    const mappingDropdown = screen.getByText('Use the engine tenant ID').closest('button');
+    expect(mappingDropdown).not.toBeNull();
+    fireEvent.click(mappingDropdown!);
+    expect(await screen.findByText('Use the project deployment target')).toBeInTheDocument();
+    expect(screen.getByText('Resolve the tenant from the EnterpriseGlue project and deployment target that produced the runtime resource.')).toBeInTheDocument();
+    expect(screen.getByText('Maintain explicit tenant mappings')).toBeInTheDocument();
+    expect(screen.getByText('An operator maps each external engine tenant identifier to a specific EnterpriseGlue tenant.')).toBeInTheDocument();
   });
 
   it('hides manual engine creation when onboarding mode is external-only', async () => {
@@ -403,7 +448,7 @@ describe('EnginesPage', () => {
 
     expect(await screen.findByText('Engine details')).toBeInTheDocument();
     expect(screen.getByText('Registration')).toBeInTheDocument();
-    expect(screen.getByText('Customer sidecar')).toBeInTheDocument();
+    expect(screen.getByText('Customer gateway or sidecar')).toBeInTheDocument();
     expect(screen.getByText('Customer-managed engine authentication')).toBeInTheDocument();
     expect(screen.getAllByText('External API').length).toBeGreaterThan(0);
     expect(screen.getByText('fleet/prod')).toBeInTheDocument();
@@ -435,7 +480,7 @@ describe('EnginesPage', () => {
     expect(screen.getByText('Manual, API, Import')).toBeInTheDocument();
     expect(screen.getByText('Legacy')).toBeInTheDocument();
     expect(screen.getByText('Production')).toBeInTheDocument();
-    expect(screen.getByLabelText('Name')).toBeDisabled();
+    expect(screen.getByLabelText('Engine name (required)')).toBeDisabled();
   });
 
   it('shows config ownership badges and locks configuration-owned engine fields', async () => {
@@ -463,10 +508,10 @@ describe('EnginesPage', () => {
     fireEvent.click((await screen.findByText('Edit')).closest('button')!);
 
     expect((await screen.findAllByText('Managed by configuration')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Native authorization backstop')).toBeInTheDocument();
+    expect(screen.getByText('Optional engine read-access backup')).toBeInTheDocument();
     expect(screen.getByText(/This engine is config-locked/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Name')).toBeDisabled();
-    expect(screen.getByLabelText('Base URL')).toBeDisabled();
+    expect(screen.getByLabelText('Engine name (required)')).toBeDisabled();
+    expect(screen.getByLabelText('Endpoint URL (required)')).toBeDisabled();
   });
 
   it('uses explicit endpoint-authentication copy for direct and sidecar engines', () => {
@@ -513,7 +558,7 @@ describe('EnginesPage', () => {
     expect(screen.getByText('Registration')).toBeInTheDocument();
     expect(screen.queryByText('Access')).not.toBeInTheDocument();
     expect(screen.queryByText('Deployment targets')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Name')).toBeDisabled();
+    expect(screen.getByLabelText('Engine name (required)')).toBeDisabled();
   });
 
   it('hides row actions when engine inventory and scoped actions are denied', async () => {
@@ -946,6 +991,18 @@ describe('EnginesPage', () => {
     }), { registrationSource: 'user', hasCredential: true })).toMatchObject({
       passwordEnc: undefined,
     });
+  });
+
+  it('does not require an OAuth client-secret replacement when a stored credential exists', () => {
+    const form = engineForm({
+      authType: 'oauth2-client-credentials',
+      username: 'oauth-client',
+      passwordEnc: '',
+      oauthTokenUrl: 'https://idp.example.com/token',
+    });
+
+    expect(isOAuth2ClientCredentialsFormIncomplete(form, { hasCredential: true })).toBe(false);
+    expect(isOAuth2ClientCredentialsFormIncomplete(form, { hasCredential: false })).toBe(true);
   });
 
   it('strips authentication fields from engine update payloads without secret management', () => {

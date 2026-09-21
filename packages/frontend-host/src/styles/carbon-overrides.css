@@ -13,6 +13,28 @@
   --cds-focus: #0f62fe;                 /* Focus ring */
 }
 
+/* Settings dropdowns can carry a short explanation for every choice. Carbon's
+   default one-line option height clips that second line, so this scoped variant
+   lets each option grow while preserving the standard dropdown interaction. */
+.eg-explained-dropdown .cds--list-box__menu {
+  max-block-size: min(22rem, 55vh);
+}
+
+.eg-explained-dropdown .cds--list-box__menu-item,
+.eg-explained-dropdown .cds--list-box__menu-item__option {
+  block-size: auto;
+  min-block-size: 4.25rem;
+}
+
+.eg-explained-dropdown .cds--list-box__menu-item__option {
+  align-items: flex-start;
+  padding-block: 0.625rem;
+}
+
+.eg-explained-dropdown .cds--list-box__menu-item__option > div {
+  inline-size: 100%;
+}
+
 /* -----------------------------------------
    2. UI SHELL / HEADER OVERRIDES
    (Minimal overrides - theme tokens handle colors via g100 at root)

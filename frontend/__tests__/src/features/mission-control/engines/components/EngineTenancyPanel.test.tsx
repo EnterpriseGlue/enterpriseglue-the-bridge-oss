@@ -159,7 +159,8 @@ describe('EngineTenancyPanel', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Proposed mapping strategy'), { target: { value: 'explicit' } });
+    fireEvent.click(screen.getByText('Use the engine tenant ID').closest('button')!);
+    fireEvent.click(await screen.findByText('Maintain explicit tenant mappings'));
     fireEvent.click(screen.getByRole('button', { name: 'Preview topology change' }));
 
     expect(await screen.findByText('Review Shared Strategy Change')).toBeInTheDocument();
