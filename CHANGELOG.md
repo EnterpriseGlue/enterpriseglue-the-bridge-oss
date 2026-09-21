@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **ui:** clarify engine settings ([b945e51](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b945e5168ad474e9603f2b373961fc6c19c80580))
-* **ui:** clarify engine settings ([dd67d37](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/dd67d37f69daaaffcc0fd180b3ea8454c13cdc84))
 
 ## [0.28.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.5...v0.28.6) (2026-09-20)
 
