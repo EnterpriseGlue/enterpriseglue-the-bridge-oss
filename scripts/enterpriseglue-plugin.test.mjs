@@ -167,6 +167,9 @@ test('delivery skills distinguish package publication from staging and productio
   }
   assert.match(watch, /“Published,” “built,” “installed,” and “default” are not synonyms/)
   assert.match(staging, /STAGING_FAST_DELIVERY_READY/)
+  assert.match(staging, /STAGING_SINGLE_RELEASE_MODE/)
+  assert.match(staging, /exactly one route remains/)
+  assert.match(staging, /F01 as application acceptance evidence and a production gate/)
   assert.match(staging, /sealed-drain authorization/)
   assert.match(staging, /never shortens production's fallback window/)
 })

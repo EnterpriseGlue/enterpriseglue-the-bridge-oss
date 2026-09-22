@@ -22,22 +22,34 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    `supersede-staging-preview.yml` reconciliation, deployment artifact, shared
    mutation lock, route ConfigMap identity, and drain/retirement receipts. A
    successful protected no-op is a capacity disposition, not a failed release.
-5. Treat the two-route gateway as a capacity boundary. An unused Candidate may
-   be superseded only by the protected exact-reference workflow. Preview and
-   Stable are never automatic retirement targets.
-6. Previous may be reclaimed early only in staging, only when the protected
+5. Treat the two-route gateway as a capacity boundary. Under the normal policy,
+   an unused Candidate may be superseded only by the protected exact-reference
+   workflow, while Preview and Stable remain protected from automatic
+   retirement.
+6. When the protected staging environments explicitly set
+   `STAGING_SINGLE_RELEASE_MODE=true` for pre-launch operation, optimize for one
+   current release: allow ordinary capacity reconciliation to withdraw only an
+   exact empty, paused, zero-reference Preview through the existing guarded
+   path; after a successful latest deployment, publish and promote that same
+   immutable identity, retire the resulting Previous through the ordinary
+   drain path, and verify that exactly one route remains. Do not require F01
+   before making the healthy latest release the staging default in this mode.
+   Keep F01 as application acceptance evidence and a production gate. This
+   switch never applies to production and does not authorize direct database or
+   Kubernetes mutation.
+7. Previous may be reclaimed early only in staging, only when the protected
    `STAGING_FAST_DELIVERY_READY` value is exactly `true`, and only when the live
    control plane advertises the drain-preparation capability. Use the protected
    workflow; never synthesize tenant revisions, edit the database, delete
    Kubernetes resources directly, or bypass the sealed-drain authorization.
-7. Before preparing that drain, use the live control plane's exact compatibility
+8. Before preparing that drain, use the live control plane's exact compatibility
    snapshot. Reuse only fresh evidence for the same retained release and tenant
    assignment revisions. Otherwise let the release-admin probe that retained
    release over its mounted private CA—health, frontend plugin graph, each
    tenant's login methods, and configured provider starts—and record the bounded
    evidence atomically. Never manufacture compatibility rows or treat a
    lifecycle classification as proof of drain readiness.
-8. For an authorized Previous reconciliation, require the sequence: exact live
+9. For an authorized Previous reconciliation, require the sequence: exact live
    classification, compatibility inspection and any required refresh,
    server-generated drain request, ordinary tenant return-to-current
    transitions, immutable sealed receipt, fresh route compare-and-set request,
@@ -47,7 +59,7 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    The normal pruning boundary must validate the current retirement-plan schema
    and run TypeScript-backed deletion code through the repository's supported
    TSX loader, not Node's strip-only TypeScript parser.
-9. A failed or cancelled mutation retains the shared lock. Do not delete or
+10. A failed or cancelled mutation retains the shared lock. Do not delete or
    release it based on age. Recovery must prove the exact failed run and retained
    artifacts and recheck the same live lock generation before a single
    generation-conditional takeover. At a pre-route failure, require the unchanged
@@ -60,11 +72,11 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    without replaying database, tenant, route, gateway or control-plane effects.
    Release the new lock only after retained success evidence. Incident-specific
    recovery is not a reusable override for another failure.
-10. Keep `STAGING_FAST_DELIVERY_READY` false while the API/admin capability and
+11. Keep `STAGING_FAST_DELIVERY_READY` false while the API/admin capability and
    workflow identity are being qualified. Enabling it authorizes future
    staging capacity pressure to move staging test tenants and retire Previous;
    it never shortens production's fallback window or authorizes production.
-11. Treat tenant provisioning registrations, release-readiness targets and the
+12. Treat tenant provisioning registrations, release-readiness targets and the
    shard heartbeat as release-activation-owned configuration after the control
    plane exists. Protected Terraform metadata may seed a first bootstrap and
    remain a recovery mirror, but an ordinary plan must resolve the exact serving
@@ -78,10 +90,10 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    shared lock, and wait for the real worker probes before tenant-routed
    acceptance. Never fabricate or directly extend readiness to break that
    circular wait.
-12. When asked to push a quick change, explain that targeted local checks happen
+13. When asked to push a quick change, explain that targeted local checks happen
    during development, protected CI still verifies the proposed revision, and
    staging deployment remains separate from publication and merge. Do not call
    an OSS tag or passing CI “deployed.”
-13. Finish with the exact current state, blocker or protected disposition, the
+14. Finish with the exact current state, blocker or protected disposition, the
     next safe action, and whether that action is read-only, staging-mutating, or
     production-mutating.
