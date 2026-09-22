@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.28.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.7...v0.28.8) (2026-09-22)
+
+
+### Bug Fixes
+
+* **authentication:** link global SaaS OIDC providers ([51f16ed](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/51f16edb847e69901a5875bc3bd90cbf477ccefe))
+* **authentication:** link global SaaS OIDC providers ([97b6c91](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/97b6c9127d7e042d6999cf5048a80c51e390dc51))
+
 ## [0.28.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.6...v0.28.7) (2026-09-21)
 
 
