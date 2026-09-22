@@ -155,6 +155,41 @@ describe('IdentityProviderProvisioningService', () => {
     }));
   });
 
+  it('links a global Cloud Entra subject to an authenticated tenant account without granting tenant authorization', async () => {
+    const originalMode = config.tenancyMode;
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.tenancyMode = 'pooled';
+    config.cloudAccountIdentityEnabled = true;
+    const currentUser = {
+      id: 'user-1', email: 'person@example.test', firstName: 'Person', lastName: 'Example',
+      authProvider: 'local', passwordHash: 'hash', isActive: true, isEmailVerified: true, authSessionVersion: 7,
+    };
+    stores.user.findOneBy.mockResolvedValueOnce(currentUser);
+    const provider = {
+      id: 'provider-global', tenantId: null, directoryTenantId: '11111111-2222-3333-4444-555555555555',
+      protocol: 'oidc', authenticationMode: 'direct', isEnabled: true, updatedAt: 50, configurationJson: '{}',
+    } as any;
+    try {
+      await expect(identityProviderProvisioningService.linkOidcIdentity(provider, {
+        sub: 'entra-subject-global', tid: provider.directoryTenantId,
+        preferred_username: currentUser.email,
+      } as any, { userId: currentUser.id, tenantId: 'tenant-1' })).resolves.toMatchObject({
+        id: currentUser.id,
+        email: currentUser.email,
+      });
+    } finally {
+      config.tenancyMode = originalMode;
+      config.cloudAccountIdentityEnabled = originalCloudIdentity;
+    }
+
+    expect(stores.externalIdentity.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null, providerId: provider.id, subjectId: 'entra-subject-global', userId: currentUser.id,
+    }));
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
+      tenantId: null, providerId: provider.id, userId: currentUser.id,
+    }));
+  });
+
   it('rejects authenticated linking when the provider email does not match the current account', async () => {
     stores.user.findOneBy.mockResolvedValueOnce({ id: 'user-1', email: 'owner@example.test', isActive: true });
     const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: '{}' } as any;
