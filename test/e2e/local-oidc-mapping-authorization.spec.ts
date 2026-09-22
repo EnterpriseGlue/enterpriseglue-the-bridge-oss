@@ -232,8 +232,11 @@ async function signInWithProvider(context: BrowserContext, providerKey: string):
     await page.locator('input[name="password"]').fill(providerPassword);
     await page.getByRole('button', { name: /sign in/i }).click();
   }
-  await expect(page).toHaveURL(new RegExp(`${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?:$|[?#])`));
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  // The callback first lands at `/` and the client router then resolves the
+  // signed-in tenant route. Wait for the actual dashboard before asserting the
+  // canonical URL so a fast callback cannot be mistaken for a ready app shell.
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 20_000 });
+  await expect(page).toHaveURL(new RegExp(`${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?:t/default/?)?(?:[?#].*)?$`));
   return page;
 }
 

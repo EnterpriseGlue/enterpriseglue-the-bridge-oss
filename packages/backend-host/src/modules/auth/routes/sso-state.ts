@@ -24,6 +24,11 @@ export interface AccountLinkContext {
   sessionId: string;
 }
 
+function accountLinkProviderScopeMatches(accountLinkTenantId: string, providerTenantId?: string | null): boolean {
+  if (providerTenantId) return accountLinkTenantId === providerTenantId;
+  return config.tenancyMode === 'pooled' && config.cloudAccountIdentityEnabled;
+}
+
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9._-]{1,160}$/;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -110,7 +115,7 @@ export function buildSsoState(
   }
   const verifiedAccountLink = accountLink === undefined ? undefined : parseAccountLinkContext(accountLink);
   if (accountLink !== undefined && (!verifiedAccountLink || enrollment !== undefined
-    || verifiedAccountLink.tenantId !== identityProvider?.tenantId
+    || !accountLinkProviderScopeMatches(verifiedAccountLink.tenantId, identityProvider?.tenantId)
     || !sanitizeProviderId(providerId) || !sanitizeProviderId(identityProvider?.key))) {
     throw new Error('Invalid account link state');
   }
@@ -177,7 +182,7 @@ export function parseSsoState(rawState: unknown): SsoState | null {
     const hasAccountLink = Object.prototype.hasOwnProperty.call(parsed, 'accountLink');
     const accountLink = hasAccountLink ? parseAccountLinkContext(parsed.accountLink) : undefined;
     if (hasAccountLink && (!accountLink || hasEnrollment || !providerId || !identityProviderKey
-      || accountLink.tenantId !== identityProviderTenantId || !tenantSlug)) return null;
+      || !accountLinkProviderScopeMatches(accountLink.tenantId, identityProviderTenantId) || !tenantSlug)) return null;
     return {
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,

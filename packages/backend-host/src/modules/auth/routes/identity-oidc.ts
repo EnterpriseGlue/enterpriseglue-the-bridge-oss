@@ -162,6 +162,24 @@ async function runInSsoCallbackTenantContext<T>(
   if (routeTenantSlug && routeTenantSlug !== state.tenantSlug) {
     throw Errors.unauthorized('Identity provider callback tenant does not match the signed login state');
   }
+  if (state.accountLink) {
+    if (!state.tenantSlug) throw Errors.unauthorized('Account-link tenant state is incomplete');
+    const tenant = await tenantService.getById(state.accountLink.tenantId);
+    if (!tenant || tenant.status !== 'active' || tenant.slug !== state.tenantSlug) {
+      throw Errors.unauthorized('Account-link tenant state is invalid');
+    }
+    if (req.tenant && (req.tenant.tenantId !== tenant.id || req.tenant.tenantSlug !== tenant.slug)) {
+      throw Errors.unauthorized('Account-link session tenant does not match the signed login state');
+    }
+    const requestTenant = {
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      placementKey: tenant.placementKey,
+      placementEpoch: Number(tenant.placementEpoch),
+    };
+    req.tenant = requestTenant;
+    return runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, callback);
+  }
   if (!state.identityProviderTenantId) {
     if (config.tenancyMode === 'pooled' && (!config.cloudAccountIdentityEnabled || state.tenantSlug)) {
       throw Errors.unauthorized('Identity provider login is not tenant-scoped');
@@ -186,6 +204,11 @@ async function runInSsoCallbackTenantContext<T>(
   };
   req.tenant = requestTenant;
   return runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, callback);
+}
+
+function providerCanLinkAuthenticatedAccount(provider: IdentityProvider, tenantId: string): boolean {
+  if (provider.tenantId === tenantId) return true;
+  return provider.tenantId === null && config.tenancyMode === 'pooled' && config.cloudAccountIdentityEnabled;
 }
 
 async function startOidcLogin(
@@ -425,9 +448,18 @@ async function loginProviderById(req: Request, res: Response): Promise<void> {
 router.get('/api/auth/me/identity-providers', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?.tenantId;
   if (!tenantId) throw Errors.forbidden('Tenant-scoped session required');
-  const providers = (await identityProviderService.listEnabledDirectLoginProviders(tenantId))
-    .filter((candidate) => candidate.protocol === 'oidc' && candidate.tenantId === tenantId);
-  const providerIds = providers.map((candidate) => candidate.id);
+  const tenantProviders = await identityProviderService.listEnabledDirectLoginProviders(tenantId);
+  const platformProviders = config.tenancyMode === 'pooled' && config.cloudAccountIdentityEnabled
+    ? await identityProviderService.listEnabledDirectLoginProviders(null)
+    : [];
+  const providers = [...new Map([...tenantProviders, ...platformProviders]
+    .filter((candidate) => candidate.protocol === 'oidc' && providerCanLinkAuthenticatedAccount(candidate, tenantId))
+    .map((candidate) => [candidate.id, candidate])).values()];
+  // Tenant-scoped links are readable through the current request tenant. Global
+  // account links intentionally remain outside tenant RLS and are offered as an
+  // explicit reconnect action; the fresh callback is idempotent for the same
+  // provider subject and fails closed if it belongs to another account.
+  const providerIds = providers.filter((candidate) => candidate.tenantId === tenantId).map((candidate) => candidate.id);
   const linked = providerIds.length === 0 ? [] : await (await getDataSource()).getRepository(ExternalIdentity).find({
     where: { tenantId, userId: req.user!.userId, providerId: In(providerIds), status: 'active' },
     select: ['providerId'],
@@ -448,8 +480,17 @@ router.get('/api/auth/me/identity-providers/:providerId/link', apiLimiter, ident
   const tenantId = req.tenant?.tenantId;
   const tenantSlug = req.tenant?.tenantSlug;
   if (!tenantId || !tenantSlug) throw Errors.forbidden('Tenant-scoped session required');
-  const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), tenantId);
-  if (!provider || provider.tenantId !== tenantId || provider.protocol !== 'oidc') throw Errors.notFound('Identity provider not found');
+  const providerId = String(req.params.providerId || '');
+  let provider = await identityProviderService.getDirectLoginProviderById(providerId, tenantId);
+  if (!provider && config.tenancyMode === 'pooled' && config.cloudAccountIdentityEnabled) {
+    provider = await runWithPlatformDatabaseCapability(
+      { kind: 'provider-lookup', providerId },
+      () => identityProviderService.getById(providerId, null),
+    );
+  }
+  if (!provider || !providerCanLinkAuthenticatedAccount(provider, tenantId) || provider.protocol !== 'oidc') {
+    throw Errors.notFound('Identity provider not found');
+  }
   if (!req.user?.sessionId) throw Errors.unauthorized('Sign in again to connect another identity provider');
   await startOidcLogin(req, res, provider, undefined, {
     userId: req.user!.userId,
@@ -551,7 +592,7 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
         || (req.user.authSessionVersion ?? 0) !== parsed.accountLink.authSessionVersion
         || req.user.sessionId !== parsed.accountLink.sessionId
         || req.tenant?.tenantId !== parsed.accountLink.tenantId
-        || provider.tenantId !== parsed.accountLink.tenantId)) {
+        || !providerCanLinkAuthenticatedAccount(provider, parsed.accountLink.tenantId))) {
         throw Errors.unauthorized('Account linking requires the current authenticated tenant session');
       }
       const rawConfiguration = configuration(provider);

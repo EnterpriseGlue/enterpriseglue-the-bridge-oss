@@ -615,7 +615,7 @@ registry.registerPath({
   path: '/api/auth/me/identity-providers',
   ...authzExemption('GET', '/api/auth/me/identity-providers'),
   responses: {
-    200: { description: 'Current user identity-provider links', content: { 'application/json': { schema: AuthenticatedIdentityProviderLinksSchema } } },
+    200: { description: 'Sanitized tenant and eligible global Cloud OIDC providers for the current user account', content: { 'application/json': { schema: AuthenticatedIdentityProviderLinksSchema } } },
     401: { description: 'Not authenticated' },
   },
 });
@@ -629,7 +629,7 @@ registry.registerPath({
     query: z.object({ returnTo: z.string().optional() }),
   },
   responses: {
-    302: { description: 'Redirect to the selected OIDC provider for authenticated account linking' },
+    302: { description: 'Redirect to the selected tenant or global Cloud OIDC provider for authenticated account linking' },
     401: { description: 'Not authenticated' },
     404: { description: 'Identity provider not found' },
   },
