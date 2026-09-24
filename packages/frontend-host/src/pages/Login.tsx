@@ -1,6 +1,6 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
-import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, Tile } from '@carbon/react';
+import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification } from '@carbon/react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient, ApiError } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
@@ -615,13 +615,21 @@ export default function Login() {
       ? 'organization-discovery-email'
       : organizationStep === 'workspace'
         ? 'organization-slug'
-        : 'organization-picker-heading';
+        : 'public-auth-page-title';
     window.requestAnimationFrame(() => document.getElementById(id)?.focus({ preventScroll: true }));
   }, [isOrganizationFinder, isAuthLoading, organizationLoading, organizationStep]);
 
   if (isOrganizationFinder) {
     return (
-      <PublicAuthShell title="Find your organization" homePath="/" appearance="process">
+      <PublicAuthShell
+        title={organizationStep === 'account-tenants' || organizationStep === 'tenants'
+          ? 'Choose an organization'
+          : organizationStep === 'account-empty'
+            ? 'No organization yet'
+            : 'Find your organization'}
+        homePath="/"
+        appearance="process"
+      >
         {loginError && <InlineNotification
           kind="error"
           lowContrast
@@ -656,25 +664,31 @@ export default function Login() {
         {isAuthenticated && organizationError && !organizationLoading && <Button type="button" kind="secondary" onClick={() => setMembershipAttempt((attempt) => attempt + 1)}>Retry</Button>}
 
         {isAuthenticated && !organizationLoading && organizationStep === 'account-tenants' && <div>
-          <h2 id="organization-picker-heading" tabIndex={-1} className="eg-login-section-heading eg-login-section-heading--with-copy">Choose an organization</h2>
           <p className="eg-login-intro-copy">These are the organizations linked to your verified account.</p>
-          <div style={{ display: 'grid', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}>
-            {organizationChoices.map((tenant) => <Tile key={tenant.tenantId}>
-              <Button kind="ghost" size="lg" onClick={() => void switchToAuthenticatedTenant(tenant)} style={{ width: '100%', justifyContent: 'flex-start' }}>
-                {tenant.tenantName}
-              </Button>
-            </Tile>)}
+          <div className="eg-login-provider-list">
+            {organizationChoices.map((tenant) => <Button
+              key={tenant.tenantId}
+              type="button"
+              kind="tertiary"
+              size="md"
+              className="eg-login-provider-button"
+              onClick={() => void switchToAuthenticatedTenant(tenant)}
+            >
+              <span className="eg-login-provider-button__action">{tenant.tenantName}</span>
+            </Button>)}
           </div>
         </div>}
 
         {isAuthenticated && !organizationLoading && organizationStep === 'account-empty' && <div>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">No organization yet</h2>
-          <p className="eg-login-intro-copy">Your work account is verified, but it is not a member of an active organization. Ask an administrator for access or create one.</p>
+          <p className="eg-login-intro-copy">Your account is verified, but it is not a member of an active organization. Ask an administrator for access or create one.</p>
           <Button as={RouterLink} to="/cloud/onboarding" kind="primary">Create an organization</Button>
         </div>}
 
-        {!isAuthenticated && !isAuthLoading && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-7)' }}>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
+        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-7)' }}>
+          <div className="eg-login-section-header">
+            <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
+            <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
+          </div>
           <p className="eg-login-intro-copy">We’ll show the organizations you can access after sign-in.</p>
           <div className="eg-login-provider-list">
             {cloudAccountProviders.map((provider, index) => <LoginProviderButton
@@ -686,7 +700,7 @@ export default function Login() {
             />)}
           </div>
         </div>}
-        {!isAuthenticated && cloudProviderError && <ActionableNotification
+        {!isAuthenticated && organizationStep !== 'tenants' && cloudProviderError && <ActionableNotification
           kind="error"
           lowContrast
           hideCloseButton
@@ -700,7 +714,7 @@ export default function Login() {
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Continue with email</h2>
-          <p className="eg-login-intro-copy">Use a work or personal email already associated with an organization. A verified work domain can open its organization directly; otherwise, we’ll send a one-time link if an active account exists. Email alone does not grant access.</p>
+          <p className="eg-login-intro-copy">Use a work or personal email linked to an organization. A verified work domain can open it directly; otherwise, an existing account receives a one-time link. Email alone does not grant access.</p>
           <div style={{ marginBottom: 'var(--spacing-6)' }}>
             <TextInput
               id="organization-discovery-email"
@@ -721,10 +735,6 @@ export default function Login() {
             Use an organization name instead
           </Button>
         </form>}
-
-        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && cloudAccountProviders.length > 0 && <p className="eg-login-intro-copy" style={{ marginTop: 'var(--spacing-6)' }}>
-          New to EnterpriseGlue? <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
-        </p>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Enter your organization name</h2>
@@ -750,14 +760,18 @@ export default function Login() {
         </form>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'tenants' && <div>
-          <h2 id="organization-picker-heading" tabIndex={-1} className="eg-login-section-heading eg-login-section-heading--with-copy">Choose an organization</h2>
           <p className="eg-login-intro-copy">You’ll complete that organization’s own login and SSO requirements next.</p>
-          <div style={{ display: 'grid', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}>
-            {organizationChoices.map((tenant) => <Tile key={tenant.tenantId}>
-              <Button kind="ghost" size="lg" onClick={() => openTenantLogin(tenant.tenantSlug)} style={{ width: '100%', justifyContent: 'flex-start' }}>
-                {tenant.tenantName}
-              </Button>
-            </Tile>)}
+          <div className="eg-login-provider-list">
+            {organizationChoices.map((tenant) => <Button
+              key={tenant.tenantId}
+              type="button"
+              kind="tertiary"
+              size="md"
+              className="eg-login-provider-button"
+              onClick={() => openTenantLogin(tenant.tenantSlug)}
+            >
+              <span className="eg-login-provider-button__action">{tenant.tenantName}</span>
+            </Button>)}
           </div>
           <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationChoices([]); setOrganizationStep('email'); }}>
             Use a different email

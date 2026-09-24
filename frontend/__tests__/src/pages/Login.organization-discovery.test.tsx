@@ -109,6 +109,9 @@ describe('pooled organization discovery login', () => {
 
   it('exchanges an email token once and presents only the returned active memberships', async () => {
     const user = userEvent.setup();
+    (apiClient.get as any).mockImplementation((path: string) => path === '/api/auth/cloud-signup/providers'
+      ? Promise.resolve([{ id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' }])
+      : Promise.resolve({}));
     (apiClient.post as any).mockResolvedValue({
       tenants: [
         { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha Industries', tenantStatus: 'active', role: 'member' },
@@ -117,7 +120,10 @@ describe('pooled organization discovery login', () => {
     });
     renderLogin('/login#discovery_token=opaque-email-token-that-is-long-enough');
 
-    expect(await screen.findByRole('heading', { name: 'Choose an organization' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Choose an organization' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alpha Industries' })).toHaveClass('eg-login-provider-button');
+    expect(screen.getByRole('button', { name: 'Bravo Services' })).toHaveClass('eg-login-provider-button');
+    expect(screen.queryByRole('button', { name: 'Sign in with Microsoft' })).not.toBeInTheDocument();
     expect(apiClient.post).toHaveBeenCalledTimes(1);
     expect(apiClient.post).toHaveBeenCalledWith('/api/auth/tenant-discovery/exchange', { token: 'opaque-email-token-that-is-long-enough' });
     expect(navigateMock).toHaveBeenCalledWith('/login', { replace: true });
@@ -182,7 +188,9 @@ describe('pooled organization discovery login', () => {
     (apiClient.post as any).mockResolvedValue({ tenantSlug: 'bravo' });
     renderLogin();
 
-    expect(await screen.findByRole('heading', { name: 'Choose an organization' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Choose an organization' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Alpha' })).toHaveClass('eg-login-provider-button');
+    expect(screen.getByRole('button', { name: 'Bravo' })).toHaveClass('eg-login-provider-button');
     expect(screen.queryByRole('button', { name: 'Charlie' })).not.toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Bravo' }));

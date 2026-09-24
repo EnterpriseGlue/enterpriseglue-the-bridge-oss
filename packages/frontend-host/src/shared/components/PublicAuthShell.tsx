@@ -212,7 +212,7 @@ export default function PublicAuthShell({
           <img src={processLandscape} alt="" />
         </div>}
         <section className={`eg-login-panel${panelSize === 'wide' ? ' eg-login-panel--wide' : ''}`}>
-          <h1 id={headingId} className="eg-login-title">{title}</h1>
+          <h1 id={headingId} className="eg-login-title" tabIndex={-1}>{title}</h1>
           {description && <p className="eg-public-auth-description">{description}</p>}
           {typeof children === 'function' ? children(branding) : children}
         </section>

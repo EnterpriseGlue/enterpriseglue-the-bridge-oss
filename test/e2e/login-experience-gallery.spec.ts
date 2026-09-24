@@ -69,7 +69,7 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 }
 
 test.describe('Login experience screenshot gallery', () => {
-  test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page }) => {
+  test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page, browserName }) => {
     let authenticated = false;
     let selectedTenant: string | null = null;
     let providerReturnTo: string | null = null;
@@ -102,7 +102,9 @@ test.describe('Login experience screenshot gallery', () => {
     await page.route(/\/api\/auth\/cloud-signup\/providers\/[^/]+\/start\?/, (route) => {
       providerReturnTo = new URL(route.request().url()).searchParams.get('returnTo');
       authenticated = true;
-      return route.fulfill({ status: 302, headers: { location: '/login' } });
+      // WebKit cannot fulfill an intercepted navigation with a 302; model the
+      // provider callback return in the fixture without changing app routing.
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><script>location.replace("/login")</script>' });
     });
     await page.route('**/api/auth/my-tenants', (route) => json(route, [
       { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'member' },
@@ -120,8 +122,22 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
     await expect(page.getByLabel('Email address')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
+    await captureManualScreenshot(page, '96-cloud-login-entry.jpg');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
-    await expect(page.getByRole('heading', { name: 'Choose an organization' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Bravo' })).toHaveClass(/eg-login-provider-button/);
+    await captureManualScreenshot(page, '97-cloud-organization-chooser.jpg');
+    await page.setViewportSize({ width: 320, height: 720 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.setViewportSize({ width: 720, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(page.getByRole('button', { name: 'Alpha' })).toBeFocused();
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(page.getByRole('button', { name: 'Bravo' })).toBeFocused();
     expect(providerReturnTo).toBe('/login');
     await expect(page.getByRole('button', { name: 'Disabled' })).toHaveCount(0);
     expect(selectedTenant).toBeNull();

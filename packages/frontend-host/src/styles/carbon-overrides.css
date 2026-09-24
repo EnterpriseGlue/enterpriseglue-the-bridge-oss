@@ -865,6 +865,10 @@
   line-height: 1.25;
 }
 
+.eg-login-title:focus {
+  outline: none;
+}
+
 .eg-public-auth-description {
   margin: calc(-1 * var(--spacing-4)) 0 var(--spacing-6);
   color: var(--cds-text-secondary);
@@ -894,6 +898,14 @@
 
 .eg-login-section-heading--with-copy {
   margin-block-end: 0;
+}
+
+.eg-login-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
 }
 
 .eg-login-intro-copy,
