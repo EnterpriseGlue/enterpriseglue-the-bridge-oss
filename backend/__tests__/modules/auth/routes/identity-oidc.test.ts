@@ -211,6 +211,20 @@ describe('provider-neutral OIDC routes', () => {
     }
   });
 
+  it('allows only the exact organization-login return path for a global Cloud provider', async () => {
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.cloudAccountIdentityEnabled = true;
+    try {
+      const started = await request(app).get('/api/auth/cloud-signup/providers/provider-1/start?returnTo=%2Flogin').redirects(0);
+      expect(started.status).toBe(302);
+      const calls = genericOidcService.createAuthorizationRequest.mock.calls;
+      expect(parseSignedOidcState(calls[calls.length - 1]?.[1])).toMatchObject({ providerId: provider.id, returnTo: '/login' });
+      for (const query of ['returnTo=%2Flogin%2F', 'returnTo=%2Flogin%3Fnext%3D%2Fadmin', 'returnTo=%2Flogin&tenantId=other']) {
+        expect((await request(app).get(`/api/auth/cloud-signup/providers/provider-1/start?${query}`)).status).toBe(400);
+      }
+    } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
+  });
+
   it('keeps Cloud account provider discovery disabled by default', async () => {
     const originalCloudIdentity = config.cloudAccountIdentityEnabled;
     config.cloudAccountIdentityEnabled = false;

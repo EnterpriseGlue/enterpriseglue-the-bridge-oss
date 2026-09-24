@@ -219,8 +219,19 @@ and tenant, so the callback cannot switch scope. Do not implement multi-tenant
 login by sending `x-tenant-slug` to the global compatibility aliases.
 
 In native pooled mode, the platform `/login` page instead uses the separate
-organization-discovery contract. A tenant administrator can DNS-verify a
-work-email domain under `/api/t/{tenantSlug}/tenant/discovery-domains`.
+organization-discovery contract. When Cloud account identity is enabled, it
+also lists explicitly enabled global OIDC/SAML providers. Their start endpoint
+accepts only the exact `/login` or `/cloud/onboarding` return path, bound into
+signed provider state. After `/login` restores a verified Cloud account session,
+the browser requests `/api/auth/my-tenants`. One active membership is switched
+to a tenant-bound session automatically; multiple active memberships require a
+user choice. The switch endpoint rechecks active membership server-side, and a
+Cloud account with no active membership can proceed to organization onboarding
+or request access from an administrator. A shared email domain is never used to
+select one of several memberships.
+
+A tenant administrator can DNS-verify a work-email domain under
+`/api/t/{tenantSlug}/tenant/discovery-domains`.
 `POST /api/auth/tenant-discovery` may then return one canonical tenant login
 path, but it never returns providers, creates membership, or issues a session.
 Zero and multiple matches use the same response. Membership selection requires

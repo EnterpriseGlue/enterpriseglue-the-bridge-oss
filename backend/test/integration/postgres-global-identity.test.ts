@@ -109,9 +109,9 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     if(admin.isInitialized){await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.query(`DROP ROLE IF EXISTS ${runtimeName}`);await admin.query(`DROP ROLE IF EXISTS ${ownerName}`);await admin.destroy();}
     Object.assign(config,original);
   });
-  async function signIn(subject:string,email:string) {
+  async function signIn(subject:string,email:string,returnTo:'/cloud/onboarding'|'/login'='/cloud/onboarding') {
     const browser=request.agent(server);
-    const start=await browser.get(`/api/auth/cloud-signup/providers/${providerId}/start?returnTo=%2Fcloud%2Fonboarding`);
+    const start=await browser.get(`/api/auth/cloud-signup/providers/${providerId}/start?returnTo=${encodeURIComponent(returnTo)}`);
     expect(start.status,start.body.error).toBe(302);
     const location=new URL(start.headers.location);
     const state=location.searchParams.get('state')!;
@@ -139,6 +139,18 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(await runtime.getRepository(SsoSyncRun).find()).toEqual([]);
     const sessions=await runtime.getRepository(RefreshToken).findBy({userId:bound});expect(sessions).toHaveLength(1);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
+  });
+  it('returns verified Cloud sign-in to organization login without assigning a tenant from email',async()=>{
+    const {browser,callback}=await signIn('verified-a','verified-a@example.test','/login');
+    expect(callback.status,JSON.stringify(callback.body)).toBe(302);
+    expect(callback.headers.location).toBe(`${config.frontendUrl.replace(/\/$/,'')}/login`);
+    const probe=await browser.get('/cloud-probe');
+    expect(probe.status).toBe(200);
+    expect(probe.body).toMatchObject({sessionClass:'cloud_account'});
+    expect(probe.body.tenantId).toBeUndefined();
+    const memberships=await browser.get('/api/auth/my-tenants');
+    expect(memberships.status).toBe(200);
+    expect(memberships.body).toEqual([]);
   });
   it('keeps two verified subjects separate and denies another account scope',async()=>{
     const {browser,callback}=await signIn('verified-b','verified-b@example.test');expect(callback.status,JSON.stringify(callback.body)).toBe(302);

@@ -69,6 +69,63 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 }
 
 test.describe('Login experience screenshot gallery', () => {
+  test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page }) => {
+    let authenticated = false;
+    let selectedTenant: string | null = null;
+    let providerReturnTo: string | null = null;
+    await page.route('**/api/tenancy/capabilities', (route) => json(route, {
+      mode: 'pooled', rootTenantAliasesEnabled: false, tenantScopedLoginRequired: true,
+      databaseIsolation: 'postgres_rls', customDomainsEnabled: true, organizationDiscoveryEnabled: true,
+      signedPlacementAssertionsEnabled: true,
+    }));
+    await page.route('**/api/plugins/v1/frontend', (route) => json(route, {
+      apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 1, issues: [], plugins: [],
+    }));
+    await page.route('**/api/auth/branding', (route) => json(route, {}));
+    await page.route('**/api/auth/me', (route) => authenticated
+      ? json(route, {
+        id: 'verified-account', email: 'person@shared.example', firstName: 'Verified', lastName: 'User',
+        platformRole: 'user', authProvider: 'oidc', isActive: true, isEmailVerified: true,
+        createdAt: Date.now(), session: { principal: { type: 'user', id: 'verified-account' }, tenant: { id: null } },
+      })
+      : json(route, { error: 'Not authenticated' }, 401));
+    await page.route('**/api/auth/refresh', (route) => json(route, { error: 'No refresh session' }, 401));
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'verified-account', tenantId: null, platform: [], projects: [], engines: [],
+      generatedAt: Date.now(), authorizationVersion: 'browser-cloud-account-v1',
+    }));
+    await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, [
+      { id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' },
+    ]));
+    await page.route(/\/api\/auth\/cloud-signup\/providers\/[^/]+\/start\?/, (route) => {
+      providerReturnTo = new URL(route.request().url()).searchParams.get('returnTo');
+      authenticated = true;
+      return route.fulfill({ status: 302, headers: { location: '/login' } });
+    });
+    await page.route('**/api/auth/my-tenants', (route) => json(route, [
+      { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'member' },
+      { tenantId: 'b', tenantSlug: 'bravo', tenantName: 'Bravo', tenantStatus: 'active', role: 'member' },
+      { tenantId: 'c', tenantSlug: 'disabled', tenantName: 'Disabled', tenantStatus: 'suspended', role: 'member' },
+    ]));
+    await page.route('**/api/auth/switch-tenant', (route) => {
+      selectedTenant = route.request().postDataJSON().tenantSlug;
+      return json(route, { error: 'Membership changed' }, 403);
+    });
+
+    await page.goto('/login');
+    await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
+    await expect(page.getByLabel('Work email')).toBeVisible();
+    await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose an organization' })).toBeVisible();
+    expect(providerReturnTo).toBe('/login');
+    await expect(page.getByRole('button', { name: 'Disabled' })).toHaveCount(0);
+    expect(selectedTenant).toBeNull();
+    await page.getByRole('button', { name: 'Bravo' }).click();
+    await expect(page.getByText('Could not open this organization. Your access may have changed. Try again.')).toBeVisible();
+    expect(selectedTenant).toBe('bravo');
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
   test('opens anonymous signup without probing or refreshing a session @identity-lifecycle', async ({ page }) => {
     await installBootstrap(page);
     const diagnostics = monitorBrowserDiagnostics(page);

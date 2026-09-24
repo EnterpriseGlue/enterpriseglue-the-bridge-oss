@@ -4068,8 +4068,8 @@ registry.registerPath({
   method: 'get',
   path: '/api/auth/cloud-signup/providers/{providerId}/start',
   ...authzExemption('GET', '/api/auth/cloud-signup/providers/:providerId/start'),
-  request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.literal('/cloud/onboarding') }).strict() },
-  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding' }, 404: { description: 'Cloud account identity or provider unavailable' } },
+  request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login']) }).strict() },
+  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding or organization login' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
 
 registry.registerPath({
