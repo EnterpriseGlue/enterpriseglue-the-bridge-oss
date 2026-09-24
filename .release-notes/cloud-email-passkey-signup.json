@@ -1,4 +1,5 @@
 {
+  "$schema": "./schema.json",
   "schemaVersion": 1,
   "id": "cloud-email-passkey-signup",
   "type": "feature",
@@ -7,14 +8,18 @@
   "audiences": ["users", "operators", "security", "developers"],
   "summary": "Allow a new managed Cloud user to verify an email address and register a passkey without granting organization access from the address alone.",
   "userImpact": ["New Cloud users can choose an email and passkey sign-up path separate from federated sign-in."],
-  "upgrade": { "required": true, "instructions": ["Apply the Cloud email-signup and passkey credential migration before enabling the new flow."] },
+  "upgrade": { "required": true, "instructions": ["Deploy the signed schema-epoch compatibility release first, then apply migration 0133 through the separately credentialed owner job before enabling the new flow."] },
   "configuration": ["Managed Cloud account identity and a working global outbound email configuration are required; the relying-party origin is the configured frontend origin."],
   "api": { "compatibility": "additive", "changes": ["Add Cloud email-signup verification and passkey registration and authentication endpoints."] },
   "database": { "migrations": ["1700000000133-add-cloud-email-passkeys"], "rollbackSupported": false, "notes": ["The new pending-signup and passkey tables have no tenant membership side effects. The down migration refuses to remove populated passkey credentials."] },
   "security": ["Email verification establishes address control, while a verified passkey assertion authenticates the account. Matching email addresses never merge existing accounts or grant tenant membership."],
   "documentation": ["docs/how-to/auth-sso.md"],
   "knownLimitations": ["Lost-passkey recovery requires a separate verified support process until a recovery method is deliberately introduced."],
-  "rollback": ["Disable the new Cloud email option and return users to existing federated methods before removing passkey tables; do not remove credentials while passkey-only accounts need access."],
-  "validation": ["Focused signup, passkey, Cloud-session, authorization, PostgreSQL, and browser gates."],
-  "packages": []
+  "rollback": ["Roll the application back only to the signed compatibility release while retaining the 0133 schema. Do not remove populated passkey tables or strand passkey-only accounts; provide a verified alternate sign-in before disabling this method."],
+  "validation": ["Focused signup, passkey, and Cloud-session tests; PostgreSQL owner/preflight, authorization, cross-database portability, and browser acceptance remain release gates."],
+  "packages": [
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.22.8", "newVersion": "0.22.9", "impact": "patch" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.19.12", "newVersion": "0.19.13", "impact": "patch" },
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.22", "newVersion": "0.17.23", "impact": "patch" }
+  ]
 }

@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "enterpriseglue-schema-epoch/v2",
-  "id": "postgres-explicit-context-cloud-email-compat-v2",
+  "schemaVersion": "enterpriseglue-schema-epoch/v3",
+  "id": "postgres-cloud-email-passkeys-v3",
   "target": {
     "databaseType": "postgres",
     "tenancyMode": "pooled"
@@ -15,36 +15,36 @@
     "ownerMigration": {
       "mode": "apply-through-executable",
       "from": {
-        "through": 1700000000130,
-        "count": 132,
-        "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16",
-        "postgresPolicyProfile": "legacy-tenant-context/v1"
+        "through": 1700000000132,
+        "count": 134,
+        "sha256": "fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a",
+        "postgresPolicyProfile": "explicit-context/v1"
       },
-      "through": 1700000000131,
-      "runtimeGrant": "configured-role-release-effect-cohorts-select-insert-update/v1"
+      "through": 1700000000133,
+      "runtimeGrant": "configured-role-release-effect-cohorts-and-cloud-passkeys/v1"
     }
   },
   "runtimeCapability": "postgres-explicit-context/v1",
   "upgradeContract": {
     "minimumDatabaseEpoch": {
-      "through": 1700000000130,
-      "count": 132,
-      "sha256": "e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16",
-      "postgresPolicyProfile": "legacy-tenant-context/v1"
+      "through": 1700000000132,
+      "count": 134,
+      "sha256": "fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a",
+      "postgresPolicyProfile": "explicit-context/v1"
     },
     "freshDatabase": "requires-separate-signed-bootstrap",
     "emptyMigrationLedger": "requires-separate-signed-recovery"
   },
   "executableMigrationInventory": {
-    "through": 1700000000131,
-    "count": 133,
-    "sha256": "12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1"
+    "through": 1700000000133,
+    "count": 135,
+    "sha256": "fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d"
   },
   "executableImplementationInventory": {
     "algorithm": "sha256-source-v1",
-    "purpose": "owner-transition-1700000000131-dual-context-closure/v1",
-    "count": 16,
-    "sha256": "4a9065fee9211df0a31ebf326ab8e7d46cdd0932aed96343182729ba92d147d0"
+    "purpose": "owner-transition-1700000000133-cloud-passkeys/v1",
+    "count": 21,
+    "sha256": "64bcc8f41ad48fd20e10f62d7e0f3334a465dc07c1e5f5d006a0b6952b473d8b"
   },
   "releaseEffectInventory": {
     "version": "release-effect-inventory.enterpriseglue.io/v1",

@@ -188,6 +188,33 @@ const sharedIdentityRows = records([
   rationale: 'The identity can participate in multiple tenants; tenant access is projected through membership rather than row ownership.',
 });
 
+const cloudAccountAuthenticationRows: TenantPersistenceOwnershipV1[] = [
+  {
+    table: 'cloud_email_signups',
+    scope: 'shared_identity',
+    enforcement: 'preauthentication_binding',
+    keyColumns: ['email_hash', 'token_hash'],
+    parentTables: [],
+    rationale: 'A short-lived verified-address proof is bound to opaque hashes before any user or tenant membership exists; it never grants tenant access.',
+  },
+  {
+    table: 'cloud_passkey_challenges',
+    scope: 'shared_identity',
+    enforcement: 'preauthentication_binding',
+    keyColumns: ['token_hash'],
+    parentTables: [],
+    rationale: 'A single-use browser challenge is bound to an opaque token before the passkey resolves a verified Cloud account.',
+  },
+  {
+    table: 'cloud_passkeys',
+    scope: 'shared_identity',
+    enforcement: 'membership_projection',
+    keyColumns: ['user_id', 'credential_id_hash'],
+    parentTables: ['users'],
+    rationale: 'The credential identifies one verified global account; tenant authorization is projected separately from active memberships.',
+  },
+];
+
 const mixedScopeRows: TenantPersistenceOwnershipV1[] = [
   ['admin_config_object_ownership', ['scope_key']],
   ['environment_tags', ['config_scope_key']],
@@ -281,6 +308,7 @@ export const TENANT_PERSISTENCE_OWNERSHIP_V1: readonly TenantPersistenceOwnershi
   ...preauthenticationBindings,
   ...registryRows,
   ...sharedIdentityRows,
+  ...cloudAccountAuthenticationRows,
   ...mixedScopeRows,
   ...pluginTenantRows,
   ...opaquePluginTenantRows,

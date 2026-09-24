@@ -10,8 +10,8 @@ const MigrationInventorySchema = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
 
-const LegacyMigrationInventorySchema = MigrationInventorySchema.extend({
-  postgresPolicyProfile: z.literal('legacy-tenant-context/v1'),
+const OwnerSourceMigrationInventorySchema = MigrationInventorySchema.extend({
+  postgresPolicyProfile: z.literal('explicit-context/v1'),
 }).strict();
 
 const DatabaseEpochSchema = MigrationInventorySchema.extend({
@@ -35,7 +35,7 @@ const PlannedMigrationSchema = z.object({
 
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
-  purpose: z.literal('owner-transition-1700000000131-dual-context-closure/v1'),
+  purpose: z.literal('owner-transition-1700000000133-cloud-passkeys/v1'),
   count: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
@@ -46,8 +46,8 @@ const ReleaseEffectInventorySchema = z.object({
 }).strict();
 
 const SchemaEpochManifestSchema = z.object({
-  schemaVersion: z.literal('enterpriseglue-schema-epoch/v2'),
-  id: z.literal('postgres-explicit-context-cloud-email-compat-v2'),
+  schemaVersion: z.literal('enterpriseglue-schema-epoch/v3'),
+  id: z.literal('postgres-cloud-email-passkeys-v3'),
   target: z.object({
     databaseType: z.literal('postgres'),
     tenancyMode: z.literal('pooled'),
@@ -61,14 +61,14 @@ const SchemaEpochManifestSchema = z.object({
     }).strict(),
     ownerMigration: z.object({
       mode: z.literal('apply-through-executable'),
-      from: LegacyMigrationInventorySchema,
+      from: OwnerSourceMigrationInventorySchema,
       through: z.number().int().nonnegative(),
-      runtimeGrant: z.literal('configured-role-release-effect-cohorts-select-insert-update/v1'),
+      runtimeGrant: z.literal('configured-role-release-effect-cohorts-and-cloud-passkeys/v1'),
     }).strict(),
   }).strict(),
   runtimeCapability: z.literal('postgres-explicit-context/v1'),
   upgradeContract: z.object({
-    minimumDatabaseEpoch: LegacyMigrationInventorySchema,
+    minimumDatabaseEpoch: OwnerSourceMigrationInventorySchema,
     freshDatabase: z.literal('requires-separate-signed-bootstrap'),
     emptyMigrationLedger: z.literal('requires-separate-signed-recovery'),
   }).strict(),
@@ -139,10 +139,14 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || post.postgresPolicyProfile !== 'explicit-context/v1'
     || future.id !== 'cloud-email-passkeys'
     || future.postgresPolicyProfile !== 'explicit-context/v1'
-    || manifest.executableMigrationInventory.through !== pre.through
-    || manifest.executableMigrationInventory.count !== pre.count
-    || manifest.executableMigrationInventory.sha256 !== pre.sha256
+    || manifest.executableMigrationInventory.through !== future.through
+    || manifest.executableMigrationInventory.count !== future.count
+    || manifest.executableMigrationInventory.sha256 !== future.sha256
     || manifest.roles.ownerMigration.through !== manifest.executableMigrationInventory.through
+    || manifest.roles.ownerMigration.from.through !== post.through
+    || manifest.roles.ownerMigration.from.count !== post.count
+    || manifest.roles.ownerMigration.from.sha256 !== post.sha256
+    || manifest.roles.ownerMigration.from.postgresPolicyProfile !== post.postgresPolicyProfile
     || manifest.roles.ownerMigration.from.through + 1 !== manifest.executableMigrationInventory.through
     || manifest.roles.ownerMigration.from.count + 1 !== manifest.executableMigrationInventory.count
     || manifest.upgradeContract.minimumDatabaseEpoch.through !== manifest.roles.ownerMigration.from.through
@@ -154,7 +158,7 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || future.count !== post.count + 1
     || manifest.plannedMigration.timestamp !== future.through
   ) {
-    throw new Error('Schema-epoch manifest does not describe the bounded pre/post enforcement bridge');
+    throw new Error('Schema-epoch manifest does not describe the bounded Cloud passkey owner transition');
   }
   return manifest;
 }
@@ -195,11 +199,8 @@ export function assertSchemaEpochInvocation(
  * Bind this process to the manifest's bounded executable migration inventory.
  *
  * The application and separately credentialed owner job use the same signed
- * bytes. The owner may apply only the executable inventory; application
- * startup can only verify it. The later enforcement migration remains present
- * for post-cutover ledger recognition but is never executable by this bridge.
- * The signed 0133 ledger is recognized for rollback compatibility, but its
- * migration is not present or executable in this release.
+ * bytes. The owner may apply only the exact 0133 inventory; application
+ * startup can only verify it and rejects a pending 0133 migration.
  */
 export function bindDataSourceToSchemaEpoch(
   dataSource: DataSource,

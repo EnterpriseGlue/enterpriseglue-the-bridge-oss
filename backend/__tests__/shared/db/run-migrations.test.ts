@@ -17,6 +17,10 @@ import {
   grantSchemaEpochReleaseEffectCohortRuntimePrivileges,
   verifySchemaEpochReleaseEffectCohortRuntimePrivileges,
 } from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
+import {
+  grantSchemaEpochCloudPasskeyRuntimePrivileges,
+  verifySchemaEpochCloudPasskeyRuntimePrivileges,
+} from '@enterpriseglue/shared/db/schema-epoch-cloud-passkey-grant.js';
 import { AddPostgresTenantRls1700000000126 } from '@enterpriseglue/shared/db/migrations/1700000000126-add-postgres-tenant-rls.js';
 import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
@@ -62,6 +66,11 @@ vi.mock('@enterpriseglue/shared/db/postgres-runtime-grants.js', () => ({
 vi.mock('@enterpriseglue/shared/db/schema-epoch-runtime-grant.js', () => ({
   grantSchemaEpochReleaseEffectCohortRuntimePrivileges: vi.fn().mockResolvedValue(undefined),
   verifySchemaEpochReleaseEffectCohortRuntimePrivileges: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@enterpriseglue/shared/db/schema-epoch-cloud-passkey-grant.js', () => ({
+  grantSchemaEpochCloudPasskeyRuntimePrivileges: vi.fn().mockResolvedValue(undefined),
+  verifySchemaEpochCloudPasskeyRuntimePrivileges: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -183,7 +192,7 @@ describe('runMigrations bootstrap behavior', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
-  it('uses the explicit pooled runtime contract and applies only 0131 despite a drifted legacy tenancy variable', async () => {
+  it('uses the explicit pooled runtime contract and applies only 0133 despite a drifted legacy tenancy variable', async () => {
     vi.stubEnv('EG_POSTGRES_RUNTIME_ROLE', 'eg_runtime');
     vi.stubEnv('TENANCY_MODE', 'single');
     vi.mocked(adapter.getDatabaseType).mockReturnValue('postgres');
@@ -242,20 +251,20 @@ describe('runMigrations bootstrap behavior', () => {
     vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
     vi.mocked(verifyOwnerMigrationStartingEpoch).mockResolvedValue('owner-source');
     vi.mocked(verifyExecutedSchemaEpoch).mockResolvedValue({
-      id: 'pre-enforcement',
-      through: 1700000000131,
-      count: 133,
-      sha256: '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1',
-      postgresPolicyProfile: 'dual-context-compatibility/v1',
+      id: 'cloud-email-passkeys',
+      through: 1700000000133,
+      count: 135,
+      sha256: 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d',
+      postgresPolicyProfile: 'explicit-context/v1',
     });
 
     try {
       await runSchemaEpochOwnerMigrations();
       expect(dataSource.runMigrations).toHaveBeenCalledOnce();
       expect(verifyOwnerMigrationStartingEpoch).toHaveBeenCalledOnce();
-      expect(dataSource.migrations.at(-1)?.name).toBe('AddReleaseEffectCohorts1700000000131');
+      expect(dataSource.migrations.at(-1)?.name).toBe('AddCloudEmailPasskeys1700000000133');
       expect(dataSource.migrations.some((migration: { name?: string }) =>
-        migration.name === 'EnforceExplicitPostgresContext1700000000132')).toBe(false);
+        migration.name === 'EnforceExplicitPostgresContext1700000000132')).toBe(true);
       expect(dataSource.synchronize).not.toHaveBeenCalled();
       expect(rlsRepair).not.toHaveBeenCalled();
       expect(policyRunner.addColumn).not.toHaveBeenCalled();
@@ -268,16 +277,21 @@ describe('runMigrations bootstrap behavior', () => {
         policyRunner,
         'eg_runtime',
       );
+      expect(grantSchemaEpochCloudPasskeyRuntimePrivileges).toHaveBeenCalledExactlyOnceWith(
+        dataSource,
+        policyRunner,
+        'eg_runtime',
+      );
       expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(
         1,
         policyRunner,
-        'legacy-tenant-context/v1',
+        'explicit-context/v1',
       );
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(
         2,
         policyRunner,
-        'dual-context-compatibility/v1',
+        'explicit-context/v1',
       );
     } finally {
       (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
@@ -312,6 +326,7 @@ describe('runMigrations bootstrap behavior', () => {
       expect(dataSource.synchronize).not.toHaveBeenCalled();
       expect(withPostgresMigrationContext).not.toHaveBeenCalled();
       expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).not.toHaveBeenCalled();
+      expect(grantSchemaEpochCloudPasskeyRuntimePrivileges).not.toHaveBeenCalled();
       expect(runner).not.toHaveProperty('query');
     } finally {
       (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
@@ -375,13 +390,18 @@ describe('runMigrations bootstrap behavior', () => {
     };
     vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
     vi.mocked(verifyExecutedSchemaEpoch).mockResolvedValue({
-      id: 'pre-enforcement', through: 1700000000131, count: 133,
-      sha256: '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1',
-      postgresPolicyProfile: 'dual-context-compatibility/v1',
+      id: 'cloud-email-passkeys', through: 1700000000133, count: 135,
+      sha256: 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d',
+      postgresPolicyProfile: 'explicit-context/v1',
     });
     try {
       await runSchemaEpochPreflight();
       expect(verifySchemaEpochReleaseEffectCohortRuntimePrivileges).toHaveBeenCalledExactlyOnceWith(
+        dataSource,
+        integrityRunner,
+        'eg_runtime',
+      );
+      expect(verifySchemaEpochCloudPasskeyRuntimePrivileges).toHaveBeenCalledExactlyOnceWith(
         dataSource,
         integrityRunner,
         'eg_runtime',
@@ -393,11 +413,12 @@ describe('runMigrations bootstrap behavior', () => {
       expect(integrityRunner.getTable).not.toHaveBeenCalled();
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenCalledWith(
         integrityRunner,
-        'dual-context-compatibility/v1',
+        'explicit-context/v1',
         postgresCatalogTableExists,
       );
       expect(refreshPostgresRuntimeGrants).not.toHaveBeenCalled();
       expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).not.toHaveBeenCalled();
+      expect(grantSchemaEpochCloudPasskeyRuntimePrivileges).not.toHaveBeenCalled();
     } finally {
       (config as { tenancyMode: string }).tenancyMode = previousTenancyMode;
       vi.unstubAllEnvs();

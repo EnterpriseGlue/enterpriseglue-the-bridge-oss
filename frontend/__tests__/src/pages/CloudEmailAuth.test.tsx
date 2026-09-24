@@ -27,6 +27,7 @@ describe('Cloud email-and-passkey account page', () => {
     vi.mocked(apiClient.post).mockRejectedValue(new Error('unavailable'));
     render(<MemoryRouter initialEntries={['/signup/email/signin']}><CloudEmailAuth /></MemoryRouter>);
     expect(screen.getByRole('heading', { name: 'Sign in with a passkey' })).toBeInTheDocument();
+    expect(await screen.findByText('Passkey sign-in is temporarily unavailable.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Other sign-in methods' })).toHaveAttribute('href', '/login');
   });
 });

@@ -28,6 +28,10 @@ import {
   grantSchemaEpochReleaseEffectCohortRuntimePrivileges,
   verifySchemaEpochReleaseEffectCohortRuntimePrivileges,
 } from './schema-epoch-runtime-grant.js';
+import {
+  grantSchemaEpochCloudPasskeyRuntimePrivileges,
+  verifySchemaEpochCloudPasskeyRuntimePrivileges,
+} from './schema-epoch-cloud-passkey-grant.js';
 import { getPlatformDatabaseCapability } from '../services/platform-database-context.js';
 import {
   assertReleaseEffectCohortTableShape,
@@ -564,9 +568,9 @@ async function verifySchemaEpochPolicy(
   }
 }
 
-/** Execute the one signed 0130 -> 0131 bridge transition without the generic
+/** Execute the signed 0132 -> 0133 Cloud passkey transition without the generic
  * migration policy lease or any bootstrap/repair/baseline path. The database
- * ledger and legacy policy are verified before the first database mutation. */
+ * ledger and explicit-context policy are verified before the first database mutation. */
 async function runBoundedSchemaEpochOwnerMigration(
   dataSource: DataSource,
   manifest: ReturnType<typeof loadBundledSchemaEpochManifest>,
@@ -589,7 +593,7 @@ async function runBoundedSchemaEpochOwnerMigration(
   const pendingMigrations = await dataSource.showMigrations();
   if (startingEpoch === 'owner-source') {
     if (!pendingMigrations) {
-      throw new Error('Signed owner transition expected migration 1700000000131 to be pending');
+      throw new Error('Signed owner transition expected migration 1700000000133 to be pending');
     }
     await dataSource.runMigrations({ transaction: 'all' });
   } else if (pendingMigrations) {
@@ -607,6 +611,7 @@ async function runBoundedSchemaEpochOwnerMigration(
     await verifySchemaEpochPolicy(verifiedRunner, accepted.postgresPolicyProfile);
     if (runtimeRole !== undefined) {
       await grantSchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, verifiedRunner, runtimeRole);
+      await grantSchemaEpochCloudPasskeyRuntimePrivileges(dataSource, verifiedRunner, runtimeRole);
     }
     console.log(
       `  ✅ Verified immutable database schema epoch ${accepted.id} ` +
@@ -832,6 +837,7 @@ async function runMigrationsForInvocation(
         }
         if (schemaEpochPreflight && runtimeRole !== undefined) {
           await verifySchemaEpochReleaseEffectCohortRuntimePrivileges(dataSource, integrityRunner, runtimeRole);
+          await verifySchemaEpochCloudPasskeyRuntimePrivileges(dataSource, integrityRunner, runtimeRole);
         }
       }
       if (!schemaEpochPreflight) {

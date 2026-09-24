@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DataSource } from 'typeorm';
+import { DataSource, getMetadataArgsStorage } from 'typeorm';
 import type { Pool } from 'pg';
 import {
   postgresCatalogTableExists,
@@ -11,6 +11,14 @@ import {
   verifySchemaEpochReleaseEffectCohortRuntimePrivileges,
 } from '@enterpriseglue/shared/db/schema-epoch-runtime-grant.js';
 import { EnforceExplicitPostgresContext1700000000132 } from '@enterpriseglue/shared/db/migrations/1700000000132-enforce-explicit-postgres-context.js';
+import { AddCloudEmailPasskeys1700000000133 } from '@enterpriseglue/shared/db/migrations/1700000000133-add-cloud-email-passkeys.js';
+import {
+  grantSchemaEpochCloudPasskeyRuntimePrivileges,
+  verifySchemaEpochCloudPasskeyRuntimePrivileges,
+} from '@enterpriseglue/shared/db/schema-epoch-cloud-passkey-grant.js';
+import { CloudEmailSignup } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudEmailSignup.js';
+import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
+import { CloudPasskeyChallenge } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskeyChallenge.js';
 
 const env = (name: string, fallback: string) =>
   process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
@@ -28,6 +36,7 @@ const legacyPredicate = "COALESCE(NULLIF(current_setting('enterpriseglue.tenancy
 let pool: Pool;
 let ownerDataSource: DataSource;
 let preflightDataSource: DataSource;
+const originalSchemas: Array<{ table: { schema?: string }; schema?: string }> = [];
 
 const tenantTables = [
   { tableName: 'projects', columns: ['tenant_id'] },
@@ -63,6 +72,12 @@ function preflightPolicyRunner() {
 
 describe('PostgreSQL schema-epoch bridge policy readiness', () => {
   beforeAll(async () => {
+    for (const entity of [CloudEmailSignup, CloudPasskey, CloudPasskeyChallenge]) {
+      const table = getMetadataArgsStorage().tables.find((entry) => entry.target === entity);
+      if (!table) throw new Error(`Missing signed metadata for ${entity.name}`);
+      originalSchemas.push({ table, schema: table.schema });
+      table.schema = schema;
+    }
     const pgModule = await import('pg');
     const PoolConstructor = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
     pool = new PoolConstructor({
@@ -118,7 +133,7 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
       database: env('POSTGRES_DATABASE', 'postgres'),
       schema,
       synchronize: false,
-      entities: [],
+      entities: [CloudEmailSignup, CloudPasskey, CloudPasskeyChallenge],
       ssl: env('POSTGRES_SSL', 'false') === 'true' ? { rejectUnauthorized: false } : false,
     };
     ownerDataSource = await new DataSource({
@@ -134,6 +149,7 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
   });
 
   afterAll(async () => {
+    for (const { table, schema: originalSchema } of originalSchemas) table.schema = originalSchema;
     if (!pool) return;
     if (preflightDataSource?.isInitialized) await preflightDataSource.destroy();
     if (ownerDataSource?.isInitialized) await ownerDataSource.destroy();
@@ -278,5 +294,64 @@ describe('PostgreSQL schema-epoch bridge policy readiness', () => {
       'explicit-context/v1',
       postgresCatalogTableExists,
     )).resolves.toEqual({ expected: 3, enforced: 3 });
+  });
+
+  it('applies 0133 on PostgreSQL and grants only exact passkey DML to the restricted runtime role', async () => {
+    const ownerRunner = ownerDataSource.createQueryRunner();
+    await ownerRunner.connect();
+    try {
+      await new AddCloudEmailPasskeys1700000000133().up(ownerRunner);
+      await grantSchemaEpochCloudPasskeyRuntimePrivileges(ownerDataSource, ownerRunner, runtimeRole);
+    } finally {
+      await ownerRunner.release();
+    }
+    const preflightRunner = preflightDataSource.createQueryRunner();
+    await preflightRunner.connect();
+    try {
+      await expect(verifySchemaEpochCloudPasskeyRuntimePrivileges(
+        ownerDataSource, preflightRunner, runtimeRole,
+      )).resolves.toBeUndefined();
+    } finally {
+      await preflightRunner.release();
+    }
+    for (const [table, expected] of [
+      ['cloud_email_signups', [true, true, true, true]],
+      ['cloud_passkeys', [true, true, true, false]],
+      ['cloud_passkey_challenges', [true, true, false, true]],
+    ] as const) {
+      const actual = await pool.query(`SELECT
+        has_table_privilege($1, $2, 'SELECT') AS select_ok,
+        has_table_privilege($1, $2, 'INSERT') AS insert_ok,
+        has_table_privilege($1, $2, 'UPDATE') AS update_ok,
+        has_table_privilege($1, $2, 'DELETE') AS delete_ok,
+        has_table_privilege($1, $2, 'TRUNCATE') AS truncate_ok`,
+      [runtimeRole, `${schema}.${table}`]);
+      expect(Object.values(actual.rows[0])).toEqual([...expected, false]);
+    }
+
+    const passkeys = `${quoteIdentifier(schema)}.${quoteIdentifier('cloud_passkeys')}`;
+    await pool.query(`GRANT DELETE ON TABLE ${passkeys} TO ${quoteIdentifier(runtimeRole)}`);
+    const unsafeRunner = preflightDataSource.createQueryRunner();
+    await unsafeRunner.connect();
+    try {
+      await expect(verifySchemaEpochCloudPasskeyRuntimePrivileges(
+        ownerDataSource, unsafeRunner, runtimeRole,
+      )).rejects.toThrow(/incorrect direct cloud_passkeys privileges/);
+    } finally {
+      await unsafeRunner.release();
+    }
+    await pool.query(`REVOKE DELETE ON TABLE ${passkeys} FROM ${quoteIdentifier(runtimeRole)}`);
+
+    await pool.query(`GRANT SELECT ON TABLE ${passkeys} TO PUBLIC`);
+    const publicRunner = preflightDataSource.createQueryRunner();
+    await publicRunner.connect();
+    try {
+      await expect(verifySchemaEpochCloudPasskeyRuntimePrivileges(
+        ownerDataSource, publicRunner, runtimeRole,
+      )).rejects.toThrow(/unexpected effective cloud_passkeys privileges/);
+    } finally {
+      await publicRunner.release();
+    }
+    await pool.query(`REVOKE SELECT ON TABLE ${passkeys} FROM PUBLIC`);
   });
 });
