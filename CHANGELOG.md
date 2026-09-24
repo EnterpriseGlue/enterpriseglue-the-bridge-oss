@@ -12,7 +12,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 * **auth:** align organization chooser with pooled login ([23d1fe0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/23d1fe0b5929078ad37a7fb4fed87825a6689a40))
 * **auth:** clarify personal email discovery on landing ([e3e7065](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e3e7065f6791abcbe9215902fb6c06a4428ef2ab))
 * **auth:** find organizations after cloud account sign-in ([579b0ad](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/579b0ad29242f2357832794ebe9db779df60bd37))
-* **auth:** find organizations after cloud account sign-in ([129d8ec](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/129d8ecbc49edd9c2d6918605844ec0cddc2d924))
 * **auth:** separate Cloud signup from account discovery ([1924c52](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1924c523d4c30c16c90172b755c708b353ba69eb))
 
 ## [0.28.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.7...v0.28.8) (2026-09-22)
