@@ -1,0 +1,74 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-account-organization-login",
+  "type": "fix",
+  "scope": "saas-authentication",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "security"
+  ],
+  "summary": "Lets pooled SaaS users sign in with a global Cloud identity provider and enter an organization only after authenticated membership checks.",
+  "userImpact": [
+    "The neutral organization finder offers configured Cloud account sign-in methods alongside email and organization-name discovery, with a separate account-creation link; existing personal-email accounts can use the one-time email-link fallback.",
+    "After Cloud sign-in, one active organization opens automatically; multiple active memberships require an explicit organization choice on the same login page, using the same option layout as sign-in."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Cloud account identity remains opt-in; tenant-specific login policies and DNS-verified discovery domains are unchanged."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The global Cloud identity-provider start endpoint accepts the exact /login return path in addition to /cloud/onboarding."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The provider callback return path remains exact and signed; organization entry rechecks an authenticated active membership and issues a tenant-bound session.",
+    "No account or tenant is selected from an unverified email alone, and email-only account merging remains disabled."
+  ],
+  "documentation": [
+    "The technical SSO guide describes identity-first Cloud account sign-in and authenticated organization selection."
+  ],
+  "knownLimitations": [
+    "A work-email domain shared by multiple organizations cannot automatically identify one tenant before authentication."
+  ],
+  "rollback": [
+    "Redeploy the prior OSS host images; existing tenant discovery and Cloud onboarding sign-in remain available and no database rollback is needed."
+  ],
+  "validation": [
+    "Frontend and browser tests cover global provider presentation, sole-tenant entry, multiple-membership selection, and failure handling.",
+    "PostgreSQL identity integration verifies the signed /login callback, membership-gated tenant switch, and sibling denial."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.10",
+      "newVersion": "0.19.11",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.20",
+      "newVersion": "0.17.21",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.6",
+      "newVersion": "0.22.7",
+      "impact": "patch"
+    }
+  ]
+}

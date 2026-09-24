@@ -69,6 +69,84 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 }
 
 test.describe('Login experience screenshot gallery', () => {
+  test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page, browserName }) => {
+    let authenticated = false;
+    let selectedTenant: string | null = null;
+    let providerReturnTo: string | null = null;
+    await page.route('**/api/tenancy/capabilities', (route) => json(route, {
+      mode: 'pooled', rootTenantAliasesEnabled: false, tenantScopedLoginRequired: true,
+      databaseIsolation: 'postgres_rls', customDomainsEnabled: true, organizationDiscoveryEnabled: true,
+      signedPlacementAssertionsEnabled: true,
+    }));
+    await page.route('**/api/plugins/v1/frontend', (route) => json(route, {
+      apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 1, issues: [], plugins: [],
+    }));
+    await page.route('**/api/auth/branding', (route) => json(route, {}));
+    await page.route('**/api/auth/me', (route) => authenticated
+      ? json(route, {
+        id: 'verified-account', email: 'person@shared.example', firstName: 'Verified', lastName: 'User',
+        platformRole: 'user', authProvider: 'oidc', isActive: true, isEmailVerified: true,
+        createdAt: Date.now(), session: { principal: { type: 'user', id: 'verified-account' }, tenant: { id: null } },
+      })
+      : json(route, { error: 'Not authenticated' }, 401));
+    await page.route('**/api/auth/refresh', (route) => json(route, { error: 'No refresh session' }, 401));
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'verified-account', tenantId: null, platform: [], projects: [], engines: [],
+      generatedAt: Date.now(), authorizationVersion: 'browser-cloud-account-v1',
+    }));
+    await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, [
+      { id: 'apple-global', displayName: 'Apple', protocol: 'oidc' },
+      { id: 'google-global', displayName: 'Google', protocol: 'oidc' },
+      { id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' },
+    ]));
+    await page.route(/\/api\/auth\/cloud-signup\/providers\/[^/]+\/start\?/, (route) => {
+      providerReturnTo = new URL(route.request().url()).searchParams.get('returnTo');
+      authenticated = true;
+      // WebKit cannot fulfill an intercepted navigation with a 302; model the
+      // provider callback return in the fixture without changing app routing.
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><script>location.replace("/login")</script>' });
+    });
+    await page.route('**/api/auth/my-tenants', (route) => json(route, [
+      { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'member' },
+      { tenantId: 'b', tenantSlug: 'bravo', tenantName: 'Bravo', tenantStatus: 'active', role: 'member' },
+      { tenantId: 'c', tenantSlug: 'disabled', tenantName: 'Disabled', tenantStatus: 'suspended', role: 'member' },
+    ]));
+    await page.route('**/api/auth/switch-tenant', (route) => {
+      selectedTenant = route.request().postDataJSON().tenantSlug;
+      return json(route, { error: 'Membership changed' }, 403);
+    });
+
+    await page.goto('/login');
+    await expect(page.getByRole('button', { name: 'Continue with Apple' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
+    await captureManualScreenshot(page, '96-cloud-login-entry.jpg');
+    await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Bravo' })).toHaveClass(/eg-login-provider-button/);
+    await captureManualScreenshot(page, '97-cloud-organization-chooser.jpg');
+    await page.setViewportSize({ width: 320, height: 720 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.setViewportSize({ width: 720, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(page.getByRole('button', { name: 'Alpha' })).toBeFocused();
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+    await expect(page.getByRole('button', { name: 'Bravo' })).toBeFocused();
+    expect(providerReturnTo).toBe('/login');
+    await expect(page.getByRole('button', { name: 'Disabled' })).toHaveCount(0);
+    expect(selectedTenant).toBeNull();
+    await page.getByRole('button', { name: 'Bravo' }).click();
+    await expect(page.getByText('Could not open this organization. Your access may have changed. Try again.')).toBeVisible();
+    expect(selectedTenant).toBe('bravo');
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
   test('opens anonymous signup without probing or refreshing a session @identity-lifecycle', async ({ page }) => {
     await installBootstrap(page);
     const diagnostics = monitorBrowserDiagnostics(page);

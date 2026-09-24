@@ -1,8 +1,8 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
-import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, Tile } from '@carbon/react';
+import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification } from '@carbon/react';
 import { useAuth } from '../shared/hooks/useAuth';
-import { apiClient } from '../shared/api/client';
+import { apiClient, ApiError } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
 import LoginProviderButton from '../shared/components/LoginProviderButton';
@@ -36,6 +36,8 @@ interface TenantDiscoveryMembership {
   tenantStatus: 'active' | 'suspended' | 'deleting';
   role: 'admin' | 'member';
 }
+
+type CloudAccountProvider = { id: string; displayName: string; protocol: 'oidc' | 'saml' };
 
 type TenantDiscoveryResult =
   | { status: 'resolved'; tenantSlug: string; loginPath: string }
@@ -102,11 +104,14 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [workspace, setWorkspace] = useState('');
-  const [organizationStep, setOrganizationStep] = useState<'email' | 'workspace' | 'tenants'>('email');
+  const [organizationStep, setOrganizationStep] = useState<'email' | 'workspace' | 'tenants' | 'account-tenants' | 'account-empty'>('email');
   const [organizationChoices, setOrganizationChoices] = useState<TenantDiscoveryMembership[]>([]);
   const [organizationNotice, setOrganizationNotice] = useState<string | null>(null);
   const [organizationError, setOrganizationError] = useState<string | null>(null);
   const [organizationLoading, setOrganizationLoading] = useState(false);
+  const [cloudAccountProviders, setCloudAccountProviders] = useState<CloudAccountProvider[]>([]);
+  const [cloudProviderError, setCloudProviderError] = useState<string | null>(null);
+  const [membershipAttempt, setMembershipAttempt] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [loginMethods, setLoginMethods] = useState<PublicLoginMethodsResponse | null>(null);
   const [directLdapProvider, setDirectLdapProvider] = useState<PublicLoginProvider | null>(null);
@@ -125,6 +130,7 @@ export default function Login() {
   const errorRef = useRef<HTMLDivElement | null>(null);
   const hasAppliedFirstFocusableState = useRef(false);
   const hasExchangedDiscoveryToken = useRef(false);
+  const tenantSwitchInFlight = useRef(false);
 
   const touchFields = useCallback((...fields: LoginField[]) => {
     setTouchedFields((current) => {
@@ -146,7 +152,7 @@ export default function Login() {
 
   const emailError = touchedFields.email ? emailFieldError(email, 'Email') : null;
   const passwordError = touchedFields.password ? requiredFieldError(password, 'Password') : null;
-  const discoveryEmailError = touchedFields.discoveryEmail ? emailFieldError(email, 'Work email') : null;
+  const discoveryEmailError = touchedFields.discoveryEmail ? emailFieldError(email, 'Email address') : null;
   const workspaceError = touchedFields.workspace && !workspaceSlug(workspace)
     ? 'Use 1–63 lowercase letters, numbers, or hyphens'
     : null;
@@ -185,6 +191,19 @@ export default function Login() {
   useEffect(() => {
     loadLoginMethods();
   }, [loadLoginMethods]);
+
+  const loadCloudAccountProviders = useCallback(() => {
+    if (!isOrganizationFinder) return;
+    setCloudProviderError(null);
+    apiClient.get<CloudAccountProvider[]>('/api/auth/cloud-signup/providers')
+      .then((providers) => setCloudAccountProviders(providers))
+      .catch((cause) => {
+        if (cause instanceof ApiError && cause.status === 404) return;
+        setCloudProviderError('Work-account sign-in is temporarily unavailable.');
+      });
+  }, [isOrganizationFinder]);
+
+  useEffect(() => { loadCloudAccountProviders(); }, [loadCloudAccountProviders]);
 
   useEffect(() => {
     if (!tenantSlug) return;
@@ -241,8 +260,48 @@ export default function Login() {
     navigate(`/t/${encodeURIComponent(slug)}/login`, { replace: true });
   }, [navigate]);
 
+  const switchToAuthenticatedTenant = useCallback(async (membership: TenantDiscoveryMembership) => {
+    if (tenantSwitchInFlight.current) return;
+    tenantSwitchInFlight.current = true;
+    setOrganizationLoading(true);
+    setOrganizationError(null);
+    try {
+      await apiClient.post('/api/auth/switch-tenant', { tenantSlug: membership.tenantSlug });
+      redirectTo(`/t/${encodeURIComponent(membership.tenantSlug)}/`);
+    } catch {
+      tenantSwitchInFlight.current = false;
+      setOrganizationError('Could not open this organization. Your access may have changed. Try again.');
+      setOrganizationLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!isOrganizationFinder || hasExchangedDiscoveryToken.current) return;
+    if (!isOrganizationFinder || isAuthLoading || !isAuthenticated) return;
+    let cancelled = false;
+    setOrganizationLoading(true);
+    setOrganizationError(null);
+    apiClient.get<TenantDiscoveryMembership[]>('/api/auth/my-tenants')
+      .then((memberships) => {
+        if (cancelled) return;
+        const active = memberships.filter((membership) => membership.tenantStatus === 'active');
+        if (active.length === 1) {
+          void switchToAuthenticatedTenant(active[0]);
+        } else {
+          setOrganizationChoices(active);
+          setOrganizationStep(active.length ? 'account-tenants' : 'account-empty');
+          setOrganizationLoading(false);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOrganizationError('Could not load your organizations. Try again.');
+        setOrganizationLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isOrganizationFinder, isAuthLoading, isAuthenticated, membershipAttempt, switchToAuthenticatedTenant]);
+
+  useEffect(() => {
+    if (!isOrganizationFinder || isAuthLoading || isAuthenticated || hasExchangedDiscoveryToken.current) return;
     const token = new URLSearchParams(location.hash.replace(/^#/, '')).get('discovery_token');
     if (!token) return;
     hasExchangedDiscoveryToken.current = true;
@@ -261,16 +320,16 @@ export default function Login() {
           setOrganizationStep('tenants');
           return;
         }
-        setOrganizationError('No active organization is available for this link. Try your work email or organization name.');
+        setOrganizationError('No active organization is available for this link. Try your email address or organization name.');
       })
       .catch(() => setOrganizationError('This organization link is invalid or has expired. Request a new link.'))
       .finally(() => setOrganizationLoading(false));
-  }, [isOrganizationFinder, location.hash, navigate, openTenantLogin]);
+  }, [isOrganizationFinder, isAuthLoading, isAuthenticated, location.hash, navigate, openTenantLogin]);
 
   const handleOrganizationEmailSubmit = async (event: FormEvent) => {
     event.preventDefault();
     touchFields('discoveryEmail');
-    if (emailFieldError(email, 'Work email')) {
+    if (emailFieldError(email, 'Email address')) {
       window.requestAnimationFrame(() => document.getElementById('organization-discovery-email')?.focus({ preventScroll: true }));
       return;
     }
@@ -551,18 +610,34 @@ export default function Login() {
   ]);
 
   useEffect(() => {
-    if (!isOrganizationFinder || organizationLoading) return;
+    if (!isOrganizationFinder || organizationLoading || isAuthLoading) return;
     const id = organizationStep === 'email'
       ? 'organization-discovery-email'
       : organizationStep === 'workspace'
         ? 'organization-slug'
-        : 'organization-picker-heading';
+        : 'public-auth-page-title';
     window.requestAnimationFrame(() => document.getElementById(id)?.focus({ preventScroll: true }));
-  }, [isOrganizationFinder, organizationLoading, organizationStep]);
+  }, [isOrganizationFinder, isAuthLoading, organizationLoading, organizationStep]);
 
   if (isOrganizationFinder) {
     return (
-      <PublicAuthShell title="Find your organization" homePath="/" appearance="process">
+      <PublicAuthShell
+        title={organizationStep === 'account-tenants' || organizationStep === 'tenants'
+          ? 'Choose an organization'
+          : organizationStep === 'account-empty'
+            ? 'No organization yet'
+            : 'Find your organization'}
+        homePath="/"
+        appearance="process"
+      >
+        {loginError && <InlineNotification
+          kind="error"
+          lowContrast
+          hideCloseButton
+          title="Work-account sign-in failed"
+          subtitle={sentence(loginError)}
+          style={{ marginBottom: 'var(--spacing-5)' }}
+        />}
         {organizationError && <InlineNotification
           kind="error"
           lowContrast
@@ -579,17 +654,71 @@ export default function Login() {
           subtitle={organizationNotice}
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
+        {isAuthLoading && <div role="status" aria-live="polite" style={{ padding: 'var(--spacing-4) 0' }}>
+          <InlineLoading description="Checking your account…" />
+        </div>}
         {organizationLoading && <div role="status" aria-live="polite" style={{ padding: 'var(--spacing-4) 0' }}>
           <InlineLoading description="Finding your organization…" />
         </div>}
 
-        {!organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Use your work email</h2>
-          <p className="eg-login-intro-copy">We’ll use your verified work-email domain to open the right organization. Your email does not grant access.</p>
+        {isAuthenticated && organizationError && !organizationLoading && <Button type="button" kind="secondary" onClick={() => setMembershipAttempt((attempt) => attempt + 1)}>Retry</Button>}
+
+        {isAuthenticated && !organizationLoading && organizationStep === 'account-tenants' && <div>
+          <p className="eg-login-intro-copy">These are the organizations linked to your verified account.</p>
+          <div className="eg-login-provider-list">
+            {organizationChoices.map((tenant) => <Button
+              key={tenant.tenantId}
+              type="button"
+              kind="tertiary"
+              size="md"
+              className="eg-login-provider-button"
+              onClick={() => void switchToAuthenticatedTenant(tenant)}
+            >
+              <span className="eg-login-provider-button__action">{tenant.tenantName}</span>
+            </Button>)}
+          </div>
+        </div>}
+
+        {isAuthenticated && !organizationLoading && organizationStep === 'account-empty' && <div>
+          <p className="eg-login-intro-copy">Your account is verified, but it is not a member of an active organization. Ask an administrator for access or create one.</p>
+          <Button as={RouterLink} to="/cloud/onboarding" kind="primary">Create an organization</Button>
+        </div>}
+
+        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-7)' }}>
+          <div className="eg-login-section-header">
+            <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
+            <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
+          </div>
+          <p className="eg-login-intro-copy">We’ll show the organizations you can access after sign-in.</p>
+          <div className="eg-login-provider-list">
+            {cloudAccountProviders.map((provider, index) => <LoginProviderButton
+              key={provider.id}
+              provider={{ ...provider, key: provider.id, organization: null, loginMethod: 'redirect', preferred: index === 0, loginDomains: [] }}
+              primary={index === 0}
+              disabled={false}
+              onClick={() => redirectTo(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/login')}`)}
+            />)}
+          </div>
+        </div>}
+        {!isAuthenticated && organizationStep !== 'tenants' && cloudProviderError && <ActionableNotification
+          kind="error"
+          lowContrast
+          hideCloseButton
+          inline
+          actionButtonLabel="Retry"
+          onActionButtonClick={loadCloudAccountProviders}
+          title="Work-account sign-in unavailable"
+          subtitle={cloudProviderError}
+          style={{ marginBottom: 'var(--spacing-5)' }}
+        />}
+
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
+          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Continue with email</h2>
+          <p className="eg-login-intro-copy">Use a work or personal email linked to an organization. A verified work domain can open it directly; otherwise, an existing account receives a one-time link. Email alone does not grant access.</p>
           <div style={{ marginBottom: 'var(--spacing-6)' }}>
             <TextInput
               id="organization-discovery-email"
-              labelText="Work email"
+              labelText="Email address"
               placeholder="name@example.com"
               type="email"
               autoComplete="email"
@@ -607,7 +736,7 @@ export default function Login() {
           </Button>
         </form>}
 
-        {!organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Enter your organization name</h2>
           <p className="eg-login-intro-copy">Use the name from your EnterpriseGlue URL, for example <strong>acme</strong> from <strong>/t/acme</strong>.</p>
           <div style={{ marginBottom: 'var(--spacing-6)' }}>
@@ -626,19 +755,23 @@ export default function Login() {
           </div>
           <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
           <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationStep('email'); }}>
-            Use work email instead
+            Use email instead
           </Button>
         </form>}
 
-        {!organizationLoading && organizationStep === 'tenants' && <div>
-          <h2 id="organization-picker-heading" tabIndex={-1} className="eg-login-section-heading eg-login-section-heading--with-copy">Choose an organization</h2>
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'tenants' && <div>
           <p className="eg-login-intro-copy">You’ll complete that organization’s own login and SSO requirements next.</p>
-          <div style={{ display: 'grid', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}>
-            {organizationChoices.map((tenant) => <Tile key={tenant.tenantId}>
-              <Button kind="ghost" size="lg" onClick={() => openTenantLogin(tenant.tenantSlug)} style={{ width: '100%', justifyContent: 'flex-start' }}>
-                {tenant.tenantName}
-              </Button>
-            </Tile>)}
+          <div className="eg-login-provider-list">
+            {organizationChoices.map((tenant) => <Button
+              key={tenant.tenantId}
+              type="button"
+              kind="tertiary"
+              size="md"
+              className="eg-login-provider-button"
+              onClick={() => openTenantLogin(tenant.tenantSlug)}
+            >
+              <span className="eg-login-provider-button__action">{tenant.tenantName}</span>
+            </Button>)}
           </div>
           <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationChoices([]); setOrganizationStep('email'); }}>
             Use a different email
