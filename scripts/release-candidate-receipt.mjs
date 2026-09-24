@@ -116,8 +116,8 @@ async function collectArtifacts(artifactDirectory) {
 async function readSchemaEpochManifest(artifactDirectory) {
   const manifest = JSON.parse(await readFile(path.join(artifactDirectory, SCHEMA_EPOCH_MANIFEST_PATH), 'utf8'))
   if (
-    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v1'
-    || manifest?.id !== 'postgres-explicit-context-bridge-v1'
+    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v2'
+    || manifest?.id !== 'postgres-explicit-context-cloud-email-compat-v2'
     || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
     || manifest?.roles?.preflight?.mode !== 'verify-runtime-grant'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
@@ -141,13 +141,20 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')
     || manifest?.roles?.ownerMigration?.through !== manifest.executableMigrationInventory.through
     || !Array.isArray(manifest?.acceptedDatabaseEpochs)
-    || manifest.acceptedDatabaseEpochs.length !== 2
+    || manifest.acceptedDatabaseEpochs.length !== 3
     || manifest.acceptedDatabaseEpochs[0]?.through !== 1700000000131
     || manifest.acceptedDatabaseEpochs[0]?.id !== 'pre-enforcement'
     || manifest.acceptedDatabaseEpochs[0]?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
     || manifest.acceptedDatabaseEpochs[1]?.through !== 1700000000132
     || manifest.acceptedDatabaseEpochs[1]?.id !== 'post-enforcement'
     || manifest.acceptedDatabaseEpochs[1]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest.acceptedDatabaseEpochs[2]?.through !== 1700000000133
+    || manifest.acceptedDatabaseEpochs[2]?.count !== 135
+    || manifest.acceptedDatabaseEpochs[2]?.id !== 'cloud-email-passkeys'
+    || manifest.acceptedDatabaseEpochs[2]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest.acceptedDatabaseEpochs[2]?.sha256 !== 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'
+    || manifest?.plannedMigration?.name !== 'AddCloudEmailPasskeys1700000000133'
+    || manifest?.plannedMigration?.timestamp !== 1700000000133
   ) fail('Candidate schema-epoch manifest is not the bounded dual-role compatibility bridge')
   return manifest
 }
@@ -184,6 +191,7 @@ function schemaEpochProjection(manifest, artifact) {
     releaseEffectInventoryVersion: manifest.releaseEffectInventory.version,
     releaseEffectInventorySha256: manifest.releaseEffectInventory.sha256,
     acceptedDatabaseEpochs: deepCopy(manifest.acceptedDatabaseEpochs),
+    plannedMigration: deepCopy(manifest.plannedMigration),
   }
 }
 

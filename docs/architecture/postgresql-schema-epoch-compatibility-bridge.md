@@ -194,6 +194,28 @@ Do not add later migrations to either accepted epoch. A new schema change needs
 a new signed compatibility decision; changing the database ledger or the
 manifest under an existing release identity is unsupported.
 
+## Cloud passkey compatibility successor
+
+The Cloud passkey compatibility release carries a new
+`enterpriseglue-schema-epoch/v2` manifest with identity
+`postgres-explicit-context-cloud-email-compat-v2`. It does not modify any
+previously published v1 manifest or the 0131/0132 ledger definitions. The v2
+manifest adds only the exact future ledger ending at migration 0133, whose
+registered identity is `AddCloudEmailPasskeys1700000000133` and whose
+ordered-inventory SHA-256 is
+`fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d`.
+The 0133 ledger retains the exact `explicit-context/v1` PostgreSQL policy
+profile. Any other migration identity, ledger, or policy profile fails closed.
+
+This compatibility release contains no 0133 migration implementation and
+creates no passkey tables. Its owner job remains bounded to 0131; its
+application and preflight remain verify-only. After it is installed, a later
+release may apply 0133 through a separately signed, owner-controlled
+transition. Keep this v2 release available as the application rollback target
+after that transition; v1 binaries cannot read the 0133 ledger. The downstream
+Cloud intake verifier must recognize the v2 receipt projection before the
+compatibility release is selected for staging.
+
 ## Verification
 
 Focused source checks are:

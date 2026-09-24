@@ -22,6 +22,17 @@ const DatabaseEpochSchema = MigrationInventorySchema.extend({
   ]),
 }).strict();
 
+const FutureDatabaseEpochSchema = MigrationInventorySchema.extend({
+  id: z.literal('cloud-email-passkeys'),
+  sha256: z.literal('fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'),
+  postgresPolicyProfile: z.literal('explicit-context/v1'),
+}).strict();
+
+const PlannedMigrationSchema = z.object({
+  name: z.literal('AddCloudEmailPasskeys1700000000133'),
+  timestamp: z.literal(1700000000133),
+}).strict();
+
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
   purpose: z.literal('owner-transition-1700000000131-dual-context-closure/v1'),
@@ -35,8 +46,8 @@ const ReleaseEffectInventorySchema = z.object({
 }).strict();
 
 const SchemaEpochManifestSchema = z.object({
-  schemaVersion: z.literal('enterpriseglue-schema-epoch/v1'),
-  id: z.literal('postgres-explicit-context-bridge-v1'),
+  schemaVersion: z.literal('enterpriseglue-schema-epoch/v2'),
+  id: z.literal('postgres-explicit-context-cloud-email-compat-v2'),
   target: z.object({
     databaseType: z.literal('postgres'),
     tenancyMode: z.literal('pooled'),
@@ -64,7 +75,8 @@ const SchemaEpochManifestSchema = z.object({
   executableMigrationInventory: MigrationInventorySchema,
   executableImplementationInventory: ImplementationInventorySchema,
   releaseEffectInventory: ReleaseEffectInventorySchema,
-  acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema]),
+  acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema, FutureDatabaseEpochSchema]),
+  plannedMigration: PlannedMigrationSchema,
 }).strict();
 
 export type SchemaEpochManifest = z.infer<typeof SchemaEpochManifestSchema>;
@@ -119,12 +131,14 @@ function assertInventory(
 
 export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
   const manifest = SchemaEpochManifestSchema.parse(value);
-  const [pre, post] = manifest.acceptedDatabaseEpochs;
+  const [pre, post, future] = manifest.acceptedDatabaseEpochs;
   if (
     pre.id !== 'pre-enforcement'
     || pre.postgresPolicyProfile !== 'dual-context-compatibility/v1'
     || post.id !== 'post-enforcement'
     || post.postgresPolicyProfile !== 'explicit-context/v1'
+    || future.id !== 'cloud-email-passkeys'
+    || future.postgresPolicyProfile !== 'explicit-context/v1'
     || manifest.executableMigrationInventory.through !== pre.through
     || manifest.executableMigrationInventory.count !== pre.count
     || manifest.executableMigrationInventory.sha256 !== pre.sha256
@@ -136,6 +150,9 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || manifest.upgradeContract.minimumDatabaseEpoch.sha256 !== manifest.roles.ownerMigration.from.sha256
     || post.through !== pre.through + 1
     || post.count !== pre.count + 1
+    || future.through !== post.through + 1
+    || future.count !== post.count + 1
+    || manifest.plannedMigration.timestamp !== future.through
   ) {
     throw new Error('Schema-epoch manifest does not describe the bounded pre/post enforcement bridge');
   }
@@ -181,13 +198,15 @@ export function assertSchemaEpochInvocation(
  * bytes. The owner may apply only the executable inventory; application
  * startup can only verify it. The later enforcement migration remains present
  * for post-cutover ledger recognition but is never executable by this bridge.
+ * The signed 0133 ledger is recognized for rollback compatibility, but its
+ * migration is not present or executable in this release.
  */
 export function bindDataSourceToSchemaEpoch(
   dataSource: DataSource,
   manifest: SchemaEpochManifest,
 ): void {
   const registered = canonicalMigrationInventory(dataSource.migrations);
-  for (const epoch of manifest.acceptedDatabaseEpochs) {
+  for (const epoch of manifest.acceptedDatabaseEpochs.slice(0, 2)) {
     assertInventory(
       `Registered migrations through ${epoch.through}`,
       registered.filter((migration) => migration.timestamp <= epoch.through),
@@ -198,6 +217,18 @@ export function bindDataSourceToSchemaEpoch(
   const acceptedMaximum = manifest.acceptedDatabaseEpochs[manifest.acceptedDatabaseEpochs.length - 1].through;
   if (registered.some((migration) => migration.timestamp > acceptedMaximum)) {
     throw new Error('Runtime contains migrations beyond the immutable schema-epoch manifest');
+  }
+
+  const future = manifest.acceptedDatabaseEpochs[2];
+  const registeredFuture = registered.filter((migration) => migration.timestamp > manifest.acceptedDatabaseEpochs[1].through);
+  if (registeredFuture.length > 0) {
+    if (registeredFuture.length !== 1 || registeredFuture[0].name !== manifest.plannedMigration.name) {
+      throw new Error('Runtime contains an unplanned schema-epoch migration');
+    }
+    assertInventory('Registered future migration inventory', registered, future);
+  } else {
+    assertInventory('Planned future migration inventory',
+      [...registered, manifest.plannedMigration], future);
   }
 
   const executableNames = new Set(
