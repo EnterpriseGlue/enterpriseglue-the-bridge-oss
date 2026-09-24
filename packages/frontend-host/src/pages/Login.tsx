@@ -152,7 +152,7 @@ export default function Login() {
 
   const emailError = touchedFields.email ? emailFieldError(email, 'Email') : null;
   const passwordError = touchedFields.password ? requiredFieldError(password, 'Password') : null;
-  const discoveryEmailError = touchedFields.discoveryEmail ? emailFieldError(email, 'Work email') : null;
+  const discoveryEmailError = touchedFields.discoveryEmail ? emailFieldError(email, 'Email address') : null;
   const workspaceError = touchedFields.workspace && !workspaceSlug(workspace)
     ? 'Use 1–63 lowercase letters, numbers, or hyphens'
     : null;
@@ -320,7 +320,7 @@ export default function Login() {
           setOrganizationStep('tenants');
           return;
         }
-        setOrganizationError('No active organization is available for this link. Try your work email or organization name.');
+        setOrganizationError('No active organization is available for this link. Try your email address or organization name.');
       })
       .catch(() => setOrganizationError('This organization link is invalid or has expired. Request a new link.'))
       .finally(() => setOrganizationLoading(false));
@@ -329,7 +329,7 @@ export default function Login() {
   const handleOrganizationEmailSubmit = async (event: FormEvent) => {
     event.preventDefault();
     touchFields('discoveryEmail');
-    if (emailFieldError(email, 'Work email')) {
+    if (emailFieldError(email, 'Email address')) {
       window.requestAnimationFrame(() => document.getElementById('organization-discovery-email')?.focus({ preventScroll: true }));
       return;
     }
@@ -699,12 +699,12 @@ export default function Login() {
         />}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Use your work email</h2>
-          <p className="eg-login-intro-copy">We’ll use your verified work-email domain to open the right organization. Your email does not grant access.</p>
+          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Continue with email</h2>
+          <p className="eg-login-intro-copy">Use a work or personal email already associated with an organization. A verified work domain can open its organization directly; otherwise, we’ll send a one-time link if an active account exists. Email alone does not grant access.</p>
           <div style={{ marginBottom: 'var(--spacing-6)' }}>
             <TextInput
               id="organization-discovery-email"
-              labelText="Work email"
+              labelText="Email address"
               placeholder="name@example.com"
               type="email"
               autoComplete="email"
@@ -741,7 +741,7 @@ export default function Login() {
           </div>
           <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
           <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationStep('email'); }}>
-            Use work email instead
+            Use email instead
           </Button>
         </form>}
 

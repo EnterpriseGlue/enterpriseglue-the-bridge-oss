@@ -114,7 +114,7 @@ test.describe('Login experience screenshot gallery', () => {
 
     await page.goto('/login');
     await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
-    await expect(page.getByLabel('Work email')).toBeVisible();
+    await expect(page.getByLabel('Email address')).toBeVisible();
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { name: 'Choose an organization' })).toBeVisible();
     expect(providerReturnTo).toBe('/login');

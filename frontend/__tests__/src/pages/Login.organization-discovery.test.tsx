@@ -71,7 +71,7 @@ describe('pooled organization discovery login', () => {
     renderLogin();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Find your organization' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Work email')).toHaveFocus();
+    expect(screen.getByLabelText('Email address')).toHaveFocus();
     expect(apiClient.get).not.toHaveBeenCalledWith('/api/auth/login-methods');
   });
 
@@ -80,7 +80,7 @@ describe('pooled organization discovery login', () => {
     (apiClient.post as any).mockResolvedValue({ status: 'resolved', tenantSlug: 'acme', loginPath: '/t/acme/login' });
     renderLogin();
 
-    await user.type(await screen.findByLabelText('Work email'), 'Person@Acme.Example');
+    await user.type(await screen.findByLabelText('Email address'), 'Person@Acme.Example');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/auth/tenant-discovery', { email: 'person@acme.example' }));
@@ -97,7 +97,7 @@ describe('pooled organization discovery login', () => {
     });
     renderLogin();
 
-    await user.type(await screen.findByLabelText('Work email'), 'person@shared.example');
+    await user.type(await screen.findByLabelText('Email address'), 'person@shared.example');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('Check your email')).toBeInTheDocument();
 
@@ -142,7 +142,7 @@ describe('pooled organization discovery login', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Sign in with Microsoft' }));
     expect(redirectMock).toHaveBeenCalledWith('/api/auth/cloud-signup/providers/microsoft-global/start?returnTo=%2Flogin');
-    expect(screen.getByLabelText('Work email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email address')).toBeInTheDocument();
     expect(apiClient.get).not.toHaveBeenCalledWith('/api/auth/login-methods');
   });
 
@@ -159,7 +159,7 @@ describe('pooled organization discovery login', () => {
 
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/auth/switch-tenant', { tenantSlug: 'alpha' }));
     expect(redirectMock).toHaveBeenCalledWith('/t/alpha/');
-    expect(screen.queryByLabelText('Work email')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument();
   });
 
   it('makes an authenticated user choose between active memberships without automatically selecting one', async () => {

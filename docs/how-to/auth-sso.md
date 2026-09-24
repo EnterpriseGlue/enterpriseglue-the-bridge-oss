@@ -238,6 +238,8 @@ Zero and multiple matches use the same response. Membership selection requires
 a short-lived single-use link sent to an existing account. This tenant lookup
 must not be confused with provider `loginDomains`, which run only after the
 tenant has already been resolved.
+The same email-link fallback can find an existing account with a personal
+email address; it does not create an account or bypass that tenant's login.
 
 At most one provider can be preferred in each tenant scope. The service changes
 the previous preferred row and the new preferred row in one TypeORM transaction,
