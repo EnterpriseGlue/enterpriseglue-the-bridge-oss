@@ -19,6 +19,49 @@ For the exact REST/headless settings contract and the UI behavior of
 `manual`, `transition_to_sso`, and `sso_managed`, see
 [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md).
 
+## Managed Cloud email and passkey accounts
+
+When pooled tenancy, `EG_TENANCY_CLOUD_REQUIRED`, and managed Cloud account
+identity are enabled, the public Cloud sign-up page offers an email-and-passkey
+method alongside configured Apple, Google, and Microsoft identity providers.
+This method requires a working default outbound email configuration and an HTTPS
+`FRONTEND_URL` (local `http://localhost` is permitted for development). The
+frontend URL supplies the WebAuthn relying-party origin and host, so changing
+its host invalidates existing passkeys unless credentials are migrated through
+an explicit, separately reviewed recovery procedure.
+
+`POST /api/auth/cloud-signup/email/request` returns the same response for new
+and existing addresses. A new address receives a single-use link, valid for 15
+minutes. An existing address receives guidance to use its current sign-in
+method; matching an email never links accounts. Following the link at
+`GET /api/auth/cloud-signup/email/verify` places only a short-lived HttpOnly
+address-proof cookie in the browser. No account or organization membership is
+created at this point. The browser then obtains user-verified, discoverable
+WebAuthn options from `POST /api/auth/cloud-signup/email/passkey/options` and
+submits the result to `POST /api/auth/cloud-signup/email/passkey/complete`.
+The latter consumes the proof atomically, creates a verified Cloud user and
+passkey, and issues a tenant-neutral Cloud account session. The new user gains
+only the non-privileged authenticated-user baseline. Organization access still
+requires the normal authorized onboarding, invitation, or membership path.
+
+Returning users obtain a browser-bound challenge from
+`POST /api/auth/cloud-passkey/options` and submit their passkey assertion to
+`POST /api/auth/cloud-passkey/complete`. The server verifies the challenge,
+origin, relying-party ID, stored public key, signature, and user verification;
+the challenge is single-use. Browser sessions remain subject to the existing
+Cloud-account refresh and tenant-switch checks. The request and challenge
+endpoints are rate limited. Operators should monitor email delivery, expired
+proofs, passkey-registration failures, and sign-in failures without logging
+raw proof tokens or credential material. Expired pending proofs and challenges
+contain no account authority and may be pruned after their expiry.
+
+Before disabling this method or rolling back the credential schema, provide a
+verified alternative for passkey-only users. Do not drop populated passkey
+tables; that would strand those accounts. Lost-passkey recovery is not
+implemented by this method and must use a separately authorized identity
+recovery process. This flow does not weaken the requirement for tenant SSO or
+grant organization access from an email domain.
+
 ## JWT and Admin Bootstrap
 Required variables:
 - `JWT_SECRET`

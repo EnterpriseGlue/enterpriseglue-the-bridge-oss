@@ -57,6 +57,7 @@
     "@enterpriseglue/plugin-runtime": "workspace:*",
     "@enterpriseglue/plugin-sdk": "workspace:*",
     "@enterpriseglue/shared": "workspace:*",
+    "@simplewebauthn/browser": "13.3.0",
     "@ibm/plex-mono": "1.1.0",
     "@ibm/plex-sans": "1.1.0",
     "@ibm/plex-sans-arabic": "1.1.0",

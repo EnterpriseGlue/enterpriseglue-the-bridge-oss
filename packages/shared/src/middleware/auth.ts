@@ -183,7 +183,8 @@ async function authenticateBrowserSession(
   if (cloudAccountSession && (!allowCloudAccount
     || !managedCloudAccountSessionsEnabled()
     || !payload.sessionId
-    || !['oidc', 'saml'].includes(payload.authenticationMethod || '')
+    || !['oidc', 'saml', 'passkey'].includes(payload.authenticationMethod || '')
+    || (payload.authenticationMethod === 'passkey' && payload.mfaVerified !== true)
     || req.tenant !== undefined)) {
     throw Errors.unauthorized('Cloud account session is not valid for this route');
   }

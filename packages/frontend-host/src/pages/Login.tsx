@@ -734,6 +734,9 @@ export default function Login() {
           <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationNotice(null); setOrganizationStep('workspace'); }}>
             Use an organization name instead
           </Button>
+          <Button as={RouterLink} type="button" to="/signup/email/signin" kind="ghost" size="md" className="eg-login-secondary-action">
+            Sign in with a passkey
+          </Button>
         </form>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>

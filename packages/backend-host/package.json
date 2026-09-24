@@ -26,6 +26,7 @@
   "dependencies": {
     "@enterpriseglue/enterprise-plugin-api": "workspace:*",
     "@enterpriseglue/shared": "workspace:*",
+    "@simplewebauthn/server": "13.3.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
