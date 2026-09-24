@@ -70,6 +70,7 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 
 test.describe('Login experience screenshot gallery', () => {
   test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page, browserName }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     let authenticated = false;
     let selectedTenant: string | null = null;
     let providerReturnTo: string | null = null;
@@ -122,7 +123,24 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
     await expect(page.getByLabel('Email address')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
+    const passkeyLink = page.getByRole('link', { name: 'Sign in with a passkey' });
+    await expect(passkeyLink).toBeVisible();
+    const passkeyBounds = await passkeyLink.boundingBox();
+    expect(passkeyBounds).not.toBeNull();
+    expect(passkeyBounds!.y + passkeyBounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
     await captureManualScreenshot(page, '96-cloud-login-entry.jpg');
+    await page.route('**/api/auth/cloud-passkey/options', (route) => json(route, {
+      challenge: 'dGVzdC1jaGFsbGVuZ2U', rpId: '127.0.0.1', allowCredentials: [], userVerification: 'preferred',
+    }));
+    await passkeyLink.focus();
+    await expect(page.getByText('Email address is required')).toHaveCount(0);
+    await passkeyLink.click();
+    await expect(page).toHaveURL(/\/signup\/email\/signin$/);
+    await expect(page.getByRole('heading', { name: 'Sign in with a passkey' })).toBeVisible();
+    await page.goto('/login');
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByText('Email address is required')).toBeVisible();
+    await captureManualScreenshot(page, '98-cloud-login-email-required.jpg');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeFocused();

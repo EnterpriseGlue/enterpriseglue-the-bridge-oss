@@ -1061,7 +1061,7 @@
   position: relative;
   isolation: isolate;
   justify-content: flex-start;
-  padding: 3rem clamp(1.5rem, 4.5vw, 5rem);
+  padding: 1.5rem clamp(1.5rem, 4.5vw, 5rem);
   background: #08090d;
   overflow: hidden;
 }

@@ -31,8 +31,9 @@ its host invalidates existing passkeys unless credentials are migrated through
 an explicit, separately reviewed recovery procedure.
 
 `POST /api/auth/cloud-signup/email/request` returns the same response for new
-and existing addresses. A new address receives a single-use link, valid for 15
-minutes. An existing address receives guidance to use its current sign-in
+and existing addresses. A new address receives a verification link, valid for 15
+minutes; its browser proof is consumed when passkey registration completes.
+An existing address receives guidance to use its current sign-in
 method; matching an email never links accounts. Following the link at
 `GET /api/auth/cloud-signup/email/verify` places only a short-lived HttpOnly
 address-proof cookie in the browser. No account or organization membership is
