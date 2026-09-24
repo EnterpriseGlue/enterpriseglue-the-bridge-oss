@@ -29,6 +29,7 @@ services:
     environment:
       CHOKIDAR_USEPOLLING: "true"
       DATABASE_TYPE: ${EG_FORCE_DATABASE_TYPE:-${DATABASE_TYPE}}
+      pnpm_config_verify_deps_before_run: "false"
     depends_on:
       db:
         condition: service_healthy
@@ -43,6 +44,7 @@ services:
       test: ["CMD-SHELL", "node -e \"const p=process.env.API_PORT||'8787';require('http').get('http://127.0.0.1:'+p+'/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));\""]
       interval: 10s
       timeout: 3s
+      start_period: 10m
       retries: 10
     networks:
       - enterpriseglue-network

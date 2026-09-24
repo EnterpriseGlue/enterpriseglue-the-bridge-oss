@@ -33,6 +33,11 @@ RUN apk upgrade --no-cache \
     && mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
     && chown -R node:node /etc/enterpriseglue /var/run/secrets/enterpriseglue
 
+# Docker initializes a fresh named node_modules volume from the image. Mark its
+# frozen-lockfile install so dev Compose does not reinstall every package at boot.
+RUN node -e "const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('pnpm-lock.yaml');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));" > /repo/node_modules/.deps-hash \
+    && chown node:node /repo/node_modules/.deps-hash
+
 COPY --chown=node:node backend backend
 
 WORKDIR /repo/backend

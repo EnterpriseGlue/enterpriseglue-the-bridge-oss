@@ -1,0 +1,44 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "dev-compose-first-start",
+  "type": "fix",
+  "scope": "development-startup",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Fixes first-run Docker Compose development startup by reusing the backend image's installed dependencies and allowing its initial build to complete before readiness fails.",
+  "userImpact": [
+    "The pnpm run dev and bash dev.sh commands can start from a clean checkout without the backend being marked unhealthy while its first-run setup is still in progress."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Development Compose disables pnpm's automatic pre-run dependency check after its explicit frozen-lockfile install; no user-provided setting is required."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": ["This change does not alter database schemas or data."]
+  },
+  "security": [
+    "Development startup retains the frozen lockfile, existing container user, and health check; no authentication or production configuration changes are made."
+  ],
+  "documentation": [
+    "The generated technical release notes explain the development startup correction."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Return to the preceding development image and Compose definition; no database rollback is required."
+  ],
+  "validation": [
+    "A clean v0.28.10 worktree reproduced both backend-unhealthy startup and the non-interactive pnpm dependency-check failure.",
+    "With the fix, pnpm run dev --detach and bash dev.sh --detach each started an isolated PostgreSQL, backend, and frontend Compose stack; backend /health and /ready and frontend / returned HTTP 200."
+  ],
+  "packages": []
+}
