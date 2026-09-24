@@ -45,7 +45,7 @@ export default function Signup() {
   }
   if (cloudSignupAvailable) {
     return (
-      <PublicAuthShell title="Create your Cloud account" description="Use a verified work account, then create your EnterpriseGlue organization.">
+      <PublicAuthShell title="Create your Cloud account" description="Use an available identity provider, then create your EnterpriseGlue organization.">
         <Stack gap={5}>
           {error ? <InlineNotification kind="error" lowContrast hideCloseButton title="Signup unavailable" subtitle={error} /> : null}
           {!error && providers?.length === 0 ? <InlineNotification kind="info" lowContrast hideCloseButton title="No signup method configured" subtitle="A Cloud account identity provider must be configured before signup can continue." /> : null}

@@ -674,7 +674,7 @@ export default function Login() {
         </div>}
 
         {!isAuthenticated && !isAuthLoading && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-7)' }}>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with your work account</h2>
+          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
           <p className="eg-login-intro-copy">We’ll show the organizations you can access after sign-in.</p>
           <div className="eg-login-provider-list">
             {cloudAccountProviders.map((provider, index) => <LoginProviderButton
@@ -721,6 +721,10 @@ export default function Login() {
             Use an organization name instead
           </Button>
         </form>}
+
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && cloudAccountProviders.length > 0 && <p className="eg-login-intro-copy" style={{ marginTop: 'var(--spacing-6)' }}>
+          New to EnterpriseGlue? <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
+        </p>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Enter your organization name</h2>

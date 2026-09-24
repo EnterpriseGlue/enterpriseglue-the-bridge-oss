@@ -13,7 +13,7 @@
   ],
   "summary": "Lets pooled SaaS users sign in with a global Cloud identity provider and enter an organization only after authenticated membership checks.",
   "userImpact": [
-    "The neutral organization finder offers configured Cloud account sign-in methods alongside email and organization-name discovery; existing personal-email accounts can use the one-time email-link fallback.",
+    "The neutral organization finder offers configured Cloud account sign-in methods alongside email and organization-name discovery, with a separate account-creation link; existing personal-email accounts can use the one-time email-link fallback.",
     "After Cloud sign-in, one active organization opens automatically; multiple active memberships require an explicit organization choice."
   ],
   "upgrade": {

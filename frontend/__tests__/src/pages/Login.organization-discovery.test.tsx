@@ -133,16 +133,23 @@ describe('pooled organization discovery login', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it('offers configured global providers before email discovery and starts a signed login-return flow', async () => {
+  it('offers configured Apple, Google, and Microsoft sign-in beside email and separate signup', async () => {
     const user = userEvent.setup();
     (apiClient.get as any).mockImplementation((path: string) => path === '/api/auth/cloud-signup/providers'
-      ? Promise.resolve([{ id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' }])
+      ? Promise.resolve([
+        { id: 'apple-global', displayName: 'Apple', protocol: 'oidc' },
+        { id: 'google-global', displayName: 'Google', protocol: 'oidc' },
+        { id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' },
+      ])
       : Promise.resolve({}));
     renderLogin();
 
+    expect(await screen.findByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Sign in with Microsoft' }));
     expect(redirectMock).toHaveBeenCalledWith('/api/auth/cloud-signup/providers/microsoft-global/start?returnTo=%2Flogin');
     expect(screen.getByLabelText('Email address')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
     expect(apiClient.get).not.toHaveBeenCalledWith('/api/auth/login-methods');
   });
 

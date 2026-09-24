@@ -95,6 +95,8 @@ test.describe('Login experience screenshot gallery', () => {
       generatedAt: Date.now(), authorizationVersion: 'browser-cloud-account-v1',
     }));
     await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, [
+      { id: 'apple-global', displayName: 'Apple', protocol: 'oidc' },
+      { id: 'google-global', displayName: 'Google', protocol: 'oidc' },
       { id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' },
     ]));
     await page.route(/\/api\/auth\/cloud-signup\/providers\/[^/]+\/start\?/, (route) => {
@@ -113,8 +115,11 @@ test.describe('Login experience screenshot gallery', () => {
     });
 
     await page.goto('/login');
+    await expect(page.getByRole('button', { name: 'Continue with Apple' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
     await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { name: 'Choose an organization' })).toBeVisible();
     expect(providerReturnTo).toBe('/login');
