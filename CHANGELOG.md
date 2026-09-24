@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **dev:** make Compose first startup reliable ([e4cd657](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e4cd657d0a92f2c05f43a9ef439b0e8bd85c3019))
-* **dev:** make Compose first startup reliable ([72a16cf](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/72a16cf047707d5eabc3bac24fb8ab11112a5871))
 
 ## [0.28.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.9...v0.28.10) (2026-09-24)
 
