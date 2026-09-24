@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "enterpriseglue-schema-epoch/v1",
-  "id": "postgres-explicit-context-bridge-v1",
+  "schemaVersion": "enterpriseglue-schema-epoch/v2",
+  "id": "postgres-explicit-context-cloud-email-compat-v2",
   "target": {
     "databaseType": "postgres",
     "tenancyMode": "pooled"
@@ -44,7 +44,7 @@
     "algorithm": "sha256-source-v1",
     "purpose": "owner-transition-1700000000131-dual-context-closure/v1",
     "count": 16,
-    "sha256": "510c60f51ca0920820bec86a9a7413169ee9e5ddd108a96ef3fc8ed11b678bcb"
+    "sha256": "4a9065fee9211df0a31ebf326ab8e7d46cdd0932aed96343182729ba92d147d0"
   },
   "releaseEffectInventory": {
     "version": "release-effect-inventory.enterpriseglue.io/v1",
@@ -64,6 +64,17 @@
       "count": 134,
       "sha256": "fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a",
       "postgresPolicyProfile": "explicit-context/v1"
+    },
+    {
+      "id": "cloud-email-passkeys",
+      "through": 1700000000133,
+      "count": 135,
+      "sha256": "fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d",
+      "postgresPolicyProfile": "explicit-context/v1"
     }
-  ]
+  ],
+  "plannedMigration": {
+    "name": "AddCloudEmailPasskeys1700000000133",
+    "timestamp": 1700000000133
+  }
 }

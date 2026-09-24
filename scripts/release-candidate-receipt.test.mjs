@@ -88,7 +88,11 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   })), [
     { id: 'pre-enforcement', through: 1700000000131, postgresPolicyProfile: 'dual-context-compatibility/v1' },
     { id: 'post-enforcement', through: 1700000000132, postgresPolicyProfile: 'explicit-context/v1' },
+    { id: 'cloud-email-passkeys', through: 1700000000133, postgresPolicyProfile: 'explicit-context/v1' },
   ])
+  assert.deepEqual(created.schemaEpoch.plannedMigration, {
+    name: 'AddCloudEmailPasskeys1700000000133', timestamp: 1700000000133,
+  })
   assert.equal(created.managedShardBootstrap.enabledByDefault, false)
   assert.equal(created.managedShardBootstrap.id, 'postgres-v0.24.2-exact-0130/v1')
   assert.equal(created.managedShardBootstrap.predecessor.migrationInventory.through, created.schemaEpoch.ownerMigrationFrom.through)

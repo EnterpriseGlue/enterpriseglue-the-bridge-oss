@@ -159,10 +159,10 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- define "enterpriseglue-host.schemaEpochManifest" -}}
 {{- $manifestBytes := required "files/schema-epoch-manifest.json is required" (.Files.Get "files/schema-epoch-manifest.json") -}}
 {{- $manifest := mustFromJson $manifestBytes -}}
-{{- if ne $manifest.schemaVersion "enterpriseglue-schema-epoch/v1" -}}
+{{- if ne $manifest.schemaVersion "enterpriseglue-schema-epoch/v2" -}}
 {{- fail "unsupported schema-epoch manifest version" -}}
 {{- end -}}
-{{- if ne $manifest.id "postgres-explicit-context-bridge-v1" -}}
+{{- if ne $manifest.id "postgres-explicit-context-cloud-email-compat-v2" -}}
 {{- fail "unsupported schema-epoch manifest identity" -}}
 {{- end -}}
 {{- if ne $manifest.roles.applicationStartup.mode "verify-only" -}}
@@ -183,16 +183,23 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if ne (int $manifest.roles.ownerMigration.through) (int $manifest.executableMigrationInventory.through) -}}
 {{- fail "compatibility bridge owner migration ceiling must equal the executable inventory" -}}
 {{- end -}}
-{{- if ne (len $manifest.acceptedDatabaseEpochs) 2 -}}
-{{- fail "compatibility bridge must declare exactly two accepted database epochs" -}}
+{{- if ne (len $manifest.acceptedDatabaseEpochs) 3 -}}
+{{- fail "compatibility bridge must declare exactly three accepted database epochs" -}}
 {{- end -}}
 {{- $preEpoch := index $manifest.acceptedDatabaseEpochs 0 -}}
 {{- $postEpoch := index $manifest.acceptedDatabaseEpochs 1 -}}
+{{- $futureEpoch := index $manifest.acceptedDatabaseEpochs 2 -}}
 {{- if or (ne $preEpoch.id "pre-enforcement") (ne $preEpoch.postgresPolicyProfile "dual-context-compatibility/v1") (ne (int $preEpoch.through) 1700000000131) -}}
 {{- fail "compatibility bridge pre-enforcement epoch must use the exact dual-context policy" -}}
 {{- end -}}
 {{- if or (ne $postEpoch.id "post-enforcement") (ne $postEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $postEpoch.through) 1700000000132) -}}
 {{- fail "compatibility bridge post-enforcement epoch must use the exact explicit-context policy" -}}
+{{- end -}}
+{{- if or (ne $futureEpoch.id "cloud-email-passkeys") (ne $futureEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $futureEpoch.through) 1700000000133) (ne $futureEpoch.sha256 "fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d") -}}
+{{- fail "compatibility bridge future epoch must use the exact explicit-context policy" -}}
+{{- end -}}
+{{- if or (ne $manifest.plannedMigration.name "AddCloudEmailPasskeys1700000000133") (ne (int $manifest.plannedMigration.timestamp) 1700000000133) -}}
+{{- fail "compatibility bridge must bind the exact planned migration identity" -}}
 {{- end -}}
 {{- if ne $manifest.executableImplementationInventory.purpose "owner-transition-1700000000131-dual-context-closure/v1" -}}
 {{- fail "compatibility bridge implementation purpose is unsupported" -}}

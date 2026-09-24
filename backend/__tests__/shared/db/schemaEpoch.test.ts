@@ -36,7 +36,7 @@ function registeredMigrations() {
 }
 
 describe('immutable schema-epoch compatibility bridge', () => {
-  it('binds the executable inventory before enforcement while retaining two exact accepted epochs', () => {
+  it('binds the executable inventory while accepting only the signed future ledger', () => {
     const manifest = loadBundledSchemaEpochManifest();
     const migrations = registeredMigrations();
     const dataSource = { migrations } as any;
@@ -60,10 +60,16 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.through)).toEqual([
       1700000000131,
       1700000000132,
+      1700000000133,
     ]);
+    expect(manifest.plannedMigration).toEqual({
+      name: 'AddCloudEmailPasskeys1700000000133',
+      timestamp: 1700000000133,
+    });
     expect(manifest.roles.ownerMigration.from.postgresPolicyProfile).toBe('legacy-tenant-context/v1');
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.postgresPolicyProfile)).toEqual([
       'dual-context-compatibility/v1',
+      'explicit-context/v1',
       'explicit-context/v1',
     ]);
     bindDataSourceToSchemaEpoch(dataSource, manifest);
@@ -116,9 +122,23 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(() => bindDataSourceToSchemaEpoch({ migrations } as any, manifest)).toThrow(
       /differs from the immutable schema-epoch manifest/,
     );
+    const unplanned = [...registeredMigrations(), { name: 'Unplanned1700000000133' }];
+    expect(() => bindDataSourceToSchemaEpoch({ migrations: unplanned } as any, manifest)).toThrow(
+      /unplanned schema-epoch migration/,
+    );
   });
 
-  it('accepts only the exact pre- and post-enforcement database ledgers', () => {
+  it('recognizes the exact future class without allowing the compatibility owner to execute it', () => {
+    const manifest = loadBundledSchemaEpochManifest();
+    const dataSource = {
+      migrations: [...registeredMigrations(), { name: manifest.plannedMigration.name }],
+    } as any;
+    bindDataSourceToSchemaEpoch(dataSource, manifest);
+    const executable = canonicalMigrationInventory(dataSource.migrations);
+    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000131);
+  });
+
+  it('accepts only the exact pre-, post-, and future compatibility ledgers', () => {
     const manifest = loadBundledSchemaEpochManifest();
     const all = canonicalMigrationInventory(registeredMigrations());
     expect(resolveAcceptedDatabaseEpoch(
@@ -126,6 +146,7 @@ describe('immutable schema-epoch compatibility bridge', () => {
       all.filter((migration) => migration.timestamp <= 1700000000131),
     )).toMatchObject({ id: 'pre-enforcement' });
     expect(resolveAcceptedDatabaseEpoch(manifest, all)).toMatchObject({ id: 'post-enforcement' });
+    expect(resolveAcceptedDatabaseEpoch(manifest, [...all, manifest.plannedMigration])).toMatchObject({ id: 'cloud-email-passkeys' });
     expect(() => resolveAcceptedDatabaseEpoch(manifest, all.slice(1))).toThrow(/not accepted/);
   });
 
@@ -141,6 +162,7 @@ describe('immutable schema-epoch compatibility bridge', () => {
       all.filter((migration) => migration.timestamp <= 1700000000131),
     )).toBe('pre-enforcement');
     expect(resolveOwnerMigrationStartingEpoch(manifest, all)).toBe('post-enforcement');
+    expect(resolveOwnerMigrationStartingEpoch(manifest, [...all, manifest.plannedMigration])).toBe('cloud-email-passkeys');
     expect(() => resolveOwnerMigrationStartingEpoch(manifest, [])).toThrow(
       /starting epoch is not accepted/,
     );
@@ -156,6 +178,9 @@ describe('immutable schema-epoch compatibility bridge', () => {
     ));
     manifest.acceptedDatabaseEpochs[1].through = 1700000000133;
     expect(() => parseSchemaEpochManifest(manifest)).toThrow(/bounded pre\/post enforcement bridge/);
+    manifest.acceptedDatabaseEpochs[1].through = 1700000000132;
+    manifest.acceptedDatabaseEpochs[2].sha256 = '0'.repeat(64);
+    expect(() => parseSchemaEpochManifest(manifest)).toThrow();
   });
 
   it('recognizes only the exact legacy policy used before enforcement', async () => {
