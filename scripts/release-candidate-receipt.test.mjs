@@ -71,16 +71,24 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   assert.equal(created.schemaEpoch.preflightMode, 'verify-runtime-grant')
   assert.equal(created.schemaEpoch.ownerMigrationMode, 'apply-through-executable')
   assert.deepEqual(created.schemaEpoch.ownerMigrationFrom, {
+    through: 1700000000131,
+    count: 133,
+    sha256: '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1',
+    postgresPolicyProfile: 'dual-context-compatibility/v1',
+  })
+  assert.deepEqual(created.schemaEpoch.ownerMigrationIntermediate, {
     through: 1700000000132,
     count: 134,
     sha256: 'fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a',
     postgresPolicyProfile: 'explicit-context/v1',
+    name: 'EnforceExplicitPostgresContext1700000000132',
+    timestamp: 1700000000132,
   })
   assert.equal(created.schemaEpoch.ownerRuntimeGrant, 'configured-role-release-effect-cohorts-and-cloud-passkeys/v1')
   assert.equal(created.schemaEpoch.freshDatabase, 'requires-separate-signed-bootstrap')
   assert.equal(created.schemaEpoch.emptyMigrationLedger, 'requires-separate-signed-recovery')
   assert.match(created.schemaEpoch.executableImplementationSha256, /^[0-9a-f]{64}$/)
-  assert.equal(created.schemaEpoch.executableImplementationPurpose, 'owner-transition-1700000000133-cloud-passkeys/v1')
+  assert.equal(created.schemaEpoch.executableImplementationPurpose, 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1')
   assert.equal(created.schemaEpoch.releaseEffectInventoryVersion, 'release-effect-inventory.enterpriseglue.io/v1')
   assert.equal(created.schemaEpoch.releaseEffectInventorySha256, 'c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087')
   assert.deepEqual(created.schemaEpoch.acceptedDatabaseEpochs.map(({ id, through, postgresPolicyProfile }) => ({

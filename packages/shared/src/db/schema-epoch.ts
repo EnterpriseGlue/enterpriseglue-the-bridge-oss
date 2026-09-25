@@ -11,7 +11,13 @@ const MigrationInventorySchema = z.object({
 }).strict();
 
 const OwnerSourceMigrationInventorySchema = MigrationInventorySchema.extend({
+  postgresPolicyProfile: z.literal('dual-context-compatibility/v1'),
+}).strict();
+
+const OwnerIntermediateMigrationInventorySchema = MigrationInventorySchema.extend({
   postgresPolicyProfile: z.literal('explicit-context/v1'),
+  name: z.literal('EnforceExplicitPostgresContext1700000000132'),
+  timestamp: z.literal(1700000000132),
 }).strict();
 
 const DatabaseEpochSchema = MigrationInventorySchema.extend({
@@ -35,7 +41,7 @@ const PlannedMigrationSchema = z.object({
 
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
-  purpose: z.literal('owner-transition-1700000000133-cloud-passkeys/v1'),
+  purpose: z.literal('owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1'),
   count: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
@@ -62,6 +68,7 @@ const SchemaEpochManifestSchema = z.object({
     ownerMigration: z.object({
       mode: z.literal('apply-through-executable'),
       from: OwnerSourceMigrationInventorySchema,
+      intermediate: OwnerIntermediateMigrationInventorySchema,
       through: z.number().int().nonnegative(),
       runtimeGrant: z.literal('configured-role-release-effect-cohorts-and-cloud-passkeys/v1'),
     }).strict(),
@@ -143,15 +150,21 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || manifest.executableMigrationInventory.count !== future.count
     || manifest.executableMigrationInventory.sha256 !== future.sha256
     || manifest.roles.ownerMigration.through !== manifest.executableMigrationInventory.through
-    || manifest.roles.ownerMigration.from.through !== post.through
-    || manifest.roles.ownerMigration.from.count !== post.count
-    || manifest.roles.ownerMigration.from.sha256 !== post.sha256
-    || manifest.roles.ownerMigration.from.postgresPolicyProfile !== post.postgresPolicyProfile
-    || manifest.roles.ownerMigration.from.through + 1 !== manifest.executableMigrationInventory.through
-    || manifest.roles.ownerMigration.from.count + 1 !== manifest.executableMigrationInventory.count
+    || manifest.roles.ownerMigration.from.through !== pre.through
+    || manifest.roles.ownerMigration.from.count !== pre.count
+    || manifest.roles.ownerMigration.from.sha256 !== pre.sha256
+    || manifest.roles.ownerMigration.from.postgresPolicyProfile !== pre.postgresPolicyProfile
+    || manifest.roles.ownerMigration.intermediate.through !== post.through
+    || manifest.roles.ownerMigration.intermediate.count !== post.count
+    || manifest.roles.ownerMigration.intermediate.sha256 !== post.sha256
+    || manifest.roles.ownerMigration.intermediate.postgresPolicyProfile !== post.postgresPolicyProfile
+    || manifest.roles.ownerMigration.intermediate.timestamp !== post.through
+    || manifest.roles.ownerMigration.from.through + 2 !== manifest.executableMigrationInventory.through
+    || manifest.roles.ownerMigration.from.count + 2 !== manifest.executableMigrationInventory.count
     || manifest.upgradeContract.minimumDatabaseEpoch.through !== manifest.roles.ownerMigration.from.through
     || manifest.upgradeContract.minimumDatabaseEpoch.count !== manifest.roles.ownerMigration.from.count
     || manifest.upgradeContract.minimumDatabaseEpoch.sha256 !== manifest.roles.ownerMigration.from.sha256
+    || manifest.upgradeContract.minimumDatabaseEpoch.postgresPolicyProfile !== manifest.roles.ownerMigration.from.postgresPolicyProfile
     || post.through !== pre.through + 1
     || post.count !== pre.count + 1
     || future.through !== post.through + 1
@@ -199,8 +212,8 @@ export function assertSchemaEpochInvocation(
  * Bind this process to the manifest's bounded executable migration inventory.
  *
  * The application and separately credentialed owner job use the same signed
- * bytes. The owner may apply only the exact 0133 inventory; application
- * startup can only verify it and rejects a pending 0133 migration.
+ * bytes. The owner may apply only 0132 and 0133 in order, verifying the
+ * explicit-context policy after 0132; application startup is verify-only.
  */
 export function bindDataSourceToSchemaEpoch(
   dataSource: DataSource,
@@ -213,6 +226,15 @@ export function bindDataSourceToSchemaEpoch(
       registered.filter((migration) => migration.timestamp <= epoch.through),
       epoch,
     );
+  }
+  const intermediateMigration = registered.filter((migration) =>
+    migration.timestamp > manifest.roles.ownerMigration.from.through &&
+    migration.timestamp <= manifest.roles.ownerMigration.intermediate.through,
+  );
+  if (intermediateMigration.length !== 1 ||
+      intermediateMigration[0]?.name !== manifest.roles.ownerMigration.intermediate.name ||
+      intermediateMigration[0]?.timestamp !== manifest.roles.ownerMigration.intermediate.timestamp) {
+    throw new Error('Runtime contains an unplanned intermediate schema-epoch migration');
   }
 
   const acceptedMaximum = manifest.acceptedDatabaseEpochs[manifest.acceptedDatabaseEpochs.length - 1].through;
@@ -256,8 +278,8 @@ export async function verifyExecutedSchemaEpoch(
   return resolveAcceptedDatabaseEpoch(manifest, executed);
 }
 
-/** Refuse an owner transition unless its starting ledger is the one exact
- * predecessor or an already accepted bridge epoch. This runs before pending
+/** Refuse an owner transition unless its starting ledger is the exact 0131
+ * bridge or an already accepted later epoch. This runs before pending
  * migration, synchronize, repair or projection work. */
 export async function verifyOwnerMigrationStartingEpoch(
   dataSource: DataSource,

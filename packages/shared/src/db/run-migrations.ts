@@ -568,9 +568,9 @@ async function verifySchemaEpochPolicy(
   }
 }
 
-/** Execute the signed 0132 -> 0133 Cloud passkey transition without the generic
- * migration policy lease or any bootstrap/repair/baseline path. The database
- * ledger and explicit-context policy are verified before the first database mutation. */
+/** Execute the signed 0131 -> 0132 -> 0133 Cloud passkey transition without the
+ * generic migration policy lease or any bootstrap/repair/baseline path. Each
+ * stage's exact ledger and policy are verified before the next stage can run. */
 async function runBoundedSchemaEpochOwnerMigration(
   dataSource: DataSource,
   manifest: ReturnType<typeof loadBundledSchemaEpochManifest>,
@@ -590,19 +590,48 @@ async function runBoundedSchemaEpochOwnerMigration(
     await startingRunner.release();
   }
 
-  const pendingMigrations = await dataSource.showMigrations();
+  const executableMigrations = [...dataSource.migrations];
   if (startingEpoch === 'owner-source') {
+    dataSource.migrations.splice(0, dataSource.migrations.length,
+      ...executableMigrations.filter((migration) => migration.name !== manifest.plannedMigration.name));
+    try {
+      if (!(await dataSource.showMigrations())) {
+        throw new Error('Signed owner transition expected migration 1700000000132 to be pending');
+      }
+      await dataSource.runMigrations({ transaction: 'all' });
+    } finally {
+      dataSource.migrations.splice(0, dataSource.migrations.length, ...executableMigrations);
+    }
+    const intermediateRunner = dataSource.createQueryRunner();
+    try {
+      const intermediate = await verifyExecutedSchemaEpoch(dataSource, intermediateRunner, manifest);
+      if (intermediate.id !== 'post-enforcement') {
+        throw new Error('Signed owner transition did not reach the exact 0132 intermediate ledger');
+      }
+      await verifySchemaEpochPolicy(intermediateRunner, intermediate.postgresPolicyProfile);
+    } finally {
+      await intermediateRunner.release();
+    }
+  } else if (startingEpoch === 'pre-enforcement') {
+    throw new Error('Signed 0131 owner source must be classified as the exact owner-source ledger');
+  }
+
+  const pendingMigrations = await dataSource.showMigrations();
+  if (startingEpoch !== 'cloud-email-passkeys') {
     if (!pendingMigrations) {
       throw new Error('Signed owner transition expected migration 1700000000133 to be pending');
     }
     await dataSource.runMigrations({ transaction: 'all' });
   } else if (pendingMigrations) {
-    throw new Error(`Accepted ${startingEpoch} database epoch unexpectedly has a pending bridge migration`);
+    throw new Error('Accepted cloud-email-passkeys database epoch unexpectedly has a pending migration');
   }
 
   const verifiedRunner = dataSource.createQueryRunner();
   try {
     const accepted = await verifyExecutedSchemaEpoch(dataSource, verifiedRunner, manifest);
+    if (accepted.id !== 'cloud-email-passkeys') {
+      throw new Error('Signed owner transition did not reach the exact 0133 passkey ledger');
+    }
     const cohortMetadata = dataSource.getMetadata('ReleaseEffectCohort');
     await assertReleaseEffectCohortTableShape(
       verifiedRunner,

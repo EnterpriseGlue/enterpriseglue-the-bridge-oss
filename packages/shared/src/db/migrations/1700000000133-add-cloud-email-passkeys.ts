@@ -1,8 +1,5 @@
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { CloudEmailSignup } from '../../infrastructure/persistence/entities/CloudEmailSignup.js';
-import { CloudPasskey } from '../../infrastructure/persistence/entities/CloudPasskey.js';
-import { CloudPasskeyChallenge } from '../../infrastructure/persistence/entities/CloudPasskeyChallenge.js';
 import { portableBigint, portableText } from './support/portable-columns.js';
 
 export class AddCloudEmailPasskeys1700000000133 implements MigrationInterface {
@@ -12,9 +9,9 @@ export class AddCloudEmailPasskeys1700000000133 implements MigrationInterface {
     const key = portableText(queryRunner, 'key');
     const document = portableText(queryRunner, 'document');
     const timestamp = portableBigint(queryRunner);
-    const signups = queryRunner.connection.getMetadata(CloudEmailSignup).tablePath;
-    const passkeys = queryRunner.connection.getMetadata(CloudPasskey).tablePath;
-    const challenges = queryRunner.connection.getMetadata(CloudPasskeyChallenge).tablePath;
+    const signups = queryRunner.connection.getMetadata('CloudEmailSignup').tablePath;
+    const passkeys = queryRunner.connection.getMetadata('CloudPasskey').tablePath;
+    const challenges = queryRunner.connection.getMetadata('CloudPasskeyChallenge').tablePath;
     if (!await queryRunner.hasTable(signups)) await queryRunner.createTable(new Table({ name: signups, columns: [
       { name: 'id', ...key, isPrimary: true },
       { name: 'email', ...document },
@@ -58,14 +55,14 @@ export class AddCloudEmailPasskeys1700000000133 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    const passkeys = queryRunner.connection.getMetadata(CloudPasskey).tablePath;
+    const passkeys = queryRunner.connection.getMetadata('CloudPasskey').tablePath;
     if (await queryRunner.hasTable(passkeys)) {
-      if (await queryRunner.manager.getRepository(CloudPasskey).count() > 0) {
+      if (await queryRunner.manager.getRepository('CloudPasskey').count() > 0) {
         throw new Error('Refusing to remove passkey credentials while Cloud accounts may depend on them');
       }
     }
-    for (const entity of [CloudPasskeyChallenge, CloudPasskey, CloudEmailSignup]) {
-      const table = queryRunner.connection.getMetadata(entity).tablePath;
+    for (const entityName of ['CloudPasskeyChallenge', 'CloudPasskey', 'CloudEmailSignup']) {
+      const table = queryRunner.connection.getMetadata(entityName).tablePath;
       if (await queryRunner.hasTable(table)) await queryRunner.dropTable(table);
     }
   }

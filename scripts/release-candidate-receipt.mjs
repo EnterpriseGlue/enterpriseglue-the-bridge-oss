@@ -121,25 +121,31 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
     || manifest?.roles?.preflight?.mode !== 'verify-runtime-grant'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
-    || manifest?.roles?.ownerMigration?.from?.through !== 1700000000132
-    || manifest?.roles?.ownerMigration?.from?.count !== 134
-    || manifest?.roles?.ownerMigration?.from?.sha256 !== 'fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a'
-    || manifest?.roles?.ownerMigration?.from?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest?.roles?.ownerMigration?.from?.through !== 1700000000131
+    || manifest?.roles?.ownerMigration?.from?.count !== 133
+    || manifest?.roles?.ownerMigration?.from?.sha256 !== '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1'
+    || manifest?.roles?.ownerMigration?.from?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
+    || manifest?.roles?.ownerMigration?.intermediate?.through !== 1700000000132
+    || manifest?.roles?.ownerMigration?.intermediate?.count !== 134
+    || manifest?.roles?.ownerMigration?.intermediate?.sha256 !== 'fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a'
+    || manifest?.roles?.ownerMigration?.intermediate?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest?.roles?.ownerMigration?.intermediate?.name !== 'EnforceExplicitPostgresContext1700000000132'
+    || manifest?.roles?.ownerMigration?.intermediate?.timestamp !== 1700000000132
     || manifest?.target?.databaseType !== 'postgres'
     || manifest?.target?.tenancyMode !== 'pooled'
     || manifest?.executableMigrationInventory?.through !== 1700000000133
     || manifest?.executableMigrationInventory?.count !== 135
     || manifest?.executableMigrationInventory?.sha256 !== 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'
-    || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000132
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000131
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.count !== manifest?.roles?.ownerMigration?.from?.count
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.sha256 !== manifest?.roles?.ownerMigration?.from?.sha256
-    || manifest?.upgradeContract?.minimumDatabaseEpoch?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
     || manifest?.upgradeContract?.freshDatabase !== 'requires-separate-signed-bootstrap'
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
-    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000133-cloud-passkeys/v1'
+    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-and-cloud-passkeys/v1'
-    || manifest?.executableImplementationInventory?.count !== 21
+    || manifest?.executableImplementationInventory?.count !== 22
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.releaseEffectInventory?.version !== 'release-effect-inventory.enterpriseglue.io/v1'
     || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')
@@ -149,10 +155,11 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest.acceptedDatabaseEpochs[0]?.through !== 1700000000131
     || manifest.acceptedDatabaseEpochs[0]?.id !== 'pre-enforcement'
     || manifest.acceptedDatabaseEpochs[0]?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
+    || manifest.acceptedDatabaseEpochs[0]?.sha256 !== manifest.roles.ownerMigration.from.sha256
     || manifest.acceptedDatabaseEpochs[1]?.through !== 1700000000132
     || manifest.acceptedDatabaseEpochs[1]?.id !== 'post-enforcement'
     || manifest.acceptedDatabaseEpochs[1]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
-    || manifest.acceptedDatabaseEpochs[1]?.sha256 !== manifest.roles.ownerMigration.from.sha256
+    || manifest.acceptedDatabaseEpochs[1]?.sha256 !== manifest.roles.ownerMigration.intermediate.sha256
     || manifest.acceptedDatabaseEpochs[2]?.through !== 1700000000133
     || manifest.acceptedDatabaseEpochs[2]?.count !== 135
     || manifest.acceptedDatabaseEpochs[2]?.id !== 'cloud-email-passkeys'
@@ -193,6 +200,7 @@ function schemaEpochProjection(manifest, artifact) {
     preflightMode: manifest.roles.preflight.mode,
     ownerMigrationMode: manifest.roles.ownerMigration.mode,
     ownerMigrationFrom: deepCopy(manifest.roles.ownerMigration.from),
+    ownerMigrationIntermediate: deepCopy(manifest.roles.ownerMigration.intermediate),
     ownerRuntimeGrant: manifest.roles.ownerMigration.runtimeGrant,
     freshDatabase: manifest.upgradeContract.freshDatabase,
     emptyMigrationLedger: manifest.upgradeContract.emptyMigrationLedger,

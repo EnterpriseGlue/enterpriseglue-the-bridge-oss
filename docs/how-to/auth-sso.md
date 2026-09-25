@@ -63,6 +63,23 @@ implemented by this method and must use a separately authorized identity
 recovery process. This flow does not weaken the requirement for tenant SSO or
 grant organization access from an email domain.
 
+### Pooled Cloud schema transition
+
+The passkey release is not an owner for a database still at migration
+`1700000000130`. First run the signed, published compatibility owner to reach
+the exact `1700000000131` dual-context ledger, and keep its verify-only runtime
+as the sole routed predecessor while older tenant-GUC consumers drain. The
+passkey release's restricted owner then verifies that ledger and dual-context
+policy, applies `1700000000132`, verifies the exact intermediate ledger and
+explicit-context policy, and only then applies `1700000000133` and grants its
+runtime role access to the passkey tables. Application and worker processes are
+verify-only throughout; they cannot repair a missing owner step. A failed or
+interrupted owner attempt must resume only from an accepted exact ledger and
+policy profile. Do not add the `0130` ledger to the passkey manifest's accepted
+starting epochs, skip the intermediate policy check, or roll back the enforced
+policy in place. A staging controller must attest the sole compatible
+predecessor and closed old-consumer boundary before invoking the passkey owner.
+
 ## JWT and Admin Bootstrap
 Required variables:
 - `JWT_SECRET`

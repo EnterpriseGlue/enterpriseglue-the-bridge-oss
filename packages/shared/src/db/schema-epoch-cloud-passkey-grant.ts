@@ -1,7 +1,4 @@
-import type { DataSource, EntityTarget, QueryRunner } from 'typeorm';
-import { CloudEmailSignup } from '../infrastructure/persistence/entities/CloudEmailSignup.js';
-import { CloudPasskey } from '../infrastructure/persistence/entities/CloudPasskey.js';
-import { CloudPasskeyChallenge } from '../infrastructure/persistence/entities/CloudPasskeyChallenge.js';
+import type { DataSource, QueryRunner } from 'typeorm';
 import {
   applySchemaEpochRuntimeTablePrivileges,
   inspectSchemaEpochRuntimeRole,
@@ -12,10 +9,10 @@ import {
 
 type DmlPrivilege = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE';
 
-const tables: ReadonlyArray<{ entity: EntityTarget<unknown>; privileges: readonly DmlPrivilege[] }> = [
-  { entity: CloudEmailSignup, privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
-  { entity: CloudPasskey, privileges: ['SELECT', 'INSERT', 'UPDATE'] },
-  { entity: CloudPasskeyChallenge, privileges: ['SELECT', 'INSERT', 'DELETE'] },
+const tables: ReadonlyArray<{ entityName: string; privileges: readonly DmlPrivilege[] }> = [
+  { entityName: 'CloudEmailSignup', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+  { entityName: 'CloudPasskey', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
+  { entityName: 'CloudPasskeyChallenge', privileges: ['SELECT', 'INSERT', 'DELETE'] },
 ];
 
 async function inspectRelations(dataSource: DataSource, runner: QueryRunner, runtimeRole: string) {
@@ -30,8 +27,8 @@ async function inspectRelations(dataSource: DataSource, runner: QueryRunner, run
   if (roles.length !== 1 || roles[0].safe !== true || roles[0].schema_usage !== true) {
     throw new Error('Cloud passkey runtime role must be restricted, nonowning, membership-free, and have schema USAGE');
   }
-  return Promise.all(tables.map(async ({ entity, privileges }) => {
-    const metadata = dataSource.getMetadata(entity);
+  return Promise.all(tables.map(async ({ entityName, privileges }) => {
+    const metadata = dataSource.getMetadata(entityName);
     if ((metadata.schema || schema) !== schema) {
       throw new Error('Cloud passkey table is not in the exact owner schema');
     }

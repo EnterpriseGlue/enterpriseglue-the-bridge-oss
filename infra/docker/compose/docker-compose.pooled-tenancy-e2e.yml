@@ -82,8 +82,58 @@ services:
     networks:
       - enterpriseglue-network
 
-  # Current code owns exactly the 0130 -> 0131 transition. It never executes
-  # the generic application migration/bootstrap path or migration 0132.
+  # The already-published compatibility release alone owns 0130 -> 0131.
+  # No legacy runtime remains active when current code enforces 0132.
+  schema-bridge-owner:
+    image: ${POOLED_TENANCY_SCHEMA_BRIDGE_IMAGE}
+    restart: "no"
+    init: true
+    entrypoint: ["/usr/bin/node"]
+    command:
+      - --input-type=module
+      - -e
+      - |-
+        const migrations = await import('./dist/packages/shared/dist/db/run-migrations.js');
+        const dataSourceModule = await import('./dist/packages/shared/dist/db/data-source.js');
+        const epoch = await import('./dist/packages/shared/dist/db/schema-epoch.js');
+        try {
+          await migrations.runSchemaEpochOwnerMigrations();
+          const source = await dataSourceModule.getDataSource();
+          const runner = source.createQueryRunner();
+          try {
+            const accepted = await epoch.verifyExecutedSchemaEpoch(source, runner, epoch.loadBundledSchemaEpochManifest());
+            if (accepted.through !== 1700000000131 || accepted.count !== 133 || accepted.sha256 !== '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1') throw new Error('Published bridge did not reach the exact 0131 ledger');
+            console.log('published-schema-bridge=exact-0131-dual-context');
+          } finally { await runner.release(); }
+        } finally { await dataSourceModule.closeDataSource(); }
+    environment:
+      NODE_ENV: production
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_USER}
+      POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_PASSWORD}
+      POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: "false"
+      EG_TENANCY_MODE: pooled
+      EG_TENANT_RLS_ENFORCED: "true"
+      EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
+      EG_POSTGRES_RUNTIME_ROLE: ${POOLED_TENANCY_POSTGRES_APP_USER}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL}
+      GIT_REPOS_PATH: /tmp/enterpriseglue-bridge-repos
+    depends_on:
+      schema-predecessor:
+        condition: service_completed_successfully
+    networks:
+      - enterpriseglue-network
+
+  # Current code owns exactly 0131 -> 0132 -> 0133 and verifies the 0132
+  # ledger and explicit-context policy before creating passkey tables.
   schema-owner-migration:
     image: node:24-bookworm-slim
     user: node
@@ -121,7 +171,7 @@ services:
     volumes:
       - .:/repo:ro
     depends_on:
-      schema-predecessor:
+      schema-bridge-owner:
         condition: service_completed_successfully
     networks:
       - enterpriseglue-network

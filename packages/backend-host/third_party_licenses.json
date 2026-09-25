@@ -1,4 +1,10 @@
 {
+  "@simplewebauthn/server@13.3.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/MasterKale/SimpleWebAuthn.git",
+    "publisher": "Matthew Miller",
+    "email": "matthew@millerti.me"
+  },
   "archiver@7.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-archiver.git",

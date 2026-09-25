@@ -19,6 +19,9 @@ project_name="enterpriseglue-pooled-tenancy-${RANDOM}${RANDOM}"
 schema_predecessor_image="ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9ece726dac9f6a492cbb030c9dab6efadedf1f3f5ac842219027a3646"
 schema_predecessor_tag=v0.24.2
 schema_predecessor_revision=785b5ab890aba315f6c3944ace0edcc3ff99d20f
+schema_bridge_image="ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:f24809523cbb1ed525009f5668d8088291423d844915b78860b9d9a3cabb60de"
+schema_bridge_tag=v0.28.13
+schema_bridge_revision=e297cedcdc4208f68653693eb22fee38be1b3ffa
 raw_dir="$temp_dir/raw-diagnostics"
 receipt_file="$artifact_dir/public/receipt.json"
 stage=preflight
@@ -33,7 +36,7 @@ cleanup() {
   set +e
   if [[ "$stack_started" == true ]]; then
     run_compose ps --all > "$raw_dir/compose-status.txt" 2>&1
-    for service in db schema-predecessor schema-owner-migration schema-runtime-verify backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
+    for service in db schema-predecessor schema-bridge-owner schema-owner-migration schema-runtime-verify backend frontend frontend-tls keycloak camunda-mock eg-plugin-io-enterpriseglue-reference-health; do
       run_compose logs --no-color --tail=700 "$service" > "$raw_dir/${service}.log" 2>&1
     done
     run_compose down --volumes --remove-orphans >> "$raw_dir/runner.log" 2>&1
@@ -115,13 +118,23 @@ if [[ "$schema_predecessor_labels" != "$schema_predecessor_revision $schema_pred
   echo '[pooled-tenancy-e2e] Schema-predecessor image labels do not bind the expected release source.' >&2
   exit 2
 fi
+if [[ "$schema_bridge_image" != *@sha256:* || "$(git -C "$root_dir" rev-parse "${schema_bridge_tag}^{commit}")" != "$schema_bridge_revision" ]]; then
+  echo '[pooled-tenancy-e2e] Compatibility bridge must be pinned to its published tag and digest.' >&2
+  exit 2
+fi
+docker pull "$schema_bridge_image" >/dev/null
+schema_bridge_labels="$(docker image inspect "$schema_bridge_image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}} {{index .Config.Labels "org.opencontainers.image.version"}}')"
+if [[ "$schema_bridge_labels" != "$schema_bridge_revision $schema_bridge_tag" ]]; then
+  echo '[pooled-tenancy-e2e] Compatibility-bridge image labels do not bind the expected release source.' >&2
+  exit 2
+fi
 
 mkdir -p "$artifact_dir"
 chmod 700 "$artifact_dir"
 
 node - "$root_dir" "$env_file" "$tls_dir" "$identity_secret_dir" "$realm_import_file" "$postgres_init_file" \
   "$backend_port" "$frontend_port" "$keycloak_port" "$tls_frontend_port" "$postgres_port" \
-  "$schema_predecessor_image" <<'NODE'
+  "$schema_predecessor_image" "$schema_bridge_image" <<'NODE'
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const [
@@ -137,6 +150,7 @@ const [
   tlsFrontendPort,
   postgresPort,
   schemaPredecessorImage,
+  schemaBridgeImage,
 ] = process.argv.slice(2);
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 const hostUid = typeof process.getuid === 'function' && process.getuid() > 0
@@ -185,6 +199,7 @@ const values = {
   POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_USER: migrationOwnerUser,
   POOLED_TENANCY_POSTGRES_MIGRATION_OWNER_PASSWORD: migrationOwnerPassword,
   POOLED_TENANCY_SCHEMA_PREDECESSOR_IMAGE: schemaPredecessorImage,
+  POOLED_TENANCY_SCHEMA_BRIDGE_IMAGE: schemaBridgeImage,
   POOLED_TENANCY_FRONTEND_DIST: `${rootDir}/frontend/dist`,
   POOLED_TENANCY_PLUGIN_STATE_FILE: `${require('node:path').dirname(envFile)}/plugin-state.json`,
   POOLED_TENANCY_PLUGIN_ASSET_ROOT: `${require('node:path').dirname(envFile)}/plugin-assets`,

@@ -91,6 +91,9 @@ importers:
       '@node-saml/node-saml':
         specifier: ^5.1.0
         version: 5.1.0
+      '@simplewebauthn/server':
+        specifier: 13.3.0
+        version: 13.3.0
       archiver:
         specifier: ^7.0.1
         version: 7.0.1

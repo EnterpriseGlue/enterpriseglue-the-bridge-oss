@@ -39,12 +39,12 @@ const appliedGrants: Record<string, string[]> = {
 function fixture() {
   const dataSource = {
     options: { schema: 'public' },
-    getMetadata: vi.fn((entity: { name: string }) => {
+    getMetadata: vi.fn((entityName: string) => {
       const tableName = ({
         CloudEmailSignup: 'cloud_email_signups',
         CloudPasskey: 'cloud_passkeys',
         CloudPasskeyChallenge: 'cloud_passkey_challenges',
-      } as Record<string, string>)[entity.name];
+      } as Record<string, string>)[entityName];
       const tablePath = `public.${tableName}`;
       return {
         schema: 'public', tableName, tablePath,

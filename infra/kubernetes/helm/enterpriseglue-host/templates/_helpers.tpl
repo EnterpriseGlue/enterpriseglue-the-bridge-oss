@@ -174,11 +174,14 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if ne $manifest.roles.ownerMigration.mode "apply-through-executable" -}}
 {{- fail "compatibility bridge owner migration must use bounded apply" -}}
 {{- end -}}
-{{- if or (ne $manifest.roles.ownerMigration.from.postgresPolicyProfile "explicit-context/v1") (ne (int $manifest.roles.ownerMigration.from.through) 1700000000132) -}}
-{{- fail "Cloud passkey owner source must use the exact 0132 explicit-context policy" -}}
+{{- if or (ne $manifest.roles.ownerMigration.from.postgresPolicyProfile "dual-context-compatibility/v1") (ne (int $manifest.roles.ownerMigration.from.through) 1700000000131) -}}
+{{- fail "Cloud passkey owner source must use the exact 0131 dual-context policy" -}}
 {{- end -}}
-{{- if or (ne $manifest.upgradeContract.minimumDatabaseEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $manifest.upgradeContract.minimumDatabaseEpoch.through) 1700000000132) -}}
-{{- fail "Cloud passkey minimum epoch must use the exact 0132 explicit-context policy" -}}
+{{- if or (ne $manifest.roles.ownerMigration.intermediate.postgresPolicyProfile "explicit-context/v1") (ne (int $manifest.roles.ownerMigration.intermediate.through) 1700000000132) (ne $manifest.roles.ownerMigration.intermediate.name "EnforceExplicitPostgresContext1700000000132") (ne (int $manifest.roles.ownerMigration.intermediate.timestamp) 1700000000132) -}}
+{{- fail "Cloud passkey owner intermediate must use the exact 0132 explicit-context policy and migration" -}}
+{{- end -}}
+{{- if or (ne $manifest.upgradeContract.minimumDatabaseEpoch.postgresPolicyProfile "dual-context-compatibility/v1") (ne (int $manifest.upgradeContract.minimumDatabaseEpoch.through) 1700000000131) -}}
+{{- fail "Cloud passkey minimum epoch must use the exact 0131 dual-context policy" -}}
 {{- end -}}
 {{- if or (ne (int $manifest.roles.ownerMigration.through) 1700000000133) (ne (int $manifest.executableMigrationInventory.through) 1700000000133) -}}
 {{- fail "Cloud passkey owner migration ceiling must equal the 0133 executable inventory" -}}
@@ -195,8 +198,11 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if or (ne $postEpoch.id "post-enforcement") (ne $postEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $postEpoch.through) 1700000000132) -}}
 {{- fail "compatibility bridge post-enforcement epoch must use the exact explicit-context policy" -}}
 {{- end -}}
-{{- if or (ne $manifest.roles.ownerMigration.from.sha256 $postEpoch.sha256) (ne (int $manifest.roles.ownerMigration.from.count) (int $postEpoch.count)) -}}
-{{- fail "Cloud passkey owner source must equal the signed 0132 ledger" -}}
+{{- if or (ne $manifest.roles.ownerMigration.from.sha256 $preEpoch.sha256) (ne (int $manifest.roles.ownerMigration.from.count) (int $preEpoch.count)) (ne $manifest.upgradeContract.minimumDatabaseEpoch.sha256 $preEpoch.sha256) -}}
+{{- fail "Cloud passkey owner source must equal the signed 0131 ledger" -}}
+{{- end -}}
+{{- if or (ne $manifest.roles.ownerMigration.intermediate.sha256 $postEpoch.sha256) (ne (int $manifest.roles.ownerMigration.intermediate.count) (int $postEpoch.count)) -}}
+{{- fail "Cloud passkey owner intermediate must equal the signed 0132 ledger" -}}
 {{- end -}}
 {{- if or (ne $futureEpoch.id "cloud-email-passkeys") (ne $futureEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $futureEpoch.through) 1700000000133) (ne $futureEpoch.sha256 "fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d") -}}
 {{- fail "compatibility bridge future epoch must use the exact explicit-context policy" -}}
@@ -207,7 +213,7 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if or (ne $manifest.plannedMigration.name "AddCloudEmailPasskeys1700000000133") (ne (int $manifest.plannedMigration.timestamp) 1700000000133) -}}
 {{- fail "compatibility bridge must bind the exact planned migration identity" -}}
 {{- end -}}
-{{- if ne $manifest.executableImplementationInventory.purpose "owner-transition-1700000000133-cloud-passkeys/v1" -}}
+{{- if ne $manifest.executableImplementationInventory.purpose "owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1" -}}
 {{- fail "compatibility bridge implementation purpose is unsupported" -}}
 {{- end -}}
 {{- if ne $manifest.roles.ownerMigration.runtimeGrant "configured-role-release-effect-cohorts-and-cloud-passkeys/v1" -}}
