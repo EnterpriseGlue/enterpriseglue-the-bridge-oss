@@ -1,0 +1,41 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "contributor-compose-lifecycle",
+  "type": "fix",
+  "scope": "developer-setup",
+  "breaking": false,
+  "audiences": ["developers"],
+  "summary": "Corrects the documented pnpm command for resetting local Compose volumes and verifies the fresh-clone startup and shutdown lifecycle in CI.",
+  "userImpact": [
+    "Developers using pnpm can reset their local Docker volumes with pnpm run down -v; the previously documented extra -- prevented -v from reaching Docker Compose."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": ["No application database schema or data changes are required."]
+  },
+  "security": [],
+  "documentation": [
+    "The contributing guide now names the host Node.js and pnpm versions required by pnpm commands and retains bash entrypoints for Docker-only setup.",
+    "The documented volume-reset command is pnpm run down -v, or bash ./down.sh -v."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the contributor guide and focused CI assertions; no application or database rollback is needed."
+  ],
+  "validation": [
+    "A disposable PostgreSQL Compose project was created locally, then pnpm run down -v removed its container, volume, and network.",
+    "The change-selected CI job checks fresh environment bootstrap, backend and frontend health, and the documented shutdown command before accepting the run."
+  ],
+  "packages": []
+}
