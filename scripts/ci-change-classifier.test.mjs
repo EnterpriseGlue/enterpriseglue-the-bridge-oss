@@ -14,6 +14,7 @@ test('release-note and ordinary documentation changes use the policy-only fast p
   assert.equal(result.run_tests, false);
   assert.equal(result.run_postgres, false);
   assert.equal(result.run_ci_images, false);
+  assert.equal(result.run_dev_startup, false);
   assert.equal(result.run_documentation_guard, true);
   assert.equal(result.run_boundary_guards, false);
   assert.equal(result.run_plugin_checks, false);
@@ -35,6 +36,7 @@ test('generated Release Please delta stays off unrelated heavyweight lanes', () 
   assert.equal(result.run_documentation_guard, true);
   assert.equal(result.run_boundary_guards, true);
   assert.equal(result.run_compose_render, true);
+  assert.equal(result.run_dev_startup, false);
   assert.equal(result.run_release_readiness, true);
   for (const lane of [
     'run_tests',
@@ -153,9 +155,42 @@ test('release fragments without documentation stay on the policy-only path', () 
 test('root package scripts do not select unrelated database, identity, or deployment matrices', () => {
   const result = classifyChangedFiles(['package.json']);
 
+  assert.equal(result.run_dev_startup, true);
   assert.equal(result.run_database_matrix, false);
   assert.equal(result.run_identity_rehearsal, false);
   assert.equal(result.run_deployment_evidence, false);
+});
+
+test('developer startup changes select one cold-start lane without unrelated application matrices', () => {
+  for (const path of [
+    'dev.sh',
+    'scripts/db-preflight.sh',
+    'backend/Dockerfile',
+    'frontend/Dockerfile.prod',
+    'infra/docker/compose/docker-compose.yml',
+    'infra/docker/compose/docker-compose.backend-expose.yml',
+    'infra/docker/env/examples/docker.postgres.env.example',
+    'package.json',
+    'pnpm-lock.yaml',
+    '.npmrc',
+    'backend/package.json',
+    'packages/shared/package.json',
+    '.github/workflows/ci.yml',
+    '.github/workflows/ci-detect-reusable.yml',
+    'scripts/ci-change-classifier.mjs',
+  ]) {
+    assert.equal(classifyChangedFiles([path]).run_dev_startup, true, path);
+  }
+
+  const script = classifyChangedFiles(['dev.sh']);
+  assert.equal(script.unknown_high_risk, false);
+  assert.equal(script.run_tests, false);
+  assert.equal(script.run_oracle, false);
+  assert.equal(script.run_database_matrix, false);
+
+  for (const path of ['docs/how-to/getting-started-docker.md', '.release-notes/other-fix.json', 'packages/frontend-host/src/App.tsx']) {
+    assert.equal(classifyChangedFiles([path]).run_dev_startup, false, path);
+  }
 });
 
 test('independent heavy workflows select only their owning change surfaces', () => {
@@ -484,6 +519,7 @@ test('manual full runs select every lane while respecting package publication in
   assert.equal(result.metadata_only, false);
   assert.equal(result.run_frontend_tests, false);
   assert.equal(result.run_tests, true);
+  assert.equal(result.run_dev_startup, true);
   assert.equal(result.run_plugin_package, false);
   assert.deepEqual(result.test_databases, ['postgres', 'oracle']);
   assert.equal(result.changed_files_count, 'all');

@@ -369,6 +369,72 @@ jobs:
             exit 1
           fi
 
+  # Do not use docker-compose.ci.yml or the production image stack here: both
+  # replace the bind-mounted dev command and fresh dependency-volume behavior.
+  dev-compose-cold-start:
+    name: Fresh developer Compose startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: detect
+    if: needs.detect.outputs.run_dev_startup == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.0.8
+
+      - name: Start the stock developer stack with fresh volumes
+        shell: bash
+        env:
+          CI: "true"
+          COMPOSE_PROJECT_NAME: eg-dev-cold-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -Eeuo pipefail
+          test ! -e .local/docker/env/docker.env
+          test ! -e .env.docker
+          test "$(node -p "require('./package.json').scripts.dev")" = 'bash ./dev.sh'
+
+          compose=(
+            docker compose --project-name "$COMPOSE_PROJECT_NAME" --project-directory .
+            --env-file .local/docker/env/docker.env
+            -f infra/docker/compose/docker-compose.yml
+            -f infra/docker/compose/docker-compose.backend-expose.yml
+          )
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [[ -f .local/docker/env/docker.env ]]; then
+              if (( status != 0 )); then
+                EG_BACKEND_ENV_FILE=./.local/docker/env/docker.env "${compose[@]}" ps || true
+                EG_BACKEND_ENV_FILE=./.local/docker/env/docker.env "${compose[@]}" logs --no-color --tail=100 db backend frontend || true
+              fi
+              if ! EG_BACKEND_ENV_FILE=./.local/docker/env/docker.env "${compose[@]}" down --volumes --remove-orphans; then
+                status=1
+              fi
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          pnpm run dev --wait --wait-timeout 900
+          curl --fail --silent --show-error http://127.0.0.1:8787/ready > /dev/null
+          curl --fail --silent --show-error http://127.0.0.1:5173/ > /dev/null
+          EG_BACKEND_ENV_FILE=./.local/docker/env/docker.env "${compose[@]}" logs --no-color backend > "$RUNNER_TEMP/dev-compose-backend.log"
+          if grep -Fq 'Deps changed; running pnpm install...' "$RUNNER_TEMP/dev-compose-backend.log"; then
+            echo 'Fresh image unexpectedly reinstalled workspace dependencies at startup.' >&2
+            exit 1
+          fi
+
   frontend-tests:
     runs-on: ubuntu-latest
     needs: detect
@@ -1237,6 +1303,7 @@ jobs:
       - plugin-api-compat-next
       - plugin-api-package
       - compose-render
+      - dev-compose-cold-start
       - frontend-tests
       - test
       - build-ci-images

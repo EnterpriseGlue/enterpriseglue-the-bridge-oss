@@ -210,6 +210,11 @@ test('image and plugin work is independently gated from application tests', () =
   assert.match(ciWorkflow, /plugin-platform-images:[\s\S]*?if: needs\.detect\.outputs\.run_plugin_images == 'true'/);
   assert.match(ciWorkflow, /published-package-version-discipline:[\s\S]*?if: needs\.detect\.outputs\.run_package_discipline == 'true'/);
   assert.match(ciWorkflow, /compose-render:[\s\S]*?if: needs\.detect\.outputs\.run_compose_render == 'true'/);
+  assert.match(ciWorkflow, /dev-compose-cold-start:[\s\S]*?if: needs\.detect\.outputs\.run_dev_startup == 'true'/);
+  assert.match(ciWorkflow, /pnpm run dev --wait --wait-timeout 900/);
+  assert.match(ciWorkflow, /dev-compose-cold-start:[\s\S]*?down --volumes --remove-orphans/);
+  assert.match(workflow, /run_dev_startup:[\s\S]*?jobs\.detect\.outputs\.run_dev_startup/);
+  assert.equal(packageManifest.scripts.dev, 'bash ./dev.sh');
   assert.match(ciWorkflow, /build-ci-images:[\s\S]*?if: needs\.detect\.outputs\.run_ci_images == 'true'/);
 });
 
