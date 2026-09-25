@@ -28,17 +28,26 @@ COPY --chown=node:node packages/frontend-host/package.json packages/frontend-hos
 COPY --chown=node:node frontend/package.json frontend/
 
 RUN apk upgrade --no-cache \
-    && CI=true pnpm install --filter webmodeler-backend... --frozen-lockfile \
-    && chown -R node:node /repo/node_modules \
+    && CI=true pnpm install --filter webmodeler-backend... --frozen-lockfile
+
+# Keep dependency installation cacheable across different host user IDs.
+ARG DEV_UID=1000
+ARG DEV_GID=1000
+RUN chown -R "${DEV_UID}:${DEV_GID}" /repo/node_modules \
     && mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
-    && chown -R node:node /etc/enterpriseglue /var/run/secrets/enterpriseglue
+    && chown -R "${DEV_UID}:${DEV_GID}" /etc/enterpriseglue /var/run/secrets/enterpriseglue
 
 # Docker initializes a fresh named node_modules volume from the image. Mark its
 # frozen-lockfile install so dev Compose does not reinstall every package at boot.
 RUN node -e "const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('pnpm-lock.yaml');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));" > /repo/node_modules/.deps-hash \
-    && chown node:node /repo/node_modules/.deps-hash
+    && chown "${DEV_UID}:${DEV_GID}" /repo/node_modules/.deps-hash
 
 COPY --chown=node:node backend backend
+
+# A fresh named git-repository volume copies this directory's ownership from
+# the image, while the source tree itself is bind-mounted from the host.
+RUN mkdir -p /repo/backend/data/repos \
+    && chown -R "${DEV_UID}:${DEV_GID}" /repo/backend/data/repos
 
 WORKDIR /repo/backend
 

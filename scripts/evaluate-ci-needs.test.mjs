@@ -54,6 +54,15 @@ test('focused frontend selection cannot be silently skipped', () => {
   assert.equal(evaluation.passed, false)
 })
 
+test('selected developer cold-start qualification cannot be silently skipped', () => {
+  const required = requiredJobsForSelection({ run_dev_startup: 'true' })
+  assert.deepEqual(required, ['dev-compose-cold-start'])
+  const evaluation = evaluateNeeds({ 'dev-compose-cold-start': { result: 'skipped' } }, {
+    requiredNonSkippedJobs: required,
+  })
+  assert.equal(evaluation.passed, false)
+})
+
 test('documentation publication checks cannot be skipped on documentation changes', () => {
   const required = requiredJobsForSelection({ run_documentation_guard: 'true' })
   assert.deepEqual(required, ['documentation-boundary'])

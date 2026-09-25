@@ -22,13 +22,18 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        DEV_UID: ${EG_DEV_UID:-1000}
+        DEV_GID: ${EG_DEV_GID:-1000}
     restart: unless-stopped
     init: true
+    user: "${EG_DEV_UID:-1000}:${EG_DEV_GID:-1000}"
     env_file:
       - ${EG_BACKEND_ENV_FILE:-./.local/docker/env/docker.env}
     environment:
       CHOKIDAR_USEPOLLING: "true"
       DATABASE_TYPE: ${EG_FORCE_DATABASE_TYPE:-${DATABASE_TYPE}}
+      HOME: ${EG_DEV_HOME:-/home/node}
       pnpm_config_verify_deps_before_run: "false"
     depends_on:
       db:
