@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **dev:** verify documented fresh-clone teardown ([574e476](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/574e47685297d662417dd38bbcfb97a841dce4ea))
-* **dev:** verify documented fresh-clone teardown ([256d774](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/256d7749d5509e8963c6ff2cc0f047d0175c191b))
 
 ## [0.28.12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.11...v0.28.12) (2026-09-25)
 
