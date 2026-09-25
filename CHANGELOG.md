@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.28.12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.11...v0.28.12) (2026-09-25)
+
+
+### Bug Fixes
+
+* **dev:** align Linux Compose ownership with checkout user ([1cb823c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1cb823c7a959f90a110bd8e13d2a4ca30784e49f))
+* **dev:** make fresh Linux Compose startup writable and test it in CI ([6f66ab8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6f66ab846878d7a1f54a9a7e23f31a0e3cdbe999))
+
 ## [0.28.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.10...v0.28.11) (2026-09-24)
 
 
