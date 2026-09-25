@@ -1,0 +1,45 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "dev-compose-linux-ownership",
+  "type": "fix",
+  "scope": "development-startup",
+  "breaking": false,
+  "audiences": ["developers", "operators"],
+  "summary": "Keeps fresh Linux Docker Compose development startup writable when the host checkout owner differs from the container's default node user.",
+  "userImpact": [
+    "Linux developers can start a fresh checkout with pnpm run dev or bash dev.sh without TypeScript failing to write generated workspace files."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "On Linux, dev.sh passes the caller's numeric UID and GID to the development backend image and service; EG_DEV_UID and EG_DEV_GID remain optional overrides.",
+    "The development backend uses a writable temporary home for host-matched Linux identities. Production images and Compose configuration are unchanged."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": ["No database schema or data changes are required."]
+  },
+  "security": [
+    "Development startup matches the host checkout owner instead of broadening source permissions or running the container as root by default; production container identity is unchanged."
+  ],
+  "documentation": [
+    "The generated technical release notes describe the Linux development startup correction and CI cold-start qualification."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert to the previous development Compose and Dockerfile definition; no database rollback is needed."
+  ],
+  "validation": [
+    "A fresh disposable development Compose stack started locally with pnpm run dev --wait --wait-timeout 900; backend /ready and frontend / returned HTTP 200.",
+    "The change-selected CI lane runs the same development entry point on a fresh Linux runner and requires healthy endpoints without a redundant dependency installation."
+  ],
+  "packages": []
+}

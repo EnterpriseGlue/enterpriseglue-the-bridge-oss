@@ -12,6 +12,9 @@ const identityWorkflow = readFileSync(new URL('../.github/workflows/identity-pro
 const deploymentWorkflow = readFileSync(new URL('../.github/workflows/access-governance-deployment-evidence.yml', import.meta.url), 'utf8');
 const toolchainWorkflow = readFileSync(new URL('../.github/workflows/plugin-toolchain-release.yml', import.meta.url), 'utf8');
 const packageManifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const devScript = readFileSync(new URL('../dev.sh', import.meta.url), 'utf8');
+const devCompose = readFileSync(new URL('../infra/docker/compose/docker-compose.yml', import.meta.url), 'utf8');
+const devBackendDockerfile = readFileSync(new URL('../backend/Dockerfile', import.meta.url), 'utf8');
 
 test('the reusable workflow delegates path policy to the tested deterministic classifier', () => {
   assert.match(workflow, /node scripts\/ci-change-classifier\.mjs/);
@@ -216,6 +219,18 @@ test('image and plugin work is independently gated from application tests', () =
   assert.match(workflow, /run_dev_startup:[\s\S]*?jobs\.detect\.outputs\.run_dev_startup/);
   assert.equal(packageManifest.scripts.dev, 'bash ./dev.sh');
   assert.match(ciWorkflow, /build-ci-images:[\s\S]*?if: needs\.detect\.outputs\.run_ci_images == 'true'/);
+});
+
+test('Linux development startup preserves bind-mount and named-volume ownership', () => {
+  assert.match(devScript, /export EG_DEV_UID="\$\{EG_DEV_UID:-\$\(id -u\)\}"/);
+  assert.match(devScript, /export EG_DEV_GID="\$\{EG_DEV_GID:-\$\(id -g\)\}"/);
+  assert.match(devScript, /export EG_DEV_HOME="\$\{EG_DEV_HOME:-\/tmp\}"/);
+  assert.match(devCompose, /DEV_UID: \$\{EG_DEV_UID:-1000\}/);
+  assert.match(devCompose, /DEV_GID: \$\{EG_DEV_GID:-1000\}/);
+  assert.match(devCompose, /user: "\$\{EG_DEV_UID:-1000\}:\$\{EG_DEV_GID:-1000\}"/);
+  assert.match(devCompose, /HOME: \$\{EG_DEV_HOME:-\/home\/node\}/);
+  assert.match(devBackendDockerfile, /chown -R "\$\{DEV_UID\}:\$\{DEV_GID\}" \/repo\/node_modules/);
+  assert.match(devBackendDockerfile, /chown -R "\$\{DEV_UID\}:\$\{DEV_GID\}" \/repo\/backend\/data\/repos/);
 });
 
 test('Trivy wrapper changes select image smoke and security qualification', () => {
