@@ -15,6 +15,7 @@ const packageManifest = JSON.parse(readFileSync(new URL('../package.json', impor
 const devScript = readFileSync(new URL('../dev.sh', import.meta.url), 'utf8');
 const devCompose = readFileSync(new URL('../infra/docker/compose/docker-compose.yml', import.meta.url), 'utf8');
 const devBackendDockerfile = readFileSync(new URL('../backend/Dockerfile', import.meta.url), 'utf8');
+const contributingGuide = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8');
 
 test('the reusable workflow delegates path policy to the tested deterministic classifier', () => {
   assert.match(workflow, /node scripts\/ci-change-classifier\.mjs/);
@@ -216,9 +217,29 @@ test('image and plugin work is independently gated from application tests', () =
   assert.match(ciWorkflow, /dev-compose-cold-start:[\s\S]*?if: needs\.detect\.outputs\.run_dev_startup == 'true'/);
   assert.match(ciWorkflow, /pnpm run dev --wait --wait-timeout 900/);
   assert.match(ciWorkflow, /dev-compose-cold-start:[\s\S]*?down --volumes --remove-orphans/);
+  assert.match(ciWorkflow, /test ! -e node_modules/);
+  assert.match(ciWorkflow, /test -s \.local\/docker\/env\/docker\.env/);
+  assert.match(ciWorkflow, /pnpm run down -v/);
+  assert.match(ciWorkflow, /docker volume ls -q --filter/);
+  assert.match(ciWorkflow, /docker network ls -q --filter/);
+  assert.match(contributingGuide, /pnpm run dev/);
+  assert.match(contributingGuide, /pnpm run down -v/);
+  assert.doesNotMatch(contributingGuide, /pnpm run down -- -v/);
   assert.match(workflow, /run_dev_startup:[\s\S]*?jobs\.detect\.outputs\.run_dev_startup/);
   assert.equal(packageManifest.scripts.dev, 'bash ./dev.sh');
+  assert.equal(packageManifest.scripts.down, 'bash ./down.sh');
   assert.match(ciWorkflow, /build-ci-images:[\s\S]*?if: needs\.detect\.outputs\.run_ci_images == 'true'/);
+});
+
+test('the fresh-clone guide names the host runtimes pinned by the workspace', () => {
+  const nodeMajor = packageManifest.engines.node.match(/^>=(\d+)/)?.[1];
+  const pnpmVersion = packageManifest.packageManager.match(/^pnpm@([\d.]+)$/)?.[1];
+  assert.ok(nodeMajor);
+  assert.ok(pnpmVersion);
+  assert.match(contributingGuide, new RegExp(`Node\\.js ${nodeMajor}\\b`));
+  assert.match(contributingGuide, new RegExp(`pnpm ${pnpmVersion.replaceAll('.', '\\.')}\\b`));
+  assert.match(contributingGuide, /bash \.\/dev\.sh/);
+  assert.match(contributingGuide, /bash \.\/down\.sh/);
 });
 
 test('Linux development startup preserves bind-mount and named-volume ownership', () => {

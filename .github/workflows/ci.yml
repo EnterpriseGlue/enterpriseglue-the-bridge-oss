@@ -402,7 +402,9 @@ jobs:
           set -Eeuo pipefail
           test ! -e .local/docker/env/docker.env
           test ! -e .env.docker
+          test ! -e node_modules
           test "$(node -p "require('./package.json').scripts.dev")" = 'bash ./dev.sh'
+          test "$(node -p "require('./package.json').scripts.down")" = 'bash ./down.sh'
 
           compose=(
             docker compose --project-name "$COMPOSE_PROJECT_NAME" --project-directory .
@@ -427,6 +429,7 @@ jobs:
           trap cleanup EXIT
 
           pnpm run dev --wait --wait-timeout 900
+          test -s .local/docker/env/docker.env
           curl --fail --silent --show-error http://127.0.0.1:8787/ready > /dev/null
           curl --fail --silent --show-error http://127.0.0.1:5173/ > /dev/null
           EG_BACKEND_ENV_FILE=./.local/docker/env/docker.env "${compose[@]}" logs --no-color backend > "$RUNNER_TEMP/dev-compose-backend.log"
@@ -434,6 +437,13 @@ jobs:
             echo 'Fresh image unexpectedly reinstalled workspace dependencies at startup.' >&2
             exit 1
           fi
+
+          # Exercise the documented pnpm lifecycle. The EXIT trap remains a
+          # fallback if shutdown or the no-resources-left assertions fail.
+          pnpm run down -v
+          test -z "$(docker container ls -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
+          test -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
+          test -z "$(docker network ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")"
 
   frontend-tests:
     runs-on: ubuntu-latest
