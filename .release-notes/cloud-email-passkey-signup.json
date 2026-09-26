@@ -12,7 +12,7 @@
   "configuration": ["Managed Cloud account identity and a working global outbound email configuration are required; the relying-party origin is the configured frontend origin."],
   "api": { "compatibility": "additive", "changes": ["Add Cloud email-signup verification and passkey registration and authentication endpoints."] },
   "database": { "migrations": ["1700000000132-enforce-explicit-postgres-context", "1700000000133-add-cloud-email-passkeys"], "rollbackSupported": false, "notes": ["The owner verifies the exact 0132 ledger and policy before applying 0133. The new pending-signup and passkey tables have no tenant membership side effects. The down migration refuses to remove populated passkey credentials."] },
-  "security": ["Email verification establishes address control, while a verified passkey assertion authenticates the account. Matching email addresses never merge existing accounts or grant tenant membership."],
+  "security": ["Email verification establishes address control, while a verified passkey assertion authenticates the account. Matching email addresses never merge existing accounts or grant tenant membership.", "Use SimpleWebAuthn server 13.3.2 to include the attestation certificate trust-anchor verification fix for GHSA-6hxq-p678-4hr2."],
   "documentation": ["docs/how-to/auth-sso.md"],
   "knownLimitations": ["Lost-passkey recovery requires a separate verified support process until a recovery method is deliberately introduced."],
   "rollback": ["Roll the application back only to the signed compatibility release while retaining the 0133 schema. Do not remove populated passkey tables or strand passkey-only accounts; provide a verified alternate sign-in before disabling this method."],

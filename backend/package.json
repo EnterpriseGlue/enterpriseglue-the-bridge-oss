@@ -33,7 +33,7 @@
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",
-    "@simplewebauthn/server": "13.3.0",
+    "@simplewebauthn/server": "13.3.2",
     "archiver": "^7.0.1",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",

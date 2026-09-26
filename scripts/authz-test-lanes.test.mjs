@@ -134,6 +134,8 @@ test('CI enforces headless admin parity and the real PostgreSQL persistence life
   for (const workflow of [ciWorkflow, ciCoreWorkflow]) {
     const integrationStep = workflow.match(/- name: Run integration tests\n(?:(?!      - name:)[\s\S])*/)?.[0];
     assert.ok(integrationStep, 'The PostgreSQL integration step must remain present');
+    assert.match(integrationStep, /SESSION_RACE_DISPOSABLE_POSTGRES: 'true'/,
+      'Cloud passkey integration must explicitly opt into the job-owned disposable fixture');
     assert.match(integrationStep, /MIGRATION_TEST_POSTGRES_CONTAINER: \$\{\{ job\.services\.postgres\.id \}\}/,
       'Restore acceptance must use the exact job-owned PostgreSQL service, not discover another container');
   }

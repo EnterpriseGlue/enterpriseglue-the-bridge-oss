@@ -29,7 +29,7 @@
     "email": "henri.bergius@iki.fi",
     "url": "http://bergie.iki.fi"
   },
-  "@simplewebauthn/server@13.3.0": {
+  "@simplewebauthn/server@13.3.2": {
     "licenses": "MIT",
     "repository": "git+https://github.com/MasterKale/SimpleWebAuthn.git",
     "publisher": "Matthew Miller",
