@@ -48,11 +48,16 @@ export async function applySchemaEpochRuntimeTablePrivileges(
   schema: string,
   tableName: string,
   runtimeRole: string,
+  privileges: readonly ('SELECT' | 'INSERT' | 'UPDATE' | 'DELETE')[] = ['SELECT', 'INSERT', 'UPDATE'],
 ): Promise<void> {
+  if (privileges.length === 0 || new Set(privileges).size !== privileges.length
+    || privileges.some((privilege) => !['SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(privilege))) {
+    throw new Error('Schema-epoch runtime table privileges must be exact, nonempty, and unique');
+  }
   const table = `${identifier(schema)}.${identifier(tableName)}`;
   const role = identifier(runtimeRole);
   await quarantinedPostgresSQL(runner, `REVOKE ALL PRIVILEGES ON TABLE ${table} FROM ${role}`);
-  await quarantinedPostgresSQL(runner, `GRANT SELECT, INSERT, UPDATE ON TABLE ${table} TO ${role}`);
+  await quarantinedPostgresSQL(runner, `GRANT ${privileges.join(', ')} ON TABLE ${table} TO ${role}`);
 }
 
 export function readSchemaEpochRuntimeDirectTablePrivileges(
@@ -72,6 +77,21 @@ export function readSchemaEpochRuntimeDirectTablePrivileges(
       ORDER BY privilege_type`,
     [runtimeRole, schema, tableName],
   );
+}
+
+/** Catalog-only shape probe: the preflight login has no business-table SELECT. */
+export function readSchemaEpochRuntimeTableColumns(
+  runner: QueryRunner,
+  schema: string,
+  tableName: string,
+): Promise<Array<{ name: string }>> {
+  return quarantinedPostgresSQL(runner, `SELECT a.attname AS name
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    JOIN pg_attribute a ON a.attrelid=c.oid
+    WHERE n.nspname=$1 AND c.relname=$2 AND c.relkind IN ('r','p')
+      AND a.attnum>0 AND NOT a.attisdropped
+    ORDER BY a.attname`, [schema, tableName]);
 }
 
 export function readSchemaEpochRuntimeEffectiveTablePrivileges(

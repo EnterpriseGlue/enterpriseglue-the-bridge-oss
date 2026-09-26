@@ -87,7 +87,8 @@ class AuthSessionService {
     if (source.sessionClass === 'cloud_account' && (config.tenancyMode !== 'pooled'
       || !config.tenancyCloudRequired
       || !config.cloudAccountIdentityEnabled
-      || !['oidc', 'saml'].includes(source.authenticationMethod || ''))) throw denied();
+      || !['oidc', 'saml', 'passkey'].includes(source.authenticationMethod || '')
+      || (source.authenticationMethod === 'passkey' && source.mfaVerified !== true))) throw denied();
     const dataSource = await getDataSource();
     const session = await dataSource.getRepository(RefreshToken).findOneBy({
       id: source.sessionId, userId: source.userId, tenantId: source.tenantId || IsNull(),
@@ -130,15 +131,25 @@ class AuthSessionService {
     if (input.sessionClass !== undefined && input.sessionClass !== 'cloud_account') {
       throw Errors.unauthorized('Invalid session class');
     }
+    const isPasskey = input.authenticationMethod === 'passkey';
     if (isCloudAccountSession && (!cloudAccountSessionsEnabled
       || input.administratorRecovery
       || Boolean(input.tenantId?.trim())
       || Boolean(input.tenantSlug?.trim())
-      || !input.identityProviderId?.trim()
-      || !input.federationSession?.subjectId?.trim()
-      || !['oidc', 'saml'].includes(input.identityProviderProtocol || '')
-      || input.authenticationMethod !== input.identityProviderProtocol
-      || input.identityProviderAuthenticationMode !== 'direct')) {
+      || (isPasskey
+        ? input.mfaVerified !== true
+          || Boolean(input.identityProviderId)
+          || input.identityProviderUpdatedAt != null
+          || Boolean(input.identityProviderProtocol)
+          || Boolean(input.identityProviderAuthenticationMode)
+          || Boolean(input.identityProviderDirectoryTenantId)
+          || input.identityProviderConfigurationJson !== undefined
+          || Boolean(input.federationSession)
+        : !input.identityProviderId?.trim()
+          || !input.federationSession?.subjectId?.trim()
+          || !['oidc', 'saml'].includes(input.identityProviderProtocol || '')
+          || input.authenticationMethod !== input.identityProviderProtocol
+          || input.identityProviderAuthenticationMode !== 'direct'))) {
       throw Errors.unauthorized('Invalid cloud account session');
     }
     const tenantId = input.tenantId?.trim()

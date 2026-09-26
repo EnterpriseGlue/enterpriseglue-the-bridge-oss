@@ -25,7 +25,7 @@ export interface JwtPayload {
   /** Marks a break-glass session that must retain live platform-administrator membership. */
   recovery?: 'platform_administrator';
   /** Verified authentication method and assurance carried across refreshes. */
-  authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap';
+  authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap' | 'passkey';
   /** True only when a trusted authenticator/IdP supplied configured MFA evidence. */
   mfaVerified?: boolean;
   /**

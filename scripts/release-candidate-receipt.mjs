@@ -116,26 +116,36 @@ async function collectArtifacts(artifactDirectory) {
 async function readSchemaEpochManifest(artifactDirectory) {
   const manifest = JSON.parse(await readFile(path.join(artifactDirectory, SCHEMA_EPOCH_MANIFEST_PATH), 'utf8'))
   if (
-    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v2'
-    || manifest?.id !== 'postgres-explicit-context-cloud-email-compat-v2'
+    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v3'
+    || manifest?.id !== 'postgres-cloud-email-passkeys-v3'
     || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
     || manifest?.roles?.preflight?.mode !== 'verify-runtime-grant'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
-    || manifest?.roles?.ownerMigration?.from?.through !== 1700000000130
-    || manifest?.roles?.ownerMigration?.from?.postgresPolicyProfile !== LEGACY_POLICY_PROFILE
+    || manifest?.roles?.ownerMigration?.from?.through !== 1700000000131
+    || manifest?.roles?.ownerMigration?.from?.count !== 133
+    || manifest?.roles?.ownerMigration?.from?.sha256 !== '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1'
+    || manifest?.roles?.ownerMigration?.from?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
+    || manifest?.roles?.ownerMigration?.intermediate?.through !== 1700000000132
+    || manifest?.roles?.ownerMigration?.intermediate?.count !== 134
+    || manifest?.roles?.ownerMigration?.intermediate?.sha256 !== 'fccc489d5df1c1e98795901b973f632dec2b8f3b71067910f96b6264859e870a'
+    || manifest?.roles?.ownerMigration?.intermediate?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest?.roles?.ownerMigration?.intermediate?.name !== 'EnforceExplicitPostgresContext1700000000132'
+    || manifest?.roles?.ownerMigration?.intermediate?.timestamp !== 1700000000132
     || manifest?.target?.databaseType !== 'postgres'
     || manifest?.target?.tenancyMode !== 'pooled'
-    || manifest?.executableMigrationInventory?.through !== 1700000000131
-    || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000130
+    || manifest?.executableMigrationInventory?.through !== 1700000000133
+    || manifest?.executableMigrationInventory?.count !== 135
+    || manifest?.executableMigrationInventory?.sha256 !== 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000131
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.count !== manifest?.roles?.ownerMigration?.from?.count
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.sha256 !== manifest?.roles?.ownerMigration?.from?.sha256
-    || manifest?.upgradeContract?.minimumDatabaseEpoch?.postgresPolicyProfile !== LEGACY_POLICY_PROFILE
+    || manifest?.upgradeContract?.minimumDatabaseEpoch?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
     || manifest?.upgradeContract?.freshDatabase !== 'requires-separate-signed-bootstrap'
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
-    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-dual-context-closure/v1'
-    || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-select-insert-update/v1'
-    || manifest?.executableImplementationInventory?.count !== 16
+    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1'
+    || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-and-cloud-passkeys/v1'
+    || manifest?.executableImplementationInventory?.count !== 22
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.releaseEffectInventory?.version !== 'release-effect-inventory.enterpriseglue.io/v1'
     || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')
@@ -145,28 +155,36 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest.acceptedDatabaseEpochs[0]?.through !== 1700000000131
     || manifest.acceptedDatabaseEpochs[0]?.id !== 'pre-enforcement'
     || manifest.acceptedDatabaseEpochs[0]?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
+    || manifest.acceptedDatabaseEpochs[0]?.sha256 !== manifest.roles.ownerMigration.from.sha256
     || manifest.acceptedDatabaseEpochs[1]?.through !== 1700000000132
     || manifest.acceptedDatabaseEpochs[1]?.id !== 'post-enforcement'
     || manifest.acceptedDatabaseEpochs[1]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
+    || manifest.acceptedDatabaseEpochs[1]?.sha256 !== manifest.roles.ownerMigration.intermediate.sha256
     || manifest.acceptedDatabaseEpochs[2]?.through !== 1700000000133
     || manifest.acceptedDatabaseEpochs[2]?.count !== 135
     || manifest.acceptedDatabaseEpochs[2]?.id !== 'cloud-email-passkeys'
     || manifest.acceptedDatabaseEpochs[2]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
     || manifest.acceptedDatabaseEpochs[2]?.sha256 !== 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'
+    || manifest.acceptedDatabaseEpochs[2]?.sha256 !== manifest.executableMigrationInventory.sha256
     || manifest?.plannedMigration?.name !== 'AddCloudEmailPasskeys1700000000133'
     || manifest?.plannedMigration?.timestamp !== 1700000000133
-  ) fail('Candidate schema-epoch manifest is not the bounded dual-role compatibility bridge')
+  ) fail('Candidate schema-epoch manifest is not the bounded Cloud passkey owner transition')
   return manifest
 }
 
-async function readManagedShardBootstrapManifest(artifactDirectory, schemaEpochManifest) {
+async function readManagedShardBootstrapManifest(artifactDirectory) {
   const manifest = parseManagedShardBootstrapManifest(JSON.parse(await readFile(path.join(artifactDirectory, MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH), 'utf8')))
   const predecessorEpoch = {
     ...manifest.predecessor.migrationInventory,
     postgresPolicyProfile: manifest.predecessor.postgresPolicyProfile,
   }
-  if (canonicalJson(predecessorEpoch) !== canonicalJson(schemaEpochManifest.roles.ownerMigration.from)) {
-    fail('Managed-shard bootstrap output does not equal the schema bridge owner predecessor')
+  if (canonicalJson(predecessorEpoch) !== canonicalJson({
+    through: 1700000000130,
+    count: 132,
+    sha256: 'e525e9f9fe8d66498aeea6beb03d6257274de3a38a7b48819de6edccf02ecb16',
+    postgresPolicyProfile: LEGACY_POLICY_PROFILE,
+  })) {
+    fail('Managed-shard bootstrap output is not the immutable 0130 predecessor')
   }
   return manifest
 }
@@ -182,6 +200,7 @@ function schemaEpochProjection(manifest, artifact) {
     preflightMode: manifest.roles.preflight.mode,
     ownerMigrationMode: manifest.roles.ownerMigration.mode,
     ownerMigrationFrom: deepCopy(manifest.roles.ownerMigration.from),
+    ownerMigrationIntermediate: deepCopy(manifest.roles.ownerMigration.intermediate),
     ownerRuntimeGrant: manifest.roles.ownerMigration.runtimeGrant,
     freshDatabase: manifest.upgradeContract.freshDatabase,
     emptyMigrationLedger: manifest.upgradeContract.emptyMigrationLedger,
@@ -226,7 +245,7 @@ async function createReceipt(args) {
 
   const artifacts = await collectArtifacts(artifactDirectory)
   const schemaEpochManifest = await readSchemaEpochManifest(artifactDirectory)
-  const managedShardBootstrapManifest = await readManagedShardBootstrapManifest(artifactDirectory, schemaEpochManifest)
+  const managedShardBootstrapManifest = await readManagedShardBootstrapManifest(artifactDirectory)
   const schemaEpochArtifact = artifacts.find((artifact) => artifact.path === SCHEMA_EPOCH_MANIFEST_PATH)
   const managedShardBootstrapArtifact = artifacts.find((artifact) => artifact.path === MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH)
   if (!schemaEpochArtifact) fail('Candidate schema-epoch manifest is missing from the artifact inventory')
@@ -268,7 +287,7 @@ async function verifyReceipt(args) {
     fail('Candidate artifact checksums or inventory do not match the receipt')
   }
   const schemaEpochManifest = await readSchemaEpochManifest(artifactDirectory)
-  const managedShardBootstrapManifest = await readManagedShardBootstrapManifest(artifactDirectory, schemaEpochManifest)
+  const managedShardBootstrapManifest = await readManagedShardBootstrapManifest(artifactDirectory)
   const schemaEpochArtifact = actualArtifacts.find((artifact) => artifact.path === SCHEMA_EPOCH_MANIFEST_PATH)
   const managedShardBootstrapArtifact = actualArtifacts.find((artifact) => artifact.path === MANAGED_SHARD_BOOTSTRAP_MANIFEST_PATH)
   const expectedSchemaEpoch = schemaEpochProjection(schemaEpochManifest, schemaEpochArtifact)

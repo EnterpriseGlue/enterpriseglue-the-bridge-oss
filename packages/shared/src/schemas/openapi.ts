@@ -4071,6 +4071,40 @@ registry.registerPath({
   request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login']) }).strict() },
   responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding or organization login' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/email/request',
+  ...authzExemption('POST', '/api/auth/cloud-signup/email/request'),
+  request: { body: { content: { 'application/json': { schema: z.object({ email: z.email().max(320) }).strict() } } } },
+  responses: { 202: { description: 'Generic response; a verification link or existing-account guidance is sent when eligible', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 404: { description: 'Managed Cloud account identity is disabled' }, 503: { description: 'Outbound email is unavailable' } },
+});
+registry.registerPath({
+  method: 'get', path: '/api/auth/cloud-signup/email/verify',
+  ...authzExemption('GET', '/api/auth/cloud-signup/email/verify'),
+  request: { query: z.object({ token: z.string() }) },
+  responses: { 302: { description: 'Sets short-lived, HttpOnly address-proof cookie and redirects to passkey registration; does not create an account' }, 401: { description: 'Invalid or expired link' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/email/passkey/options',
+  ...authzExemption('POST', '/api/auth/cloud-signup/email/passkey/options'),
+  responses: { 200: { description: 'User-verified, discoverable WebAuthn registration options for the verified email proof', content: { 'application/json': { schema: z.object({ challenge: z.string() }).passthrough() } } }, 401: { description: 'Missing or expired email proof' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/email/passkey/complete',
+  ...authzExemption('POST', '/api/auth/cloud-signup/email/passkey/complete'),
+  request: { body: { content: { 'application/json': { schema: z.object({ id: z.string(), rawId: z.string(), type: z.literal('public-key'), response: z.record(z.string(), z.unknown()), clientExtensionResults: z.record(z.string(), z.unknown()) }).passthrough() } } } },
+  responses: { 201: { description: 'Atomically consumes the email proof and creates a tenant-neutral Cloud account with a verified passkey', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } }, 401: { description: 'Invalid, expired, or reused proof or passkey registration' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-passkey/options',
+  ...authzExemption('POST', '/api/auth/cloud-passkey/options'),
+  responses: { 200: { description: 'Browser-bound, single-use WebAuthn authentication challenge', content: { 'application/json': { schema: z.object({ challenge: z.string() }).passthrough() } } }, 404: { description: 'Managed Cloud account identity is disabled' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-passkey/complete',
+  ...authzExemption('POST', '/api/auth/cloud-passkey/complete'),
+  request: { body: { content: { 'application/json': { schema: z.object({ id: z.string(), rawId: z.string(), type: z.literal('public-key'), response: z.record(z.string(), z.unknown()), clientExtensionResults: z.record(z.string(), z.unknown()) }).passthrough() } } } },
+  responses: { 200: { description: 'Consumes the challenge and issues a tenant-neutral Cloud account session after verified user-presence and user-verification evidence', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } }, 401: { description: 'Invalid, expired, or reused passkey assertion' } },
+});
 
 registry.registerPath({
   method: 'post',

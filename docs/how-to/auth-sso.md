@@ -19,6 +19,67 @@ For the exact REST/headless settings contract and the UI behavior of
 `manual`, `transition_to_sso`, and `sso_managed`, see
 [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md).
 
+## Managed Cloud email and passkey accounts
+
+When pooled tenancy, `EG_TENANCY_CLOUD_REQUIRED`, and managed Cloud account
+identity are enabled, the public Cloud sign-up page offers an email-and-passkey
+method alongside configured Apple, Google, and Microsoft identity providers.
+This method requires a working default outbound email configuration and an HTTPS
+`FRONTEND_URL` (local `http://localhost` is permitted for development). The
+frontend URL supplies the WebAuthn relying-party origin and host, so changing
+its host invalidates existing passkeys unless credentials are migrated through
+an explicit, separately reviewed recovery procedure.
+
+`POST /api/auth/cloud-signup/email/request` returns the same response for new
+and existing addresses. A new address receives a verification link, valid for 15
+minutes; its browser proof is consumed when passkey registration completes.
+An existing address receives guidance to use its current sign-in
+method; matching an email never links accounts. Following the link at
+`GET /api/auth/cloud-signup/email/verify` places only a short-lived HttpOnly
+address-proof cookie in the browser. No account or organization membership is
+created at this point. The browser then obtains user-verified, discoverable
+WebAuthn options from `POST /api/auth/cloud-signup/email/passkey/options` and
+submits the result to `POST /api/auth/cloud-signup/email/passkey/complete`.
+The latter consumes the proof atomically, creates a verified Cloud user and
+passkey, and issues a tenant-neutral Cloud account session. The new user gains
+only the non-privileged authenticated-user baseline. Organization access still
+requires the normal authorized onboarding, invitation, or membership path.
+
+Returning users obtain a browser-bound challenge from
+`POST /api/auth/cloud-passkey/options` and submit their passkey assertion to
+`POST /api/auth/cloud-passkey/complete`. The server verifies the challenge,
+origin, relying-party ID, stored public key, signature, and user verification;
+the challenge is single-use. Browser sessions remain subject to the existing
+Cloud-account refresh and tenant-switch checks. The request and challenge
+endpoints are rate limited. Operators should monitor email delivery, expired
+proofs, passkey-registration failures, and sign-in failures without logging
+raw proof tokens or credential material. Expired pending proofs and challenges
+contain no account authority and may be pruned after their expiry.
+
+Before disabling this method or rolling back the credential schema, provide a
+verified alternative for passkey-only users. Do not drop populated passkey
+tables; that would strand those accounts. Lost-passkey recovery is not
+implemented by this method and must use a separately authorized identity
+recovery process. This flow does not weaken the requirement for tenant SSO or
+grant organization access from an email domain.
+
+### Pooled Cloud schema transition
+
+The passkey release is not an owner for a database still at migration
+`1700000000130`. First run the signed, published compatibility owner to reach
+the exact `1700000000131` dual-context ledger, and keep its verify-only runtime
+as the sole routed predecessor while older tenant-GUC consumers drain. The
+passkey release's restricted owner then verifies that ledger and dual-context
+policy, applies `1700000000132`, verifies the exact intermediate ledger and
+explicit-context policy, and only then applies `1700000000133` and grants its
+runtime role access to the passkey tables. Application and worker processes are
+verify-only throughout; they cannot repair a missing owner step. A failed or
+interrupted owner attempt must resume only from an accepted exact ledger and
+policy profile. Do not add the `0130` ledger to the passkey manifest's accepted
+starting epochs, skip the intermediate policy check, or roll back the enforced
+policy in place. A staging controller must attest the sole compatible
+predecessor and closed old-consumer boundary before invoking the passkey owner.
+
 ## JWT and Admin Bootstrap
 Required variables:
 - `JWT_SECRET`

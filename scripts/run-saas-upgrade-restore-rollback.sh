@@ -12,6 +12,9 @@ baseline_image="${SAAS_BASELINE_BACKEND_IMAGE:-ghcr.io/enterpriseglue/enterprise
 predecessor_image="ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9ece726dac9f6a492cbb030c9dab6efadedf1f3f5ac842219027a3646"
 predecessor_tag=v0.24.2
 predecessor_revision=785b5ab890aba315f6c3944ace0edcc3ff99d20f
+bridge_image="ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:f24809523cbb1ed525009f5668d8088291423d844915b78860b9d9a3cabb60de"
+bridge_tag=v0.28.13
+bridge_revision=e297cedcdc4208f68653693eb22fee38be1b3ffa
 baseline_source_dir="$temp_dir/v0.18.0-source"
 database_name="enterpriseglue_recovery"
 migration_owner_user="enterpriseglue_recovery_owner"
@@ -77,11 +80,22 @@ if [[ "$(git -C "$root_dir" rev-parse "${predecessor_tag}^{commit}")" != "$prede
   echo '[saas-recovery] Local schema-predecessor tag does not resolve to the published release revision.' >&2
   exit 1
 fi
+if [[ "$(git -C "$root_dir" rev-parse "${bridge_tag}^{commit}")" != "$bridge_revision" ]]; then
+  echo '[saas-recovery] Local compatibility-bridge tag does not resolve to the published release revision.' >&2
+  exit 1
+fi
 echo "[saas-recovery] Pulling exact published schema predecessor ${predecessor_image}."
 docker pull "$predecessor_image" >/dev/null
 predecessor_labels="$(docker image inspect "$predecessor_image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}} {{index .Config.Labels "org.opencontainers.image.version"}}')"
 if [[ "$predecessor_labels" != "$predecessor_revision $predecessor_tag" ]]; then
   echo '[saas-recovery] Schema-predecessor image labels do not bind the expected release source.' >&2
+  exit 1
+fi
+echo "[saas-recovery] Pulling exact published compatibility bridge ${bridge_image}."
+docker pull "$bridge_image" >/dev/null
+bridge_labels="$(docker image inspect "$bridge_image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}} {{index .Config.Labels "org.opencontainers.image.version"}}')"
+if [[ "$bridge_labels" != "$bridge_revision $bridge_tag" ]]; then
+  echo '[saas-recovery] Compatibility-bridge image labels do not bind the expected release source.' >&2
   exit 1
 fi
 
@@ -287,6 +301,49 @@ try {
 NODE
 }
 
+run_bridge_owner_migration() {
+  docker run --rm -i \
+    --network "$network_name" \
+    -e NODE_ENV=production \
+    -e DATABASE_TYPE=postgres \
+    -e POSTGRES_HOST=db \
+    -e POSTGRES_PORT=5432 \
+    -e POSTGRES_USER="$migration_owner_user" \
+    -e POSTGRES_PASSWORD="$migration_owner_password" \
+    -e POSTGRES_DATABASE="$database_name" \
+    -e POSTGRES_SCHEMA=main \
+    -e POSTGRES_SSL=false \
+    -e JWT_SECRET=disposable-recovery-jwt-secret-0123456789abcdef \
+    -e ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    -e ADMIN_EMAIL=recovery-admin@example.test \
+    -e ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
+    -e FRONTEND_URL=http://frontend.invalid \
+    -e GIT_REPOS_PATH=/tmp/enterpriseglue-recovery-repos \
+    -e EG_TENANCY_MODE=pooled \
+    -e EG_TENANT_RLS_ENFORCED=true \
+    -e EG_TENANT_PLACEMENT_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    -e EG_POSTGRES_RUNTIME_ROLE="$runtime_user" \
+    "$bridge_image" --input-type=module - <<'NODE'
+const migrations = await import('./dist/packages/shared/dist/db/run-migrations.js');
+const dataSourceModule = await import('./dist/packages/shared/dist/db/data-source.js');
+const epoch = await import('./dist/packages/shared/dist/db/schema-epoch.js');
+try {
+  await migrations.runSchemaEpochOwnerMigrations();
+  const source = await dataSourceModule.getDataSource();
+  const runner = source.createQueryRunner();
+  try {
+    const manifest = epoch.loadBundledSchemaEpochManifest();
+    const accepted = await epoch.verifyExecutedSchemaEpoch(source, runner, manifest);
+    if (accepted.through !== 1700000000131 || accepted.count !== 133 ||
+        accepted.sha256 !== '12d8f4fe707e5f8a320f187979c5546c6b17198477a182c99c4ae3d8448417e1') {
+      throw new Error('Published compatibility bridge did not reach the exact 0131 ledger');
+    }
+    console.log('published-compatibility-bridge=exact-0131-dual-context');
+  } finally { await runner.release(); }
+} finally { await dataSourceModule.closeDataSource(); }
+NODE
+}
+
 run_current_owner_migration() {
   (
   cd "$root_dir"
@@ -476,14 +533,19 @@ echo '[saas-recovery] Advancing populated v0.18.0 state with the exact published
 run_predecessor_migrations \
   > "$artifact_dir/published-predecessor-migrations.log" 2>&1
 
-echo '[saas-recovery] Applying only the bounded current 0131 owner transition.'
+echo '[saas-recovery] Applying the signed published 0130 -> 0131 compatibility bridge.'
+run_bridge_owner_migration \
+  > "$artifact_dir/published-bridge-owner-migrations.log" 2>&1
+echo '[saas-recovery] Verifying the retained legacy consumer only at the dual-context 0131 boundary.'
+run_predecessor_overlap verify \
+  > "$artifact_dir/v0.24.2-verify-only-legacy-access.log" 2>&1
+echo '[saas-recovery] Draining the legacy consumer before 0132 policy enforcement.'
+docker rm -f "$predecessor_overlap_name" >/dev/null 2>&1 || true
+echo '[saas-recovery] Applying the bounded current 0131 -> 0132 -> 0133 owner transition.'
 cd "$root_dir"
 pnpm --filter webmodeler-backend run build >/dev/null
 run_current_owner_migration \
   > "$artifact_dir/current-upgrade-migrations.log" 2>&1
-echo '[saas-recovery] Verifying retained v0.24.2 overlap is read-only and preserves the dual policy.'
-run_predecessor_overlap verify \
-  > "$artifact_dir/v0.24.2-verify-only-legacy-access.log" 2>&1
 run_migrations_from "$root_dir" verify \
   > "$artifact_dir/current-upgrade-verify.log" 2>&1
 
@@ -546,10 +608,12 @@ stop_baseline_capture v0.18.0-application-restored-rollback
   echo "baseline_digest=${baseline_digest}"
   echo "schema_predecessor=${predecessor_tag}@${predecessor_revision}"
   echo "schema_predecessor_digest=${predecessor_image#*@}"
-  echo 'owner_transition=bounded-1700000000131'
+  echo "compatibility_bridge=${bridge_tag}@${bridge_revision}"
+  echo "compatibility_bridge_digest=${bridge_image#*@}"
+  echo 'owner_transition=signed-0130-to-0131-then-bounded-0131-to-0132-to-0133'
   echo 'application_startup=verify-only-restricted-runtime'
   echo 'upgrade=populated-security-policy-with-separate-runtime-role'
-  echo 'policy_epoch=pre-enforcement-dual-context-compatible'
+  echo 'policy_epoch=explicit-context-after-old-consumer-drain'
   echo 'predecessor_overlap=v0.24.2-verify-only-ready-with-legacy-tenant-access'
   echo 'application_rollback=previous-v0.18.0-ready-on-restored-pre-upgrade-schema'
   echo 'restore=current-upgraded-dump-verified-with-runtime-role'

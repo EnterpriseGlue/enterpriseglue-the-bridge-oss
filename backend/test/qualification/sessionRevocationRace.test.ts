@@ -229,7 +229,8 @@ describe('physical PostgreSQL session derivation and logout', () => {
 
   it.each(['/private', '/optional'])('rate-limits the real fixture auth probe %s', async (path) => {
     for (let index = 0; index < 20; index++) {
-      expect((await request(app).get(path)).status).toBe(path === '/private' ? 401 : 200);
+      const response = await request(app).get(path);
+      expect(response.status, JSON.stringify(response.body)).toBe(path === '/private' ? 401 : 200);
     }
     const blocked = await request(app).get(path);
     expect(blocked.status).toBe(429);

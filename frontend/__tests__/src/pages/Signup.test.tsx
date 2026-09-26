@@ -29,6 +29,7 @@ describe('Signup', () => {
     expect(document.querySelector('.eg-login-provider-button--google')).toBeInTheDocument();
     expect(document.querySelector('.eg-login-provider-button--microsoft')).toBeInTheDocument();
     expect(document.querySelector('.eg-login-provider-button--apple')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Use email and a passkey' })).toHaveAttribute('href', '/signup/email');
     expect(screen.getByRole('link', { name: /Already have an account/i })).toHaveAttribute('href', '/login');
   });
 

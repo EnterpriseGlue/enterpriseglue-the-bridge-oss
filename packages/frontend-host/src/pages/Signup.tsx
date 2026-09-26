@@ -58,6 +58,7 @@ export default function Signup() {
               onClick={() => window.location.assign(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/cloud/onboarding')}`)}
             />)}
           </div> : null}
+          {!error && <Button as={Link} kind="secondary" to="/signup/email">Use email and a passkey</Button>}
           {error ? <Button kind="secondary" onClick={() => void load()}>Retry</Button> : null}
           <Button as={Link} kind="ghost" to="/login" renderIcon={Login}>Already have an account?</Button>
         </Stack>

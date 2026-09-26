@@ -19,6 +19,8 @@ export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/db/postgres-tenant-policy.ts',
   'packages/shared/src/db/postgres-migration-context.ts',
   'packages/shared/src/db/migrations/1700000000131-add-release-effect-cohorts.ts',
+  'packages/shared/src/db/migrations/1700000000132-enforce-explicit-postgres-context.ts',
+  'packages/shared/src/db/migrations/1700000000133-add-cloud-email-passkeys.ts',
   'packages/shared/src/db/migrations/plugin-migration-schema.ts',
   'packages/shared/src/db/release-effect-cohort-schema.ts',
   'packages/shared/src/infrastructure/persistence/pluginColumnPolicy.ts',
@@ -26,7 +28,11 @@ export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/db/postgres-tenant-rls.ts',
   'packages/shared/src/db/tenant-ownership-inventory.ts',
   'packages/shared/src/db/schema-epoch-runtime-grant.ts',
+  'packages/shared/src/db/schema-epoch-cloud-passkey-grant.ts',
   'packages/shared/src/db/postgres-runtime-grants.ts',
+  'packages/shared/src/infrastructure/persistence/entities/CloudEmailSignup.ts',
+  'packages/shared/src/infrastructure/persistence/entities/CloudPasskey.ts',
+  'packages/shared/src/infrastructure/persistence/entities/CloudPasskeyChallenge.ts',
   'packages/shared/src/contracts/release-effect-inventory.ts',
   'packages/shared/src/services/platform-admin/ReleaseEffectSettlementService.ts',
   'packages/shared/src/services/platform-admin/open-release-effect-cohort.ts',
@@ -40,7 +46,7 @@ export function implementationInventoryFromSources(sources) {
     .sort((left, right) => left.path.localeCompare(right.path))
   return {
     algorithm: 'sha256-source-v1',
-    purpose: 'owner-transition-1700000000131-dual-context-closure/v1',
+    purpose: 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1',
     count: entries.length,
     sha256: sha256(JSON.stringify(entries)),
   }
