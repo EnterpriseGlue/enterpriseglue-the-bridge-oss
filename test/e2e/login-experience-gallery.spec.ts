@@ -140,6 +140,7 @@ test.describe('Login experience screenshot gallery', () => {
     await page.goto('/login');
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByText('Email address is required')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in with a passkey' })).toBeInViewport({ ratio: 1 });
     await captureManualScreenshot(page, '98-cloud-login-email-required.jpg');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();

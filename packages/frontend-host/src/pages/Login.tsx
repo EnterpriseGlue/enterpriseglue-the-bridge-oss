@@ -684,7 +684,7 @@ export default function Login() {
           <Button as={RouterLink} to="/cloud/onboarding" kind="primary">Create an organization</Button>
         </div>}
 
-        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-7)' }}>
+        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-5)' }}>
           <div className="eg-login-section-header">
             <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
             <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
