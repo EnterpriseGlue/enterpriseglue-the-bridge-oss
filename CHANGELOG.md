@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.29.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.13...v0.29.0) (2026-09-27)
+
+
+### Features
+
+* **auth:** add Cloud email and passkey signup ([3c57a83](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3c57a83ae28dcd1c3ad69186da434da091124a40))
+* **auth:** bind Cloud passkey schema owner and runtime grants ([303a5db](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/303a5dbda10cecd44a2c05f7847105a9d6878912))
+
+
+### Bug Fixes
+
+* **auth:** keep Cloud passkey sign-in reachable on login ([04c101f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/04c101faf54390836867b2f04c764f0a8005b0d2))
+* **auth:** qualify owned passkey fixture and patched WebAuthn runtime ([e7fc67e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e7fc67e3604367c3a9f2b7cb1b102fd553ce0f08))
+* **auth:** stage signed passkey schema transition and CI repair ([9b09ad8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9b09ad88347d1cce055175687aec093c8f66bdc3))
+* **ui:** keep Cloud sign-in actions visible on Linux ([cd7a320](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cd7a32002a32d815e8b97f9a6a3dc1a534b0b97f))
+
 ## [0.28.13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.12...v0.28.13) (2026-09-25)
 
 
