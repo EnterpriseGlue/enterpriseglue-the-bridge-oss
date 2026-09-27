@@ -324,6 +324,7 @@ jobs:
       - name: Run integration tests
         if: matrix.database == 'postgres'
         env:
+          SESSION_RACE_DISPOSABLE_POSTGRES: 'true'
           MIGRATION_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: pnpm run test:integration
 

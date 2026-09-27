@@ -1061,7 +1061,7 @@
   position: relative;
   isolation: isolate;
   justify-content: flex-start;
-  padding: 3rem clamp(1.5rem, 4.5vw, 5rem);
+  padding: 1.5rem clamp(1.5rem, 4.5vw, 5rem);
   background: #08090d;
   overflow: hidden;
 }
@@ -1071,7 +1071,8 @@
   z-index: 1;
   flex: 0 0 auto;
   inline-size: min(27.5rem, 100%);
-  padding: 2.5rem;
+  /* Leave room for all sign-in actions with taller cross-platform text metrics. */
+  padding: 1.5rem 2.5rem;
   border: 0;
   background: #08090d;
 }

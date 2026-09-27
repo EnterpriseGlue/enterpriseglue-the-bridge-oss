@@ -16,6 +16,9 @@ const goodIsolation = { superuser: false, bypass_rls: false, forced_tenant_polic
 const schemaPredecessorTag = 'v0.24.2';
 const schemaPredecessorRevision = '785b5ab890aba315f6c3944ace0edcc3ff99d20f';
 const schemaPredecessorImage = 'ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9ece726dac9f6a492cbb030c9dab6efadedf1f3f5ac842219027a3646';
+const schemaBridgeTag = 'v0.28.13';
+const schemaBridgeRevision = 'e297cedcdc4208f68653693eb22fee38be1b3ffa';
+const schemaBridgeImage = 'ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:f24809523cbb1ed525009f5668d8088291423d844915b78860b9d9a3cabb60de';
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'eg-pooled-evidence-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -150,6 +153,8 @@ function runnerFixture(t) {
 case "$*" in
   *"rev-parse ${schemaPredecessorTag}^{commit}")
     if [ "$SCENARIO" = wrong-predecessor-revision ]; then printf '%064d\\n' 0; else printf '%s\\n' '${schemaPredecessorRevision}'; fi;;
+  *"rev-parse ${schemaBridgeTag}^{commit}")
+    if [ "$SCENARIO" = wrong-bridge-revision ]; then printf '%064d\\n' 0; else printf '%s\\n' '${schemaBridgeRevision}'; fi;;
   *) exit 2;;
 esac`);
   executable('bin/docker', `
@@ -158,6 +163,9 @@ case "$*" in
   "pull ${schemaPredecessorImage}") exit 0;;
   "image inspect ${schemaPredecessorImage} --format "*)
     if [ "$SCENARIO" = wrong-predecessor-label ]; then printf '%s\\n' '${schemaPredecessorRevision} v0.0.0'; else printf '%s\\n' '${schemaPredecessorRevision} ${schemaPredecessorTag}'; fi;;
+  "pull ${schemaBridgeImage}") exit 0;;
+  "image inspect ${schemaBridgeImage} --format "*)
+    if [ "$SCENARIO" = wrong-bridge-label ]; then printf '%s\\n' '${schemaBridgeRevision} v0.0.0'; else printf '%s\\n' '${schemaBridgeRevision} ${schemaBridgeTag}'; fi;;
   *"exec -T backend node -")
     if [ "$SCENARIO" = invalid-isolation ]; then echo '${secret}'; else echo '${JSON.stringify({ ...goodIsolation, role: secret })}'; fi;;
   *"down --volumes"*) touch "$HARNESS_CLEANUP"; [ "$SCENARIO" != cleanup-failure ]; exit $?;;
@@ -180,6 +188,7 @@ esac`);
 for (const [scenario, code, stage] of [
   ['success', 0, 'complete'], ['preflight-failure', 2, 'preflight'], ['build-failure', 23, 'build'],
   ['wrong-predecessor-revision', 2, 'preflight'], ['wrong-predecessor-label', 2, 'preflight'],
+  ['wrong-bridge-revision', 2, 'preflight'], ['wrong-bridge-label', 2, 'preflight'],
   ['tls-startup-failure', 35, 'startup'],
   ['browser-failure', 17, 'browser'], ['signal', 143, 'browser'], ['invalid-isolation', 1, 'complete'],
   ['cleanup-failure', 1, 'cleanup'], ['scratch-cleanup-failure', 1, 'cleanup'],
@@ -202,7 +211,8 @@ for (const [scenario, code, stage] of [
   }
   assert.equal(
     existsSync(join(root, 'cleaned')),
-    !['preflight-failure', 'build-failure', 'wrong-predecessor-revision', 'wrong-predecessor-label'].includes(scenario),
+    !['preflight-failure', 'build-failure', 'wrong-predecessor-revision', 'wrong-predecessor-label',
+      'wrong-bridge-revision', 'wrong-bridge-label'].includes(scenario),
   );
 });
 

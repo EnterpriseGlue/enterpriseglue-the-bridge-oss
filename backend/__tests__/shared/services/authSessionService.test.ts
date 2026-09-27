@@ -90,6 +90,29 @@ describe('authSessionService', () => {
     }), { isEnabled: true });
   });
 
+  it('issues a verified passkey Cloud session without accepting provider lineage', async () => {
+    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
+    const user = { id: 'user-1', email: 'person@example.test', authSessionVersion: 7 };
+
+    await expect(authSessionService.issue(user, {
+      sessionClass: 'cloud_account', authenticationMethod: 'passkey', mfaVerified: true,
+    })).resolves.toMatchObject({ tenantId: null });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null, identityProviderId: null, providerSubjectId: null,
+      deviceInfo: expect.stringContaining('"authenticationMethod":"passkey"'),
+    }));
+    expect(providerUpdate).not.toHaveBeenCalled();
+
+    await expect(authSessionService.issue(user, {
+      sessionClass: 'cloud_account', authenticationMethod: 'passkey',
+    })).rejects.toThrow('Invalid cloud account session');
+    await expect(authSessionService.issue(user, {
+      sessionClass: 'cloud_account', authenticationMethod: 'passkey', mfaVerified: true,
+      identityProviderId: 'provider-1', ...providerTrust,
+    })).rejects.toThrow('Invalid cloud account session');
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
+
   it('does not turn ordinary pooled or incompletely configured sessions into tenant-neutral authority', async () => {
     Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
     await expect(authSessionService.issue({ id: 'user-1', email: 'person@example.test' }))

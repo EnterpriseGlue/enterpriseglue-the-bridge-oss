@@ -74,6 +74,7 @@ vi.mock('@modules/platform-admin/index.js', () => ({
 }));
 
 vi.mock('@modules/auth/index.js', () => ({
+  cloudEmailPasskeyRoute: noopMiddleware,
   loginRoute: noopMiddleware,
   logoutRoute: noopMiddleware,
   refreshRoute: noopMiddleware,

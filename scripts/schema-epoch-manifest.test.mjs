@@ -38,7 +38,7 @@ test('manifest writer is reproducible and synchronizes the shared-package and ch
   const firstBytes = await readFile(path.join(base, manifestPaths[0]))
   assert.deepEqual(await readFile(path.join(base, manifestPaths[1])), firstBytes)
   assert.deepEqual(JSON.parse(firstBytes).executableImplementationInventory, firstInventory)
-  assert.equal(JSON.parse(firstBytes).id, 'postgres-explicit-context-cloud-email-compat-v2')
+  assert.equal(JSON.parse(firstBytes).id, 'postgres-cloud-email-passkeys-v3')
   await writeSchemaEpochManifest(base)
   assert.deepEqual(await readFile(path.join(base, manifestPaths[0])), firstBytes)
 

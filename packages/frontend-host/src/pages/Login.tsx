@@ -684,7 +684,7 @@ export default function Login() {
           <Button as={RouterLink} to="/cloud/onboarding" kind="primary">Create an organization</Button>
         </div>}
 
-        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-7)' }}>
+        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-5)' }}>
           <div className="eg-login-section-header">
             <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
             <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
@@ -712,7 +712,8 @@ export default function Login() {
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
 
-        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <>
+          <form onSubmit={handleOrganizationEmailSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Continue with email</h2>
           <p className="eg-login-intro-copy">Use a work or personal email linked to an organization. A verified work domain can open it directly; otherwise, an existing account receives a one-time link. Email alone does not grant access.</p>
           <div style={{ marginBottom: 'var(--spacing-6)' }}>
@@ -724,7 +725,7 @@ export default function Login() {
               autoComplete="email"
               value={email}
               onChange={(event) => { updateEmail(event.target.value); setOrganizationNotice(null); setOrganizationError(null); }}
-              onBlur={() => touchFields('discoveryEmail')}
+              onBlur={() => { if (email.trim()) touchFields('discoveryEmail'); }}
               invalid={Boolean(discoveryEmailError)}
               invalidText={discoveryEmailError || undefined}
               required
@@ -734,7 +735,11 @@ export default function Login() {
           <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationNotice(null); setOrganizationStep('workspace'); }}>
             Use an organization name instead
           </Button>
-        </form>}
+          </form>
+          <Button as={RouterLink} to="/signup/email/signin" kind="ghost" size="md" className="eg-login-secondary-action">
+            Sign in with a passkey
+          </Button>
+        </>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Enter your organization name</h2>
