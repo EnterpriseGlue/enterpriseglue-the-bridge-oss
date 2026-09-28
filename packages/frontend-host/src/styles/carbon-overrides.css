@@ -2087,11 +2087,15 @@
 }
 
 .eg-dashboard-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(12rem, 16rem));
+  display: flex;
   gap: var(--spacing-4);
-  justify-content: end;
+  justify-content: flex-end;
   align-items: end;
+}
+
+.eg-dashboard-controls > * {
+  flex: 0 1 16rem;
+  min-inline-size: 12rem;
 }
 
 .eg-dashboard-get-started,
