@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.29.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.0...v0.29.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **dashboard:** align filters without an engine ([1f03951](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1f03951bbbe69407289bb0afa782d6d2c18fd585))
+* **dashboard:** align filters without an engine ([f3a990c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f3a990ca3203fd944c1931195a2d0fca29ca64f6))
+
 ## [0.29.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.13...v0.29.0) (2026-09-27)
 
 
