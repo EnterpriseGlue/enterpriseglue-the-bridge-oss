@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "dashboard-filter-alignment",
+  "type": "fix",
+  "scope": "frontend-host",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators"
+  ],
+  "summary": "Aligns the dashboard time-period filter with the content edge when the current organization has no selectable engine.",
+  "userImpact": [
+    "The time-period filter no longer appears stranded to the left of an empty engine-filter slot on new or engine-free organizations.",
+    "When an engine is available, both dashboard filters remain grouped and right-aligned."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Upgrade the frontend image; no backend, configuration, or data changes are required."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This frontend-only change does not alter persistence or database behavior."
+    ]
+  },
+  "security": [],
+  "documentation": [
+    "The versioned technical release notes describe the dashboard empty-state alignment fix."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend image; no data rollback is needed."
+  ],
+  "validation": [
+    "Focused Chromium, Firefox, and WebKit checks cover engine-free and populated dashboards at desktop, ultrawide, 200% equivalent reflow, and mobile widths.",
+    "Audited and visually inspected 1440x900, ultrawide, reflow, and mobile screenshots of the engine-free and populated layouts."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.23",
+      "newVersion": "0.17.24",
+      "impact": "patch"
+    }
+  ]
+}

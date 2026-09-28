@@ -318,6 +318,76 @@ async function installGalleryStack(page: Page): Promise<void> {
 test.describe('Carbon UX screenshot gallery', () => {
   test.setTimeout(90_000);
 
+  test('keeps dashboard filters aligned with and without an engine @carbon-gallery', async ({ page }) => {
+    await installGalleryStack(page);
+    let availableEngines: typeof engine[] = [];
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'browser-admin-user',
+      tenantId: null,
+      platform: ['platform:dashboard:view'],
+      projects: [],
+      engines: [],
+      generatedAt: now,
+      authorizationVersion: 'dashboard-empty-state-v1',
+    }));
+    await page.route('**/engines-api/engines', (route) => json(route, availableEngines));
+    await page.route('**/api/dashboard/context', (route) => json(route, {
+      canViewActiveUsers: false,
+      canViewProcessData: false,
+      canViewMetrics: false,
+      runtimeScopedEngineIds: [],
+    }));
+    await page.route('**/api/dashboard/stats', (route) => json(route, {
+      totalProjects: 0,
+      totalFiles: 0,
+      fileTypes: {},
+    }));
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    const controls = page.locator('.eg-dashboard-controls');
+    await expect(controls.locator(':scope > *')).toHaveCount(1);
+    const emptyRightGap = await controls.evaluate((element) =>
+      element.getBoundingClientRect().right - element.lastElementChild!.getBoundingClientRect().right);
+    expect(Math.abs(emptyRightGap)).toBeLessThan(2);
+    await captureManualScreenshot(page, '204-dashboard-empty-filters-desktop.jpg');
+
+    await page.setViewportSize({ width: 3600, height: 900 });
+    const wideRightGap = await controls.evaluate((element) =>
+      element.getBoundingClientRect().right - element.lastElementChild!.getBoundingClientRect().right);
+    expect(Math.abs(wideRightGap)).toBeLessThan(2);
+    await captureManualScreenshot(page, '205-dashboard-empty-filters-wide.jpg', { stabilize: false });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const emptyNarrowOverflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(emptyNarrowOverflow).toBe(0);
+    await captureManualScreenshot(page, '208-dashboard-empty-filters-mobile.jpg', { stabilize: false });
+
+    availableEngines = [engine];
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.reload();
+    await expect(controls.locator(':scope > *')).toHaveCount(2);
+    const populatedRightGap = await controls.evaluate((element) =>
+      element.getBoundingClientRect().right - element.lastElementChild!.getBoundingClientRect().right);
+    expect(Math.abs(populatedRightGap)).toBeLessThan(2);
+    await captureManualScreenshot(page, '206-dashboard-populated-filters-desktop.jpg');
+
+    // A 720px CSS viewport exercises the same reflow pressure as a 1440px
+    // desktop viewport at 200% browser zoom.
+    await page.setViewportSize({ width: 720, height: 450 });
+    const zoomReflowOverflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(zoomReflowOverflow).toBe(0);
+    await captureManualScreenshot(page, '209-dashboard-populated-filters-zoom-reflow.jpg', { stabilize: false });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const narrowOverflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(narrowOverflow).toBe(0);
+    await captureManualScreenshot(page, '207-dashboard-populated-filters-mobile.jpg', { stabilize: false });
+  });
+
   test('captures the final Carbon administration redesign surfaces @carbon-admin-redesign', async ({ page }) => {
     await installGalleryStack(page);
 
