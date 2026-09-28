@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Bug Fixes
 
 * **dashboard:** align filters without an engine ([1f03951](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1f03951bbbe69407289bb0afa782d6d2c18fd585))
-* **dashboard:** align filters without an engine ([f3a990c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f3a990ca3203fd944c1931195a2d0fca29ca64f6))
 
 ## [0.29.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.13...v0.29.0) (2026-09-27)
 
