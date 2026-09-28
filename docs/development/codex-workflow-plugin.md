@@ -62,6 +62,12 @@ EE-sync triggers remain only as safe redirects and do not authorize EE writes.
 The staging-delivery workflow treats EnterpriseGlue Cloud as an independently
 evidenced delivery target and reports publication, image assembly, candidate
 installation, staging default promotion, and production promotion separately.
+When the protected Cloud environments opt into pre-launch single-release mode,
+the workflow permits only an empty paused Preview to be withdrawn automatically,
+then advances the exact healthy latest deployment to the staging default and
+retires its predecessor so one route remains. F01 stays an acceptance and
+production gate instead of blocking staging iteration, and production behavior
+is unchanged.
 For staging-only early retirement it also distinguishes lifecycle
 classification from actual drain compatibility: stale or missing compatibility
 must be refreshed through exact retained-release probes and an atomic

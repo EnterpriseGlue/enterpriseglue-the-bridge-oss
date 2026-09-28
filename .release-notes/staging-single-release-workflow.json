@@ -1,0 +1,45 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "staging-single-release-workflow",
+  "type": "docs",
+  "scope": "developer-workflows",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Updates the staging-delivery workflow guidance for the protected pre-launch mode that keeps only the latest healthy release routed in staging.",
+  "userImpact": [],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Reinstall enterpriseglue-dev-workflows 0.1.13 from the repository marketplace and start a new Codex task so the updated staging guidance is loaded."
+    ]
+  },
+  "configuration": [
+    "STAGING_SINGLE_RELEASE_MODE remains a protected, default-off EnterpriseGlue Cloud staging environment variable; it is not an OSS runtime setting."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The guidance retains signed artifact, exact-reference, readiness, mutation-lock, route, and zero-reference checks and does not alter production policy."
+  ],
+  "documentation": [
+    "The staging-delivery skill now distinguishes normal multi-release policy from protected pre-launch single-release staging operation."
+  ],
+  "knownLimitations": [
+    "Reinstalling the plugin does not change a running Codex task; start a new task to load version 0.1.13."
+  ],
+  "rollback": [
+    "Reinstall plugin version 0.1.12 to restore the prior guidance; this does not change Cloud staging state."
+  ],
+  "validation": [
+    "The repository plugin contract, official skill and plugin validators, release-note preflight, and documentation boundary guard pass locally."
+  ],
+  "packages": []
+}
