@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "public-auth-shell-consistency",
+  "type": "fix",
+  "scope": "public authentication",
+  "breaking": false,
+  "audiences": ["users", "developers"],
+  "summary": "Use the shared process-style authentication shell consistently for signup, email/passkey access and account recovery as well as organization discovery and tenant login.",
+  "userImpact": ["Public account pages share the same dark Carbon theme and process landscape, including loading and unavailable states."],
+  "upgrade": {"required": false, "instructions": []},
+  "configuration": ["Existing platform branding remains in effect; explicit light-shell callers can still select appearance=default."],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": ["Presentation only: provider selection, account creation, tenant discovery and authentication authority are unchanged."],
+  "documentation": ["The shared PublicAuthShell component retains its explicit appearance override for host extensions."],
+  "knownLimitations": ["This frontend change does not recover an unavailable tenant route or qualify successful authentication."],
+  "rollback": ["Restore the previous frontend-host package and frontend image; no data migration is involved."],
+  "validation": ["Regression coverage checks provider signup, loading, unavailable, self-hosted registration and email/passkey pages retain the process shell."],
+  "packages": [{"name": "@enterpriseglue/frontend-host", "previousVersion": "0.17.24", "newVersion": "0.17.25", "impact": "patch"}]
+}
