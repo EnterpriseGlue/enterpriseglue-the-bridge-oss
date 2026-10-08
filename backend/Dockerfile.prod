@@ -16,6 +16,7 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
+COPY patches patches
 
 # BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
 # concurrent multi-platform builds safely. --frozen-lockfile ensures reproducible installs.
@@ -50,6 +51,7 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
+COPY patches patches
 
 # The runtime dependency stage must not ship build/test dependencies. The build
 # stage above retains the full tree; production modules still resolve from the

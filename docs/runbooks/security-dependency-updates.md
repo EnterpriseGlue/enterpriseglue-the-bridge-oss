@@ -29,6 +29,21 @@ Preserve its exact predecessor source, migration inventory and schema-plan
 identities when isolating its runtime dependency closure. Any replacement must
 pass the real PostgreSQL bootstrap and drift checks and exact image scan.
 
+The managed-shard bootstrap retains the pinned predecessor's compiled code and
+replaces its dependency stores with the application's reviewed production
+lockfile. Old stores are removed before copying, rather than overlaid. Its
+unchanged migration inventory and signed TypeORM schema-plan checks remain
+mandatory; dependency compatibility must be proved by the bootstrap harness.
+
+The pnpm workspace applies a source patch to Tedious 20.0.0's five diagnostic
+callers and removes that driver's `sprintf-js` dependency. The owned bounded
+formatter implements only its fixed decimal/string/unsigned hexadecimal
+literals, rejecting precision and unbounded padding. Tedious keeps its original
+package identity and SQL Server protocol behavior; no advisory is suppressed.
+The patch is root-workspace composition, not an upstream fix. Consumers of
+standalone npm packages do not automatically inherit pnpm root patches. A
+driver upgrade must revisit this patch and qualify real SQL Server behavior.
+
 If a remaining runtime dependency has no qualified upstream fix, stop dependent
 release qualification. Removing or replacing that dependency requires caller
 compatibility and regression evidence. Do not falsify versions, suppress the

@@ -27,6 +27,7 @@ overrides:
   qs: ^6.16.0
   tar: ^7.5.19
   typeorm: ^0.3.31
+  'tedious@20.0.0>sprintf-js': '-'
   undici: ^7.29.1
 allowBuilds:
   '@carbon/charts': true
@@ -64,3 +65,5 @@ allowBuilds:
   msw: true
   oracledb: true
   protobufjs: true
+patchedDependencies:
+  tedious@20.0.0: patches/tedious@20.0.0.patch

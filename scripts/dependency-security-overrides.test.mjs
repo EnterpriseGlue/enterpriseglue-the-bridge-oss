@@ -131,3 +131,53 @@ test('production dependency assembly excludes build dependencies without alterin
   assert.match(deps, /pnpm install --prod --frozen-lockfile --filter webmodeler-backend\.\.\./)
   assert.match(dockerfile, /COPY --from=deps \/repo\/packages\/shared\/node_modules/)
 })
+
+const backendRequire = createRequire(new URL('backend/package.json', root))
+const mssqlRequire = createRequire(backendRequire.resolve('mssql'))
+const tediousRequire = createRequire(mssqlRequire.resolve('tedious'))
+
+test('the SQL Server driver retains its real package identity and no longer loads sprintf-js', async () => {
+  const lock = await readFile(new URL('pnpm-lock.yaml', root), 'utf8')
+  assert.doesNotMatch(lock, /^ {2}sprintf-js@/m)
+  assert.equal(tediousRequire('../package.json').version, '20.0.0')
+  for (const name of ['value-parser', 'packet', 'login7-payload', 'metadata-parser', 'prelogin-payload']) {
+    const source = await readFile(tediousRequire.resolve(`./${name}.js`), 'utf8')
+    assert.doesNotMatch(source, /require\(["']sprintf-js["']\)/)
+    assert.match(source, /require\(["']\.\/bounded-format["']\)/)
+  }
+  assert.throws(() => tediousRequire('sprintf-js'), { code: 'MODULE_NOT_FOUND' })
+})
+
+test('bounded driver diagnostics preserve decimal, string and unsigned zero-padded hexadecimal output', () => {
+  const { sprintf } = tediousRequire('./bounded-format.js')
+  assert.equal(sprintf('type:0x%02X(%s), length:0x%04X', 4, 'RESPONSE', 42), 'type:0x04(RESPONSE), length:0x002A')
+  assert.equal(sprintf('TDS:0x%08X, ClientTimezone:%d', 1946157060, -60), 'TDS:0x74000004, ClientTimezone:-60')
+  assert.equal(sprintf('%08X %04X %02X', -1, 65536, 255), 'FFFFFFFF 10000 FF')
+  assert.equal(sprintf('Unrecognised type %s', '%.999999999f'), 'Unrecognised type %.999999999f')
+  assert.equal(sprintf('100%%'), '100%')
+})
+
+test('bounded driver diagnostics reject precision, unsupported padding and malformed formats before allocation', () => {
+  const { sprintf } = tediousRequire('./bounded-format.js')
+  for (const format of ['%.101f', '%.999999999e', '%.0g', '%999999999s', '%09X', '%*s', '%(name)s', '%']) {
+    assert.throws(() => sprintf(format, 1), /Unsupported Tedious diagnostic format/)
+  }
+  assert.throws(() => sprintf('x'.repeat(4097)), /Unsupported/)
+  assert.throws(() => sprintf('%d'), /Missing/)
+  assert.throws(() => sprintf('literal', 1), /Unexpected/)
+})
+
+test('every installed driver diagnostic literal is handled by the bounded formatter', async () => {
+  const { sprintf } = tediousRequire('./bounded-format.js')
+  let count = 0
+  for (const name of ['value-parser', 'packet', 'login7-payload', 'metadata-parser', 'prelogin-payload']) {
+    const source = await readFile(tediousRequire.resolve(`./${name}.js`), 'utf8')
+    for (const match of source.matchAll(/_sprintfJs\.sprintf\)\((['"])(.*?)\1/g)) {
+      const tokens = [...match[2].matchAll(/%(?:0[1-8])?([dsX])/g)]
+      const args = tokens.map(token => token[1] === 's' ? 'fixture' : 1)
+      assert.equal(typeof sprintf(match[2], ...args), 'string')
+      count++
+    }
+  }
+  assert.equal(count, 12, 'all pinned driver call sites must remain covered')
+})

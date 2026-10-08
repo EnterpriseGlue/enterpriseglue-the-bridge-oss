@@ -55,10 +55,10 @@ describe('Cloud email-and-passkey signup', () => {
     findOneBy: vi.fn(async (where: Record<string, unknown>) => [...pending.values()].find((record) =>
       (where.emailHash === undefined || record.emailHash === where.emailHash)
       && (where.tokenHash === undefined || record.tokenHash === where.tokenHash)) || null),
-    insert: vi.fn(async (value: CloudEmailSignup) => { pending.set(value.id, { ...value }); return { affected: 1 }; }),
+    insert: vi.fn(async (value: CloudEmailSignup) => { pending.set(value.id, Object.assign(new CloudEmailSignup(), value)); return { affected: 1 }; }),
     update: vi.fn(async (where: { id: string }, value: Partial<CloudEmailSignup>) => {
       const old = pending.get(where.id);
-      if (old) pending.set(where.id, { ...old, ...value });
+      if (old) pending.set(where.id, Object.assign(new CloudEmailSignup(), old, value));
       return { affected: old ? 1 : 0 };
     }),
     delete: vi.fn(async (where: { id: string; tokenHash: string; challenge: string }) => {
@@ -78,7 +78,7 @@ describe('Cloud email-and-passkey signup', () => {
     findOneByOrFail: vi.fn(async (where: { id: string }) => users.get(where.id)!),
     update: vi.fn(async (where: { id: string }, value: Partial<User>) => {
       const old = users.get(where.id);
-      if (old) users.set(where.id, { ...old, ...value });
+      if (old) users.set(where.id, Object.assign(new User(), old, value));
       return { affected: old ? 1 : 0 };
     }),
   };
@@ -103,7 +103,7 @@ describe('Cloud email-and-passkey signup', () => {
   };
   const manager = { getRepository: (entity: unknown) => entity === CloudEmailSignup ? pendingRepo
     : entity === User ? userRepo : entity === CloudPasskey ? passkeyRepo : challengeRepo };
-  const dataSource = { ...manager, transaction: async (callback: (manager: typeof manager) => Promise<unknown>) => callback(manager) };
+  const dataSource = { ...manager, transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => callback(manager) };
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {

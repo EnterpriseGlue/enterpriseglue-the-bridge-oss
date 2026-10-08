@@ -207,7 +207,7 @@ describe('auth middleware', () => {
     it('retains verified v3 release placement through a tenant-scoped browser session', async () => {
       await withPooledSession(async () => {
         req.params = { tenantSlug: 'alpha' };
-        req.hostname = 'app.enterpriseglue.test';
+        Object.defineProperty(req, 'hostname', { value: 'app.enterpriseglue.test', configurable: true });
         req.originalUrl = '/api/t/alpha/tenant/cloud-identity';
         req.headers!['x-eg-tenant-placement-v3'] = 'header.payload.signature';
         const placementVerification = vi.spyOn(tenantService, 'verifyPlacementClaimV3').mockReturnValue({
