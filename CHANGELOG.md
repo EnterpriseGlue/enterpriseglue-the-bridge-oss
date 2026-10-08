@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.29.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.1...v0.29.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* **auth:** align email signup choice and explain passkeys ([923d6bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/923d6bcccc1726c534284d430a9d42f644e0f567))
+* **auth:** unify public authentication appearance ([7a890ad](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7a890ad30c7a72815ccfdfa53ae89016768ff0ea))
+* **deps:** include security patches in developer image installs ([122ad52](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/122ad525d4e6be3978ff4eb565ce145c4e212a4a))
+* **deps:** prepare approved security floors pending qualification ([88c0a41](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/88c0a413bb7521dc1bcd5427b62626419756014d))
+* **deps:** qualify bounded SQL diagnostics and refreshed production dependencies ([d67e69d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d67e69d10cd5d2c55809b55c80433dcfba796d8f))
+* **deps:** repair production image security qualification ([705f1db](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/705f1db257fc3124661f069eff32f09aa7397a8f))
+
 ## [0.29.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.0...v0.29.1) (2026-09-28)
 
 
