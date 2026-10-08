@@ -92,9 +92,14 @@ your local database contents:**
 ### Running services outside Docker (advanced)
 
 The host backend still needs PostgreSQL. To use only the development Compose
-database, run this from the repo root (after `dev.sh` has created the env file):
+database, run this from the repo root. Create the environment file only if it
+does not already exist:
 
 ```bash
+mkdir -p .local/docker/env
+if [ ! -f .local/docker/env/docker.env ]; then
+  cp infra/docker/env/examples/docker.postgres.env.example .local/docker/env/docker.env
+fi
 docker compose --project-directory . --env-file .local/docker/env/docker.env \
   -f infra/docker/compose/docker-compose.yml up -d db
 ```

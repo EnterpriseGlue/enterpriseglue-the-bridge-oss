@@ -49,3 +49,15 @@ release qualification. Removing or replacing that dependency requires caller
 compatibility and regression evidence. Do not falsify versions, suppress the
 finding or count a filtered scan as acceptance. The candidate's exact scanner,
 all-severity application/bootstrap gate and signed composition remain required.
+
+
+Runtime OS floors must be explicit in the Dockerfile command: a cached
+`apk upgrade` layer does not observe newly published package fixes. Application
+and frozen-bootstrap assemblies require the glibc 2.44 runtime family at
+2.44-r8 or later. The application removes the base image's Node/npm/Corepack
+family and installs the qualified Node 24 package; a runtime assertion protects
+the repository's declared major even when a digest-pinned vendor image contains
+a newer Node major. The bootstrap retains its exact predecessor code and
+runtime identity; package floors do not change its signed migration inventory
+or schema plan. Scan the final exact application and bootstrap subjects with
+fresh vulnerability data before acceptance.

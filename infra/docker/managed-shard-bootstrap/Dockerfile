@@ -19,13 +19,13 @@ FROM ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a
 
 USER root
 RUN apk add --no-cache --upgrade \
-      glibc-2.44 \
-      glibc-2.44-dev \
-      glibc-2.44-locale-posix \
-      ld-linux-2.44 \
+      'glibc-2.44>=2.44-r8' \
+      'glibc-2.44-dev>=2.44-r8' \
+      'glibc-2.44-locale-posix>=2.44-r8' \
+      'ld-linux-2.44>=2.44-r8' \
       libcurl-openssl4 \
       wget \
-      libcrypt1-2.44
+      'libcrypt1-2.44>=2.44-r8'
 
 # The pinned predecessor retains a build-only tool with vulnerable Undici.
 # Bootstrap executes Node scripts but never compiles native addons at runtime.

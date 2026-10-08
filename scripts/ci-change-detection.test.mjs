@@ -327,7 +327,10 @@ test('compiled migration regression selects physical database acceptance and is 
 
 
 test('compiled Oracle smoke owns its fresh bootstrap rather than receiving a synchronized schema with an empty ledger', () => {
-  const source = readFileSync(new URL('../.github/workflows/ci-core-reusable.yml', import.meta.url), 'utf8');
-  assert.match(source, /name: Sync database schema\s+if: matrix\.database != 'oracle'/);
-  assert.match(source, /name: Run Oracle backend smoke[\s\S]*?run: \|[\s\S]*?start:compiled/);
+  for (const workflow of ['ci.yml', 'ci-core-reusable.yml']) {
+    const source = readFileSync(new URL(`../.github/workflows/${workflow}`, import.meta.url), 'utf8');
+    assert.match(source, /name: Sync database schema\s+if: matrix\.database != 'oracle'/);
+    assert.match(source, /name: Run Oracle backend smoke[\s\S]*?run: \|[\s\S]*?start:compiled/);
+    assert.match(source, /name: Verify compiled historical migration upgrades[\s\S]*?node scripts\/test-compiled-migration-upgrades\.mjs/);
+  }
 });

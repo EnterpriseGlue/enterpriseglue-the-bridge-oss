@@ -99,8 +99,13 @@ FROM runtime-root AS runtime-base
 USER root
 RUN set -eux; \
     apk upgrade --no-cache; \
-    npm_packages="$(awk -F: '$1 == "P" && $2 ~ /^npm(-[0-9]+)?$/ { print $2 }' /lib/apk/db/installed)"; \
-    apk del --no-network node-gyp ${npm_packages}; \
+    apk add --no-cache ca-certificates-bundle; \
+    runtime_tools="$(apk info | awk '/^(nodejs|npm|node-gyp|corepack)(-|$)/')"; \
+    apk del --no-network ${runtime_tools}; \
+    apk add --no-cache 'nodejs-24=24.21.0-r4' \
+      'glibc-2.44>=2.44-r8' 'glibc-2.44-dev>=2.44-r8' \
+      'glibc-2.44-locale-posix>=2.44-r8' 'ld-linux-2.44>=2.44-r8' 'libcrypt1-2.44>=2.44-r8'; \
+    node -e 'if (process.versions.node.split(".")[0] !== "24") process.exit(1)'; \
     ! apk info -e node-gyp; \
     rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
 COPY --from=zlib-security-build --chown=0:0 \
