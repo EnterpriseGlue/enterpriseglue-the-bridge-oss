@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.29.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.2...v0.29.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* **ci:** let Oracle smoke own pristine migration bootstrap ([1755c2e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1755c2ed5c70bb028ac6d5dbf88083da651d914a))
+* **db:** exclude migration helpers across all compiled adapters ([d92b370](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d92b37094207001129c130cc23f8941b3b94bc7d))
+* **installation:** preserve compiled migration identity and macOS shutdown ([24f7c8e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/24f7c8e87b1e7c3ec8fe7e50f36db0bd9a4a583d))
+* **installation:** qualify supported Node and patched runtime OS floors ([964d098](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/964d098c1dffc10c19f4da9249eedf36f3651a05))
+* **installation:** restore compiled upgrades and qualified runtime ([a5a67e9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a5a67e9fd3476c29c066d27baba37f35d16fd335))
+
 ## [0.29.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.1...v0.29.2) (2026-10-08)
 
 
