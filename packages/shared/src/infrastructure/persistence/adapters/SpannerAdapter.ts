@@ -178,7 +178,7 @@ export class SpannerAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations: [
-        this.getMigrationsPath() + (path.isAbsolute(this.getMigrationsPath()) ? '/*.js' : '/*.ts')
+        this.getMigrationsPath() + (path.isAbsolute(this.getMigrationsPath()) ? '/[0-9]*.js' : '/[0-9]*.ts')
       ],
     } as DataSourceOptions;
   }

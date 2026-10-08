@@ -260,7 +260,7 @@ export class OracleAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations: [
-        migrationsPath + (path.isAbsolute(migrationsPath) ? '/*.js' : '/*.ts')
+        migrationsPath + (path.isAbsolute(migrationsPath) ? '/[0-9]*.js' : '/[0-9]*.ts')
       ],
       extra: {
         connectString,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { globSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -38,8 +38,18 @@ try {
   const { PostgresAdapter } = await import(pathToFileURL(path.join(compiledRoot, 'infrastructure/persistence/adapters/PostgresAdapter.js')));
   for (const AdapterName of ['PostgresAdapter', 'MySQLAdapter', 'OracleAdapter', 'SqlServerAdapter', 'SpannerAdapter']) {
     for (const tree of [compiledRoot, path.join(root, 'packages/shared/dist')]) {
-      const module = await import(pathToFileURL(path.join(tree, `infrastructure/persistence/adapters/${AdapterName}.js`)));
-      assert.equal(new module[AdapterName]().getMigrationsPath(), path.join(tree, 'db/migrations'));
+      // Driver constructors normalize global decorator metadata. Isolate each
+      // probe, matching deployments that select one adapter per process.
+      const output = execFileSync(process.execPath, ['--input-type=module', '-e',
+        'const m = await import(process.argv[1]); const a = new m[process.argv[2]](); console.log(JSON.stringify({path:a.getMigrationsPath(),globs:a.getDataSourceOptions().migrations}));',
+        pathToFileURL(path.join(tree, `infrastructure/persistence/adapters/${AdapterName}.js`)).href, AdapterName,
+      ], { encoding: 'utf8', timeout: 30000 });
+      const { path: migrationsPath, globs } = JSON.parse(output.trim().split('\n').at(-1));
+      assert.equal(migrationsPath, path.join(tree, 'db/migrations'));
+      assert.ok(globs.every(glob => glob.includes('/[0-9]*.js')), `${AdapterName} must exclude non-migration helpers`);
+      const files = globSync(globs);
+      assert.ok(files.length >= 135, `${AdapterName} must discover the complete timestamped inventory`);
+      assert.ok(files.every(file => /^[0-9]/.test(path.basename(file))));
     }
   }
   console.log('PASS all five compiled backend and published-package adapters select colocated migrations');

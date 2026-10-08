@@ -135,7 +135,7 @@ export class MySQLAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations: [
-        this.getMigrationsPath() + (path.isAbsolute(this.getMigrationsPath()) ? '/*.js' : '/*.ts')
+        this.getMigrationsPath() + (path.isAbsolute(this.getMigrationsPath()) ? '/[0-9]*.js' : '/[0-9]*.ts')
       ],
       charset: 'utf8mb4',
     } as DataSourceOptions;

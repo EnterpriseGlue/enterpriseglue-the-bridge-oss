@@ -55,7 +55,8 @@
     "Both compiled PostgreSQL historical upgrades passed with retained data and repeat-run idempotence; all ten backend/published adapter path selections passed.",
     "Eight actual shutdown argv cases passed under macOS Bash 3.2 with a recording Docker stub.",
     "CI contracts (166 tests), affected classifier contracts (51 tests), documentation boundary, release-note preflight, and package version guard passed.",
-    "The initial Node 24.10.0 broad backend run had two HTTP socket/parser failures. All 94 tests in those files passed focused reproduction; the complete suite subsequently passed under Node 24.18.1."
+    "The initial Node 24.10.0 broad backend run had two HTTP socket/parser failures. All 94 tests in those files passed focused reproduction; the complete suite subsequently passed under Node 24.18.1.",
+    "Final adapter discovery correction: 48 focused adapter/portability tests passed, and ten isolated compiled adapter probes discover only timestamped migrations. The earlier hosted matrix failed on the helper module constructor and requires fresh exact-head acceptance."
   ],
   "packages": [
     {
