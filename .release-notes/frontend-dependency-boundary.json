@@ -51,12 +51,15 @@
   ],
   "validation": [
     "Node 24.10.0 and pnpm 11.0.8: workspace typechecks, backend build, frontend-host build, frontend production bundle and warning-free lint passed.",
-    "Fifteen dependency/security contracts passed; the complete CI contract suite and release/documentation preflights passed.",
+    "Seventeen dependency/security contracts passed; the complete CI contract suite and release/documentation preflights passed.",
     "A standalone pnpm production install of five packed browser packages contained 313 package names and no database, mail, HTTP-server, or identity-provider peers. Packed browser schema and permission catalog imports succeeded.",
     "The workspace frontend production dependency probe has no nodemailer, typeorm or mssql path; there are no peer dependency issues.",
     "DOMPurify is locked above the GHSA-p98j-92pf-mc4p patched floor.",
     "Node 24.18.1: complete backend suite 3781/3781 and frontend suite 1562/1562 passed. The initially mis-rooted frontend invocation had two path lookup failures; the complete supported frontend-directory invocation passed.",
-    "After integrating the installation prerequisite, both compiled PostgreSQL upgrades and all ten isolated adapter inventory probes passed; 172 CI contracts and strict license checks passed."
+    "After integrating the installation prerequisite, both compiled PostgreSQL upgrades and all ten isolated adapter inventory probes passed; 173 CI contracts and strict license checks passed.",
+    "A standalone packed backend production consumer resolves all 29 optional shared server peers through the supported package manager.",
+    "The exact native application image resolves all shared server peers, runs Node 24.21.0, and becomes ready on pristine PostgreSQL and after retained-database restart. The updated frozen-bootstrap image passed real PostgreSQL bootstrap, idempotence, receipt and drift rejection checks.",
+    "Exact native backend, frontend and frozen-bootstrap images passed Trivy 0.72.0 all-severity scans under the unchanged ignore policy with zero unignored findings; vulnerability DB updated 2026-10-08 15:33 UTC. Protected dual-architecture candidate acceptance remains mandatory."
   ],
   "packages": [
     {

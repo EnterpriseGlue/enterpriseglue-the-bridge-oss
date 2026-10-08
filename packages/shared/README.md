@@ -24,3 +24,9 @@ frontend-host declares shared as a regular dependency for browser runtime code.
 Use a production audit of the installed consumer graph and a bundle check for
 browser acceptance. The workspace's server development dependencies are not
 part of that production browser graph.
+
+Workspace production image assembly copies the backend host's server dependency
+links into shared's resolution directory. This is an installation detail of
+workspace links, which do not create the peer capsules used for published
+packages. The application and frozen-bootstrap images verify server peer
+resolution while the isolated browser consumer continues to omit those peers.

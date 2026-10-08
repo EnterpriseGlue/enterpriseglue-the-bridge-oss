@@ -57,3 +57,10 @@ test('DOMPurify stays above the advisory floor and overrides have one authority'
     assert.ok(Number(major) > 3 || Number(major) === 3 && (Number(minor) > 4 || Number(minor) === 4 && Number(patch) >= 16));
   }
 });
+
+test('workspace production assemblies provide shared server peer links from the backend host', () => {
+  for (const file of ['backend/Dockerfile.prod', 'infra/docker/managed-shard-bootstrap/Dockerfile']) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+    assert.match(source, /COPY --from=(?:deps|dependencies)(?: --chown=65532:65532)? \/repo\/packages\/backend-host\/node_modules (?:\.\/dist|\/app\/dist)\/packages\/shared\/node_modules/);
+  }
+});
