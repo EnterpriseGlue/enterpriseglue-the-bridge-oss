@@ -53,6 +53,11 @@ export interface AuthenticatedIdentityLinkContext {
   tenantId: string;
 }
 
+function providerMatchesAuthenticatedLinkScope(provider: IdentityProvider, context: AuthenticatedIdentityLinkContext): boolean {
+  if (provider.tenantId === context.tenantId) return true;
+  return provider.tenantId === null && config.tenancyMode === 'pooled' && config.cloudAccountIdentityEnabled;
+}
+
 /** A safe public signal that the provider subject needs existing-account control before it can be linked. */
 export class IdentityProviderAccountLinkRequiredError extends Error {
   constructor() {
@@ -154,7 +159,7 @@ class IdentityProviderProvisioningService {
     claims: OidcIdentityClaims,
     context: AuthenticatedIdentityLinkContext,
   ): Promise<ProvisionedIdentityUser> {
-    if (!provider.tenantId || provider.tenantId !== context.tenantId) {
+    if (!providerMatchesAuthenticatedLinkScope(provider, context)) {
       throw new Error('Identity provider does not match the authenticated tenant');
     }
     return (await this.provision(provider, this.oidcInput(provider, claims), undefined, undefined, context)).user;
@@ -274,7 +279,7 @@ class IdentityProviderProvisioningService {
       if (enrollment && !await manager.getRepository(Tenant).existsBy({ id: enrollment.context.tenantId, slug: enrollment.context.tenantSlug, status: 'active' })) {
         throw new Error('Invitation tenant is no longer active');
       }
-      if (accountLink && provider.tenantId !== accountLink.tenantId) {
+      if (accountLink && !providerMatchesAuthenticatedLinkScope(provider, accountLink)) {
         throw new Error('Identity provider does not match the authenticated tenant');
       }
       if (leaseFence) {

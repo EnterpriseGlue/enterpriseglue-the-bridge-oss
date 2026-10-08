@@ -30,6 +30,12 @@
     "licenses": "OFL-1.1",
     "repository": "https://github.com/ibm/plex.git"
   },
+  "@simplewebauthn/browser@13.3.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/MasterKale/SimpleWebAuthn.git",
+    "publisher": "Matthew Miller",
+    "email": "matthew@millerti.me"
+  },
   "@tanstack/react-query@5.102.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/TanStack/query.git",

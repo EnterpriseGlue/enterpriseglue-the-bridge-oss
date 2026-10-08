@@ -11,7 +11,7 @@
   "upgrade": {
     "required": true,
     "instructions": [
-      "Reinstall enterpriseglue-dev-workflows 0.1.13 from the repository marketplace and start a new Codex task so the updated staging guidance is loaded."
+      "Reinstall enterpriseglue-dev-workflows 0.1.14 from the repository marketplace and start a new Codex task so the updated staging guidance is loaded."
     ]
   },
   "configuration": [
@@ -33,13 +33,13 @@
     "The staging-delivery skill now distinguishes normal multi-release policy from protected pre-launch single-release staging operation."
   ],
   "knownLimitations": [
-    "Reinstalling the plugin does not change a running Codex task; start a new task to load version 0.1.13."
+    "Reinstalling the plugin does not change a running Codex task; start a new task to load version 0.1.14."
   ],
   "rollback": [
-    "Reinstall plugin version 0.1.12 to restore the prior guidance; this does not change Cloud staging state."
+    "Reinstall plugin version 0.1.13 to restore the prior guidance; this does not change Cloud staging state."
   ],
   "validation": [
-    "The repository plugin contract, official skill and plugin validators, release-note preflight, and documentation boundary guard pass locally."
+    "Repository plugin contracts, all 25 official skill validations, release-note preflight and the documentation boundary guard pass locally. The separate official plugin-creator validator is unavailable locally; repository and Codex installation validation remain distinct."
   ],
   "packages": []
 }

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   ConfigAssignmentSchema,
+  ConfigBundleRequestSchema,
   ConfigAssignmentsFileSchema,
   ConfigAuthorizationPoliciesFileSchema,
   ConfigEmailConfigurationsFileSchema,
@@ -39,6 +40,7 @@ import {
 import {
   UpdatePlatformSettingsRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import { PlatformUserUpdateRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 import {
   CreateEngineRequestSchema,
   EngineTenancyConfigurationSchema,
@@ -54,6 +56,7 @@ import {
 
 const SCHEMAS: Record<string, z.ZodType> = {
   ConfigAssignmentSchema,
+  ConfigBundleRequestSchema,
   ConfigAssignmentsFileSchema,
   ConfigAuthorizationPoliciesFileSchema,
   ConfigEmailConfigurationsFileSchema,
@@ -90,6 +93,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   GovernanceOwnershipRequestSchema,
   ManagedEngineWorkloadRegistrationRequestSchema,
   PublicLoginMethodsResponseSchema,
+  PlatformUserUpdateRequestSchema,
   UpdatePlatformSettingsRequest,
   UpdateEngineRequestSchema,
 };
@@ -114,7 +118,7 @@ describe('published machine-readable JSON examples', () => {
   });
 
   for (const documentPath of DOCUMENTS) {
-    it(`${documentPath} stays synchronized with shared schemas`, () => {
+    it(`${documentPath} stays synchronized with shared schemas`, async () => {
       const markdown = readFileSync(resolve(repoRoot, documentPath), 'utf8');
       const matches = [...markdown.matchAll(taggedJsonBlock)];
 
@@ -131,6 +135,14 @@ describe('published machine-readable JSON examples', () => {
         expect(() => { example = JSON.parse(source); }, `${documentPath} contains malformed JSON`).not.toThrow();
         const result = schema.safeParse(example);
         expect(result.success, result.success ? undefined : JSON.stringify(result.error.issues, null, 2)).toBe(true);
+
+        if (schemaName === 'ConfigBundleRequestSchema') {
+          const { configBundlePreviewService } = await import(
+            '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js'
+          );
+          const compilation = configBundlePreviewService.compile(ConfigBundleRequestSchema.parse(example));
+          expect(compilation.preview.valid, JSON.stringify(compilation.preview.errors, null, 2)).toBe(true);
+        }
       }
     });
   }

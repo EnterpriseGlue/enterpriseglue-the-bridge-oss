@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, InlineLoading, InlineNotification, Stack } from '@carbon/react';
-import { Login } from '@carbon/icons-react';
+import { Email, Login } from '@carbon/icons-react';
 import { ExtensionSlot } from '../enterprise/ExtensionSlot';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
@@ -45,7 +45,7 @@ export default function Signup() {
   }
   if (cloudSignupAvailable) {
     return (
-      <PublicAuthShell title="Create your Cloud account" description="Use a verified work account, then create your EnterpriseGlue organization.">
+      <PublicAuthShell title="Create your Cloud account" description="Use an available identity provider, then create your EnterpriseGlue organization.">
         <Stack gap={5}>
           {error ? <InlineNotification kind="error" lowContrast hideCloseButton title="Signup unavailable" subtitle={error} /> : null}
           {!error && providers?.length === 0 ? <InlineNotification kind="info" lowContrast hideCloseButton title="No signup method configured" subtitle="A Cloud account identity provider must be configured before signup can continue." /> : null}
@@ -58,6 +58,13 @@ export default function Signup() {
               onClick={() => window.location.assign(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/cloud/onboarding')}`)}
             />)}
           </div> : null}
+          {!error && <div className="eg-login-email-option">
+            <Link className="eg-login-provider-button eg-login-provider-button--email" to="/signup/email" aria-describedby="cloud-email-signup-description">
+              <Email size={20} aria-hidden="true" className="eg-login-provider-logo" />
+              <span className="eg-login-provider-button__action">Continue with email</span>
+            </Link>
+            <p id="cloud-email-signup-description" className="eg-login-email-description">Verify your email, then create a passkey for secure sign-in.</p>
+          </div>}
           {error ? <Button kind="secondary" onClick={() => void load()}>Retry</Button> : null}
           <Button as={Link} kind="ghost" to="/login" renderIcon={Login}>Already have an account?</Button>
         </Stack>

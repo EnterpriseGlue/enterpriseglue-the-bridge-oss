@@ -35,20 +35,20 @@ function registeredMigrations() {
     });
 }
 
-describe('immutable schema-epoch compatibility bridge', () => {
-  it('binds the executable inventory before enforcement while retaining two exact accepted epochs', () => {
+describe('immutable Cloud passkey schema-epoch transition', () => {
+  it('binds the exact 0131 -> 0132 -> 0133 owner inventory', () => {
     const manifest = loadBundledSchemaEpochManifest();
     const migrations = registeredMigrations();
     const dataSource = { migrations } as any;
 
-    expect(manifest.executableMigrationInventory.through).toBe(1700000000131);
+    expect(manifest.executableMigrationInventory.through).toBe(1700000000133);
     expect(manifest.upgradeContract.minimumDatabaseEpoch).toEqual(manifest.roles.ownerMigration.from);
     expect(manifest.upgradeContract.freshDatabase).toBe('requires-separate-signed-bootstrap');
     expect(manifest.upgradeContract.emptyMigrationLedger).toBe('requires-separate-signed-recovery');
     expect(manifest.executableImplementationInventory).toMatchObject({
       algorithm: 'sha256-source-v1',
-      purpose: 'owner-transition-1700000000131-dual-context-closure/v1',
-      count: 16,
+      purpose: 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1',
+      count: 22,
     });
     expect(manifest.releaseEffectInventory).toEqual({
       version: RELEASE_EFFECT_INVENTORY_VERSION,
@@ -60,17 +60,26 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.through)).toEqual([
       1700000000131,
       1700000000132,
+      1700000000133,
     ]);
-    expect(manifest.roles.ownerMigration.from.postgresPolicyProfile).toBe('legacy-tenant-context/v1');
+    expect(manifest.plannedMigration).toEqual({
+      name: 'AddCloudEmailPasskeys1700000000133',
+      timestamp: 1700000000133,
+    });
+    expect(manifest.roles.ownerMigration.from.postgresPolicyProfile).toBe('dual-context-compatibility/v1');
+    expect(manifest.acceptedDatabaseEpochs[0]).toMatchObject(manifest.roles.ownerMigration.from);
+    const { id: _postId, ...postInventory } = manifest.acceptedDatabaseEpochs[1];
+    expect(manifest.roles.ownerMigration.intermediate).toMatchObject(postInventory);
     expect(manifest.acceptedDatabaseEpochs.map((epoch) => epoch.postgresPolicyProfile)).toEqual([
       'dual-context-compatibility/v1',
+      'explicit-context/v1',
       'explicit-context/v1',
     ]);
     bindDataSourceToSchemaEpoch(dataSource, manifest);
 
     const executable = canonicalMigrationInventory(dataSource.migrations);
-    expect(executable).toHaveLength(133);
-    expect(executable.at(-1)?.timestamp).toBe(1700000000131);
+    expect(executable).toHaveLength(135);
+    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000133);
     expect(migrationInventorySha256(executable)).toBe(manifest.executableMigrationInventory.sha256);
   });
 
@@ -116,16 +125,29 @@ describe('immutable schema-epoch compatibility bridge', () => {
     expect(() => bindDataSourceToSchemaEpoch({ migrations } as any, manifest)).toThrow(
       /differs from the immutable schema-epoch manifest/,
     );
+    const unplanned = [...registeredMigrations(), { name: 'Unplanned1700000000133' }];
+    expect(() => bindDataSourceToSchemaEpoch({ migrations: unplanned } as any, manifest)).toThrow(
+      /unplanned schema-epoch migration/,
+    );
   });
 
-  it('accepts only the exact pre- and post-enforcement database ledgers', () => {
+  it('allows the owner to execute the exact 0132 and 0133 migrations and nothing later', () => {
+    const manifest = loadBundledSchemaEpochManifest();
+    const dataSource = { migrations: registeredMigrations() } as any;
+    bindDataSourceToSchemaEpoch(dataSource, manifest);
+    const executable = canonicalMigrationInventory(dataSource.migrations);
+    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000133);
+  });
+
+  it('accepts only the exact pre-, post-, and future compatibility ledgers', () => {
     const manifest = loadBundledSchemaEpochManifest();
     const all = canonicalMigrationInventory(registeredMigrations());
     expect(resolveAcceptedDatabaseEpoch(
       manifest,
       all.filter((migration) => migration.timestamp <= 1700000000131),
     )).toMatchObject({ id: 'pre-enforcement' });
-    expect(resolveAcceptedDatabaseEpoch(manifest, all)).toMatchObject({ id: 'post-enforcement' });
+    expect(resolveAcceptedDatabaseEpoch(manifest, all.filter((migration) => migration.timestamp <= 1700000000132))).toMatchObject({ id: 'post-enforcement' });
+    expect(resolveAcceptedDatabaseEpoch(manifest, all)).toMatchObject({ id: 'cloud-email-passkeys' });
     expect(() => resolveAcceptedDatabaseEpoch(manifest, all.slice(1))).toThrow(/not accepted/);
   });
 
@@ -134,13 +156,13 @@ describe('immutable schema-epoch compatibility bridge', () => {
     const all = canonicalMigrationInventory(registeredMigrations());
     expect(resolveOwnerMigrationStartingEpoch(
       manifest,
-      all.filter((migration) => migration.timestamp <= 1700000000130),
+      all.filter((migration) => migration.timestamp <= 1700000000131),
     )).toBe('owner-source');
     expect(resolveOwnerMigrationStartingEpoch(
       manifest,
-      all.filter((migration) => migration.timestamp <= 1700000000131),
-    )).toBe('pre-enforcement');
-    expect(resolveOwnerMigrationStartingEpoch(manifest, all)).toBe('post-enforcement');
+      all.filter((migration) => migration.timestamp <= 1700000000132),
+    )).toBe('post-enforcement');
+    expect(resolveOwnerMigrationStartingEpoch(manifest, all)).toBe('cloud-email-passkeys');
     expect(() => resolveOwnerMigrationStartingEpoch(manifest, [])).toThrow(
       /starting epoch is not accepted/,
     );
@@ -155,7 +177,10 @@ describe('immutable schema-epoch compatibility bridge', () => {
       'utf8',
     ));
     manifest.acceptedDatabaseEpochs[1].through = 1700000000133;
-    expect(() => parseSchemaEpochManifest(manifest)).toThrow(/bounded pre\/post enforcement bridge/);
+    expect(() => parseSchemaEpochManifest(manifest)).toThrow(/bounded Cloud passkey owner transition/);
+    manifest.acceptedDatabaseEpochs[1].through = 1700000000132;
+    manifest.acceptedDatabaseEpochs[2].sha256 = '0'.repeat(64);
+    expect(() => parseSchemaEpochManifest(manifest)).toThrow();
   });
 
   it('recognizes only the exact legacy policy used before enforcement', async () => {

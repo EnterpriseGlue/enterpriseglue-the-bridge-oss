@@ -13,6 +13,7 @@ import forgotPasswordRoute from './forgot-password.js';
 import ssoConfigRoute from './sso-config.js';
 import onboardingRoute from './onboarding.js';
 import identityOidcRoute from './identity-oidc.js';
+import cloudEmailPasskeyRoute from './cloud-email-passkey.js';
 
 export {
   loginRoute,
@@ -25,4 +26,5 @@ export {
   ssoConfigRoute,
   onboardingRoute,
   identityOidcRoute,
+  cloudEmailPasskeyRoute,
 };

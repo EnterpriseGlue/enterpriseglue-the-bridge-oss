@@ -52,6 +52,24 @@ if [[ "$ready" != true ]]; then
 fi
 
 cd "$root_dir"
+test_files=(
+  test/integration/nativeTenantRls.test.ts
+  test/integration/postgres-context-boundary.test.ts
+  test/integration/postgres-global-identity.test.ts
+  test/integration/postgres-shared-inventory-readiness.test.ts
+  test/integration/postgres-schema-epoch-bridge.test.ts
+  test/integration/postgres-cloud-email-passkey.test.ts
+  test/qualification/sessionRevocationRace.test.ts
+)
+if [[ "$#" -gt 0 ]]; then
+  case "$1" in
+    --schema-epoch) test_files=(test/integration/postgres-schema-epoch-bridge.test.ts) ;;
+    --cloud-passkey) test_files=(test/integration/postgres-cloud-email-passkey.test.ts) ;;
+    --session-race) test_files=(test/qualification/sessionRevocationRace.test.ts) ;;
+    *) echo '[native-tenancy-rls] Unknown targeted lane.' >&2; exit 2 ;;
+  esac
+  if [[ "$#" -ne 1 ]]; then echo '[native-tenancy-rls] One targeted lane is required.' >&2; exit 2; fi
+fi
 SESSION_RACE_DISPOSABLE_POSTGRES=true \
 MIGRATION_TEST_POSTGRES_CONTAINER="$container_id" \
 MIGRATION_TEST_POSTGRES_HOST=127.0.0.1 \
@@ -60,12 +78,7 @@ MIGRATION_TEST_POSTGRES_USER=postgres \
 MIGRATION_TEST_POSTGRES_PASSWORD=postgres \
 MIGRATION_TEST_POSTGRES_DATABASE=postgres \
   corepack pnpm --dir backend exec vitest run \
-    test/integration/nativeTenantRls.test.ts \
-    test/integration/postgres-context-boundary.test.ts \
-    test/integration/postgres-global-identity.test.ts \
-    test/integration/postgres-shared-inventory-readiness.test.ts \
-    test/integration/postgres-schema-epoch-bridge.test.ts \
-    test/qualification/sessionRevocationRace.test.ts \
+    "${test_files[@]}" \
     --config vitest.config.ts \
     --reporter=dot \
     --maxWorkers=1 \

@@ -3,7 +3,7 @@ import { isInvitationEnrollmentRoute } from './invitationRoute.js';
 const SESSION_AWARE_PUBLIC_AUTH_ROUTE_PATTERN =
   /^(?:\/t\/[^/]+)?\/(?:login|admin-recovery|verify-email|forgot-password|password-reset|resend-verification)\/?$/;
 
-const ROOT_SIGNUP_ROUTE_PATTERN = /^\/signup\/?$/;
+const ROOT_SIGNUP_ROUTE_PATTERN = /^\/signup(?:\/email(?:\/(?:passkey|signin))?)?\/?$/;
 
 export type PublicAuthRoutePolicy = Readonly<{
   skipSessionBootstrap: boolean;

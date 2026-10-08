@@ -95,3 +95,25 @@ an unrelated infrastructure apply from silently restoring an older release.
 Repository scripts and tests remain the authority for deterministic behavior;
 skills select and orchestrate those commands rather than duplicating product
 logic.
+
+## Bounded diagnosis and delivery preflight
+
+Before qualification or staging mutation, the delivery skill checks available
+exact-composition security evidence, retained mutation ownership, unresolved
+work, route capacity and approvals. A known blocker stops dependent dispatches,
+not unrelated local implementation. General skill guidance never expands an
+incident's narrower privacy or mutation permissions.
+
+Each diagnostic identifies the decision it can change and a stopping condition.
+When safe evidence cannot distinguish remaining causes, report the missing
+evidence or approval rather than accumulating probes, incident-specific PRs or
+unchanged reruns. Timeouts and durable active records do not prove terminal
+external effects. CI failure diagnosis precedes any justified bounded retry.
+
+The legacy CI-debug, dependency and test entrypoints defer to maintained skills:
+they no longer offer retired repository targets, destructive checkout recipes,
+CI/docs testing exemptions or shipping known failures. Dependency changes use
+the declared package manager and named major-upgrade approvals. Security evidence
+also records scanner/database freshness; unchanged image bytes alone are not
+current acceptance. Report merge, publication, installation, routing and live
+E2E qualification separately.

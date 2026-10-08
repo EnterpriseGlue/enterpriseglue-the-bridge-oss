@@ -25,10 +25,13 @@ By participating, you agree to abide by the Code of Conduct. See `CODE_OF_CONDUC
 - Docker (Docker Desktop recommended)
 - Docker Compose plugin (`docker compose`)
 
-Optional (only if running services outside Docker):
+For the `pnpm run ...` commands below, also install:
 
-- Node.js (LTS recommended)
-- pnpm
+- Node.js 24 (see `package.json` `engines`)
+- pnpm 11.0.8 (see `package.json` `packageManager`)
+
+If you have Docker and Compose but not Node.js or pnpm on the host, use the
+equivalent `bash ./dev.sh` and `bash ./down.sh` entrypoints instead.
 
 ### Configure environment
 
@@ -67,9 +70,10 @@ Alternative entrypoints:
 
 ### Resetting your local Docker state
 
-If you change the Postgres major version or want to reset your local database:
+If you change the Postgres major version or want to reset your local database
+and its volumes:
 
-- `pnpm run down -- -v`
+- `pnpm run down -v` (or `bash ./down.sh -v`)
 
 ### Running services outside Docker (advanced)
 

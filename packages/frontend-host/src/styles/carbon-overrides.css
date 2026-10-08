@@ -865,6 +865,10 @@
   line-height: 1.25;
 }
 
+.eg-login-title:focus {
+  outline: none;
+}
+
 .eg-public-auth-description {
   margin: calc(-1 * var(--spacing-4)) 0 var(--spacing-6);
   color: var(--cds-text-secondary);
@@ -894,6 +898,14 @@
 
 .eg-login-section-heading--with-copy {
   margin-block-end: 0;
+}
+
+.eg-login-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
 }
 
 .eg-login-intro-copy,
@@ -947,6 +959,17 @@
   display: block;
   overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.eg-login-provider-button--email {
+  text-decoration: none;
+}
+
+.eg-login-email-description {
+  margin: var(--spacing-3) 0 0;
+  color: var(--cds-text-secondary);
+  font-size: var(--cds-body-compact-01-font-size, 0.875rem);
+  line-height: var(--cds-body-compact-01-line-height, 1.28572);
 }
 
 .eg-login-provider-button:not(.cds--btn) {
@@ -1049,7 +1072,7 @@
   position: relative;
   isolation: isolate;
   justify-content: flex-start;
-  padding: 3rem clamp(1.5rem, 4.5vw, 5rem);
+  padding: 1.5rem clamp(1.5rem, 4.5vw, 5rem);
   background: #08090d;
   overflow: hidden;
 }
@@ -1059,7 +1082,8 @@
   z-index: 1;
   flex: 0 0 auto;
   inline-size: min(27.5rem, 100%);
-  padding: 2.5rem;
+  /* Leave room for all sign-in actions with taller cross-platform text metrics. */
+  padding: 1.5rem 2.5rem;
   border: 0;
   background: #08090d;
 }
@@ -2074,11 +2098,15 @@
 }
 
 .eg-dashboard-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(12rem, 16rem));
+  display: flex;
   gap: var(--spacing-4);
-  justify-content: end;
+  justify-content: flex-end;
   align-items: end;
+}
+
+.eg-dashboard-controls > * {
+  flex: 0 1 16rem;
+  min-inline-size: 12rem;
 }
 
 .eg-dashboard-get-started,

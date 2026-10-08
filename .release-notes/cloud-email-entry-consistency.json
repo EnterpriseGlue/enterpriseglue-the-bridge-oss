@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "cloud-email-entry-consistency",
+  "type": "fix",
+  "scope": "cloud account signup",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "developers"
+  ],
+  "summary": "Align the email signup option with the provider buttons and explain the email-verification and passkey steps before account creation.",
+  "userImpact": [
+    "Continue with email is a full-width option with an email icon, matching the provider choices.",
+    "Signup explains the required passkey step before requesting a verification email."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "No password signup, credential, session or account-recovery authority changes; passkeys remain the existing email-account authentication method."
+  ],
+  "documentation": [
+    "Signup and email-account page copy document the existing verification and passkey sequence."
+  ],
+  "knownLimitations": [
+    "UI and protocol fixtures do not prove hardware compatibility, live email delivery, lost-passkey recovery or staging E2E signup."
+  ],
+  "rollback": [
+    "Restore the prior frontend-host package and frontend image; no data migration."
+  ],
+  "validation": [
+    "Focused UI tests cover email-option semantics, unsupported browsers, expired links and cancelled passkey prompts; backend protocol fixtures are qualified separately from real-provider acceptance."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.25",
+      "newVersion": "0.17.26",
+      "impact": "patch"
+    }
+  ]
+}

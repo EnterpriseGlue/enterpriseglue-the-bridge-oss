@@ -62,7 +62,8 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   const cloudAccountSession = payload.sessionClass === 'cloud_account';
   if (cloudAccountSession && (!managedCloudAccountSessionsEnabled()
     || !payload.sessionId
-    || !['oidc', 'saml'].includes(payload.authenticationMethod || '')
+    || !['oidc', 'saml', 'passkey'].includes(payload.authenticationMethod || '')
+    || (payload.authenticationMethod === 'passkey' && payload.mfaVerified !== true)
     || req.tenant !== undefined)) {
     throw Errors.unauthorized('Invalid cloud account session');
   }

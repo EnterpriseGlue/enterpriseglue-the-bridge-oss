@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-09-09T07:47:55.169Z
+Generated at: 2026-09-26T14:10:14.936Z
 
 Generated from:
 - third_party_licenses.json
@@ -27,7 +27,7 @@ Generated from:
 | BSD-2-Clause | 1 |
 | BSD-3-Clause | 1 |
 | ISC | 4 |
-| MIT | 59 |
+| MIT | 61 |
 | MIT-0 | 1 |
 | OFL-1.1 | 3 |
 | SEE LICENSE IN LICENSE | 2 |
@@ -50,6 +50,8 @@ Generated from:
 | @ibm/plex-sans-arabic | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | frontend, packages/frontend-host |
 | @ibm/plex-sans | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | frontend, packages/frontend-host |
 | @node-saml/node-saml | 5.1.0 | MIT | https://github.com/node-saml/node-saml.git | backend, frontend, packages/shared, root |
+| @simplewebauthn/browser | 13.3.0 | MIT | git+https://github.com/MasterKale/SimpleWebAuthn.git | frontend, packages/frontend-host |
+| @simplewebauthn/server | 13.3.2 | MIT | git+https://github.com/MasterKale/SimpleWebAuthn.git | backend, packages/backend-host |
 | @tanstack/react-query | 5.102.0 | MIT | git+https://github.com/TanStack/query.git | frontend, packages/frontend-host |
 | @tanstack/react-table | 8.21.3 | MIT | https://github.com/TanStack/table.git | frontend, packages/frontend-host |
 | ajv | 8.20.0 | MIT | ajv-validator/ajv | packages/plugin-runtime |

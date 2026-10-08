@@ -211,6 +211,20 @@ describe('provider-neutral OIDC routes', () => {
     }
   });
 
+  it('allows only the exact organization-login return path for a global Cloud provider', async () => {
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.cloudAccountIdentityEnabled = true;
+    try {
+      const started = await request(app).get('/api/auth/cloud-signup/providers/provider-1/start?returnTo=%2Flogin').redirects(0);
+      expect(started.status).toBe(302);
+      const calls = genericOidcService.createAuthorizationRequest.mock.calls;
+      expect(parseSignedOidcState(calls[calls.length - 1]?.[1])).toMatchObject({ providerId: provider.id, returnTo: '/login' });
+      for (const query of ['returnTo=%2Flogin%2F', 'returnTo=%2Flogin%3Fnext%3D%2Fadmin', 'returnTo=%2Flogin&tenantId=other']) {
+        expect((await request(app).get(`/api/auth/cloud-signup/providers/provider-1/start?${query}`)).status).toBe(400);
+      }
+    } finally { config.cloudAccountIdentityEnabled = originalCloudIdentity; }
+  });
+
   it('keeps Cloud account provider discovery disabled by default', async () => {
     const originalCloudIdentity = config.cloudAccountIdentityEnabled;
     config.cloudAccountIdentityEnabled = false;
@@ -601,6 +615,91 @@ describe('provider-neutral OIDC routes', () => {
       }));
     } finally {
       config.tenancyMode = originalMode;
+    }
+  });
+
+  it('lists global Cloud OIDC providers for explicit authenticated account linking without exposing configuration', async () => {
+    const originalMode = config.tenancyMode;
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.tenancyMode = 'pooled';
+    config.cloudAccountIdentityEnabled = true;
+    const globalProvider = {
+      ...provider,
+      id: 'provider-global',
+      key: 'identity.microsoft',
+      tenantId: null,
+      displayName: 'Microsoft',
+      organization: 'EnterpriseGlue',
+      configurationJson: JSON.stringify({ clientId: 'must-not-leak', clientSecret: 'must-not-leak' }),
+    };
+    identityProviderService.listEnabledDirectLoginProviders
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([globalProvider]);
+    const sessionId = randomUUID();
+    const currentUser = { id: 'user-1', email: 'person@example.test', isActive: true, isEmailVerified: true, authSessionVersion: 7 };
+    userRepository.findOneBy.mockResolvedValueOnce(currentUser);
+    const accessToken = generateAccessToken(currentUser, {
+      sessionId, tenantId: 'tenant-default', tenantSlug: 'default', authenticationMethod: 'local',
+    });
+    try {
+      const response = await request(app).get('/api/auth/me/identity-providers').set('Cookie', `accessToken=${accessToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ providers: [{
+        id: globalProvider.id, displayName: 'Microsoft', organization: 'EnterpriseGlue', protocol: 'oidc', linked: false,
+      }] });
+      expect(JSON.stringify(response.body)).not.toContain('must-not-leak');
+      expect(externalIdentityRepository.find).not.toHaveBeenCalled();
+    } finally {
+      config.tenancyMode = originalMode;
+      config.cloudAccountIdentityEnabled = originalCloudIdentity;
+    }
+  });
+
+  it('links a global Cloud OIDC subject only from the exact current tenant session', async () => {
+    const originalMode = config.tenancyMode;
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.tenancyMode = 'pooled';
+    config.cloudAccountIdentityEnabled = true;
+    const globalProvider = { ...provider, id: 'provider-global', key: 'identity.microsoft', tenantId: null };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValueOnce(null);
+    identityProviderService.getById.mockResolvedValueOnce(globalProvider);
+    identityProviderService.getByKey.mockResolvedValueOnce(globalProvider);
+    const sessionId = randomUUID();
+    const currentUser = { id: 'user-1', email: 'person@example.test', isActive: true, isEmailVerified: true, authSessionVersion: 7 };
+    userRepository.findOneBy.mockResolvedValue(currentUser);
+    const accessToken = generateAccessToken(currentUser, {
+      sessionId, tenantId: 'tenant-default', tenantSlug: 'default', authenticationMethod: 'local',
+    });
+    try {
+      const started = await request(app)
+        .get(`/api/auth/me/identity-providers/${globalProvider.id}/link?returnTo=%2Ft%2Fdefault%2F`)
+        .set('Cookie', `accessToken=${accessToken}`)
+        .redirects(0);
+      expect(started.status).toBe(302);
+      const authorizationCalls = genericOidcService.createAuthorizationRequest.mock.calls;
+      const state = authorizationCalls[authorizationCalls.length - 1]?.[1];
+      expect(parseSignedOidcState(state)).toMatchObject({
+        providerId: globalProvider.id,
+        tenantSlug: 'default',
+        accountLink: { userId: currentUser.id, tenantId: 'tenant-default', authSessionVersion: 7, sessionId },
+      });
+      expect(parseSignedOidcState(state)).not.toHaveProperty('identityProviderTenantId');
+      const protocolCookies = (started.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split(';')[0]);
+      const completed = await request(app)
+        .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+        .set('Cookie', [...protocolCookies, `accessToken=${accessToken}`])
+        .redirects(0);
+      expect(completed.status).toBe(302);
+      expect(completed.headers.location).toBe(`${config.frontendUrl.replace(/\/$/, '')}/t/default/`);
+      expect(identityProviderProvisioningService.linkOidcIdentity).toHaveBeenCalledWith(
+        expect.objectContaining({ id: globalProvider.id, tenantId: null }),
+        expect.objectContaining({ sub: 'subject-1' }),
+        { userId: currentUser.id, tenantId: 'tenant-default' },
+      );
+      expect(authSessionService.issue).not.toHaveBeenCalled();
+    } finally {
+      config.tenancyMode = originalMode;
+      config.cloudAccountIdentityEnabled = originalCloudIdentity;
     }
   });
 

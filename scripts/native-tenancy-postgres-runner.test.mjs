@@ -63,6 +63,8 @@ test('ignores temporary socket readiness and waits for the real TCP server', (t)
   assert.ok(tests.includes('test/integration/postgres-context-boundary.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-global-identity.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-shared-inventory-readiness.test.ts'));
+  assert.ok(tests.includes('test/integration/postgres-schema-epoch-bridge.test.ts'));
+  assert.ok(tests.includes('test/integration/postgres-cloud-email-passkey.test.ts'));
   assert.ok(tests.includes('test/qualification/sessionRevocationRace.test.ts'));
   const startedName = calls.find(([command]) => command === 'create')[2];
   assert.match(startedName, /^enterpriseglue-native-tenancy-rls-\d+$/);

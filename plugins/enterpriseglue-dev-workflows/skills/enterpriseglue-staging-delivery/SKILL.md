@@ -22,6 +22,16 @@ description: Use when inspecting, reconciling, deploying, or troubleshooting Ent
    `supersede-staging-preview.yml` reconciliation, deployment artifact, shared
    mutation lock, route ConfigMap identity, and drain/retirement receipts. A
    successful protected no-op is a capacity disposition, not a failed release.
+   Before requesting qualification or mutation, check the exact composition's
+   available security evidence, retained mutation owner/lock, unresolved work,
+   route capacity and required approvals. Do not enqueue work that depends on
+   an unresolved blocker. Prefer existing protected status receipts; never use
+   this preflight as permission to query raw logs, Secrets or private state.
+   A durable active record, timeout or old lock is not terminal-effect proof.
+   If no authorized source-bound recovery path matches the incident, stop that
+   dependent action and identify the missing proof instead of replaying an old
+   recovery script or building speculative diagnostics. Unrelated local work
+   may continue. A diagnostic must have a decision and stopping condition.
 5. Treat the two-route gateway as a capacity boundary. Under the normal policy,
    an unused Candidate may be superseded only by the protected exact-reference
    workflow, while Preview and Stable remain protected from automatic

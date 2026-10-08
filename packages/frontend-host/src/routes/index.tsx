@@ -52,6 +52,7 @@ import ResetPassword from '../pages/ResetPassword'
 import ResendVerification from '../pages/ResendVerification'
 import VerifyEmail from '../pages/VerifyEmail'
 import Signup from '../pages/Signup'
+import CloudEmailAuth from '../pages/CloudEmailAuth'
 import AcceptInvite from '../pages/AcceptInvite'
 
 // Admin pages
@@ -709,6 +710,9 @@ export function getPublicRoutes(): RouteObject[] {
     { path: '/resend-verification', element: <ResendVerification /> },
     { path: '/t/:tenantSlug/resend-verification', element: <ResendVerification /> },
     { path: '/signup', element: <Signup /> },
+    { path: '/signup/email', element: <CloudEmailAuth /> },
+    { path: '/signup/email/passkey', element: <CloudEmailAuth /> },
+    { path: '/signup/email/signin', element: <CloudEmailAuth /> },
     { 
       path: '/git/oauth/callback', 
       element: (

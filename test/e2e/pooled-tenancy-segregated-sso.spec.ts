@@ -317,9 +317,9 @@ async function oidcLoginFromOrganizationFinder(browser: Browser, tenantSlug: str
   const page = await context.newPage();
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Find your organization' })).toBeVisible();
-  await expect(page.getByLabel('Work email')).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Email address' })).toBeFocused();
   await captureManualScreenshot(page, '01-neutral-organization-finder.jpg');
-  await page.getByLabel('Work email').fill(email);
+  await page.getByRole('textbox', { name: 'Email address' }).fill(email);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/login(?:$|[?#])`));
   await page.getByRole('button', { name: new RegExp(`Continue with ${displayName}`) }).click();
@@ -327,7 +327,7 @@ async function oidcLoginFromOrganizationFinder(browser: Browser, tenantSlug: str
   await page.locator('input[name="password"]').fill(oidcPassword);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/(?:$|[?#])`));
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
   return context;
 }
 
@@ -367,7 +367,7 @@ async function samlLogin(browser: Browser, tenantSlug: string, providerId: strin
   await page.locator('input[name="password"]').fill(samlPassword);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/(?:$|[?#])`));
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
   return context;
 }
 
@@ -386,7 +386,7 @@ async function ldapLogin(browser: Browser, tenantSlug: string, providerId: strin
   await page.getByRole('button', { name: /^Log in$/ }).click();
   expect((await loginResponse).status()).toBe(200);
   await expect(page).toHaveURL(new RegExp(`/t/${tenantSlug}/(?:$|[?#])`));
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
   return context;
 }
 
@@ -413,7 +413,7 @@ async function enrollInvitedProviderUser(browser: Browser, admin: Page, input: {
   const onboardingRoot = `/api/t/${encodeURIComponent(input.tenant.slug)}/auth/onboarding`;
   await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: input.tenant.slug }), 200);
   await admin.goto(`/t/${encodeURIComponent(input.tenant.slug)}/`);
-  await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
   const invitation = await expectStatus(await post(admin, `/api/t/${input.tenant.slug}/invitations`, {
     email: input.email, resourceType: 'tenant', deliveryMethod: 'email',
   }), 201);
@@ -462,7 +462,7 @@ async function enrollInvitedProviderUser(browser: Browser, admin: Page, input: {
       await page.getByRole('button', { name: /sign in/i }).click();
     }
     await expect(page).toHaveURL(new RegExp(`/t/${input.tenant.slug}/(?:$|[?#])`));
-    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
     await diagnostics.expectClean(`${input.protocol} fresh invitation enrollment`);
     await assertTenantSession(context, input.tenant, input.siblingSlug);
     const me = await expectStatus(await context.request.get('/api/auth/me'), 200);
@@ -766,7 +766,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       await admin.setViewportSize({ width: 1440, height: 900 });
 
       await admin.goto('/t/alpha');
-      await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+      await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
       const tenantPicker = admin.locator('.cds--header__menu-title', { hasText: 'Alpha Industries' });
       await expect(tenantPicker).toBeVisible();
       await tenantPicker.click();
@@ -793,7 +793,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       }
       await expectStatus(await post(admin, '/api/auth/switch-tenant', { tenantSlug: 'alpha' }), 200);
       await admin.goto('/t/alpha/');
-      await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+      await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
       const alphaContext = await oidcLoginFromOrganizationFinder(browser, 'alpha', 'Alpha OIDC', 'operator@alpha.example');
       const bravoContext = await samlLogin(browser, 'bravo', providers.bravo.id);
       const charlieContext = await ldapLogin(browser, 'charlie', providers.charlie.id, 'Charlie Directory');

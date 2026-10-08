@@ -14,5 +14,9 @@ Codex adaptation:
   explicitly requests a read-only historical audit.
 - Do not update dependencies on `main`; require an isolated worktree branch.
 - Always produce the version map before changing dependency versions.
+- Read the actual scanner/advisory evidence; blank merged table cells do not
+  establish that a finding is unfixed. Include frozen bootstrap/predecessor
+  dependency trees, not only the current application lockfile. Preserve exact
+  migration inventory and schema-plan identities when minimizing bootstrap.
 - Major upgrades require explicit user approval per package or approved grouped peer-unblock set.
 - Stop on dependency resolution or test failures and present fix, revert, or abort options.

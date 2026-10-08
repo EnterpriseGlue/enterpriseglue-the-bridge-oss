@@ -105,6 +105,15 @@ if [[ -f "$ACTIVE_ENV_FILE" ]]; then
   set +a
 fi
 
+# Linux bind mounts retain the host checkout's numeric ownership. Build and
+# run the development backend with that identity so its generated artifacts
+# remain writable without making the checkout or container root-owned.
+if [[ "$(uname -s)" == "Linux" ]]; then
+  export EG_DEV_UID="${EG_DEV_UID:-$(id -u)}"
+  export EG_DEV_GID="${EG_DEV_GID:-$(id -g)}"
+  export EG_DEV_HOME="${EG_DEV_HOME:-/tmp}"
+fi
+
 if [[ -n "$SELECTED_DB" ]]; then
   DATABASE_TYPE="$SELECTED_DB"
 fi

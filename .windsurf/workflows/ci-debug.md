@@ -1,66 +1,26 @@
 ---
-description: Investigate a failed CI run — fetch logs, identify root cause, suggest fix
+description: Diagnose exact failed CI evidence before repair or a bounded retry
 ---
 
-# /ci-debug — Debug a Failed CI Run
+# /ci-debug — Diagnose a failed run
 
-Quickly diagnose why CI failed and suggest a fix.
+Use the maintained `enterpriseglue-ci-debug` skill in
+`plugins/enterpriseglue-dev-workflows`. Its lifecycle and evidence rules apply
+to this legacy entrypoint too. Work only in active OSS, Cloud or the owning
+plugin repository; do not resolve a retired repository for ordinary CI work.
 
-## Step 1: Find the failed run
-
-// turbo
-```bash
-gh run list --repo EnterpriseGlue/enterpriseglue-the-bridge-oss --status failure --limit 5
-```
-
-If the user mentions a specific PR:
-// turbo
-```bash
-gh pr checks {PR_NUMBER} --repo EnterpriseGlue/enterpriseglue-the-bridge-oss
-```
-
-Ask the user which run to investigate if multiple failures exist.
-
-## Step 2: Get failed job details
-
-```bash
-gh run view {RUN_ID} --repo EnterpriseGlue/enterpriseglue-the-bridge-oss
-```
-
-Identify which job(s) failed.
-
-## Step 3: Fetch failure logs
-
-```bash
-gh run view {RUN_ID} --repo EnterpriseGlue/enterpriseglue-the-bridge-oss --log-failed 2>&1 | tail -80
-```
-
-## Step 4: Diagnose
-
-Analyze the logs and categorize:
-
-- **Test failure** — which test, what assertion, likely cause
-- **Build failure** — TypeScript error, missing dependency
-- **Infra failure** — Docker build, network, timeout
-- **Flaky test** — passed locally but failed in CI (timing, resource)
-
-## Step 5: Suggest fix
-
-Based on diagnosis:
-
-- **Test failure** → show the failing test, suggest code fix
-- **Build failure** → show the error, suggest fix
-- **Infra failure** → suggest re-running: `gh run rerun {RUN_ID} --repo EnterpriseGlue/enterpriseglue-the-bridge-oss --failed`
-- **Flaky test** → suggest re-run first, then investigate if it fails again
-
-Ask the user:
-- **Fix now** — apply the fix locally, then `/test` and `/ship`
-- **Re-run CI** — `gh run rerun {RUN_ID} --failed`
-- **Skip** — leave for later
-
-## Notes for Cascade
-
-- Always show the actual error message, not just the job name
-- The `--log-failed` flag only shows output from failed steps
-- If the failure is in `ci-complete`, look at which upstream job actually failed
-- For EE, use `--repo EnterpriseGlue/enterpriseglue-the-bridge-ee`
+1. Resolve repository, PR/head SHA, run attempt and actual failing job/step.
+   Use `gh pr checks` and `gh run view` with the explicit active repository.
+2. Inspect scoped CI evidence, subject to the task's privacy restrictions.
+   Classify product, test, infrastructure, security, release-contract and
+   cancellation failures separately. Missing selected lanes are not passing.
+3. Reproduce the smallest affected command locally and repair only authorized
+   scope. A security or deterministic contract failure needs a fix, not a rerun.
+4. Before another diagnostic, state the decision it can change and when it ends.
+   Escalate missing evidence or authority when safe evidence cannot discriminate
+   causes. Do not accumulate speculative probes or PRs.
+5. Retry only a demonstrated transient failure within authorization. Record why
+   the outcome may change; a timeout with an unknown external effect does not
+   establish retry safety. Do not bypass checks or ship known failures.
+6. Report the evidence, cause or remaining uncertainty, fix, exact revision's
+   local checks and next action. Keep merge, publication and deployment distinct.

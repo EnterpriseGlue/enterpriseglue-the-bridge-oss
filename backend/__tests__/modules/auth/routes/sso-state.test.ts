@@ -11,6 +11,7 @@ import {
   parseInvitationEnrollmentContext,
 } from '../../../../../packages/backend-host/src/modules/auth/routes/sso-state.js';
 import { signOidcState, signSamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 
 function request(): Request {
   return { params: { tenantSlug: 'acme' }, query: { returnTo: '/t/acme/dashboard' } } as unknown as Request;
@@ -75,6 +76,53 @@ describe('provider-neutral SSO state', () => {
       accountLink,
     });
     expect(parsed).not.toHaveProperty('enrollment');
+  });
+
+  it('binds a global Cloud provider link to the exact authenticated tenant session', () => {
+    const originalMode = config.tenancyMode;
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.tenancyMode = 'pooled';
+    config.cloudAccountIdentityEnabled = true;
+    const accountLink = { userId: 'user-1', tenantId: 'tenant-1', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555' };
+    try {
+      const parsed = parseSignedOidcState(buildSignedOidcState(
+        request(),
+        'provider-global',
+        { key: 'identity.microsoft', tenantId: null },
+        undefined,
+        accountLink,
+      ));
+
+      expect(parsed).toMatchObject({
+        tenantSlug: 'acme',
+        providerId: 'provider-global',
+        identityProviderKey: 'identity.microsoft',
+        accountLink,
+      });
+      expect(parsed).not.toHaveProperty('identityProviderTenantId');
+    } finally {
+      config.tenancyMode = originalMode;
+      config.cloudAccountIdentityEnabled = originalCloudIdentity;
+    }
+  });
+
+  it('rejects a global provider account-link state when Cloud account identity is disabled', () => {
+    const originalMode = config.tenancyMode;
+    const originalCloudIdentity = config.cloudAccountIdentityEnabled;
+    config.tenancyMode = 'pooled';
+    config.cloudAccountIdentityEnabled = false;
+    try {
+      expect(() => buildSignedOidcState(
+        request(),
+        'provider-global',
+        { key: 'identity.microsoft', tenantId: null },
+        undefined,
+        { userId: 'user-1', tenantId: 'tenant-1', authSessionVersion: 7, sessionId: '11111111-2222-4333-8444-555555555555' },
+      )).toThrow('Invalid account link state');
+    } finally {
+      config.tenancyMode = originalMode;
+      config.cloudAccountIdentityEnabled = originalCloudIdentity;
+    }
   });
 
   it.each([

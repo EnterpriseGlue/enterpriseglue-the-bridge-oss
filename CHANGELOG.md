@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.29.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.0...v0.29.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **dashboard:** align filters without an engine ([1f03951](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1f03951bbbe69407289bb0afa782d6d2c18fd585))
+
+## [0.29.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.13...v0.29.0) (2026-09-27)
+
+
+### Features
+
+* **auth:** add Cloud email and passkey signup ([3c57a83](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3c57a83ae28dcd1c3ad69186da434da091124a40))
+* **auth:** bind Cloud passkey schema owner and runtime grants ([303a5db](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/303a5dbda10cecd44a2c05f7847105a9d6878912))
+
+
+### Bug Fixes
+
+* **auth:** keep Cloud passkey sign-in reachable on login ([04c101f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/04c101faf54390836867b2f04c764f0a8005b0d2))
+* **auth:** qualify owned passkey fixture and patched WebAuthn runtime ([e7fc67e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e7fc67e3604367c3a9f2b7cb1b102fd553ce0f08))
+* **auth:** stage signed passkey schema transition and CI repair ([9b09ad8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9b09ad88347d1cce055175687aec093c8f66bdc3))
+* **ui:** keep Cloud sign-in actions visible on Linux ([cd7a320](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cd7a32002a32d815e8b97f9a6a3dc1a534b0b97f))
+
+## [0.28.13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.12...v0.28.13) (2026-09-25)
+
+
+### Bug Fixes
+
+* **dev:** verify documented fresh-clone teardown ([574e476](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/574e47685297d662417dd38bbcfb97a841dce4ea))
+
+## [0.28.12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.11...v0.28.12) (2026-09-25)
+
+
+### Bug Fixes
+
+* **dev:** align Linux Compose ownership with checkout user ([1cb823c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1cb823c7a959f90a110bd8e13d2a4ca30784e49f))
+* **dev:** make fresh Linux Compose startup writable and test it in CI ([6f66ab8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6f66ab846878d7a1f54a9a7e23f31a0e3cdbe999))
+
+## [0.28.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.10...v0.28.11) (2026-09-24)
+
+
+### Bug Fixes
+
+* **dev:** make Compose first startup reliable ([e4cd657](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e4cd657d0a92f2c05f43a9ef439b0e8bd85c3019))
+
+## [0.28.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.9...v0.28.10) (2026-09-24)
+
+
+### Bug Fixes
+
+* **schema:** recognize signed Cloud passkey epoch for rollback ([02f20c1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/02f20c1c9f2496c019600620a6e7903ebef75a15))
+
+## [0.28.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.8...v0.28.9) (2026-09-24)
+
+
+### Bug Fixes
+
+* **auth:** align organization chooser with pooled login ([23d1fe0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/23d1fe0b5929078ad37a7fb4fed87825a6689a40))
+* **auth:** clarify personal email discovery on landing ([e3e7065](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e3e7065f6791abcbe9215902fb6c06a4428ef2ab))
+* **auth:** find organizations after cloud account sign-in ([579b0ad](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/579b0ad29242f2357832794ebe9db779df60bd37))
+* **auth:** separate Cloud signup from account discovery ([1924c52](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1924c523d4c30c16c90172b755c708b353ba69eb))
+
+## [0.28.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.7...v0.28.8) (2026-09-22)
+
+
+### Bug Fixes
+
+* **authentication:** link global SaaS OIDC providers ([51f16ed](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/51f16edb847e69901a5875bc3bd90cbf477ccefe))
+
 ## [0.28.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.28.6...v0.28.7) (2026-09-21)
 
 

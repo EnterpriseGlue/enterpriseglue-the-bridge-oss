@@ -41,6 +41,7 @@ const booleanOutputs = [
   'run_plugin_images',
   'run_package_discipline',
   'run_compose_render',
+  'run_dev_startup',
   'run_ci_images',
   'run_security_scan',
   'run_smoke_exposed',
@@ -66,6 +67,19 @@ const metadataPatterns = [
 ];
 
 const rootDependencyPattern = /^(?:package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/;
+
+const devStartupPatterns = [
+  /^dev\.sh$/,
+  /^scripts\/db-preflight\.sh$/,
+  /^(?:backend\/Dockerfile|frontend\/Dockerfile\.prod)$/,
+  /^infra\/docker\/compose\/docker-compose(?:\.backend-expose)?\.yml$/,
+  /^infra\/docker\/env\/examples\/docker\.postgres\.env\.example$/,
+  rootDependencyPattern,
+  /^\.npmrc$/,
+  /^(?:backend|frontend|packages\/(?:shared|backend-host|frontend-host|plugin-sdk|plugin-runtime|enterprise-plugin-api))\/package\.json$/,
+  /^\.github\/workflows\/(?:ci|ci-detect-reusable)\.yml$/,
+  /^scripts\/(?:ci-change-classifier|ci-change-detection|evaluate-ci-needs|check-ci-aggregate-contract)(?:\.test)?\.mjs$/,
+];
 
 const identityRehearsalPatterns = [
   /^\.github\/workflows\/(?:identity-protocol-rehearsal|entra-id-rehearsal)\.yml$/,
@@ -251,6 +265,7 @@ export function classifyChangedFiles(rawPaths, {
   const metadataOnly = paths.length > 0 && paths.every((path) => matches(path, metadataPatterns));
   const known = (path) => matches(path, metadataPatterns)
     || Object.values(classifiers).some((patterns) => matches(path, patterns))
+    || matches(path, devStartupPatterns)
     || matches(path, identityRehearsalPatterns)
     || matches(path, deploymentEvidencePatterns);
   const unknownHighRisk = paths.some((path) => !known(path));
@@ -270,6 +285,7 @@ export function classifyChangedFiles(rawPaths, {
   const runPackageDiscipline = raw.plugin_packaging || unknownHighRisk
     || paths.some((path) => publishedPackageForChangedPath(packageVersionAuthority, path));
   const runComposeRender = raw.application_container || raw.helm || unknownHighRisk;
+  const runDevStartup = paths.some((path) => matches(path, devStartupPatterns)) || unknownHighRisk;
   const runSecurityScan = securityScanOnSmokeOnly ? runCiImages : (runCiImages || raw.toolchain_container);
   const runReleaseReadiness = raw.workflow_or_release || raw.plugin_packaging || raw.toolchain_container
     || raw.helm || raw.application_container || unknownHighRisk;
@@ -303,6 +319,7 @@ export function classifyChangedFiles(rawPaths, {
     run_plugin_images: runPluginImages,
     run_package_discipline: runPackageDiscipline,
     run_compose_render: runComposeRender,
+    run_dev_startup: runDevStartup,
     run_ci_images: runCiImages,
     run_security_scan: runSecurityScan,
     run_smoke_exposed: runCiImages,

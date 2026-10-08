@@ -167,7 +167,7 @@ test('database jobs mount only their database-scoped Secrets and no application 
   assert.doesNotMatch(jobs.preflight, /schema-owner-database-secrets/)
 })
 
-test('fresh managed-shard bootstrap is default off and renders one bounded pre-install predecessor job only when enabled', async (t) => {
+test('fresh legacy-0130 bootstrap stays default off and cannot be combined with the 0131-source passkey owner', async (t) => {
   const baseline = await render(t)
   assert.equal(baseline.status, 0, baseline.stderr)
   assert.doesNotMatch(baseline.stdout, /app\.kubernetes\.io\/component: bootstrap|EG_MANAGED_SHARD_BOOTSTRAP_ENABLED/)
@@ -176,32 +176,9 @@ test('fresh managed-shard bootstrap is default off and renders one bounded pre-i
     database: { managedShardBootstrap },
     serviceAccounts: { bootstrap: { automountServiceAccountToken: true } },
   })
-  assert.equal(result.status, 0, result.stderr)
-  const rendered = documents(result.stdout)
-  const job = rendered.find((document) => document.includes('kind: Job') && document.includes('app.kubernetes.io/component: bootstrap'))
-  assert.ok(job)
-  assert.match(job, /helm\.sh\/hook: pre-install\n/)
-  assert.doesNotMatch(job, /pre-upgrade/)
-  assert.match(job, /helm\.sh\/hook-weight: "-30"/)
-  assert.match(job, /helm\.sh\/hook-delete-policy: before-hook-creation/)
-  assert.doesNotMatch(job, /hook-succeeded/)
-  assert.match(job, /ttlSecondsAfterFinished: 3600/)
-  assert.match(job, /image: "ghcr\.io\/enterpriseglue\/enterpriseglue-managed-shard-bootstrap@sha256:d{64}"/)
-  assert.match(job, /name: EG_MANAGED_SHARD_BOOTSTRAP_ENABLED\n\s+value: "true"/)
-  assert.match(job, /name: EG_MANAGED_SHARD_TARGET_TENANCY_MODE\n\s+value: "pooled"/)
-  assert.match(job, /name: EG_MANAGED_SHARD_ID\n\s+value: "staging-shard-a1"/)
-  assert.match(job, /name: EG_TENANCY_MODE\n\s+value: "single"/)
-  assert.match(job, /name: EG_POSTGRES_RUNTIME_ROLE\n\s+value: "eg_runtime"/)
-  assert.match(job, /secretRef: \{ name: enterpriseglue-migration-secrets \}/)
-  assert.match(job, /secretRef: \{ name: enterpriseglue-bootstrap-seeds \}/)
-  assert.doesNotMatch(job, /enterpriseglue-secrets|enterpriseglue-preflight-secrets|runSchemaEpochOwnerMigrations|synchronize/)
-  assert.match(job, /name: bootstrap-receipt, emptyDir: \{\}/)
-  assert.match(job, /readOnlyRootFilesystem: true/)
-  const serviceAccount = rendered.find((document) => document.includes('kind: ServiceAccount') && document.includes('app.kubernetes.io/component: bootstrap'))
-  assert.ok(serviceAccount)
-  assert.match(serviceAccount, /helm\.sh\/hook: pre-install\n/)
-  assert.doesNotMatch(serviceAccount, /pre-upgrade/)
-  assert.match(serviceAccount, /automountServiceAccountToken: false/)
+  assert.notEqual(result.status, 0)
+  assert.equal(result.stdout, '')
+  assert.match(result.stderr, /managed-shard bootstrap output must equal the bridge's exact owner predecessor/)
 })
 
 for (const [label, database, serviceAccounts] of [

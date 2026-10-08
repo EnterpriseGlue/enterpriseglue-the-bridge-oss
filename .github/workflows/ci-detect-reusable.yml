@@ -68,6 +68,8 @@ on:
         value: ${{ jobs.detect.outputs.run_package_discipline }}
       run_compose_render:
         value: ${{ jobs.detect.outputs.run_compose_render }}
+      run_dev_startup:
+        value: ${{ jobs.detect.outputs.run_dev_startup }}
       run_ci_images:
         value: ${{ jobs.detect.outputs.run_ci_images }}
       run_security_scan:
@@ -126,6 +128,7 @@ jobs:
       run_plugin_images: ${{ steps.classify.outputs.run_plugin_images }}
       run_package_discipline: ${{ steps.classify.outputs.run_package_discipline }}
       run_compose_render: ${{ steps.classify.outputs.run_compose_render }}
+      run_dev_startup: ${{ steps.classify.outputs.run_dev_startup }}
       run_ci_images: ${{ steps.classify.outputs.run_ci_images }}
       run_security_scan: ${{ steps.classify.outputs.run_security_scan }}
       run_smoke_exposed: ${{ steps.classify.outputs.run_smoke_exposed }}

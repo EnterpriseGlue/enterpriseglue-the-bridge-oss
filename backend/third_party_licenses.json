@@ -29,6 +29,12 @@
     "email": "henri.bergius@iki.fi",
     "url": "http://bergie.iki.fi"
   },
+  "@simplewebauthn/server@13.3.2": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/MasterKale/SimpleWebAuthn.git",
+    "publisher": "Matthew Miller",
+    "email": "matthew@millerti.me"
+  },
   "archiver@7.0.1": {
     "licenses": "MIT",
     "repository": "https://github.com/archiverjs/node-archiver.git",
