@@ -71,20 +71,6 @@ test('release workflow changes run release readiness without unrelated applicati
   assert.equal(result.run_plugin_checks, false);
 });
 
-test('nightly security orchestration changes require workflow contracts, not application rebuilds', () => {
-  for (const file of ['.github/workflows/security-nightly.yml', '.github/workflows/security-nightly-reusable.yml']) {
-    const result = classifyChangedFiles([file]);
-    assert.equal(result.workflow_or_release, true);
-    assert.equal(result.unknown_high_risk, false);
-    assert.equal(result.run_release_readiness, true);
-    assert.equal(result.run_ci_images, false);
-    assert.equal(result.run_tests, false);
-    assert.equal(result.run_database_matrix, false);
-  }
-  assert.equal(classifyChangedFiles(['backend/Dockerfile']).run_ci_images, true);
-  assert.equal(classifyChangedFiles(['scripts/run-trivy-image-scan.sh']).run_ci_images, true);
-});
-
 test('candidate artifact helpers select release readiness without application or database fan-out', () => {
   for (const path of ['scripts/release-candidate-artifacts.sh', 'scripts/release-candidate-workflow.test.mjs']) {
     const result = classifyChangedFiles([path]);

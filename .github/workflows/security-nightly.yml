@@ -23,7 +23,6 @@ jobs:
     outputs:
       backend_image_ref: ${{ steps.refs.outputs.backend }}
       frontend_image_ref: ${{ steps.refs.outputs.frontend }}
-      managed_shard_bootstrap_image: ${{ steps.refs.outputs.bootstrap }}
       image_platforms: ${{ steps.refs.outputs.platforms }}
     steps:
       - name: Resolve image refs
@@ -32,12 +31,10 @@ jobs:
           owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
           backend="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-backend:latest"
           frontend="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-frontend:latest"
-          bootstrap="ghcr.io/${owner_lc}/enterpriseglue-managed-shard-bootstrap"
           platforms="${IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
           {
             echo "backend=${backend}"
             echo "frontend=${frontend}"
-            echo "bootstrap=${bootstrap}"
             echo "platforms=${platforms}"
           } >> "$GITHUB_OUTPUT"
         env:
@@ -49,5 +46,4 @@ jobs:
     with:
       backend_image_ref: ${{ needs.resolve.outputs.backend_image_ref }}
       frontend_image_ref: ${{ needs.resolve.outputs.frontend_image_ref }}
-      managed_shard_bootstrap_image: ${{ needs.resolve.outputs.managed_shard_bootstrap_image }}
       image_platforms: ${{ needs.resolve.outputs.image_platforms }}

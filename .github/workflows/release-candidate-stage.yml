@@ -646,6 +646,11 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
+      - name: Qualify pristine bootstrap and fail-closed drift on real PostgreSQL
+        env:
+          EG_MANAGED_SHARD_BOOTSTRAP_IMAGE: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap@${{ steps.build.outputs.digest }}
+        run: bash scripts/run-managed-shard-bootstrap-postgres.sh
+
       - name: Scan exact bootstrap image digest
         env:
           BOOTSTRAP_REF: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap@${{ steps.build.outputs.digest }}
@@ -657,11 +662,6 @@ jobs:
           "$TRIVY_IMAGE" image --quiet --exit-code 1
           --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN
           --ignorefile /workspace/.trivyignore "$BOOTSTRAP_REF"
-
-      - name: Qualify pristine bootstrap and fail-closed drift on real PostgreSQL
-        env:
-          EG_MANAGED_SHARD_BOOTSTRAP_IMAGE: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap@${{ steps.build.outputs.digest }}
-        run: bash scripts/run-managed-shard-bootstrap-postgres.sh
 
   qualify-application-images:
     name: Qualify exact candidate images
@@ -695,23 +695,6 @@ jobs:
           set -euo pipefail
           [[ "$(oras resolve '${{ needs.stage-application-images.outputs.backend_image }}:${{ needs.stage-application-images.outputs.image_tag }}')" == "${{ needs.stage-application-images.outputs.backend_digest }}" ]]
           [[ "$(oras resolve '${{ needs.stage-application-images.outputs.frontend_image }}:${{ needs.stage-application-images.outputs.image_tag }}')" == "${{ needs.stage-application-images.outputs.frontend_digest }}" ]]
-
-      - name: Scan exact candidate image digests
-        shell: bash
-        env:
-          BACKEND_REF: ${{ needs.stage-application-images.outputs.backend_image }}@${{ needs.stage-application-images.outputs.backend_digest }}
-          FRONTEND_REF: ${{ needs.stage-application-images.outputs.frontend_image }}@${{ needs.stage-application-images.outputs.frontend_digest }}
-          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
-        run: |
-          set -euo pipefail
-          for subject in "$BACKEND_REF" "$FRONTEND_REF"; do
-            docker run --rm \
-              --volume "$HOME/.docker:/root/.docker:ro" \
-              --volume "$GITHUB_WORKSPACE/.trivyignore:/workspace/.trivyignore:ro" \
-              "$TRIVY_IMAGE" image --quiet --exit-code 1 \
-              --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN \
-              --ignorefile /workspace/.trivyignore "$subject"
-          done
 
       - name: Prepare isolated candidate deployment inputs
         shell: bash
@@ -799,6 +782,23 @@ jobs:
           path: test/results/
           if-no-files-found: warn
           retention-days: 90
+
+      - name: Scan exact candidate image digests
+        shell: bash
+        env:
+          BACKEND_REF: ${{ needs.stage-application-images.outputs.backend_image }}@${{ needs.stage-application-images.outputs.backend_digest }}
+          FRONTEND_REF: ${{ needs.stage-application-images.outputs.frontend_image }}@${{ needs.stage-application-images.outputs.frontend_digest }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+        run: |
+          set -euo pipefail
+          for subject in "$BACKEND_REF" "$FRONTEND_REF"; do
+            docker run --rm \
+              --volume "$HOME/.docker:/root/.docker:ro" \
+              --volume "$GITHUB_WORKSPACE/.trivyignore:/workspace/.trivyignore:ro" \
+              "$TRIVY_IMAGE" image --quiet --exit-code 1 \
+              --severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN \
+              --ignorefile /workspace/.trivyignore "$subject"
+          done
 
   stage-toolchain:
     name: Stage packages, plugin images, and charts
