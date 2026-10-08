@@ -13,5 +13,15 @@ Codex adaptation:
   Exclude retired repositories unless the user explicitly requests a read-only
   historical assessment; never update or publish from that assessment.
 - Check whether Trivy is installed before scanning.
-- Ask what to scan if the user did not specify backend, frontend, both images, or filesystem.
-- Report HIGH and CRITICAL findings separately and do not suppress findings unless the user asks for `--ignore-unfixed`.
+- Resolve the requested artifact composition before scanning. Release checks
+  include backend, frontend and managed-shard bootstrap when present, including
+  pinned predecessor dependencies. A filesystem audit is early feedback, not
+  image acceptance. Record exact subjects, platform, scanner and scan time;
+  mutable tags and yesterday's vulnerability database are not fresh acceptance.
+- Check known dependency and pinned-base risks before expensive qualification.
+  Exact built-image scans still gate candidate acceptance, before functional
+  image/browser qualification; do not replace them with advisory prechecks.
+- Report findings by severity. Keep the candidate's committed scanner,
+  severity and ignore policy unchanged. Never use `--ignore-unfixed`, add an
+  exception or lower severity to make acceptance pass. A user-requested filtered
+  diagnostic is incomplete evidence, not a release qualification.

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "delivery-security-preflight",
+  "type": "internal",
+  "scope": "delivery",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Align development workflows with delivery preflight, bounded diagnosis and exact delivery evidence.",
+  "userImpact": [],
+  "upgrade": {"required": false, "instructions": []},
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["No database schema or bootstrap inventory changes."]},
+  "security": ["Workflow instructions require exact-composition security preflight and preserve candidate scanner, ignore policy, severity thresholds and incident privacy boundaries."],
+  "documentation": ["docs/development/codex-workflow-plugin.md"],
+  "knownLimitations": ["Early checks do not establish terminal external effects, release publication, deployment or live signup success."],
+  "rollback": ["Revert this instruction change and reinstall the prior workflow plugin; no staging state rollback is required."],
+  "validation": ["Repository plugin contracts: 11 passed; all 25 official skill validators passed. Separate official plugin validator is unavailable locally.", "Documentation boundary and package-version discipline passed; no CI pipeline, application, live scan or release candidate qualification changes are included."],
+  "packages": []
+}

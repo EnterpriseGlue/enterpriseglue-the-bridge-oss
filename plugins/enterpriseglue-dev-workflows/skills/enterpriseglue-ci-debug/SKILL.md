@@ -25,6 +25,13 @@ description: Use when the user says /ci-debug, debug CI, investigate a failed Gi
 6. Reproduce the smallest relevant command locally, implement only an
    authorized fix, and rerun proportionately. Do not rerun expensive suites
    while a deterministic preflight or contract failure remains.
+   Before another diagnostic, identify the decision it can change and a bounded
+   stopping condition. If available evidence cannot distinguish the remaining
+   causes, report the missing evidence or approval rather than adding another
+   speculative probe or incident-specific PR. Retry a transient failure only
+   with evidence that retry is useful and within scope; never offer to ship a
+   known required-check failure. Incident privacy restrictions take precedence
+   over generic log-inspection advice.
 7. Report root cause, evidence, fix, local verification, remaining jobs, and
    whether a rerun was requested or performed. For duration investigations,
    separate queue, execution, wall-clock critical path, and runner minutes;
