@@ -42,6 +42,9 @@ RUN rm -rf /app/dist/node_modules /app/dist/backend/node_modules \
 COPY --from=dependencies --chown=65532:65532 /repo/node_modules /app/dist/node_modules
 COPY --from=dependencies --chown=65532:65532 /repo/backend/node_modules /app/dist/backend/node_modules
 COPY --from=dependencies --chown=65532:65532 /repo/packages/backend-host/node_modules /app/dist/packages/backend-host/node_modules
+# Match application assembly: frozen shared server modules need their optional
+# peers from the backend host's production dependency links.
+COPY --from=dependencies --chown=65532:65532 /repo/packages/backend-host/node_modules /app/dist/packages/shared/node_modules
 COPY --from=dependencies --chown=65532:65532 /repo/packages/shared/node_modules /app/dist/packages/shared/node_modules
 COPY --from=dependencies --chown=65532:65532 /repo/packages/plugin-sdk/node_modules /app/dist/packages/plugin-sdk/node_modules
 COPY --from=dependencies --chown=65532:65532 /repo/packages/plugin-runtime/node_modules /app/dist/packages/plugin-runtime/node_modules

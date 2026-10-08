@@ -135,6 +135,10 @@ COPY backend/package.json ./package.json
 COPY --from=deps /repo/node_modules ./dist/node_modules
 COPY --from=deps /repo/backend/node_modules ./dist/backend/node_modules
 COPY --from=deps /repo/packages/backend-host/node_modules ./dist/packages/backend-host/node_modules
+# Workspace-linked shared modules resolve optional server peers from their own
+# directory. Provide the backend host's production links at that same depth;
+# published consumers use their package manager's peer-resolution capsule.
+COPY --from=deps /repo/packages/backend-host/node_modules ./dist/packages/shared/node_modules
 COPY --from=deps /repo/packages/shared/node_modules ./dist/packages/shared/node_modules
 
 COPY --from=build /repo/backend/dist ./dist

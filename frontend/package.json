@@ -21,6 +21,7 @@
     "@carbon/icons-react": "^11.76.0",
     "@carbon/react": "^1.102.0",
     "@carbon/styles": "^1.101.0",
+    "@enterpriseglue/frontend-host": "workspace:*",
     "@tanstack/react-query": "^5.102.0",
     "@tanstack/react-table": "^8.21.3",
     "bpmn-js-bpmnlint": "^0.24.0",
@@ -49,7 +50,6 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@enterpriseglue/frontend-host": "workspace:*",
     "@enterpriseglue/shared": "workspace:*",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.3",

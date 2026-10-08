@@ -40,7 +40,7 @@
     "guard:published-package-runtime": "pnpm --filter shared run build && pnpm --filter backend-host run build && node scripts/check-published-host-package.mjs",
     "test:ci-change-detection": "node --test scripts/ci-change-classifier.test.mjs scripts/ci-change-detection.test.mjs scripts/ci-observability.test.mjs scripts/pr-release-label-workflows.test.mjs scripts/release-canary-workflow.test.mjs scripts/security-workflow-contract.test.mjs scripts/enforce-security-severity-gate.test.mjs scripts/verify-oci-image-metadata.test.mjs",
     "test:release-notes": "node --test scripts/dedupe-release-changelog.test.mjs scripts/release-notes.test.mjs scripts/release-notes-preflight.test.mjs",
-    "test:ci-contracts": "node --test scripts/ci-action-runtime.test.mjs scripts/check-ci-aggregate-contract.test.mjs scripts/ci-change-classifier.test.mjs scripts/ci-change-detection.test.mjs scripts/ci-observability.test.mjs scripts/dependency-security-overrides.test.mjs scripts/engine-compatibility-workflow.test.mjs scripts/evaluate-ci-needs.test.mjs scripts/published-package-workflow.test.mjs scripts/release-canary-workflow.test.mjs scripts/release-readiness.test.mjs scripts/release-candidate-receipt.test.mjs scripts/release-candidate-workflow.test.mjs scripts/verify-host-package-tarballs.test.mjs && node scripts/check-ci-aggregate-contract.mjs",
+    "test:ci-contracts": "node --test scripts/ci-action-runtime.test.mjs scripts/check-ci-aggregate-contract.test.mjs scripts/ci-change-classifier.test.mjs scripts/ci-change-detection.test.mjs scripts/ci-observability.test.mjs scripts/dependency-security-overrides.test.mjs scripts/frontend-dependency-boundary.test.mjs scripts/engine-compatibility-workflow.test.mjs scripts/evaluate-ci-needs.test.mjs scripts/published-package-workflow.test.mjs scripts/release-canary-workflow.test.mjs scripts/release-readiness.test.mjs scripts/release-candidate-receipt.test.mjs scripts/release-candidate-workflow.test.mjs scripts/verify-host-package-tarballs.test.mjs && node scripts/check-ci-aggregate-contract.mjs",
     "test:tenant-ownership-inventory": "node --test scripts/cloud-readiness-ownership-inventory.test.mjs",
     "guard:tenant-ownership-inventory": "node scripts/cloud-readiness-ownership-inventory.mjs --check",
     "release-notes:preflight": "node scripts/run-release-notes-preflight.mjs",
@@ -249,6 +249,7 @@
     "test:release-readiness": "bash ./scripts/check-release-candidate-readiness.sh",
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger",
+    "test:frontend-consumer-install": "node scripts/test-frontend-consumer-install.mjs",
     "test:compiled-migration-upgrades": "pnpm --dir backend run build:skip-generate && node scripts/test-compiled-migration-upgrades.mjs"
   },
   "dependencies": {
@@ -267,59 +268,5 @@
     "mysql2": "^3.14.0",
     "pg": "^8.11.3",
     "typescript-eslint": "^8.65.0"
-  },
-  "overrides": {
-    "@types/express": "5.0.6",
-    "react-split-pane": {
-      "react": "^19.2.4",
-      "react-dom": "^19.2.4"
-    },
-    "dompurify": "^3.4.12",
-    "immutable": "5.1.9",
-    "body-parser": "^2.3.0",
-    "postcss": "^8.5.26",
-    "esbuild": "^0.28.1",
-    "fast-uri": "^3.1.8",
-    "form-data": "^4.0.6",
-    "@babel/core": "^7.29.6",
-    "cookie": "^0.7.0",
-    "lodash": "^4.18.0",
-    "lodash-es": "4.18.0",
-    "minimatch": "^10.2.4",
-    "cross-spawn": "^7.0.6",
-    "tar": "^7.5.8",
-    "brace-expansion@2": "^2.1.7",
-    "brace-expansion@5": "^5.0.12",
-    "@grpc/grpc-js": "^1.14.5",
-    "ip-address": "^10.7.1",
-    "morgan": "^1.12.1",
-    "nodemailer": "10.0.16",
-    "proxy-addr": "^2.0.8",
-    "source-map-js": "^1.2.2",
-    "tedious@20.0.0>sprintf-js": "-",
-    "undici": "^7.29.1",
-    "diff": "^5.2.2",
-    "fast-xml-parser": "^5.3.6",
-    "path-to-regexp@8": "^8.4.0",
-    "picomatch@2": "^2.3.2",
-    "picomatch@4": "^4.0.4",
-    "yaml@1": "^1.10.3",
-    "yaml@2": "^2.8.3",
-    "qs": "^6.16.0",
-    "underscore": "^1.13.8",
-    "@tootallnate/once": "^3.0.1",
-    "@xmldom/xmldom": "^0.8.13",
-    "@azure/msal-node": {
-      "uuid": "^14.0.0"
-    },
-    "gaxios@6": {
-      "uuid": "^11.1.1"
-    },
-    "typeorm": {
-      "uuid": "^14.0.0"
-    },
-    "preact": "10.28.2",
-    "ids": "^3.0.0",
-    "svix": "^1.92.2"
   }
 }
