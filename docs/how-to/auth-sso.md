@@ -321,11 +321,87 @@ whether a provider row is portal- or configuration-managed.
 | Setting | Value | Logged-out behavior |
 | --- | --- | --- |
 | Local password | `auto` | Show ordinary local credentials only when no direct provider is enabled. This preserves standalone installs and hides them after SSO is introduced. |
-| Local password | `enabled` | Show local credentials alongside organization methods. Use only for a deliberate transition period. |
+| Local password | `enabled` | Show local credentials alongside organization methods. Supports an ongoing mixed-login policy or a transition period. |
 | Local password | `disabled` | Never accept ordinary local password login. Administrator recovery remains separate. |
 | Provider selection | `auto_redirect_single` | Redirect only when local password is unavailable and exactly one redirect-capable provider is enabled. LDAP never auto-redirects. |
 | Provider selection | `chooser` | Show all enabled methods in preferred/display order. |
 | Provider selection | `progressive` | Ask for a work email, match only its domain to provider metadata, then redirect or narrow the chooser. The response never reveals whether an account exists. |
+
+The portal labels for local password mode are **Automatic** (`auto`),
+**Always available** (`enabled`), and **SSO only** (`disabled`). For provider
+selection they are **Automatic redirect**, **Provider chooser**, and
+**Work email first**. When a configuration bundle owns the login section,
+update and apply that bundle rather than editing a read-only portal control.
+
+#### Common login configurations
+
+| Deployment policy | Local password | Provider selection | Provider setup |
+| --- | --- | --- | --- |
+| Local accounts only | `enabled` | `chooser` | No enabled direct SSO provider |
+| Local accounts and Entra SSO | `enabled` | `chooser` | Enable the Entra OIDC provider; show the password form and Microsoft button |
+| Mixed login with email first | `enabled` | `progressive` | Configure provider `loginDomains`; retain the method chooser and local-password alternative |
+| SSO only with a method chooser | `disabled` | `chooser` | Enable at least one direct provider |
+| SSO only with an automatic redirect | `disabled` | `auto_redirect_single` | Enable exactly one redirect-capable provider |
+
+For a self-hosted installation that permits manually provisioned local accounts
+alongside Entra users, set the manifest's `login` block (or `bundle.login` in
+the API envelope) to:
+
+<!-- enterpriseglue-config-schema: ConfigBundleLoginPolicySchema -->
+```json
+{
+  "localPassword": "enabled",
+  "providerSelection": "chooser"
+}
+```
+
+Retain this policy for as long as mixed login is permitted. The `auto` value
+is not a mixed-login default: introducing an enabled direct provider makes
+ordinary password login unavailable. Enabling passwords also prevents a
+single-provider automatic redirect from removing the user's choice.
+
+#### Local account creation and access
+
+Login policy does not create accounts, enable public registration, or assign
+roles. For a local user, an authorized operator uses **Admin → Users** to
+create the pending account and deliver an invitation; the person completes
+onboarding and establishes their local password. Manual invitation delivery
+is available when email delivery is unavailable. A configuration bundle does
+not create arbitrary user passwords. An SSO- or SCIM-created account has no
+local password merely because the password form is visible.
+
+Assign platform and engine permissions separately. Login policy does not
+change `engineMembershipAuthority` or `projectMembershipAuthority`:
+`manual` and `transition_to_sso` allow authorized manual scoped-access
+changes; `sso_managed` disables those mutations while preserving existing
+grants. Configuration-owned records still follow their bundle ownership.
+A reviewed bundle can grant a role to an existing user ID at an exact engine
+scope. See [the common local configuration pattern](./common-configuration-use-case.md#45-give-local-users-platform-and-engine-access).
+
+#### One account with local credentials and SSO
+
+Separate local and SSO user populations need no account linking. If one person
+must use both methods on the same account, establish the local credential and
+use an approved linking path. For `single` mode, a provider's explicit
+`allowVerifiedEmailLinking=true` opt-in permits a fresh verified provider
+sign-in to link a new subject to an existing active account with the same
+email. A false/missing setting rejects that collision. A linked local account
+keeps its password; ordinary password login still depends on login policy.
+For tenant-scoped OIDC providers offered by **My Profile → Sign-in methods**,
+the authenticated Connect flow supplies separate account-control evidence.
+It is not offered for a platform-scoped provider in `single` mode. See
+[existing-account linking](../concepts/authentication-and-authoritative-provisioning.md#existing-account-linking)
+for scope and conflict rules.
+
+Local password sessions have no verified MFA, including when the account is
+linked to Entra. Entra's MFA policy applies when authenticating through Entra;
+an EnterpriseGlue `requireMfa` action must deny a local-password session.
+To require Entra MFA for every ordinary login, disable ordinary local passwords
+and keep restricted administrator recovery separate. Existing account grants
+can be used after either permitted login method, subject to authorization
+policies; password login does not refresh Entra memberships. Removing an Entra
+assignment does not revoke independent local credentials or manual grants.
+Use account deactivation and session revocation for complete local offboarding.
 
 With zero providers, `localPassword: auto` keeps the standalone form
 available. With one provider, EnterpriseGlue can use a single primary action
@@ -469,6 +545,10 @@ This example grants a mapped upstream `enterpriseglue-operators` group a
 minimal platform role. Replace that role assignment with your scoped engine,
 Engine Set, runtime-resource, or project assignments as appropriate; the SSO
 mapping itself stays platform-wide.
+
+This example uses SSO-only, work-email-first login. For an integrated local
+deployment with mixed login, SSO administrator access, and exact engine grants,
+use [Local SSO, Administrator, and Engine Configuration](./common-configuration-use-case.md).
 
 `bundle.json`:
 
