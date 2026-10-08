@@ -147,6 +147,27 @@ describe('published machine-readable JSON examples', () => {
     });
   }
 
+  it('compiles the optional local-user engine grant with the complete configuration pattern', async () => {
+    const markdown = readFileSync(resolve(repoRoot, 'docs/how-to/common-configuration-use-case.md'), 'utf8');
+    const examples = [...markdown.matchAll(taggedJsonBlock)].map(([, schemaName, source]) => ({
+      schemaName, value: JSON.parse(source),
+    }));
+    const envelope = ConfigBundleRequestSchema.parse(
+      examples.find((example) => example.schemaName === 'ConfigBundleRequestSchema')?.value,
+    );
+    const localGrant = ConfigAssignmentSchema.parse(examples.find((example) => (
+      example.schemaName === 'ConfigAssignmentSchema' && example.value.principal?.type === 'user'
+    ))?.value);
+    const assignments = ConfigAssignmentsFileSchema.parse(envelope.files['./assignments.json']);
+    envelope.files['./assignments.json'] = { assignments: [...assignments.assignments, localGrant] };
+
+    const { configBundlePreviewService } = await import(
+      '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js'
+    );
+    const compilation = configBundlePreviewService.compile(envelope);
+    expect(compilation.preview.valid, JSON.stringify(compilation.preview.errors, null, 2)).toBe(true);
+  });
+
   it('keeps the complete headless governance and engine envelope executable', () => {
     const examplePath = resolve(repoRoot, 'docs/reference/access-governance-headless.example.json');
     const envelope = JSON.parse(readFileSync(examplePath, 'utf8')) as {

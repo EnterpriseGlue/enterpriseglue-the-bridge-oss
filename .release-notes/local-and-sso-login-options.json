@@ -1,0 +1,38 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "local-and-sso-login-options",
+  "type": "docs",
+  "scope": "self-hosted-authentication",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Clarifies local password, Entra SSO, and mixed login configuration for self-hosted installations.",
+  "userImpact": [
+    "Operators can choose password-only, SSO-only, or mixed login and distinguish sign-in policy from account provisioning and engine access."
+  ],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [
+    "Documents existing login and membership-authority options, including persistent mixed login; adds no runtime setting."
+  ],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "Explains that local password sessions do not inherit Entra MFA and that existing-account linking requires explicit policy and verified provider evidence."
+  ],
+  "documentation": [
+    "docs/how-to/auth-sso.md",
+    "docs/how-to/common-configuration-use-case.md",
+    "docs/concepts/authentication-and-authoritative-provisioning.md"
+  ],
+  "knownLimitations": [
+    "Documentation checks do not replace sign-in and access qualification against the installed release and actual Entra tenant."
+  ],
+  "rollback": ["Revert the documentation change; no application or database rollback is required."],
+  "validation": [
+    "Documented settings were reviewed against canonical schemas, login-policy resolution, provisioning/linking services, and portal controls.",
+    "The documentation-contract gate validates schema-tagged JSON and compiles the optional local-user engine grant with the complete configuration pattern.",
+    "The documentation-boundary and release-note preflight gates validate the published operator change.",
+    "All three previously rendered Mermaid sequences are unchanged."
+  ],
+  "packages": []
+}

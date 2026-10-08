@@ -40,8 +40,8 @@ profile and lifecycle fields after the authentication source changes.
 Email alone is never sufficient to link an existing account.
 
 For interactive OIDC, a signed-in tenant user can connect another configured
-provider from **My Profile → Sign-in methods**. EnterpriseGlue keeps the current
-session active while it performs a fresh authorization-code exchange, and the
+provider offered in **My Profile → Sign-in methods**. EnterpriseGlue keeps the
+current session active while it performs a fresh authorization-code exchange, and the
 signed state binds the operation to that user, tenant, provider, exact session
 ID and version, browser state cookie, PKCE verifier, and ten-minute expiry. The
 provider email must match the current account as an additional guard, but the
@@ -49,11 +49,30 @@ existing authenticated session—not that mutable email claim—is the
 account-control evidence. A subject already linked to another account or
 explicitly unlinked by an administrator remains blocked.
 
-An ordinary logged-out OIDC callback never performs this merge. When its
-verified subject is new but its email belongs to an existing pooled account,
+In `pooled` mode, an ordinary logged-out OIDC callback never performs this merge.
+When its verified subject is new but its email belongs to an existing pooled account,
 the login page directs the person to authenticate with an existing method and
 connect the provider from their profile. This avoids both unsafe email-only
 linking and a generic server-error response.
+
+In a self-hosted `single`-organization installation, the provider can explicitly
+opt in to verified-email linking with `allowVerifiedEmailLinking=true`.
+EnterpriseGlue then accepts a new provider subject for an existing active
+account only after a fresh provider sign-in supplies accepted email-verification
+evidence and the matching account email. A false or missing setting rejects
+the collision. The existing local password is preserved, so the person can use
+both methods while ordinary local passwords remain enabled. It does not create
+a password for an SSO-only account or transfer an already bound subject.
+Platform-scoped providers in `single` mode are not offered in the authenticated
+profile Connect flow; the single-organization opt-in is a distinct linking path.
+
+Account creation, linking, login policy, and authorization are separate.
+`login.localPassword=enabled` allows existing local credentials alongside SSO;
+it does not provision users or grant platform/engine roles. Account grants are
+shared across permitted login methods, but a local password session does not
+inherit Entra MFA or fetch new Entra claims. See
+[the common configuration pattern](../how-to/common-configuration-use-case.md#31-choose-how-people-sign-in)
+for local-only, SSO-only, and mixed login choices.
 
 EnterpriseGlue can reuse an existing account during SCIM creation only when:
 
