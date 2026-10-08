@@ -961,6 +961,17 @@
   white-space: normal;
 }
 
+.eg-login-provider-button--email {
+  text-decoration: none;
+}
+
+.eg-login-email-description {
+  margin: var(--spacing-3) 0 0;
+  color: var(--cds-text-secondary);
+  font-size: var(--cds-body-compact-01-font-size, 0.875rem);
+  line-height: var(--cds-body-compact-01-line-height, 1.28572);
+}
+
 .eg-login-provider-button:not(.cds--btn) {
   display: flex;
   align-items: center;
