@@ -21,7 +21,8 @@
     ]
   },
   "configuration": [
-    "Contributor setup documents environment bootstrapping, host database prerequisites, and the current CI commands."
+    "Contributor setup documents environment bootstrapping, host database prerequisites, and the current CI commands.",
+    "Oracle compiled smoke lets the application bootstrap its pristine disposable database and record the migration ledger; a test-only schema sync no longer creates a latest schema with an empty ledger."
   ],
   "api": {
     "compatibility": "none",
@@ -56,7 +57,8 @@
     "Eight actual shutdown argv cases passed under macOS Bash 3.2 with a recording Docker stub.",
     "CI contracts (166 tests), affected classifier contracts (51 tests), documentation boundary, release-note preflight, and package version guard passed.",
     "The initial Node 24.10.0 broad backend run had two HTTP socket/parser failures. All 94 tests in those files passed focused reproduction; the complete suite subsequently passed under Node 24.18.1.",
-    "Final adapter discovery correction: 48 focused adapter/portability tests passed, and ten isolated compiled adapter probes discover only timestamped migrations. The earlier hosted matrix failed on the helper module constructor and requires fresh exact-head acceptance."
+    "Final adapter discovery correction: 48 focused adapter/portability tests passed, and ten isolated compiled adapter probes discover only timestamped migrations. The earlier hosted matrix failed on the helper module constructor and requires fresh exact-head acceptance.",
+    "Hosted d92b3709 passed the full physical five-adapter portability matrix. Its separate Oracle smoke exposed a current-schema/empty-ledger fixture; the fixture correction requires fresh hosted smoke acceptance."
   ],
   "packages": [
     {

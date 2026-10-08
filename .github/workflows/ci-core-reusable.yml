@@ -305,7 +305,11 @@ jobs:
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
+      # Oracle smoke starts the compiled application. Let
+      # its owned fresh-database bootstrap synchronize and stamp the inventory;
+      # test-only schema sync would leave a current schema with an empty ledger.
       - name: Sync database schema
+        if: matrix.database != 'oracle'
         run: pnpm --filter webmodeler-backend run db:schema:sync
 
       - name: Run unit tests
