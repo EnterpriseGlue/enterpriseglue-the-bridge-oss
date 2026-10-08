@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "release-security-dependency-floors",
+  "type": "security",
+  "scope": "dependencies",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Raise application dependency security floors with approved mail and Git library upgrades.",
+  "userImpact": [
+    "Requires successful image and runtime qualification before publication or deployment; no authentication method changes."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema or signed predecessor bootstrap inventory changes."
+    ]
+  },
+  "security": [
+    "Approved Nodemailer 9 to 10 and simple-git 3 to 4 upgrades, including argv-parser 1 to 2; compatible fixes apply to HTTP transport and parser dependencies.",
+    "Application runtime dependency assembly excludes build/test dependencies while the build stage retains them."
+  ],
+  "documentation": [
+    "docs/runbooks/security-dependency-updates.md"
+  ],
+  "knownLimitations": [
+    "The unresolved braces and sprintf-js advisories and frozen bootstrap dependency tree remain release blockers; this partial dependency update is not image acceptance."
+  ],
+  "rollback": [
+    "Revert the scoped manifest and lockfile change; do not downgrade a serving system without separately qualified rollback evidence."
+  ],
+  "validation": [
+    "Node 24.10.0 and pnpm 11.0.8: six dependency/runtime compatibility checks, twelve email/passkey unit tests and one owned PostgreSQL passkey lifecycle test passed; shared/plugin-runtime/backend production compilation passed.",
+    "License notices, documentation boundary, release-note preflight and package-version discipline passed. Full backend typecheck retains nine pre-existing test-fixture errors, confirmed against the unchanged-dependency baseline.",
+    "Image security, complete runtime/database/browser gates, frozen bootstrap repair and protected qualification remain incomplete; this local change is not ready for publication."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.13",
+      "newVersion": "0.19.14",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.26",
+      "newVersion": "0.17.27",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.9",
+      "newVersion": "0.22.10",
+      "impact": "patch"
+    }
+  ]
+}

@@ -266,7 +266,7 @@
     "publisher": "Dominic Gannaway",
     "email": "dg@domgan.com"
   },
-  "ip-address@10.5.0": {
+  "ip-address@10.7.3": {
     "licenses": "MIT",
     "repository": "https://github.com/beaugunderson/ip-address.git",
     "publisher": "Beau Gunderson",
@@ -292,7 +292,7 @@
     "repository": "https://github.com/lucide-icons/lucide.git",
     "publisher": "Eric Fennis"
   },
-  "morgan@1.12.0": {
+  "morgan@1.12.1": {
     "licenses": "MIT",
     "repository": "expressjs/morgan"
   },
@@ -308,7 +308,7 @@
     "publisher": "Andrey Sidorov",
     "email": "andrey.sidorov@gmail.com"
   },
-  "nodemailer@9.1.1": {
+  "nodemailer@10.0.16": {
     "licenses": "MIT-0",
     "repository": "https://github.com/nodemailer/nodemailer.git",
     "publisher": "Andris Reinman"
@@ -391,7 +391,7 @@
     "repository": "git+https://github.com/npm/node-semver.git",
     "publisher": "GitHub Inc."
   },
-  "simple-git@3.36.0": {
+  "simple-git@4.0.2": {
     "licenses": "MIT",
     "repository": "https://github.com/steveukx/git-js.git",
     "publisher": "Steve King",
@@ -430,7 +430,7 @@
     "repository": "https://github.com/microsoft/TypeScript.git",
     "publisher": "Microsoft Corp."
   },
-  "undici@7.29.0": {
+  "undici@7.30.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/nodejs/undici.git"
   },
