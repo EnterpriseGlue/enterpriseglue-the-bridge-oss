@@ -115,7 +115,7 @@ cd "$SCRIPT_DIR"
 if [[ -f "$ACTIVE_ENV_FILE" ]]; then
   EG_BACKEND_ENV_FILE="$ACTIVE_ENV_FILE" \
   EG_FORCE_DATABASE_TYPE="$DATABASE_TYPE" \
-  exec docker compose --env-file "$ACTIVE_ENV_FILE" "${COMPOSE_ARGS[@]}" down "${FORWARD_ARGS[@]}"
+  exec docker compose --env-file "$ACTIVE_ENV_FILE" "${COMPOSE_ARGS[@]}" down ${FORWARD_ARGS[@]+"${FORWARD_ARGS[@]}"}
 fi
 
-exec docker compose "${COMPOSE_ARGS[@]}" down "${FORWARD_ARGS[@]}"
+exec docker compose "${COMPOSE_ARGS[@]}" down ${FORWARD_ARGS[@]+"${FORWARD_ARGS[@]}"}

@@ -393,6 +393,9 @@ jobs:
         with:
           version: 11.0.8
 
+      - name: Verify shutdown argument forwarding
+        run: node --test scripts/down-shell.test.mjs
+
       - name: Start the stock developer stack with fresh volumes
         shell: bash
         env:
@@ -596,12 +599,17 @@ jobs:
       - name: Build backend
         run: pnpm --filter webmodeler-backend run build:skip-generate
 
+      - name: Verify compiled historical migration upgrades
+        if: matrix.database == 'postgres'
+        run: node scripts/test-compiled-migration-upgrades.mjs
+
       - name: Create PostgreSQL schema
         if: matrix.database == 'postgres'
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
 
       - name: Sync database schema
+        if: matrix.database != 'oracle'
         run: pnpm --filter webmodeler-backend run db:schema:sync
 
       - name: Run unit tests

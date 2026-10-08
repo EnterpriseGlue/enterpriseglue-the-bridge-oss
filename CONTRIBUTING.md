@@ -36,7 +36,7 @@ equivalent `bash ./dev.sh` and `bash ./down.sh` entrypoints instead.
 ### Configure environment
 
 - Docker-first development uses `.local/docker/env/docker.env` (legacy root `.env.docker` is still accepted as fallback).
-- If missing, `dev.sh` can bootstrap it from `infra/docker/env/examples/docker.postgres.env.example`.
+- On first run, `dev.sh` creates it from `infra/docker/env/examples/docker.postgres.env.example`. The development defaults work as-is; edit it only when changing ports, credentials, or other settings.
 - The Docker environment runs PostgreSQL 18 in a container and the backend uses PostgreSQL schemas for different logical databases.
 
 ### Run locally (Docker-first)
@@ -49,6 +49,13 @@ This starts:
 
 - Backend: http://localhost:8787
 - Frontend: http://localhost:5173
+
+The command stays attached to the terminal. The first run can take several
+minutes while images and workspace packages build. Startup is complete when
+the backend reports `Database migrations complete`, its `/ready` endpoint
+returns HTTP 200, and the frontend loads at http://localhost:5173. The frontend
+starts after the backend healthcheck passes. For a bounded readiness check,
+run `pnpm run dev --wait --wait-timeout 900`.
 
 To run PostgreSQL and the backend without the bundled frontend:
 
@@ -70,22 +77,44 @@ Alternative entrypoints:
 
 ### Resetting your local Docker state
 
-If you change the Postgres major version or want to reset your local database
-and its volumes:
+Keep the volume when updating the application: normal startup applies pending
+migrations to the existing database. If startup fails, retain the volume and
+inspect the backend logs before resetting anything. Compiled upgrades crossing
+the credential-idempotency or native-tenancy migrations require the corrected
+backend described in #551.
+
+For a disposable development database, changing the Postgres major version or
+intentionally resetting state requires deleting the volumes. **This deletes
+your local database contents:**
 
 - `pnpm run down -v` (or `bash ./down.sh -v`)
 
 ### Running services outside Docker (advanced)
 
-If you prefer to run the backend/frontend outside Docker:
+The host backend still needs PostgreSQL. To use only the development Compose
+database, run this from the repo root. Create the environment file only if it
+does not already exist:
+
+```bash
+mkdir -p .local/docker/env
+if [ ! -f .local/docker/env/docker.env ]; then
+  cp infra/docker/env/examples/docker.postgres.env.example .local/docker/env/docker.env
+fi
+docker compose --project-directory . --env-file .local/docker/env/docker.env \
+  -f infra/docker/compose/docker-compose.yml up -d db
+```
+
+The host backend and frontend bind ports 8787 and 5173 by default, matching the
+Compose stack. Stop those host processes before starting the full Compose stack.
+Install all workspace dependencies once from the repo root with `pnpm install`.
+
+Then run the backend/frontend outside Docker:
 
 - Backend:
-  - Copy `backend/.env.example` to `backend/.env` and set required values.
-  - `cd backend && pnpm install`
+  - Copy `backend/.env.example` to `backend/.env`. Match `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE`, and `POSTGRES_SCHEMA` to the Docker environment; set `POSTGRES_HOST=localhost` and `POSTGRES_PORT` to `POSTGRES_HOST_PORT` (5432 by default). Generate `JWT_SECRET` and `ENCRYPTION_KEY` using the commands in the example and choose your local `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
   - `cd backend && pnpm run dev`
 - Frontend:
   - Copy `frontend/.env.example` to `frontend/.env` and set required values.
-  - `cd frontend && pnpm install`
   - `cd frontend && pnpm run dev`
 
 Optional: local “production-style” run on the host (advanced):
@@ -100,7 +129,13 @@ Optional: local “production-style” run on the host (advanced):
 
 ### First-time test setup
 
-Before running tests for the first time, you need to set up the test database schema:
+Integration tests require an isolated PostgreSQL test database. The schema-sync
+command below reads the database connection in `backend/.env` (or environment
+variables that override it). Configure it to target a disposable test database,
+not a database with data you need to retain. With Compose, the database is
+reachable through `localhost` and `POSTGRES_HOST_PORT` (5432 by default).
+
+Before running tests for the first time, set up that test database schema:
 
 ```bash
 # From repo root
@@ -130,12 +165,22 @@ Playwright uses `test/e2e/playwright.config.ts` as the canonical E2E config path
 
 ## Running checks
 
-This repo relies on TypeScript and build-time checks.
+Run the workspace commands used by CI from the repo root:
 
-- Backend typecheck (no emit):
-  - `cd backend && npx tsc --noEmit`
-- Frontend build (includes typecheck):
-  - `cd frontend && pnpm run build`
+```bash
+pnpm run typecheck
+pnpm run lint
+pnpm run release-notes:preflight -- --base-ref origin/main
+```
+
+Typecheck covers the backend, frontend, and frontend host. Lint covers backend,
+frontend, packages, scripts, and tests and rejects warnings. The release-note
+preflight validates the release baseline, fragments, package versions, and path
+coverage and writes `.artifacts/release-notes-preview.md` for review.
+
+`pnpm --dir frontend run build` is an additional frontend bundle check. Database,
+browser, security, and image acceptance are separate CI lanes; these checks do
+not replace them.
 
 Optional API smoke checks (requires a running backend and valid credentials):
 
@@ -155,7 +200,8 @@ Optional API smoke checks (requires a running backend and valid credentials):
 - Include steps to validate (what you ran locally).
 - UI changes should include screenshots.
 - Add a structured `.release-notes/*.json` fragment for release-impacting
-  changes and run the release-note validation and preview commands.
+  changes and run `pnpm run release-notes:validate` and
+  `pnpm run release-notes:preview`, or the combined preflight above.
 - Use `release-note:none` only for internal changes, with a concrete
   `Release-note exemption:` reason in the PR body.
 - Follow the [documentation publication policy](docs/development/documentation-publication-policy.md):

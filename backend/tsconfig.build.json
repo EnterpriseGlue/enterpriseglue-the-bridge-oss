@@ -18,6 +18,6 @@
       "@enterpriseglue/enterprise-plugin-api/frontend": ["../packages/enterprise-plugin-api/src/frontend.d.ts"],
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "../packages/backend-host/src/**/*.ts", "../packages/shared/src/types/**/*.d.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "../packages/backend-host/src/**/*.ts", "../packages/shared/src/types/**/*.d.ts", "../packages/shared/src/db/migrations/**/*.ts"],
   "exclude": ["test", "__tests__", "node_modules"]
 }

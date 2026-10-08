@@ -303,3 +303,34 @@ test('tenant activation and lifecycle service changes trigger the physical datab
     assert.equal(classifyChangedFiles([path]).run_database_matrix, true);
   }
 });
+
+
+test('shutdown regressions select the developer lifecycle without unrelated database acceptance', () => {
+  for (const path of ['down.sh', 'scripts/down-shell.test.mjs']) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.run_dev_startup, true);
+    assert.equal(result.unknown_high_risk, false);
+    assert.equal(result.run_database_matrix, false);
+  }
+  const docs = classifyChangedFiles(['CONTRIBUTING.md']);
+  assert.equal(docs.run_dev_startup, false);
+  assert.equal(docs.run_database_matrix, false);
+});
+
+test('compiled migration regression selects physical database acceptance and is run after the backend build', () => {
+  const result = classifyChangedFiles(['scripts/test-compiled-migration-upgrades.mjs']);
+  assert.equal(result.persistence, true);
+  assert.equal(result.run_database_matrix, true);
+  assert.equal(result.unknown_high_risk, false);
+  assert.match(readFileSync(new URL("../.github/workflows/ci-core-reusable.yml", import.meta.url), "utf8"), /Verify compiled historical migration upgrades/);
+});
+
+
+test('compiled Oracle smoke owns its fresh bootstrap rather than receiving a synchronized schema with an empty ledger', () => {
+  for (const workflow of ['ci.yml', 'ci-core-reusable.yml']) {
+    const source = readFileSync(new URL(`../.github/workflows/${workflow}`, import.meta.url), 'utf8');
+    assert.match(source, /name: Sync database schema\s+if: matrix\.database != 'oracle'/);
+    assert.match(source, /name: Run Oracle backend smoke[\s\S]*?run: \|[\s\S]*?start:compiled/);
+    assert.match(source, /name: Verify compiled historical migration upgrades[\s\S]*?node scripts\/test-compiled-migration-upgrades\.mjs/);
+  }
+});
