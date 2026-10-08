@@ -166,7 +166,7 @@ export default function PublicAuthShell({
   description,
   homePath = '/',
   panelSize = 'default',
-  appearance = 'default',
+  appearance = 'process',
   children,
 }: PublicAuthShellProps) {
   const branding = usePublicAuthBranding();
