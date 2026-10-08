@@ -100,6 +100,7 @@ const deploymentEvidencePatterns = [
 
 const classifiers = {
   frontend: [
+    /^scripts\/browser-evidence-screenshot\.test\.mjs$/,
     /^frontend\/(?!Dockerfile)/,
     /^packages\/frontend-host\//,
     /^packages\/(?:shared|enterprise-plugin-api|plugin-manager)\//,
@@ -139,6 +140,8 @@ const classifiers = {
     /^scripts\/(?:run-operaton|write-operaton|run-camunda-native|write-camunda-native)/,
   ],
   authorization: [
+    /^test\/e2e\/utils\/evidence-screenshot\.ts$/,
+    /^scripts\/browser-evidence-screenshot\.test\.mjs$/,
     /^packages\/(?:backend-host|frontend-host|shared)\/src\/.*(?:auth|permission|tenan|identity|sso|group|role)/i,
     /^backend\/(?:__tests__|test)\/.*(?:auth|permission|tenan|identity|sso|group|role)/i,
     /^frontend\/__tests__\/.*(?:auth|permission|tenan|identity|sso|group|role)/i,

@@ -1,5 +1,6 @@
-import { expect, test, type APIResponse, type Page, type TestInfo } from '@playwright/test';
+import { expect, request as apiRequest, test, type APIResponse, type Page, type TestInfo } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import { captureEvidenceScreenshot } from './utils/evidence-screenshot';
 import {
   getE2ECredentials,
   getE2ESeedData,
@@ -92,14 +93,14 @@ async function classificationReport(page: Page): Promise<ClassificationReport> {
   );
 }
 
-async function csrfToken(page: Page): Promise<string> {
+async function csrfToken(page: Pick<Page, 'request'>): Promise<string> {
   const response = await page.request.get('/api/csrf-token');
   const body = await responseJson<{ csrfToken: string }>(response, 'obtain CSRF token');
   expect(body.csrfToken).toBeTruthy();
   return body.csrfToken;
 }
 
-async function mutationOptions(page: Page, data?: unknown) {
+async function mutationOptions(page: Pick<Page, 'request'>, data?: unknown) {
   const token = await csrfToken(page);
   return {
     headers: { 'X-CSRF-Token': token },
@@ -197,6 +198,13 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
     let mappedDiagnostics: Record<string, unknown> | null = null;
     let finalReport: ClassificationReport | null = null;
     let metrics = '';
+    const cleanupContext = await apiRequest.newContext({
+      baseURL: baseUrl,
+      storageState: await page.context().storageState(),
+      ignoreHTTPSErrors: Boolean(testInfo.project.use.ignoreHTTPSErrors),
+      timeout: 5000,
+    });
+    let primaryError: unknown;
 
     try {
       const unsafeShared = await page.request.post('/engines-api/engines', {
@@ -393,21 +401,42 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       });
 
       const screenshotPath = testInfo.outputPath('engine-tenancy-dashboard.png');
-      await page.screenshot({ path: screenshotPath, fullPage: true });
+      await captureEvidenceScreenshot(page, screenshotPath);
       await testInfo.attach('engine-tenancy-dashboard.png', {
         path: screenshotPath,
         contentType: 'image/png',
       });
+    } catch (error) {
+      primaryError = error;
+      throw error;
     } finally {
+      const cleanupErrors: Error[] = [];
       for (const engineId of createdEngineIds.reverse()) {
-        const response = await page.request.delete(
-          `/engines-api/engines/${encodeURIComponent(engineId)}`,
-          await mutationOptions(page),
-        );
-        expect(
-          [204, 404],
-          `cleanup engine ${engineId} failed (${response.status()}): ${await response.text()}`,
-        ).toContain(response.status());
+        try {
+          const response = await cleanupContext.delete(
+            `/engines-api/engines/${encodeURIComponent(engineId)}`,
+            await mutationOptions({ request: cleanupContext }),
+          );
+          expect(
+            [204, 404],
+            `cleanup engine ${engineId} failed (${response.status()}): ${await response.text()}`,
+          ).toContain(response.status());
+        } catch (error) {
+          cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+      await cleanupContext.dispose();
+      if (cleanupErrors.length) {
+        // A failed primary assertion remains the reported cause. Cleanup still
+        // runs after browser teardown and cannot turn a successful test green.
+        if (primaryError) {
+          await testInfo.attach('engine-tenancy-cleanup-errors.txt', {
+            body: cleanupErrors.map(error => error.message).join('\n'),
+            contentType: 'text/plain',
+          });
+        } else {
+          throw new AggregateError(cleanupErrors, 'Engine-tenancy fixture cleanup failed');
+        }
       }
     }
   });
