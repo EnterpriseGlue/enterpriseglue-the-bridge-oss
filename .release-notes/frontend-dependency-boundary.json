@@ -1,0 +1,79 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "frontend-dependency-boundary",
+  "type": "breaking",
+  "scope": "package-dependencies",
+  "breaking": true,
+  "audiences": [
+    "developers",
+    "security",
+    "operators"
+  ],
+  "summary": "Separate browser installation dependencies from optional server peers while retaining shared import paths, and correct frontend runtime dependency declarations.",
+  "userImpact": [
+    "Production frontend dependency audits include the workspace runtime and omit server-only installations."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Direct consumers of shared server modules must provide the declared optional server peers. The backend host declares them as production dependencies. Browser schema, authorization catalog, and contract consumers need no database, mail, or HTTP server dependencies."
+    ]
+  },
+  "configuration": [
+    "pnpm-workspace.yaml is the single override authority; the inactive npm-style root overrides are removed."
+  ],
+  "api": {
+    "compatibility": "breaking",
+    "changes": [
+      "Shared server imports keep their paths and signatures but now require optional peer dependencies supplied by the server consumer."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Database drivers remain production dependencies of the backend host; no schema change."
+    ]
+  },
+  "security": [
+    "DOMPurify floor moves from ^3.4.12 (locked 3.4.14) to ^3.4.16 to address GHSA-p98j-92pf-mc4p.",
+    "Server dependency versions remain on their already approved release lines."
+  ],
+  "documentation": [
+    "Technical package dependency documentation records browser-safe paths and server peer installation requirements."
+  ],
+  "knownLimitations": [
+    "A frontend dependency graph is not a substitute for inspecting the built browser bundle."
+  ],
+  "rollback": [
+    "Restore the previous package versions and lockfile; no database rollback is needed."
+  ],
+  "validation": [
+    "Node 24.10.0 and pnpm 11.0.8: workspace typechecks, backend build, frontend-host build, frontend production bundle and warning-free lint passed.",
+    "Fifteen dependency/security contracts passed; the complete CI contract suite and release/documentation preflights passed.",
+    "A standalone pnpm production install of five packed browser packages contained 313 package names and no database, mail, HTTP-server, or identity-provider peers. Packed browser schema and permission catalog imports succeeded.",
+    "The workspace frontend production dependency probe has no nodemailer, typeorm or mssql path; there are no peer dependency issues.",
+    "DOMPurify is locked above the GHSA-p98j-92pf-mc4p patched floor."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.14",
+      "newVersion": "0.19.15",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.27",
+      "newVersion": "0.17.28",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.10",
+      "newVersion": "0.23.0",
+      "impact": "minor"
+    }
+  ]
+}

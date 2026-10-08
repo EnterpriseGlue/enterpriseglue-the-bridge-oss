@@ -10,7 +10,7 @@ overrides:
   brace-expansion@2: ^2.1.7
   brace-expansion@5: ^5.0.12
   '@grpc/grpc-js': ^1.14.5
-  dompurify: ^3.4.12
+  dompurify: ^3.4.16
   immutable: 5.1.9
   gaxios@6>uuid: ^11.1.1
   esbuild: ^0.28.1
@@ -274,6 +274,9 @@ importers:
       '@carbon/styles':
         specifier: ^1.101.0
         version: 1.106.0(sass@1.103.1)
+      '@enterpriseglue/frontend-host':
+        specifier: workspace:*
+        version: link:../packages/frontend-host
       '@tanstack/react-query':
         specifier: ^5.102.0
         version: 5.102.0(react@19.2.6)
@@ -353,9 +356,6 @@ importers:
         specifier: ^5.0.8
         version: 5.0.15(@types/react@19.2.18)(react@19.2.6)
     devDependencies:
-      '@enterpriseglue/frontend-host':
-        specifier: workspace:*
-        version: link:../packages/frontend-host
       '@enterpriseglue/shared':
         specifier: workspace:*
         version: link:../packages/shared
@@ -404,6 +404,9 @@ importers:
 
   packages/backend-host:
     dependencies:
+      '@azure/msal-node':
+        specifier: ^5.0.6
+        version: 5.6.0
       '@enterpriseglue/enterprise-plugin-api':
         specifier: workspace:*
         version: link:../enterprise-plugin-api
@@ -416,33 +419,93 @@ importers:
       '@enterpriseglue/shared':
         specifier: workspace:*
         version: link:../shared
+      '@gitbeaker/rest':
+        specifier: ^43.8.0
+        version: 43.8.0
+      '@google-cloud/spanner':
+        specifier: ^8.10.0
+        version: 8.11.0
+      '@node-saml/node-saml':
+        specifier: ^5.1.0
+        version: 5.1.0
       '@simplewebauthn/server':
         specifier: 13.3.2
         version: 13.3.2
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
+      azure-devops-node-api:
+        specifier: ^15.1.1
+        version: 15.1.3
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
+      bitbucket:
+        specifier: ^2.12.0
+        version: 2.12.0
+      cookie-parser:
+        specifier: ^1.4.7
+        version: 1.4.7
       cors:
         specifier: ^2.8.5
         version: 2.8.6
       csrf-csrf:
         specifier: ^4.0.3
         version: 4.0.3
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.4.2
+      escape-html:
+        specifier: ^1.0.3
+        version: 1.0.3
       express:
         specifier: ^5.2.1
         version: 5.2.1
+      express-rate-limit:
+        specifier: ^8.2.1
+        version: 8.6.2(express@5.2.1)
+      google-auth-library:
+        specifier: ^10.6.2
+        version: 10.9.1
       helmet:
         specifier: ^8.1.0
         version: 8.3.0
+      ip-address:
+        specifier: ^10.7.1
+        version: 10.7.3
+      jsonwebtoken:
+        specifier: ^9.0.2
+        version: 9.0.3
+      ldapts:
+        specifier: ^9.0.0
+        version: 9.0.0
       morgan:
         specifier: ^1.12.1
         version: 1.12.1
+      mssql:
+        specifier: ^12.7.0
+        version: 12.7.0
+      mysql2:
+        specifier: ^3.14.3
+        version: 3.23.4(@types/node@25.9.5)
+      nodemailer:
+        specifier: 10.0.16
+        version: 10.0.16
+      octokit:
+        specifier: ^5.0.5
+        version: 5.0.5
+      oracledb:
+        specifier: ^6.0.0
+        version: 6.10.0
+      pg:
+        specifier: ^8.11.3
+        version: 8.23.0
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      resend:
+        specifier: ^6.12.2
+        version: 6.22.0
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@5.2.1)
@@ -455,6 +518,9 @@ importers:
       undici:
         specifier: ^7.29.1
         version: 7.30.0
+      uuid:
+        specifier: ^14.0.0
+        version: 14.0.2
       zod:
         specifier: ^4.3.6
         version: 4.4.3
@@ -764,12 +830,16 @@ importers:
       '@asteasolutions/zod-to-openapi':
         specifier: ^8.4.3
         version: 8.5.0(zod@4.4.3)
-      '@azure/msal-node':
-        specifier: ^5.0.6
-        version: 5.6.0
       '@enterpriseglue/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
+      zod:
+        specifier: ^4.3.6
+        version: 4.4.3
+    devDependencies:
+      '@azure/msal-node':
+        specifier: ^5.0.6
+        version: 5.6.0
       '@gitbeaker/rest':
         specifier: ^43.8.0
         version: 43.8.0
@@ -779,6 +849,39 @@ importers:
       '@node-saml/node-saml':
         specifier: ^5.1.0
         version: 5.1.0
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
+      '@types/cookie-parser':
+        specifier: ^1.4.10
+        version: 1.4.10(@types/express@5.0.6)
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@types/express-serve-static-core':
+        specifier: ^5.0.6
+        version: 5.1.3
+      '@types/jsonwebtoken':
+        specifier: ^9.0.6
+        version: 9.0.10
+      '@types/node':
+        specifier: ^25.3.5
+        version: 25.9.5
+      '@types/nodemailer':
+        specifier: ^7.0.11
+        version: 7.0.12
+      '@types/pg':
+        specifier: ^8.11.6
+        version: 8.23.1
+      '@types/qs':
+        specifier: ^6.9.17
+        version: 6.15.1
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
       azure-devops-node-api:
         specifier: ^15.1.1
         version: 15.1.3
@@ -848,52 +951,15 @@ importers:
       typeorm:
         specifier: ^0.3.31
         version: 0.3.31(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
       undici:
         specifier: ^7.29.1
         version: 7.30.0
       uuid:
         specifier: ^14.0.0
         version: 14.0.2
-      zod:
-        specifier: ^4.3.6
-        version: 4.4.3
-    devDependencies:
-      '@types/bcryptjs':
-        specifier: ^2.4.6
-        version: 2.4.6
-      '@types/cookie-parser':
-        specifier: ^1.4.10
-        version: 1.4.10(@types/express@5.0.6)
-      '@types/cors':
-        specifier: ^2.8.17
-        version: 2.8.19
-      '@types/express':
-        specifier: ^5.0.6
-        version: 5.0.6
-      '@types/express-serve-static-core':
-        specifier: ^5.0.6
-        version: 5.1.3
-      '@types/jsonwebtoken':
-        specifier: ^9.0.6
-        version: 9.0.10
-      '@types/node':
-        specifier: ^25.3.5
-        version: 25.9.5
-      '@types/nodemailer':
-        specifier: ^7.0.11
-        version: 7.0.12
-      '@types/pg':
-        specifier: ^8.11.6
-        version: 8.23.1
-      '@types/qs':
-        specifier: ^6.9.17
-        version: 6.15.1
-      '@types/uuid':
-        specifier: ^10.0.0
-        version: 10.0.0
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
 
 packages:
 
@@ -3717,8 +3783,8 @@ packages:
     resolution: {integrity: sha512-bs2yO68JDFOm6rKv8f0EnrM2cENduhRkpqOtt/s5l5JBA/eqGBZCzLPmdYoHtJ6utgLGgcBajFsEQbl12pT0lQ==}
     engines: {node: '>=20'}
 
-  dompurify@3.4.14:
-    resolution: {integrity: sha512-dVoH9z+MY+C9IilgGCk3YfFqjLi3fChm2OiKJMzh6axrJ5qwxqWaZamgmHrpv22CN/KdbZJuGEGgfQoL00LTdg==}
+  dompurify@3.4.16:
+    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
 
   dotenv@16.6.1:
     resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
@@ -6519,7 +6585,7 @@ snapshots:
       d3-cloud: 1.2.9
       d3-sankey: 0.12.3
       date-fns: 4.4.0
-      dompurify: 3.4.14
+      dompurify: 3.4.16
       html-to-image: 1.11.11
       lodash-es: 4.18.1
       topojson-client: 3.1.0
@@ -9478,7 +9544,7 @@ snapshots:
 
   domify@3.0.0: {}
 
-  dompurify@3.4.14:
+  dompurify@3.4.16:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -10278,7 +10344,7 @@ snapshots:
     optionalDependencies:
       canvg: 3.0.11
       core-js: 3.50.0
-      dompurify: 3.4.14
+      dompurify: 3.4.16
       html2canvas: 1.4.1
 
   jwa@2.0.1:

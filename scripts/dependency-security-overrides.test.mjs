@@ -50,8 +50,7 @@ test('fast-uri security override and lockfile stay on a patched release line', a
   ])
   const packageJson = JSON.parse(packageText)
 
-  assert.equal(packageJson.overrides?.['fast-uri'], '^3.1.8')
-  assert.equal(packageJson.overrides?.qs, '^6.16.0')
+  assert.equal(packageJson.overrides, undefined, 'pnpm-workspace.yaml owns effective security overrides')
   assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}fast-uri: \^3\.1\.8$/m)
   assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}qs: \^6\.16\.0$/m)
 
