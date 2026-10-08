@@ -36,6 +36,7 @@ Audience: Developers and architects.
 - [Migrate Governance Settings Ownership](how-to/migrate-governance-settings-ownership.md)
 - [Customer Sidecar Backstop Adapter API](reference/customer-sidecar-backstop-adapter-api.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
+- [Local SSO, Administrator, and Engine Configuration](how-to/common-configuration-use-case.md)
 - [Configure SCIM Provisioning](how-to/configure-scim-provisioning.md)
 - [Operate User Lifecycle and Provisioning](how-to/operate-identity-lifecycle.md)
 - [Upgrade Identity Provisioning](how-to/upgrade-identity-provisioning.md)

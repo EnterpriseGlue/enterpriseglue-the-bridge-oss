@@ -1,0 +1,52 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "common-configuration-use-case",
+  "type": "docs",
+  "scope": "self-hosted-configuration",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds an integrated operator guide for self-hosted Entra SSO, administrator access, headless configuration, and engine-scoped role assignments.",
+  "userImpact": [
+    "Operators can follow one worked configuration example for platform administration and access to a specific engine."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Documents existing bootstrap settings, Entra provider configuration, secret references, configuration-bundle application, and scoped role assignments; no runtime settings are added or changed."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Clarifies SSO administrator permissions versus local recovery membership, verified MFA evidence, and local-session refresh and revocation behavior."
+  ],
+  "documentation": [
+    "docs/how-to/common-configuration-use-case.md",
+    "docs/index.md"
+  ],
+  "knownLimitations": [
+    "Provider setup and connection tests do not replace a controlled Entra sign-in in the target deployment."
+  ],
+  "rollback": [
+    "Revert the documentation change; no runtime, database, or configuration rollback is required."
+  ],
+  "validation": [
+    "The documentation-boundary guard and documentation-contract gate validate the guide and its schema-tagged JSON examples.",
+    "The full embedded bundle is compiled with the repository configuration compiler, including SSO administrator and exact engine-scope references.",
+    "All three Mermaid sequences were rendered and visually inspected; publication preserves their checked sources."
+  ],
+  "packages": []
+}
