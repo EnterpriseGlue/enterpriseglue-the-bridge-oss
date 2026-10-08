@@ -267,6 +267,10 @@ export class SqlServerAdapter implements DatabaseAdapter {
     const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
 
     if (runningFromDist) {
+      // Migrations must use the same entity constructors as this adapter's
+      // DataSource. The backend build emits the canonical migration tree here.
+      const colocatedMigrations = path.join(adapterDir, '..', '..', '..', 'db', 'migrations');
+      if (fs.existsSync(colocatedMigrations)) return colocatedMigrations;
       return path.join(adapterDir, '..', 'migrations');
     }
     return 'packages/shared/src/db/migrations';

@@ -393,6 +393,9 @@ jobs:
         with:
           version: 11.0.8
 
+      - name: Verify shutdown argument forwarding
+        run: node --test scripts/down-shell.test.mjs
+
       - name: Start the stock developer stack with fresh volumes
         shell: bash
         env:

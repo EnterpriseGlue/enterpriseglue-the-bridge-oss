@@ -69,7 +69,8 @@ const metadataPatterns = [
 const rootDependencyPattern = /^(?:package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|patches\/[^/]+\.patch)$/;
 
 const devStartupPatterns = [
-  /^dev\.sh$/,
+  /^(?:dev|down)\.sh$/,
+  /^scripts\/down-shell\.test\.mjs$/,
   /^scripts\/db-preflight\.sh$/,
   /^(?:backend\/Dockerfile|frontend\/Dockerfile\.prod)$/,
   /^infra\/docker\/compose\/docker-compose(?:\.backend-expose)?\.yml$/,
@@ -124,6 +125,7 @@ const classifiers = {
     /^backend\/src\/modules\/.*(?:db|migration)/,
     /^backend\/.*migration/,
     /^test\/database\//,
+    /^scripts\/test-compiled-migration-upgrades\.mjs$/,
     /^scripts\/(?:run-engine-tenancy-database-matrix|engine-tenancy-database-matrix|check-migration-identifiers|schema-epoch-manifest)/,
     /^\.github\/workflows\/engine-tenancy-database\.yml$/,
   ],

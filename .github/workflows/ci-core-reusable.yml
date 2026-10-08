@@ -296,6 +296,10 @@ jobs:
       - name: Build backend
         run: pnpm --filter webmodeler-backend run build:skip-generate
 
+      - name: Verify compiled historical migration upgrades
+        if: matrix.database == 'postgres'
+        run: node scripts/test-compiled-migration-upgrades.mjs
+
       - name: Create PostgreSQL schema
         if: matrix.database == 'postgres'
         run: |

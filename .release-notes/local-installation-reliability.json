@@ -1,0 +1,80 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "local-installation-reliability",
+  "type": "fix",
+  "scope": "installation",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators"
+  ],
+  "summary": "Keep compiled database upgrades on one entity/module tree and support argument-free shutdown on macOS Bash 3.2.",
+  "userImpact": [
+    "Existing databases can run historical entity-based migrations from a compiled backend.",
+    "Developers can stop their local Compose stack with no extra arguments on stock macOS Bash."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Build or install the corrected backend before upgrading an existing database; retain its data volume."
+    ]
+  },
+  "configuration": [
+    "Contributor setup documents environment bootstrapping, host database prerequisites, and the current CI commands."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [
+      "1700000000113-add-provisioning-credential-idempotency",
+      "1700000000124-add-native-saas-tenancy"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "Historical migration bodies and the migration inventory are unchanged. Compiled migrations resolve the entities registered by the same compiled backend."
+    ]
+  },
+  "security": [
+    "No authentication or authorization policy changes."
+  ],
+  "documentation": [
+    "CONTRIBUTING.md describes startup completion, non-destructive upgrades, isolated test database setup, and CI checks."
+  ],
+  "knownLimitations": [
+    "Physical database portability and production image acceptance require their candidate gates."
+  ],
+  "rollback": [
+    "Restore the prior application; this change adds no migration or schema transition."
+  ],
+  "validation": [
+    "Node 24.18.1: complete backend unit suite passed (3781 tests across 466 files); Node 24.10.0: frontend unit suite passed (1562 tests across 316 files).",
+    "Workspace typecheck and warning-free lint passed with pnpm 11.0.8.",
+    "Both compiled PostgreSQL historical upgrades passed with retained data and repeat-run idempotence; all ten backend/published adapter path selections passed.",
+    "Eight actual shutdown argv cases passed under macOS Bash 3.2 with a recording Docker stub.",
+    "CI contracts (166 tests), affected classifier contracts (51 tests), documentation boundary, release-note preflight, and package version guard passed.",
+    "The initial Node 24.10.0 broad backend run had two HTTP socket/parser failures. All 94 tests in those files passed focused reproduction; the complete suite subsequently passed under Node 24.18.1."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.14",
+      "newVersion": "0.19.15",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.27",
+      "newVersion": "0.17.28",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.10",
+      "newVersion": "0.22.11",
+      "impact": "patch"
+    }
+  ]
+}

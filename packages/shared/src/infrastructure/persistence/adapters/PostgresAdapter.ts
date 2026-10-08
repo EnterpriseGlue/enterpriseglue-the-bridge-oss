@@ -172,6 +172,10 @@ export class PostgresAdapter implements DatabaseAdapter {
     const runningFromDist = runtimePath.includes(`${path.sep}dist${path.sep}`);
 
     if (runningFromDist) {
+      // Migrations must use the same entity constructors as this adapter's
+      // DataSource. The backend build emits the canonical migration tree here.
+      const colocatedMigrations = path.join(adapterDir, '..', '..', '..', 'db', 'migrations');
+      if (fs.existsSync(colocatedMigrations)) return colocatedMigrations;
       const sharedDistMigrations = this.findWorktreeDistPath(['packages', 'shared', 'dist', 'db', 'migrations']);
       if (sharedDistMigrations) {
         return sharedDistMigrations;

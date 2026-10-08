@@ -248,7 +248,8 @@
     "test:plugin-toolchain-release:local": "bash ./scripts/check-plugin-toolchain-oci-local.sh",
     "test:release-readiness": "bash ./scripts/check-release-candidate-readiness.sh",
     "ci:watch": "bash ./scripts/ci-watch.sh",
-    "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger"
+    "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger",
+    "test:compiled-migration-upgrades": "pnpm --dir backend run build:skip-generate && node scripts/test-compiled-migration-upgrades.mjs"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.4.3",
