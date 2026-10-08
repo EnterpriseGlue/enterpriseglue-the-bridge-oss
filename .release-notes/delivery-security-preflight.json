@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "delivery-security-preflight",
+  "type": "internal",
+  "scope": "delivery",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Detect image security blockers earlier and align development workflows with bounded diagnosis and exact delivery evidence.",
+  "userImpact": [],
+  "upgrade": {"required": false, "instructions": []},
+  "configuration": ["The existing nightly scan includes managed-shard bootstrap alongside application images; no new schedule is created."],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["No database schema or bootstrap inventory changes."]},
+  "security": ["Candidate scanner, ignore policy and severity thresholds remain unchanged; scans precede functional image qualification."],
+  "documentation": ["docs/development/codex-workflow-plugin.md", "docs/development/ci-and-release-routing.md"],
+  "knownLimitations": ["Early checks do not establish terminal external effects, release publication, deployment or live signup success."],
+  "rollback": ["Revert this workflow change and reinstall the prior workflow plugin; no staging state rollback is required."],
+  "validation": ["Local CI contracts: 155 passed; classifier/security workflow checks: 89 passed, including executed mismatch and missing-report fixtures.", "Repository plugin contracts: 11 passed; all 25 official skill validators passed. Separate official plugin validator is unavailable locally; no live nightly scan or release candidate qualification is claimed."],
+  "packages": []
+}

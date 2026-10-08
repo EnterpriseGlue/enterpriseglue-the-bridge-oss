@@ -162,7 +162,7 @@ const classifiers = {
     /^(?:backend|frontend)\/Dockerfile(?:\.prod)?$/,
     /^infra\/docker\//,
     /^scripts\/(?:smoke-images-local|e2e-smoke-postgres-images|run-trivy-image-scan|check-release-dockerfile-pins)/,
-    /^\.github\/workflows\/(?:docker-images|docker-images-reusable|security-nightly|security-nightly-reusable)\.yml$/,
+    /^\.github\/workflows\/(?:docker-images|docker-images-reusable)\.yml$/,
   ],
   toolchain_container: [
     /^packages\/(?:plugin-installer|plugin-manager)\/Dockerfile/,

@@ -9,6 +9,9 @@ on:
       frontend_image_ref:
         required: true
         type: string
+      managed_shard_bootstrap_image:
+        required: true
+        type: string
       image_platforms:
         required: false
         type: string
@@ -68,6 +71,28 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Resolve matching published bootstrap provenance
+        id: bootstrap-meta
+        shell: bash
+        env:
+          BOOTSTRAP_IMAGE: ${{ inputs.managed_shard_bootstrap_image }}
+          EXPECTED_PLATFORMS: ${{ inputs.image_platforms }}
+          EXPECTED_SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          EXPECTED_VERSION: ${{ steps.image-meta.outputs.backend_version }}
+          EXPECTED_REVISION: ${{ steps.image-meta.outputs.backend_revision }}
+          FRONTEND_VERSION: ${{ steps.image-meta.outputs.frontend_version }}
+          FRONTEND_REVISION: ${{ steps.image-meta.outputs.frontend_revision }}
+        run: |
+          set -euo pipefail
+          [[ "$BOOTSTRAP_IMAGE" =~ ^ghcr\.io/[a-z0-9-]+/enterpriseglue-managed-shard-bootstrap$ ]] || { echo "Invalid bootstrap repository" >&2; exit 1; }
+          [[ "$EXPECTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid published version" >&2; exit 1; }
+          [[ "$FRONTEND_VERSION" == "$EXPECTED_VERSION" ]] || { echo "Published version mismatch" >&2; exit 1; }
+          [[ "$FRONTEND_REVISION" == "$EXPECTED_REVISION" ]] || { echo "Published revision mismatch" >&2; exit 1; }
+          docker buildx imagetools inspect "$BOOTSTRAP_IMAGE:$EXPECTED_VERSION" --format '{{json .}}' \
+            | node scripts/verify-oci-image-metadata.mjs managedShardBootstrap \
+            >> "$GITHUB_OUTPUT"
+          echo "Bootstrap drift scan resolves the backend's published release tag, not a latest alias." >> "$GITHUB_STEP_SUMMARY"
+
       # -- Trivy scans --------------------------------------------------------
 
       - name: Setup Trivy
@@ -77,17 +102,30 @@ jobs:
           cache: false
 
       - name: Trivy scan backend image
+        if: always() && steps.bootstrap-meta.outcome == 'success'
+        env:
+          TRIVY_PLATFORM: linux/amd64
         # Defer failure until reports are uploaded and the tracking issue is updated.
         run: >-
           bash ./scripts/run-trivy-image-scan.sh
-          '${{ inputs.backend_image_ref }}'
+          '${{ inputs.backend_image_ref }}@${{ steps.image-meta.outputs.backend_digest }}'
           backend-trivy.json 0
 
       - name: Trivy scan frontend image
+        if: always() && steps.bootstrap-meta.outcome == 'success'
+        env:
+          TRIVY_PLATFORM: linux/amd64
         run: >-
           bash ./scripts/run-trivy-image-scan.sh
-          '${{ inputs.frontend_image_ref }}'
+          '${{ inputs.frontend_image_ref }}@${{ steps.image-meta.outputs.frontend_digest }}'
           frontend-trivy.json 0
+
+      - name: Trivy scan managed-shard bootstrap image
+        if: always() && steps.bootstrap-meta.outcome == 'success'
+        env:
+          BOOTSTRAP_SUBJECT: ${{ inputs.managed_shard_bootstrap_image }}@${{ steps.bootstrap-meta.outputs.managedShardBootstrap_digest }}
+          TRIVY_PLATFORM: linux/amd64
+        run: bash ./scripts/run-trivy-image-scan.sh "$BOOTSTRAP_SUBJECT" bootstrap-trivy.json 0
 
       # -- Artifact upload -----------------------------------------------------
 
@@ -99,6 +137,7 @@ jobs:
           path: |
             backend-trivy.json
             frontend-trivy.json
+            bootstrap-trivy.json
           if-no-files-found: warn
 
       # -- Audit .trivyignore expiry -------------------------------------------
@@ -135,14 +174,18 @@ jobs:
 
       - name: Evaluate findings
         id: evaluate
+        if: always() && steps.bootstrap-meta.outcome == 'success'
         run: |
+          set -euo pipefail
           total=0
           critical_total=0
           high_total=0
           body=""
 
-          for img in backend frontend; do
+          for img in backend frontend bootstrap; do
             file="${img}-trivy.json"
+            [[ -f "$file" ]] || { echo "Missing required $img scan evidence" >&2; exit 1; }
+            jq -e 'type == "object" and (.Results | type == "array")' "$file" >/dev/null
             if [ -f "$file" ]; then
               count=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
               critical=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "CRITICAL")] | length' "$file")
@@ -189,10 +232,12 @@ jobs:
             echo ""
             echo "**Date:** $(date -u +%Y-%m-%d)"
             echo "**Total findings:** ${{ steps.evaluate.outputs.total }}"
-            echo "**Release-blocking findings:** ${{ steps.evaluate.outputs.critical }} critical, ${{ steps.evaluate.outputs.high }} high"
+            echo "**Nightly alert threshold:** ${{ steps.evaluate.outputs.critical }} critical, ${{ steps.evaluate.outputs.high }} high"
+            echo "Candidate application and bootstrap acceptance still rejects all unignored severities."
+            echo "Drift scans inspect linux/amd64; OCI metadata checks cover configured platforms. This is not candidate qualification."
             echo ""
 
-            for img in backend frontend; do
+            for img in backend frontend bootstrap; do
               file="${img}-trivy.json"
               if [ -f "$file" ]; then
                 count=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
@@ -234,7 +279,7 @@ jobs:
       # -- Create or update tracking issue -------------------------------------
 
       - name: Create or update security issue
-        if: steps.evaluate.outputs.total != '0' || steps.expiry.outputs.has_expired == 'true'
+        if: always() && steps.evaluate.outcome == 'success' && (steps.evaluate.outputs.total != '0' || steps.expiry.outputs.has_expired == 'true')
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -252,6 +297,7 @@ jobs:
             body += `| Image | Ref | Version | Revision | Digest |\n|---|---|---|---|---|\n`;
             body += `| backend | \`${{ inputs.backend_image_ref }}\` | ${{ steps.image-meta.outputs.backend_version }} | \`${{ steps.image-meta.outputs.backend_revision }}\` | \`${{ steps.image-meta.outputs.backend_digest }}\` |\n`;
             body += `| frontend | \`${{ inputs.frontend_image_ref }}\` | ${{ steps.image-meta.outputs.frontend_version }} | \`${{ steps.image-meta.outputs.frontend_revision }}\` | \`${{ steps.image-meta.outputs.frontend_digest }}\` |\n\n`;
+            body += `| bootstrap | \`${{ inputs.managed_shard_bootstrap_image }}:${{ steps.image-meta.outputs.backend_version }}\` | ${{ steps.bootstrap-meta.outputs.managedShardBootstrap_version }} | \`${{ steps.bootstrap-meta.outputs.managedShardBootstrap_revision }}\` | \`${{ steps.bootstrap-meta.outputs.managedShardBootstrap_digest }}\` |\n\n`;
             body += ${{ toJSON(steps.evaluate.outputs.body) }};
 
             if (hasExpired) {
@@ -313,7 +359,7 @@ jobs:
             }
 
       - name: Close resolved security issue
-        if: steps.evaluate.outputs.total == '0' && steps.expiry.outputs.has_expired != 'true'
+        if: always() && steps.evaluate.outcome == 'success' && steps.evaluate.outputs.total == '0' && steps.expiry.outcome == 'success' && steps.expiry.outputs.has_expired != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |

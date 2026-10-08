@@ -195,6 +195,24 @@ when a release or investigation needs fresher evidence. The daily security and
 CI-observability workflows remain daily because they detect time-sensitive
 dependency, advisory, and operational changes.
 
+The nightly drift scan resolves backend/frontend aliases to immutable digests
+and the managed-shard bootstrap tag matching their published version and source
+revision. Bootstrap has no `latest` alias; missing or inconsistent composition
+fails closed. All three reports are required before findings can be evaluated
+or a tracking issue closed. The existing daily schedule is unchanged.
+The drift scan explicitly selects linux/amd64; multi-platform OCI identity
+validation is not a vulnerability scan of every platform and is not release
+acceptance. The nightly HIGH/CRITICAL alert threshold remains distinct from
+candidate application/bootstrap acceptance, which rejects all unignored
+severities.
+
+Candidate application and bootstrap scans run before functional image and
+browser qualification. Their exact digests, scanner pin, ignore policy and
+severity thresholds are unchanged. Successful scans do not waive PostgreSQL,
+other database adapters, engine/browser acceptance, signatures or the final
+candidate receipt. This ordering detects a blocker earlier without substituting
+an advisory scan for qualification or cancelling unrelated parallel jobs.
+
 The `ci-images` artifact is only an intra-workflow handoff to downstream smoke
 jobs and expires after one day. Plugin-toolchain releases upload the complete
 air-gap archive and distribution assets to the immutable GitHub Release; the
