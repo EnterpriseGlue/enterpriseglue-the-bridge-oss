@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { startAuthentication, startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
+import { startAuthentication, startRegistration, browserSupportsWebAuthn } from '../shared/auth/cloudWebAuthn';
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
 import { Button, InlineLoading, InlineNotification, Stack, TextInput } from '@carbon/react';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
@@ -68,7 +68,7 @@ export default function CloudEmailAuth() {
 
   const title = mode === 'request' ? 'Sign up with email' : mode === 'register' ? 'Create your passkey' : 'Sign in with a passkey';
   const description = mode === 'request'
-    ? 'We’ll email you a link to verify your address before you create an account.'
+    ? 'We’ll email you a verification link. Then you’ll create a passkey to sign in using your device’s fingerprint, face recognition or PIN.'
     : mode === 'register'
       ? 'Your email is verified. Save a passkey to this device or password manager to secure your Cloud account.'
       : 'Use the passkey you created for your EnterpriseGlue Cloud account.';

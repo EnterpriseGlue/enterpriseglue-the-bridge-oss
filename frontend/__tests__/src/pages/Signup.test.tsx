@@ -30,7 +30,10 @@ describe('Signup', () => {
     expect(document.querySelector('.eg-login-provider-button--google')).toBeInTheDocument();
     expect(document.querySelector('.eg-login-provider-button--microsoft')).toBeInTheDocument();
     expect(document.querySelector('.eg-login-provider-button--apple')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Use email and a passkey' })).toHaveAttribute('href', '/signup/email');
+    const email = screen.getByRole('link', { name: 'Continue with email' });
+    expect(email).toHaveAttribute('href', '/signup/email');
+    expect(email).toHaveClass('eg-login-provider-button', 'eg-login-provider-button--email');
+    expect(email).toHaveAccessibleDescription('Verify your email, then create a passkey for secure sign-in.');
     expect(screen.getByRole('link', { name: /Already have an account/i })).toHaveAttribute('href', '/login');
   });
 
