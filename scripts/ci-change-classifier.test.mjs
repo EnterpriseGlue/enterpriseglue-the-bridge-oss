@@ -457,6 +457,17 @@ test('application Dockerfiles select cached image, smoke, security, and release 
   assert.equal(result.run_release_readiness, true);
 });
 
+test('dependency patches require runtime qualification and cannot masquerade as documentation', () => {
+  const result = classifyChangedFiles(['patches/tedious@20.0.0.patch']);
+  assert.equal(result.metadata_only, false);
+  assert.equal(result.run_tests, true);
+  assert.equal(result.run_ci_images, true);
+  assert.equal(result.run_security_scan, true);
+  assert.equal(result.run_release_readiness, true);
+  assert.equal(result.run_database_matrix, true);
+  assert.equal(classifyChangedFiles(['patches/unclassified-new-helper.mjs']).unknown_high_risk, true);
+});
+
 test('application image workflow contracts avoid unrelated broad verification', () => {
   const result = classifyChangedFiles([
     '.github/workflows/docker-images-reusable.yml',

@@ -66,7 +66,7 @@ const metadataPatterns = [
   /^(?:\.sync|\.windsurf|\.vscode|archive)\//,
 ];
 
-const rootDependencyPattern = /^(?:package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/;
+const rootDependencyPattern = /^(?:package\.json|package-lock\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|patches\/[^/]+\.patch)$/;
 
 const devStartupPatterns = [
   /^dev\.sh$/,
@@ -114,6 +114,7 @@ const classifiers = {
     /^(?:eslint|tsconfig|vitest)[^/]*\.(?:js|mjs|cjs|json|ts)$/,
   ],
   persistence: [
+    /^patches\/tedious@[^/]+\.patch$/,
     /^packages\/shared\/src\/(?:db|config|infrastructure\/persistence)\//,
     /^packages\/shared\/src\/schema-epoch-manifest\.json$/,
     /^infra\/kubernetes\/helm\/enterpriseglue-host\/files\/schema-epoch-manifest\.json$/,
@@ -159,6 +160,7 @@ const classifiers = {
     rootDependencyPattern,
   ],
   application_container: [
+    /^patches\/[^/]+\.patch$/,
     /^(?:backend|frontend)\/Dockerfile(?:\.prod)?$/,
     /^infra\/docker\//,
     /^scripts\/(?:smoke-images-local|e2e-smoke-postgres-images|run-trivy-image-scan|check-release-dockerfile-pins)/,

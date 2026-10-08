@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-09-26T14:10:14.936Z
+Generated at: 2026-10-08T06:10:36.048Z
 
 Generated from:
 - third_party_licenses.json
@@ -84,15 +84,15 @@ Generated from:
 | google-auth-library | 10.9.1 | Apache-2.0 | https://github.com/googleapis/google-cloud-node.git | backend, frontend, packages/shared, root |
 | helmet | 8.3.0 | MIT | git://github.com/helmetjs/helmet.git | backend, frontend, packages/backend-host, packages/shared, root |
 | inferno | 5.6.3 | MIT | https://github.com/infernojs/inferno | frontend, packages/frontend-host |
-| ip-address | 10.5.0 | MIT | https://github.com/beaugunderson/ip-address.git | backend, frontend, packages/shared, root |
+| ip-address | 10.7.3 | MIT | https://github.com/beaugunderson/ip-address.git | backend, frontend, packages/shared, root |
 | jsonwebtoken | 9.0.3 | MIT | https://github.com/auth0/node-jsonwebtoken | backend, frontend, packages/shared, root |
 | jspdf | 4.2.1 | MIT | https://github.com/parallax/jsPDF.git | frontend, packages/frontend-host |
 | ldapts | 9.0.0 | MIT | git+https://github.com/ldapts/ldapts.git | backend, frontend, packages/shared, root |
 | lucide-react | 0.577.0 | ISC | https://github.com/lucide-icons/lucide.git | frontend |
-| morgan | 1.12.0 | MIT | expressjs/morgan | backend, packages/backend-host |
+| morgan | 1.12.1 | MIT | expressjs/morgan | backend, packages/backend-host |
 | mssql | 12.7.0 | MIT | git+https://github.com/tediousjs/node-mssql.git | backend, frontend, packages/shared, root |
 | mysql2 | 3.23.4 | MIT | git+https://github.com/sidorares/node-mysql2.git | backend, frontend, packages/shared, root |
-| nodemailer | 9.1.1 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/shared, root |
+| nodemailer | 10.0.16 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, frontend, packages/shared, root |
 | octokit | 5.0.5 | MIT | github:octokit/octokit.js | backend, frontend, packages/shared, root |
 | oracledb | 6.10.0 | (Apache-2.0 OR UPL-1.0) | git://github.com/oracle/node-oracledb.git | backend, frontend, packages/shared, root |
 | pg | 8.23.0 | MIT | git://github.com/brianc/node-postgres.git | backend, frontend, packages/shared, root |
@@ -108,14 +108,14 @@ Generated from:
 | reflect-metadata | 0.2.2 | Apache-2.0 | https://github.com/rbuckton/reflect-metadata.git | backend, frontend, packages/backend-host, packages/shared, root |
 | resend | 6.22.0 | MIT | git+https://github.com/resend/resend-node.git | backend, frontend, packages/shared, root |
 | semver | 7.8.5 | ISC | git+https://github.com/npm/node-semver.git | packages/plugin-runtime |
-| simple-git | 3.36.0 | MIT | https://github.com/steveukx/git-js.git | backend, root |
+| simple-git | 4.0.2 | MIT | https://github.com/steveukx/git-js.git | backend, root |
 | sql.js | 1.14.2 | MIT | http://github.com/sql-js/sql.js.git | backend |
 | svg2pdf.js | 2.7.0 | MIT | git+https://github.com/yWorks/svg2pdf.js.git | frontend, packages/frontend-host |
 | swagger-ui-express | 5.0.1 | MIT | git@github.com:scottie1984/swagger-ui-express.git | backend, packages/backend-host |
 | tailwind-merge | 3.6.0 | MIT | https://github.com/dcastil/tailwind-merge.git | frontend, packages/frontend-host |
 | typeorm | 0.3.31 | MIT | https://github.com/typeorm/typeorm.git | backend, frontend, packages/backend-host, packages/shared, root |
 | typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript.git | packages/backend-host |
-| undici | 7.29.0 | MIT | git+https://github.com/nodejs/undici.git | backend, frontend, packages/backend-host, packages/shared, root |
+| undici | 7.30.0 | MIT | git+https://github.com/nodejs/undici.git | backend, frontend, packages/backend-host, packages/shared, root |
 | uuid | 14.0.2 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/shared, root |
 | yaml | 2.9.0 | ISC | github:eemeli/yaml | packages/plugin-installer |
 | zod | 4.4.3 | MIT | git+https://github.com/colinhacks/zod.git | backend, frontend, packages/backend-host, packages/plugin-manager, packages/plugin-sdk, packages/shared, root |

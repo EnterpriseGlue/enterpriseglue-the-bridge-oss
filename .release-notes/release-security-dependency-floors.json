@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "release-security-dependency-floors",
+  "type": "security",
+  "scope": "dependencies",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Raise application dependency security floors with approved mail and Git library upgrades.",
+  "userImpact": [
+    "Requires successful image and runtime qualification before publication or deployment; no authentication method changes."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema changes. The bootstrap retains its exact predecessor code, migration inventory and signed schema plan while refreshing its production dependency stores."
+    ]
+  },
+  "security": [
+    "Approved Nodemailer 9 to 10 and simple-git 3 to 4 upgrades, including argv-parser 1 to 2; compatible fixes apply to HTTP transport and parser dependencies.",
+    "Application runtime dependency assembly excludes build/test dependencies while the build stage retains them.",
+    "Tedious keeps its real package identity and SQL Server support; an owned bounded diagnostic formatter replaces sprintf-js in the reviewed pnpm workspace, without a scan suppression."
+  ],
+  "documentation": [
+    "docs/runbooks/security-dependency-updates.md"
+  ],
+  "knownLimitations": [
+    "Standalone npm consumers do not inherit pnpm root patches; the Tedious change qualifies the shipped workspace/image composition, not an upstream sprintf-js release.",
+    "Local image and database evidence is not the signed registry candidate or live staging signup; complete protected qualification remains required."
+  ],
+  "rollback": [
+    "Revert the scoped manifest and lockfile change; do not downgrade a serving system without separately qualified rollback evidence."
+  ],
+  "validation": [
+    "Node 24.10.0 and pnpm 11.0.8: fifteen focused dependency/formatter/bootstrap contracts passed; the nine pre-existing TypeScript fixture errors were repaired and all eighty-four affected tests passed.",
+    "The rebuilt bootstrap passed real PostgreSQL bootstrap/idempotence/receipt/drift rejection. Local arm64 backend, frontend and bootstrap images passed the pinned all-severity scanner with unchanged ignore policy. A real SQL Server development shard passed its required stages; this is not five-adapter acceptance.",
+    "Backend typecheck and all 3780 unit tests passed with serial file scheduling; frontend typechecks and all 1562 unit tests passed. CI contracts 163/163 and routing/security contracts 85/85 passed. Initial concurrent backend tests had socket/time-out failures that all passed in focused serial reproduction before the full serial gate.",
+    "Full application image, browser, five-adapter and signed protected candidate qualification remain distinct required gates."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.13",
+      "newVersion": "0.19.14",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.26",
+      "newVersion": "0.17.27",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.22.9",
+      "newVersion": "0.22.10",
+      "impact": "patch"
+    }
+  ]
+}

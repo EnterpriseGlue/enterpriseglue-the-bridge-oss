@@ -92,7 +92,7 @@
     "email": "adam@npmjs.com",
     "url": "https://evilpacket.net"
   },
-  "ip-address@10.5.0": {
+  "ip-address@10.7.3": {
     "licenses": "MIT",
     "repository": "https://github.com/beaugunderson/ip-address.git",
     "publisher": "Beau Gunderson",
@@ -121,7 +121,7 @@
     "publisher": "Andrey Sidorov",
     "email": "andrey.sidorov@gmail.com"
   },
-  "nodemailer@9.1.1": {
+  "nodemailer@10.0.16": {
     "licenses": "MIT-0",
     "repository": "https://github.com/nodemailer/nodemailer.git",
     "publisher": "Andris Reinman"
@@ -159,7 +159,7 @@
     "publisher": "TypeORM",
     "email": "maintainers@typeorm.io"
   },
-  "undici@7.29.0": {
+  "undici@7.30.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/nodejs/undici.git"
   },

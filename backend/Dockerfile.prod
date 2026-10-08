@@ -16,6 +16,7 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
+COPY patches patches
 
 # BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
 # concurrent multi-platform builds safely. --frozen-lockfile ensures reproducible installs.
@@ -50,10 +51,13 @@ COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY frontend/package.json frontend/
+COPY patches patches
 
-# BuildKit cache mount for pnpm store — same rationale as the build stage above.
+# The runtime dependency stage must not ship build/test dependencies. The build
+# stage above retains the full tree; production modules still resolve from the
+# same pnpm layout, with explicitly declared runtime dependencies preserved.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
-    pnpm install --frozen-lockfile --filter webmodeler-backend...
+    pnpm install --prod --frozen-lockfile --filter webmodeler-backend...
 
 FROM cgr.dev/chainguard/node:latest-dev@sha256:9df8062d1bc926d1eafd0be518d308bf92adde1b13093905cdf8dd45e4beaf9e AS runtime-root
 

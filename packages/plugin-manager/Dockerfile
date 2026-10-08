@@ -3,6 +3,7 @@ FROM --platform=$BUILDPLATFORM node:24.13.1-alpine3.23@sha256:4f696fbf39f383c1e4
 WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY patches patches
 COPY packages/plugin-sdk/package.json packages/plugin-sdk/package.json
 COPY packages/plugin-runtime/package.json packages/plugin-runtime/package.json
 COPY packages/plugin-installer/package.json packages/plugin-installer/package.json

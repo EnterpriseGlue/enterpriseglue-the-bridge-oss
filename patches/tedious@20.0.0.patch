@@ -1,0 +1,104 @@
+diff --git a/lib/bounded-format.js b/lib/bounded-format.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..f645c41b93eb8105a8c7867739612708eee9f5f5
+--- /dev/null
++++ b/lib/bounded-format.js
+@@ -0,0 +1,33 @@
++'use strict';
++
++// EnterpriseGlue-owned diagnostic formatter for Tedious 20.0.0's fixed
++// literals only. Not a general sprintf implementation. No precision, dynamic
++// width, named lookup, callable argument, cache or attacker-sized padding.
++function sprintf(format, ...values) {
++  if (typeof format !== 'string' || format.length > 4096 || values.length > 64) {
++    throw new TypeError('Unsupported Tedious diagnostic format');
++  }
++  let output = '';
++  let argument = 0;
++  for (let offset = 0; offset < format.length;) {
++    if (format[offset] !== '%') {
++      output += format[offset++];
++      continue;
++    }
++    const token = /^%(?:0([1-8]))?([dsX%])/.exec(format.slice(offset));
++    if (!token || (token[1] && token[2] !== 'X') || (token[2] === '%' && token[1])) {
++      throw new TypeError('Unsupported Tedious diagnostic format');
++    }
++    offset += token[0].length;
++    if (token[2] === '%') { output += '%'; continue; }
++    if (argument >= values.length) throw new TypeError('Missing Tedious diagnostic argument');
++    const value = values[argument++];
++    if (token[2] === 's') output += String(value);
++    else if (token[2] === 'd') output += String(Number.parseInt(value, 10));
++    else output += (Number.parseInt(value, 10) >>> 0).toString(16).toUpperCase().padStart(Number(token[1] || 0), '0');
++  }
++  if (argument !== values.length) throw new TypeError('Unexpected Tedious diagnostic argument');
++  return output;
++}
++
++exports.sprintf = sprintf;
+diff --git a/lib/login7-payload.js b/lib/login7-payload.js
+index 6734990a2f911d3ef9048b17b619f71f4f08030a..842a21f82f711e0db8c071df4f9c50103c2e4a8e 100644
+--- a/lib/login7-payload.js
++++ b/lib/login7-payload.js
+@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", {
+   value: true
+ });
+ exports.default = void 0;
+-var _sprintfJs = require("sprintf-js");
++var _sprintfJs = require("./bounded-format");
+ var _tdsVersions = require("./tds-versions");
+ const FLAGS_1 = {
+   ENDIAN_LITTLE: 0x00,
+diff --git a/lib/metadata-parser.js b/lib/metadata-parser.js
+index a052fdc51cd9c77640f1a9541da8158513b4d8f2..47ad62eadb21eb7388e32c8ef26ee883ae53cb79 100644
+--- a/lib/metadata-parser.js
++++ b/lib/metadata-parser.js
+@@ -8,7 +8,7 @@ exports.readCollation = readCollation;
+ exports.readMetadata = readMetadata;
+ var _collation = require("./collation");
+ var _dataType = require("./data-type");
+-var _sprintfJs = require("sprintf-js");
++var _sprintfJs = require("./bounded-format");
+ var _helpers = require("./token/helpers");
+ function readCollation(buf, offset) {
+   offset = +offset;
+diff --git a/lib/packet.js b/lib/packet.js
+index 16dadf15e3aa3475f3363d1f1389220a61de5c65..fe1deeda8df7273947134f1033f6b971e62757a2 100644
+--- a/lib/packet.js
++++ b/lib/packet.js
+@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", {
+ exports.TYPE = exports.Packet = exports.OFFSET = exports.HEADER_LENGTH = void 0;
+ exports.isPacketComplete = isPacketComplete;
+ exports.packetLength = packetLength;
+-var _sprintfJs = require("sprintf-js");
++var _sprintfJs = require("./bounded-format");
+ const HEADER_LENGTH = exports.HEADER_LENGTH = 8;
+ const TYPE = exports.TYPE = {
+   SQL_BATCH: 0x01,
+diff --git a/lib/prelogin-payload.js b/lib/prelogin-payload.js
+index 349bc55b4d8cf64e007a40c2194d086d5cdaef5c..55f5c8e00f04ba2f217b27df194e71ec155832f2 100644
+--- a/lib/prelogin-payload.js
++++ b/lib/prelogin-payload.js
+@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", {
+   value: true
+ });
+ exports.default = void 0;
+-var _sprintfJs = require("sprintf-js");
++var _sprintfJs = require("./bounded-format");
+ var _writableTrackingBuffer = _interopRequireDefault(require("./tracking-buffer/writable-tracking-buffer"));
+ var _crypto = require("crypto");
+ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+diff --git a/lib/value-parser.js b/lib/value-parser.js
+index 496b9c737e0f007628fc20068aa94ec0c87756b2..99c301e27b51db2db0c48700474a440e4ac83535 100644
+--- a/lib/value-parser.js
++++ b/lib/value-parser.js
+@@ -9,7 +9,7 @@ exports.readValue = readValue;
+ var _metadataParser = require("./metadata-parser");
+ var _dataType = require("./data-type");
+ var _iconvLite = _interopRequireDefault(require("iconv-lite"));
+-var _sprintfJs = require("sprintf-js");
++var _sprintfJs = require("./bounded-format");
+ var _guidParser = require("./guid-parser");
+ var _helpers = require("./token/helpers");
+ function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }

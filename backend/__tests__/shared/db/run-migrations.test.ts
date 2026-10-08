@@ -247,7 +247,7 @@ describe('runMigrations bootstrap behavior', () => {
       synchronize: vi.fn(),
       showMigrations: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(true),
       runMigrations: vi.fn().mockImplementation(async () => {
-        const last = dataSource.migrations.at(-1)?.name;
+        const last = dataSource.migrations[dataSource.migrations.length - 1]?.name;
         expect(last).toBe(dataSource.runMigrations.mock.calls.length === 1
           ? 'EnforceExplicitPostgresContext1700000000132'
           : 'AddCloudEmailPasskeys1700000000133');
@@ -272,7 +272,7 @@ describe('runMigrations bootstrap behavior', () => {
       await runSchemaEpochOwnerMigrations();
       expect(dataSource.runMigrations).toHaveBeenCalledTimes(2);
       expect(verifyOwnerMigrationStartingEpoch).toHaveBeenCalledOnce();
-      expect(dataSource.migrations.at(-1)?.name).toBe('AddCloudEmailPasskeys1700000000133');
+      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddCloudEmailPasskeys1700000000133');
       expect(dataSource.migrations.some((migration: { name?: string }) =>
         migration.name === 'EnforceExplicitPostgresContext1700000000132')).toBe(true);
       expect(dataSource.synchronize).not.toHaveBeenCalled();
@@ -374,7 +374,7 @@ describe('runMigrations bootstrap behavior', () => {
     try {
       await runSchemaEpochOwnerMigrations();
       expect(dataSource.runMigrations).toHaveBeenCalledOnce();
-      expect(dataSource.migrations.at(-1)?.name).toBe('AddCloudEmailPasskeys1700000000133');
+      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddCloudEmailPasskeys1700000000133');
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(1, runner, 'explicit-context/v1');
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(2, runner, 'explicit-context/v1');
       expect(dataSource.synchronize).not.toHaveBeenCalled();

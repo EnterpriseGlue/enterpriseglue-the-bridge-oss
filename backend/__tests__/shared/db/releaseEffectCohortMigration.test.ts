@@ -28,7 +28,7 @@ function runner(database: string) {
     },
     hasTable: vi.fn(async () => false),
     createTable: vi.fn(async (table: any) => { createdTables.push(table); }),
-    getTable: vi.fn(async () => createdTables.at(-1)?.clone()),
+    getTable: vi.fn(async () => createdTables[createdTables.length - 1]?.clone()),
     query: vi.fn(async (sql: string) => sql.includes('a.attname AS name') ? postgresColumns : [postgresIndex]),
     dropTable: vi.fn(async () => undefined),
     createdTables,
