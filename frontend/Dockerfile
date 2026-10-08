@@ -7,6 +7,7 @@ RUN npm install -g pnpm@11.0.8
 
 # Copy every manifest that affects pnpm's frozen-lockfile resolution.
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --chown=node:node patches patches
 COPY --chown=node:node frontend/package.json frontend/
 COPY --chown=node:node packages/shared/package.json packages/shared/
 COPY --chown=node:node packages/frontend-host/package.json packages/frontend-host/

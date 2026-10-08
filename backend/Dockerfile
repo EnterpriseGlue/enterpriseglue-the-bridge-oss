@@ -11,13 +11,14 @@ ENV ENTERPRISEGLUE_HOST_VERSION=${ENTERPRISEGLUE_HOST_VERSION}
 # contract fails CI if this explicit Docker pin ever drifts from it.
 # npm 11.19.0 still bundles brace-expansion 5.0.7, so replace that bundled
 # copy with its patched release without changing the workspace package manager.
-RUN npm install -g npm@11.19.0 pnpm@11.0.8 brace-expansion@5.0.9 \
+RUN npm install -g npm@11.19.0 pnpm@11.0.8 brace-expansion@5.0.12 \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
     && cp -R /usr/local/lib/node_modules/brace-expansion /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
     && rm -rf /usr/local/lib/node_modules/brace-expansion
 
 # Copy every manifest that affects pnpm's frozen-lockfile resolution.
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --chown=node:node patches patches
 COPY --chown=node:node backend/package.json backend/
 COPY --chown=node:node packages/shared/package.json packages/shared/
 COPY --chown=node:node packages/plugin-sdk/package.json packages/plugin-sdk/

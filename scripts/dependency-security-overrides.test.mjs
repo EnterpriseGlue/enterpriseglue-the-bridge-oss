@@ -181,3 +181,20 @@ test('every installed driver diagnostic literal is handled by the bounded format
   }
   assert.equal(count, 12, 'all pinned driver call sites must remain covered')
 })
+
+test('every Docker workspace install receives the source patch before dependency resolution', async () => {
+  for (const file of [
+    'backend/Dockerfile', 'backend/Dockerfile.prod', 'frontend/Dockerfile', 'frontend/Dockerfile.prod',
+    'packages/plugin-installer/Dockerfile', 'packages/plugin-manager/Dockerfile',
+    'packages/plugin-reference/Dockerfile', 'infra/docker/managed-shard-bootstrap/Dockerfile',
+  ]) {
+    const source = await readFile(new URL(file, root), 'utf8')
+    for (const stage of source.split(/^FROM /m).slice(1)) {
+      const instructions = stage.split('\n').filter(line => !line.trimStart().startsWith('#')).join('\n')
+      const install = instructions.indexOf('pnpm install')
+      if (install < 0) continue
+      const copy = instructions.search(/^COPY (?:--chown=[^ ]+ )?patches patches$/m)
+      assert.ok(copy >= 0 && copy < install, `${file}: patch must precede each workspace install`)
+    }
+  }
+})
