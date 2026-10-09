@@ -565,3 +565,13 @@ test('changed paths must stay repository-relative', () => {
   assert.throws(() => classifyChangedFiles(['/tmp/file']), /invalid changed path/);
   assert.throws(() => classifyChangedFiles(['../file']), /invalid changed path/);
 });
+
+
+test('owned screenshot evidence selects browser acceptance while ordinary docs do not', () => {
+  for (const path of ['test/e2e/utils/evidence-screenshot.ts', 'scripts/browser-evidence-screenshot.test.mjs']) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.authorization, true);
+    assert.equal(result.unknown_high_risk, false);
+  }
+  assert.equal(classifyChangedFiles(['docs/reference/observability-logs.md']).authorization, false);
+});

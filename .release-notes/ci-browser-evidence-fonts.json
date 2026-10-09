@@ -1,0 +1,50 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "ci-browser-evidence-fonts",
+  "type": "fix",
+  "scope": "browser-evidence",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators"
+  ],
+  "summary": "Verify the fonts used by browser evidence before bounded capture, avoiding an unused FontFaceSet stall and preserving cleanup diagnostics.",
+  "userImpact": [
+    "Scheduled engine-tenancy browser evidence retains its functional checks and captures the rendered fonts without waiting indefinitely for unrelated font faces."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "The pinned Playwright screenshot font-ready switch is scoped to the owned capture after explicit used-font verification, and restored immediately."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "All engine-tenancy and authorization assertions remain mandatory; missing or failed rendered fonts fail capture."
+  ],
+  "documentation": [
+    "Technical comments explain the bounded font-readiness and screenshot contract."
+  ],
+  "knownLimitations": [
+    "This repairs the observed screenshot FontFaceSet stall, not a guarantee against every future CI failure."
+  ],
+  "rollback": [
+    "Revert the evidence helper and restore Playwright default screenshot preparation."
+  ],
+  "validation": [
+    "Real native WebKit: capture passed with a loaded IBM Plex font and an unrelated pending FontFace, and rejected a failed rendered font without writing evidence (2/2 cases).",
+    "Warning-free workspace lint, complete CI contracts, and 47 focused engine-tenancy/classifier/coverage contracts passed.",
+    "Release-note preflight passed. Exact hosted browser execution remains required; the functional engine-tenancy assertions are unchanged."
+  ],
+  "packages": []
+}
