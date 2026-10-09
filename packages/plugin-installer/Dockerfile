@@ -54,11 +54,12 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && cd /oras-build \
   && go mod init enterpriseglue.local/oras-build \
   && retry go get oras.land/oras/cmd/oras@v1.3.4 \
-      golang.org/x/crypto@v0.55.0 \
+      golang.org/x/crypto@v0.57.0 \
+      golang.org/x/net@v0.60.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
       go build -buildvcs=false -trimpath -o /out/oras oras.land/oras/cmd/oras \
   && test -x /out/oras \
-  && go version -m /out/oras | grep -E 'golang.org/x/crypto[[:space:]]+v0\.55\.0'
+  && go version -m /out/oras | grep -E 'golang.org/x/crypto[[:space:]]+v0\.57\.0'
 RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/pkg/mod,sharing=locked \
   --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-build,target=/root/.cache/go-build,sharing=locked \
   retry() { \
@@ -73,17 +74,19 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && cd /cosign-build \
   && go mod init enterpriseglue.local/cosign-build \
   && retry go get github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3 \
-      golang.org/x/crypto@v0.55.0 \
+      golang.org/x/crypto@v0.57.0 \
+      golang.org/x/net@v0.60.0 \
       google.golang.org/grpc@v1.83.2 \
-      golang.org/x/mod@v0.40.0 \
-      golang.org/x/text@v0.41.0 \
+      golang.org/x/mod@v0.41.0 \
+      golang.org/x/text@v0.42.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
       go build -buildvcs=false -trimpath \
-        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.4 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
+        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.5 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
         -o /out/cosign github.com/sigstore/cosign/v3/cmd/cosign \
-  && go version -m /out/cosign | grep -E 'golang.org/x/crypto[[:space:]]+v0\.55\.0' \
-  && go version -m /out/cosign | grep -E 'golang.org/x/mod[[:space:]]+v0\.40\.0' \
-  && go version -m /out/cosign | grep -E 'golang.org/x/text[[:space:]]+v0\.41\.0' \
+  && go version -m /out/cosign | grep -E 'golang.org/x/crypto[[:space:]]+v0\.57\.0' \
+  && go version -m /out/cosign | grep -E 'golang.org/x/net[[:space:]]+v0\.60\.0' \
+  && go version -m /out/cosign | grep -E 'golang.org/x/mod[[:space:]]+v0\.41\.0' \
+  && go version -m /out/cosign | grep -E 'golang.org/x/text[[:space:]]+v0\.42\.0' \
   && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.83\.2'
 
 FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40

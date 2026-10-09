@@ -1,0 +1,68 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-http2-security",
+  "type": "fix",
+  "scope": "plugin-toolchain",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "security"
+  ],
+  "summary": "Rebuild installer and manager OCI tools with patched x/net HTTP/2 modules and their required Go dependency floors.",
+  "userImpact": [
+    "Connected registry acquisition and signature verification avoid the newly reported HTTP/2 SETTINGS-frame denial-of-service vulnerability."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Upgrade installer and manager images with their version-matched charts as one qualified set."
+    ]
+  },
+  "configuration": [
+    "Both ORAS and Cosign resolve golang.org/x/net 0.60.0, x/crypto 0.57.0 and x/text 0.42.0 and x/mod 0.41.0. The pinned Go 1.26.9 builder and upstream OCI tool releases remain unchanged."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database or application schema change."
+    ]
+  },
+  "security": [
+    "Fix CVE-2026-78669 / GO-2026-6611 in golang.org/x/net/http2; Go 1.26.9 alone only fixes the separate standard-library implementation. The Go advisory identifies x/net 0.60.0 as fixed.",
+    "Scanner severity and ignore policy remain unchanged."
+  ],
+  "documentation": [
+    "Container third-party notices explain the module-level remediation and retained BSD license."
+  ],
+  "knownLimitations": [
+    "Current dual-architecture scans and signed candidate qualification remain required before publication."
+  ],
+  "rollback": [
+    "Do not restore vulnerable embedded modules; use an independently qualified patched toolchain set or suspend affected connected acquisition. No database rollback is required."
+  ],
+  "validation": [
+    "Installer 62/62 and manager 26/26 unit tests passed. The complete 179 CI contracts, aggregate guard, 82 release-note/package regressions, strict license inventory, warning-free lint and package-version checks passed.",
+    "Both native ARM64 final images build and execute the upstream ORAS 1.3.4 and Cosign 3.1.3 CLIs with Go 1.26.9. The identical Go stage also compiled the patched binaries for Linux AMD64.",
+    "Both exact native images passed pinned Trivy 0.72.0 HIGH/CRITICAL scans with zero findings and no exceptions, using a vulnerability database updated 2026-10-09 19:06 UTC. Dual-architecture final-image and signed candidate acceptance remain required before publication."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.10",
+      "newVersion": "0.2.11",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.10",
+      "newVersion": "0.1.11",
+      "impact": "patch"
+    }
+  ]
+}
