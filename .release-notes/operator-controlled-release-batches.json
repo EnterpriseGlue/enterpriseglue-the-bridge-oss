@@ -33,9 +33,7 @@
   "database": {
     "migrations": [],
     "rollbackSupported": true,
-    "notes": [
-      "No application schema or historical migration change."
-    ]
+    "notes": []
   },
   "security": [
     "Automatic events, labels and autopilot settings cannot authorize production tag creation. Publication requires an exact protected source, merged batch ancestry, generated document and managed-comment equality, and the existing signed candidate proof."
@@ -50,12 +48,10 @@
     "Restore the prior workflow only through an explicitly authorized change; do not alter published tags or bypass candidate validation."
   ],
   "validation": [
-    "Node 24.10.0: 144 targeted release/workflow/classifier tests passed, including 34 behavioral cases using the actual GitHub-script bodies and temporary real Git repositories. Automatic events created no release tags; incomplete batches, live-main drift and inconsistent generated documents were rejected.",
-    "The complete CI contract suite passed 178 tests and its aggregate coverage guard; all 92 change-detection/security contracts and 65 release-note tests passed. Warning-free workspace lint, release-note preflight, documentation-boundary and published-package version guards passed. Actionlint workflow validation passed; full CI ShellCheck reports six unchanged baseline diagnostics outside the added job.",
-    "All 11 workflow-plugin contracts and official validation of all 25 skills passed. The supplemental Python plugin-manifest validator is absent locally; the official bundled Codex installer accepted plugin 0.1.15, and installed skill bytes match the maintained source.",
-    "The actual previous #563 merge-group commit contains its PR head, confirming the new per-PR ancestry guard applies to the recorded failure.",
-    "The focused canary passed nine local scenarios using the actual approval CLI and production signed-candidate shell step: automatic events, incomplete approval, source drift and mismatched documentation fail closed; a complete fixture approval reaches the real verifier, which rejects its missing staged candidate. Disposable Git/API fixtures carry no production authority or tokens. The exact-source hosted canary remains required before merge and does not replace signed production candidate, image, database, browser or security acceptance.",
-    "Live RELEASE_AUTOPILOT_ENABLED is false. No production publication, semantic tag, registry write or deployment was performed; source-level qualification and protected hosted acceptance remain distinct."
+    "Source-level release/workflow/classifier qualification passed 144 targeted tests, including 34 behavioral cases using actual workflow script bodies and disposable Git histories; the full CI contract suite and aggregate coverage guard passed.",
+    "The workflow plugin passed 11 contracts and official validation of all 25 skills. The bundled Codex installer accepted plugin 0.1.15, and installed skill bytes matched the maintained source.",
+    "The hosted read-only authorization canary passed on the PR and protected merge-queue sources. Its retained receipt covers automatic-event rejection, incomplete batches, protected-main drift, document mismatch, and an actual missing-candidate rejection after fixture approval; no publication, production tag or registry write occurred. This supplemental proof does not replace signed production candidate, image, database, browser or security acceptance.",
+    "RELEASE_AUTOPILOT_ENABLED is false. Automatic preparation and code merges do not authorize publication; the complete release batch requires explicit source-bound approval and signed candidate acceptance."
   ],
   "packages": []
 }

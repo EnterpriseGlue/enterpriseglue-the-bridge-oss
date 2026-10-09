@@ -391,3 +391,12 @@ After publication, verify:
 tags pass PostgreSQL, exposed-backend, Oracle, and vulnerability qualification.
 Retry a failed publication against the same tag and source commit. Create a new
 version only when the shipped payload itself must change.
+
+The trusted preparation job generates both the concise latest `CHANGELOG.md`
+section and the detailed versioned document from the complete fragment selection
+since the stable tag. Earlier changelog sections remain unchanged. Commit
+selection alone can omit an older branch merged after a release; fragment-based
+generation keeps those unreleased changes in the combined documentation.
+Evidence-only corrections retain identical historical package transitions at
+the PR comparison base. Those records cannot authorize a fresh source change;
+new source still requires a valid new bump and downstream consumer versions.

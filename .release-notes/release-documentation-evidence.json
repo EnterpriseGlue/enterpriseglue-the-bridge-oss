@@ -1,0 +1,50 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-documentation-evidence",
+  "type": "fix",
+  "scope": "release-documentation",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators"
+  ],
+  "summary": "Generate concise and detailed batch documentation from the complete unreleased fragments and corrected evidence, retaining historical package records without repeating bumps.",
+  "userImpact": [
+    "Release documentation omits superseded development retries and records completed source qualification."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Only package entries identical to the comparison baseline are retained as historical evidence. Fresh source changes and altered package transitions still require valid version bumps."
+  ],
+  "documentation": [
+    "Technical release-note sources retain compatibility, upgrade, security and package-version information; qualification details distinguish source proof from final signed candidate acceptance.",
+    "The concise latest changelog section is generated from the same complete fragment selection as the detailed document; prior release sections remain byte-for-byte unchanged."
+  ],
+  "knownLimitations": [
+    "Source-level evidence cannot establish final combined candidate or production publication acceptance."
+  ],
+  "rollback": [
+    "Revert the guard correction and documentation changes; no package or database rollback is required."
+  ],
+  "validation": [
+    "Fifteen package-version tests passed, including evidence-only corrections, complete release-range version chains, rejection of fresh source changes using historical records, and rejection of invalid modified transitions.",
+    "Release-note tests cover complete breaking/fix batch inclusion, idempotent changelog generation, exact release identity rejection and preservation of historical changelog bytes. Package-version regression cases run in the protected release-note suite.",
+    "Node 24.10.0 / pnpm 11.0.8: all 82 release-note and package-version cases passed; release preflight recommends 0.30.0 from the v0.29.3 baseline.",
+    "The integrated batch passed 179 CI contracts with the self-validating aggregate guard, 92 change-detection/security contracts, warning-free workspace lint, documentation-boundary and package guards against both main and v0.29.3."
+  ],
+  "packages": []
+}

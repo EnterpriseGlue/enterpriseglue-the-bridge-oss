@@ -494,6 +494,30 @@ export function renderReleaseNotes(fragments, { version = 'next', baseRef = '' }
   return output
 }
 
+export function syncReleaseChangelog(text, fragments, version) {
+  parseVersion(version, 'release version')
+  if (fragments.length === 0) fail('Cannot generate a release changelog without fragments.')
+  const headings = [...text.matchAll(/^## \[([^\]\n]+)\].*$/gm)]
+  if (headings[0]?.[1] !== version) fail('The latest changelog heading must match the proposed release version.')
+  const first = headings[0]
+  const end = headings[1]?.index ?? text.length
+  const breaking = fragments.filter(entry => entry.breaking || entry.type === 'breaking')
+  const other = fragments.filter(entry => !breaking.includes(entry))
+  const bullets = entries => entries.map(entry => `- **${entry.scope}:** ${entry.summary}`).join('\n')
+  let body = `${first[0]}\n\n`
+  if (breaking.length) body += `### Breaking changes\n\n${bullets(breaking)}\n\n`
+  if (other.length) body += `### Changes\n\n${bullets(other)}\n\n`
+  body += `Full upgrade, compatibility and verification details: [v${version} release notes](docs/releases/v${version}.md).\n\n`
+  return text.slice(0, first.index) + body + text.slice(end)
+}
+
+function runChangelog(root, options) {
+  if (!options.version || !options.output) fail('changelog requires --version X.Y.Z and --output CHANGELOG.md.')
+  const selection = releaseSelection(root, options.baseRef || resolveDefaultBase(root))
+  const original = readFileSync(join(root, options.output), 'utf8')
+  writeOutput(options.output, syncReleaseChangelog(original, selection.selected.map(entry => entry.value), options.version), root)
+}
+
 export function validateBaselineState({ manifestVersion, latestTag, changelog, allowPending = false }) {
   const latestVersion = latestTag.replace(/^v/, '')
   const latestHeading = new RegExp(`^## \\[${escapeRegExp(latestVersion)}\\]`, 'm')
@@ -608,10 +632,11 @@ function runBaseline(root, options) {
 export function main(argv = process.argv.slice(2), root = process.cwd()) {
   const { command, options } = parseArgs(argv)
   if (command === 'validate') return runValidate(root, options)
+  if (command === 'changelog') return runChangelog(root, options)
   if (command === 'preview' || command === 'render') return runPreviewOrRender(root, options, command)
   if (command === 'recommend' || command === 'assert-version') return runRecommendOrAssert(root, options, command)
   if (command === 'baseline') return runBaseline(root, options)
-  fail(`Unknown command: ${command}. Expected validate, preview, render, recommend, assert-version, or baseline.`)
+  fail(`Unknown command: ${command}. Expected validate, preview, render, changelog, recommend, assert-version, or baseline.`)
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : ''
