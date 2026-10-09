@@ -6,21 +6,18 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.3...v0.30.0) (2026-10-09)
 
+### Breaking changes
 
-### ⚠ BREAKING CHANGES
+- **package-dependencies:** Separate browser installation dependencies from optional server peers while retaining shared import paths, and correct frontend runtime dependency declarations.
 
-* **release:** prepare complete batch documentation without repeated package bumps
+### Changes
 
-### Bug Fixes
+- **browser-evidence:** Verify the fonts used by browser evidence before bounded capture, avoiding an unused FontFaceSet stall and preserving cleanup diagnostics.
+- **release-authorization:** Separate local implementation, code shipping and explicitly approved multi-PR release publication, with exact generated release-document verification.
+- **plugin-toolchain:** Rebuild pinned ORAS and Cosign releases with Go 1.26.9 in both installer and manager images, eliminating newly reported Go standard-library denial-of-service vulnerabilities.
+- **release-documentation:** Generate concise and detailed batch documentation from the complete unreleased fragments and corrected evidence, retaining historical package records without repeating bumps.
 
-* **ci:** bound font-verified browser evidence and preserve cleanup failures ([3ce3647](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3ce3647c780bd292a3870845b1df945f95cc0c55))
-* **ci:** verify rendered fonts before bounded browser evidence capture ([2307d1e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2307d1e762ba96555d32022ae6cf5568d2a4d7de))
-* **release:** add read-only pre-merge authorization canary ([1b1a318](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1b1a318404ba50fbcc6eb066dda0b2fcb112c7b3))
-* **release:** prepare complete batch documentation without repeated package bumps ([81d3f20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/81d3f2090aaa0b2e0e93e71ff65aad98517e782e))
-* **release:** require explicit complete-batch publication approval ([d6c2cb9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d6c2cb9d5be1b1b74c524119693b219d7b38815c))
-* **release:** require explicit complete-batch publication approval ([74435cd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/74435cd0c3d726c3a32d8996d0f0790cd7896005))
-* **security:** rebuild OCI toolchain with patched Go ([9d591a6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9d591a6896c9ae8c8ce6007f15710e821e5eea2d))
-* **security:** rebuild OCI toolchain with patched Go ([6f13bf5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6f13bf549a7df22076ea8f974e6e6e46640ee461))
+Full upgrade, compatibility and verification details: [v0.30.0 release notes](docs/releases/v0.30.0.md).
 
 ## [0.29.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.2...v0.29.3) (2026-10-08)
 
