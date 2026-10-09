@@ -89,7 +89,7 @@ assert.doesNotMatch(
   /^  (?:push|pull_request|pull_request_target|release|schedule):/m,
 );
 for (const dockerfile of [installerDockerfile, managerDockerfile]) {
-  assert.match(dockerfile, /golang:1\.26\.6-alpine3\.23@sha256:[a-f0-9]{64}/);
+  assert.match(dockerfile, /golang:1\.26\.9-alpine3\.23@sha256:[a-f0-9]{64}/);
   assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.4/);
   assert.match(dockerfile, /go build -buildvcs=false -trimpath -o \/out\/oras/);
   assert.doesNotMatch(dockerfile, /go install oras\.land\/oras\/cmd\/oras/);

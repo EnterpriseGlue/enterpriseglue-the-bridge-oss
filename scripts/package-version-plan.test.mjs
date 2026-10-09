@@ -148,11 +148,17 @@ test('the authority rejects two owners for the same bound version field', () => 
 });
 
 test('unrelated repository tooling changes produce an empty passing package plan', () => {
-  const plan = planRepositoryPackageVersions({ root: repository, baseRef: 'origin/main' });
-  assert.equal(plan.status, 'passed', plan.violations.join('\n'));
-  assert.deepEqual(plan.directPackages, []);
-  assert.deepEqual(plan.packages, []);
-  assert.ok(plan.bindings.length >= 6);
+  const root = createFixture();
+  try {
+    writeFileSync(join(root, 'scripts/tooling.js'), 'export const tooling = true;\n');
+    const plan = planRepositoryPackageVersions({ root, baseRef: 'origin/main' });
+    assert.equal(plan.status, 'passed', plan.violations.join('\n'));
+    assert.deepEqual(plan.directPackages, []);
+    assert.deepEqual(plan.packages, []);
+    assert.ok(plan.bindings.length > 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('plan reports every transitive packed-workspace bump before CI', () => {

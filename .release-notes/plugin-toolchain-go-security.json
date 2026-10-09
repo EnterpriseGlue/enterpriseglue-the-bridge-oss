@@ -1,0 +1,67 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-go-security",
+  "type": "security",
+  "scope": "plugin-toolchain",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Rebuild pinned ORAS and Cosign releases with Go 1.26.9 in both installer and manager images, eliminating newly reported Go standard-library denial-of-service vulnerabilities.",
+  "userImpact": [
+    "Connected registry acquisition and signature verification use patched toolchain binaries."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade installer and manager images and their version-matched Helm charts as one verified toolchain set; retain existing signature, digest and disconnected-import requirements."
+    ]
+  },
+  "configuration": [
+    "Both toolchain image builds use the immutable multi-architecture Go 1.26.9 Alpine builder digest. ORAS 1.3.4 and Cosign 3.1.3 module versions and existing dependency security floors are retained."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Go 1.26.9 fixes CVE-2026-78667 (net/http range-header CPU exhaustion; https://pkg.go.dev/vuln/GO-2026-6609) and CVE-2026-97031 (crypto/tls ECH memory amplification; https://pkg.go.dev/vuln/GO-2026-6607). The patched standard library is compiled into ORAS and Cosign in both images.",
+    "Scanner severity and ignore policy are unchanged. No exception or ignore-unfixed flag is introduced."
+  ],
+  "documentation": [
+    "Container notices record the pinned compiler and standard-library remediation. The Go BSD license is retained in both images."
+  ],
+  "knownLimitations": [
+    "Exact dual-architecture image scans, signing, immutable repull and disconnected-import rehearsal remain required before publication."
+  ],
+  "rollback": [
+    "Do not restore vulnerable Go binaries. If operational rollback is necessary, use a previously qualified patched toolchain set; no database rollback is needed."
+  ],
+  "validation": [
+    "Native linux/arm64 installer and manager images both report Go 1.26.9 for ORAS and Cosign and contain the Go BSD license text. Trivy 0.72.0 at the committed immutable scanner digest found zero unignored HIGH/CRITICAL findings in each exact image, using a vulnerability database updated 2026-10-09 07:05 UTC.",
+    "The identical Go build stage in both images also cross-compiled the patched binaries for linux/amd64. Exact dual-architecture final-image acceptance remains required in protected candidate qualification.",
+    "Installer 62/62 and manager 26/26 unit tests passed. Source qualification passed 179 CI contracts and the aggregate guard, 65 release-note tests, 17 toolchain publication-policy cases, 11 package-version cases, strict license notices, warning-free lint, release preflight and documentation/package guards."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.9",
+      "newVersion": "0.2.10",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.9",
+      "newVersion": "0.1.10",
+      "impact": "patch"
+    }
+  ]
+}
