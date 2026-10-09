@@ -87,7 +87,7 @@ test('candidate artifact helpers select release readiness without application or
 });
 
 test('release publication policy and legacy skill entrypoints select their maintained lanes', () => {
-  for (const path of ['scripts/release-publication-approval.mjs', 'scripts/lib/release-publication-policy.mjs', 'scripts/release-publication-policy.test.mjs', 'scripts/release-batch-integration.test.mjs']) {
+  for (const path of ['scripts/release-publication-approval.mjs', 'scripts/lib/release-publication-policy.mjs', 'scripts/release-publication-policy.test.mjs', 'scripts/release-batch-integration.test.mjs', 'scripts/release-publication-canary.mjs', 'scripts/release-publication-canary.test.mjs', 'scripts/lib/release-publication-canary-fixture.mjs']) {
     const result = classifyChangedFiles([path]);
     assert.equal(result.workflow_or_release, true);
     assert.equal(result.unknown_high_risk, false);

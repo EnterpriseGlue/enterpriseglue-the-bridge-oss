@@ -201,6 +201,24 @@ hand-edit generated documents to pass these checks.
 
 ## Publishing an approved batch
 
+Publication-authorization changes have a focused pre-merge rehearsal in the
+`Non-publishing release authorization canary` CI job. It runs the production
+approval CLI against token-free disposable Git/API fixtures, checks automatic
+event rejection, complete-batch/source/document guards, then executes the real
+signed-candidate step with the approved fixture source. Its deliberately
+unstaged candidate must be rejected as a missing manifest; authentication,
+transport and tool failures are not passing evidence. The job has only read
+permissions, cannot invoke a publisher, and is non-skippable in `ci-complete`
+when release controls are selected. Its retained receipt identifies the exact
+tested source and distinguishes fixture authority from production proof.
+
+This focused rehearsal does not accept a signed production candidate or
+replace release readiness, image, database, browser or security qualification.
+The existing weekly scratch-image/recovery canary remains required for changes
+to image publication or alias-recovery control flow. Authorization-only work
+does not need a new GCP environment or application image rebuild for its
+focused canary.
+
 After all intended code PRs are merged and the Release Please candidate passes
 its protected CI and signed staging gate, `/release` merges the release PR
 with a merge commit and resolves that exact source SHA. Its merge alone does

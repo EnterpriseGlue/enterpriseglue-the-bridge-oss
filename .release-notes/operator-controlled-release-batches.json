@@ -23,7 +23,8 @@
   "configuration": [
     "Release Please push and schedule runs prepare release PRs without tagging. Publication dispatch requires publish_release=true, source_ref, release_tag, release_pr and required_prs.",
     "The workflow plugin advances independently to 0.1.15; /new-change stops locally and /ship excludes Release Please PRs.",
-    "Legacy release-autopilot and hotfix auto-merge inputs are retained but cannot authorize a release."
+    "Legacy release-autopilot and hotfix auto-merge inputs are retained but cannot authorize a release.",
+    "Release-control CI includes a five-minute read-only authorization canary, required by ci-complete; it creates no public tags, packages or images."
   ],
   "api": {
     "compatibility": "none",
@@ -50,10 +51,11 @@
   ],
   "validation": [
     "Node 24.10.0: 144 targeted release/workflow/classifier tests passed, including 34 behavioral cases using the actual GitHub-script bodies and temporary real Git repositories. Automatic events created no release tags; incomplete batches, live-main drift and inconsistent generated documents were rejected.",
-    "The complete CI contract suite passed 174 tests and its aggregate coverage guard; all 89 change-detection/security contracts passed. Workflow actionlint, warning-free workspace lint, release-note preflight, documentation-boundary and published-package version guards passed.",
+    "The complete CI contract suite passed 178 tests and its aggregate coverage guard; all 92 change-detection/security contracts and 65 release-note tests passed. Warning-free workspace lint, release-note preflight, documentation-boundary and published-package version guards passed. Actionlint workflow validation passed; full CI ShellCheck reports six unchanged baseline diagnostics outside the added job.",
     "All 11 workflow-plugin contracts and official validation of all 25 skills passed. The supplemental Python plugin-manifest validator is absent locally; the official bundled Codex installer accepted plugin 0.1.15, and installed skill bytes match the maintained source.",
     "The actual previous #563 merge-group commit contains its PR head, confirming the new per-PR ancestry guard applies to the recorded failure.",
-    "Live RELEASE_AUTOPILOT_ENABLED is false. Workflow source remains local until /ship; the required protected-CI non-publishing canary is deferred to authorized shipping before the material publication-control change can merge. No production publication, semantic tag or deployment was performed."
+    "The focused canary passed nine local scenarios using the actual approval CLI and production signed-candidate shell step: automatic events, incomplete approval, source drift and mismatched documentation fail closed; a complete fixture approval reaches the real verifier, which rejects its missing staged candidate. Disposable Git/API fixtures carry no production authority or tokens. The exact-source hosted canary remains required before merge and does not replace signed production candidate, image, database, browser or security acceptance.",
+    "Live RELEASE_AUTOPILOT_ENABLED is false. No production publication, semantic tag, registry write or deployment was performed; source-level qualification and protected hosted acceptance remain distinct."
   ],
   "packages": []
 }
