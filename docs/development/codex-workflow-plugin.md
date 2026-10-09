@@ -53,6 +53,16 @@ belongs in the OSS host or the independently owned plugin repository.
 
 ## Included workflows
 
+The delivery commands have separate human authorization boundaries:
+`/new-change` ends with verified local changes; `/ship` pushes and merges code
+PRs; `/release` publishes one approved batch of merged PRs. Do not automatically
+advance from one command to the next. Code PRs keep their technical docs and
+release fragments, while the release command owns the combined versioned
+document, exact candidate qualification, tag and package/image publication.
+Release Please PRs cannot be merged by the shipping default or PR autopilot.
+See [Release-note and versioning process](release-notes-process.md) for the
+non-publishing preparation and explicit batch publication dispatch.
+
 The plugin contains the existing EnterpriseGlue lifecycle skills plus focused
 documentation-governance, PR-readiness, UI-evidence, access-governance
 verification, contract-parity, and plugin-development skills. The OSS

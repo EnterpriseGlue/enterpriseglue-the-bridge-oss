@@ -5,6 +5,12 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
 
 # EnterpriseGlue /ship
 
+Ship one code capability into protected main only after the human user requests
+`/ship` or explicitly authorizes pushing, PR creation, or merging it. A general
+implementation request and `/new-change` are not shipping authorization.
+Release Please PRs belong to `enterpriseglue-release`; `/ship` cannot merge
+them, enable their auto-merge, dispatch publication, or create release tags.
+
 1. Read `../../references/repository-lifecycle.json` and run the plugin-root
    lifecycle guard for the `write` operation. Stop when the repository is
    retired; historical-audit permission never authorizes shipping.
@@ -68,20 +74,25 @@ description: Use when the user says /ship, ship this branch, create a PR, push t
    Confirm metadata-only changes avoid unrelated expensive lanes and selected
    jobs cannot pass by being skipped. Do not replace exact candidate evidence
    with an advisory or mocked lane.
-11. Determine whether the PR is first-party by comparing its head repository
+   Material publication-control changes also need the non-publishing canary
+   before merge. Keep the PR draft while that required proof is unavailable so
+   repository autopilot cannot advance it prematurely; enable the normal code
+   PR merge path only after the candidate checks are satisfied.
+11. For an authorized code PR, determine whether it is first-party by comparing its head repository
    owner with the base repository owner. For a first-party PR that is not
    explicitly requested or marked as draft, enable auto-merge by default after
    the required checks and release metadata are in place. Do not enable
    auto-merge for fork/external PRs or explicitly draft PRs unless the user
    explicitly requests it. Enabling auto-merge does not authorize bypassing
    branch protection, dismissing reviews, or merging a draft.
-12. For a Release Please PR, require `docs/releases/vX.Y.Z.md` and require the
-   managed `<!-- enterpriseglue-detailed-release-notes -->` issue comment to
-   match that document. Preserve Release Please's machine-readable PR body and
-   use a merge commit—not squash. Do not delete or recreate published tags.
+12. Leave Release Please preparing one pending release PR as code PRs merge.
+    Do not advance publication. Report that the merged capability is included
+    in the next unreleased batch and route an explicitly requested publication
+    to `enterpriseglue-release`.
 13. Do not remove worktrees or branches without satisfying cleanup conditions
    and any required user confirmation.
-14. Report merge, package publication, downstream Cloud intake, staging
-    candidate installation, staging default promotion, and production promotion
-    as separate outcomes. Shipping a PR does not prove any later delivery state;
-    use the post-ship or staging-delivery workflow when the user asks to follow it.
+14. Report the code PR, merged revision, applicable checks, and unreleased
+    status. An unexpected external publication must be reported as a separate
+    observed outcome; never infer publication or deployment from a code merge.
+    Publication belongs to `/release`; Cloud intake, staging and production
+    remain separately authorized delivery work.

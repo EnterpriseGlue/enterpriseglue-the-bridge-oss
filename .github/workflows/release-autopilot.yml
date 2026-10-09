@@ -22,7 +22,7 @@ jobs:
     uses: ./.github/workflows/release-autopilot-reusable.yml
     with:
       ai_autopilot_enabled: ${{ vars.AI_AUTOPILOT_ENABLED || 'false' }}
-      release_autopilot_enabled: ${{ vars.RELEASE_AUTOPILOT_ENABLED || 'false' }}
+      release_autopilot_enabled: ${{ 'false' }}
       allowed_author: haryselman
     secrets:
       release_please_token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

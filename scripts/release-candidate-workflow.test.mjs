@@ -225,18 +225,17 @@ test('application release publication promotes candidate digests and delays alia
 })
 
 test('Release Please fails closed before creating a tag without a signed candidate', () => {
+  const approval = releasePlease.indexOf('      - name: Resolve release preparation or explicitly approved publication\n')
   const verify = releasePlease.indexOf('      - name: Verify signed candidate before tag creation\n')
   const release = releasePlease.indexOf('      - name: Run Release Please\n')
-  assert.ok(verify > 0)
+  assert.ok(approval > 0 && verify > approval)
   assert.ok(release > verify)
   assert.match(releasePlease, /bash scripts\/fetch-release-candidate\.sh "\$GITHUB_SHA" "\$RELEASE_TAG"/)
   assert.match(releasePlease, /packages: read/)
-  assert.match(releasePlease, /git log -1 --format=%B/)
-  assert.equal(
-    releasePlease.match(/match\(\/\^chore\\\(main\\\)!\?: release .*\\s\*\$\/m\)/g)?.length,
-    2,
-    'release-note publication and release existence checks must recognize a release title in a merge commit body',
-  )
+  assert.match(releasePlease, /node scripts\/release-publication-approval\.mjs/)
+  assert.match(releasePlease, /skip-github-release: \$\{\{ steps\.publication\.outputs\.is_release != 'true' \}\}/)
+  assert.match(releasePlease, /skip-github-pull-request: \$\{\{ steps\.publication\.outputs\.is_release == 'true' \}\}/)
+  assert.match(releasePlease, /object\.sha !== sourceRef/)
 })
 
 test('charts and packages consume the signed candidate with a legacy recovery boundary', () => {

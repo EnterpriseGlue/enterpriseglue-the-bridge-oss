@@ -86,6 +86,24 @@ test('candidate artifact helpers select release readiness without application or
   assert.equal(classifyChangedFiles(['.release-notes/candidate-chart-identity.json']).run_release_readiness, false);
 });
 
+test('release publication policy and legacy skill entrypoints select their maintained lanes', () => {
+  for (const path of ['scripts/release-publication-approval.mjs', 'scripts/lib/release-publication-policy.mjs', 'scripts/release-publication-policy.test.mjs', 'scripts/release-batch-integration.test.mjs']) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.workflow_or_release, true);
+    assert.equal(result.unknown_high_risk, false);
+    assert.equal(result.run_release_readiness, true);
+    assert.equal(result.run_tests, false);
+    assert.equal(result.run_postgres, false);
+  }
+  for (const command of ['new-change', 'ship', 'release']) {
+    const result = classifyChangedFiles([`.windsurf/workflows/${command}.md`]);
+    assert.ok(result.selected_classes.includes('developer_workflow'));
+    assert.equal(result.unknown_high_risk, false);
+    assert.equal(result.run_tests, false);
+  }
+  assert.equal(classifyChangedFiles(['scripts/lib/unclassified-publication-helper.mjs']).unknown_high_risk, true);
+});
+
 test('release hardening helpers do not fan out into unrelated heavyweight matrices', () => {
   const result = classifyChangedFiles([
     '.github/workflows/engine-compatibility.yml',

@@ -179,11 +179,13 @@ const classifiers = {
     /^\.github\/workflows\/(?:host-chart-release|plugin-toolchain-release)\.yml$/,
   ],
   developer_workflow: [
+    /^\.windsurf\/workflows\/(?:new-change|ship|release)\.md$/,
     /^plugins\/enterpriseglue-dev-workflows\//,
     /^scripts\/enterpriseglue-plugin/,
     /^docs\/development\/codex-workflow-plugin\.md$/,
   ],
   workflow_or_release: [
+    /^scripts\/(?:lib\/)?release-publication-/,
     /^\.github\/(?:workflows|actions)\//,
     /^\.release-notes\/schema\.json$/,
     /^scripts\/(?:lib\/)?package-version-(?:authority|plan)(?:\.|$)/,

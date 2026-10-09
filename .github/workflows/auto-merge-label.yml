@@ -27,7 +27,14 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const pull = context.payload.pull_request;
             const labels = (context.payload.pull_request.labels || []).map(label => label.name);
+            if (String(pull.head?.ref || '').startsWith('release-please--branches--') ||
+                labels.some(label => ['autorelease: pending', 'autorelease: triggered'].includes(label))) {
+              core.setOutput('should_enable', 'false');
+              core.notice('Release PRs require explicit /release; the auto-merge label cannot authorize publication.');
+              return;
+            }
             const hasLabel = labels.includes('auto-merge');
             const author = context.payload.pull_request.user?.login;
             const allowedAuthors = new Set(['haryselman', 'dependabot[bot]']);

@@ -4,6 +4,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import './release-publication-policy.test.mjs'
+import './release-batch-integration.test.mjs'
 
 import {
   changedPaths,
@@ -380,10 +382,11 @@ test('normal and hotfix release workflows generate detailed notes through the sa
     /repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{RELEASE_PR_NUMBER\}/,
     'detailed notes must not replace Release Please machine-readable PR metadata',
   )
-  assert.match(release, /gh release edit "v\$\{RELEASE_VERSION\}" --notes-file/)
+  assert.match(release, /gh release edit "\$RELEASE_TAG" --notes-file/)
   assert.match(release, /baseline --allow-pending/)
-  assert.equal((release.match(/\^chore\\\(main\\\)!\?: release/g) || []).length, 2)
-  assert.match(hotfix, /merge-method: merge/)
+  assert.match(release, /node scripts\/release-publication-approval\.mjs/)
+  assert.doesNotMatch(hotfix, /enable-pull-request-automerge/)
+  assert.equal((hotfix.match(/skip-github-release: true/g) || []).length, 2)
 })
 
 test('Release Please mutates release state only when fragments demand a release', () => {
@@ -397,8 +400,8 @@ test('Release Please mutates release state only when fragments demand a release'
   assert.match(release, /git diff --name-only --diff-filter=ACMR "\$base_tag"\.\.\.HEAD -- \.release-notes/)
   assert.match(release, /grep -Fv '\.release-notes\/schema\.json'/)
   assert.match(release, /No release-note fragment changed since \$base_tag; skipping Release Please mutation/)
-  assert.match(release, /Run Release Please[\s\S]*?if: steps\.publication\.outputs\.is_release == 'true' \|\| steps\.demand\.outputs\.should_run == 'true'/)
-  assert.match(release, /Resolve detailed release-note context[\s\S]*?if: steps\.publication\.outputs\.is_release == 'true' \|\| steps\.demand\.outputs\.should_run == 'true'/)
+  assert.match(release, /Run Release Please[\s\S]*?if: steps\.publication\.outputs\.is_release == 'true' \|\| \(steps\.publication\.outputs\.should_prepare == 'true' && steps\.demand\.outputs\.should_run == 'true'\)/)
+  assert.match(release, /Resolve detailed release-note context[\s\S]*?if: steps\.publication\.outputs\.is_release == 'true' \|\| \(steps\.publication\.outputs\.should_prepare == 'true' && steps\.demand\.outputs\.should_run == 'true'\)/)
 })
 
 test('release preparation advances the host chart once and binds it to the OSS release', () => {

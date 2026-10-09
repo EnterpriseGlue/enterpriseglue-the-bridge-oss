@@ -5,6 +5,12 @@ description: Use when the user says /new-change, newchange, start a new change, 
 
 # EnterpriseGlue /new-change
 
+This workflow authorizes local implementation and verification. Stop before
+pushing, creating a PR, or enabling merge automation unless the human user
+explicitly authorizes `/ship` or the equivalent shipping action. Do not invoke
+shipping automatically because the change is finished or the user asked to fix
+an issue. A skill mention in a question is not authorization to execute it.
+
 1. Read `../../references/repository-lifecycle.json` and run the plugin-root
    lifecycle guard for the `write` operation before creating a branch or
    worktree. Stop when the repository is retired.
@@ -50,5 +56,5 @@ description: Use when the user says /new-change, newchange, start a new change, 
     ```
 
     Resolve every package and fragment mismatch locally. Implement and verify
-    in proportion to risk, then hand off shipping to the
-   `enterpriseglue-ship` skill rather than merging from this workflow.
+    in proportion to risk, then report the reviewable local result and checks.
+    Use `enterpriseglue-ship` only after explicit shipping authorization.

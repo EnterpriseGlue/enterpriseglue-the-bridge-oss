@@ -7,6 +7,27 @@ on:
   schedule:
     - cron: "30 3 * * *"
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the explicitly approved /release batch after its release PR has merged.
+        type: boolean
+        default: false
+      source_ref:
+        description: Exact approved 40-character release merge commit on protected main.
+        type: string
+        default: ''
+      release_tag:
+        description: Exact approved vX.Y.Z release tag.
+        type: string
+        default: ''
+      release_pr:
+        description: Merged Release Please PR approved by /release.
+        type: string
+        default: ''
+      required_prs:
+        description: JSON array of merged code PR numbers included in the approved batch.
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -20,6 +41,7 @@ concurrency:
 
 jobs:
   release-please:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full release history
@@ -36,23 +58,15 @@ jobs:
       - name: Validate release baseline
         run: node scripts/release-notes.mjs baseline --allow-pending
 
-      - name: Detect an exact release publication commit
+      - name: Resolve release preparation or explicitly approved publication
         id: publication
-        shell: bash
-        run: |
-          set -euo pipefail
-          message="$(git log -1 --format=%B)"
-          version="$(sed -n 's/^chore(main)!\{0,1\}: release \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p' <<< "$message")"
-          if [[ -n "$version" ]]; then
-            [[ "$(jq -er '.["."]' .github/.release-please-manifest.json)" == "$version" ]]
-            echo "is_release=true" >> "$GITHUB_OUTPUT"
-            echo "release_tag=v$version" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_release=false" >> "$GITHUB_OUTPUT"
-          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-publication-approval.mjs
 
       - name: Detect fragment-derived release demand
         id: demand
+        if: steps.publication.outputs.should_prepare == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -104,22 +118,23 @@ jobs:
 
       - name: Run Release Please
         id: release
-        if: steps.publication.outputs.is_release == 'true' || steps.demand.outputs.should_run == 'true'
+        if: steps.publication.outputs.is_release == 'true' || (steps.publication.outputs.should_prepare == 'true' && steps.demand.outputs.should_run == 'true')
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+          skip-github-release: ${{ steps.publication.outputs.is_release != 'true' }}
+          skip-github-pull-request: ${{ steps.publication.outputs.is_release == 'true' }}
 
       - name: Resolve detailed release-note context
         id: notes
-        if: steps.publication.outputs.is_release == 'true' || steps.demand.outputs.should_run == 'true'
+        if: steps.publication.outputs.is_release == 'true' || (steps.publication.outputs.should_prepare == 'true' && steps.demand.outputs.should_run == 'true')
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PRS_JSON: ${{ steps.release.outputs.prs || '[]' }}
           PR_JSON: ${{ steps.release.outputs.pr || '{}' }}
           RELEASES_CREATED: ${{ steps.release.outputs.releases_created || 'false' }}
-          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
         with:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           script: |
@@ -165,10 +180,6 @@ jobs:
               core.setOutput('pr_version', version);
             }
 
-            const releasedVersion = String(process.env.HEAD_COMMIT_MESSAGE || '')
-              .match(/^chore\(main\)!?: release (\d+\.\d+\.\d+)\s*$/m)?.[1] || '';
-            core.setOutput('released_version', releasedVersion);
-
       - name: Prepare detailed release PR notes
         if: steps.notes.outputs.pull_number != ''
         env:
@@ -187,30 +198,33 @@ jobs:
           echo "releases_created=${{ steps.release.outputs.releases_created }}"
 
       - name: Verify release exists for merged release commit
-        if: ${{ always() && github.event_name == 'push' }}
+        if: ${{ always() && steps.publication.outputs.is_release == 'true' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          APPROVED_SOURCE_REF: ${{ steps.publication.outputs.source_ref }}
+          APPROVED_RELEASE_TAG: ${{ steps.publication.outputs.release_tag }}
         with:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           script: |
-            const headCommitMessage = String(context.payload.head_commit?.message || '').trim();
-            const match = headCommitMessage.match(/^chore\(main\)!?: release (\d+\.\d+\.\d+)\s*$/m);
-            if (!match) {
-              core.notice('Head commit is not a merged release commit. Skipping release existence verification.');
-              return;
-            }
-
-            const version = match[1];
-            const tagName = `v${version}`;
+            const tagName = process.env.APPROVED_RELEASE_TAG;
+            const sourceRef = process.env.APPROVED_SOURCE_REF;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
             async function hasTag() {
               try {
-                await github.rest.git.getRef({
+                const { data: ref } = await github.rest.git.getRef({
                   owner,
                   repo,
                   ref: `tags/${tagName}`,
                 });
+                let object = ref.object;
+                for (let depth = 0; object.type === 'tag' && depth < 3; depth++) {
+                  ({ data: { object } } = await github.rest.git.getTag({ owner, repo, tag_sha: object.sha }));
+                }
+                if (object.type !== 'commit' || object.sha !== sourceRef) {
+                  throw new Error(`Release tag ${tagName} does not identify approved source ${sourceRef}.`);
+                }
                 return true;
               } catch (error) {
                 if (error.status === 404) return false;
@@ -246,17 +260,26 @@ jobs:
 
             const [tagExists, releaseExists] = await Promise.all([hasTag(), hasRelease()]);
             core.setFailed(
-              `Expected merged release commit "${headCommitMessage}" to publish ${tagName}, but verification failed. ` +
+              `Approved source ${sourceRef} did not publish ${tagName}. ` +
               `tagExists=${tagExists} releaseExists=${releaseExists}.`
             );
 
       - name: Publish detailed GitHub release notes
-        if: steps.notes.outputs.released_version != ''
+        if: steps.publication.outputs.is_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
-          RELEASE_VERSION: ${{ steps.notes.outputs.released_version }}
+          RELEASE_TAG: ${{ steps.publication.outputs.release_tag }}
         run: |
           set -euo pipefail
-          release_file="docs/releases/v${RELEASE_VERSION}.md"
+          release_file="docs/releases/${RELEASE_TAG}.md"
           test -f "$release_file"
-          gh release edit "v${RELEASE_VERSION}" --notes-file "$release_file"
+          gh release edit "$RELEASE_TAG" --notes-file "$release_file"
+
+      - name: Retain batch publication authorization
+        if: always() && steps.publication.outputs.is_release == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-publication-authorization-${{ github.run_id }}
+          path: .artifacts/release-publication
+          if-no-files-found: error
+          retention-days: 90

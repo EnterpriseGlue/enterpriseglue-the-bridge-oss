@@ -12,7 +12,7 @@ on:
         required: false
         type: string
       enable_release_pr_automerge:
-        description: Enable auto-merge on the generated Release Please PR.
+        description: Deprecated compatibility input; ignored. Use /release for the prepared hotfix batch.
         required: false
         type: boolean
         default: false
@@ -28,6 +28,7 @@ concurrency:
 
 jobs:
   trigger-hotfix-release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full release history
@@ -53,23 +54,29 @@ jobs:
           base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
           node scripts/release-notes.mjs assert-version --base-ref "$base_tag" --version "$RELEASE_VERSION"
 
+      - name: Resolve preparation-only hotfix mode
+        id: preparation
+        run: node scripts/release-publication-approval.mjs
+
       - name: Run Release Please (automatic bump)
         id: release_auto
-        if: ${{ inputs.release_as == '' }}
+        if: ${{ steps.preparation.outputs.should_prepare == 'true' && inputs.release_as == '' }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+          skip-github-release: true
 
       - name: Run Release Please (forced release-as)
         id: release_forced
-        if: ${{ inputs.release_as != '' }}
+        if: ${{ steps.preparation.outputs.should_prepare == 'true' && inputs.release_as != '' }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+          skip-github-release: true
           release-as: ${{ inputs.release_as }}
 
       - name: Resolve release outputs
@@ -137,18 +144,18 @@ jobs:
           RELEASE_VERSION: ${{ steps.resolve.outputs.pr_version }}
         run: bash scripts/prepare-release-notes-pr.sh
 
-      - name: Enable auto-merge on generated release PR
-        if: ${{ inputs.enable_release_pr_automerge && steps.resolve.outputs.pull_number != '' }}
-        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3
-        with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
-          pull-request-number: ${{ steps.resolve.outputs.pull_number }}
-          merge-method: merge
-
       - name: Publish hotfix summary
+        env:
+          HOTFIX_REASON: ${{ inputs.reason }}
+          RELEASE_AS: ${{ inputs.release_as || 'auto' }}
+          PRS_CREATED: ${{ steps.resolve.outputs.prs_created }}
+          RELEASES_CREATED: ${{ steps.resolve.outputs.releases_created }}
+          RELEASE_PR_NUMBER: ${{ steps.resolve.outputs.pull_number || 'none' }}
         run: |
-          echo "hotfix_reason=${{ inputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "release_as=${{ inputs.release_as || 'auto' }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "prs_created=${{ steps.resolve.outputs.prs_created }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "releases_created=${{ steps.resolve.outputs.releases_created }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "release_pr_number=${{ steps.resolve.outputs.pull_number || 'none' }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '%s\n' "hotfix_reason=$HOTFIX_REASON"
+            printf '%s\n' "release_as=$RELEASE_AS"
+            printf '%s\n' "prs_created=$PRS_CREATED"
+            printf '%s\n' "releases_created=$RELEASES_CREATED"
+            printf '%s\n' "release_pr_number=$RELEASE_PR_NUMBER"
+          } >> "$GITHUB_STEP_SUMMARY"
