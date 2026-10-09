@@ -16,7 +16,7 @@ function compareVersions(left, right) {
   return 0
 }
 
-export function resolveReleasePublication({ eventName, ref, sha, commitMessage, manifestVersion, latestTag, inputs = {} }) {
+export function resolveReleasePublication({ eventName, ref, sha, sourceSha = sha, commitMessage, manifestVersion, latestTag, inputs = {} }) {
   requireValue(ref === 'refs/heads/main', 'Release preparation and publication must run from protected main.')
   requireValue(commitSha.test(sha), 'Release workflow source must be an exact commit SHA.')
   requireValue(/^v\d+\.\d+\.\d+$/.test(latestTag), 'A stable release baseline is required.')
@@ -25,16 +25,30 @@ export function resolveReleasePublication({ eventName, ref, sha, commitMessage, 
   const requested = inputs.publish_release
   requireValue([undefined, '', false, true, 'false', 'true'].includes(requested), 'publish_release must be a boolean.')
   const publish = requested === true || requested === 'true'
+  const replacing = inputs.prepare_replacement === true || inputs.prepare_replacement === 'true'
+  requireValue([undefined, '', false, true, 'false', 'true'].includes(inputs.prepare_replacement), 'prepare_replacement must be a boolean.')
+  requireValue(!(publish && replacing), 'Replacement preparation and publication are separate operations.')
   const releaseVersion = String(commitMessage).match(/^chore\(main\)!?: release (\d+\.\d+\.\d+)\s*$/m)?.[1]
+  if (replacing) {
+    requireValue(eventName === 'workflow_dispatch', 'Only an explicit dispatch may prepare a replacement candidate.')
+    requireValue(comparison > 0, 'Replacement requires a reserved version that has not been published.')
+    requireValue(inputs.source_ref === sha && sourceSha === sha && inputs.release_tag === `v${manifestVersion}`,
+      'Replacement preparation must bind the current protected source and reserved version.')
+    requireValue(!inputs.recovery_prs, 'Replacement content cannot use a publication-only repair list.')
+    const releasePR = Number(inputs.release_pr)
+    requireValue(Number.isSafeInteger(releasePR) && releasePR > 0, 'The unpublished release PR to supersede is required.')
+    return {mode:'prepare-replacement',shouldPrepare:true,shouldPublish:false,sourceRef:sha,controlRef:sha,
+      releaseTag:inputs.release_tag,releasePR,prepareReplacement:true}
+  }
   if (!publish) {
-    requireValue(!inputs.source_ref && !inputs.release_tag && !inputs.release_pr && !inputs.required_prs,
+    requireValue(!inputs.source_ref && !inputs.release_tag && !inputs.release_pr && !inputs.required_prs && !inputs.recovery_prs,
       'Publication identity requires publish_release=true on an explicitly authorized dispatch.')
     const mode = comparison > 0 ? 'await-publication' : releaseVersion ? 'published' : 'prepare'
     return { mode, shouldPrepare: mode === 'prepare', shouldPublish: false, releaseTag: `v${manifestVersion}` }
   }
 
   requireValue(eventName === 'workflow_dispatch', 'Automatic events cannot authorize release publication.')
-  requireValue(commitSha.test(inputs.source_ref ?? '') && inputs.source_ref === sha,
+  requireValue(commitSha.test(inputs.source_ref ?? '') && inputs.source_ref === sourceSha,
     'Approved source_ref must equal the exact protected-main workflow commit; refresh approval after source drift.')
   requireValue(inputs.release_tag === `v${manifestVersion}` && releaseVersion === manifestVersion,
     'Approved tag, release merge commit, and version manifest must agree.')
@@ -46,8 +60,32 @@ export function resolveReleasePublication({ eventName, ref, sha, commitMessage, 
     'A non-empty approved code-PR batch is required.')
   requireValue(new Set(requiredPRs).size === requiredPRs.length && !requiredPRs.includes(releasePR),
     'Approved code PR numbers must be unique and exclude the release PR.')
-  return { mode: 'publish', shouldPrepare: false, shouldPublish: true, sourceRef: sha,
-    releaseTag: inputs.release_tag, releasePR, requiredPRs }
+  let recoveryPRs
+  try { recoveryPRs = JSON.parse(inputs.recovery_prs || '[]') } catch { throw new Error('recovery_prs must be a JSON array of repair PR numbers.') }
+  requireValue(Array.isArray(recoveryPRs) && recoveryPRs.every(number => Number.isSafeInteger(number) && number > 0),
+    'Recovery PR numbers must be positive integers.')
+  requireValue(new Set(recoveryPRs).size === recoveryPRs.length && recoveryPRs.every(number => !requiredPRs.includes(number) && number !== releasePR),
+    'Recovery PRs must be unique and separate from the frozen release batch.')
+  requireValue(sourceSha === sha ? recoveryPRs.length === 0 : recoveryPRs.length > 0,
+    'A different workflow revision requires an explicit recovery_prs list; unchanged sources cannot accept repair PRs.')
+  return { mode: 'publish', shouldPrepare: false, shouldPublish: true, sourceRef: sourceSha, controlRef: sha,
+    releaseTag: inputs.release_tag, releasePR, requiredPRs, recoveryPRs }
+}
+
+// Deliberately excludes application sources, manifests, lockfiles, Dockerfiles,
+// charts, migration/schema data and scanner policies. Unknown paths fail closed.
+export function isPublicationRepairPath(path) {
+  const allowed = [
+    /^scripts\/(?:lib\/)?release-publication-[a-z0-9.-]+\.(?:mjs|sh|json)$/,
+    /^scripts\/ci-change-classifier(?:\.test)?\.mjs$/,
+    /^scripts\/release-(?:notes(?:\.test)?|canary-workflow\.test|candidate-workflow\.test|batch-integration\.test)\.mjs$/,
+    /^scripts\/prepare-release-notes-pr\.sh$/,
+    /^\.github\/workflows\/(?:release-please|release-publication-reconcile|release-canary|release-candidate-stage|docker-images|plugin-package-release|host-package-release|host-chart-release|plugin-toolchain-release)\.yml$/,
+    /^plugins\/enterpriseglue-dev-workflows\/[^\0]+$/,
+    /^docs\/(?:development\/(?:release-notes-process|codex-workflow-plugin)|runbooks\/release-artifact-promotion)\.md$/,
+    /^\.release-notes\/resumable-release-publication\.json$/,
+  ]
+  return allowed.some(pattern => pattern.test(path))
 }
 
 export function validateReleasePublicationApproval({ approval, repository, releasePR, codePRs, includedPRs, releaseDocument, managedComments }) {

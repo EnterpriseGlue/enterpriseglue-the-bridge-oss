@@ -1,0 +1,66 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "resumable-release-publication",
+  "type": "fix",
+  "scope": "release-authorization",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Publish and recover one frozen release batch through signed immutable records, reviewed workflow repairs and observed registry receipts.",
+  "userImpact": [
+    "Publication failures can resume the approved candidate without creating another software release or rebuilding its artifacts.",
+    "Publication status distinguishes qualified, approved, publishing, partially published and verified published outcomes."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Install workflow plugin 0.1.16 and the reviewed protected-main publication workflows; use the frozen source and explicit recovery_prs when repairing an already qualified release."
+    ]
+  },
+  "configuration": [
+    "Explicit release dispatch retains source_ref, release_tag, release_pr and required_prs; optional recovery_prs lists every reviewed publication-only repair after the frozen source.",
+    "Signed publication identities and append-only observations are stored in enterpriseglue-oss-release-publication on GHCR.",
+    "Release Publication Reconcile automatically observes publisher completion. Manual resume=true renews approval and security acceptance before dispatching only incomplete publishers.",
+    "GitHub history reads project merge state, branch names and labels one bounded page at a time; the workflow plugin advances independently to 0.1.16.",
+    "Explicit prepare_replacement=true may supersede an unpublished reserved release PR and regenerate one replacement candidate at the same version. Neither tag nor GitHub release may exist."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database or application-runtime changes."
+    ]
+  },
+  "security": [
+    "Automatic events remain non-publishing. Frozen batch ancestry, generated-document and managed-comment equality, exact candidate signatures and immutable payload hashes remain mandatory.",
+    "Recovery requires explicit first-party repair PRs and a strict path allowlist. Application sources, dependency locks, package manifests, Dockerfiles, charts, migrations, scanner policy and unknown paths cannot qualify as publication-only repairs.",
+    "Fresh scans cover all five exact image roles on AMD64 and ARM64 under the pinned scanner and unchanged severity/ignore policy, with current vulnerability database metadata and hashed reports.",
+    "Unknown registry state and immutable conflicts stop recovery writes. Scratch canary records are marked as fixtures and cannot enter the production publication repository."
+  ],
+  "documentation": [
+    "Technical release/versioning documentation and the artifact-promotion runbook define frozen identity, workflow authority, observation states, retry conditions and recovery commands.",
+    "Maintained ship, release and watch skills describe the same protocol and keep deployment approval separate.",
+    "Replacement preparation preserves the prior published changelog bytes, removes superseded unpublished sections and keeps metadata-only release PRs separate from the code-PR batch."
+  ],
+  "knownLimitations": [
+    "Observed registry publication does not establish Cloud installation, route promotion or production deployment.",
+    "A content change requires a new generated document and qualified candidate; only reviewed publication-only repairs may reuse frozen artifacts."
+  ],
+  "rollback": [
+    "Revert the reviewed publication tooling and stop new recovery dispatches. Retain signed records and existing releases; never delete or repoint published tags. No package or database rollback is required."
+  ],
+  "validation": [
+    "Local qualification passed 181 CI contracts and the aggregate guard, 122 release-note/package regressions, warning-free workspace lint, Actionlint, Shellcheck, package discipline and documentation-boundary checks.",
+    "The maintained plugin passed 11 repository contracts and official checks for all 25 skills. The separate official Python plugin-manifest validator is unavailable locally; installer and protected validation remain distinct evidence.",
+    "Real Git histories exercise frozen-source recovery, explicit repair ancestry, prohibited content changes and reserved-version replacement. The actual toolchain authority and privileged candidate-validation scripts are executed in regression tests.",
+    "The read-only production CLI authorization canary tests automatic-event rejection, incomplete batches, source drift, document mismatch, reviewed publication-only repair and application-drift rejection. Signed scratch registry and protected candidate qualification remain required before publication."
+  ],
+  "packages": []
+}

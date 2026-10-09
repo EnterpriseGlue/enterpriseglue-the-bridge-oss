@@ -43,14 +43,39 @@ export function createCanaryFixture() {
     [`${prefix}git/ref/heads/main`]: [{ object: { sha } }],
     [`${prefix}pulls/900`]: [releasePR],
     [`${prefix}issues/900/comments`]: [[{ body: `${detailedNotesMarker}\n\n${document}` }]],
-    [`${prefix}pulls?state=closed&per_page=100`]: [[releasePR]],
+    [`${prefix}pulls?state=closed&per_page=100`]: [[{ ...releasePR, body: 'x'.repeat(2 * 1024 * 1024) }, ...Array.from({length: 99}, (_, index) => ({number: 1000 + index, merged_at: null, labels: []}))], codePRs],
   }
   for (const pr of codePRs) {
     api[`${prefix}pulls/${pr.number}`] = [pr]
     api[`${prefix}commits/${pr.merge_commit_sha}/pulls?per_page=100`] = [[pr]]
   }
   write('.artifacts/api.json', JSON.stringify(api))
-  write('.artifacts/bin/gh', `#!${process.execPath}\nimport assert from 'node:assert/strict';\nimport { appendFileSync, readFileSync } from 'node:fs';\nfor (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'NODE_AUTH_TOKEN', 'HOME']) assert.equal(process.env[key], undefined);\nconst args = process.argv.slice(2);\nassert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);\nassert.equal(args.length, 4);\nconst api = JSON.parse(readFileSync(process.env.CANARY_API_FILE, 'utf8'));\nassert.ok(Object.hasOwn(api, args[3]), 'Unallowlisted fixture API request');\nappendFileSync(process.env.CANARY_API_TRACE, args[3] + '\\n');\nconsole.log(JSON.stringify(api[args[3]]));\n`)
+  write('.artifacts/bin/gh', `#!${process.execPath}
+import assert from 'node:assert/strict';
+import { appendFileSync, readFileSync } from 'node:fs';
+for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'NODE_AUTH_TOKEN', 'HOME']) assert.equal(process.env[key], undefined);
+const args = process.argv.slice(2);
+assert.equal(args[0], 'api');
+const history = args[1] === '--jq';
+if (history) {
+  assert.equal(args.length, 4);
+  assert.equal(args[2], 'map({number, merged_at, merge_commit_sha, head: {ref: .head.ref}, labels: [.labels[] | {name}]})');
+} else {
+  assert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);
+  assert.equal(args.length, 4);
+}
+const endpoint = args.at(-1).replace(/&page=\\d+$/, '');
+const pageIndex = Number(args.at(-1).match(/&page=(\\d+)$/)?.[1] || '1') - 1;
+const api = JSON.parse(readFileSync(process.env.CANARY_API_FILE, 'utf8'));
+assert.ok(Object.hasOwn(api, endpoint), 'Unallowlisted fixture API request');
+assert.equal(history, endpoint.endsWith('/pulls?state=closed&per_page=100'));
+appendFileSync(process.env.CANARY_API_TRACE, endpoint + '\\n');
+if (history) {
+  const page = api[endpoint][pageIndex] || [];
+  console.log(JSON.stringify(page.map(pr => ({number: pr.number, merged_at: pr.merged_at, merge_commit_sha: pr.merge_commit_sha,
+    head: {ref: pr.head?.ref}, labels: (pr.labels || []).map(({name}) => ({name}))}))));
+} else console.log(JSON.stringify(api[endpoint]));
+`)
   const inputs = { publish_release: true, source_ref: sha, release_tag: 'v0.29.4', release_pr: '900', required_prs: '[551,552]' }
   return { root, git, write, sha, repository, api, inputs, prefix }
 }

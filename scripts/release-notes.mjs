@@ -494,7 +494,7 @@ export function renderReleaseNotes(fragments, { version = 'next', baseRef = '' }
   return output
 }
 
-export function syncReleaseChangelog(text, fragments, version) {
+export function syncReleaseChangelog(text, fragments, version, historicalText) {
   parseVersion(version, 'release version')
   if (fragments.length === 0) fail('Cannot generate a release changelog without fragments.')
   const headings = [...text.matchAll(/^## \[([^\]\n]+)\].*$/gm)]
@@ -508,14 +508,23 @@ export function syncReleaseChangelog(text, fragments, version) {
   if (breaking.length) body += `### Breaking changes\n\n${bullets(breaking)}\n\n`
   if (other.length) body += `### Changes\n\n${bullets(other)}\n\n`
   body += `Full upgrade, compatibility and verification details: [v${version} release notes](docs/releases/v${version}.md).\n\n`
-  return text.slice(0, first.index) + body + text.slice(end)
+  let history=text.slice(end)
+  if (historicalText !== undefined) {
+    const stable=historicalText.match(/^## \[([^\]\n]+)\].*$/m)
+    if (!stable) fail('Published changelog history is missing its first release heading.')
+    if (stable[1]===version) fail('Cannot replace an already published release changelog.')
+    history=historicalText.slice(stable.index)
+    body=body.replace(/\/compare\/v[^.]+\.[^.]+\.[^.]+\.\.\.v/,`/compare/v${stable[1]}...v`)
+  }
+  return text.slice(0, first.index) + body + history
 }
 
 function runChangelog(root, options) {
   if (!options.version || !options.output) fail('changelog requires --version X.Y.Z and --output CHANGELOG.md.')
   const selection = releaseSelection(root, options.baseRef || resolveDefaultBase(root))
   const original = readFileSync(join(root, options.output), 'utf8')
-  writeOutput(options.output, syncReleaseChangelog(original, selection.selected.map(entry => entry.value), options.version), root)
+  const history=execFileSync('git',['show',`${options.baseRef || resolveDefaultBase(root)}:CHANGELOG.md`],{cwd:root,encoding:'utf8'})
+  writeOutput(options.output, syncReleaseChangelog(original, selection.selected.map(entry => entry.value), options.version, history), root)
 }
 
 export function validateBaselineState({ manifestVersion, latestTag, changelog, allowPending = false }) {

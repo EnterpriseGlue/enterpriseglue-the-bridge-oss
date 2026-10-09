@@ -67,6 +67,23 @@ test('recovery drill detects a partial update and restores only scratch aliases'
   assert.doesNotMatch(recovery, /--tag "\$PUBLIC_(?:BACKEND|FRONTEND):/)
 })
 
+test('first-party PR canaries require an explicit dispatch and exact head before obtaining scratch write permissions', () => {
+  const resolver=workflow.slice(workflow.indexOf('  resolve-canary-source:'),workflow.indexOf('  scratch-images:'))
+  assert.match(resolver,/context\.eventName !== 'workflow_dispatch'/)
+  assert.match(resolver,/pull\.head\.sha === context\.sha/)
+  assert.match(resolver,/pull\.head\.repo\?\.full_name/)
+  assert.match(workflow,/scratch-images:[\s\S]*?needs: resolve-canary-source/)
+})
+
+test('the ledger canary exercises the production store only in a marked scratch namespace', () => {
+  const ledger=workflow.slice(workflow.indexOf('  publication-ledger-canary:'),workflow.indexOf('  non-publishing-release-drill:'))
+  assert.match(ledger,/enterpriseglue-release-canary-publication/)
+  assert.match(ledger,/EG_PUBLICATION_CANARY: 'true'/)
+  assert.match(ledger,/node scripts\/release-publication-ledger-canary\.mjs/)
+  assert.match(ledger,/node --test scripts\/release-publication-record\.test\.mjs/)
+  assert.doesNotMatch(ledger,/npm publish|docker buildx imagetools create|gh release create/)
+})
+
 test('frontend assets build natively while runtime tools match the target platform', () => {
   assert.match(
     frontendDockerfile,
