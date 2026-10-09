@@ -5,6 +5,10 @@ description: Use when the user says /hotfix, urgent EnterpriseGlue fix, fast-tra
 
 # EnterpriseGlue /hotfix
 
+Urgency does not collapse authorization boundaries. Implement and verify
+locally unless shipping is explicitly requested; publication still requires
+the human user's `/release` or equivalent direct publication request.
+
 1. Read `../../references/repository-lifecycle.json` and run the plugin-root
    lifecycle guard for the `write` operation. Never create a hotfix for a
    retired repository.
@@ -20,9 +24,10 @@ description: Use when the user says /hotfix, urgent EnterpriseGlue fix, fast-tra
    existing tag.
 5. Run focused reproduction/regression tests, package compatibility, migration
    checks when applicable, and the release-note validator/preview.
-6. Ship the fix PR through normal required checks. Then invoke the repository
-   Hotfix Release workflow, which must generate the same detailed versioned
-   document as a normal release.
-7. Release Please hotfix PRs use merge commits. Do not squash release PRs.
-8. Verify the final GitHub release body, images, digests, smoke tests, and
-   vulnerability scan. Never delete or recreate a release tag; fix forward.
+6. Use `/ship` for an explicitly authorized fix PR through normal required
+   checks. The Hotfix Release workflow only prepares the same detailed release
+   document as a normal release; its legacy auto-merge input cannot publish.
+7. Use `enterpriseglue-release` only when publication is explicitly authorized.
+   Its approved batch may contain the hotfix and other agreed merged PRs.
+8. Preserve immutable tags and qualified payloads; publication verification
+   and recovery belong to the release workflow. Never delete or recreate a tag.

@@ -120,7 +120,13 @@ jobs:
             core.setOutput('exempt', String(labels.includes('release-note:none')));
             core.setOutput('number', String(pullNumber));
             core.setOutput('head_ref', pullRequest.head?.ref || '');
+            core.setOutput('head_sha', pullRequest.head?.sha || '');
             core.setOutput('head_repository', pullRequest.head?.repo?.full_name || '');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              pull_number: pullNumber, per_page: 100,
+            });
+            core.setOutput('changed_files', JSON.stringify(files.map(file => file.filename)));
 
       - name: Resolve release-note comparison base
         id: release_base
@@ -154,8 +160,18 @@ jobs:
           RELEASE_PR_LABELS: ${{ steps.pull_request.outputs.labels || '' }}
           RELEASE_PR_TITLE: ${{ steps.pull_request.outputs.title || '' }}
           RELEASE_PR_HEAD_REF: ${{ steps.pull_request.outputs.head_ref || '' }}
+          RELEASE_PR_HEAD_SHA: ${{ steps.pull_request.outputs.head_sha || '' }}
+          RELEASE_PR_CHANGED_FILES: ${{ github.event_name == 'merge_group' && !startsWith(steps.pull_request.outputs.head_ref, 'release-please--branches--') && steps.pull_request.outputs.changed_files || '' }}
         run: |
           set -euo pipefail
+          if [[ -n "$RELEASE_PR_CHANGED_FILES" ]]; then
+            [[ "$RELEASE_PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+            git fetch --no-tags origin "$RELEASE_PR_HEAD_SHA"
+            git merge-base --is-ancestor "$RELEASE_PR_HEAD_SHA" HEAD || {
+              echo "Current PR head is absent from the immutable merge group" >&2
+              exit 1
+            }
+          fi
           base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
           preflight_args=(
             --base-ref "${{ steps.release_base.outputs.base_ref }}"

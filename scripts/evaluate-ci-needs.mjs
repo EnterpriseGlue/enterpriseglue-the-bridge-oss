@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const acceptedResults = new Set(['success', 'skipped'])
 
 const selectedJobMap = new Map([
+  ['workflow_or_release', ['release-authorization-canary']],
   ['run_documentation_guard', ['documentation-boundary']],
   ['run_boundary_guards', ['boundary-guards']],
   ['run_plugin_checks', ['plugin-platform', 'plugin-api-compat-current', 'plugin-api-compat-next']],

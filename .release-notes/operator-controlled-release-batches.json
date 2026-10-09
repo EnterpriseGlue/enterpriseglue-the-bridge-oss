@@ -1,0 +1,61 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "operator-controlled-release-batches",
+  "type": "fix",
+  "scope": "release-authorization",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Separate local implementation, code shipping and explicitly approved multi-PR release publication, with exact generated release-document verification.",
+  "userImpact": [
+    "Merged code changes can accumulate in one pending release instead of automatically publishing a release after the first PR."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Set RELEASE_AUTOPILOT_ENABLED=false, reinstall the maintained workflow plugin, and use /release to publish the complete agreed batch through the explicit source/tag/PR dispatch."
+    ]
+  },
+  "configuration": [
+    "Release Please push and schedule runs prepare release PRs without tagging. Publication dispatch requires publish_release=true, source_ref, release_tag, release_pr and required_prs.",
+    "The workflow plugin advances independently to 0.1.15; /new-change stops locally and /ship excludes Release Please PRs.",
+    "Legacy release-autopilot and hotfix auto-merge inputs are retained but cannot authorize a release.",
+    "Release-control CI includes a five-minute read-only authorization canary, required by ci-complete; it creates no public tags, packages or images."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No application schema or historical migration change."
+    ]
+  },
+  "security": [
+    "Automatic events, labels and autopilot settings cannot authorize production tag creation. Publication requires an exact protected source, merged batch ancestry, generated document and managed-comment equality, and the existing signed candidate proof."
+  ],
+  "documentation": [
+    "Technical release-process and plugin documentation define command authority, batch composition, documentation generation and the explicit publication inputs. Legacy workflow entrypoints delegate to the maintained skills."
+  ],
+  "knownLimitations": [
+    "The release merge/publication interval is frozen; a change to protected main invalidates the approved source and stops publication."
+  ],
+  "rollback": [
+    "Restore the prior workflow only through an explicitly authorized change; do not alter published tags or bypass candidate validation."
+  ],
+  "validation": [
+    "Node 24.10.0: 144 targeted release/workflow/classifier tests passed, including 34 behavioral cases using the actual GitHub-script bodies and temporary real Git repositories. Automatic events created no release tags; incomplete batches, live-main drift and inconsistent generated documents were rejected.",
+    "The complete CI contract suite passed 178 tests and its aggregate coverage guard; all 92 change-detection/security contracts and 65 release-note tests passed. Warning-free workspace lint, release-note preflight, documentation-boundary and published-package version guards passed. Actionlint workflow validation passed; full CI ShellCheck reports six unchanged baseline diagnostics outside the added job.",
+    "All 11 workflow-plugin contracts and official validation of all 25 skills passed. The supplemental Python plugin-manifest validator is absent locally; the official bundled Codex installer accepted plugin 0.1.15, and installed skill bytes match the maintained source.",
+    "The actual previous #563 merge-group commit contains its PR head, confirming the new per-PR ancestry guard applies to the recorded failure.",
+    "The focused canary passed nine local scenarios using the actual approval CLI and production signed-candidate shell step: automatic events, incomplete approval, source drift and mismatched documentation fail closed; a complete fixture approval reaches the real verifier, which rejects its missing staged candidate. Disposable Git/API fixtures carry no production authority or tokens. The exact-source hosted canary remains required before merge and does not replace signed production candidate, image, database, browser or security acceptance.",
+    "Live RELEASE_AUTOPILOT_ENABLED is false. No production publication, semantic tag, registry write or deployment was performed; source-level qualification and protected hosted acceptance remain distinct."
+  ],
+  "packages": []
+}

@@ -530,7 +530,20 @@ function runValidate(root, options) {
     exemptionReason: process.env.RELEASE_NOTE_EXEMPT_REASON || '',
   })
   const labels = String(process.env.RELEASE_PR_LABELS || '').split(',').map((label) => label.trim()).filter(Boolean)
-  validatePrClassification(fragments, {
+  let classifiedFragments = fragments
+  if (process.env.RELEASE_PR_CHANGED_FILES) {
+    const prFiles = JSON.parse(process.env.RELEASE_PR_CHANGED_FILES)
+    if (!Array.isArray(prFiles) || prFiles.length === 0 || !prFiles.every(file => typeof file === 'string' && file.length > 0)) {
+      fail('Current PR changed files must be a non-empty JSON array of paths.')
+    }
+    const ownPaths = new Set(prFiles)
+    classifiedFragments = selection.all.filter(entry => ownPaths.has(entry.path)).map(entry => entry.value)
+    // A merge group can include earlier PRs with a different release impact.
+    // Validate aggregate coverage, but apply title/label and exemption rules
+    // only to the current PR's own API-verified file list.
+    validatePathCoverage(prFiles, classifiedFragments, { exempt, exemptionReason: process.env.RELEASE_NOTE_EXEMPT_REASON || '' })
+  }
+  validatePrClassification(classifiedFragments, {
     title: process.env.RELEASE_PR_TITLE || '',
     labels,
     isReleasePlease: String(process.env.RELEASE_PR_HEAD_REF || '').startsWith('release-please--branches--'),

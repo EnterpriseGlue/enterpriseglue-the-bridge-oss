@@ -5,6 +5,23 @@ Please remains the authority for application versions, release pull requests,
 tags, and GitHub releases; structured release-note fragments provide the
 detail that cannot be reconstructed reliably from commit titles.
 
+## Implementation, shipping and publication authority
+
+`/new-change` implements and verifies locally. It does not push or create a PR.
+`/ship` explicitly authorizes shipping a code capability into protected main;
+its per-change docs, fragments, package checks and protected CI remain required.
+`/release` separately authorizes publication of one complete batch of merged
+PRs. A general fix request, successful CI, a label or a code merge is not
+publication approval.
+
+Multiple reviewable code PRs can belong to one release. Release Please keeps one
+pending release PR up to date as they merge; automatic runs use
+`skip-github-release` and cannot create tags or GitHub releases. Release PRs are
+excluded from both PR autopilot and label-driven auto-merge, even if the legacy
+release-autopilot setting is enabled. Set `RELEASE_AUTOPILOT_ENABLED=false` in
+existing installations. Hotfix preparation follows the same boundary; its
+legacy auto-merge input is retained for compatibility and ignored.
+
 There are two different manifests with different owners:
 
 - change authors create `.release-notes/<change-id>.json` fragments;
@@ -136,6 +153,13 @@ The preflight:
    and package/version details; and
 6. recommends the semantic version and builds the release-note preview.
 
+For merge groups, combined path coverage is still validated. The current code
+PR's title, labels and exemption are checked against its own API-verified file
+list, with its exact head required to be an ancestor of the group. An earlier
+breaking PR therefore cannot force a later fix PR to acquire a false breaking
+title. Release Please PRs continue to validate the complete release against the
+previous stable tag.
+
 If any step fails, CI change detection, build matrices, browsers, containers,
 database adapters, CodeQL, and dependency-notice verification do not start.
 Separate GitHub Actions workflows cannot depend on a job in another workflow,
@@ -157,8 +181,77 @@ release pull request. The workflow then:
    one linked commit is already represented by its merge commit;
 5. synchronizes that document to a managed release pull-request comment while
    preserving Release Please's machine-readable pull-request body; and
-6. publishes the same document as the GitHub release body after the release
-   pull request is merged.
+6. holds publication until an explicit approved `/release` dispatch, then
+   publishes the same document as the GitHub release body.
+
+The release operator reviews the combined document against the frozen source
+and accepted candidate. Package rows consolidate the continuous version chain
+from the previous published version to the final version. New migrations are
+listed as new; fixes to historical migrations are explained separately.
+Remove superseded pending-check claims and keep development retries in CI
+artifacts. Technical API/configuration/upgrade docs accompany the code.
+Customer guides target the documentation CMS; when it is unavailable, drafts
+remain explicitly unpublished under the non-Git customer-docs staging root.
+
+The publication gate regenerates `docs/releases/vX.Y.Z.md` from every fragment
+changed since the previous stable tag and compares it byte-for-byte with the
+checked-in document. Its complete contents must also match the managed release
+PR comment. The concise `CHANGELOG.md` remains ancestry-deduplicated. Do not
+hand-edit generated documents to pass these checks.
+
+## Publishing an approved batch
+
+Publication-authorization changes have a focused pre-merge rehearsal in the
+`Non-publishing release authorization canary` CI job. It runs the production
+approval CLI against token-free disposable Git/API fixtures, checks automatic
+event rejection, complete-batch/source/document guards, then executes the real
+signed-candidate step with the approved fixture source. Its deliberately
+unstaged candidate must be rejected as a missing manifest; authentication,
+transport and tool failures are not passing evidence. The job has only read
+permissions, cannot invoke a publisher, and is non-skippable in `ci-complete`
+when release controls are selected. Its retained receipt identifies the exact
+tested source and distinguishes fixture authority from production proof.
+
+This focused rehearsal does not accept a signed production candidate or
+replace release readiness, image, database, browser or security qualification.
+The existing weekly scratch-image/recovery canary remains required for changes
+to image publication or alias-recovery control flow. Authorization-only work
+does not need a new GCP environment or application image rebuild for its
+focused canary.
+
+After all intended code PRs are merged and the Release Please candidate passes
+its protected CI and signed staging gate, `/release` merges the release PR
+with a merge commit and resolves that exact source SHA. Its merge alone does
+not publish. The explicit publication dispatch is:
+
+```bash
+gh workflow run release-please.yml --ref main \
+  -f publish_release=true \
+  -f source_ref=<exact-release-merge-SHA> \
+  -f release_tag=vX.Y.Z \
+  -f release_pr=<merged-release-PR-number> \
+  -f required_prs='[<code-PR-number>,<code-PR-number>]'
+```
+
+These inputs record the already approved batch. The gate rejects missing or
+unmerged PRs, PRs outside that source's ancestry, source drift, inconsistent
+version identities, another merged release awaiting publication, or mismatched
+generated documentation. The approved list must match every unreleased code PR
+in main's first-parent history; naming only a subset cannot publish additional
+unapproved changes. The gate also verifies the live protected-main head. The
+source must still be the exact protected-main
+workflow commit; if main moves, stop and resolve the changed composition rather
+than silently substituting a new SHA. Keep the brief release merge/publication
+interval frozen.
+
+The signed candidate is verified before Release Please can tag. Automatic
+push/schedule runs only prepare PRs, and pause preparation while a release merge
+is awaiting publication. The authorization artifact records the source, tag,
+release PR, required code PRs, baseline and dispatcher; it is evidence of the
+explicit workflow request, not a substitute for signed candidate acceptance.
+Post-tag image and package workflows promote the same qualified bytes. Verify
+the resulting tag's exact source and release-body/document equality, then
+report image/package publication separately from any deployment.
 
 The ancestry-aware changelog pass retains the merge commit entry, leaves
 unrelated commits with identical text untouched, and never rewrites an older

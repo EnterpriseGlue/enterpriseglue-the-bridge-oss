@@ -22,6 +22,16 @@ test('CI needs reject a skipped release-readiness job when it is required', () =
   assert.deepEqual(evaluation.rejected, [{ job: 'release-readiness', result: 'skipped' }])
 })
 
+test('release-control selection requires the non-publishing canary, including merge groups', () => {
+  const required = requiredJobsForSelection({ workflow_or_release: 'true' })
+  assert.deepEqual(required, ['release-authorization-canary'])
+  assert.equal(evaluateNeeds({ 'release-authorization-canary': { result: 'skipped' } }, {
+    requiredNonSkippedJobs: required,
+  }).passed, false)
+  assert.throws(() => evaluateNeeds({ other: { result: 'success' } }, { requiredNonSkippedJobs: required }), /required job is missing/)
+  assert.deepEqual(requiredJobsForSelection({ workflow_or_release: 'false' }), [])
+})
+
 test('change classification makes every selected expensive lane non-skippable', () => {
   const required = requiredJobsForSelection({
     run_plugin_checks: 'true',

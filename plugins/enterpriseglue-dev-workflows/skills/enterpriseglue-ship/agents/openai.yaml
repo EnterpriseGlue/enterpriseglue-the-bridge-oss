@@ -1,4 +1,4 @@
 interface:
   display_name: "EnterpriseGlue Ship"
-  short_description: "Validate and ship an EnterpriseGlue change"
+  short_description: "Merge an authorized code PR without releasing"
   default_prompt: "Use $enterpriseglue-ship to help with this EnterpriseGlue task."

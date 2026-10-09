@@ -109,7 +109,10 @@ an emulated critical path.
 
 The weekly `Release Canary` invokes this same reusable image path in dedicated
 scratch repositories and runs the non-publishing release-readiness drill. It
-must be green before enabling a material release-control change. It is evidence
+must be green before enabling material image-publication or alias-recovery
+control changes. Authorization-only changes use the mandatory read-only
+pre-merge authorization canary documented in
+[the release-note process](../development/release-notes-process.md). It is evidence
 for workflow permissions and control flow, not permission to skip the exact
 candidate checks above.
 

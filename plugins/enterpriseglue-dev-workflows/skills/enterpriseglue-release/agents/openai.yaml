@@ -1,4 +1,4 @@
 interface:
   display_name: "EnterpriseGlue Release"
-  short_description: "Publish and verify an EnterpriseGlue release"
+  short_description: "Publish one approved batch of merged PRs"
   default_prompt: "Use $enterpriseglue-release to help with this EnterpriseGlue task."

@@ -9,7 +9,7 @@ on:
         type: string
         default: 'false'
       release_autopilot_enabled:
-        description: Whether release PR autopilot is enabled
+        description: Deprecated compatibility input; release PRs always require explicit /release authorization.
         required: false
         type: string
         default: 'false'
@@ -40,7 +40,6 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const autopilotEnabled = String(process.env.AI_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
-            const releaseAutopilotEnabled = String(process.env.RELEASE_AUTOPILOT_ENABLED || 'false').toLowerCase() === 'true';
             const authorLogin = String(pr.user?.login || '').toLowerCase();
             const prTitle = String(pr.title || '').toLowerCase();
             const prHeadRef = String(pr.head?.ref || '').toLowerCase();
@@ -70,12 +69,12 @@ jobs:
 
             const labels = (pr.labels || []).map((label) => label.name);
 
-            // Release Please PRs: opt-in (disabled by default)
+            // A release is a separately authorized batch, never PR autopilot.
             const isReleasePleaseLabel = labels.includes('autorelease: pending') || labels.includes('autorelease: triggered');
             const isReleasePR = isReleasePleaseBranch || isReleasePleaseLabel;
 
-            if (isReleasePR && !releaseAutopilotEnabled) {
-              core.notice('Release Please PR detected. Auto-merge is disabled by default (set RELEASE_AUTOPILOT_ENABLED=true to enable).');
+            if (isReleasePR) {
+              core.notice('Release Please PR detected. Only an explicitly authorized /release may merge and publish the batch.');
               core.setOutput('should_enable', 'false');
               return;
             }
