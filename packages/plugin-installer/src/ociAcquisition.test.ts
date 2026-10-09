@@ -462,7 +462,7 @@ describe('connected OCI plugin acquisition', () => {
     const connectedBranch = wrapper.slice(connectedStart, connectedEnd);
     expect(connectedStart).toBeGreaterThanOrEqual(0);
     expect(connectedEnd).toBeGreaterThan(connectedStart);
-    expect(dockerfile).toContain('golang:1.26.6-alpine3.23@sha256:');
+    expect(dockerfile).toContain('golang:1.26.9-alpine3.23@sha256:');
     expect(dockerfile).toContain('go get oras.land/oras/cmd/oras@v1.3.4');
     expect(dockerfile).toContain(
       'go build -buildvcs=false -trimpath -o /out/oras oras.land/oras/cmd/oras',

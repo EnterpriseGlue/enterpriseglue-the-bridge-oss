@@ -35,7 +35,7 @@ RUN pnpm --filter @enterpriseglue/plugin-sdk build \
       /packs/enterpriseglue-plugin-installer-*.tgz \
   && test -z "$(find /output -type f -name '*.node' -print -quit)"
 
-FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS oras
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine3.23@sha256:96123126ac58e910f4dd3619a8901e2fb6d1ad84b59b1232cac7c9ea65a8f888 AS oras
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -79,7 +79,7 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
       golang.org/x/text@v0.41.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
       go build -buildvcs=false -trimpath \
-        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.3 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
+        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.4 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
         -o /out/cosign github.com/sigstore/cosign/v3/cmd/cosign \
   && go version -m /out/cosign | grep -E 'golang.org/x/crypto[[:space:]]+v0\.55\.0' \
   && go version -m /out/cosign | grep -E 'golang.org/x/mod[[:space:]]+v0\.40\.0' \
@@ -99,6 +99,7 @@ COPY --from=build --chown=65532:65532 /output ./
 COPY --from=oras /out/oras /usr/local/bin/oras
 COPY --from=oras /out/cosign /usr/local/bin/cosign
 COPY LICENSE /usr/share/licenses/enterpriseglue-plugin-installer/Apache-2.0.txt
+COPY --from=oras /usr/local/go/LICENSE /usr/share/licenses/enterpriseglue-plugin-installer/Go-BSD-3-Clause.txt
 COPY packages/plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md /usr/share/licenses/enterpriseglue-plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md
 
 USER 65532:65532

@@ -18,3 +18,7 @@ installed in the image at
 The JavaScript runtime-dependency inventory is recorded separately in
 `third_party_licenses.json` and the repository-level
 `THIRD_PARTY_NOTICES.md`.
+
+The pinned Go 1.26.9 standard library fixes CVE-2026-78667 and
+CVE-2026-97031. Its BSD-3-Clause license text is installed at
+`/usr/share/licenses/enterpriseglue-plugin-installer/Go-BSD-3-Clause.txt`.
