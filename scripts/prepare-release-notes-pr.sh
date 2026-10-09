@@ -55,6 +55,10 @@ node scripts/sync-host-chart-release-version.mjs \
   --base-chart-version "$base_chart_version" \
   --app-version "$RELEASE_VERSION"
 node scripts/dedupe-release-changelog.mjs --file CHANGELOG.md
+node scripts/release-notes.mjs changelog \
+  --base-ref "$base_tag" \
+  --version "$RELEASE_VERSION" \
+  --output CHANGELOG.md
 
 git add "$release_file" "$chart_file" CHANGELOG.md
 if ! git diff --cached --quiet; then

@@ -44,7 +44,7 @@
   "validation": [
     "Real native WebKit: capture passed with a loaded IBM Plex font and an unrelated pending FontFace, and rejected a failed rendered font without writing evidence (2/2 cases).",
     "Warning-free workspace lint, complete CI contracts, and 47 focused engine-tenancy/classifier/coverage contracts passed.",
-    "Release-note preflight passed. Exact hosted browser execution remains required; the functional engine-tenancy assertions are unchanged."
+    "Release-note preflight and protected merge-group CI, CodeQL and release policy passed. The functional engine-tenancy assertions remain unchanged; the final signed release candidate requires its own pinned browser acceptance."
   ],
   "packages": []
 }

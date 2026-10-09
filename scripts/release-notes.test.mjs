@@ -6,10 +6,13 @@ import { join } from 'node:path'
 import test from 'node:test'
 import './release-publication-policy.test.mjs'
 import './release-batch-integration.test.mjs'
+import './package-version-plan.test.mjs'
+import './published-package-version-discipline.test.mjs'
 
 import {
   changedPaths,
   renderReleaseNotes,
+  syncReleaseChangelog,
   recommendReleaseVersion,
   validateBaselineState,
   validateFragment,
@@ -453,3 +456,22 @@ test('pull request template requests the release fragment and an explicit exempt
   assert.match(template, /\.release-notes\/<change-id>\.json/)
   assert.match(template, /Release-note exemption: <reason>/)
 })
+
+test('concise changelog covers the complete fragment batch and preserves historical bytes', () => {
+  const historical = '## [0.29.3]\n\n* immutable history\n';
+  const input = '# Changelog\n\n## [0.30.0](https://example.test/compare) (2026-10-09)\n\n* incomplete commit selection\n\n' + historical;
+  const breaking = { ...fragment, id: 'dependency', breaking: true, scope: 'dependencies', summary: 'Provide optional server peers explicitly.' };
+  const fixed = { ...fragment, id: 'browser', breaking: false, type: 'fix', scope: 'browser', summary: 'Capture verified fonts within a bounded interval.' };
+  const output = syncReleaseChangelog(input, [breaking, fixed], '0.30.0');
+  assert.match(output, /### Breaking changes\n\n- \*\*dependencies:/);
+  assert.match(output, /### Changes\n\n- \*\*browser:/);
+  assert.match(output, /docs\/releases\/v0.30.0\.md/);
+  assert.doesNotMatch(output, /incomplete commit selection/);
+  assert.ok(output.endsWith(historical));
+  assert.equal(syncReleaseChangelog(output, [breaking, fixed], '0.30.0'), output);
+});
+
+test('changelog generation rejects empty batches and mismatched release identities', () => {
+  assert.throws(() => syncReleaseChangelog('## [0.30.0]\n', [], '0.30.0'), /without fragments/);
+  assert.throws(() => syncReleaseChangelog('## [0.29.4]\n', [fragment], '0.30.0'), /heading must match/);
+});

@@ -257,11 +257,21 @@ export function directlyChangedPackages({ root, authority, mergeBase, paths }) {
     .sort();
 }
 
-function changedReleaseFragments(root, paths) {
+function changedReleaseFragments(root, paths, mergeBase) {
   return paths
     .filter((path) => /^\.release-notes\/[a-z0-9][a-z0-9-]*\.json$/.test(path))
     .filter((path) => existsSync(resolve(root, path)))
-    .map((path) => ({ path, value: readJson(resolve(root, path)) }));
+    .map((path) => {
+      const value = readJson(resolve(root, path));
+      const previous = readGitJson(root, mergeBase, path);
+      // Evidence corrections retain historical package transitions. Only new or
+      // modified entries can authorize a new bump at this comparison base.
+      const retained = new Set((previous?.packages ?? []).map((entry) => JSON.stringify(canonicalJson(entry))));
+      assert.ok(Array.isArray(value.packages), `${path}.packages must be an array`);
+      return { path, value: { ...value, packages: value.packages.filter(
+        (entry) => !retained.has(JSON.stringify(canonicalJson(entry))),
+      ) } };
+    });
 }
 
 function packageRecords(root, authority, mergeBase) {
@@ -519,7 +529,7 @@ export function planRepositoryPackageVersions({ root = repositoryRoot, baseRef =
   const authority = loadPackageVersionAuthority(root);
   const { mergeBase, paths } = repositoryChangedPaths(root, baseRef);
   const records = packageRecords(root, authority, mergeBase);
-  const fragments = changedReleaseFragments(root, paths);
+  const fragments = changedReleaseFragments(root, paths, mergeBase);
   const directPackages = directlyChangedPackages({ root, authority, mergeBase, paths });
   const plan = createPackageVersionPlan({
     authority,

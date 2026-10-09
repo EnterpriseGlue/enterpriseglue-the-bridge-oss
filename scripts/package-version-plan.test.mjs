@@ -299,3 +299,68 @@ test('CLI requires explicit, non-duplicated package impacts', () => {
     /duplicate --bump/,
   );
 });
+
+function recordPreviouslyIntegratedBumps(root) {
+  writeFileSync(join(root, 'packages/a/src/index.js'), 'export const value = 2;\n');
+  writeJson(join(root, '.release-notes/example.json'), { validation: ['Initial qualification'], packages: [] });
+  applyRepositoryPackageVersions({ root, baseRef: 'origin/main', fragmentPath: '.release-notes/example.json',
+    requestedImpacts: new Map([['@eg/a', 'patch']]) });
+  git(root, 'add', '.');
+  git(root, 'commit', '-qm', 'fix: integrated package changes');
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const fragment = JSON.parse(readFileSync(join(root, '.release-notes/example.json'), 'utf8'));
+  fragment.validation = ['Final protected qualification'];
+  writeJson(join(root, '.release-notes/example.json'), fragment);
+}
+
+test('evidence-only fragment corrections retain old package records without repeating bumps', () => {
+  const root = createFixture();
+  try {
+    recordPreviouslyIntegratedBumps(root);
+    const plan = planRepositoryPackageVersions({ root, baseRef: 'origin/main' });
+    assert.equal(plan.status, 'passed', plan.violations.join('\n'));
+    assert.deepEqual(plan.packages, []);
+    const releaseRange = planRepositoryPackageVersions({ root, baseRef: 'HEAD~1' });
+    assert.equal(releaseRange.status, 'passed', releaseRange.violations.join('\n'));
+    assert.deepEqual(releaseRange.packages.map(({ expectedVersion }) => expectedVersion), ['1.0.1', '2.0.1']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('retained historical package entries cannot authorize fresh source changes', () => {
+  const root = createFixture();
+  try {
+    recordPreviouslyIntegratedBumps(root);
+    writeFileSync(join(root, 'packages/a/src/index.js'), 'export const value = 3;\n');
+    const plan = planRepositoryPackageVersions({ root, baseRef: 'origin/main' });
+    assert.equal(plan.status, 'blocked');
+    assert.match(plan.violations.join('\n'), /publishable source changes but no package entry/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('modified package transitions still require a valid new continuous version chain', () => {
+  const root = createFixture();
+  try {
+    recordPreviouslyIntegratedBumps(root);
+    const fragment = JSON.parse(readFileSync(join(root, '.release-notes/example.json'), 'utf8'));
+    fragment.packages[0].newVersion = '1.0.2';
+    writeJson(join(root, '.release-notes/example.json'), fragment);
+    const plan = planRepositoryPackageVersions({ root, baseRef: 'origin/main' });
+    assert.equal(plan.status, 'blocked');
+    assert.match(plan.violations.join('\n'), /continuous chain/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('evidence corrections and a newly qualified package bump can share one change', () => {
+  const root = createFixture();
+  try {
+    recordPreviouslyIntegratedBumps(root);
+    writeFileSync(join(root, 'packages/a/src/index.js'), 'export const value = 3;\n');
+    writeJson(join(root, '.release-notes/next.json'), { packages: [] });
+    const plan = applyRepositoryPackageVersions({ root, baseRef: 'origin/main',
+      fragmentPath: '.release-notes/next.json', requestedImpacts: new Map([['@eg/a', 'patch']]) });
+    assert.equal(plan.status, 'passed', plan.violations.join('\n'));
+    assert.deepEqual(plan.packages.map(({ expectedVersion }) => expectedVersion), ['1.0.2', '2.0.2']);
+    const releaseRange = planRepositoryPackageVersions({ root, baseRef: 'HEAD~1' });
+    assert.equal(releaseRange.status, 'passed', releaseRange.violations.join('\n'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
