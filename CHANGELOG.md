@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.3...v0.30.0) (2026-10-09)
+
+### Breaking changes
+
+- **package-dependencies:** Separate browser installation dependencies from optional server peers while retaining shared import paths, and correct frontend runtime dependency declarations.
+
+### Changes
+
+- **browser-evidence:** Verify the fonts used by browser evidence before bounded capture, avoiding an unused FontFaceSet stall and preserving cleanup diagnostics.
+- **release-authorization:** Separate local implementation, code shipping and explicitly approved multi-PR release publication, with exact generated release-document verification.
+- **plugin-toolchain:** Rebuild pinned ORAS and Cosign releases with Go 1.26.9 in both installer and manager images, eliminating newly reported Go standard-library denial-of-service vulnerabilities.
+- **release-documentation:** Generate concise and detailed batch documentation from the complete unreleased fragments and corrected evidence, retaining historical package records without repeating bumps.
+
+Full upgrade, compatibility and verification details: [v0.30.0 release notes](docs/releases/v0.30.0.md).
+
 ## [0.29.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.2...v0.29.3) (2026-10-08)
 
 
