@@ -22,7 +22,8 @@ resolve_existing() {
   if result="$(oras resolve "$reference" 2>"$error_file")"; then
     rm -f "$error_file"
     printf '%s\n' "$result"
-  elif rg -qi 'manifest unknown|MANIFEST_UNKNOWN|404 Not Found|NAME_UNKNOWN' "$error_file"; then
+  elif grep -Eqi 'manifest unknown|MANIFEST_UNKNOWN|404 Not Found|NAME_UNKNOWN' "$error_file" ||
+    grep -Fxq "Error response from registry: failed to resolve digest: $reference: not found" "$error_file"; then
     rm -f "$error_file"
   else
     cat "$error_file" >&2

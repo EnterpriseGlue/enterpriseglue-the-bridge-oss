@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -28,6 +28,38 @@ export function recordFixture() {
 
 const passing = () => ({status: 'verified'})
 const adapters = changes => ({ release: passing, oci: passing, package: passing, distribution: passing, workflow: passing, ...changes })
+
+test('record storage recognizes the real ORAS missing-manifest response without optional runner tools and stops on unknown registry errors', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'eg-ledger-runner-'))
+  try {
+    // Reproduce the minimal hosted runner PATH instead of letting local rg mask
+    // an undeclared dependency. Execute the production resolver, not a copy.
+    for (const command of ['mktemp', 'rm', 'cat', 'grep']) {
+      const resolved = spawnSync('sh', ['-c', `command -v ${command}`], {encoding: 'utf8'})
+      assert.equal(resolved.status, 0)
+      symlinkSync(resolved.stdout.trim(), join(directory, command))
+    }
+    writeFileSync(join(directory, 'oras'), '#!/bin/bash\nprintf "%s\\n" "$ORAS_ERROR" >&2\nexit 1\n', {mode: 0o755})
+    const source = readFileSync(new URL('./release-publication-record-store.sh', import.meta.url), 'utf8')
+    const resolver = source.slice(source.indexOf('resolve_existing() {'), source.indexOf('verify_subject() {'))
+    const reference = `ghcr.io/enterpriseglue/enterpriseglue-release-canary-publication:identity-sha-${'a'.repeat(40)}`
+    const run = error => spawnSync('/bin/bash', ['-c', `set -euo pipefail\n${resolver}\nresolve_existing "$REFERENCE"`], {
+      env: {PATH: directory, REFERENCE: reference, ORAS_ERROR: error}, encoding: 'utf8',
+    })
+    const missing = run(`Error response from registry: failed to resolve digest: ${reference}: not found`)
+    assert.equal(missing.status, 0, missing.stderr)
+    assert.equal(missing.stdout, '')
+    for (const error of ['unauthorized: authentication required', 'dial tcp: i/o timeout', 'proxy endpoint: not found',
+      'Error response from registry: failed to resolve digest: ghcr.io/other/image:tag: not found']) {
+      const unknown = run(error)
+      assert.notEqual(unknown.status, 0, error)
+      assert.equal(unknown.stdout, '')
+      assert.match(unknown.stderr, /authentication|timeout|not found/)
+    }
+  } finally {
+    rmSync(directory, {recursive: true, force: true})
+  }
+})
 
 test('a frozen record binds exact packages, charts, documentation, batch and registry destinations', () => {
   const {record} = recordFixture()
