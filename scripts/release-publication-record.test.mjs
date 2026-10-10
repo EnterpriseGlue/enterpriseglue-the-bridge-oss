@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -56,6 +56,59 @@ test('record storage recognizes the real ORAS missing-manifest response without 
       assert.equal(unknown.stdout, '')
       assert.match(unknown.stderr, /authentication|timeout|not found/)
     }
+  } finally {
+    rmSync(directory, {recursive: true, force: true})
+  }
+})
+
+test('the production record store configures OCI signing and verifies both immutable writes on a minimal runner', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'eg-ledger-storage-'))
+  try {
+    const bin = join(directory, 'bin')
+    mkdirSync(bin)
+    for (const command of ['bash', 'dirname', 'mktemp', 'rm', 'cat', 'grep', 'jq', 'cp', 'mv', 'mkdir']) {
+      const resolved = spawnSync('sh', ['-c', `command -v ${command}`], {encoding: 'utf8'})
+      assert.equal(resolved.status, 0)
+      symlinkSync(resolved.stdout.trim(), join(bin, command))
+    }
+    symlinkSync(process.execPath, join(bin, 'node'))
+    writeFileSync(join(bin, 'oras'), `#!/bin/bash
+set -euo pipefail
+tag="\${2##*:}"
+if [[ "$1" == resolve ]]; then
+  if [[ -f "$FIXTURE_STATE/$tag" ]]; then
+    printf 'sha256:%064d\\n' 0
+  else
+    printf 'Error response from registry: failed to resolve digest: %s: not found\\n' "$2" >&2
+    exit 1
+  fi
+elif [[ "$1" == push ]]; then
+  [[ "$2" == ghcr.io/enterpriseglue/enterpriseglue-release-canary-publication:* ]]
+  : > "$FIXTURE_STATE/$tag"
+else
+  exit 93
+fi
+`, {mode: 0o755})
+    writeFileSync(join(bin, 'cosign'), `#!/bin/bash
+set -euo pipefail
+[[ "$COSIGN_EXPERIMENTAL" == 1 ]]
+if [[ "$1" == sign ]]; then [[ "$*" == *--registry-referrers-mode=oci-1-1* ]]; fi
+printf '%s\\n' "$1" >> "$FIXTURE_STATE/cosign-calls"
+`, {mode: 0o755})
+    const {record} = recordFixture()
+    record.canary = {fixture: true, publicationPerformed: false}
+    const file = join(directory, 'publication.json')
+    writeFileSync(file, JSON.stringify(record))
+    const result = spawnSync('/bin/bash', ['scripts/release-publication-record-store.sh', 'save', file, 'fixture'], {
+      env: {PATH: bin, FIXTURE_STATE: directory, GITHUB_SERVER_URL: 'https://github.com',
+        GITHUB_REPOSITORY: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', GITHUB_WORKFLOW: 'Release Canary',
+        GITHUB_REF: 'refs/heads/fixture', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
+        EG_PUBLICATION_CANARY: 'true', EG_PUBLICATION_REPOSITORY: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-publication'},
+      encoding: 'utf8',
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(readFileSync(join(directory, 'cosign-calls'), 'utf8').trim().split('\n'), ['sign', 'verify', 'sign', 'verify'])
+    assert.match(result.stdout, /enterpriseglue-release-canary-publication@sha256:/)
   } finally {
     rmSync(directory, {recursive: true, force: true})
   }

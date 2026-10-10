@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Cosign's pinned OCI 1.1 referrer mode requires this explicit setting, as in
+# the candidate and reusable image signing workflows.
+export COSIGN_EXPERIMENTAL=1
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${1:-}"
 record="${2:-}"
