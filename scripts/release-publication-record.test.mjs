@@ -30,6 +30,23 @@ export function recordFixture() {
 const passing = () => ({status: 'verified'})
 const adapters = changes => ({ release: passing, oci: passing, package: passing, distribution: passing, workflow: passing, ...changes })
 
+for (const publisher of ['plugin-package-release.yml', 'host-package-release.yml', 'docker-images.yml',
+  'host-chart-release.yml', 'plugin-toolchain-release.yml']) {
+  test(`authorized ${publisher} recovery matches its real workflow inputs and publishes instead of defaulting to a dry run`, async () => {
+    const {record} = recordFixture()
+    const observed = await observePublication(record, adapters({workflow: name => ({status: name === publisher ? 'failed' : 'verified'})}))
+    const requests = await resumePublication(observed, {explicitRecovery: true, dispatch: () => {}})
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].publisher, publisher)
+    assert.equal(requests[0].inputs.source_ref, record.identity.sourceRef)
+    assert.equal(requests[0].inputs.release_tag, record.identity.releaseTag)
+    const workflow = readFileSync(new URL(`../.github/workflows/${publisher}`, import.meta.url), 'utf8')
+    const declarations = [...workflow.matchAll(/^      ([a-z_]+):\s*$/gm)].map(match => match[1])
+    for (const input of Object.keys(requests[0].inputs)) assert.ok(declarations.includes(input), `${publisher} rejects undeclared input ${input}`)
+    if (declarations.includes('dry_run')) assert.equal(requests[0].inputs.dry_run, 'false')
+  })
+}
+
 test('production OCI observation recognizes only a target-specific missing manifest and preserves unknown errors', async () => {
   const {record} = recordFixture()
   const target = record.identity.targets[0]

@@ -34,7 +34,7 @@ export async function resumePublication(record, { explicitRecovery = false, disp
     if (record.observations.some(item => item.publisher === publisher && item.status === 'pending')) continue
     if (publisher === 'plugin-toolchain-release.yml' && requests.some(request => request.publisher === 'docker-images.yml')) continue
     const inputs = { source_ref: record.identity.sourceRef, release_tag: record.identity.releaseTag }
-    if (publisher === 'plugin-package-release.yml') inputs.dry_run = 'false'
+    if (['plugin-package-release.yml', 'host-package-release.yml'].includes(publisher)) inputs.dry_run = 'false'
     await dispatch(publisher, inputs)
     requests.push({ publisher, inputs })
   }
