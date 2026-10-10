@@ -1,3 +1,4 @@
+import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantRequestSchema, DocumentationGrantResponseSchema, DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema } from './auth/documentation.js';
 import { z } from 'zod';
 import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
 
@@ -4056,6 +4057,18 @@ registry.registerPath({
 // -----------------------------
 // Auth API
 // -----------------------------
+for (const [method, path, requestSchema, responseSchema] of [
+  ['get', '/api/auth/documentation/configuration', null, DocumentationConfigurationResponseSchema],
+  ['post', '/api/auth/documentation/grant', DocumentationGrantRequestSchema, DocumentationGrantResponseSchema],
+  ['post', '/api/auth/documentation/exchange', DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema],
+  ['get', '/api/auth/documentation/session', null, DocumentationAccessResponseSchema],
+  ['post', '/api/auth/documentation/logout', null, DocumentationLogoutResponseSchema],
+] as const) {
+  registry.registerPath({ method, path, ...authzExemption(method.toUpperCase(), path),
+    ...(requestSchema ? { request: { body: { content: { 'application/json': { schema: requestSchema } } } } } : {}),
+    responses: { 200: { description: 'Documentation-only account access without tenant provisioning', content: { 'application/json': { schema: responseSchema } } }, 401: { description: 'Invalid, expired, revoked or reused credential' }, 403: { description: 'Account or browser proof is not eligible' }, 404: { description: 'Documentation integration is disabled' } },
+  });
+}
 
 // POST /api/auth/login
 registry.registerPath({
@@ -4068,19 +4081,19 @@ registry.registerPath({
   method: 'get',
   path: '/api/auth/cloud-signup/providers/{providerId}/start',
   ...authzExemption('GET', '/api/auth/cloud-signup/providers/:providerId/start'),
-  request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login']) }).strict() },
-  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding or organization login' }, 404: { description: 'Cloud account identity or provider unavailable' } },
+  request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login', '/documentation/access']) }).strict() },
+  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding, organization login or documentation access' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
 registry.registerPath({
   method: 'post', path: '/api/auth/cloud-signup/email/request',
   ...authzExemption('POST', '/api/auth/cloud-signup/email/request'),
-  request: { body: { content: { 'application/json': { schema: z.object({ email: z.email().max(320) }).strict() } } } },
+  request: { body: { content: { 'application/json': { schema: z.object({ email: z.email().max(320), intent: z.enum(['cloud', 'documentation']).optional() }).strict() } } } },
   responses: { 202: { description: 'Generic response; a verification link or existing-account guidance is sent when eligible', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 404: { description: 'Managed Cloud account identity is disabled' }, 503: { description: 'Outbound email is unavailable' } },
 });
 registry.registerPath({
   method: 'get', path: '/api/auth/cloud-signup/email/verify',
   ...authzExemption('GET', '/api/auth/cloud-signup/email/verify'),
-  request: { query: z.object({ token: z.string() }) },
+  request: { query: z.object({ token: z.string(), intent: z.enum(['cloud', 'documentation']).optional() }) },
   responses: { 302: { description: 'Sets short-lived, HttpOnly address-proof cookie and redirects to passkey registration; does not create an account' }, 401: { description: 'Invalid or expired link' } },
 });
 registry.registerPath({

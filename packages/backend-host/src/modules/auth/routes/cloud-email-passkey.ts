@@ -34,7 +34,7 @@ const emailCookie = 'cloud_email_signup_proof';
 const loginCookie = 'cloud_passkey_login_proof';
 const proofLifetimeMs = 15 * 60 * 1000;
 const challengeLifetimeMs = 5 * 60 * 1000;
-const emailSchema = z.object({ email: z.email().max(320) }).strict();
+const emailSchema = z.object({ email: z.email().max(320), intent: z.enum(['cloud', 'documentation']).optional() }).strict();
 const credentialSchema = z.object({
   id: z.string().min(1).max(2048),
   rawId: z.string().min(1).max(2048),
@@ -102,9 +102,10 @@ router.post('/api/auth/cloud-signup/email/request', apiLimiter, identityFlowLimi
     const email = String(req.body.email).trim().toLowerCase();
     const frontend = config.frontendUrl.replace(/\/$/, '');
     if (await existingUser(email)) {
+      const signInPath = req.body.intent === 'documentation' ? '/documentation/access' : '/login';
       const sent = await sendEmailWithConfig(undefined, email, 'EnterpriseGlue account sign-in',
-        `<p>An EnterpriseGlue account already uses this address. Sign in using its existing method at <a href="${frontend}/login">EnterpriseGlue</a>.</p>`,
-        `An EnterpriseGlue account already uses this address. Sign in with its existing method at ${frontend}/login.`);
+        `<p>An EnterpriseGlue account already uses this address. Sign in using its existing method at <a href="${frontend}${signInPath}">EnterpriseGlue</a>.</p>`,
+        `An EnterpriseGlue account already uses this address. Sign in with its existing method at ${frontend}${signInPath}.`);
       if (!sent.success) throw Errors.serviceUnavailable('Cloud email delivery');
       res.status(202).json({ message: genericMessage });
       return;
@@ -126,6 +127,7 @@ router.post('/api/auth/cloud-signup/email/request', apiLimiter, identityFlowLimi
     }
     const url = new URL('/api/auth/cloud-signup/email/verify', frontend);
     url.searchParams.set('token', token);
+    if (req.body.intent === 'documentation') url.searchParams.set('intent', 'documentation');
     const sent = await sendVerificationEmail({ to: email, verificationUrl: url.toString() });
     if (!sent.success) throw Errors.serviceUnavailable('Cloud email delivery');
     res.status(202).json({ message: genericMessage });
@@ -140,7 +142,7 @@ router.get('/api/auth/cloud-signup/email/verify', apiLimiter, identityFlowLimite
   if (!pending || Number(pending.expiresAt) <= Date.now()) throw Errors.unauthorized('Email signup link is invalid or expired');
   cookie(res, emailCookie, token, Math.min(proofLifetimeMs, Number(pending.expiresAt) - Date.now()), '/api/auth/cloud-signup/email');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.redirect(`${config.frontendUrl.replace(/\/$/, '')}/signup/email/passkey`);
+  res.redirect(`${config.frontendUrl.replace(/\/$/, '')}/signup/email/passkey${req.query.intent === 'documentation' ? '?intent=documentation' : ''}`);
 }));
 
 router.post('/api/auth/cloud-signup/email/passkey/options', apiLimiter, identityFlowLimiter, authLimiter,

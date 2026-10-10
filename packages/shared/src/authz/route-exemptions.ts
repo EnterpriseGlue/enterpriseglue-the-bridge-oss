@@ -30,6 +30,11 @@ function tokenAuthenticatedRoute(method: string, route: string, risk: AuthzActio
 }
 
 export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
+  publicRoute('GET', '/api/auth/documentation/configuration', 'low', 'platform-runtime', 'Public documentation/account origins only; no user, session, gateway credential or tenant data.'),
+  tokenAuthenticatedRoute('POST', '/api/auth/documentation/logout', 'high', 'A dedicated gateway credential and current documentation token revoke only that documentation session; the source Cloud session stays active.'),
+  tokenAuthenticatedRoute('POST', '/api/auth/documentation/grant', 'high', 'A current verified browser session and same-origin request can mint only a PKCE-bound documentation grant; it creates no tenant.'),
+  tokenAuthenticatedRoute('POST', '/api/auth/documentation/exchange', 'high', 'A dedicated gateway credential and a single-use PKCE-bound documentation grant establish a limited documentation session.'),
+  tokenAuthenticatedRoute('GET', '/api/auth/documentation/session', 'high', 'A dedicated gateway credential and documentation token require live account and exact source-session validity; no tenant-management authority is returned.'),
   publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only sanitized configuration bootstrap state.'),
   publicRoute('GET', '/ready', 'low', 'platform-runtime', 'Unauthenticated readiness probes expose only sanitized configuration bootstrap state.'),
   publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap, aggregate engine-tenancy, and login-experience gauges/counters without tenant, engine, provider, or principal identifiers.'),

@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import express from 'express';
+import type { Server } from 'node:http';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AUTHZ_RESOURCE_RESOLVERS } from '@enterpriseglue/shared/authz/permission-actions.js';
@@ -437,6 +438,7 @@ describe('requireAction project resource resolvers', () => {
   const gitLockId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
   let app: express.Application;
+  let server: Server;
   let projectFindOne: ReturnType<typeof vi.fn>;
   let projectFind: ReturnType<typeof vi.fn>;
   let engineFind: ReturnType<typeof vi.fn>;
@@ -452,7 +454,7 @@ describe('requireAction project resource resolvers', () => {
   let runtimeResourceFindOne: ReturnType<typeof vi.fn>;
   let runtimeResourceFind: ReturnType<typeof vi.fn>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // This describe reuses module-level service mocks across its broad route
     // matrix. Reset implementations as well as call history so shuffled test
     // order cannot inherit a one-off denial or missing-resource fixture.
@@ -707,12 +709,18 @@ describe('requireAction project resource resolvers', () => {
         return {};
       },
     });
+    // A stable IPv4 listener avoids per-request server teardown races.
+    await new Promise<void>((resolve) => { server = app.listen(0, '127.0.0.1', () => resolve()); });
+  });
+  afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
 
   it('resolves tenant-scoped actions only from the trusted tenant context', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const allowed = await request(app).get('/tenant');
+    const allowed = await request(server).get('/tenant');
     expect(allowed.status).toBe(200);
     expect(allowed.body.resource).toEqual({ type: 'tenant', id: 'tenant-default' });
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
@@ -725,7 +733,7 @@ describe('requireAction project resource resolvers', () => {
     );
     expect(getDataSource).not.toHaveBeenCalled();
 
-    const missingTenant = await request(app)
+    const missingTenant = await request(server)
       .get('/tenant')
       .set('x-test-without-tenant', 'true');
     expect(missingTenant.status).toBe(404);
@@ -735,7 +743,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
-    const response = await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition/definition-1');
@@ -752,7 +760,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-1?engineId=${engineId}&key=hr-untrusted`);
 
     expect(response.status).toBe(200);
@@ -774,7 +782,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: 'runtime-tenant-a' });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -793,7 +801,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const response = await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).not.toHaveBeenCalled();
@@ -811,7 +819,7 @@ describe('requireAction project resource resolvers', () => {
     runtimeResourceFindOne.mockResolvedValue(null);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -842,7 +850,7 @@ describe('requireAction project resource resolvers', () => {
       runtimeTenantId: 'runtime-a',
     }]);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(200);
@@ -876,7 +884,7 @@ describe('requireAction project resource resolvers', () => {
       runtimeTenantId: 'runtime-a',
     }]);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/sibling-definition?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -907,7 +915,7 @@ describe('requireAction project resource resolvers', () => {
       runtimeTenantId: 'runtime-a',
     }]);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-1?engineId=${engineId}`)
       .set('x-test-without-tenant', 'true');
 
@@ -943,7 +951,7 @@ describe('requireAction project resource resolvers', () => {
       tenantId: 'runtime-a',
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(200);
@@ -972,7 +980,7 @@ describe('requireAction project resource resolvers', () => {
     }]);
     camundaGet.mockResolvedValue({ id: 'definition-without-lineage' });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-without-lineage?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1004,7 +1012,7 @@ describe('requireAction project resource resolvers', () => {
       },
     ]);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(200);
@@ -1021,7 +1029,7 @@ describe('requireAction project resource resolvers', () => {
       resourceKey: 'payments',
       runtimeTenantId: undefined,
     }]);
-    expect((await request(app)
+    expect((await request(server)
       .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`)).status).toBe(200);
   });
 
@@ -1042,7 +1050,7 @@ describe('requireAction project resource resolvers', () => {
         runtimeTenantId: 'runtime-a',
       },
     ]);
-    expect((await request(app)
+    expect((await request(server)
       .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`)).status).toBe(403);
 
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
@@ -1061,7 +1069,7 @@ describe('requireAction project resource resolvers', () => {
         runtimeTenantId: 'runtime-b',
       },
     ]);
-    expect((await request(app)
+    expect((await request(server)
       .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`)).status).toBe(403);
     expect(camundaGet).not.toHaveBeenCalled();
   });
@@ -1092,7 +1100,7 @@ describe('requireAction project resource resolvers', () => {
     ]);
     camundaGet.mockResolvedValue({ id: 'definition-v1', key: 42, tenantId: null });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1121,7 +1129,7 @@ describe('requireAction project resource resolvers', () => {
       tenantId: null,
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(200);
@@ -1144,7 +1152,7 @@ describe('requireAction project resource resolvers', () => {
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1156,7 +1164,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+    expect((await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
   });
 
   it('resolves a deployment only through active inventoried runtime resources', async () => {
@@ -1170,7 +1178,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(true);
 
-    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(runtimeResourceFind).toHaveBeenCalledWith(expect.objectContaining({
@@ -1193,7 +1201,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
 
-    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
 
     expect(response.status).toBe(403);
     expect(permissionService.hasPermission).toHaveBeenLastCalledWith(
@@ -1207,7 +1215,7 @@ describe('requireAction project resource resolvers', () => {
     runtimeResourceFind.mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
 
-    const response = await request(app).get(`/runtime-process-deployments/deployment-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-process-deployments/deployment-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(runtimeResourceFind).toHaveBeenCalledWith(expect.objectContaining({
@@ -1222,7 +1230,7 @@ describe('requireAction project resource resolvers', () => {
     runtimeResourceFind.mockResolvedValue([]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app).get(`/runtime-deployments/deployment-missing?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-deployments/deployment-missing?engineId=${engineId}`);
 
     expect(response.status).toBe(403);
     expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
@@ -1232,7 +1240,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(runtimeResourceFind).not.toHaveBeenCalled();
@@ -1243,7 +1251,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    expect((await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`)).status).toBe(403);
+    expect((await request(server).get(`/runtime-deployments/deployment-1?engineId=${engineId}`)).status).toBe(403);
   });
 
   it('rejects inventoried runtime deployments without resource-specific permission', async () => {
@@ -1251,7 +1259,7 @@ describe('requireAction project resource resolvers', () => {
     runtimeResourceFind.mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
 
-    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
 
     expect(response.status).toBe(403);
   });
@@ -1261,7 +1269,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue([{ id: 'definition-2', key: 'payments', tenantId: null }]);
 
-    const response = await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}&version=2`);
+    const response = await request(server).get(`/runtime-definitions-by-key/payments?engineId=${engineId}&version=2`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition', { key: 'payments', version: 2 });
@@ -1273,7 +1281,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue([{ id: 'definition-latest', key: 'payments', tenantId: null }]);
 
-    const response = await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition', { key: 'payments', latestVersion: true });
@@ -1283,31 +1291,31 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}&version=0`);
+    const response = await request(server).get(`/runtime-definitions-by-key/payments?engineId=${engineId}&version=0`);
 
     expect(response.status).toBe(400);
   });
 
   it('fails closed for missing, unresolvable, uninventoried, and ungranted runtime definitions', async () => {
     engineFindOne.mockReset().mockResolvedValue(null);
-    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(404);
+    expect((await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(404);
 
     engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
     camundaGet.mockReset().mockResolvedValue({ id: 'definition-1', tenantId: null });
-    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+    expect((await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
 
     camundaGet.mockReset().mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
     runtimeResourceFindOne.mockReset().mockResolvedValue(null);
-    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+    expect((await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
 
     runtimeResourceFindOne.mockReset().mockResolvedValue({ id: 'runtime-resource-1', tenantId: null });
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(false);
-    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+    expect((await request(server).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
 
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
     camundaGet.mockReset().mockResolvedValue([]);
-    expect((await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`)).status).toBe(404);
+    expect((await request(server).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`)).status).toBe(404);
   });
 
   it('requires authenticated, identified, and existing engines for runtime operation guards', async () => {
@@ -1418,7 +1426,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue({ id: 'decision-1', key: 'payments-risk', tenantId: 'runtime-tenant-a' });
 
-    const response = await request(app).get(`/runtime-decisions/decision-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-decisions/decision-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenCalledWith(engineId, '/decision-definition/decision-1');
@@ -1442,7 +1450,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'job-1', processDefinitionId: 'definition-1' })
       .mockResolvedValueOnce({ id: 'definition-1', key: 'payments', tenantId: null });
 
-    const response = await request(app).get(`/runtime-jobs/job-1?engineId=${engineId}`);
+    const response = await request(server).get(`/runtime-jobs/job-1?engineId=${engineId}`);
 
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenNthCalledWith(1, engineId, '/job/job-1');
@@ -1453,7 +1461,7 @@ describe('requireAction project resource resolvers', () => {
   it('supports custom definition identifiers and the default linked-definition path', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    const custom = await request(app).get(`/runtime-definitions-custom/definition-1?engineId=${engineId}`);
+    const custom = await request(server).get(`/runtime-definitions-custom/definition-1?engineId=${engineId}`);
     expect(custom.status, JSON.stringify(custom.body)).toBe(200);
 
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
@@ -1461,7 +1469,7 @@ describe('requireAction project resource resolvers', () => {
       .mockReset()
       .mockResolvedValueOnce({ id: 'job-1', processDefinitionId: 'definition-1' })
       .mockResolvedValueOnce({ id: 'definition-1', key: 'payments', tenantId: null });
-    const linked = await request(app).get(`/runtime-jobs-default-reference/job-1?engineId=${engineId}`);
+    const linked = await request(server).get(`/runtime-jobs-default-reference/job-1?engineId=${engineId}`);
     expect(linked.status).toBe(200);
     expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/definition-1');
   });
@@ -1489,7 +1497,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     camundaGet.mockResolvedValue({ id: 'job-1' });
 
-    expect((await request(app).get(`/runtime-jobs/job-1?engineId=${engineId}`)).status).toBe(403);
+    expect((await request(server).get(`/runtime-jobs/job-1?engineId=${engineId}`)).status).toBe(403);
   });
 
   it('denies a shared referenced detail before transport when no resolved resource is visible', async () => {
@@ -1502,7 +1510,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-jobs/job-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1535,7 +1543,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'job-1', processDefinitionId: 'definition-1' })
       .mockResolvedValueOnce({ id: 'definition-1', key: 'payments', tenantId: null });
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-jobs/job-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1548,7 +1556,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments', tenantId: 'runtime-a' });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/runtime-instance-selection')
       .send({ engineId, processInstanceIds: ['instance-1'] });
 
@@ -1582,7 +1590,7 @@ describe('requireAction project resource resolvers', () => {
         : { id: 'instance-risk', definitionKey: 'payments-risk' }
     ));
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/runtime-instance-selection')
       .send({ engineId, processInstanceIds: ['instance-payments', 'instance-risk'] });
 
@@ -1598,7 +1606,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: null, processDefinitionKey: 'payments' });
 
-    const compatible = await request(app)
+    const compatible = await request(server)
       .post('/runtime-instance-selection')
       .send({ engineId, processInstanceIds: ['instance-1'] });
     expect(compatible.status).toBe(200);
@@ -1609,14 +1617,14 @@ describe('requireAction project resource resolvers', () => {
     }));
 
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
-    const malformed = await request(app)
+    const malformed = await request(server)
       .post('/runtime-instance-selection')
       .send({ engineId, processInstanceIds: [42] });
     expect(malformed.status).toBe(403);
     expect(camundaGet).toHaveBeenCalledTimes(1);
 
     camundaGet.mockReset().mockResolvedValue({ id: 'instance-invalid', definitionKey: 42 });
-    const unresolved = await request(app)
+    const unresolved = await request(server)
       .post('/runtime-instance-selection')
       .send({ engineId, processInstanceIds: ['instance-invalid'] });
     expect(unresolved.status).toBe(403);
@@ -1628,7 +1636,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
 
-    const duplicate = await request(app)
+    const duplicate = await request(server)
       .post('/runtime-instance-selection?engineId=tenant-b-injected')
       .send({ engineId, processInstanceIds: ['instance-1', 'instance-1', 'instance-1'], resourceId: 'injected-resource' });
     expect(duplicate.status).toBe(200);
@@ -1639,7 +1647,7 @@ describe('requireAction project resource resolvers', () => {
 
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
     camundaGet.mockClear();
-    const empty = await request(app)
+    const empty = await request(server)
       .post('/runtime-instance-selection')
       .send({ engineId, processInstanceIds: ['', ' ', null, 0] });
     expect(empty.status).toBe(403);
@@ -1650,7 +1658,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app).post('/runtime-instance-selection').send({ engineId });
+    const response = await request(server).post('/runtime-instance-selection').send({ engineId });
 
     expect(response.status).toBe(403);
     expect(camundaGet).not.toHaveBeenCalled();
@@ -1660,7 +1668,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    expect((await request(app).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] })).status).toBe(403);
+    expect((await request(server).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] })).status).toBe(403);
   });
 
   it('rejects selected instances that are absent from the runtime inventory', async () => {
@@ -1669,7 +1677,7 @@ describe('requireAction project resource resolvers', () => {
     camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
     runtimeResourceFindOne.mockResolvedValue(null);
 
-    const response = await request(app).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] });
+    const response = await request(server).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] });
 
     expect(response.status).toBe(403);
   });
@@ -1679,7 +1687,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
     camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
 
-    const response = await request(app).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] });
+    const response = await request(server).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] });
 
     expect(response.status).toBe(403);
   });
@@ -1688,11 +1696,11 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const selection = await request(app).post('/runtime-instance-selection').send({ engineId });
+    const selection = await request(server).post('/runtime-instance-selection').send({ engineId });
     expect(selection.status).toBe(200);
     expect(selection.body.resource).toEqual({ type: 'engine', id: engineId });
 
-    const migration = await request(app).post('/runtime-migration').send({ engineId });
+    const migration = await request(server).post('/runtime-migration').send({ engineId });
     expect(migration.status).toBe(200);
     expect(migration.body.resource).toEqual({ type: 'engine', id: engineId });
   });
@@ -1707,13 +1715,13 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
 
-    const selection = await request(app)
+    const selection = await request(server)
       .post('/runtime-instance-selection?tenantId=tenant-a')
       .send({ engineId, processInstanceIds: ['instance-1'] });
     expect(selection.status).toBe(403);
     expect(camundaGet).not.toHaveBeenCalled();
 
-    const migration = await request(app)
+    const migration = await request(server)
       .post('/runtime-migration?tenantId=tenant-a')
       .send({
         engineId,
@@ -1748,7 +1756,7 @@ describe('requireAction project resource resolvers', () => {
     });
     camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
 
-    const selection = await request(app)
+    const selection = await request(server)
       .post('/runtime-instance-selection?tenantId=tenant-a')
       .send({ engineId, processInstanceIds: ['instance-1'] });
     expect(selection.status).toBe(403);
@@ -1757,7 +1765,7 @@ describe('requireAction project resource resolvers', () => {
       .mockReset()
       .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
-    const migration = await request(app)
+    const migration = await request(server)
       .post('/runtime-migration?tenantId=tenant-a')
       .send({
         engineId,
@@ -1784,7 +1792,7 @@ describe('requireAction project resource resolvers', () => {
     }]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-deployments/deployment-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1806,7 +1814,7 @@ describe('requireAction project resource resolvers', () => {
     }]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app)
+    const response = await request(server)
       .get(`/runtime-deployments/deployment-1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
@@ -1845,7 +1853,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1', tenantId: 'runtime-a' })
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2', tenantId: 'runtime-a' });
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId,
       plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
     });
@@ -1872,7 +1880,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' })
       .mockResolvedValueOnce({ id: 'instance-1', definitionKey: 'payments-v1' });
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId,
       plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
       processInstanceIds: ['instance-1'],
@@ -1888,7 +1896,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId, sourceDefinitionId: 'source-v1', targetDefinitionId: 'target-v2',
     });
 
@@ -1900,7 +1908,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    expect((await request(app).post('/runtime-migration').send({
+    expect((await request(server).post('/runtime-migration').send({
       engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
     })).status).toBe(403);
   });
@@ -1909,7 +1917,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app).post('/runtime-migration').send({ engineId, plan: { sourceProcessDefinitionId: 'source-v1' } });
+    const response = await request(server).post('/runtime-migration').send({ engineId, plan: { sourceProcessDefinitionId: 'source-v1' } });
 
     expect(response.status).toBe(400);
     expect(camundaGet).not.toHaveBeenCalled();
@@ -1923,7 +1931,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' })
       .mockResolvedValueOnce({ id: 'instance-1', definitionKey: 'unrelated' });
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' }, processInstanceIds: ['instance-1'],
     });
 
@@ -1938,7 +1946,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
     runtimeResourceFindOne.mockResolvedValueOnce({ id: 'runtime-resource-1', tenantId: null }).mockResolvedValueOnce(null);
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
     });
 
@@ -1955,7 +1963,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
     });
 
@@ -1969,7 +1977,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ id: 'source-v1', key: '' })
       .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
 
-    const response = await request(app).post('/runtime-migration').send({
+    const response = await request(server).post('/runtime-migration').send({
       engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
     });
 
@@ -1978,11 +1986,11 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('rejects non-string invitation and migration identifiers without treating them as valid input', async () => {
-    expect((await request(app).post('/invitations').send({ resourceType: 42 })).status).toBe(400);
+    expect((await request(server).post('/invitations').send({ resourceType: 42 })).status).toBe(400);
 
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
-    const invalidPlan = await request(app).post('/runtime-migration').send({
+    const invalidPlan = await request(server).post('/runtime-migration').send({
       engineId,
       plan: 'not-an-object',
       sourceDefinitionId: 'source-v1',
@@ -1991,7 +1999,7 @@ describe('requireAction project resource resolvers', () => {
     expect(invalidPlan.status).toBe(200);
 
     camundaGet.mockReset().mockResolvedValueOnce({ id: 'source-v1', key: 42 }).mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
-    const invalidKey = await request(app).post('/runtime-migration').send({
+    const invalidKey = await request(server).post('/runtime-migration').send({
       engineId,
       plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
     });
@@ -2007,7 +2015,7 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce([{ id: 'runtime-resource-1' }])
       .mockResolvedValueOnce([]);
 
-    const response = await request(app).get('/engines');
+    const response = await request(server).get('/engines');
 
     expect(response.status).toBe(200);
     expect(response.body.authorizedEngineIds).toEqual([engineId]);
@@ -2023,7 +2031,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
 
-    const hidden = await request(app).get('/engines?tenantId=tenant-a');
+    const hidden = await request(server).get('/engines?tenantId=tenant-a');
 
     expect(hidden.status).toBe(200);
     expect(hidden.body.authorizedEngineIds).toEqual([]);
@@ -2031,7 +2039,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.getVisibleRuntimeResources as unknown as Mock)
       .mockResolvedValueOnce([{ id: 'runtime-resource-1' }])
       .mockResolvedValueOnce([]);
-    const visible = await request(app).get('/engines?tenantId=tenant-a');
+    const visible = await request(server).get('/engines?tenantId=tenant-a');
 
     expect(visible.status).toBe(200);
     expect(visible.body.authorizedEngineIds).toEqual([engineId]);
@@ -2050,7 +2058,7 @@ describe('requireAction project resource resolvers', () => {
     );
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
 
-    const manageable = await request(app)
+    const manageable = await request(server)
       .get('/engines?tenantId=tenant-a&includeManageableShared=true');
 
     expect(manageable.status, JSON.stringify(manageable.body)).toBe(200);
@@ -2078,7 +2086,7 @@ describe('requireAction project resource resolvers', () => {
     );
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
 
-    const hidden = await request(app)
+    const hidden = await request(server)
       .get('/engines?tenantId=tenant-a&includeManageableShared=true');
 
     expect(hidden.status).toBe(200);
@@ -2095,7 +2103,7 @@ describe('requireAction project resource resolvers', () => {
     }]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const manageable = await request(app)
+    const manageable = await request(server)
       .get('/engines?includeManageableShared=true')
       .set('x-test-without-tenant', 'true');
 
@@ -2114,7 +2122,7 @@ describe('requireAction project resource resolvers', () => {
       tenancyMode: 'dedicated',
     });
 
-    const response = await request(app).get(`/engines/${engineId}`);
+    const response = await request(server).get(`/engines/${engineId}`);
 
     expect(response.status, JSON.stringify(response.body)).toBe(200);
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
@@ -2126,10 +2134,10 @@ describe('requireAction project resource resolvers', () => {
 
   it('conceals missing and cross-tenant engines resolved by ID', async () => {
     engineFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get('/engines/missing-engine')).status).toBe(404);
+    expect((await request(server).get('/engines/missing-engine')).status).toBe(404);
 
     engineFindOne.mockResolvedValueOnce({ id: engineId, tenantId: 'tenant-b' });
-    expect((await request(app).get(`/engines/${engineId}?tenantId=tenant-a`)).status).toBe(403);
+    expect((await request(server).get(`/engines/${engineId}?tenantId=tenant-a`)).status).toBe(403);
   });
 
   it('uses a platform registry permission only for a quarantined unowned-engine migration', async () => {
@@ -2143,7 +2151,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'platform:engine-registration:manage',
     );
 
-    const response = await request(app).post(`/migration-engines/${engineId}`);
+    const response = await request(server).post(`/migration-engines/${engineId}`);
 
     expect(response.status).toBe(200);
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
@@ -2174,7 +2182,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'platform:engine-registration:manage',
     );
 
-    const response = await request(app)
+    const response = await request(server)
       .post(`/migration-engines/${engineId}`)
       .set('x-test-without-tenant', 'true');
 
@@ -2194,7 +2202,7 @@ describe('requireAction project resource resolvers', () => {
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app).post(`/migration-engines/${engineId}`);
+    const response = await request(server).post(`/migration-engines/${engineId}`);
 
     expect(response.status).toBe(403);
     expect(permissionService.hasPermission).toHaveBeenCalledTimes(2);
@@ -2210,7 +2218,7 @@ describe('requireAction project resource resolvers', () => {
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
-    const response = await request(app).post(`/migration-engines/${engineId}`);
+    const response = await request(server).post(`/migration-engines/${engineId}`);
 
     expect(response.status).toBe(403);
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
@@ -2227,7 +2235,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'engine:edit',
     );
 
-    const response = await request(app).post(`/migration-engines/${engineId}`);
+    const response = await request(server).post(`/migration-engines/${engineId}`);
 
     expect(response.status).toBe(200);
     expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
@@ -2248,7 +2256,7 @@ describe('requireAction project resource resolvers', () => {
       reasons: [],
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/deploy')
       .send({ projectId, engineId });
 
@@ -2293,7 +2301,7 @@ describe('requireAction project resource resolvers', () => {
     });
     environmentTagFindOne.mockResolvedValue({ id: 'environment-tag-1', name: 'production' });
 
-    const tagged = await request(app).post('/deploy').send({ projectId, engineId });
+    const tagged = await request(server).post('/deploy').send({ projectId, engineId });
     expect(tagged.status).toBe(200);
     expect(tagged.body.deployContext).toMatchObject({ engineName: 'Tagged Engine', environmentTag: 'production' });
     expect(environmentTagFindOne).toHaveBeenCalledWith({ id: 'environment-tag-1' });
@@ -2302,7 +2310,7 @@ describe('requireAction project resource resolvers', () => {
       allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
     });
     environmentTagFindOne.mockResolvedValue({ id: 'environment-tag-1' });
-    const unnamedTag = await request(app).post('/deploy').send({ projectId, engineId });
+    const unnamedTag = await request(server).post('/deploy').send({ projectId, engineId });
     expect(unnamedTag.status).toBe(200);
     expect(unnamedTag.body.deployContext).toMatchObject({ environmentTag: null });
 
@@ -2310,7 +2318,7 @@ describe('requireAction project resource resolvers', () => {
       allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
     });
     engineFindOne.mockReset().mockResolvedValue(null);
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(404);
   });
 
   it('returns deployment eligibility reasons when a composite deployment action is denied', async () => {
@@ -2331,7 +2339,7 @@ describe('requireAction project resource resolvers', () => {
       reasons: ['User lacks project deploy permission'],
     });
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/deploy')
       .send({ projectId, engineId });
 
@@ -2348,7 +2356,7 @@ describe('requireAction project resource resolvers', () => {
       allowed: false, decision: 'deny', mode: 'manual', projectId, engineId, checks: [], reasons: [],
     });
 
-    const response = await request(app).post('/deploy').send({ projectId, engineId });
+    const response = await request(server).post('/deploy').send({ projectId, engineId });
 
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({ error: 'Deployment is not allowed', reasons: [], checks: [] });
@@ -2356,12 +2364,12 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('requires both project and engine identifiers for composite deployments', async () => {
-    expect((await request(app).post('/deploy').send({ projectId })).status).toBe(400);
+    expect((await request(server).post('/deploy').send({ projectId })).status).toBe(400);
     expect(deploymentEligibilityService.evaluate).not.toHaveBeenCalled();
   });
 
   it('allows an optional composite route to proceed without an engine target', async () => {
-    const response = await request(app).post('/deploy-optional').send({ projectId });
+    const response = await request(server).post('/deploy-optional').send({ projectId });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ optional: true });
@@ -2373,7 +2381,7 @@ describe('requireAction project resource resolvers', () => {
       allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
     });
 
-    const response = await request(app).post('/deploy-no-context').send({ projectId, engineId });
+    const response = await request(server).post('/deploy-no-context').send({ projectId, engineId });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -2388,7 +2396,7 @@ describe('requireAction project resource resolvers', () => {
       checks: [{ id: 'project.exists', allowed: false, reason: 'Project missing' }], reasons: ['Project missing'],
     });
 
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(404);
   });
 
   it('conceals missing engines reported by deployment eligibility', async () => {
@@ -2397,7 +2405,7 @@ describe('requireAction project resource resolvers', () => {
       checks: [{ id: 'engine.exists', allowed: false, reason: 'Engine missing' }], reasons: ['Engine missing'],
     });
 
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(404);
   });
 
   it('conceals a deployment engine when its access denial cannot be viewed', async () => {
@@ -2416,17 +2424,17 @@ describe('requireAction project resource resolvers', () => {
       });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(404);
 
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'engine:deploy:view'
     );
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(403);
 
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'engine:instance:view'
     );
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(403);
   });
 
   it('keeps deployment auto-grant when only the project-engine target is missing and approval permission exists', async () => {
@@ -2453,7 +2461,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'engine:project-access:approve'
     );
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/deploy')
       .send({ projectId, engineId });
 
@@ -2475,13 +2483,13 @@ describe('requireAction project resource resolvers', () => {
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
+    expect((await request(server).post('/deploy').send({ projectId, engineId })).status).toBe(403);
     expect(engineAccessService.grantAccess).not.toHaveBeenCalled();
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledTimes(1);
   });
 
   it('resolves a project-scoped action from a file id', async () => {
-    const response = await request(app).get(`/files/${fileId}`);
+    const response = await request(server).get(`/files/${fileId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -2506,7 +2514,7 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('resolves a project-scoped action from a folder id', async () => {
-    const response = await request(app).get(`/folders/${folderId}`);
+    const response = await request(server).get(`/folders/${folderId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -2525,7 +2533,7 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('resolves a project-scoped action from a version id through its file', async () => {
-    const response = await request(app).get(`/versions/${versionId}`);
+    const response = await request(server).get(`/versions/${versionId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -2550,17 +2558,17 @@ describe('requireAction project resource resolvers', () => {
 
   it('conceals missing file, folder, and version resolver targets before permission evaluation', async () => {
     fileFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/files/${fileId}`)).status).toBe(404);
+    expect((await request(server).get(`/files/${fileId}`)).status).toBe(404);
 
     folderFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/folders/${folderId}`)).status).toBe(404);
+    expect((await request(server).get(`/folders/${folderId}`)).status).toBe(404);
 
     versionFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/versions/${versionId}`)).status).toBe(404);
+    expect((await request(server).get(`/versions/${versionId}`)).status).toBe(404);
 
     versionFindOne.mockResolvedValueOnce({ id: versionId, fileId });
     fileFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/versions/${versionId}`)).status).toBe(404);
+    expect((await request(server).get(`/versions/${versionId}`)).status).toBe(404);
 
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
   });
@@ -2568,7 +2576,7 @@ describe('requireAction project resource resolvers', () => {
   it('denies after resolving the project when the permission is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
-    const response = await request(app).get(`/files/${fileId}`);
+    const response = await request(server).get(`/files/${fileId}`);
 
     expect(response.status).toBe(403);
     expect(fileFindOne).toHaveBeenCalled();
@@ -2582,7 +2590,7 @@ describe('requireAction project resource resolvers', () => {
       reason: 'policy:release-freeze',
     });
 
-    const response = await request(app).get(`/files/${fileId}`);
+    const response = await request(server).get(`/files/${fileId}`);
 
     expect(response.status).toBe(403);
     expect(response.body.error).toContain('policy:release-freeze');
@@ -2591,7 +2599,7 @@ describe('requireAction project resource resolvers', () => {
       tenantId: 'tenant-default',
       resourceType: 'project',
       resourceId: projectId,
-      ipAddress: '::ffff:127.0.0.1',
+      ipAddress: '127.0.0.1',
       userAgent: undefined,
       mfaVerified: false,
     });
@@ -2600,7 +2608,7 @@ describe('requireAction project resource resolvers', () => {
   it('fails closed before permission evaluation when the resolved project is outside the tenant', async () => {
     projectFindOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-a' });
 
-    const response = await request(app).get(`/files/${fileId}`).query({ tenantId: 'tenant-b' });
+    const response = await request(server).get(`/files/${fileId}`).query({ tenantId: 'tenant-b' });
 
     expect(response.status).toBe(403);
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
@@ -2617,7 +2625,7 @@ describe('requireAction project resource resolvers', () => {
         permission === 'engine:instance:view' && context.resourceId === engineId
     );
 
-    const response = await request(app).get('/engines');
+    const response = await request(server).get('/engines');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -2641,7 +2649,7 @@ describe('requireAction project resource resolvers', () => {
   it('omits missing projects from explicit project collections before checking permission', async () => {
     projectFind.mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
 
-    const response = await request(app).get(`/projects?projectIds=${projectId},missing-project`);
+    const response = await request(server).get(`/projects?projectIds=${projectId},missing-project`);
 
     expect(response.status).toBe(200);
     expect(response.body.collection).toEqual({
@@ -2663,7 +2671,7 @@ describe('requireAction project resource resolvers', () => {
         permission === 'project:files:view' && context.resourceId === projectId
     );
 
-    const response = await request(app).get('/projects');
+    const response = await request(server).get('/projects');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -2689,8 +2697,8 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([]);
     (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockResolvedValue([]);
 
-    const projects = await request(app).get('/projects');
-    const engines = await request(app).get('/engines');
+    const projects = await request(server).get('/projects');
+    const engines = await request(server).get('/engines');
 
     expect(projects.status).toBe(200);
     expect(projects.body.collection).toEqual({ type: 'project', ids: [], requestedIds: [], deniedIds: [] });
@@ -2707,7 +2715,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'project:files:view'
     );
 
-    const response = await request(app).get('/projects?tenantId=tenant-a');
+    const response = await request(server).get('/projects?tenantId=tenant-a');
 
     expect(response.status).toBe(200);
     expect(response.body.collection).toEqual({
@@ -2725,7 +2733,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'project:files:view'
     );
 
-    const response = await request(app)
+    const response = await request(server)
       .get('/projects')
       .set('x-test-without-tenant', 'true');
 
@@ -2752,7 +2760,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.getVisibleRuntimeResources as unknown as Mock)
       .mockResolvedValue([{ id: 'shared-resource' }]);
 
-    const response = await request(app).get('/engines?tenantId=tenant-a');
+    const response = await request(server).get('/engines?tenantId=tenant-a');
 
     expect(response.status).toBe(200);
     expect(response.body.collection).toEqual({
@@ -2781,7 +2789,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.getVisibleRuntimeResources as unknown as Mock)
       .mockResolvedValue([{ id: 'shared-resource' }]);
 
-    const response = await request(app)
+    const response = await request(server)
       .get('/engines')
       .set('x-test-without-tenant', 'true');
 
@@ -2814,7 +2822,7 @@ describe('requireAction project resource resolvers', () => {
         permission === 'engine:instance:view' && context.resourceId === engineId
     );
 
-    const response = await request(app)
+    const response = await request(server)
       .get('/engines?tenantId=tenant-a')
       .query({ engineIds: [engineId, `${secondEngineId},missing-engine`] });
 
@@ -2836,7 +2844,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockResolvedValue([engineId]);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockRejectedValue(new Error('inventory unavailable'));
 
-    const response = await request(app).get('/engines');
+    const response = await request(server).get('/engines');
 
     expect(response.status).toBe(200);
     expect(response.body.collection).toEqual({
@@ -2849,8 +2857,8 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({ decision: 'deny', reason: 'project-freeze' })
       .mockResolvedValueOnce({ decision: 'deny', reason: 'engine-freeze' });
 
-    const projects = await request(app).get('/projects');
-    const engines = await request(app).get('/engines');
+    const projects = await request(server).get('/projects');
+    const engines = await request(server).get('/engines');
 
     expect(projects.status).toBe(403);
     expect(projects.body.error).toContain('project-freeze');
@@ -3022,7 +3030,7 @@ describe('requireAction project resource resolvers', () => {
       tenantId: 'tenant-default',
       tenancyMode: 'dedicated',
     });
-    const response = await request(app).get(`/saved-filters/${savedFilterId}`);
+    const response = await request(server).get(`/saved-filters/${savedFilterId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -3049,21 +3057,21 @@ describe('requireAction project resource resolvers', () => {
     savedFilterFindOne.mockReset().mockResolvedValue({ id: savedFilterId, engineId });
     engineFindOne.mockReset().mockResolvedValue(null);
 
-    expect((await request(app).get(`/saved-filters/${savedFilterId}`)).status).toBe(404);
+    expect((await request(server).get(`/saved-filters/${savedFilterId}`)).status).toBe(404);
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
   });
 
   it('conceals missing and cross-tenant saved-filter engines', async () => {
     savedFilterFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/saved-filters/${savedFilterId}`)).status).toBe(404);
+    expect((await request(server).get(`/saved-filters/${savedFilterId}`)).status).toBe(404);
 
     savedFilterFindOne.mockResolvedValueOnce({ id: savedFilterId, engineId });
     engineFindOne.mockResolvedValueOnce({ id: engineId, tenantId: 'tenant-b' });
-    expect((await request(app).get(`/saved-filters/${savedFilterId}?tenantId=tenant-a`)).status).toBe(403);
+    expect((await request(server).get(`/saved-filters/${savedFilterId}?tenantId=tenant-a`)).status).toBe(403);
   });
 
   it('resolves a project-scoped action from a Git repository id', async () => {
-    const response = await request(app).get(`/git-repositories/${gitRepositoryId}`);
+    const response = await request(server).get(`/git-repositories/${gitRepositoryId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -3083,11 +3091,11 @@ describe('requireAction project resource resolvers', () => {
 
   it('conceals missing Git repositories before project permission evaluation', async () => {
     gitRepositoryFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/git-repositories/${gitRepositoryId}`)).status).toBe(404);
+    expect((await request(server).get(`/git-repositories/${gitRepositoryId}`)).status).toBe(404);
   });
 
   it('resolves a project-scoped action from a Git deployment id', async () => {
-    const response = await request(app).get(`/git-deployments/${gitDeploymentId}`);
+    const response = await request(server).get(`/git-deployments/${gitDeploymentId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -3107,7 +3115,7 @@ describe('requireAction project resource resolvers', () => {
 
   it('conceals missing Git deployments before project permission evaluation', async () => {
     gitDeploymentFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).get(`/git-deployments/${gitDeploymentId}`)).status).toBe(404);
+    expect((await request(server).get(`/git-deployments/${gitDeploymentId}`)).status).toBe(404);
   });
 
   it('resolves a project-scoped action from a Git lock id', async () => {
@@ -3115,7 +3123,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'project:settings:manage'
     );
 
-    const response = await request(app).delete(`/git-locks/${gitLockId}`);
+    const response = await request(server).delete(`/git-locks/${gitLockId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -3140,11 +3148,11 @@ describe('requireAction project resource resolvers', () => {
 
   it('conceals missing locks and lock files before project permission evaluation', async () => {
     gitLockFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).delete(`/git-locks/${gitLockId}`)).status).toBe(404);
+    expect((await request(server).delete(`/git-locks/${gitLockId}`)).status).toBe(404);
 
     gitLockFindOne.mockResolvedValueOnce({ id: gitLockId, fileId });
     fileFindOne.mockResolvedValueOnce(null);
-    expect((await request(app).delete(`/git-locks/${gitLockId}`)).status).toBe(404);
+    expect((await request(server).delete(`/git-locks/${gitLockId}`)).status).toBe(404);
   });
 
   it('allows a project action when any accepted permission matches', async () => {
@@ -3152,7 +3160,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'project:git:push'
     );
 
-    const response = await request(app).get(`/sync-status/${projectId}`);
+    const response = await request(server).get(`/sync-status/${projectId}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -3174,7 +3182,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'project:members:manage'
     );
 
-    const response = await request(app)
+    const response = await request(server)
       .post('/invitations')
       .send({ resourceType: 'project', resourceId: projectId });
 
@@ -3206,11 +3214,11 @@ describe('requireAction project resource resolvers', () => {
         permission === 'project:members:manage' || permission === 'engine:members:manage'
     );
 
-    const projectResponse = await request(app)
+    const projectResponse = await request(server)
       .post('/invitations')
       .set('x-test-without-tenant', 'true')
       .send({ resourceType: 'project', resourceId: projectId });
-    const engineResponse = await request(app)
+    const engineResponse = await request(server)
       .post('/invitations')
       .set('x-test-without-tenant', 'true')
       .send({ resourceType: 'engine', resourceId: engineId });
@@ -3232,7 +3240,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'platform:users:create'
     );
 
-    const allowed = await request(app).post('/invitations').send({ resourceType: 'tenant' });
+    const allowed = await request(server).post('/invitations').send({ resourceType: 'tenant' });
 
     expect(allowed.status).toBe(200);
     expect(allowed.body).toMatchObject({
@@ -3251,22 +3259,22 @@ describe('requireAction project resource resolvers', () => {
     }));
 
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
-    const denied = await request(app).post('/invitations').send({ resourceType: 'tenant' });
+    const denied = await request(server).post('/invitations').send({ resourceType: 'tenant' });
     expect(denied.status).toBe(403);
     expect(denied.body.error).toContain('Only platform admins');
   });
 
   it('rejects invitation targets outside the supported authorization scopes', async () => {
-    expect((await request(app).post('/invitations').send({ resourceType: 'engine_set', resourceId: 'set-1' })).status).toBe(400);
+    expect((await request(server).post('/invitations').send({ resourceType: 'engine_set', resourceId: 'set-1' })).status).toBe(400);
   });
 
   it('requires an identifier for project and engine invitation targets', async () => {
-    expect((await request(app).post('/invitations').send({ resourceType: 'project' })).status).toBe(400);
+    expect((await request(server).post('/invitations').send({ resourceType: 'project' })).status).toBe(400);
   });
 
   it('denies project invitations without member-management permission', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
-    expect((await request(app).post('/invitations').send({ resourceType: 'project', resourceId: projectId })).status).toBe(403);
+    expect((await request(server).post('/invitations').send({ resourceType: 'project', resourceId: projectId })).status).toBe(403);
   });
 
   it('resolves engine invitations only within the active tenant', async () => {
@@ -3277,7 +3285,7 @@ describe('requireAction project resource resolvers', () => {
       async (permission: string) => permission === 'engine:members:manage'
     );
 
-    const allowed = await request(app)
+    const allowed = await request(server)
       .post('/invitations?tenantId=tenant-a')
       .send({ resourceType: 'engine', resourceId: engineId });
     expect(allowed.status).toBe(200);
@@ -3290,7 +3298,7 @@ describe('requireAction project resource resolvers', () => {
       resourceType: 'engine', resourceId: engineId, tenantId: 'tenant-a',
     }));
 
-    const crossTenant = await request(app)
+    const crossTenant = await request(server)
       .post('/invitations?tenantId=tenant-a')
       .send({ resourceType: 'engine', resourceId: engineId });
     expect(crossTenant.status).toBe(403);
@@ -3298,12 +3306,12 @@ describe('requireAction project resource resolvers', () => {
 
   it('conceals missing engine invitation targets', async () => {
     engineFindOne.mockResolvedValue(null);
-    expect((await request(app).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(404);
+    expect((await request(server).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(404);
   });
 
   it('denies engine invitations without engine member-management permission', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
-    expect((await request(app).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(403);
+    expect((await request(server).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(403);
   });
 
   it('rejects unauthenticated invitation creation before resolving its target', async () => {

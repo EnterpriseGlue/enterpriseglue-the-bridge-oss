@@ -171,7 +171,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(cookies.join(';')).toContain('identity_oidc_verifier=verifier');
   });
 
-  it('admits an explicitly enabled global Cloud account provider and returns to onboarding', async () => {
+  it.each(['/cloud/onboarding', '/documentation/access'])('admits a global account provider and returns to %s without tenant membership', async (returnTo) => {
     const originalMode = config.tenancyMode;
     const originalCloudIdentity = config.cloudAccountIdentityEnabled;
     const originalCloudRequired = config.tenancyCloudRequired;
@@ -185,16 +185,16 @@ describe('provider-neutral OIDC routes', () => {
       expect(listed.body).toEqual([{ id: provider.id, displayName: provider.key, protocol: 'oidc' }]);
       expect(JSON.stringify(listed.body)).not.toContain('configurationJson');
 
-      const started = await request(app).get('/api/auth/cloud-signup/providers/provider-1/start?returnTo=%2Fcloud%2Fonboarding').redirects(0);
+      const started = await request(app).get(`/api/auth/cloud-signup/providers/provider-1/start?returnTo=${encodeURIComponent(returnTo)}`).redirects(0);
       expect(started.status).toBe(302);
       expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith(provider.id, null);
       const authorizationCalls = genericOidcService.createAuthorizationRequest.mock.calls;
       const state = authorizationCalls[authorizationCalls.length - 1]?.[1];
-      expect(parseSignedOidcState(state)).toMatchObject({ providerId: provider.id, returnTo: '/cloud/onboarding' });
+      expect(parseSignedOidcState(state)).toMatchObject({ providerId: provider.id, returnTo });
       const cookies = (started.headers['set-cookie'] as unknown as string[]).map((cookie) => cookie.split(';')[0]);
       const completed = await request(app).get(`/api/auth/identity/callback?code=code&state=${encodeURIComponent(state)}`).set('Cookie', cookies).redirects(0);
       expect(completed.status).toBe(302);
-      expect(completed.headers.location).toBe(`${config.frontendUrl.replace(/\/$/, '')}/cloud/onboarding`);
+      expect(completed.headers.location).toBe(`${config.frontendUrl.replace(/\/$/, '')}${returnTo}`);
       expect(tenantService.ensureSsoMember).not.toHaveBeenCalled();
       expect(authSessionService.issue).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'user-1' }),

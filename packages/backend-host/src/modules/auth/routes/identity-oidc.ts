@@ -419,7 +419,7 @@ router.get('/api/auth/cloud-signup/providers', apiLimiter, identityFlowLimiter, 
 router.get('/api/auth/cloud-signup/providers/:providerId/start', apiLimiter, identityFlowLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!config.cloudAccountIdentityEnabled) throw Errors.notFound('Cloud signup');
   if (Object.keys(req.query).join(',') !== 'returnTo'
-    || (req.query.returnTo !== '/cloud/onboarding' && req.query.returnTo !== '/login')) {
+    || (req.query.returnTo !== '/cloud/onboarding' && req.query.returnTo !== '/login' && req.query.returnTo !== '/documentation/access')) {
     throw Errors.validation('Cloud account return path is invalid');
   }
   const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), null);

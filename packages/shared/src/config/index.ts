@@ -37,6 +37,8 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantCloudIdentityAudience: z.string().min(1).max(256).optional(),
   platformCloudIdentityAudience: z.string().min(1).max(256).optional(),
   cloudAccountIdentityEnabled: z.boolean().default(false),
+  documentationOrigin: z.url().optional(),
+  documentationGatewaySecret: z.string().min(32).max(512).optional(),
   tenantReleaseControllerToken: z.string().min(32).max(512).optional(),
   tenantPlacementV2ClockSkewSeconds: z.number().int().nonnegative().max(60).default(5),
   tenancyCloudRequired: z.boolean().default(false),
@@ -196,6 +198,8 @@ function loadConfig(): Config {
     tenantCloudIdentityAudience: envOrUndefined(process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE),
     platformCloudIdentityAudience: envOrUndefined(process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE),
     cloudAccountIdentityEnabled: process.env.EG_CLOUD_ACCOUNT_IDENTITY_ENABLED === 'true',
+    documentationOrigin: process.env.EG_DOCUMENTATION_ORIGIN,
+    documentationGatewaySecret: process.env.EG_DOCUMENTATION_GATEWAY_SECRET,
     tenantReleaseControllerToken: envOrUndefined(process.env.EG_TENANT_RELEASE_CONTROLLER_TOKEN),
     tenantPlacementV2ClockSkewSeconds: process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS
       ? Number(process.env.EG_TENANT_PLACEMENT_V2_CLOCK_SKEW_SECONDS)

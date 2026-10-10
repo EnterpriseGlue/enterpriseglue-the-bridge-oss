@@ -1,3 +1,4 @@
+import documentationRoute from './documentation.js';
 /**
  * Authentication routes
  * Handles login, logout, token refresh, password management, email verification, and provider-neutral identity login.
@@ -16,6 +17,7 @@ import identityOidcRoute from './identity-oidc.js';
 import cloudEmailPasskeyRoute from './cloud-email-passkey.js';
 
 export {
+  documentationRoute,
   loginRoute,
   logoutRoute,
   refreshRoute,

@@ -473,3 +473,10 @@ The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as
 - `scripts/db-preflight.sh`
 - `dev.sh`
 - `down.sh`
+
+## Documentation account gateway
+
+- `EG_DOCUMENTATION_ORIGIN`: Canonical HTTPS documentation origin, without a path, query or fragment.
+- `EG_DOCUMENTATION_GATEWAY_SECRET`: Dedicated 32–512 character API-only secret, also installed on the documentation gateway. It must differ from `JWT_SECRET`.
+
+The integration requires managed pooled Cloud account identity. Unset configuration disables access. Neither variable belongs in frontend runtime configuration. See [the account contract](documentation-account-access.md).

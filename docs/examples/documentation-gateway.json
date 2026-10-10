@@ -1,0 +1,21 @@
+{
+  "canonicalDocumentationOrigin": "https://docs.staging.enterpriseglue.ai",
+  "accountOrigin": "https://app.staging.enterpriseglue.ai",
+  "apiEnvironment": {
+    "EG_DOCUMENTATION_ORIGIN": "https://docs.staging.enterpriseglue.ai",
+    "EG_DOCUMENTATION_GATEWAY_SECRET": "<provision-a-dedicated-secret-outside-git>"
+  },
+  "gatewayEnvironment": {
+    "DOCUMENTATION_ORIGIN": "https://docs.staging.enterpriseglue.ai",
+    "ACCOUNT_ORIGIN": "https://app.staging.enterpriseglue.ai",
+    "DOCUMENTATION_GATEWAY_SECRET": "<the-same-dedicated-secret-outside-git>"
+  },
+  "browserGrantRequest": {
+    "state": "sssssssssssssssssssssssssssssssssssssssssss",
+    "challenge": "ccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "accountRegistration": {
+    "intent": "documentation",
+    "createsTenant": false
+  }
+}

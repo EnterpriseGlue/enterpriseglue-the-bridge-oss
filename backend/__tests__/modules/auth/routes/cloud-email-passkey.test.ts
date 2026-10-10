@@ -101,8 +101,13 @@ describe('Cloud email-and-passkey signup', () => {
       return { affected: 1 };
     }),
   };
-  const manager = { getRepository: (entity: unknown) => entity === CloudEmailSignup ? pendingRepo
-    : entity === User ? userRepo : entity === CloudPasskey ? passkeyRepo : challengeRepo };
+  const manager = { getRepository: (entity: unknown) => {
+    if (entity === CloudEmailSignup) return pendingRepo;
+    if (entity === User) return userRepo;
+    if (entity === CloudPasskey) return passkeyRepo;
+    if (entity === CloudPasskeyChallenge) return challengeRepo;
+    throw new Error('Account registration must not access tenant or provisioning persistence');
+  } };
   const dataSource = { ...manager, transaction: async (callback: (transactionManager: typeof manager) => Promise<unknown>) => callback(manager) };
   const app = express();
   app.use(express.json());
@@ -140,26 +145,29 @@ describe('Cloud email-and-passkey signup', () => {
     expect(sendVerificationEmail).not.toHaveBeenCalled();
   });
 
-  it('sends existing-account guidance without creating a pending signup or linking identities', async () => {
+  it.each(['cloud', 'documentation'])('sends %s account guidance without a pending signup or linked identities', async (intent) => {
     users.set('existing', { id: 'existing', email: 'member@example.com' } as User);
-    const response = await request(app).post('/api/auth/cloud-signup/email/request').send({ email: 'MEMBER@example.com' });
+    const response = await request(app).post('/api/auth/cloud-signup/email/request').send({ email: 'MEMBER@example.com', intent });
     expect(response.status).toBe(202);
     expect(sendEmailWithConfig).toHaveBeenCalledOnce();
+    expect(vi.mocked(sendEmailWithConfig).mock.calls[0]![4]).toContain(`https://app.staging.enterpriseglue.ai${intent === 'documentation' ? '/documentation/access' : '/login'}`);
     expect(sendVerificationEmail).not.toHaveBeenCalled();
     expect(pendingRepo.insert).not.toHaveBeenCalled();
     expect(credentials).toHaveLength(0);
   });
 
-  it('does not create an account until the email proof and passkey registration both succeed', async () => {
-    const requested = await request(app).post('/api/auth/cloud-signup/email/request').send({ email: 'New@Example.com' });
+  it.each(['cloud', 'documentation'])('creates a %s account only after email proof and passkey registration', async (intent) => {
+    const requested = await request(app).post('/api/auth/cloud-signup/email/request').send({ email: 'New@Example.com', intent });
     expect(requested.status).toBe(202);
     expect(users.size).toBe(0);
     expect(pending.size).toBe(1);
     const link = vi.mocked(sendVerificationEmail).mock.calls[0]![0].verificationUrl;
-    const token = new URL(link).searchParams.get('token')!;
-    const verified = await request(app).get(`/api/auth/cloud-signup/email/verify?token=${token}`);
+    const verification = new URL(link);
+    expect(verification.searchParams.get('intent')).toBe(intent === 'documentation' ? intent : null);
+    const token = verification.searchParams.get('token')!;
+    const verified = await request(app).get(`${verification.pathname}${verification.search}`);
     expect(verified.status).toBe(302);
-    expect(verified.headers.location).toBe('https://app.staging.enterpriseglue.ai/signup/email/passkey');
+    expect(verified.headers.location).toBe(`https://app.staging.enterpriseglue.ai/signup/email/passkey${intent === 'documentation' ? '?intent=documentation' : ''}`);
     expect(users.size).toBe(0);
     const browserCookie = `cloud_email_signup_proof=${token}`;
     const options = await request(app).post('/api/auth/cloud-signup/email/passkey/options').set('Cookie', browserCookie).send({});
