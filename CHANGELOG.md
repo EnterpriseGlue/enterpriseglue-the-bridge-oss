@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
-## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.3...v0.30.0) (2026-10-09)
+## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.3...v0.30.0) (2026-10-10)
 
 ### Breaking changes
 
@@ -13,9 +13,13 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Changes
 
 - **browser-evidence:** Verify the fonts used by browser evidence before bounded capture, avoiding an unused FontFaceSet stall and preserving cleanup diagnostics.
+- **documentation account access:** Add a documentation-only sign-in journey and limited, revocable documentation sessions without creating a Cloud tenant.
 - **release-authorization:** Separate local implementation, code shipping and explicitly approved multi-PR release publication, with exact generated release-document verification.
 - **plugin-toolchain:** Rebuild pinned ORAS and Cosign releases with Go 1.26.9 in both installer and manager images, eliminating newly reported Go standard-library denial-of-service vulnerabilities.
+- **plugin-toolchain:** Rebuild installer and manager OCI tools with patched x/net HTTP/2 modules and their required Go dependency floors.
 - **release-documentation:** Generate concise and detailed batch documentation from the complete unreleased fragments and corrected evidence, retaining historical package records without repeating bumps.
+- **release-preparation:** Keep an unpublished reserved release at its approved version when Release Please runs in manifest mode.
+- **release-authorization:** Publish and recover one frozen release batch through signed immutable records, reviewed workflow repairs and observed registry receipts.
 
 Full upgrade, compatibility and verification details: [v0.30.0 release notes](docs/releases/v0.30.0.md).
 
