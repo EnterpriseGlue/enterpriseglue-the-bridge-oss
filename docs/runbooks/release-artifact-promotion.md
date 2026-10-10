@@ -289,8 +289,19 @@ gh workflow run release-please.yml --ref main \
 
 The gate verifies the current protected source, the old owned release PR,
 reserved manifest version, fragment-derived version and absence of both tag
-and release. Only then is the old reservation marked `autorelease: superseded`;
-Release Please's `release-as` input is scoped to that preparation operation.
+and release. Only then is the old reservation marked `autorelease: superseded`.
+The preparation helper adds a managed `BEGIN_COMMIT_OVERRIDE` / `Release-As`
+directive to the latest reviewed first-party code PR in that source. The pinned
+Release Please action ignores its `release-as` input in manifest mode; the
+library's supported commit override enforces the reserved version instead.
+Existing human overrides require review and are never overwritten. Code review
+content is preserved, and generated Release Please bodies remain managed by
+Release Please. After publication, the release baseline excludes the commit
+carrying this directive, so later release versions advance normally.
+
+Label reconciliation removes only pending/triggered states actually attached
+to the old reservation. An absent legacy label definition does not block
+replacement preparation.
 Automatic push/schedule runs never select this mode. The generator reconstructs
 concise and detailed notes from all fragments since the last published tag,
 using the published changelog's historical bytes rather than retaining old

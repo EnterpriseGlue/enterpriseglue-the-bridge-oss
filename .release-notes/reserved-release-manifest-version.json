@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "reserved-release-manifest-version",
+  "type": "fix",
+  "scope": "release-preparation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Keep an unpublished reserved release at its approved version when Release Please runs in manifest mode.",
+  "userImpact": [
+    "Replacing an unpublished candidate regenerates the approved version instead of proposing an extra minor release."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Use explicit replacement preparation after the corrected protected-main helper is merged."
+    ]
+  },
+  "configuration": [
+    "The preparation helper applies a managed Release-As commit override to the newest reviewed first-party code PR contained in the source. The pinned action ignores its release-as input in manifest mode.",
+    "Only labels actually attached to the old reservation are removed; missing legacy label definitions are tolerated."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No application, database or published-package change."
+    ]
+  },
+  "security": [
+    "Replacement still requires an explicit protected-main dispatch and verified absence of both semantic tag and GitHub release. Publication and all candidate acceptance gates remain separate.",
+    "Generated release PR bodies and existing human commit overrides are not rewritten by the preparation helper."
+  ],
+  "documentation": [
+    "The artifact-promotion runbook explains managed version directives, published-baseline behavior and idempotent label reconciliation."
+  ],
+  "knownLimitations": [
+    "Only unpublished reserved versions may be replaced. The replacement still needs generated-document agreement and exact signed candidate acceptance."
+  ],
+  "rollback": [
+    "Stop replacement dispatches and revert the preparation helper if required. Retain existing releases and signed records; no database or package rollback is needed."
+  ],
+  "validation": [
+    "39 local record, observer, recovery, workflow and replacement-metadata regressions passed, including first-party ancestry, review preservation, idempotent version directives, missing legacy labels and rejected human overrides.",
+    "The actual pinned release-please 17.6.0 parser and version strategy recognize the managed code-PR override and retain 0.30.0 even when the manifest already reserves 0.30.0; the local proof performs no publication."
+  ],
+  "packages": []
+}

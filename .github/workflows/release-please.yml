@@ -106,7 +106,7 @@ jobs:
           fi
           echo "base_tag=$base_tag" >> "$GITHUB_OUTPUT"
 
-      - name: Supersede the unpublished reservation before generating a replacement PR
+      - name: Supersede the unpublished reservation and enforce its reserved version
         if: steps.publication.outputs.mode == 'prepare-replacement'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -193,7 +193,6 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
-          release-as: ${{ steps.publication.outputs.replacement_version }}
           skip-github-release: ${{ steps.publication.outputs.is_release != 'true' }}
           skip-github-pull-request: ${{ steps.publication.outputs.is_release == 'true' }}
 
