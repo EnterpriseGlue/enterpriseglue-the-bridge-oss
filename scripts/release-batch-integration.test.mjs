@@ -143,3 +143,73 @@ test('a valid source and document cannot publish an incompletely approved PR bat
   f.write('.artifacts/event.json', JSON.stringify(event))
   assert.throws(() => verifyPublication({ root: f.root, env: f.env, runApi: f.runApi }), /complete unreleased merged-PR batch/)
 })
+
+function repairFixture(t, path = 'scripts/release-publication-approval.mjs') {
+  const f = releaseFixture(t)
+  const releaseRoot = join(f.root, '.artifacts/frozen-source')
+  execFileSync('git', ['clone', '--quiet', '--shared', f.root, releaseRoot])
+  f.write(path, 'export const repaired = true\n')
+  f.git(['add', path]); f.git(['commit', '-m', 'fix(release): repair publication tooling'])
+  const controlRef = f.git(['rev-parse', 'HEAD'])
+  const repair = {number:901,merged_at:'2026-10-10T00:00:00Z',merge_commit_sha:controlRef,
+    base:{ref:'main',repo:{full_name:repository}},head:{ref:'fix/release-recovery',repo:{full_name:repository}}}
+  const originalAPI = f.runApi
+  f.runApi = endpoint => endpoint.endsWith('/git/ref/heads/main') ? [{object:{sha:controlRef}}]
+    : endpoint.endsWith(`/commits/${controlRef}/pulls?per_page=100`) ? [[repair]] : originalAPI(endpoint)
+  const event = JSON.parse(readFileSync(f.env.GITHUB_EVENT_PATH, 'utf8'))
+  event.inputs.recovery_prs = '[901]'
+  f.write('.artifacts/event.json', JSON.stringify(event))
+  f.env = {...f.env,GITHUB_SHA:controlRef,RELEASE_SOURCE_ROOT:releaseRoot}
+  return {...f,controlRef,releaseRoot,event}
+}
+
+test('a reviewed publication-only repair can use the frozen source and documentation without retagging', t => {
+  const f = repairFixture(t)
+  const approved = verifyPublication({root:f.root,env:f.env,runApi:f.runApi})
+  assert.equal(approved.sourceRef,f.sha)
+  assert.equal(approved.controlRef,f.controlRef)
+  assert.deepEqual(approved.recoveryPRs,[901])
+  assert.equal(f.git(['tag','--list']),'v0.29.3')
+})
+
+for (const path of ['packages/shared/package.json','pnpm-lock.yaml','backend/Dockerfile.prod','infra/kubernetes/helm/enterpriseglue-host/Chart.yaml',
+  '.trivyignore','packages/shared/src/migrations/1700000000999.ts','unknown/recovery-helper.mjs']) {
+  test(`recovery rejects intervening content changes to ${path}`, t => {
+    const f=repairFixture(t,path)
+    assert.throws(()=>verifyPublication({root:f.root,env:f.env,runApi:f.runApi}),/changes release content or an unallowlisted path/)
+  })
+}
+
+test('recovery cannot omit the reviewed repair PR or invent additional repairs', t => {
+  const f = repairFixture(t)
+  for (const repairs of ['[]','[902]','[901,902]']) {
+    f.event.inputs.recovery_prs=repairs
+    f.write('.artifacts/event.json',JSON.stringify(f.event))
+    assert.throws(()=>verifyPublication({root:f.root,env:f.env,runApi:f.runApi}),/requires an explicit|Unapproved intervening|exactly cover/)
+  }
+})
+
+test('old pending labels within the previous published baseline are not active-release authority', t => {
+  const f=releaseFixture(t)
+  const old={number:1,merged_at:'2026-01-01',merge_commit_sha:f.git(['rev-parse','v0.29.3']),head:{ref:'release-please--branches--main'},labels:[{name:'autorelease: pending'}]}
+  const api=f.runApi
+  assert.doesNotThrow(()=>verifyPublication({root:f.root,env:f.env,runApi:endpoint=>endpoint.endsWith('/pulls?state=closed&per_page=100') ? [[old]] : api(endpoint)}))
+})
+
+test('replacement preparation accepts a reserved unpublished release but never a tag or GitHub release', t => {
+  const f=releaseFixture(t)
+  const event={inputs:{publish_release:false,prepare_replacement:true,source_ref:f.sha,release_tag:'v0.30.0',release_pr:'900'}}
+  f.write('.artifacts/event.json',JSON.stringify(event))
+  const original=f.runApi
+  const missing=endpoint=>{
+    if (endpoint.endsWith('/git/ref/tags/v0.30.0') || endpoint.endsWith('/releases/tags/v0.30.0')) throw Object.assign(new Error('Fixture missing tag/release'),{status:404})
+    return original(endpoint)
+  }
+  const result=verifyPublication({root:f.root,env:f.env,runApi:missing})
+  assert.equal(result.mode,'prepare-replacement')
+  assert.equal(result.shouldPublish,false)
+  assert.equal(JSON.parse(readFileSync(join(f.root,'.artifacts/release-publication/replacement.json'),'utf8')).publicationPerformed,false)
+  for (const endpointSuffix of ['/git/ref/tags/v0.30.0','/releases/tags/v0.30.0']) {
+    assert.throws(()=>verifyPublication({root:f.root,env:f.env,runApi:endpoint=>endpoint.endsWith(endpointSuffix) ? [{}] : missing(endpoint)}),/cannot be replaced/)
+  }
+})

@@ -34,3 +34,12 @@ description: Use when the user says /post-ship-watch, watch after ship, monitor 
    the safe action is explicit.
 8. If asked to keep watching later, use a thread heartbeat automation rather
    than a permanent cron.
+
+For a frozen release with publication-only repair PRs, track the release source
+and protected workflow revision separately. Verify the signed publication
+identity and observation attempts against actual registries. A merged PR,
+created GitHub release or green subset is not full publication. Preserve the
+frozen notes, candidate and tag; only explicit recovery authorization may
+resume incomplete publishers, and unknown state or immutable conflicts block
+writes. Current security acceptance includes the scanner/database and both
+architectures of the exact digests.

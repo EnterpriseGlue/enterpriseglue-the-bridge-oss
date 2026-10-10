@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import test from 'node:test'
+import { readPublicationApi } from './release-publication-approval.mjs'
+import './release-publication-record.test.mjs'
 import { detailedNotesMarker, resolveReleasePublication, validateReleasePublicationApproval } from './lib/release-publication-policy.mjs'
 
 const sha = 'a'.repeat(40)
@@ -8,6 +11,60 @@ const repository = 'EnterpriseGlue/enterpriseglue-the-bridge-oss'
 const approvedInputs = { publish_release: true, source_ref: sha, release_tag: 'v0.30.0', release_pr: '900', required_prs: '[551,554]' }
 const publicationContext = { eventName: 'workflow_dispatch', ref: 'refs/heads/main', sha,
   commitMessage: 'chore(main)!: release 0.30.0', manifestVersion: '0.30.0', latestTag: 'v0.29.3', inputs: approvedInputs }
+
+test('closed-PR history retains every page and pending-release field without retrieving PR bodies', () => {
+  const pending = { number: 900, merged_at: '2026-10-09', merge_commit_sha: sha, head: { ref: 'release-please--branches--main' },
+    labels: [{ name: 'autorelease: pending' }] }
+  const pages = [Array.from({length: 100}, (_, number) => ({number, merged_at: null, head: {}, labels: []})), [pending]]
+  let requests = 0
+  const result = readPublicationApi(`repos/${repository}/pulls?state=closed&per_page=100`, { execute(command, args) {
+    assert.equal(command, 'gh')
+    assert.ok(!args.includes('--paginate') && !args.includes('--slurp'), 'Each projected response is bounded independently.')
+    assert.equal(args[args.indexOf('--jq') + 1],
+      'map({number, merged_at, merge_commit_sha, head: {ref: .head.ref}, labels: [.labels[] | {name}]})')
+    assert.ok(args.at(-1).endsWith(`&page=${requests + 1}`))
+    return JSON.stringify(pages[requests++])
+  } })
+  assert.deepEqual(result, pages)
+  assert.equal(requests, 2)
+})
+
+test('publication metadata larger than the default subprocess buffer is read completely', () => {
+  const body = 'x'.repeat(2 * 1024 * 1024)
+  const pages = readPublicationApi(`repos/${repository}/issues/900/comments`, { execute(command, args, options) {
+    assert.equal(command, 'gh')
+    assert.ok(args.includes('--slurp'))
+    return execFileSync(process.execPath, ['-e', 'process.stdout.write(JSON.stringify([[{body:"x".repeat(2*1024*1024)}]]))'], options)
+  } })
+  assert.equal(pages[0][0].body, body)
+})
+
+test('publisher observation reads a bounded recent-run page without downloading complete workflow history', () => {
+  const page={workflow_runs:[{id:1,status:'completed'}]}
+  const result=readPublicationApi(`repos/${repository}/actions/workflows/docker-images.yml/runs?per_page=100`,{
+    paginate:false,execute(command,args){assert.equal(command,'gh');assert.ok(!args.includes('--paginate'));return JSON.stringify(page)},
+  })
+  assert.deepEqual(result,[page])
+})
+
+test('failed or malformed publication API responses fail closed with endpoint diagnostics', () => {
+  const endpoint = `repos/${repository}/pulls/900`
+  for (const execute of [() => 'truncated JSON', () => { throw Object.assign(new Error('private response'), { code: 'ENOBUFS' }) }]) {
+    assert.throws(() => readPublicationApi(endpoint, { execute }), error => {
+      assert.ok(error.message.includes(endpoint))
+      assert.ok(!error.message.includes('private response'))
+      return true
+    })
+  }
+})
+
+test('missing or malformed closed-PR pages cannot silently become an empty history', () => {
+  const endpoint = `repos/${repository}/pulls?state=closed&per_page=100`
+  for (const response of ['', '\n', '{}\n', 'null\n']) {
+    assert.throws(() => readPublicationApi(endpoint, { execute: () => response }), /Could not read publication metadata/)
+  }
+  assert.deepEqual(readPublicationApi(endpoint, { execute: () => '[]\n' }), [[]])
+})
 
 for (const eventName of ['push', 'schedule', 'workflow_run', 'pull_request']) {
   test(`${eventName} cannot publish even when the main commit is a release merge`, () => {
@@ -38,6 +95,19 @@ test('an explicit dispatch binds one release identity and a multi-PR batch', () 
   assert.equal(result.shouldPrepare, false)
   assert.deepEqual(result.requiredPRs, [551, 554])
   assert.equal(result.sourceRef, sha)
+})
+
+test('an unpublished reserved version can prepare a replacement only through an explicit protected dispatch', () => {
+  const inputs={publish_release:false,prepare_replacement:true,source_ref:sha,release_tag:'v0.30.0',release_pr:'900'}
+  const result=resolveReleasePublication({...publicationContext,commitMessage:'fix: patch candidate content',inputs})
+  assert.equal(result.shouldPublish,false)
+  assert.equal(result.shouldPrepare,true)
+  assert.equal(result.mode,'prepare-replacement')
+  assert.equal(result.releaseTag,'v0.30.0')
+  assert.throws(()=>resolveReleasePublication({...publicationContext,eventName:'push',inputs}),/Only an explicit dispatch/)
+  assert.throws(()=>resolveReleasePublication({...publicationContext,latestTag:'v0.30.0',inputs}),/has not been published/)
+  assert.throws(()=>resolveReleasePublication({...publicationContext,inputs:{...inputs,publish_release:true}}),/separate operations/)
+  assert.throws(()=>resolveReleasePublication({...publicationContext,inputs:{...inputs,source_ref:'b'.repeat(40)}}),/current protected source/)
 })
 
 for (const [name, change, error] of [

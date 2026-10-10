@@ -8,6 +8,10 @@ on:
     - cron: "30 3 * * *"
   workflow_dispatch:
     inputs:
+      prepare_replacement:
+        description: Explicitly replace an unpublished reserved candidate after content or security changes.
+        type: boolean
+        default: false
       publish_release:
         description: Publish the explicitly approved /release batch after its release PR has merged.
         type: boolean
@@ -24,6 +28,10 @@ on:
         description: Merged Release Please PR approved by /release.
         type: string
         default: ''
+      recovery_prs:
+        description: JSON array of reviewed publication-only repair PRs after the frozen source.
+        type: string
+        default: ''
       required_prs:
         description: JSON array of merged code PR numbers included in the approved batch.
         type: string
@@ -33,7 +41,8 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  packages: read
+  packages: write
+  id-token: write
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -50,6 +59,15 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
 
+      - name: Checkout the frozen release data separately
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_ref }}
+          path: .artifacts/release-source
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -62,6 +80,7 @@ jobs:
         id: publication
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SOURCE_ROOT: ${{ inputs.publish_release && format('{0}/.artifacts/release-source', github.workspace) || github.workspace }}
         run: node scripts/release-publication-approval.mjs
 
       - name: Detect fragment-derived release demand
@@ -87,6 +106,12 @@ jobs:
           fi
           echo "base_tag=$base_tag" >> "$GITHUB_OUTPUT"
 
+      - name: Supersede the unpublished reservation before generating a replacement PR
+        if: steps.publication.outputs.mode == 'prepare-replacement'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-publication-labels.mjs .artifacts/release-publication/replacement.json replace
+
       - name: Set up ORAS for candidate verification
         if: steps.publication.outputs.is_release == 'true'
         uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
@@ -106,15 +131,59 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify signed candidate before tag creation
+        id: candidate
         if: steps.publication.outputs.is_release == 'true'
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.publication.outputs.release_tag }}
+          SOURCE_REF: ${{ steps.publication.outputs.source_ref }}
         run: |
           set -euo pipefail
           candidate="$RUNNER_TEMP/release-candidate"
           mkdir -p "$candidate"
-          bash scripts/fetch-release-candidate.sh "$GITHUB_SHA" "$RELEASE_TAG" "$candidate" >/dev/null
+          candidate_ref="$(bash scripts/fetch-release-candidate.sh "$SOURCE_REF" "$RELEASE_TAG" "$candidate" | tail -n 1)"
+          [[ "$candidate_ref" =~ @sha256:[0-9a-f]{64}$ ]]
+          echo "candidate_ref=$candidate_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh security evidence for the exact frozen images
+        if: steps.publication.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cmp .trivyignore .artifacts/release-source/.trivyignore
+          bash scripts/release-publication-security.sh "$RUNNER_TEMP/release-candidate" .artifacts/release-publication/security
+
+      - name: Persist the signed publication identity before creating any tag
+        if: steps.publication.outputs.is_release == 'true'
+        env:
+          CANDIDATE_REF: ${{ steps.candidate.outputs.candidate_ref }}
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          namespace=''
+          if [[ -n "$DOCKERHUB_NAMESPACE" && -n "$DOCKERHUB_USERNAME" && -n "$DOCKERHUB_TOKEN" ]]; then namespace="$DOCKERHUB_NAMESPACE"; fi
+          node scripts/release-publication-record.mjs create \
+            --authorization .artifacts/release-publication/authorization.json \
+            --artifacts "$RUNNER_TEMP/release-candidate" --candidate-ref "$CANDIDATE_REF" \
+            --security .artifacts/release-publication/security/security.json \
+            --dockerhub-namespace "$namespace" --output .artifacts/release-publication/publication.json
+          bash scripts/release-publication-record-store.sh save .artifacts/release-publication/publication.json pre-tag
+
+      - name: Reconcile superseded pending labels against the previous published baseline
+        if: steps.publication.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release-publication-labels.mjs .artifacts/release-publication/authorization.json
+
+      - name: Recheck protected authority immediately before tag creation
+        if: steps.publication.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SOURCE_ROOT: ${{ github.workspace }}/.artifacts/release-source
+        run: node scripts/release-publication-approval.mjs
 
       - name: Run Release Please
         id: release
@@ -124,6 +193,7 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+          release-as: ${{ steps.publication.outputs.replacement_version }}
           skip-github-release: ${{ steps.publication.outputs.is_release != 'true' }}
           skip-github-pull-request: ${{ steps.publication.outputs.is_release == 'true' }}
 
@@ -135,9 +205,11 @@ jobs:
           PRS_JSON: ${{ steps.release.outputs.prs || '[]' }}
           PR_JSON: ${{ steps.release.outputs.pr || '{}' }}
           RELEASES_CREATED: ${{ steps.release.outputs.releases_created || 'false' }}
+          IS_PUBLICATION: ${{ steps.publication.outputs.is_release }}
         with:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           script: |
+            if (process.env.IS_PUBLICATION === 'true') { core.setOutput('pull_number', ''); return; }
             const parseJson = (value, fallback) => {
               try { return JSON.parse(value); } catch { return fallback; }
             };
@@ -271,12 +343,28 @@ jobs:
           RELEASE_TAG: ${{ steps.publication.outputs.release_tag }}
         run: |
           set -euo pipefail
-          release_file="docs/releases/${RELEASE_TAG}.md"
+          release_file=".artifacts/release-source/docs/releases/${RELEASE_TAG}.md"
           test -f "$release_file"
           gh release edit "$RELEASE_TAG" --notes-file "$release_file"
 
-      - name: Retain batch publication authorization
+      - name: Observe actual publication progress and retain the signed attempt
         if: always() && steps.publication.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          record=.artifacts/release-publication/publication.json
+          if [[ -f "$record" ]]; then
+            observation=.artifacts/release-publication/observation.json
+            status=0
+            node scripts/release-publication-observe.mjs "$record" "$RUNNER_TEMP/release-candidate" "$observation" || status=$?
+            if [[ -f "$observation" ]]; then bash scripts/release-publication-record-store.sh save "$observation" result; fi
+            exit "$status"
+          fi
+
+      - name: Retain batch publication authorization
+        if: always() && (steps.publication.outputs.is_release == 'true' || steps.publication.outputs.mode == 'prepare-replacement')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-publication-authorization-${{ github.run_id }}

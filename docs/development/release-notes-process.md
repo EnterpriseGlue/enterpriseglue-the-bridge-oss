@@ -199,6 +199,13 @@ checked-in document. Its complete contents must also match the managed release
 PR comment. The concise `CHANGELOG.md` remains ancestry-deduplicated. Do not
 hand-edit generated documents to pass these checks.
 
+Publication approval reads every page of closed-PR history, retaining merge
+state, branch names and labels while omitting unrelated historical PR bodies.
+Other metadata reads preserve their complete JSON payload with a bounded
+16 MiB subprocess buffer. Failed or malformed responses stop approval and name
+the endpoint without logging response contents. A local repair cannot replace
+the exact protected source or bypass its signed-candidate qualification.
+
 ## Publishing an approved batch
 
 Publication-authorization changes have a focused pre-merge rehearsal in the
@@ -400,3 +407,13 @@ generation keeps those unreleased changes in the combined documentation.
 Evidence-only corrections retain identical historical package transitions at
 the PR comparison base. Those records cannot authorize a fresh source change;
 new source still requires a valid new bump and downstream consumer versions.
+
+Publication recovery preserves the versioned notes and concise changelog from
+the frozen release source. The signed publication identity binds both document
+hashes and the complete code-PR batch to the immutable candidate. A reviewed
+publication-only repair is tracked as a separate workflow revision and repair
+PR list; its technical fragment accompanies that code change without rewriting
+the already qualified release document. Newly selected release content requires
+new generation and candidate qualification. See the
+[artifact promotion runbook](../runbooks/release-artifact-promotion.md) for the
+recovery protocol and observed publication states.

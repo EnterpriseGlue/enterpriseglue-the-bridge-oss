@@ -35,3 +35,12 @@ description: Use when the user says /release-publish-watch, watch release publis
     default-route promotion, and production promotion are downstream states;
     inspect them only when requested and never claim them from publication
     success alone.
+
+For a frozen release with publication-only repair PRs, track the release source
+and protected workflow revision separately. Verify the signed publication
+identity and observation attempts against actual registries. A merged PR,
+created GitHub release or green subset is not full publication. Preserve the
+frozen notes, candidate and tag; only explicit recovery authorization may
+resume incomplete publishers, and unknown state or immutable conflicts block
+writes. Current security acceptance includes the scanner/database and both
+architectures of the exact digests.

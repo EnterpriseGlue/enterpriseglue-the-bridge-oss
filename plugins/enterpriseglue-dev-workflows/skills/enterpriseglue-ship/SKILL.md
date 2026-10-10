@@ -85,13 +85,19 @@ them, enable their auto-merge, dispatch publication, or create release tags.
    auto-merge for fork/external PRs or explicitly draft PRs unless the user
    explicitly requests it. Enabling auto-merge does not authorize bypassing
    branch protection, dismissing reviews, or merging a draft.
-12. Leave Release Please preparing one pending release PR as code PRs merge.
+12. A publication-only recovery repair remains a code PR. It may be recorded
+    separately from an already frozen release payload; it must not replace
+    the candidate source, notes or digest. `/ship` does not authorize
+    `recovery_prs`, tag creation or downstream publisher dispatch. An existing
+    explicit human request to implement, ship and recover covers those stated
+    actions without another routine confirmation.
+13. Leave Release Please preparing one pending release PR as code PRs merge.
     Do not advance publication. Report that the merged capability is included
     in the next unreleased batch and route an explicitly requested publication
     to `enterpriseglue-release`.
-13. Do not remove worktrees or branches without satisfying cleanup conditions
+14. Do not remove worktrees or branches without satisfying cleanup conditions
    and any required user confirmation.
-14. Report the code PR, merged revision, applicable checks, and unreleased
+15. Report the code PR, merged revision, applicable checks, and unreleased
     status. An unexpected external publication must be reported as a separate
     observed outcome; never infer publication or deployment from a code merge.
     Publication belongs to `/release`; Cloud intake, staging and production

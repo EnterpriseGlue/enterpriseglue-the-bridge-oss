@@ -475,3 +475,14 @@ test('changelog generation rejects empty batches and mismatched release identiti
   assert.throws(() => syncReleaseChangelog('## [0.30.0]\n', [], '0.30.0'), /without fragments/);
   assert.throws(() => syncReleaseChangelog('## [0.29.4]\n', [fragment], '0.30.0'), /heading must match/);
 });
+
+test('a replacement changelog discards unpublished duplicate sections and preserves released history bytes', () => {
+  const history='# Changelog\n\n## [0.29.3]\n\nHistorical release bytes.\n\n'
+  const pending='# Changelog\n\n## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.0...v0.30.0)\n\nNew pending section.\n\n## [0.30.0]\n\nOld unpublished reservation.\n\n## [0.29.3]\n\nStale generated history.\n'
+  const result=syncReleaseChangelog(pending,[fragment],'0.30.0',history)
+  assert.equal((result.match(/^## \[0\.30\.0\]/gm)||[]).length,1)
+  assert.ok(result.endsWith(history.slice(history.indexOf('## [0.29.3]'))))
+  assert.ok(result.includes('/compare/v0.29.3...v0.30.0'))
+  assert.ok(!result.includes('Old unpublished reservation'))
+  assert.throws(()=>syncReleaseChangelog(pending,[fragment],'0.30.0','# Changelog\n\n## [0.30.0]\n'),/already published/)
+});

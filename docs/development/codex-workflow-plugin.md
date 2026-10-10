@@ -127,3 +127,9 @@ the declared package manager and named major-upgrade approvals. Security evidenc
 also records scanner/database freshness; unchanged image bytes alone are not
 current acceptance. Report merge, publication, installation, routing and live
 E2E qualification separately.
+
+The maintained release workflow supports signed publication records and
+explicit recovery of a frozen candidate. `/ship` remains the authority for code
+PRs; `/release` binds the candidate, documents and batch, with publication-only
+repair PRs recorded separately. Watch workflows distinguish partial publication
+from completed publication and never infer installation or routing from either.

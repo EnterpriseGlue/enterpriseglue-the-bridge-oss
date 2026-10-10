@@ -9,8 +9,9 @@ Only a direct human `/release` or equivalent publication request authorizes
 merging the release PR and dispatching publication. `/new-change`, `/ship`,
 labels, CI success and autopilot settings do not grant that authority. Read-only
 release questions do not authorize mutation. Existing approval covers its
-unchanged agreed batch; ask again only if scope or exact source has materially
-changed. Deployment has its own authorization.
+unchanged agreed candidate and documentation; ask again only when those release
+contents materially change. A reviewed publication-only repair may use a later
+protected workflow revision through the explicit recovery protocol below. Deployment has its own authorization.
 
 1. Read `../../references/repository-lifecycle.json` and run the plugin-root
    lifecycle guard for the `release` operation. A retired result is a hard
@@ -73,7 +74,19 @@ changed. Deployment has its own authorization.
    `required_prs=<JSON array of the approved code PR numbers>`. The publication
    gate checks the batch's ancestry, regenerated document, managed comment and
    signed candidate before creating the tag. Source drift stops publication;
-   do not substitute a newer SHA or expand the batch without authorization.
+   do not substitute a newer artifact SHA or expand the batch without authorization.
+   For recovery, keep `source_ref` at the original release merge and supply
+   `recovery_prs=<JSON array>` covering every intervening reviewed repair PR.
+   The gate requires protected-main ancestry and a strict publication-only path
+   allowlist; package manifests, lockfiles, application sources, Dockerfiles,
+   charts, migrations and scanner policy cannot qualify as control repairs.
+   The versioned document and batch are validated in the frozen source, while
+   the current protected workflow remains the execution authority. Reuse
+   applicable database/browser/package proof; refresh both-architecture scans
+   of all five exact image digests under the unchanged severity/ignore policy.
+   Verify the signed write-once publication identity before any tag is created.
+   See [release artifact promotion](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/blob/main/docs/runbooks/release-artifact-promotion.md)
+   in the active OSS checkout; installed plugins use that repository runbook.
 9. Monitor GitHub release creation, Docker Images, `Publish Plugin/API
    Packages`, `Publish Host Packages`, and the downstream signed plugin
    toolchain. The two package workflows must consume the eight exact tarballs
@@ -89,6 +102,27 @@ changed. Deployment has its own authorization.
    and non-publisher verification. A canary must never advance semantic tags,
    production `latest`, Docker Hub, or packages. Review the rolling release-SLO
    issue before declaring recovery complete.
-11. Verify the published GitHub release body matches
+11. Resolve the signed identity and append-only observation attempts in
+    `ghcr.io/enterpriseglue/enterpriseglue-oss-release-publication`. Report
+    qualified, approved, publishing, partially published and published
+    separately. Automatic observation may record results but cannot resume
+    publishers. Explicit recovery uses `release-publication-reconcile.yml`
+    with `source_ref`, `resume=true` and the reviewed `recovery_prs`; it
+    renews source/document/candidate approval and current security evidence,
+    verifies existing destinations and dispatches only incomplete publishers.
+    Unknown registry state or immutable conflicts stop writes. Never rebuild
+    from a newer main revision to fill a missing publication.
+12. Verify the published GitHub release body matches
    `docs/releases/vX.Y.Z.md`. Never delete, recreate, or repoint a published
    `v*` tag; repair mistakes with a reviewed forward release.
+
+When artifact bytes must change before the first publication, use explicit
+`prepare_replacement=true` preparation against the current protected source,
+reserved `release_tag` and old unpublished `release_pr`. The gate must confirm
+neither tag nor GitHub release exists before superseding the metadata-only
+reservation. Release Please regenerates both documents from the published
+baseline and the replacement PR receives full exact-candidate qualification.
+Review and approve the new artifact composition; never treat a content repair
+as `recovery_prs`, reuse old security acceptance, hand-edit generated release
+files or replace an existing semantic tag. Code PRs remain in one cumulative
+release; superseded release-metadata PRs are not code capabilities.

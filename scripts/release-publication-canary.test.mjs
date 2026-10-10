@@ -25,13 +25,13 @@ test('the pre-merge authorization canary has no publication credentials or write
 
 test('the canary uses the production approval and signed-candidate handoff, not a publisher', () => {
   assert.match(workflowStep('Resolve release preparation or explicitly approved publication'), /node scripts\/release-publication-approval\.mjs/)
-  assert.match(workflowStep('Verify signed candidate before tag creation'), /bash scripts\/fetch-release-candidate\.sh "\$GITHUB_SHA" "\$RELEASE_TAG"/)
+  assert.match(workflowStep('Verify signed candidate before tag creation'), /bash scripts\/fetch-release-candidate\.sh "\$SOURCE_REF" "\$RELEASE_TAG"/)
 })
 
 test('actual CLI fixture rehearsal is token-free and emits only supplemental non-publishing evidence', () => {
   const receipt = runCanary({ env: { PATH: process.env.PATH, GH_TOKEN: 'must-not-enter-fixtures', GITHUB_TOKEN: 'must-not-enter-fixtures' } })
   assert.equal(receipt.kind, 'release-authorization-canary')
-  assert.equal(receipt.scenarios.length, 8)
+  assert.equal(receipt.scenarios.length, 11)
   assert.equal(receipt.candidateCheckReached, false, 'Local offline proof cannot stand in for hosted candidate handoff.')
   for (const field of ['signedCandidateAccepted', 'publicationPerformed', 'productionTagsWritten', 'registryWritesPerformed']) {
     assert.equal(receipt[field], false)

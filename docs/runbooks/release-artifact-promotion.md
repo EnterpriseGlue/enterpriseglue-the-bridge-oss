@@ -50,8 +50,11 @@ to create another patch version.
    `ghcr.io/enterpriseglue/enterpriseglue-oss-release-candidate:sha-<commit>`
    and records the `Release candidate staged` commit status.
 7. Branch protection permits the Release Please merge only after that status
-   succeeds. Release Please then creates the tag and GitHub release at the same
-   commit.
+   succeeds. The merge does not publish. An explicitly authorized publication
+   dispatch validates the complete frozen batch, generated notes and signed
+   candidate, refreshes security evidence for both architectures, and stores a
+   signed publication identity before Release Please creates the tag and GitHub
+   release at the release PR merge commit.
 8. `Docker Images` verifies the signed receipt and adds the immutable release
    tags to the already-qualified image digests. It does not rebuild them. The
    workflow verifies that both public release tags still resolve to the signed
@@ -201,3 +204,106 @@ gates because they do not carry a signed, pre-qualified candidate receipt.
 For classifier policy, selected CI lanes, browser diagnostics, and weekly
 queue/runtime/cancellation metrics, see
 [CI and release routing](../development/ci-and-release-routing.md).
+
+## Frozen publication identity and resumable recovery
+
+The release source and publication workflow revision are distinct. The release
+source remains the qualified merge-group/release-PR commit; its batch,
+versioned document, changelog, candidate digest, tarballs and charts are frozen.
+A later protected workflow may publish that same candidate only when an
+explicit `recovery_prs` list covers every intervening first-party merged PR and
+all of its changes pass `isPublicationRepairPath`. Application sources, package
+manifests, dependency locks, Dockerfiles, chart payloads, migrations and scanner
+policy are excluded. Unknown paths and unapproved intervening PRs stop recovery.
+
+Release Please 17.6.0, pinned by the maintained action's lockfile, builds each
+release with the merged release PR's SHA and passes it as `target_commitish`.
+The workflow verifies that target against the frozen source; it does not retag
+an existing release. Historical pending labels are reconciled only when Git
+proves their merge commit is included in the previous published baseline.
+
+Before tag creation, the workflow writes a signed, immutable identity at
+`ghcr.io/enterpriseglue/enterpriseglue-oss-release-publication:identity-sha-<source>`.
+It binds the candidate digest, included PRs, previous stable tag, detailed-note
+and changelog hashes, exact artifact inventory, and publication destinations.
+The execution authority records the protected workflow SHA and reviewed repair
+PRs separately. Retries must match the identity exactly; a changed batch,
+document, candidate or destination requires a separately qualified identity.
+
+Each observation is retained with its own signed
+`attempt-sha-<source>-<run>-<attempt>-<phase>` tag. Qualified, approved,
+publishing, partially published and published are separate states. Published
+requires the exact GitHub tag and notes, immutable OCI versions and configured
+aliases, signatures, eight canonical registry package payloads, signed
+distribution and archives, and successful publisher workflow acceptance.
+Missing, pending, failed, unknown and conflicting destinations remain visible.
+Automatic observations never dispatch publishers.
+
+For an explicitly authorized recovery after the GitHub release exists:
+
+```bash
+gh workflow run release-publication-reconcile.yml --ref main \
+  -f source_ref=<frozen-40-character-release-sha> \
+  -f resume=true -f 'recovery_prs=[<reviewed-repair-pr-numbers>]'
+```
+
+This reloads and verifies the signed identity and candidate, renews exact-source
+and document checks, and refreshes all five image roles on both architectures.
+The scanner is pinned, its database must still be current, and severity/ignore
+policy is unchanged. Database, browser and package qualification may be reused
+for unchanged inputs; current security acceptance cannot be inferred from
+unchanged bytes alone. Only incomplete publishers are dispatched. Active runs
+are observed without duplicate dispatch, immutable conflicts and unknown
+registry state stop writes, and image recovery triggers toolchain publication
+after image success. Package publishers retain dependency order and verify
+existing canonical payloads before publishing missing versions.
+
+Before the GitHub release exists, retry the original explicit `release-please`
+dispatch with its frozen source, tag, release PR and required code PRs, adding
+only the reviewed `recovery_prs`. A created GitHub release does not establish
+complete registry publication. No recovery path rebuilds the candidate from a
+new main checkout or changes a published semantic tag.
+
+`Release Canary` runs the production image workflow in scratch repositories,
+checks exact signed digests, detects/restores partial scratch aliases, exercises
+write-once publication identity and duplicate-attempt reuse, rejects identity
+conflicts, and retains non-publisher package/chart evidence. A first-party PR
+can be selected through an explicit dispatch before merge; automatic/fork PR
+execution cannot obtain scratch write authority. Canary records are marked as
+fixtures and cannot be saved to the production publication repository.
+
+## Replacing a reserved candidate before its first publication
+
+When current security evidence or new code requires different artifact bytes,
+publication-only recovery is forbidden. If neither the semantic Git tag nor
+GitHub release exists, an explicit preparation dispatch may supersede the old
+merged reservation and generate another Release Please PR at the same reserved
+version:
+
+```bash
+gh workflow run release-please.yml --ref main \
+  -f publish_release=false -f prepare_replacement=true \
+  -f source_ref=<current-protected-main-sha> -f release_tag=<reserved-vX.Y.Z> \
+  -f release_pr=<old-unpublished-release-pr>
+```
+
+The gate verifies the current protected source, the old owned release PR,
+reserved manifest version, fragment-derived version and absence of both tag
+and release. Only then is the old reservation marked `autorelease: superseded`;
+Release Please's `release-as` input is scoped to that preparation operation.
+Automatic push/schedule runs never select this mode. The generator reconstructs
+concise and detailed notes from all fragments since the last published tag,
+using the published changelog's historical bytes rather than retaining old
+unpublished sections. No generated documents are edited by hand.
+
+The replacement release PR still needs protected queue acceptance. Its exact
+metadata delta contains the detailed document, changelog and deterministic host
+chart patch; the manifest is included only if its version changes. An unchanged
+manifest must equal the same reserved version. A semantic tag pointing to any
+other source blocks replacement. All new candidate images, packages, charts,
+database/browser proof and signatures are qualified for the replacement SHA.
+Superseded metadata-only release merges are recorded separately from the code
+PR batch; a release merge containing code cannot use this exemption. After
+reviewing the new candidate and complete batch, publish through the ordinary
+explicit release dispatch. A version that already has a tag or release always
+requires a forward release instead.

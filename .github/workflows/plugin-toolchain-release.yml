@@ -1,4 +1,5 @@
 name: Publish plugin installation toolchain
+run-name: ${{ github.workflow }} / ${{ github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.display_title || format('{0} / {1}', inputs.release_tag || github.event.release.tag_name || github.event.workflow_run.head_sha, inputs.source_ref || github.event.workflow_run.head_sha || github.sha) }}
 
 on:
   workflow_run:
@@ -30,7 +31,9 @@ jobs:
     name: Verify, sign, and publish the reusable plugin toolchain
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'release' ||
+        (github.event.workflow_run.event == 'workflow_dispatch' && contains(github.event.workflow_run.display_title, ' / v'))))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: plugin-toolchain-production
@@ -51,6 +54,12 @@ jobs:
     steps:
       - name: Validate protected release authority
         shell: bash
+        env:
+          UPSTREAM_NAME: ${{ github.event.workflow_run.name }}
+          UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
+          UPSTREAM_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPSTREAM_TITLE: ${{ github.event.workflow_run.display_title }}
         run: |
           set -euo pipefail
           [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]] || {
@@ -71,16 +80,25 @@ jobs:
               exit 1
             }
           else
-            [[ "${{ github.event.workflow_run.name }}" == "Docker Images" ]]
-            [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]
-            [[ "${{ github.event.workflow_run.event }}" == "release" ]]
-            [[ "$SOURCE_REF" == "${{ github.event.workflow_run.head_sha }}" ]]
+            [[ "$UPSTREAM_NAME" == "Docker Images" && "$UPSTREAM_CONCLUSION" == success ]]
+            if [[ "$UPSTREAM_EVENT" == release ]]; then
+              [[ "$SOURCE_REF" == "$UPSTREAM_SHA" ]]
+            else
+              [[ "$UPSTREAM_EVENT" == workflow_dispatch ]]
+              [[ "$UPSTREAM_TITLE" =~ ^Docker\ Images\ /\ (v[0-9]+\.[0-9]+\.[0-9]+)\ /\ ([a-f0-9]{40})$ ]]
+              REQUESTED_RELEASE_TAG="${BASH_REMATCH[1]}"
+              SOURCE_REF="${BASH_REMATCH[2]}"
+              {
+                echo "SOURCE_REF=$SOURCE_REF"
+                echo "REQUESTED_RELEASE_TAG=$REQUESTED_RELEASE_TAG"
+              } >> "$GITHUB_ENV"
+            fi
           fi
 
       - name: Checkout the exact public OSS revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.source_ref || github.event.workflow_run.head_sha }}
+          ref: ${{ env.SOURCE_REF }}
           fetch-depth: 1
 
       - name: Resolve the owning OSS release

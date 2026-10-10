@@ -204,7 +204,7 @@ jobs:
             }
             const version = releaseTag.slice(1);
             const expectedPaths = [
-              '.github/.release-please-manifest.json',
+              ...(comparison.files?.some(file => file.filename === '.github/.release-please-manifest.json') ? ['.github/.release-please-manifest.json'] : []),
               'CHANGELOG.md',
               `docs/releases/${releaseTag}.md`,
               'infra/kubernetes/helm/enterpriseglue-host/Chart.yaml',
@@ -223,7 +223,16 @@ jobs:
               }
               return Buffer.from(String(data.content).replace(/\n/g, ''), 'base64').toString('utf8');
             };
-            const manifest = JSON.parse(await readText(expectedPaths[0], sourceRef));
+            const manifest = JSON.parse(await readText('.github/.release-please-manifest.json', sourceRef));
+            const baseManifest = JSON.parse(await readText('.github/.release-please-manifest.json', baseRef));
+            if (!changedPaths.includes('.github/.release-please-manifest.json') && baseManifest['.'] !== version) {
+              core.setFailed('An unchanged manifest must be the same unpublished reserved version.');
+              return;
+            }
+            try {
+              const { data: tag } = await github.rest.git.getRef({ ...request, ref: `tags/${releaseTag}` });
+              if (tag.object.sha !== sourceRef) { core.setFailed('A tagged version cannot select a replacement candidate.'); return; }
+            } catch (error) { if (error.status !== 404) throw error; }
             if (Object.keys(manifest).length !== 1 || manifest['.'] !== version) {
               core.setFailed('Release Please manifest does not exactly match the proposed version.');
               return;

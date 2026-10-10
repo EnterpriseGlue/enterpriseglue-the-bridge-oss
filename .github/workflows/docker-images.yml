@@ -1,4 +1,5 @@
 name: Docker Images
+run-name: '${{ github.workflow }} / ${{ inputs.release_tag || github.event.release.tag_name || github.event.workflow_run.head_sha }} / ${{ inputs.source_ref || github.event.workflow_run.head_sha || github.sha }}'
 
 on:
   release:

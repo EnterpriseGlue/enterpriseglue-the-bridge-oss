@@ -89,6 +89,33 @@ export function runCanary({ candidateHandoff = false, env = process.env } = {}) 
     assert.equal(fixtureReceipt.publicationPerformed, false)
     assert.deepEqual(fixtureReceipt.requiredPRs, [551, 552])
     scenarios.push('complete-approval-reaches-candidate-gate')
+    const frozen = join(f.root, '.artifacts/frozen-source')
+    execFileSync('git', ['clone', '--quiet', '--shared', f.root, frozen])
+    f.write('.github/workflows/release-please.yml', 'name: fixture-reviewed-repair\n')
+    f.git(['add', '.github/workflows/release-please.yml']); f.git(['commit', '-m', 'fix(release): fixture publication repair'])
+    const repaired = f.git(['rev-parse', 'HEAD'])
+    const repair = {number:901,merged_at:'2026-10-10T00:00:00Z',merge_commit_sha:repaired,
+      base:{ref:'main',repo:{full_name:f.repository}},head:{ref:'fix/fixture-repair',repo:{full_name:f.repository}}}
+    const repairApi = {...f.api,[`${f.prefix}git/ref/heads/main`]:[{object:{sha:repaired}}],
+      [`${f.prefix}commits/${repaired}/pulls?per_page=100`]:[[repair]]}
+    f.write(apiPath,JSON.stringify(repairApi))
+    childEnv.GITHUB_SHA = repaired
+    childEnv.RELEASE_SOURCE_ROOT = frozen
+    reject('unreviewed-workflow-repair', f.inputs, /requires an explicit recovery_prs/)
+    const recovered = execute({...f.inputs,recovery_prs:'[901]'})
+    assert.equal(recovered.status,0,recovered.stderr)
+    const recoveryReceipt=JSON.parse(readFileSync(join(f.root,'.artifacts/release-publication/authorization.json'),'utf8'))
+    assert.equal(recoveryReceipt.sourceRef,f.sha)
+    assert.equal(recoveryReceipt.controlRef,repaired)
+    assert.deepEqual(recoveryReceipt.recoveryPRs,[901])
+    scenarios.push('reviewed-repair-preserves-frozen-candidate')
+    f.write('backend/runtime.mjs','export const changedApplication = true\n')
+    f.git(['add','backend/runtime.mjs']);f.git(['commit','-m','fix: fixture application change'])
+    const changed=f.git(['rev-parse','HEAD'])
+    childEnv.GITHUB_SHA=changed
+    f.write(apiPath,JSON.stringify({...repairApi,[`${f.prefix}git/ref/heads/main`]:[{object:{sha:changed}}],
+      [`${f.prefix}commits/${changed}/pulls?per_page=100`]:[[{...repair,number:902,merge_commit_sha:changed}]]}))
+    reject('application-drift-is-not-a-workflow-repair',{...f.inputs,recovery_prs:'[901,902]'},/changes release content or an unallowlisted path/)
     let candidateCheckReached = false
     if (candidateHandoff) {
       // Execute the production shell body and actual candidate verifier. A
@@ -96,10 +123,10 @@ export function runCanary({ candidateHandoff = false, env = process.env } = {}) 
       // missing manifest rejection, not an auth/tool/transport failure.
       const run = candidate.slice(candidate.indexOf('        run: |\n') + '        run: |\n'.length)
         .split('\n').filter(line => line.startsWith('          ')).map(line => line.slice(10)).join('\n')
-      assert.match(run, /bash scripts\/fetch-release-candidate\.sh "\$GITHUB_SHA" "\$RELEASE_TAG"/)
+      assert.match(run, /bash scripts\/fetch-release-candidate\.sh "\$SOURCE_REF" "\$RELEASE_TAG"/)
       const result = spawnSync('bash', ['-c', run], { cwd: sourceRoot, encoding: 'utf8', timeout: 60000,
         env: { PATH: env.PATH, HOME: env.HOME, DOCKER_CONFIG: env.DOCKER_CONFIG || `${env.HOME}/.docker`,
-          RUNNER_TEMP: join(f.root, '.artifacts'), GITHUB_SHA: f.sha, RELEASE_TAG: 'v0.29.4',
+          RUNNER_TEMP: join(f.root, '.artifacts'), GITHUB_SHA: f.sha, SOURCE_REF: f.sha, RELEASE_TAG: 'v0.29.4',
           GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: f.repository } })
       assert.equal(result.status, 1, 'Missing fixture candidate must fail before any publisher can run.')
       assert.match(result.stderr, /(?:manifest unknown|MANIFEST_UNKNOWN|not found)/i,
