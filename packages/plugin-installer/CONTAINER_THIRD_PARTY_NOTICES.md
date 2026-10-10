@@ -22,3 +22,10 @@ The JavaScript runtime-dependency inventory is recorded separately in
 The pinned Go 1.26.9 standard library fixes CVE-2026-78667 and
 CVE-2026-97031. Its BSD-3-Clause license text is installed at
 `/usr/share/licenses/enterpriseglue-plugin-installer/Go-BSD-3-Clause.txt`.
+
+The embedded tools also pin `golang.org/x/net` to 0.60.0, with its required
+`golang.org/x/crypto` 0.57.0, `golang.org/x/text` 0.42.0 and
+`golang.org/x/mod` 0.41.0 floors. This fixes
+CVE-2026-78669 (GO-2026-6611) in the separately compiled HTTP/2 implementation;
+the patched standard-library compiler alone does not fix older x/net modules.
+These Go Authors modules use the retained BSD-3-Clause license.

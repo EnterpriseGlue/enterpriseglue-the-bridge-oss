@@ -21,7 +21,7 @@
     ]
   },
   "configuration": [
-    "Both toolchain image builds use the immutable multi-architecture Go 1.26.9 Alpine builder digest. ORAS 1.3.4 and Cosign 3.1.3 module versions and existing dependency security floors are retained."
+    "Both toolchain image builds use the immutable multi-architecture Go 1.26.9 Alpine builder digest. ORAS 1.3.4 and Cosign 3.1.3 module versions remain pinned; later module-specific security remediation is recorded separately."
   ],
   "api": {
     "compatibility": "none",

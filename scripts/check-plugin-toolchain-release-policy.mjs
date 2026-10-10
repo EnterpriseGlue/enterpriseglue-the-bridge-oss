@@ -95,17 +95,19 @@ for (const dockerfile of [installerDockerfile, managerDockerfile]) {
   assert.doesNotMatch(dockerfile, /go install oras\.land\/oras\/cmd\/oras/);
   assert.match(dockerfile, /github\.com\/sigstore\/cosign\/v3\/cmd\/cosign@v3\.1\.3/);
   assert.equal(
-    [...dockerfile.matchAll(/golang\.org\/x\/crypto@v0\.55\.0/g)].length,
+    [...dockerfile.matchAll(/golang\.org\/x\/crypto@v0\.57\.0/g)].length,
     2,
     'Both embedded OCI tools must use the fixed x/crypto dependency floor',
   );
   assert.equal(
-    [...dockerfile.matchAll(/golang\.org\/x\/crypto\[\[:space:\]\]\+v0\\\.55\\\.0/g)].length,
+    [...dockerfile.matchAll(/golang\.org\/x\/crypto\[\[:space:\]\]\+v0\\\.57\\\.0/g)].length,
     2,
     'Both embedded OCI binaries must verify the fixed x/crypto dependency floor',
   );
-  assert.match(dockerfile, /golang\.org\/x\/mod@v0\.40\.0/);
-  assert.match(dockerfile, /golang\.org\/x\/text@v0\.41\.0/);
+  assert.equal([...dockerfile.matchAll(/golang\.org\/x\/net@v0\.60\.0/g)].length, 2, 'Both OCI tools must resolve patched HTTP/2 modules');
+  assert.match(dockerfile, /golang\.org\/x\/net\[\[:space:\]\]\+v0\\.60\\.0/);
+  assert.match(dockerfile, /golang\.org\/x\/mod@v0\.41\.0/);
+  assert.match(dockerfile, /golang\.org\/x\/text@v0\.42\.0/);
   assert.match(dockerfile, /google\.golang\.org\/grpc@v1\.83\.2/);
   assert.match(dockerfile, /google\.golang\.org\/grpc\[\[:space:\]\]\+v1\\\.83\\\.2/);
   assert.equal(
