@@ -65,6 +65,7 @@ import {
   onboardingRoute,
   identityOidcRoute,
   cloudEmailPasskeyRoute,
+  documentationRoute,
 } from '@modules/auth/index.js';
 
 import {
@@ -210,6 +211,7 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   app.use(onboardingRoute);
   app.use(identityOidcRoute);
   app.use(cloudEmailPasskeyRoute);
+  app.use(documentationRoute);
   app.use(ssoConfigRoute);
   app.use(invitationsRoute);
 

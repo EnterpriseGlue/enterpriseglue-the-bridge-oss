@@ -4,7 +4,9 @@ import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { documentationSessionService } from '@enterpriseglue/shared/services/DocumentationSessionService.js';
 import { IsNull, MoreThan, type DataSource } from 'typeorm';
+import { requireDocumentationGatewaySecret, verifyDocumentationGrant, verifyDocumentationIdentity } from '@enterpriseglue/shared/utils/documentation-identity.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -172,8 +174,9 @@ async function authenticateBrowserSession(
   req: Request,
   next: NextFunction,
   allowCloudAccount: boolean,
+  verifiedDocumentationSource?: UserJwtPayload,
 ): Promise<void> {
-  const payload = normalizeUserJwtPayload(readRequiredAuthPayload(req));
+  const payload = normalizeUserJwtPayload(verifiedDocumentationSource ?? readRequiredAuthPayload(req));
 
   if (payload.type !== 'access') {
     throw Errors.unauthorized('Invalid token type. Use access token.');
@@ -218,7 +221,9 @@ async function authenticateBrowserSession(
     user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
     user.createdByUserId === null;
 
-  if (cloudAccountSession && !user.isEmailVerified) {
+  const documentationRequest = verifiedDocumentationSource !== undefined || requestPath === '/api/auth/documentation/grant';
+  if (documentationRequest && user.mustResetPassword) throw Errors.forbidden('Complete the required password reset before opening documentation');
+  if ((cloudAccountSession || documentationRequest) && !user.isEmailVerified) {
     throw Errors.forbidden('Email verification required');
   }
   if (!cloudAccountSession && !user.isEmailVerified && !isAdminVerificationExempt
@@ -271,6 +276,24 @@ export async function requireCloudAccountOrTenantAuth(req: Request, res: Respons
     if (error instanceof Error) return next(Errors.unauthorized(error.message));
     return next(Errors.unauthorized('Authentication failed'));
   }
+}
+
+/** Admit documentation tokens only on the explicit read/exchange endpoints.
+ * Signature, audience and gateway proof precede the ordinary live account,
+ * exact-session, verification and membership checks. No browser API accepts
+ * this token family or the signing key used by the documentation gateway.
+ */
+export function requireDocumentationAuth(kind: 'grant' | 'session') {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      requireDocumentationGatewaySecret(req.headers['x-enterpriseglue-documentation-key']);
+      const claims = kind === 'grant'
+        ? verifyDocumentationGrant(req.body?.code, req.body?.verifier)
+        : verifyDocumentationIdentity(getRequestTokenCandidate(req), 'documentation_session');
+      if (kind === 'session') await documentationSessionService.requireSession(claims);
+      await authenticateBrowserSession(req, next, true, normalizeUserJwtPayload(claims.source));
+    } catch (error) { next(error instanceof AppError ? error : Errors.unauthorized('Documentation authentication failed')); }
+  };
 }
 
 /**

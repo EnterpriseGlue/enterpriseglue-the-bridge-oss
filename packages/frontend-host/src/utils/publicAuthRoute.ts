@@ -20,7 +20,7 @@ export function getPublicAuthRoutePolicy(pathname: string): PublicAuthRoutePolic
   if (ROOT_SIGNUP_ROUTE_PATTERN.test(pathname) || isInvitationEnrollmentRoute(pathname)) {
     return { skipSessionBootstrap: true };
   }
-  if (SESSION_AWARE_PUBLIC_AUTH_ROUTE_PATTERN.test(pathname)) {
+  if (pathname === '/documentation/access' || SESSION_AWARE_PUBLIC_AUTH_ROUTE_PATTERN.test(pathname)) {
     return { skipSessionBootstrap: false };
   }
   return null;

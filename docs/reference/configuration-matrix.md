@@ -205,3 +205,8 @@ Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 | GIT_REPOS_PATH | Yes | ./data/repos | Server-side git storage |
 | GIT_DEFAULT_BRANCH | Yes | main | Default git branch |
 | ENCRYPTION_KEY | Yes | dev value | 64-char hex key |
+
+| Documentation gateway variable | Required | Default | Contract |
+|---|---|---|---|
+| EG_DOCUMENTATION_ORIGIN | Only for documentation | Unset | Canonical HTTPS origin; managed pooled account identity is required. |
+| EG_DOCUMENTATION_GATEWAY_SECRET | Only for documentation | Unset | Dedicated API-only shared gateway credential, 32–512 characters; never a frontend setting. |

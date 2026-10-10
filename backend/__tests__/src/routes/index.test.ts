@@ -2,8 +2,12 @@ import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createNotificationsRouter, dashboardContextRoute, identityProvisioningRoute, noopMiddleware } = vi.hoisted(() => ({
+const { createNotificationsRouter, dashboardContextRoute, documentationRoute, identityProvisioningRoute, noopMiddleware } = vi.hoisted(() => ({
   createNotificationsRouter: vi.fn(),
+  documentationRoute: (req: any, res: any, next: any) => {
+    if (req.path === '/api/auth/documentation/configuration') return res.status(200).json({ documentation: true });
+    next();
+  },
   dashboardContextRoute: (req: any, res: any, next: any) => {
     if (req.path === '/api/dashboard/context') return res.status(200).json({ healthy: true });
     next();
@@ -74,6 +78,7 @@ vi.mock('@modules/platform-admin/index.js', () => ({
 }));
 
 vi.mock('@modules/auth/index.js', () => ({
+  documentationRoute,
   cloudEmailPasskeyRoute: noopMiddleware,
   loginRoute: noopMiddleware,
   logoutRoute: noopMiddleware,
@@ -155,5 +160,12 @@ describe('backend routes index', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ healthy: true });
+  });
+  it('admits the neutral documentation account contract before tenant compatibility resolution', async () => {
+    const app = express();
+    registerRoutes(app);
+    const response = await request(app).get('/api/auth/documentation/configuration').set('x-test-require-route-tenant', 'true');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ documentation: true });
   });
 });

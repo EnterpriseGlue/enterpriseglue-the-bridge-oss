@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { isDocumentationIntent, accountDestination } from '../utils/documentationAccess';
+import { Link, useLocation } from 'react-router-dom';
 import { Button, InlineLoading, InlineNotification, Stack } from '@carbon/react';
 import { Email, Login } from '@carbon/icons-react';
 import { ExtensionSlot } from '../enterprise/ExtensionSlot';
@@ -10,16 +11,13 @@ import { apiClient, ApiError } from '../shared/api/client';
 
 type CloudSignupProvider = { id: string; displayName: string; protocol: 'oidc' | 'saml' };
 
-/**
- * OSS Signup Page
- * 
- * In OSS single-tenant mode, self-service signup is disabled.
- * Users must be created by a platform administrator.
- * 
- * In EE multi-tenant mode, the full signup flow (with tenant creation)
- * is provided via the 'signup-form' extension slot.
+/** Managed Cloud accounts remain separate from organization onboarding.
+ * Self-hosted OSS registration is disabled; an owning plugin may provide its
+ * signup-form extension when global account entry is unavailable.
  */
 export default function Signup() {
+  const documentation = isDocumentationIntent(useLocation().search);
+  const intentQuery = documentation ? "?intent=documentation" : "";
   const [providers, setProviders] = useState<CloudSignupProvider[] | null>(null);
   const [cloudSignupAvailable, setCloudSignupAvailable] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,11 +39,11 @@ export default function Signup() {
   useEffect(() => { void load(); }, [load]);
 
   if (cloudSignupAvailable === null) {
-    return <PublicAuthShell title="Create your Cloud account" description="Checking available secure sign-in methods."><InlineLoading description="Loading account options…" /></PublicAuthShell>;
+    return <PublicAuthShell title={documentation ? "Create your EnterpriseGlue account" : "Create your Cloud account"} description="Checking available secure sign-in methods."><InlineLoading description="Loading account options…" /></PublicAuthShell>;
   }
   if (cloudSignupAvailable) {
     return (
-      <PublicAuthShell title="Create your Cloud account" description="Use an available identity provider, then create your EnterpriseGlue organization.">
+      <PublicAuthShell title={documentation ? "Create your EnterpriseGlue account" : "Create your Cloud account"} description={documentation ? "Create a free account to read documentation. No Cloud organization or workspace is required." : "Use an available identity provider, then create your EnterpriseGlue organization."}>
         <Stack gap={5}>
           {error ? <InlineNotification kind="error" lowContrast hideCloseButton title="Signup unavailable" subtitle={error} /> : null}
           {!error && providers?.length === 0 ? <InlineNotification kind="info" lowContrast hideCloseButton title="No signup method configured" subtitle="A Cloud account identity provider must be configured before signup can continue." /> : null}
@@ -55,18 +53,18 @@ export default function Signup() {
               provider={{ ...provider, key: provider.id, organization: null, loginMethod: 'redirect', preferred: index === 0, loginDomains: [] }}
               primary={index === 0}
               disabled={false}
-              onClick={() => window.location.assign(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/cloud/onboarding')}`)}
+              onClick={() => window.location.assign(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent(accountDestination(documentation, true))}`)}
             />)}
           </div> : null}
           {!error && <div className="eg-login-email-option">
-            <Link className="eg-login-provider-button eg-login-provider-button--email" to="/signup/email" aria-describedby="cloud-email-signup-description">
+            <Link className="eg-login-provider-button eg-login-provider-button--email" to={`/signup/email${intentQuery}`} aria-describedby="cloud-email-signup-description">
               <Email size={20} aria-hidden="true" className="eg-login-provider-logo" />
               <span className="eg-login-provider-button__action">Continue with email</span>
             </Link>
             <p id="cloud-email-signup-description" className="eg-login-email-description">Verify your email, then create a passkey for secure sign-in.</p>
           </div>}
           {error ? <Button kind="secondary" onClick={() => void load()}>Retry</Button> : null}
-          <Button as={Link} kind="ghost" to="/login" renderIcon={Login}>Already have an account?</Button>
+          <Button as={Link} kind="ghost" to={documentation ? "/documentation/access" : "/login"} renderIcon={Login}>Already have an account?</Button>
         </Stack>
       </PublicAuthShell>
     );

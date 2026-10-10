@@ -59,12 +59,18 @@ test_files=(
   test/integration/postgres-shared-inventory-readiness.test.ts
   test/integration/postgres-schema-epoch-bridge.test.ts
   test/integration/postgres-cloud-email-passkey.test.ts
+  test/integration/postgres-documentation-session.test.ts
   test/qualification/sessionRevocationRace.test.ts
 )
 if [[ "$#" -gt 0 ]]; then
   case "$1" in
     --schema-epoch) test_files=(test/integration/postgres-schema-epoch-bridge.test.ts) ;;
     --cloud-passkey) test_files=(test/integration/postgres-cloud-email-passkey.test.ts) ;;
+    --documentation) test_files=(test/integration/postgres-cloud-email-passkey.test.ts test/integration/postgres-documentation-session.test.ts) ;;
+    --documentation-gateway)
+      if [[ ! -f "${DOCUMENTATION_GATEWAY_MODULE:-}" ]]; then echo '[native-tenancy-rls] An exact documentation gateway module is required.' >&2; exit 2; fi
+      test_files=(test/integration/postgres-documentation-session.test.ts test/qualification/documentationGateway.test.ts)
+      ;;
     --session-race) test_files=(test/qualification/sessionRevocationRace.test.ts) ;;
     *) echo '[native-tenancy-rls] Unknown targeted lane.' >&2; exit 2 ;;
   esac

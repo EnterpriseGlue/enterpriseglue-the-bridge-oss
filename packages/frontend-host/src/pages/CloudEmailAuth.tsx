@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { startAuthentication, startRegistration, browserSupportsWebAuthn } from '../shared/auth/cloudWebAuthn';
+import { isDocumentationIntent, accountDestination } from '../utils/documentationAccess';
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
 import { Button, InlineLoading, InlineNotification, Stack, TextInput } from '@carbon/react';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
@@ -9,7 +10,10 @@ import { apiClient } from '../shared/api/client';
 type Mode = 'request' | 'register' | 'signin';
 
 export default function CloudEmailAuth() {
-  const path = useLocation().pathname;
+  const location = useLocation();
+  const path = location.pathname;
+  const documentation = isDocumentationIntent(location.search);
+  const intentQuery = documentation ? "?intent=documentation" : "";
   const mode: Mode = path.endsWith('/passkey') ? 'register' : path.endsWith('/signin') ? 'signin' : 'request';
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,7 +43,7 @@ export default function CloudEmailAuth() {
     setBusy(true);
     setError(null);
     try {
-      await apiClient.post('/api/auth/cloud-signup/email/request', { email: email.trim().toLowerCase() });
+      await apiClient.post('/api/auth/cloud-signup/email/request', { email: email.trim().toLowerCase(), ...(documentation ? { intent: 'documentation' } : {}) });
       setSent(true);
     } catch {
       setError('We could not send the email right now. Please try again.');
@@ -54,11 +58,11 @@ export default function CloudEmailAuth() {
       if (mode === 'register') {
         const result = await startRegistration({ optionsJSON: options as PublicKeyCredentialCreationOptionsJSON });
         await apiClient.post('/api/auth/cloud-signup/email/passkey/complete', result);
-        window.location.assign('/cloud/onboarding');
+        window.location.assign(accountDestination(documentation, true));
       } else {
         const result = await startAuthentication({ optionsJSON: options as PublicKeyCredentialRequestOptionsJSON });
         await apiClient.post('/api/auth/cloud-passkey/complete', result);
-        window.location.assign('/login');
+        window.location.assign(accountDestination(documentation));
       }
     } catch {
       setError('The passkey could not be verified. Try again or choose another sign-in method.');
@@ -70,8 +74,8 @@ export default function CloudEmailAuth() {
   const description = mode === 'request'
     ? 'We’ll email you a verification link. Then you’ll create a passkey to sign in using your device’s fingerprint, face recognition or PIN.'
     : mode === 'register'
-      ? 'Your email is verified. Save a passkey to this device or password manager to secure your Cloud account.'
-      : 'Use the passkey you created for your EnterpriseGlue Cloud account.';
+      ? 'Your email is verified. Save a passkey to this device or password manager to secure your EnterpriseGlue account.'
+      : 'Use the passkey you created for your EnterpriseGlue account.';
   return <PublicAuthShell title={title} description={description}>
     <Stack gap={5}>
       {error && <InlineNotification kind="error" lowContrast hideCloseButton title="Could not continue" subtitle={error} />}
@@ -93,10 +97,10 @@ export default function CloudEmailAuth() {
               </Button>
               {!options && <Button kind="ghost" onClick={() => void loadOptions()}>Try again</Button>}
             </>}
-      <Button as={Link} kind="ghost" to={mode === 'signin' ? '/login' : '/signup'}>
+      <Button as={Link} kind="ghost" to={documentation && mode === 'signin' ? '/documentation/access' : `${mode === 'signin' ? '/login' : '/signup'}${intentQuery}`}>
         {mode === 'signin' ? 'Other sign-in methods' : 'Other sign-up methods'}
       </Button>
-      {mode === 'request' && <Button as={Link} kind="ghost" to="/signup/email/signin">Already have an email account? Sign in with a passkey</Button>}
+      {mode === 'request' && <Button as={Link} kind="ghost" to={`/signup/email/signin${intentQuery}`}>Already have an email account? Sign in with a passkey</Button>}
     </Stack>
   </PublicAuthShell>;
 }

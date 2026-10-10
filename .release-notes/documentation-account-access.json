@@ -1,0 +1,77 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "documentation-account-access",
+  "type": "feature",
+  "scope": "documentation account access",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "security",
+    "developers"
+  ],
+  "summary": "Add a documentation-only sign-in journey and limited, revocable documentation sessions without creating a Cloud tenant.",
+  "userImpact": [
+    "Documentation readers can use their existing EnterpriseGlue accounts without creating a workspace."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Set EG_DOCUMENTATION_ORIGIN and an API-only EG_DOCUMENTATION_GATEWAY_SECRET matching the documentation gateway; unset configuration disables the integration."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Add public documentation-origin configuration plus dedicated documentation grant, exchange, session-verification and sign-out endpoints."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "A bounded pending handoff identifier and at most four active documentation-token identifiers are stored in existing refresh-session metadata; no tenant rows or provisioning events are written."
+    ]
+  },
+  "security": [
+    "Short-lived PKCE-bound single-use grants and audience-separated documentation tokens retain live account and source-session revocation checks. Recovery credentials cannot create documentation grants."
+  ],
+  "documentation": [
+    "docs/reference/documentation-account-access.md"
+  ],
+  "knownLimitations": [
+    "Gateway routing and secrets must be deployed together before enabling the public documentation hostname.",
+    "The new flow is disabled without explicit gateway configuration. The gateway and hostname have not been deployed; real-provider/staging acceptance remains required."
+  ],
+  "rollback": [
+    "Disable the documentation origin and gateway deployment. Existing account and organization flows remain independently available."
+  ],
+  "validation": [
+    "248 focused authentication/authorization tests, 111 account-session regressions, 13 account UI tests and 658 identity-local tests pass.",
+    "Typechecks, production frontend build, lint, route/OpenAPI inventory, contract parity and authorization structure/coverage checks pass.",
+    "Disposable PostgreSQL qualifies atomic handoff consumption and the exact gateway source over real HTTP, including independent documentation sign-out and parent-session revocation.",
+    "The packaged frontend documentation account journey passes Chromium, Firefox and WebKit with controlled account API responses. Real-provider signup and deployed staging acceptance remain pending."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.19.16",
+      "newVersion": "0.20.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.17.29",
+      "newVersion": "0.18.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.23.0",
+      "newVersion": "0.24.0",
+      "impact": "minor"
+    }
+  ]
+}
