@@ -13,6 +13,7 @@ import { verifyDocumentationIdentity } from '@enterpriseglue/shared/utils/docume
 import documentationRoute from '../../../../../packages/backend-host/src/modules/auth/routes/documentation.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => ({ updateBpmnEngineRequestContext: vi.fn() }));
@@ -46,7 +47,7 @@ beforeEach(async () => {
   } } as never);
   browserToken = generateAccessToken(user, { sessionId, authenticationMethod: 'oidc', sessionClass: 'cloud_account' });
   app = express(); app.use(express.json()); app.use(documentationRoute);
-  app.get('/tenant-api', requireAuth, (_req, res) => res.json({ forbidden: true }));
+  app.get('/tenant-api', apiLimiter, requireAuth, (_req, res) => res.json({ forbidden: true }));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(error instanceof AppError ? error.statusCode : 500).json({ error: error instanceof Error ? error.message : 'error' }));
   // Keep one IPv4 listener for each test, including its concurrent requests.
   await new Promise<void>((resolve) => { server = app.listen(0, '127.0.0.1', () => resolve()); });
