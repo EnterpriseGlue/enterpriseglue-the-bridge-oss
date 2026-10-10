@@ -9,15 +9,21 @@ import { readPublicationApi } from './release-publication-approval.mjs'
 import { hashBytes } from './lib/release-publication-record.mjs'
 import { observePublication, resumePublication } from './lib/release-publication-observation.mjs'
 
-export function productionObservers({ record, artifacts, evidence, repository = process.env.GITHUB_REPOSITORY }) {
+export function productionObservers({ record, artifacts, evidence, repository = process.env.GITHUB_REPOSITORY,
+  runCommand = (binary, args) => execFileSync(binary, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000 }).trim() }) {
   assert.equal(repository, 'EnterpriseGlue/enterpriseglue-the-bridge-oss')
-  const command = (binary, args) => execFileSync(binary, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000 }).trim()
+  const command = runCommand
   const api = endpoint => readPublicationApi(`repos/${repository}/${endpoint}`, {paginate:!endpoint.startsWith('actions/workflows/')})[0]
-  const missing = error => /MANIFEST_UNKNOWN|manifest unknown|NAME_UNKNOWN|HTTP 404|404 Not Found/.test(`${error.cause?.stderr || error.stderr || ''}`)
+  const missing = (error, reference) => {
+    const detail = String(error.cause?.stderr || error.stderr || '')
+    return /MANIFEST_UNKNOWN|manifest unknown|NAME_UNKNOWN|HTTP 404|404 Not Found/.test(detail) ||
+      Boolean(reference && detail.trim() === `Error response from registry: failed to resolve digest: ${reference}: not found`)
+  }
   const registry = createNpmRegistryClient()
   const context = `https://github.com/${repository}`.replaceAll('.', '\\.')
+  const releaseIdentity = record.identity.releaseTag.replaceAll('.', '\\.')
   const signature = subject => command('cosign', ['verify', '--certificate-identity-regexp',
-    `^${context}/\\.github/workflows/(docker-images-reusable|release-candidate-stage|host-chart-release|plugin-toolchain-release)\\.yml@(refs/heads/main|refs/tags/${record.identity.releaseTag})$`,
+    `^${context}/\\.github/workflows/(docker-images-reusable|release-candidate-stage|host-chart-release|plugin-toolchain-release)\\.yml@(refs/heads/main|refs/tags/${releaseIdentity})$`,
     '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', subject])
   const signatures = new Set()
   const source = record.identity.sourceRef
@@ -54,7 +60,7 @@ export function productionObservers({ record, artifacts, evidence, repository = 
     async oci(target) {
       let digest
       try { digest = command('oras', ['resolve', target.reference]) }
-      catch (error) { if (missing(error)) return { status: 'missing' }; throw error }
+      catch (error) { if (missing(error, target.reference)) return { status: 'missing' }; throw error }
       if (digest !== target.expectedDigest) return { status: target.mutable ? 'missing' : 'conflict', digest, expectedDigest: target.expectedDigest }
       if (target.reference.startsWith('ghcr.io/')) {
         const subject = `${target.reference.slice(0, target.reference.lastIndexOf(':'))}@${digest}`
@@ -72,7 +78,7 @@ export function productionObservers({ record, artifacts, evidence, repository = 
       const reference = `ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution:${tag}`
       let digest
       try { digest = command('oras', ['resolve', reference]) }
-      catch (error) { if (missing(error)) return { status: 'missing' }; throw error }
+      catch (error) { if (missing(error, reference)) return { status: 'missing' }; throw error }
       const subject = `${reference.slice(0, reference.lastIndexOf(':'))}@${digest}`
       signature(subject)
       const manifest = JSON.parse(command('oras', ['manifest', 'fetch', subject]))

@@ -8,6 +8,7 @@ import { createPublicationRecord, assertSamePublication, validatePublicationReco
 import { observePublication, resumePublication } from './lib/release-publication-observation.mjs'
 import { reconcileHistoricalReleaseLabels } from './release-publication-labels.mjs'
 import { createSecurityProof, SECURITY_ROLES, validateSecurityProof } from './lib/release-publication-security.mjs'
+import { productionObservers } from './release-publication-observe.mjs'
 
 export function recordFixture() {
   const source = 'a'.repeat(40)
@@ -28,6 +29,48 @@ export function recordFixture() {
 
 const passing = () => ({status: 'verified'})
 const adapters = changes => ({ release: passing, oci: passing, package: passing, distribution: passing, workflow: passing, ...changes })
+
+test('production OCI observation recognizes only a target-specific missing manifest and preserves unknown errors', async () => {
+  const {record} = recordFixture()
+  const target = record.identity.targets[0]
+  let failure = `Error response from registry: failed to resolve digest: ${target.reference}: not found`
+  const observers = productionObservers({record, artifacts: 'fixture', evidence: 'fixture',
+    repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss',
+    runCommand: () => {throw Object.assign(new Error('Fixture registry error'), {stderr: failure})},
+  })
+  assert.equal((await observers.oci(target)).status, 'missing')
+  for (const error of ['unauthorized: authentication required', 'dial tcp: i/o timeout',
+    'Error response from registry: failed to resolve digest: ghcr.io/other/image:tag: not found']) {
+    failure = error
+    await assert.rejects(observers.oci(target), /Fixture registry error/)
+  }
+  failure = `Error response from registry: failed to resolve digest: ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution:${record.identity.releaseTag}: not found`
+  assert.equal((await observers.distribution()).status, 'missing')
+})
+
+test('production signature observation matches exact protected producer identities and rejects different hosts, refs and workflows', async () => {
+  const {record} = recordFixture()
+  const target = record.identity.targets[0]
+  const observers = productionObservers({record, artifacts: 'fixture', evidence: 'fixture',
+    repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', runCommand: (binary, args) => {
+      if (binary === 'oras') return target.expectedDigest
+      assert.equal(binary, 'cosign')
+      const pattern = new RegExp(args[args.indexOf('--certificate-identity-regexp') + 1])
+      for (const workflow of ['docker-images-reusable', 'release-candidate-stage', 'host-chart-release', 'plugin-toolchain-release']) {
+        assert.ok(pattern.test(`https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/${workflow}.yml@refs/heads/main`))
+        assert.ok(pattern.test(`https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/${workflow}.yml@refs/tags/v0.30.0`))
+      }
+      for (const identity of [
+        'https://githubXcom/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/release-candidate-stage.yml@refs/heads/main',
+        'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/release-candidate-stage.yml@refs/heads/feature',
+        'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/release-candidate-stage.yml@refs/tags/v0x30x0',
+        'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/untrusted.yml@refs/heads/main',
+      ]) assert.equal(pattern.test(identity), false, identity)
+      return 'verified fixture signature'
+    },
+  })
+  assert.equal((await observers.oci(target)).status, 'verified')
+})
 
 test('record storage recognizes the real ORAS missing-manifest response without optional runner tools and stops on unknown registry errors', () => {
   const directory = mkdtempSync(join(tmpdir(), 'eg-ledger-runner-'))
