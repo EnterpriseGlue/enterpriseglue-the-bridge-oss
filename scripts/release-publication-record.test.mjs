@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { createPublicationRecord, assertSamePublication, validatePublicationRecord, identityHash, publicationRecoveryPlan } from './lib/release-publication-record.mjs'
 import { observePublication, resumePublication } from './lib/release-publication-observation.mjs'
-import { reconcileHistoricalReleaseLabels } from './release-publication-labels.mjs'
+import { reconcileHistoricalReleaseLabels, reservedVersionCommitOverride, prepareReplacementMetadata } from './release-publication-labels.mjs'
 import { createSecurityProof, SECURITY_ROLES, validateSecurityProof } from './lib/release-publication-security.mjs'
 import { productionObservers } from './release-publication-observe.mjs'
 
@@ -29,6 +29,70 @@ export function recordFixture() {
 
 const passing = () => ({status: 'verified'})
 const adapters = changes => ({ release: passing, oci: passing, package: passing, distribution: passing, workflow: passing, ...changes })
+
+const ordinaryPull = () => ({number: 571, title: 'fix(release): make publication resumable', body: 'Reviewed code and validation.\n',
+  head: {ref: 'fix/publication', repo: {full_name: 'EnterpriseGlue/enterpriseglue-the-bridge-oss'}}})
+
+test('a reserved version uses the upstream commit override protocol, preserves the review and is idempotent', () => {
+  const pull = ordinaryPull()
+  const body = reservedVersionCommitOverride(pull, 'v0.30.0')
+  assert.ok(body.startsWith(pull.body))
+  // This is the extraction used by release-please 17.6 commit preprocessing.
+  const commit = body.split('BEGIN_COMMIT_OVERRIDE')[1].split('END_COMMIT_OVERRIDE')[0].trim()
+  assert.equal(commit, `${pull.title}\n\nRelease-As: 0.30.0`)
+  assert.equal(reservedVersionCommitOverride({...pull, body}, 'v0.30.0'), body)
+  const changed = reservedVersionCommitOverride({...pull, body}, 'v0.31.0')
+  assert.ok(changed.startsWith(pull.body))
+  assert.equal(changed.split('BEGIN_COMMIT_OVERRIDE').length, 2)
+  assert.match(changed, /Release-As: 0\.31\.0/)
+})
+
+for (const [name, mutate] of [
+  ['generated release PR', pull => {pull.head.ref = 'release-please--branches--main'}],
+  ['human commit override', pull => {pull.body += '\nBEGIN_COMMIT_OVERRIDE\nfeat: reviewed human message\nEND_COMMIT_OVERRIDE'}],
+  ['incomplete managed marker', pull => {pull.body += '\n<!-- enterpriseglue-reserved-release-version -->'}],
+  ['oversized body', pull => {pull.body = 'x'.repeat(65536)}],
+  ['multiline title', pull => {pull.title += '\nRelease-As: 99.0.0'}],
+]) test(`reserved version metadata rejects ${name} without rewriting it`, () => {
+  const pull = ordinaryPull()
+  mutate(pull)
+  const before = structuredClone(pull)
+  assert.throws(() => reservedVersionCommitOverride(pull, 'v0.30.0'))
+  assert.deepEqual(pull, before)
+})
+
+test('replacement metadata selects the reviewed source and removes only attached legacy states', () => {
+  const pull = ordinaryPull()
+  const reservation = {labels: [{name: 'autorelease: pending'}, {name: 'release:breaking'}]}
+  const changes = []
+  const options = {authorization: {prepareReplacement: true, sourceRef: 'a'.repeat(40), releaseTag: 'v0.30.0', releasePR: 567},
+    repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', pages: [[
+      {number: 571, merged_at: '2026-10-10T00:00:00Z', merge_commit_sha: 'a'.repeat(40), head: {ref: pull.head.ref}},
+      {number: 572, merged_at: '2026-10-11T00:00:00Z', merge_commit_sha: 'b'.repeat(40), head: {ref: 'unrelated'}},
+      {number: 567, merged_at: '2026-10-12T00:00:00Z', merge_commit_sha: 'a'.repeat(40), head: {ref: 'release-please--branches--main'}},
+    ]], isAncestor: sha => sha === 'a'.repeat(40) ? 0 : 1,
+    readPull: number => number === 571 ? pull : reservation,
+    writeBody: (number, body) => {pull.body = body; changes.push({number, body})},
+    addLabel: (number, label) => changes.push({number, add: label}),
+    removeLabel: (number, label) => changes.push({number, remove: label}),
+  }
+  assert.deepEqual(prepareReplacementMetadata(options), {supersededReleasePR: 567, versionOverridePR: 571, publicationPerformed: false})
+  assert.deepEqual(changes.filter(change => change.remove), [{number: 567, remove: 'autorelease: pending'}])
+  reservation.labels = [{name: 'autorelease: superseded'}]
+  const count = changes.filter(change => change.body).length
+  prepareReplacementMetadata(options)
+  assert.equal(changes.filter(change => change.body).length, count)
+})
+
+test('replacement version metadata cannot edit a foreign code PR', () => {
+  const pull = ordinaryPull()
+  pull.head.repo.full_name = 'external/fork'
+  assert.throws(() => prepareReplacementMetadata({authorization: {prepareReplacement: true, sourceRef: 'a'.repeat(40), releaseTag: 'v0.30.0', releasePR: 567},
+    repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', pages: [[{number: 571, merged_at: '2026-10-10', merge_commit_sha: 'a'.repeat(40), head: {ref: pull.head.ref}}]],
+    isAncestor: () => 0, readPull: () => pull, writeBody: () => assert.fail('No write permitted'),
+    addLabel: () => assert.fail('No label write permitted'), removeLabel: () => assert.fail('No label write permitted'),
+  }), /first-party/)
+})
 
 for (const publisher of ['plugin-package-release.yml', 'host-package-release.yml', 'docker-images.yml',
   'host-chart-release.yml', 'plugin-toolchain-release.yml']) {
