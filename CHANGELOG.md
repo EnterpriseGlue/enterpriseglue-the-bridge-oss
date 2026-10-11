@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.30.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.0...v0.30.1) (2026-10-11)
 
+### Changes
 
-### Bug Fixes
+- **identity:** Honor explicitly assigned, policy-approved organization-read access in neutral Cloud account sessions without granting platform write authority.
 
-* **identity:** honor explicit organization-read grants for cloud accounts ([9f00278](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9f00278f42a6da7012099e11f0713fb064f072ef))
-* **identity:** honor explicit organization-read grants for cloud accounts ([ab85dbb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ab85dbbfa74b851494326df77c7893690c8c9982))
+Full upgrade, compatibility and verification details: [v0.30.1 release notes](docs/releases/v0.30.1.md).
 
 ## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.3...v0.30.0) (2026-10-10)
 
