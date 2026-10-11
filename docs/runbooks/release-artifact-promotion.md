@@ -239,6 +239,23 @@ distribution and archives, and successful publisher workflow acceptance.
 Missing, pending, failed, unknown and conflicting destinations remain visible.
 Automatic observations never dispatch publishers.
 
+Automatic image-to-chart/toolchain handoffs identify the upstream workflow by
+the exact `.github/workflows/docker-images.yml` path and first-party repository
+bindings, not by its display name. GitHub may place a configured `run-name`
+such as `Docker Images / vX.Y.Z / <source>` in `workflow_run.name`. Successful
+event, source, protected-main, published-tag and signed-candidate checks still
+apply; a matching title cannot authorize another workflow or repository.
+The maintained [workflow-run payload schema](https://github.com/octokit/webhooks/blob/aa80c24a3f55354465b8b1438d33dd5602956d0d/payload-schemas/api.github.com/common/workflow-run.schema.json)
+requires these identity fields. Each failed binding exits explicitly rather
+than depending on Bash's version-sensitive compound-command `errexit` behavior.
+
+Package observations require the Node setup's fixed GitHub Packages registry
+and `@enterpriseglue` scope as well as the existing ephemeral token. A token
+environment variable alone is not npm registry configuration. Publication
+artifacts use a named-file inventory for authority records and all ten scan
+reports plus vulnerability database metadata; they never traverse the
+root-owned Trivy cache. Observation/distribution evidence remains retained.
+
 For an explicitly authorized recovery after the GitHub release exists:
 
 ```bash

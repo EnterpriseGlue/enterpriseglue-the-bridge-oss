@@ -360,13 +360,105 @@ test('the actual toolchain authority step preserves the frozen source after manu
   const control='b'.repeat(40)
   const output=join(directory,'environment')
   const env={PATH:process.env.PATH,GITHUB_ENV:output,GITHUB_EVENT_NAME:'workflow_run',GITHUB_REF:'refs/heads/main',
-    GITHUB_REPOSITORY_OWNER:'EnterpriseGlue',SOURCE_REF:control,REQUESTED_RELEASE_TAG:'',UPSTREAM_NAME:'Docker Images',
+    GITHUB_REPOSITORY_OWNER:'EnterpriseGlue',GITHUB_REPOSITORY:'EnterpriseGlue/enterpriseglue-the-bridge-oss',
+    SOURCE_REF:control,REQUESTED_RELEASE_TAG:'',UPSTREAM_PATH:'.github/workflows/docker-images.yml',
+    UPSTREAM_REPOSITORY:'EnterpriseGlue/enterpriseglue-the-bridge-oss',UPSTREAM_HEAD_REPOSITORY:'EnterpriseGlue/enterpriseglue-the-bridge-oss',
     UPSTREAM_CONCLUSION:'success',UPSTREAM_EVENT:'workflow_dispatch',UPSTREAM_SHA:control,UPSTREAM_TITLE:`Docker Images / v0.30.0 / ${source}`}
   const result=spawnSync('bash',['-c',script],{env,encoding:'utf8'})
   assert.equal(result.status,0,result.stderr)
   assert.equal(readFileSync(output,'utf8'),`SOURCE_REF=${source}\nREQUESTED_RELEASE_TAG=v0.30.0\n`)
   for (const title of [`Docker Images / / ${control}`,`Docker Images / sha-${control.slice(0,12)} / ${control}`,'Other Images / v0.30.0 / '+source]) {
     assert.notEqual(spawnSync('bash',['-c',script],{env:{...env,UPSTREAM_TITLE:title},encoding:'utf8'}).status,0)
+  }
+})
+
+function imageHandoffAuthority(file) {
+  const workflow=readFileSync(new URL(`../.github/workflows/${file}`,import.meta.url),'utf8')
+  const start=workflow.indexOf('      - name: Validate protected release authority\n')
+  assert.notEqual(start,-1)
+  const end=workflow.indexOf('\n      - name:',start+1)
+  const step=workflow.slice(start,end)
+  for (const [name,field] of [['UPSTREAM_PATH','path'],['UPSTREAM_REPOSITORY','repository.full_name'],
+    ['UPSTREAM_HEAD_REPOSITORY','head_repository.full_name'],['UPSTREAM_CONCLUSION','conclusion'],
+    ['UPSTREAM_EVENT','event'],['UPSTREAM_SHA','head_sha']]) {
+    assert.ok(step.includes(`${name}: \${{ github.event.workflow_run.${field} }}`),`${file}: ${name} must use actual upstream metadata`)
+  }
+  const marker='        run: |\n'
+  const script=step.slice(step.indexOf(marker)+marker.length).split('\n')
+    .filter(line=>line.startsWith('          ')||line==='').map(line=>line.slice(10)).join('\n')
+  assert.ok(!script.includes('${{'),'Upstream metadata must enter through quoted environment values, not shell interpolation')
+  assert.ok(!script.includes('$UPSTREAM_NAME'),'Display names must not grant or deny publication authority')
+  return script
+}
+
+for (const file of ['host-chart-release.yml','plugin-toolchain-release.yml']) {
+  test(`${file}: actual protected guard accepts release runs independent of decorated display names`,()=>{
+    const script=imageHandoffAuthority(file),repository='EnterpriseGlue/enterpriseglue-the-bridge-oss',source='a'.repeat(40)
+    const env={PATH:process.env.PATH,GITHUB_EVENT_NAME:'workflow_run',GITHUB_REF:'refs/heads/main',
+      GITHUB_REPOSITORY_OWNER:'EnterpriseGlue',GITHUB_REPOSITORY:repository,SOURCE_REF:source,
+      REQUESTED_RELEASE_TAG:'',UPSTREAM_PATH:'.github/workflows/docker-images.yml',UPSTREAM_REPOSITORY:repository,
+      UPSTREAM_HEAD_REPOSITORY:repository,UPSTREAM_CONCLUSION:'success',UPSTREAM_EVENT:'release',UPSTREAM_SHA:source}
+    for (const name of ['Docker Images',`Docker Images / v0.30.1 / ${source}`,'Untrusted display text is not authority']) {
+      const result=spawnSync('bash',['-c',script],{env:{...env,UPSTREAM_NAME:name,UPSTREAM_TITLE:name},encoding:'utf8'})
+      assert.equal(result.status,0,result.stderr)
+    }
+    const result=spawnSync('bash',['-c',script],{env:{...env,GITHUB_EVENT_NAME:'workflow_dispatch',REQUESTED_RELEASE_TAG:'v0.30.1'},encoding:'utf8'})
+    assert.equal(result.status,0,result.stderr)
+  })
+
+  const invalid=[
+    ['another repository owner',{GITHUB_REPOSITORY_OWNER:'example'}],
+    ['another target repository',{GITHUB_REPOSITORY:'EnterpriseGlue/other'}],
+    ['an unprotected branch',{GITHUB_REF:'refs/heads/topic'}],
+    ['a tag context',{GITHUB_REF:'refs/tags/v0.30.1'}],
+    ['another root event',{GITHUB_EVENT_NAME:'pull_request'}],
+    ['a mutable source',{SOURCE_REF:'main'}],
+    ['a different upstream workflow',{UPSTREAM_PATH:'.github/workflows/ci.yml'}],
+    ['missing workflow identity',{UPSTREAM_PATH:''}],
+    ['a different upstream repository',{UPSTREAM_REPOSITORY:'example/other'}],
+    ['a fork head repository',{UPSTREAM_HEAD_REPOSITORY:'example/fork'}],
+    ['a failed image publication',{UPSTREAM_CONCLUSION:'failure'}],
+    ['a pull-request image run',{UPSTREAM_EVENT:'pull_request'}],
+    ['source drift',{UPSTREAM_SHA:'b'.repeat(40)}],
+    ['manual recovery without a semantic tag',{GITHUB_EVENT_NAME:'workflow_dispatch',REQUESTED_RELEASE_TAG:'latest'}],
+  ]
+  for (const [name,change] of invalid) test(`${file}: actual protected guard rejects ${name}`,()=>{
+    const script=imageHandoffAuthority(file),repository='EnterpriseGlue/enterpriseglue-the-bridge-oss',source='a'.repeat(40)
+    const env={PATH:process.env.PATH,GITHUB_EVENT_NAME:'workflow_run',GITHUB_REF:'refs/heads/main',
+      GITHUB_REPOSITORY_OWNER:'EnterpriseGlue',GITHUB_REPOSITORY:repository,SOURCE_REF:source,
+      REQUESTED_RELEASE_TAG:'',UPSTREAM_PATH:'.github/workflows/docker-images.yml',UPSTREAM_REPOSITORY:repository,
+      UPSTREAM_HEAD_REPOSITORY:repository,UPSTREAM_CONCLUSION:'success',UPSTREAM_EVENT:'release',UPSTREAM_SHA:source,
+      UPSTREAM_NAME:'Docker Images',UPSTREAM_TITLE:`Docker Images / v0.30.1 / ${source}`,...change}
+    assert.notEqual(spawnSync('bash',['-c',script],{env,encoding:'utf8'}).status,0)
+  })
+}
+
+test('publication observation configures exact authenticated GitHub Packages access',()=>{
+  const workflow=readFileSync(new URL('../.github/workflows/release-please.yml',import.meta.url),'utf8')
+  const start=workflow.indexOf('      - name: Setup Node\n'),end=workflow.indexOf('\n      - name:',start+1)
+  const step=workflow.slice(start,end)
+  assert.match(step,/registry-url: https:\/\/npm\.pkg\.github\.com/)
+  assert.match(step,/scope: '@enterpriseglue'/)
+  const observation=workflow.slice(workflow.indexOf('      - name: Observe actual publication progress and retain the signed attempt\n'))
+  assert.ok(observation.includes('NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'))
+})
+
+test('publication retention selects all authority/security evidence without traversing scanner caches',()=>{
+  const prefix='.artifacts/release-publication/'
+  const expected=['authorization.json','publication.json','observation.json','replacement.json','recovery.json',
+    'identity/publication.json','security/security.json','security/vulnerability-database.json',
+    ...SECURITY_ROLES.flatMap(role=>['amd64','arm64'].map(architecture=>`security/${role}-${architecture}.json`)),
+    'observation-evidence'].map(path=>prefix+path)
+  for (const [file,name] of [['release-please.yml','Retain batch publication authorization'],
+    ['release-publication-reconcile.yml','Retain non-secret diagnostics']]) {
+    const workflow=readFileSync(new URL(`../.github/workflows/${file}`,import.meta.url),'utf8')
+    const step=workflow.slice(workflow.indexOf(`      - name: ${name}\n`))
+    const block=step.match(/          path: \|\n((?:            [^\n]+\n)+)/)
+    assert.ok(block,`${file}: evidence must use an explicit path inventory`)
+    const paths=block[1].trim().split('\n').map(line=>line.trim())
+    assert.deepEqual(paths,expected)
+    assert.ok(!paths.some(path=>path.includes('cache')||path.includes('*')||path===prefix.slice(0,-1)||path===prefix+'security'))
+    assert.match(step,/if-no-files-found: error/)
   }
 })
 

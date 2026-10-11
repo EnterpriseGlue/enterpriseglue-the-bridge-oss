@@ -72,6 +72,8 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@enterpriseglue'
 
       - name: Validate release baseline
         run: node scripts/release-notes.mjs baseline --allow-pending
@@ -367,6 +369,25 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-publication-authorization-${{ github.run_id }}
-          path: .artifacts/release-publication
+          path: |
+            .artifacts/release-publication/authorization.json
+            .artifacts/release-publication/publication.json
+            .artifacts/release-publication/observation.json
+            .artifacts/release-publication/replacement.json
+            .artifacts/release-publication/recovery.json
+            .artifacts/release-publication/identity/publication.json
+            .artifacts/release-publication/security/security.json
+            .artifacts/release-publication/security/vulnerability-database.json
+            .artifacts/release-publication/security/backend-amd64.json
+            .artifacts/release-publication/security/backend-arm64.json
+            .artifacts/release-publication/security/frontend-amd64.json
+            .artifacts/release-publication/security/frontend-arm64.json
+            .artifacts/release-publication/security/managedShardBootstrap-amd64.json
+            .artifacts/release-publication/security/managedShardBootstrap-arm64.json
+            .artifacts/release-publication/security/pluginInstaller-amd64.json
+            .artifacts/release-publication/security/pluginInstaller-arm64.json
+            .artifacts/release-publication/security/pluginManager-amd64.json
+            .artifacts/release-publication/security/pluginManager-arm64.json
+            .artifacts/release-publication/observation-evidence
           if-no-files-found: error
           retention-days: 90

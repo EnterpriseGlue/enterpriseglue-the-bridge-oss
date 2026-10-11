@@ -9,10 +9,11 @@
     "operators",
     "developers"
   ],
-  "summary": "Publish and recover one frozen release batch through signed immutable records, reviewed workflow repairs and observed registry receipts.",
+  "summary": "Complete frozen release publication with source-bound image-workflow handoffs, authenticated package observations and retained security evidence without scanner caches.",
   "userImpact": [
     "Publication failures can resume the approved candidate without creating another software release or rebuilding its artifacts.",
-    "Publication status distinguishes qualified, approved, publishing, partially published and verified published outcomes."
+    "Publication status distinguishes qualified, approved, publishing, partially published and verified published outcomes.",
+    "Automatic chart/toolchain handoffs no longer mistake a decorated image-run title for a different workflow; package observations use the declared GitHub registry authentication."
   ],
   "upgrade": {
     "required": false,
@@ -25,7 +26,8 @@
     "Signed publication identities and append-only observations are stored in enterpriseglue-oss-release-publication on GHCR.",
     "Release Publication Reconcile automatically observes publisher completion. Manual resume=true renews approval and security acceptance before dispatching only incomplete publishers.",
     "GitHub history reads project merge state, branch names and labels one bounded page at a time; the workflow plugin advances independently to 0.1.16.",
-    "Explicit prepare_replacement=true may supersede an unpublished reserved release PR and regenerate one replacement candidate at the same version. Neither tag nor GitHub release may exist."
+    "Explicit prepare_replacement=true may supersede an unpublished reserved release PR and regenerate one replacement candidate at the same version. Neither tag nor GitHub release may exist.",
+    "Publication artifacts retain named authority records, all ten architecture/role scan reports, vulnerability database metadata and observation evidence; the root-owned scanner cache is excluded."
   ],
   "api": {
     "compatibility": "none",
@@ -42,7 +44,8 @@
     "Automatic events remain non-publishing. Frozen batch ancestry, generated-document and managed-comment equality, exact candidate signatures and immutable payload hashes remain mandatory.",
     "Recovery requires explicit first-party repair PRs and a strict path allowlist. Application sources, dependency locks, package manifests, Dockerfiles, charts, migrations, scanner policy and unknown paths cannot qualify as publication-only repairs.",
     "Fresh scans cover all five exact image roles on AMD64 and ARM64 under the pinned scanner and unchanged severity/ignore policy, with current vulnerability database metadata and hashed reports.",
-    "Unknown registry state and immutable conflicts stop recovery writes. Scratch canary records are marked as fixtures and cannot enter the production publication repository."
+    "Unknown registry state and immutable conflicts stop recovery writes. Scratch canary records are marked as fixtures and cannot enter the production publication repository.",
+    "Upstream publication authority binds the exact Docker Images workflow path, owning/head repositories, successful event and immutable source, while retaining protected-main, exact-tag and signed-candidate guards. Display titles are not workflow authority."
   ],
   "documentation": [
     "Technical release/versioning documentation and the artifact-promotion runbook define frozen identity, workflow authority, observation states, retry conditions and recovery commands.",
@@ -57,10 +60,10 @@
     "Revert the reviewed publication tooling and stop new recovery dispatches. Retain signed records and existing releases; never delete or repoint published tags. No package or database rollback is required."
   ],
   "validation": [
-    "Local qualification passed 181 CI contracts and the aggregate guard, 122 release-note/package regressions, warning-free workspace lint, Actionlint, Shellcheck, package discipline and documentation-boundary checks.",
-    "The maintained plugin passed 11 repository contracts and official checks for all 25 skills. The separate official Python plugin-manifest validator is unavailable locally; installer and protected validation remain distinct evidence.",
-    "Real Git histories exercise frozen-source recovery, explicit repair ancestry, prohibited content changes and reserved-version replacement. The actual toolchain authority and privileged candidate-validation scripts are executed in regression tests.",
-    "The read-only production CLI authorization canary tests automatic-event rejection, incomplete batches, source drift, document mismatch, reviewed publication-only repair and application-drift rejection. Signed scratch registry and protected candidate qualification remain required before publication."
+    "Node 24.19.0 / pnpm 11.0.8: all 71 publication-record regressions passed, including actual Bash guards accepting decorated upstream names and rejecting wrong paths, repositories, fork heads, branches, events, sources and recovery tags. Explicit rejection paths also passed on the local Bash runtime.",
+    "The integrated local gate passed 181 CI contracts and the self-validating aggregate, 95 classifier/routing tests, 169 release-note/tooling tests, seven documentation-boundary tests, package-version discipline, both publisher policy checks, Actionlint and the combined diff check.",
+    "The supplemental non-publishing authorization canary passed all 12 scenarios, including the actual verifier's rejection of an unstaged fixture candidate; it performed no publication or registry writes. Hosted exact-head canary and protected CI remain independent pre-merge acceptance.",
+    "The maintained immutable webhook schema requires the selected path and repository fields. No application source, dependencies, database, package/chart payload, scanner policy or frozen release document changed; existing exact-candidate runtime evidence is not a substitute for qualification of the edited controls."
   ],
   "packages": []
 }
