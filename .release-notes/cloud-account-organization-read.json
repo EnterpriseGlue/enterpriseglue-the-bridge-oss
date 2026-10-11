@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "cloud-account-organization-read",
+  "type": "fix",
+  "scope": "identity",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Honor explicitly assigned, policy-approved organization-read access in neutral Cloud account sessions without granting platform write authority.",
+  "userImpact": [
+    "Ordinary signup accounts retain only their existing self-onboarding authority; no organization-read grant is created automatically."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Deploy the qualified host revision alongside the compatible Cloud composition; existing role assignments and policy gates remain authoritative."
+    ]
+  },
+  "configuration": [
+    "An authorized application administrator must explicitly assign platform:tenants:view; GCP roles and an email address alone do not confer this permission."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Cloud-account permission snapshots may advertise platform.tenants.read only when the current global permission and policy allow it.",
+      "The existing platform Cloud identity exchange can mint a one-use read claim for that account; manage claims remain forbidden."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No role, assignment, account, or schema is created or changed by this code upgrade."
+    ]
+  },
+  "security": [
+    "Permission and policy are rechecked on every snapshot and identity request, with no tenant-scoped authority promoted to platform access.",
+    "Neutral sessions still cannot mint platform management claims or acquire tenant, project, engine, or unrelated administration rights."
+  ],
+  "documentation": [
+    "docs/how-to/auth-sso.md documents the account-session authorization boundary."
+  ],
+  "knownLimitations": [
+    "This does not apply an operator grant or recover a blocked Cloud deployment; those are separate authorized actions.",
+    "Already-issued platform read claims retain the existing one-use, 90-second lifetime; revocation stops new claims rather than changing that contract."
+  ],
+  "rollback": [
+    "Roll back the host revision to restore the previous account-surface restriction; existing durable grants are unchanged."
+  ],
+  "validation": [
+    "Node 24.19.0 / pnpm 11.0.8: 108 focused authorization-route tests cover explicit grant, default denial, policy denial and revocation. The complete backend milestone passed all 3,799 tests across 467 files, and the raw-SQL guard passed; original assertions and timeouts were preserved.",
+    "Host build, workspace typechecking, access-governance structure, identity contracts/routes/components and provisioning checks passed. Physical PostgreSQL acceptance includes 22 global OIDC/RLS tests, the managed-account session test and the independent authorization model's 24 generated states, with forced RLS and original bounds retained. This is not five-adapter portability acceptance.",
+    "All 18 Chromium lifecycle/login-gallery cases passed on an isolated loopback fixture. Screenshot capture now preserves visible mapping results; all 29 selected 1440x900 images passed duplicate/dimension audit and visual review. These mocked browser flows are not live Cloud signup evidence.",
+    "The full disposable compiled-stack protocol rehearsal passed ten SCIM, OIDC, Entra-compatible OIDC, signed SAML and LDAP/TLS journeys. Production-client LDAPS tests also passed. Owned fixtures and temporary credentials were removed; local provider/directory evidence is not a real external-provider or Cloud signup receipt.",
+    "All five plugin/API and three host packages built and packed locally; tarball exports/dependency references, backend-host 0.20.1 version discipline, documentation boundary and release-note preflight passed against v0.30.0. Local packaging checks are not signed release provenance.",
+    "Protected exact-candidate database, pinned Operaton/browser, image and current security acceptance remain independent of local qualification. No release publication, staging deployment or live Cloud E2E acceptance is claimed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.20.0",
+      "newVersion": "0.20.1",
+      "impact": "patch"
+    }
+  ]
+}

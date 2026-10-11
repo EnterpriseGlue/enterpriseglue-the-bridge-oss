@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import type { Server } from 'node:http';
 import request from 'supertest';
 import express from 'express';
 import usersRouter from '../../../../packages/backend-host/src/modules/users/routes/users.js';
@@ -98,14 +99,21 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 }));
 
 describe('users routes', () => {
-  let app: express.Application;
+  let app: Server;
+  let receivedRequests: string[];
 
-  beforeEach(() => {
-    app = express();
-    app.disable('x-powered-by');
-    app.use(express.json());
-    app.use(usersRouter);
-    app.use(errorHandler);
+  beforeEach(async () => {
+    const fixture = express();
+    receivedRequests = [];
+    fixture.disable('x-powered-by');
+    fixture.use(express.json());
+    fixture.use((req, res, next) => {
+      receivedRequests.push(`${req.method} ${req.originalUrl}`);
+      res.setHeader('x-eg-test-fixture', 'users-routes');
+      next();
+    });
+    fixture.use(usersRouter);
+    fixture.use(errorHandler);
     vi.clearAllMocks();
     permissionGate.allowedPermissions.clear();
     permissionGate.allowedPermissions.add('platform:user:manage');
@@ -123,6 +131,23 @@ describe('users routes', () => {
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn(), save: vi.fn(), delete: vi.fn() };
       },
     });
+
+    // Supertest otherwise opens a wildcard listener for each request. Bind
+    // this mock-authorized fixture to loopback, keep one server for the whole
+    // case, and await its cleanup before the next case can reuse the mocks.
+    app = await new Promise<Server>((resolve, reject) => {
+      const listener = fixture.listen(0, '127.0.0.1', () => resolve(listener));
+      listener.once('error', reject);
+    });
+    expect(app.address()).toMatchObject({ address: '127.0.0.1' });
+  });
+
+  afterEach(async () => {
+    if (app?.listening) {
+      await new Promise<void>((resolve, reject) => {
+        app.close((error) => error ? reject(error) : resolve());
+      });
+    }
   });
 
   it('creates a platform user via onboarding invitation and returns reveal-once credentials for manual delivery', async () => {
@@ -315,12 +340,38 @@ describe('users routes', () => {
     expect(identity.status).toBe(200);
     expect(access.status).toBe(200);
     expect(sessions.status).toBe(200);
-    expect(audit.status).toBe(200);
+    expect(audit.status, JSON.stringify({
+      fixture: audit.headers['x-eg-test-fixture'],
+      receivedRequests,
+      auditMockCalls: userDirectoryServiceMock.audit.mock.calls,
+      contentType: audit.headers['content-type'],
+    })).toBe(200);
+    expect(audit.headers['x-eg-test-fixture']).toBe('users-routes');
+    expect(audit.body).toEqual({ userId: 'user-2', events: [] });
     expect(userDirectoryServiceMock.identityContext).toHaveBeenCalledWith('user-2', null);
     expect(userDirectoryServiceMock.effectiveAccess).toHaveBeenCalledWith('user-2', null);
     expect(userDirectoryServiceMock.sessions).toHaveBeenCalledWith('user-2');
     expect(userDirectoryServiceMock.audit).toHaveBeenCalledWith('user-2', 20);
     expect(sessions.body).not.toHaveProperty('tokenHash');
+  });
+
+  it('denies audit detail without users:view before calling the directory service', async () => {
+    permissionGate.allowedPermissions.clear();
+
+    const response = await request(app).get('/api/users/user-2/audit?limit=20');
+
+    expect(response.status).toBe(403);
+    expect(userDirectoryServiceMock.audit).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid audit query before calling the directory service', async () => {
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:view');
+
+    const response = await request(app).get('/api/users/user-2/audit?limit=201');
+
+    expect(response.status).toBe(400);
+    expect(userDirectoryServiceMock.audit).not.toHaveBeenCalled();
   });
 
   it('validates lifecycle reasons and protects the signed-in user from deactivation', async () => {
