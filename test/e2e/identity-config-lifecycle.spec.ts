@@ -160,12 +160,27 @@ test.describe('Identity configuration browser lifecycle', () => {
     }))
       .toBe(true);
     await expect(page.getByRole('heading', { name: 'Edit identity mapping' })).toBeVisible();
-    await captureManualScreenshot(page, '25-identity-mapping-preview.jpg');
+    await mappingPreviewNotification.evaluate((element) => {
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.querySelectorAll<HTMLElement>('main, [role="main"], .cds--content')
+        .forEach((scroller) => { scroller.scrollTop = 0; scroller.scrollLeft = 0; });
+    });
+    await expect(mappingPreviewNotification).toBeInViewport({ ratio: 1 });
+    // The standard viewport was established by the earlier captures. Preserve
+    // the result's scroll position instead of resetting the workflow to its top.
+    await captureManualScreenshot(page, '25-identity-mapping-preview.jpg', { stabilize: false });
     await page.getByRole('button', { name: 'Check saved identities' }).click();
     const storedIdentityPreview = page.getByText('2 saved identities would match and 1 saved identity would not. No identity or access was changed.');
     await expect(storedIdentityPreview).toBeVisible();
-    await storedIdentityPreview.scrollIntoViewIfNeeded();
-    await captureManualScreenshot(page, '54-mapping-test-and-stored-preview.jpg');
+    await storedIdentityPreview.evaluate((element) => {
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.querySelectorAll<HTMLElement>('main, [role="main"], .cds--content')
+        .forEach((scroller) => { scroller.scrollTop = 0; scroller.scrollLeft = 0; });
+    });
+    await expect(storedIdentityPreview).toBeInViewport({ ratio: 1 });
+    await captureManualScreenshot(page, '54-mapping-test-and-stored-preview.jpg', { stabilize: false });
 
     const enabledMapping = page.getByRole('checkbox', { name: 'Enable mapping' });
     await enabledMapping.uncheck({ force: true });

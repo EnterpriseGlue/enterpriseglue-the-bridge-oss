@@ -203,32 +203,39 @@ router.get('/api/authz/me/permissions', apiLimiter, requireCloudAccountOrTenantA
         tenantId: null,
         resourceType: 'platform' as const,
       };
-      const hasSelfCreatePermission = await permissionService.hasPermission(
-        PlatformPermissions.TENANTS_SELF_CREATE,
-        permissionContext,
-      );
-      const selfCreatePolicy = hasSelfCreatePermission
-        ? await policyService.evaluateGate(PlatformPermissions.TENANTS_SELF_CREATE, {
+      const platform: Permission[] = [];
+      const allowedActions: string[] = [];
+      // Neutral signup grants neither operator access nor tenant application
+      // rights. Honor only these explicitly allowed account-surface actions,
+      // with current global grants and the same policy gate as identity minting.
+      for (const [permission, action] of [
+        [PlatformPermissions.TENANTS_SELF_CREATE, 'platform.tenants.self_create'],
+        [PlatformPermissions.TENANTS_VIEW, 'platform.tenants.read'],
+      ] as const) {
+        if (!await permissionService.hasPermission(permission, permissionContext)) continue;
+        const policy = await policyService.evaluateGate(permission, {
             ...permissionContext,
             ipAddress: req.ip,
             userAgent: req.headers['user-agent'],
             mfaVerified: req.user!.mfaVerified === true,
-          })
-        : null;
-      const selfCreateAllowed = hasSelfCreatePermission && selfCreatePolicy?.decision !== 'deny';
+          });
+        if (policy.decision === 'deny') continue;
+        platform.push(permission);
+        allowedActions.push(action);
+      }
       res.setHeader('cache-control', 'no-store');
       return res.json(CurrentUserPermissionsSchema.parse({
         userId: req.user!.userId,
         tenantId: null,
-        platform: selfCreateAllowed ? [PlatformPermissions.TENANTS_SELF_CREATE] : [],
+        platform,
         platformActionAvailability: {
-          allowedActions: selfCreateAllowed ? ['platform.tenants.self_create'] : [],
+          allowedActions,
           restrictions: {},
         },
         tenant: null,
         projects: [],
         engines: [],
-        authorizationVersion: `cloud-account:${req.user!.authSessionVersion ?? 0}`,
+        authorizationVersion: `cloud-account:${req.user!.authSessionVersion ?? 0}:${platform.join(',')}`,
         generatedAt: Date.now(),
       }));
     }

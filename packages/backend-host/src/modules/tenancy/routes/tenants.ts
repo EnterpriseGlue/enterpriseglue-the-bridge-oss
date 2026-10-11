@@ -76,8 +76,8 @@ const tenantIdSchema = z.string().min(1).max(160);
 
 const requireRequestedPlatformCloudAction: RequestHandler = (req, res, next) => {
   const action = PlatformCloudIdentityActionSchema.parse(req.body.action);
-  if (req.user?.sessionClass === 'cloud_account' && action !== 'platform.tenants.self_create') {
-    return next(Errors.forbidden('Cloud account sessions may only create their first tenant'));
+  if (req.user?.sessionClass === 'cloud_account' && !['platform.tenants.self_create', 'platform.tenants.read'].includes(action)) {
+    return next(Errors.forbidden('Cloud account sessions cannot manage platform tenants'));
   }
   return requireAction(action)(req, res, next);
 };

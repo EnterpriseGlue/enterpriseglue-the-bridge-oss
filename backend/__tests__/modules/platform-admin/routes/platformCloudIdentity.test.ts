@@ -106,7 +106,7 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
     expect(issue).not.toHaveBeenCalled();
   });
 
-  it.each(['platform.tenants.read', 'platform.tenants.manage'] as const)(
+  it.each(['platform.tenants.manage'] as const)(
     'never admits neutral Cloud account authority to %s',
     async (action) => {
       const response = await request(app)
@@ -119,6 +119,22 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
       expect(issue).not.toHaveBeenCalled();
     },
   );
+
+  it('requires an explicit read action for a Cloud account and immediately denies its revoked claim', async () => {
+    authz.allowed = new Set(['platform.tenants.self_create']);
+    const denied = await request(app).post('/api/platform/cloud-identity').set('x-test-cloud-account', 'true').send({ action: 'platform.tenants.read' });
+    expect(denied.status).toBe(403);
+    expect(issue).not.toHaveBeenCalled();
+    authz.allowed.add('platform.tenants.read');
+    const allowed = await request(app).post('/api/platform/cloud-identity').set('x-test-cloud-account', 'true').send({ action: 'platform.tenants.read' });
+    expect(allowed.status).toBe(200);
+    expect(issue).toHaveBeenCalledExactlyOnceWith({ userId: 'operator-1', shardId: 'regional-shard-01', action: 'platform.tenants.read' });
+    authz.allowed.delete('platform.tenants.read');
+    const revoked = await request(app).post('/api/platform/cloud-identity').set('x-test-cloud-account', 'true').send({ action: 'platform.tenants.read' });
+    expect(revoked.status).toBe(403);
+    expect(issue).toHaveBeenCalledTimes(1);
+    expect(authz.evaluated).toEqual(['platform.tenants.read', 'platform.tenants.read', 'platform.tenants.read']);
+  });
 
   it('denies a tenant member without a platform tenant permission', async () => {
     authz.allowed = new Set();

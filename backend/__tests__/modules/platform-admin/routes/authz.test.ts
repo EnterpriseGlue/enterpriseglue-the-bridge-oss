@@ -391,6 +391,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   },
   PlatformPermissions: {
     TENANTS_SELF_CREATE: 'platform:tenants:self-create',
+    TENANTS_VIEW: 'platform:tenants:view',
     ENGINE_REGISTRATION_MANAGE: 'platform:engine-registration:manage',
     ENGINE_SETS_VIEW: 'platform:engine-sets:view',
     ENGINE_SETS_MANAGE: 'platform:engine-sets:manage',
@@ -710,6 +711,7 @@ describe('platform-admin authz routes', () => {
   });
 
   it('returns only first-tenant creation authority for a neutral Cloud account session', async () => {
+    sharedPermissionServiceMock.hasPermission.mockImplementation(async permission => permission === 'platform:tenants:self-create');
     const response = await request(app)
       .get('/api/authz/me/permissions')
       .set('x-test-cloud-account', 'true');
@@ -727,7 +729,7 @@ describe('platform-admin authz routes', () => {
       tenant: null,
       projects: [],
       engines: [],
-      authorizationVersion: 'cloud-account:4',
+      authorizationVersion: 'cloud-account:4:platform:tenants:self-create',
       generatedAt: expect.any(Number),
     });
     expect(permissionService.getCurrentUserPermissions).not.toHaveBeenCalled();
@@ -739,7 +741,7 @@ describe('platform-admin authz routes', () => {
   });
 
   it('does not advertise first-tenant creation after its permission is revoked', async () => {
-    sharedPermissionServiceMock.hasPermission.mockResolvedValueOnce(false);
+    sharedPermissionServiceMock.hasPermission.mockResolvedValue(false);
 
     const response = await request(app)
       .get('/api/authz/me/permissions')
@@ -756,6 +758,7 @@ describe('platform-admin authz routes', () => {
   });
 
   it('does not advertise first-tenant creation when policy denies the otherwise granted action', async () => {
+    sharedPermissionServiceMock.hasPermission.mockImplementation(async permission => permission === 'platform:tenants:self-create');
     vi.mocked(policyService.evaluateGate).mockResolvedValueOnce({
       decision: 'deny', reason: 'cloud signup suspended',
     } as any);
@@ -769,6 +772,30 @@ describe('platform-admin authz routes', () => {
       platform: [],
       platformActionAvailability: { allowedActions: [] },
     });
+  });
+
+  it('advertises only explicitly granted global organization-read access and removes it on revocation', async () => {
+    sharedPermissionServiceMock.hasPermission.mockImplementation(async permission => permission === 'platform:tenants:view');
+    const allowed = await request(app).get('/api/authz/me/permissions').set('x-test-cloud-account', 'true');
+    expect(allowed.status).toBe(200);
+    expect(allowed.body).toMatchObject({ tenantId: null, tenant: null, projects: [], engines: [],
+      platform: ['platform:tenants:view'], platformActionAvailability: { allowedActions: ['platform.tenants.read'], restrictions: {} } });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:tenants:view', {
+      userId: 'cloud-user-1', tenantId: null, resourceType: 'platform',
+    });
+    sharedPermissionServiceMock.hasPermission.mockResolvedValue(false);
+    const revoked = await request(app).get('/api/authz/me/permissions').set('x-test-cloud-account', 'true');
+    expect(revoked.body).toMatchObject({ platform: [], platformActionAvailability: { allowedActions: [] } });
+    expect(revoked.body.authorizationVersion).not.toBe(allowed.body.authorizationVersion);
+    expect(permissionService.getCurrentUserPermissions).not.toHaveBeenCalled();
+  });
+
+  it('does not expose a granted organization-read action when its policy denies it', async () => {
+    sharedPermissionServiceMock.hasPermission.mockImplementation(async permission => permission === 'platform:tenants:view');
+    vi.mocked(policyService.evaluateGate).mockResolvedValueOnce({ decision: 'deny', reason: 'operator policy denied' } as any);
+    const response = await request(app).get('/api/authz/me/permissions').set('x-test-cloud-account', 'true');
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ platform: [], tenant: null, projects: [], engines: [], platformActionAvailability: { allowedActions: [] } });
   });
 
   it('serializes authorization audit records through the strict shared API view', async () => {

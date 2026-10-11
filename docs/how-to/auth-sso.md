@@ -45,6 +45,17 @@ passkey, and issues a tenant-neutral Cloud account session. The new user gains
 only the non-privileged authenticated-user baseline. Organization access still
 requires the normal authorized onboarding, invitation, or membership path.
 
+The neutral permission snapshot and platform Cloud identity exchange expose
+only self-onboarding and, when explicitly granted and allowed by the current
+policy, `platform:tenants:view` / `platform.tenants.read`. Account signup never
+creates that read grant. A global application role or assignment is required;
+GCP roles and matching email addresses are not application authorization.
+Permission revocation or policy denial removes the advertised read action and
+prevents minting another one-use read identity. Cloud-account sessions still
+cannot mint `platform.tenants.manage`, gain tenant application access without
+membership, or use unrelated administration routes. The snapshot version binds
+its currently allowed permissions rather than only the session version.
+
 Returning users obtain a browser-bound challenge from
 `POST /api/auth/cloud-passkey/options` and submit their passkey assertion to
 `POST /api/auth/cloud-passkey/complete`. The server verifies the challenge,
