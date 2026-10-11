@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.30.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.0...v0.30.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **identity:** honor explicit organization-read grants for cloud accounts ([9f00278](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9f00278f42a6da7012099e11f0713fb064f072ef))
+* **identity:** honor explicit organization-read grants for cloud accounts ([ab85dbb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ab85dbbfa74b851494326df77c7893690c8c9982))
+
 ## [0.30.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.29.3...v0.30.0) (2026-10-10)
 
 ### Breaking changes
