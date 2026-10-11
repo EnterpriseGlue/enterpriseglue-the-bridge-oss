@@ -55,7 +55,9 @@ jobs:
       - name: Validate protected release authority
         shell: bash
         env:
-          UPSTREAM_NAME: ${{ github.event.workflow_run.name }}
+          UPSTREAM_PATH: ${{ github.event.workflow_run.path }}
+          UPSTREAM_REPOSITORY: ${{ github.event.workflow_run.repository.full_name }}
+          UPSTREAM_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
           UPSTREAM_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -70,22 +72,27 @@ jobs:
             echo "Plugin toolchain releases are restricted to EnterpriseGlue" >&2
             exit 1
           }
+          [[ "$GITHUB_REPOSITORY" == "EnterpriseGlue/enterpriseglue-the-bridge-oss" ]] || exit 1
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
             echo "The protected release workflow must run from refs/heads/main" >&2
             exit 1
           }
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch || "$GITHUB_EVENT_NAME" == workflow_run ]] || exit 1
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             [[ "$REQUESTED_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
               echo "recovery dispatch requires an exact semantic release_tag" >&2
               exit 1
             }
           else
-            [[ "$UPSTREAM_NAME" == "Docker Images" && "$UPSTREAM_CONCLUSION" == success ]]
+            [[ "$UPSTREAM_PATH" == ".github/workflows/docker-images.yml" ]] || exit 1
+            [[ "$UPSTREAM_REPOSITORY" == "$GITHUB_REPOSITORY" ]] || exit 1
+            [[ "$UPSTREAM_HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]] || exit 1
+            [[ "$UPSTREAM_CONCLUSION" == success ]] || exit 1
             if [[ "$UPSTREAM_EVENT" == release ]]; then
-              [[ "$SOURCE_REF" == "$UPSTREAM_SHA" ]]
+              [[ "$SOURCE_REF" == "$UPSTREAM_SHA" ]] || exit 1
             else
-              [[ "$UPSTREAM_EVENT" == workflow_dispatch ]]
-              [[ "$UPSTREAM_TITLE" =~ ^Docker\ Images\ /\ (v[0-9]+\.[0-9]+\.[0-9]+)\ /\ ([a-f0-9]{40})$ ]]
+              [[ "$UPSTREAM_EVENT" == workflow_dispatch ]] || exit 1
+              [[ "$UPSTREAM_TITLE" =~ ^Docker\ Images\ /\ (v[0-9]+\.[0-9]+\.[0-9]+)\ /\ ([a-f0-9]{40})$ ]] || exit 1
               REQUESTED_RELEASE_TAG="${BASH_REMATCH[1]}"
               SOURCE_REF="${BASH_REMATCH[2]}"
               {
