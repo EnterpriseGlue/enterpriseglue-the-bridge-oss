@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { chmodSync, mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -10,6 +10,9 @@ import { verifyOracleSessions } from './verify-oracle-session-encryption.mjs';
 const root = path.resolve(import.meta.dirname, '..');
 const container = `eg-nne-${randomBytes(6).toString('hex')}`;
 const temporary = mkdtempSync(path.join(tmpdir(), 'eg-nne-'));
+// Linux bind mounts preserve host permissions. The production image runs as
+// UID 65532 and must traverse this directory to read the non-secret fixtures.
+chmodSync(temporary, 0o711);
 const image = process.env.ORACLE_NNE_TEST_IMAGE || 'eg-oracle-nne:local';
 const databaseImage = 'gvenzl/oracle-free:23-slim-faststart@sha256:f5ff19033860d662c821cb04eb10483fa94f14f78eae252d054291ea07028093';
 const password = randomBytes(24).toString('hex');
@@ -30,6 +33,7 @@ writeFileSync(path.join(temporary, 'sqlnet.ora'), 'SQLNET.ENCRYPTION_CLIENT=REQU
 writeFileSync(path.join(temporary, 'check.mjs'), `
 import assert from 'node:assert/strict';
 try {
+  console.log('EG_NNE_TEST_STARTED');
   const { getConnectionPool, closeConnectionPool } = await import('/app/dist/packages/shared/dist/db/db-pool.js');
   // OracleDriver can initialize OCI in its constructor. Import the ORM only
   // after the raw-first attempt so these cases exercise the raw initializer.
@@ -95,8 +99,9 @@ async function scenario(name, serverMode, serverCipher, { failure = false, mode 
   args.push(image, '/test/check.mjs');
   const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
+  let diagnostic = '';
   const completed = new Promise((resolve, reject) => {
-    child.on('error', reject); child.on('exit', code => resolve(code));
+    child.on('error', reject); child.on('close', code => resolve(code));
   });
   let held = false;
   let evidence;
@@ -113,11 +118,13 @@ async function scenario(name, serverMode, serverCipher, { failure = false, mode 
     }
   });
   // Native diagnostics are intentionally kept out of retained artifacts.
-  child.stderr.on('data', () => {});
+  child.stderr.on('data', chunk => { diagnostic = (diagnostic + String(chunk)).slice(0, 16_384); });
   const timeout = setTimeout(() => child.kill('SIGTERM'), 90_000);
   const code = await completed;
   clearTimeout(timeout);
   await evidencePromise;
+  const startupCode = diagnostic.match(/code: ['"]([A-Z0-9_]+)['"]/)?.[1] || 'no-code';
+  assert.ok(output.includes('EG_NNE_TEST_STARTED'), `${name}: disposable test program did not start (${startupCode})`);
   if (failure) {
     assert.notEqual(code, 0, `${name} unexpectedly connected`);
     assert.ok(output.includes('EG_NNE_CONNECTION_FAILED'), `${name} did not exercise the connection failure path`);

@@ -1,8 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { parseEncryptionEvidence } from './verify-oracle-session-encryption.mjs';
 import { oracleClientComponent, addOracleClientComponent } from './complete-oracle-image-sbom.mjs';
+
+for (const protocol of ['oidc', 'saml', 'ldap']) {
+  test(`${protocol} browser preflight recognizes Linux ARM64 and CFT executables but rejects non-executable files`, () => {
+    const source = readFileSync(`scripts/run-local-${protocol}-rehearsal-test.sh`, 'utf8');
+    const line = source.split('\n').find(value => value.startsWith('if [[ -z "$headless_shell_path"'));
+    assert.ok(line);
+    const check = line.slice(line.indexOf('find '), line.indexOf('; then'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'eg-headless-preflight-'));
+    const execute = () => execFileSync('bash', ['-c', `headless_shell_path="$HEADLESS_SHELL_TEST_DIR"; ${check}`], {
+      env: { ...process.env, HEADLESS_SHELL_TEST_DIR: directory }, stdio: 'pipe',
+    });
+    try {
+      assert.throws(execute);
+      for (const name of ['headless_shell', 'chrome-headless-shell', 'chrome-headless-shell.exe']) {
+        const file = path.join(directory, name);
+        writeFileSync(file, 'fixture'); chmodSync(file, 0o600);
+        assert.throws(execute);
+        chmodSync(file, 0o755); execute(); rmSync(file);
+      }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}
 
 test('Oracle SBOM includes the correct architecture distribution and licence without losing scanner inventory', () => {
   const installer = readFileSync('backend/install-oracle-instant-client.sh', 'utf8');

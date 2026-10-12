@@ -110,6 +110,7 @@ const oracleNativePatterns = [
   /^infra\/kubernetes\/(?:helm\/enterpriseglue-host\/|openshift\/kustomize\/components\/oracle-nne\/)/,
   /^scripts\/deploy-openshift\.sh$/,
   /^scripts\/(?:run-ci-identity-protocol-rehearsals|verify-oracle-session-encryption|oracle-native-encryption-contract|run-oracle-native-encryption|scan-oracle-image|complete-oracle-image-sbom)/,
+  /^scripts\/run-local-(?:oidc|saml|ldap)-rehearsal-test\.sh$/,
   /^test\/e2e\/playwright\.config\.ts$/,
   /^test\/e2e\/local-oidc-(?:config|mapping)-authorization\.spec\.ts$/,
   /^\.github\/workflows\/oracle-(?:native-encryption-reusable|image-release)\.yml$/,
