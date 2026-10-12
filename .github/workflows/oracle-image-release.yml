@@ -18,29 +18,50 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-24.04
+    outputs:
+      source_ref: ${{ steps.source.outputs.source_ref }}
+      release_tag: ${{ steps.source.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Require an exact existing released source
+      - name: Verify protected release authority before any checkout
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           SOURCE_REF: ${{ inputs.source_ref }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$(git rev-parse HEAD)" = "$SOURCE_REF"
-          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$SOURCE_REF"
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease | jq -e '.isDraft == false and .isPrerelease == false'
+        with:
+          script: |
+            const sourceRef = String(process.env.SOURCE_REF || '');
+            const releaseTag = String(process.env.RELEASE_TAG || '');
+            if (context.eventName !== 'workflow_dispatch' || context.ref !== 'refs/heads/main' ||
+                context.repo.owner !== 'EnterpriseGlue' || context.repo.repo !== 'enterpriseglue-the-bridge-oss') {
+              throw new Error('Oracle publication requires the first-party protected main workflow.');
+            }
+            if (!/^[0-9a-f]{40}$/.test(sourceRef) || !/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+              throw new Error('Oracle publication requires an exact released SHA and stable release tag.');
+            }
+            const { data: branch } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            if (!branch.protected || branch.commit.sha !== context.sha) {
+              throw new Error('Oracle publication requires the current protected workflow source.');
+            }
+            const { data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag: releaseTag });
+            if (release.draft || release.prerelease || release.tag_name !== releaseTag) {
+              throw new Error('Oracle publication requires an existing stable published release.');
+            }
+            const { data: commit } = await github.rest.repos.getCommit({ ...context.repo, ref: releaseTag });
+            if (commit.sha !== sourceRef) throw new Error('The released tag does not match the supplied source SHA.');
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              ...context.repo, basehead: `${commit.sha}...${context.sha}`,
+            });
+            if (!['ahead', 'identical'].includes(comparison.status)) {
+              throw new Error('The released source is outside protected main history.');
+            }
+            core.setOutput('source_ref', commit.sha);
+            core.setOutput('release_tag', release.tag_name);
   qualify:
     needs: validate
     uses: ./.github/workflows/oracle-native-encryption-reusable.yml
     with:
-      source_ref: ${{ inputs.source_ref }}
+      source_ref: ${{ needs.validate.outputs.source_ref }}
       retain_image: true
   publish:
     needs: [validate, qualify]
@@ -53,7 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.validate.outputs.source_ref }}
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -71,7 +92,7 @@ jobs:
       - name: Scan and publish the retained qualified image bytes
         id: publication
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
         run: |
           set -euo pipefail
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/enterpriseglue-the-bridge-oss-backend-oracle"

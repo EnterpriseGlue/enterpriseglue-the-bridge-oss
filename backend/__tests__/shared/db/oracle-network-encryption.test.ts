@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadDatabaseConfig } from '@enterpriseglue/shared/config/database.js';
@@ -7,6 +8,11 @@ import {
   initializeOracleNetworkEncryption, oracleApplicationConnectString, oracleNetworkEncryptionOptions,
   validateOracleNetworkConfiguration,
 } from '@enterpriseglue/shared/db/oracle-network-encryption.js';
+
+vi.mock('node:fs', async importOriginal => {
+  const original = await importOriginal<typeof import('node:fs')>();
+  return { ...original, fstatSync: vi.fn(original.fstatSync) };
+});
 
 let directory: string;
 const required = 'SQLNET.ENCRYPTION_CLIENT = REQUIRED\nSQLNET.ENCRYPTION_TYPES_CLIENT = (AES256)\n';
@@ -81,6 +87,26 @@ describe('Oracle encryption deployment contract', () => {
     rmSync(path.join(directory, 'sqlnet.ora'));
     expect(() => validateOracleNetworkConfiguration(profile())).toThrow('missing, unreadable');
     writeFileSync(path.join(directory, 'sqlnet.ora'), required + '#'.repeat(65_536));
+    expect(() => validateOracleNetworkConfiguration(profile())).toThrow('too large');
+  });
+  it('reads the checked open file when the mounted path is replaced during validation', () => {
+    const original = vi.mocked(fs.fstatSync).getMockImplementation()!;
+    vi.mocked(fs.fstatSync).mockImplementationOnce(descriptor => {
+      const stat = original(descriptor);
+      fs.renameSync(path.join(directory, 'sqlnet.ora'), path.join(directory, 'previous.ora'));
+      writeFileSync(path.join(directory, 'sqlnet.ora'), 'SQLNET.ENCRYPTION_CLIENT=REJECTED');
+      return stat;
+    });
+    expect(validateOracleNetworkConfiguration(profile())).toEqual({ configDir: directory });
+    expect(() => validateOracleNetworkConfiguration(profile())).toThrow('restrict client encryption types');
+  });
+  it('bounds the read when an already opened configuration grows after its size check', () => {
+    const original = vi.mocked(fs.fstatSync).getMockImplementation()!;
+    vi.mocked(fs.fstatSync).mockImplementationOnce(descriptor => {
+      const stat = original(descriptor);
+      fs.appendFileSync(path.join(directory, 'sqlnet.ora'), '#'.repeat(65_536));
+      return stat;
+    });
     expect(() => validateOracleNetworkConfiguration(profile())).toThrow('too large');
   });
   it.each([

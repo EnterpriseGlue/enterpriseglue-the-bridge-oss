@@ -34,7 +34,8 @@ Concurrent first callers share one initialization in each datasource/pool
 instance. A failed initialization can be retried later; it cannot fall back to a
 permissive profile. Shutdown waits for pending initialization before closing.
 
-Files are limited to 64 KiB. The supported `sqlnet.ora` grammar consists of
+Files are limited to 64 KiB; validation and bounded reads use the same open
+file so mount replacements cannot bypass the file check. The supported `sqlnet.ora` grammar consists of
 unquoted direct assignments and optional parenthesized lists; comments and
 multiline lists are supported. Duplicate assignments and `IFILE` indirection
 are rejected. The snapshot restricts naming to `TNSNAMES` and `EZCONNECT`;
@@ -84,7 +85,10 @@ select or download an image.
 The optional repository is
 `ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend-oracle`. Publication
 uses the explicitly dispatched `oracle-image-release.yml` workflow for an
-existing stable released source. It qualifies both architectures, retains the
+existing stable released source. Dispatch uses the current protected `main`
+workflow. It resolves the stable release tag through GitHub's API, verifies its
+exact source SHA and protected-main history before checkout, and passes that
+verified source to qualification. It qualifies both architectures, retains the
 qualified image bytes, scans them under the committed application security
 policy, and signs the assembled manifest. Each architecture receives a CycloneDX SBOM
 attestation; the manifest receives build provenance. The ordinary SaaS release image set

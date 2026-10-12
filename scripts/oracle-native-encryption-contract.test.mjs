@@ -39,8 +39,9 @@ test('default and Oracle production image flavors share the compiled application
 test('Oracle publication requires a released SHA and retained security-qualified bytes', () => {
   const publish = readFileSync('.github/workflows/oracle-image-release.yml', 'utf8');
   assert.match(publish, /workflow_dispatch:/);
-  assert.match(publish, /\[\[ "\$SOURCE_REF" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
-  assert.match(publish, /isDraft == false and \.isPrerelease == false/);
+  assert.doesNotMatch(publish.slice(publish.indexOf('  validate:'), publish.indexOf('  qualify:')), /actions\/checkout@/);
+  assert.match(publish, /ref: \$\{\{ needs.validate.outputs.source_ref \}\}/);
+  assert.doesNotMatch(publish, /ref: \$\{\{ inputs.source_ref \}\}/);
   assert.match(publish, /gzip -dc "\$directory\/qualified-backend-image.tar.gz" \| docker load/);
   assert.ok(publish.indexOf('scripts/scan-oracle-image.sh') < publish.indexOf('docker push'));
   assert.match(publish, /--type cyclonedx/);
@@ -50,4 +51,68 @@ test('Oracle publication requires a released SHA and retained security-qualified
   const scan = readFileSync('scripts/scan-oracle-image.sh', 'utf8');
   assert.match(scan, /--severity "CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN"/);
   assert.doesNotMatch(scan, /--ignore-unfixed/);
+  assert.match(scan, /--format cyclonedx "\$image" > "\$output_dir\/sbom.cdx.json"/);
+  assert.doesNotMatch(scan, /"\$output_dir:\/evidence"|--output \/evidence/);
 });
+
+const workflow = readFileSync('.github/workflows/oracle-image-release.yml', 'utf8');
+const validation = workflow.slice(workflow.indexOf('          script: |\n') + '          script: |\n'.length, workflow.indexOf('\n  qualify:'))
+  .split('\n').map(line => line.slice(12)).join('\n');
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+function releaseFixture() {
+  const source = 'a'.repeat(40), current = 'b'.repeat(40);
+  return {
+    context: { eventName: 'workflow_dispatch', ref: 'refs/heads/main', sha: current,
+      repo: { owner: 'EnterpriseGlue', repo: 'enterpriseglue-the-bridge-oss' } },
+    environment: { SOURCE_REF: source, RELEASE_TAG: 'v0.31.0' },
+    branch: { protected: true, commit: { sha: current } },
+    release: { draft: false, prerelease: false, tag_name: 'v0.31.0' },
+    commit: { sha: source }, comparison: { status: 'ahead' },
+  };
+}
+
+async function verifyRelease(fixture) {
+  const outputs = {}, calls = [];
+  const methods = { getBranch: 'branch', getReleaseByTag: 'release', getCommit: 'commit', compareCommitsWithBasehead: 'comparison' };
+  const repos = Object.fromEntries(Object.entries(methods).map(([method, result]) => [method, async argument => {
+    calls.push({ method, argument }); return { data: fixture[result] };
+  }]));
+  await new AsyncFunction('context', 'process', 'github', 'core', validation)(
+    fixture.context, { env: fixture.environment }, { rest: { repos } },
+    { setOutput: (key, value) => { outputs[key] = value; } },
+  );
+  return { outputs, calls };
+}
+
+test('Oracle publisher verifies the API-resolved stable source before passing it to qualification', async () => {
+  for (const status of ['ahead', 'identical']) {
+    const fixture = releaseFixture(); fixture.comparison.status = status;
+    const result = await verifyRelease(fixture);
+    assert.deepEqual(result.outputs, { source_ref: fixture.commit.sha, release_tag: fixture.release.tag_name });
+    assert.deepEqual(result.calls.map(call => call.method), ['getBranch', 'getReleaseByTag', 'getCommit', 'compareCommitsWithBasehead']);
+    assert.equal(result.calls[2].argument.ref, 'v0.31.0');
+  }
+});
+
+for (const [name, change] of [
+  ['automatic event', fixture => { fixture.context.eventName = 'push'; }],
+  ['branch dispatch', fixture => { fixture.context.ref = 'refs/heads/feature'; }],
+  ['foreign owner', fixture => { fixture.context.repo.owner = 'fork'; }],
+  ['foreign repository', fixture => { fixture.context.repo.repo = 'other'; }],
+  ['mutable source', fixture => { fixture.environment.SOURCE_REF = 'main'; }],
+  ['unstable tag', fixture => { fixture.environment.RELEASE_TAG = 'v0.31.0-rc.1'; }],
+  ['unprotected main', fixture => { fixture.branch.protected = false; }],
+  ['stale workflow', fixture => { fixture.branch.commit.sha = 'c'.repeat(40); }],
+  ['draft release', fixture => { fixture.release.draft = true; }],
+  ['prerelease', fixture => { fixture.release.prerelease = true; }],
+  ['wrong release tag', fixture => { fixture.release.tag_name = 'v0.30.1'; }],
+  ['different released source', fixture => { fixture.commit.sha = 'c'.repeat(40); }],
+  ['divergent history', fixture => { fixture.comparison.status = 'diverged'; }],
+  ['source ahead of main', fixture => { fixture.comparison.status = 'behind'; }],
+]) {
+  test(`Oracle publisher rejects ${name} without emitting qualification authority`, async () => {
+    const fixture = releaseFixture(); change(fixture);
+    await assert.rejects(verifyRelease(fixture), /Oracle publication|released|protected main/);
+  });
+}

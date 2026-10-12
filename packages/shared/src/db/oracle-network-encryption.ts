@@ -1,4 +1,4 @@
-import { constants, accessSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { constants, closeSync, fstatSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -32,14 +32,30 @@ function fail(reason: string): never {
   throw new Error(`Oracle native network encryption: ${reason}`);
 }
 
-function readConfiguration(file: string): string {
+function readConfiguration(file: string): string;
+function readConfiguration(file: string, optional: true): string | undefined;
+function readConfiguration(file: string, optional = false): string | undefined {
+  let descriptor: number | undefined;
   try {
-    accessSync(file, constants.R_OK);
-    const stat = statSync(file);
+    // Inspect and read the same open file, even when a projected mount changes.
+    descriptor = openSync(file, constants.O_RDONLY | constants.O_NONBLOCK);
+    const stat = fstatSync(descriptor);
     if (!stat.isFile() || stat.size > 65_536) fail('configuration must be a readable file of at most 64 KiB.');
-    return readFileSync(file, 'utf8');
-  } catch {
+    // Bound the read as well: a file can grow after fstat without being replaced.
+    const buffer = Buffer.alloc(65_537);
+    let length = 0;
+    while (length < buffer.length) {
+      const count = readSync(descriptor, buffer, length, buffer.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length > 65_536) fail('configuration must be at most 64 KiB.');
+    return buffer.toString('utf8', 0, length);
+  } catch (error) {
+    if (optional && descriptor === undefined && (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     return fail('required Oracle Net configuration is missing, unreadable, or too large.');
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 
@@ -115,7 +131,7 @@ export function oracleNetworkEncryptionOptions(config: OracleNetworkConfiguratio
   inspect(connectString);
   const profile = validatedClientProfile(readConfiguration(path.join(options.configDir, 'sqlnet.ora')));
   const namesFile = path.join(options.configDir, 'tnsnames.ora');
-  const names = existsSync(namesFile) ? readConfiguration(namesFile) : undefined;
+  const names = readConfiguration(namesFile, true);
   if (names !== undefined) inspect(names);
   if (/^[A-Z0-9_.-]+$/i.test(connectString) && names === undefined) fail('TNS aliases require a dedicated tnsnames.ora file.');
 

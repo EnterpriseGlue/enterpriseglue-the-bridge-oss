@@ -41,6 +41,7 @@
   },
   "security": [
     "The required profile fails closed on invalid client configuration, unsupported transport overrides, missing Oracle Client libraries, and incompatible encryption negotiation.",
+    "Oracle Net configuration is checked and read through the same open file with a bounded read. Optional image publication verifies protected-main authority and the API-resolved stable released source before checkout.",
     "Oracle image acceptance scans every committed application severity before browser qualification; publication retains the qualified bytes with signatures, CycloneDX SBOMs, and provenance."
   ],
   "documentation": [
@@ -55,8 +56,8 @@
     "Retain a previously qualified encrypted composition or stop service when deployment policy requires NNE; do not recover by disabling encryption."
   ],
   "validation": [
-    "58 focused Oracle contracts, 183 CI contracts and 51 affected routing/native-SBOM contracts passed; 55 portability units, Helm positive/negative profiles and OpenShift rendering passed.",
-    "The rebuilt arm64 Oracle image and frontend passed pinned all-severity security scans. All 15 Oracle Free negotiation/upgrade scenarios and 9 Oracle-backed OIDC, Entra-compatible OIDC, signed SAML and LDAP browser journeys passed, with AES256 observed before and after SSO and zero unencrypted application sessions.",
+    "60 focused Oracle contracts and 66 affected routing/native-SBOM/publication-authority contracts passed; 183 CI contracts, 55 portability units, Helm positive/negative profiles and OpenShift rendering passed.",
+    "The initial compiled arm64 Oracle candidate and frontend passed pinned all-severity security scans. All 15 Oracle Free negotiation/upgrade scenarios and 9 Oracle-backed OIDC, Entra-compatible OIDC, signed SAML and LDAP browser journeys passed, with AES256 observed before and after SSO and zero unencrypted application sessions. Exact final-source dual-architecture acceptance remains a protected CI requirement after shipping fixes to bounded file reads and Linux scanner report ownership.",
     "PostgreSQL clean installation, populated upgrades, retry, service behavior and rollback passed on the local checkpoint; 5 database-only migration configuration checks passed. Oracle 21c XE fixture initialization stalled under local ARM emulation; native amd64 regression and dual-architecture acceptance remain CI requirements."
   ],
   "packages": [
