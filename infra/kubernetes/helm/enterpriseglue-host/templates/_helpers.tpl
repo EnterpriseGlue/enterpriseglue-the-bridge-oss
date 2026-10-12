@@ -360,3 +360,34 @@ tolerations:
     periodSeconds: 2
 {{- end }}
 {{- end }}
+
+{{- define "enterpriseglue-host.oracleNativeEnvironment" -}}
+{{- if .Values.database.oracleNativeEncryption.enabled }}
+{{- if or (ne .Values.database.profile.databaseType "oracle") (ne .Values.database.profile.tenancyMode "single") }}
+{{- fail "Oracle NNE requires database.profile.databaseType=oracle and tenancyMode=single" }}
+{{- end }}
+{{- if or .Values.database.managedShardBootstrap.enabled .Values.database.releaseEffectCohort.enabled }}
+{{- fail "Oracle NNE cannot be combined with managed PostgreSQL bootstrap/cohort hooks" }}
+{{- end }}
+- name: ORACLE_NETWORK_ENCRYPTION
+  value: native-aes256-required
+- name: ORACLE_NET_CONFIG_DIR
+  value: /etc/enterpriseglue/oracle
+{{- end }}
+{{- end }}
+
+{{- define "enterpriseglue-host.oracleNativeMount" -}}
+{{- if .Values.database.oracleNativeEncryption.enabled }}
+- name: oracle-net
+  mountPath: /etc/enterpriseglue/oracle
+  readOnly: true
+{{- end }}
+{{- end }}
+
+{{- define "enterpriseglue-host.oracleNativeVolume" -}}
+{{- if .Values.database.oracleNativeEncryption.enabled }}
+- name: oracle-net
+  configMap:
+    name: {{ required "database.oracleNativeEncryption.configMapName is required" .Values.database.oracleNativeEncryption.configMapName | quote }}
+{{- end }}
+{{- end }}

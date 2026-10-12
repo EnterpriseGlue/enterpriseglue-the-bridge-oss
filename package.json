@@ -250,7 +250,10 @@
     "ci:watch": "bash ./scripts/ci-watch.sh",
     "ci:watch:trigger": "bash ./scripts/ci-watch.sh docker-images --trigger",
     "test:frontend-consumer-install": "node scripts/test-frontend-consumer-install.mjs",
-    "test:compiled-migration-upgrades": "pnpm --dir backend run build:skip-generate && node scripts/test-compiled-migration-upgrades.mjs"
+    "test:compiled-migration-upgrades": "pnpm --dir backend run build:skip-generate && node scripts/test-compiled-migration-upgrades.mjs",
+    "test:oracle:nne:unit": "pnpm --dir backend exec vitest run __tests__/shared/db/oracle- --config vitest.config.ts --reporter=dot",
+    "test:oracle:nne:sso": "IDENTITY_PROTOCOL_REHEARSAL_DATABASE=oracle-nne IDENTITY_PROTOCOL_REHEARSAL_ARTIFACT_DIR=.artifacts/oracle-nne-sso bash scripts/run-ci-identity-protocol-rehearsals.sh",
+    "test:oracle:nne:negotiation": "node scripts/run-oracle-native-encryption.mjs"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.4.3",

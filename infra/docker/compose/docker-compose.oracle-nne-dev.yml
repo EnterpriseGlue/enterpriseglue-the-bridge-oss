@@ -1,0 +1,9 @@
+services:
+  backend:
+    build:
+      dockerfile: backend/Dockerfile.oracle-dev
+    environment:
+      ORACLE_NETWORK_ENCRYPTION: native-aes256-required
+      ORACLE_NET_CONFIG_DIR: /etc/enterpriseglue/oracle
+    volumes:
+      - ${EG_ORACLE_NET_CONFIG_HOST_DIR:-./infra/docker/oracle/client}:/etc/enterpriseglue/oracle:ro

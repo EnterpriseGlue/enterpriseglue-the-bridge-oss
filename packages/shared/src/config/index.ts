@@ -80,6 +80,8 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   oracleServiceName: z.string().optional(),
   oracleSid: z.string().optional(),
   oracleSchema: schemaName.default('MAIN'),
+  oracleNetworkEncryption: z.enum(['default', 'native-aes256-required']).default('default'),
+  oracleNetConfigDir: z.string().optional(),
 
   // SQL Server configuration (when databaseType=mssql)
   mssqlHost: z.string().optional(),
@@ -501,7 +503,7 @@ if (config.databaseType === 'postgres') {
   }
 } else if (config.databaseType === 'oracle') {
   if (config.oracleConnectionString) {
-    console.log(`  - Oracle Connection String: ${config.oracleConnectionString.substring(0, 80)}...`);
+    console.log('  - Oracle Connection String: configured');
   } else {
     console.log(`  - Oracle Host: ${config.oracleHost}`);
     console.log(`  - Oracle Service: ${config.oracleServiceName || config.oracleSid}`);

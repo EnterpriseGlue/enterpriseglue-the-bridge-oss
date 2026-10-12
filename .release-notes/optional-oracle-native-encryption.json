@@ -1,0 +1,82 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "optional-oracle-native-encryption",
+  "type": "feature",
+  "scope": "oracle",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Add an optional required AES256 Oracle native network encryption profile across application pools, Oracle-capable images, deployment configuration, and qualification.",
+  "userImpact": [
+    "Oracle application-database deployments can opt in to mandatory AES256 native network encryption independently of user SSO."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "For existing Oracle databases, run the Oracle schema-owner migration before verify-only startup. Enabling native-aes256-required also requires the Oracle image and reviewed Oracle Net configuration."
+    ]
+  },
+  "configuration": [
+    "ORACLE_NETWORK_ENCRYPTION defaults to default; native-aes256-required enables mandatory AES256 NNE and requires ORACLE_NET_CONFIG_DIR."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Add optional Oracle deployment configuration without changing default connection behavior."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "ExpandOracleAssignmentKeys1700000000134 (Oracle only)"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "Oracle assignment_key columns widen in place to VARCHAR2(4000 BYTE); values and indexes are preserved. Existing Oracle installations must apply this migration before verify-only application startup. Other database inventories and the PostgreSQL schema epoch remain unchanged.",
+      "Application rollback retains the widened Oracle columns; automatic shrinking is refused."
+    ]
+  },
+  "security": [
+    "The required profile fails closed on invalid client configuration, unsupported transport overrides, missing Oracle Client libraries, and incompatible encryption negotiation.",
+    "Oracle image acceptance scans every committed application severity before browser qualification; publication retains the qualified bytes with signatures, CycloneDX SBOMs, and provenance."
+  ],
+  "documentation": [
+    "docs/reference/oracle-network-security.md",
+    "docs/reference/configuration.md",
+    "docs/reference/configuration-matrix.md"
+  ],
+  "knownLimitations": [
+    "Client Oracle release-update and real identity-provider acceptance remain separate qualification gates."
+  ],
+  "rollback": [
+    "Retain a previously qualified encrypted composition or stop service when deployment policy requires NNE; do not recover by disabling encryption."
+  ],
+  "validation": [
+    "58 focused Oracle contracts, 183 CI contracts and 51 affected routing/native-SBOM contracts passed; 55 portability units, Helm positive/negative profiles and OpenShift rendering passed.",
+    "The rebuilt arm64 Oracle image and frontend passed pinned all-severity security scans. All 15 Oracle Free negotiation/upgrade scenarios and 9 Oracle-backed OIDC, Entra-compatible OIDC, signed SAML and LDAP browser journeys passed, with AES256 observed before and after SSO and zero unencrypted application sessions.",
+    "PostgreSQL clean installation, populated upgrades, retry, service behavior and rollback passed on the local checkpoint; 5 database-only migration configuration checks passed. Oracle 21c XE fixture initialization stalled under local ARM emulation; native amd64 regression and dual-architecture acceptance remain CI requirements."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.20.1",
+      "newVersion": "0.20.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.18.0",
+      "newVersion": "0.18.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.24.0",
+      "newVersion": "0.25.0",
+      "impact": "minor"
+    }
+  ]
+}

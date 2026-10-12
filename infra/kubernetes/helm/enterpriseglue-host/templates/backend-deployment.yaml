@@ -80,6 +80,7 @@ spec:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.applicationSecretName }} }
           env:
+            {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             {{- if .Values.apiConfigBundle.enabled }}
             - name: EG_CONFIG_BUNDLE_PATH
@@ -149,6 +150,7 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 3
           volumeMounts:
+            {{- include "enterpriseglue-host.oracleNativeMount" . | nindent 12 }}
             - { name: tmp, mountPath: /tmp }
             {{- if .Values.apiConfigBundle.enabled }}
             - name: api-config-bundle
@@ -161,6 +163,7 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
+        {{- include "enterpriseglue-host.oracleNativeVolume" . | nindent 8 }}
         - { name: tmp, emptyDir: {} }
         {{- if .Values.apiConfigBundle.enabled }}
         - name: api-config-bundle

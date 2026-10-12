@@ -92,6 +92,12 @@ in `engine-tenant-mappings.json`. See
 | ORACLE_PASSWORD | Yes | Oracle password |
 | ORACLE_SERVICE_NAME or ORACLE_SID | Yes (unless ORACLE_CONNECTION_STRING set) | At least one is required |
 | ORACLE_SCHEMA | No | Defaults to `MAIN` |
+| ORACLE_NETWORK_ENCRYPTION | No | `default` preserves existing connection behavior; `native-aes256-required` requires AES256 NNE through Thick mode. |
+| ORACLE_NET_CONFIG_DIR | Only for native profile | Absolute directory containing the validated client `sqlnet.ora` and any required TNS aliases. |
+
+`ENCRYPTION_KEY` does not configure database transport encryption. See
+[Oracle application database network encryption](oracle-network-security.md)
+for the Oracle image, deployment mounts, upgrade, and encryption evidence.
 
 ### SQL Server
 | Variable | Required | Notes |

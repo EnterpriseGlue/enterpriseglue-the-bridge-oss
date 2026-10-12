@@ -78,6 +78,19 @@
       "additionalProperties": false,
       "required": ["profile", "configMapName", "applicationSecretName", "migrationSecretName", "preflightSecretName", "managedShardBootstrap", "releaseEffectCohort", "migration", "preflight", "connectionProxy"],
       "properties": {
+        "oracleNativeEncryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "configMapName"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "configMapName": { "type": "string", "maxLength": 253, "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*)$" }
+          },
+          "allOf": [{
+            "if": { "properties": { "enabled": { "const": true } } },
+            "then": { "properties": { "configMapName": { "minLength": 1 } } }
+          }]
+        },
         "profile": {
           "type": "object",
           "additionalProperties": false,

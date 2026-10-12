@@ -90,3 +90,10 @@ for (const result of ['failure', 'cancelled', 'timed_out', 'action_required', ''
     assert.deepEqual(evaluation.rejected, [{ job: 'unsafe', result }])
   })
 }
+
+test('selected Oracle NNE acceptance cannot be skipped', () => {
+  const required = requiredJobsForSelection({ run_oracle_nne: 'true' });
+  assert.deepEqual(required, ['oracle-native-encryption']);
+  assert.equal(evaluateNeeds({ 'oracle-native-encryption': { result: 'skipped' } },
+    { requiredNonSkippedJobs: required }).passed, false);
+});

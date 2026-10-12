@@ -63,6 +63,15 @@ Launcher and validation scripts:
 - `ORACLE_HOST`, `ORACLE_PORT`, `ORACLE_SERVICE_NAME` / `ORACLE_SID` (single-host alternative)
 - `ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_SCHEMA`
 
+- `ORACLE_NETWORK_ENCRYPTION` — `default` preserves existing behavior;
+  `native-aes256-required` requires AES256 Native Network Encryption.
+- `ORACLE_NET_CONFIG_DIR` — absolute Oracle Net configuration directory,
+  required only with the native profile.
+
+The native profile requires an Oracle-capable image and validated client
+configuration. See [Oracle application database network encryption](oracle-network-security.md)
+for image selection, enforcement, upgrade, and qualification.
+
 ### Enterprise Schema
 - `ENTERPRISE_SCHEMA` (must be non-public and distinct from the active main schema)
 
@@ -387,7 +396,8 @@ request, or session identifiers; see
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:
 - **Postgres**: `pg`
-- **Oracle**: `oracledb` (requires Oracle Instant Client)
+- **Oracle**: `oracledb` (default Thin mode; Oracle Instant Client is required
+  for the optional Thick-mode native network encryption profile)
 - **SQL Server**: `mssql`
 - **Spanner**: `@google-cloud/spanner`
 - **MySQL**: `mysql2`

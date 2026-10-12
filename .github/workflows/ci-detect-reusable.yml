@@ -48,6 +48,8 @@ on:
         value: ${{ jobs.detect.outputs.current_sha }}
       run_postgres:
         value: ${{ jobs.detect.outputs.run_postgres }}
+      run_oracle_nne:
+        value: ${{ jobs.detect.outputs.run_oracle_nne }}
       run_oracle:
         value: ${{ jobs.detect.outputs.run_oracle }}
       run_smoke:
@@ -118,6 +120,7 @@ jobs:
       run_frontend_tests: ${{ steps.classify.outputs.run_frontend_tests }}
       current_sha: ${{ steps.source.outputs.current_sha }}
       run_postgres: ${{ steps.classify.outputs.run_postgres }}
+      run_oracle_nne: ${{ steps.classify.outputs.run_oracle_nne }}
       run_oracle: ${{ steps.classify.outputs.run_oracle }}
       run_smoke: ${{ steps.classify.outputs.run_smoke }}
       run_documentation_guard: ${{ steps.classify.outputs.run_documentation_guard }}

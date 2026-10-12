@@ -1,0 +1,37 @@
+services:
+  backend:
+    environment:
+      EG_ENFORCE_ENGINE_ENDPOINT_POLICY: "true"
+      # Include the existing Operaton alias of the same disposable REST mock.
+      EG_ENGINE_ALLOWED_HOSTS: "camunda-mock,operaton-mock,camunda-mock.example.test"
+    # A cold Oracle schema includes the complete host ledger and seed. Keep the
+    # disposable qualification fixture bounded without using a dev-image limit.
+    healthcheck:
+      start_period: 20m
+      timeout: 5s
+      retries: 30
+  keycloak:
+    # Native Oracle schema work and a cold realm import share the qualification
+    # runner. Verify readiness after startup rather than expiring during import.
+    healthcheck:
+      start_period: 20m
+  db:
+    image: gvenzl/oracle-free:23-slim-faststart@sha256:f5ff19033860d662c821cb04eb10483fa94f14f78eae252d054291ea07028093
+    environment: !override
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+      APP_USER: ${ORACLE_USER}
+      APP_USER_PASSWORD: ${ORACLE_PASSWORD}
+    ports: !override
+      - "127.0.0.1:${ORACLE_HOST_PORT:-0}:1521"
+    volumes: !override
+      - oracle_nne_data:/opt/oracle/oradata
+      - ./infra/docker/oracle/server:/etc/enterpriseglue/oracle-server:ro
+      - ./infra/docker/oracle/server/initialize.sh:/container-entrypoint-initdb.d/00-encryption.sh:ro
+    healthcheck:
+      test: [CMD, healthcheck.sh]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+volumes:
+  oracle_nne_data:

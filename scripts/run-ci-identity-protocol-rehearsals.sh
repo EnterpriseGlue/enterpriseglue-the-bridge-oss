@@ -6,6 +6,16 @@ set -Eeuo pipefail
 # database volume, and containers are removed at the end of every invocation.
 # Only diagnostic logs and Playwright output are retained under .artifacts/.
 
+database_profile="${IDENTITY_PROTOCOL_REHEARSAL_DATABASE:-postgres}"
+case "$database_profile" in postgres|oracle-nne) ;; *) echo "Unsupported identity database profile" >&2; exit 2 ;; esac
+export IDENTITY_PROTOCOL_REHEARSAL_DATABASE="$database_profile"
+for retained_image in "${IDENTITY_PROTOCOL_REHEARSAL_BACKEND_IMAGE:-}" "${IDENTITY_PROTOCOL_REHEARSAL_FRONTEND_IMAGE:-}"; do
+  if [[ -n "$retained_image" && ! "$retained_image" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo 'Rehearsal image reuse requires an immutable local image ID' >&2
+    exit 2
+  fi
+done
+
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 artifact_dir="${IDENTITY_PROTOCOL_REHEARSAL_ARTIFACT_DIR:-$root_dir/.artifacts/identity-protocol-rehearsal}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/enterpriseglue-identity-protocol-rehearsal.XXXXXX")"
@@ -42,6 +52,8 @@ fi
 
 mkdir -p "$artifact_dir"
 chmod 700 "$artifact_dir"
+printf 'status=running\ndatabase=%s\n' "$database_profile" > "$artifact_dir/summary.txt"
+rm -f "$artifact_dir/qualified-image.json" "$artifact_dir/qualified-backend-image.tar.gz"
 
 node - "$root_dir" "$env_file" "$tls_dir" "$identity_secret_dir" "$realm_import_file" \
   "$backend_port" "$frontend_port" "$keycloak_port" "$tls_frontend_port" "$postgres_port" <<'NODE'
@@ -107,6 +119,15 @@ const values = {
   EG_LDAP_GROUP_SEARCH_QUERY_LIMIT: '100',
   EG_LDAP_GROUP_SEARCH_RESULT_LIMIT: '5000',
 };
+if (process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE === 'oracle-nne') {
+  Object.assign(values, { NODE_ENV: 'production', EG_DATABASE_STARTUP_MODE: 'apply',
+    DATABASE_TYPE: 'oracle', ORACLE_USER: 'enterpriseglue',
+    ORACLE_PASSWORD: randomHex(24), ORACLE_SCHEMA: 'ENTERPRISEGLUE',
+    ORACLE_CONNECTION_STRING: 'db:1521/FREEPDB1', ORACLE_HOST_PORT: postgresPort,
+    ORACLE_NETWORK_ENCRYPTION: 'native-aes256-required',
+    ORACLE_NET_CONFIG_DIR: '/etc/enterpriseglue/oracle',
+    ENTERPRISEGLUE_HOST_VERSION: JSON.parse(fs.readFileSync(`${rootDir}/.github/.release-please-manifest.json`, 'utf8'))['.'] });
+}
 fs.writeFileSync(envFile, `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`, { mode: 0o600 });
 
 const sourceRealm = JSON.parse(fs.readFileSync(`${rootDir}/infra/docker/keycloak/enterpriseglue-local-realm.json`, 'utf8'));
@@ -139,19 +160,46 @@ compose=(
   -f "$root_dir/infra/docker/compose/docker-compose.identity-protocol-rehearsal.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.e2e-mission-control.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.backend-expose.yml"
+ )
+if [[ "$database_profile" == oracle-nne ]]; then
+  compose+=( -f "$root_dir/infra/docker/compose/docker-compose.oracle-nne-fixture.yml" -f "$root_dir/infra/docker/compose/docker-compose.oracle-nne.yml" )
+fi
+compose+=(
   -f "$root_dir/infra/docker/compose/docker-compose.keycloak.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.keycloak-tls.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.keycloak-saml.yml"
 )
+if [[ -n "${IDENTITY_PROTOCOL_REHEARSAL_BACKEND_IMAGE:-}" ]]; then
+  cat > "$temp_dir/retained-backend.yml" <<EOF
+services:
+  backend:
+    image: $IDENTITY_PROTOCOL_REHEARSAL_BACKEND_IMAGE
+    build: !reset null
+EOF
+  compose+=( -f "$temp_dir/retained-backend.yml" )
+fi
+if [[ -n "${IDENTITY_PROTOCOL_REHEARSAL_FRONTEND_IMAGE:-}" ]]; then
+  cat > "$temp_dir/retained-frontend.yml" <<EOF
+services:
+  frontend:
+    image: $IDENTITY_PROTOCOL_REHEARSAL_FRONTEND_IMAGE
+    build: !reset null
+EOF
+  compose+=( -f "$temp_dir/retained-frontend.yml" )
+fi
 
 run_compose() {
   EG_BACKEND_ENV_FILE="$env_file" "${compose[@]}" "$@"
 }
 
 capture_diagnostics() {
+  local log_lines=500
+  # Oracle catalog/permission logging can otherwise push the first failing
+  # request out of the retained tail before browser fixture cleanup completes.
+  if [[ "$database_profile" == oracle-nne ]]; then log_lines=10000; fi
   run_compose ps --all > "$artifact_dir/compose-status.txt" 2>&1 || true
   for service in db backend frontend frontend-tls keycloak camunda-mock; do
-    run_compose logs --no-color --tail=500 "$service" > "$artifact_dir/${service}.log" 2>&1 || true
+    run_compose logs --no-color --tail="$log_lines" "$service" > "$artifact_dir/${service}.log" 2>&1 || true
   done
   if [[ -d "$playwright_output_dir" ]]; then
     rm -rf "$artifact_dir/playwright-results"
@@ -162,6 +210,9 @@ capture_diagnostics() {
 cleanup() {
   local status=$?
   trap - EXIT
+  if [[ "$status" != 0 ]]; then
+    printf 'status=failed\ndatabase=%s\n' "$database_profile" > "$artifact_dir/summary.txt"
+  fi
   capture_diagnostics
   run_compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$temp_dir"
@@ -185,11 +236,28 @@ chmod 755 "$tls_dir"
 chmod 644 "$tls_dir/ca.crt" "$tls_dir/server.crt" "$tls_dir/server.key"
 
 echo "[identity-protocol-rehearsal] Starting disposable local Docker stack ($project_name)."
-run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock
+if [[ "$database_profile" == oracle-nne ]]; then
+  # Native libraries plus two TypeScript build graphs can exhaust a modest
+  # developer Docker VM when Compose builds both application images in parallel.
+  if [[ -z "${IDENTITY_PROTOCOL_REHEARSAL_BACKEND_IMAGE:-}" ]]; then run_compose build backend; fi
+  if [[ -z "${IDENTITY_PROTOCOL_REHEARSAL_FRONTEND_IMAGE:-}" ]]; then run_compose build frontend; fi
+  # Inspect the newly built images before creating containers.
+  backend_image="${IDENTITY_PROTOCOL_REHEARSAL_BACKEND_IMAGE:-$(docker image inspect "${project_name}-backend" --format '{{.Id}}')}"
+  "$root_dir/scripts/scan-oracle-image.sh" "$backend_image" "$artifact_dir/security/backend"
+  frontend_image="${IDENTITY_PROTOCOL_REHEARSAL_FRONTEND_IMAGE:-$(docker image inspect "${project_name}-frontend" --format '{{.Id}}')}"
+  "$root_dir/scripts/scan-oracle-image.sh" "$frontend_image" "$artifact_dir/security/frontend"
+  run_compose up --no-build -d --wait --wait-timeout 1800 db backend frontend frontend-tls keycloak camunda-mock
+else
+  run_compose up --build -d --wait --wait-timeout 900 db backend frontend frontend-tls keycloak camunda-mock
+fi
 
-curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" \
+# Container health can precede the host port-forward/TLS listener becoming
+# reachable. Bound startup retries while retaining certificate verification.
+curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 \
+  --retry-max-time 60 --connect-timeout 5 --max-time 10 --cacert "$tls_dir/ca.crt" \
   "https://localhost:${tls_frontend_port}/login" >/dev/null
-curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" \
+curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 \
+  --retry-max-time 60 --connect-timeout 5 --max-time 10 --cacert "$tls_dir/ca.crt" \
   "https://localhost:${keycloak_port}/realms/enterpriseglue-local/.well-known/openid-configuration" >/dev/null
 
 # Materialise the public IdP signing certificate only after Keycloak is ready,
@@ -207,6 +275,7 @@ chmod 711 "$identity_secret_dir"
 run_compose exec -T backend node -e "require('node:fs').accessSync('/etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt')"
 
 common_env=(
+  IDENTITY_PROTOCOL_REHEARSAL_DATABASE="$database_profile"
   LOCAL_OIDC_ADMIN_ENV_FILE="$env_file"
   LOCAL_SAML_ADMIN_ENV_FILE="$env_file"
   LOCAL_LDAP_ADMIN_ENV_FILE="$env_file"
@@ -225,6 +294,10 @@ common_env=(
   LOCAL_LDAP_DIRECTORY_PORT=636
 )
 
+if [[ "$database_profile" == oracle-nne ]]; then
+  node "$root_dir/scripts/verify-oracle-session-encryption.mjs" "${project_name}-db-1" > "$artifact_dir/oracle-encryption-before.json"
+fi
+
 echo '[identity-protocol-rehearsal] Running OIDC provider, configuration, mapping, and browser authorization rehearsal.'
 env "${common_env[@]}" pnpm run test:oidc:local-rehearsal 2>&1 | tee "$artifact_dir/oidc-rehearsal.log"
 
@@ -237,10 +310,21 @@ env "${common_env[@]}" pnpm run test:saml:local-rehearsal 2>&1 | tee "$artifact_
 echo '[identity-protocol-rehearsal] Running direct LDAP TLS/browser sign-in rehearsal.'
 env "${common_env[@]}" pnpm run test:ldap:local-rehearsal 2>&1 | tee "$artifact_dir/ldap-rehearsal.log"
 
+if [[ "$database_profile" == oracle-nne ]]; then
+  node "$root_dir/scripts/verify-oracle-session-encryption.mjs" "${project_name}-db-1" > "$artifact_dir/oracle-encryption-after.json"
+fi
+
+image_id="$(run_compose images -q backend)"
+docker image inspect "$image_id" --format '{{json .}}' > "$artifact_dir/qualified-image.json"
+if [[ "${IDENTITY_PROTOCOL_REHEARSAL_SAVE_BACKEND_IMAGE:-false}" == true ]]; then
+  docker image save "$image_id" | gzip > "$artifact_dir/qualified-backend-image.tar.gz"
+fi
+
 node - "$artifact_dir/summary.txt" <<'NODE'
 const { writeFileSync } = require('node:fs');
 writeFileSync(process.argv[2], [
   'status=passed',
+  `database=${process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE}`,
   'protocols=scim-http-relational,oidc-config,oidc,entra-compatible-oidc,saml,ldap',
   'scope=scim-http-relational-harness,disposable-localhost-docker-stack',
   'artifacts=compose-status,service-logs,playwright-output,protocol-run-logs',

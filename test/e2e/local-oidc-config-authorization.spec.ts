@@ -200,7 +200,7 @@ async function cleanInterruptedConfigFixtures(page: Page, csrf: string): Promise
 }
 
 test.describe('Local OIDC configuration-to-login authorization rehearsal', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE === 'oracle-nne' ? 300_000 : 180_000);
   test.skip(!enabled, 'Set LOCAL_OIDC_CONFIG_AUTHORIZATION_REHEARSAL=true with local administrator credentials.');
 
   test('applies an authoritative bundle, signs in through its OIDC provider, and revokes access after mapping removal @local-oidc-live @identity-configuration-live', async ({ browser }) => {

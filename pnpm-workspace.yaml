@@ -67,3 +67,4 @@ allowBuilds:
   protobufjs: true
 patchedDependencies:
   tedious@20.0.0: patches/tedious@20.0.0.patch
+  typeorm@0.3.31: patches/typeorm@0.3.31.patch

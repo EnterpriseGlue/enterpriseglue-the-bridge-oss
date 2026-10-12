@@ -38,6 +38,7 @@ spec:
           image: {{ include "enterpriseglue-host.managedShardBootstrapImage" . | quote }}
           imagePullPolicy: {{ .Values.database.managedShardBootstrap.image.pullPolicy }}
           env:
+            {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             - name: EG_MANAGED_SHARD_BOOTSTRAP_ENABLED
               value: "true"
             - name: EG_MANAGED_SHARD_TARGET_TENANCY_MODE
@@ -62,9 +63,11 @@ spec:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { cpu: "1", memory: 1Gi }
           volumeMounts:
+            {{- include "enterpriseglue-host.oracleNativeMount" . | nindent 12 }}
             - { name: bootstrap-receipt, mountPath: /var/run/enterpriseglue-bootstrap }
             - { name: tmp, mountPath: /tmp }
       volumes:
+        {{- include "enterpriseglue-host.oracleNativeVolume" . | nindent 8 }}
         - { name: bootstrap-receipt, emptyDir: {} }
         - { name: tmp, emptyDir: {} }
 ---
@@ -110,6 +113,7 @@ spec:
             {{- end }}
           {{- if or .Values.database.migration.runtimeRole .Values.database.profile.databaseType }}
           env:
+            {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             {{- if .Values.database.migration.runtimeRole }}
             - name: EG_POSTGRES_RUNTIME_ROLE
               value: {{ .Values.database.migration.runtimeRole | quote }}
@@ -130,8 +134,10 @@ spec:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { cpu: "1", memory: 1Gi }
           volumeMounts:
+            {{- include "enterpriseglue-host.oracleNativeMount" . | nindent 12 }}
             - { name: tmp, mountPath: /tmp }
       volumes:
+        {{- include "enterpriseglue-host.oracleNativeVolume" . | nindent 8 }}
         - { name: tmp, emptyDir: {} }
 {{- end }}
 {{- if .Values.database.releaseEffectCohort.enabled }}
@@ -174,6 +180,7 @@ spec:
           args:
             - "import('./dist/packages/shared/dist/services/platform-admin/open-release-effect-cohort.js').then(({openConfiguredReleaseEffectCohort}) => openConfiguredReleaseEffectCohort())"
           env:
+            {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             - name: DATABASE_TYPE
               value: {{ .Values.database.profile.databaseType | quote }}
@@ -188,8 +195,10 @@ spec:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
           volumeMounts:
+            {{- include "enterpriseglue-host.oracleNativeMount" . | nindent 12 }}
             - { name: tmp, mountPath: /tmp }
       volumes:
+        {{- include "enterpriseglue-host.oracleNativeVolume" . | nindent 8 }}
         - { name: tmp, emptyDir: {} }
 {{- end }}
 {{- if or $schemaEpochTarget .Values.database.preflight.enabled }}
@@ -237,6 +246,7 @@ spec:
             - secretRef: { name: {{ .Values.database.preflightSecretName }} }
           {{- if .Values.database.profile.databaseType }}
           env:
+            {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             {{- if $schemaEpochTarget }}
             - name: EG_POSTGRES_RUNTIME_ROLE
               value: {{ .Values.database.migration.runtimeRole | quote }}
@@ -252,7 +262,9 @@ spec:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
           volumeMounts:
+            {{- include "enterpriseglue-host.oracleNativeMount" . | nindent 12 }}
             - { name: tmp, mountPath: /tmp }
       volumes:
+        {{- include "enterpriseglue-host.oracleNativeVolume" . | nindent 8 }}
         - { name: tmp, emptyDir: {} }
 {{- end }}

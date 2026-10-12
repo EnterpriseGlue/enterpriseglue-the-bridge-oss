@@ -33,6 +33,7 @@ const booleanOutputs = [
   'run_tests',
   'run_postgres',
   'run_oracle',
+  'run_oracle_nne',
   'run_smoke',
   'run_documentation_guard',
   'run_boundary_guards',
@@ -96,6 +97,22 @@ const deploymentEvidencePatterns = [
   /^test\/authz\/deployment-evidence-matrix(?:\.schema)?\.json$/,
   /^(?:backend|frontend|packages\/(?:backend-host|frontend-host|shared))\/.*(?:authz|authorization|permission|identity|tenant|deployment)/i,
   /^infra\/(?:docker|kubernetes)\/.*(?:auth|identity|tenant|deploy)/i,
+];
+
+const oracleNativePatterns = [
+  /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|backend\/package\.json|packages\/(?:shared|backend-host)\/package\.json)$/,
+  /^patches\/typeorm@[^/]+\.patch$/,
+  /^packages\/shared\/src\/(?:config\/(?:database|index)\.ts|db\/(?:db-pool|data-source|run-migrations|oracle[^/]*|adapters\/index)\.ts|infrastructure\/persistence\/adapters\/(?:OracleAdapter|DatabaseAdapter|QueryHelpers|index)\.ts)$/,
+  /^packages\/shared\/src\/(?:db|infrastructure\/persistence)\/migrations\//,
+  /^packages\/shared\/src\/infrastructure\/persistence\/entities\//,
+  /^backend\/(?:Dockerfile(?:\.prod|\.oracle-dev)?|install-oracle-instant-client\.sh|oracle-runtime-notices\.txt|__tests__\/shared\/db\/oracle-)/,
+  /^infra\/docker\/(?:oracle\/|compose\/docker-compose\.oracle-nne)/,
+  /^infra\/kubernetes\/(?:helm\/enterpriseglue-host\/|openshift\/kustomize\/components\/oracle-nne\/)/,
+  /^scripts\/deploy-openshift\.sh$/,
+  /^scripts\/(?:run-ci-identity-protocol-rehearsals|verify-oracle-session-encryption|oracle-native-encryption-contract|run-oracle-native-encryption|scan-oracle-image|complete-oracle-image-sbom)/,
+  /^test\/e2e\/playwright\.config\.ts$/,
+  /^test\/e2e\/local-oidc-(?:config|mapping)-authorization\.spec\.ts$/,
+  /^\.github\/workflows\/oracle-(?:native-encryption-reusable|image-release)\.yml$/,
 ];
 
 const classifiers = {
@@ -166,7 +183,7 @@ const classifiers = {
   ],
   application_container: [
     /^patches\/[^/]+\.patch$/,
-    /^(?:backend|frontend)\/Dockerfile(?:\.prod)?$/,
+    /^(?:backend|frontend)\/Dockerfile(?:\.prod|\.oracle-dev)?$/,
     /^infra\/docker\//,
     /^scripts\/(?:smoke-images-local|e2e-smoke-postgres-images|run-trivy-image-scan|check-release-dockerfile-pins)/,
     /^\.github\/workflows\/(?:docker-images|docker-images-reusable|security-nightly|security-nightly-reusable)\.yml$/,
@@ -276,7 +293,8 @@ export function classifyChangedFiles(rawPaths, {
     || Object.values(classifiers).some((patterns) => matches(path, patterns))
     || matches(path, devStartupPatterns)
     || matches(path, identityRehearsalPatterns)
-    || matches(path, deploymentEvidencePatterns);
+    || matches(path, deploymentEvidencePatterns)
+    || matches(path, oracleNativePatterns);
   const unknownHighRisk = paths.some((path) => !known(path));
   const runTests = raw.backend || raw.frontend || raw.persistence || raw.engine_integration
     || raw.authorization || unknownHighRisk;
@@ -320,6 +338,7 @@ export function classifyChangedFiles(rawPaths, {
     run_tests: runTests && !runFrontendTests,
     run_postgres: runPostgres,
     run_oracle: runOracle,
+    run_oracle_nne: paths.some((path) => matches(path, oracleNativePatterns)) || unknownHighRisk,
     run_smoke: runSmoke,
     run_documentation_guard: runDocumentationGuard,
     run_boundary_guards: paths.length > 0 && !metadataOnly,

@@ -1,0 +1,3 @@
+# Dedicated AES256 NNE profile for EnterpriseGlue's application database.
+SQLNET.ENCRYPTION_CLIENT = REQUIRED
+SQLNET.ENCRYPTION_TYPES_CLIENT = (AES256)

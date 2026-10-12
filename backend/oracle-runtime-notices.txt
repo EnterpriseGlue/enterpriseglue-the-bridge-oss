@@ -1,0 +1,9 @@
+Oracle-capable runtime notices
+
+This image includes Oracle Instant Client Basic 23.26.3 for native Oracle
+application-database connectivity. Oracle software retains its own license
+terms. The original BASIC_LICENSE and BASIC_README are included at
+/opt/oracle/instantclient_23_26/ and apply independently of the host license.
+
+Architecture-specific archives and SHA256 checksums are pinned in
+backend/install-oracle-instant-client.sh.
