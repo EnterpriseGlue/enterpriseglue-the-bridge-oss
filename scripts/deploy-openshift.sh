@@ -7,6 +7,7 @@ OPENSHIFT_OVERLAY="${OPENSHIFT_OVERLAY:-prod}"
 OPENSHIFT_KUSTOMIZE_DIR="$OPENSHIFT_ROOT_DIR/kustomize/overlays/$OPENSHIFT_OVERLAY"
 CONFIG_BUNDLE_HASH=""
 CONFIG_BUNDLE_CONTAINER_PATH=""
+ORACLE_KUSTOMIZE_TEMP_DIR=""
 
 log() { echo "[openshift-deploy] $*"; }
 warn() { echo "[openshift-deploy] WARN: $*"; }
@@ -77,7 +78,7 @@ apply_runtime_secret() {
   require_env ADMIN_PASSWORD
   require_env ENCRYPTION_KEY
 
-  if [[ -z "${POSTGRES_URL:-}" ]]; then
+  if [[ "$DATABASE_TYPE" == postgres && -z "${POSTGRES_URL:-}" ]]; then
     require_env POSTGRES_USER
     require_env POSTGRES_PASSWORD
   fi
@@ -165,6 +166,8 @@ data:
   ORACLE_PORT: "${ORACLE_PORT:-1521}"
   ORACLE_SERVICE_NAME: "${ORACLE_SERVICE_NAME:-XEPDB1}"
   ORACLE_SCHEMA: "${ORACLE_SCHEMA:-ENTERPRISEGLUE}"
+  ORACLE_NETWORK_ENCRYPTION: "${ORACLE_NETWORK_ENCRYPTION:-default}"
+  ORACLE_NET_CONFIG_DIR: "${ORACLE_NET_CONFIG_DIR:-}"
 
   GIT_REPOS_PATH: "/app/data/repos"
   GIT_DEFAULT_BRANCH: "${GIT_DEFAULT_BRANCH:-main}"
@@ -216,6 +219,45 @@ prepare_config_bundle() {
     error "EG_CONFIG_EXPECTED_SHA256 does not match EG_CONFIG_BUNDLE_FILE"
   fi
   CONFIG_BUNDLE_CONTAINER_PATH="/etc/enterpriseglue/config/bundle.json"
+}
+
+
+prepare_oracle_native_encryption() {
+  case "${ORACLE_NETWORK_ENCRYPTION:-default}" in
+    default)
+      [[ -z "${ORACLE_NET_CONFIG_DIR:-}" ]] || error "ORACLE_NET_CONFIG_DIR requires the native encryption profile"
+      return ;;
+    native-aes256-required) ;;
+    *) error "Unsupported ORACLE_NETWORK_ENCRYPTION value" ;;
+  esac
+  [[ "$DATABASE_TYPE" == oracle ]] || error "Oracle NNE requires DATABASE_TYPE=oracle"
+  local source_directory="${EG_ORACLE_NET_CONFIG_HOST_DIR:-$ROOT_DIR/infra/docker/oracle/client}"
+  node --input-type=module - "$ROOT_DIR/packages/shared/src/db/oracle-network-encryption.ts" "$source_directory" <<'NODE'
+const { validateOracleNetworkConfiguration } = await import(process.argv[2]);
+validateOracleNetworkConfiguration({ databaseType: 'oracle', oracleNetworkEncryption: 'native-aes256-required', oracleNetConfigDir: process.argv[3] });
+NODE
+  ORACLE_NET_CONFIG_DIR=/etc/enterpriseglue/oracle
+  ORACLE_KUSTOMIZE_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/eg-oracle-kustomize.XXXXXX")"
+  trap 'rm -rf "$ORACLE_KUSTOMIZE_TEMP_DIR"' EXIT
+  cp "$source_directory/sqlnet.ora" "$ORACLE_KUSTOMIZE_TEMP_DIR/sqlnet.ora"
+  local overlay_reference
+  overlay_reference="$(node -e 'const fs=require("node:fs");process.stdout.write(require("node:path").relative(fs.realpathSync(process.argv[1]), fs.realpathSync(process.argv[2])))' "$ORACLE_KUSTOMIZE_TEMP_DIR" "$OPENSHIFT_KUSTOMIZE_DIR")"
+  mkdir "$ORACLE_KUSTOMIZE_TEMP_DIR/oracle-nne"
+  cp "$ROOT_DIR/infra/kubernetes/openshift/kustomize/components/oracle-nne/"*.yaml "$ORACLE_KUSTOMIZE_TEMP_DIR/oracle-nne/"
+  mv "$ORACLE_KUSTOMIZE_TEMP_DIR/sqlnet.ora" "$ORACLE_KUSTOMIZE_TEMP_DIR/oracle-nne/sqlnet.ora"
+  cat > "$ORACLE_KUSTOMIZE_TEMP_DIR/kustomization.yaml" <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - $overlay_reference
+components:
+  - oracle-nne
+EOF
+  if [[ -f "$source_directory/tnsnames.ora" ]]; then
+    cp "$source_directory/tnsnames.ora" "$ORACLE_KUSTOMIZE_TEMP_DIR/oracle-nne/tnsnames.ora"
+    printf '      - tnsnames.ora\n' >> "$ORACLE_KUSTOMIZE_TEMP_DIR/oracle-nne/kustomization.yaml"
+  fi
+  OPENSHIFT_KUSTOMIZE_DIR="$ORACLE_KUSTOMIZE_TEMP_DIR"
 }
 
 validate_manifests() {
@@ -324,6 +366,7 @@ main() {
   oc project "$OPENSHIFT_NAMESPACE" >/dev/null
 
   print_arch_summary
+  prepare_oracle_native_encryption
   prepare_config_bundle
   validate_manifests
   validate_secret_source

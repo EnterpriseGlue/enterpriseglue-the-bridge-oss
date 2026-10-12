@@ -66,6 +66,10 @@ workers:
     targetCPUUtilizationPercentage: 70
 
 database:
+  # Optional AES256 NNE client profile; requires an Oracle-capable backend image.
+  oracleNativeEncryption:
+    enabled: false
+    configMapName: ""
   # Optional chart-validated runtime profile. Leave both values empty to retain
   # the historical ConfigMap-driven contract. The signed bridge is activated
   # only by the exact postgres/pooled pair; managed cohort admission also uses

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enterpriseglue-backend
+spec:
+  template:
+    spec:
+      containers:
+        - name: backend
+          env:
+            - name: ORACLE_NETWORK_ENCRYPTION
+              value: native-aes256-required
+            - name: ORACLE_NET_CONFIG_DIR
+              value: /etc/enterpriseglue/oracle
+          volumeMounts:
+            - name: oracle-net
+              mountPath: /etc/enterpriseglue/oracle
+              readOnly: true
+      volumes:
+        - name: oracle-net
+          configMap:
+            name: enterpriseglue-oracle-net

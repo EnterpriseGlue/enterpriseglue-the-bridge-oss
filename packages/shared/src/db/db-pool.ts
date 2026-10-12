@@ -11,6 +11,7 @@
 import pg from 'pg';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getAdapter } from './adapters/index.js';
+import { initializeOracleNetworkEncryption, oracleApplicationConnectString } from './oracle-network-encryption.js';
 
 const { Pool } = pg;
 
@@ -105,6 +106,7 @@ class PostgresConnectionPool implements ConnectionPool {
 class OracleConnectionPool implements ConnectionPool {
   private pool: any = null;
   private oracledb: any = null;
+  private initializing: Promise<void> | undefined;
 
   constructor() {
     // Oracle connection will be initialized lazily when first used
@@ -112,9 +114,12 @@ class OracleConnectionPool implements ConnectionPool {
   }
 
   private async ensurePool(): Promise<void> {
-    if (this.pool) {
-      return;
-    }
+    if (this.pool) return;
+    this.initializing ??= this.initializePool().finally(() => { this.initializing = undefined; });
+    await this.initializing;
+  }
+
+  private async initializePool(): Promise<void> {
 
     let oracledbModule: any;
     try {
@@ -122,17 +127,15 @@ class OracleConnectionPool implements ConnectionPool {
     } catch {
       throw new Error(
         'Oracle driver (oracledb) not installed. Install with: pnpm add oracledb ' +
-          'and configure Oracle Instant Client: https://oracle.github.io/node-oracledb/INSTALL.html'
+          '(Oracle Instant Client is needed only for the native encryption profile).'
       );
     }
 
     this.oracledb = oracledbModule?.default ?? oracledbModule;
 
-    const connectString = config.oracleConnectionString
-      || (config.oracleServiceName
-        ? `${config.oracleHost}:${config.oraclePort || 1521}/${config.oracleServiceName}`
-        : `${config.oracleHost}:${config.oraclePort || 1521}:${config.oracleSid}`);
+    const connectString = oracleApplicationConnectString(config);
 
+    initializeOracleNetworkEncryption(this.oracledb, config, connectString);
     this.pool = await this.oracledb.createPool({
       user: config.oracleUser,
       password: config.oraclePassword,
@@ -160,8 +163,10 @@ class OracleConnectionPool implements ConnectionPool {
   }
 
   async close(): Promise<void> {
+    await this.initializing?.catch(() => undefined);
     if (this.pool) {
       await this.pool.close();
+      this.pool = null;
       console.log('✅ Oracle connection pool closed');
     }
   }

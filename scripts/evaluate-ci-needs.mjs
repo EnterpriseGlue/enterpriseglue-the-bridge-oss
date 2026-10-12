@@ -18,6 +18,7 @@ const selectedJobMap = new Map([
   ['run_dev_startup', ['dev-compose-cold-start']],
   ['run_frontend_tests', ['frontend-tests']],
   ['run_tests', ['test']],
+  ['run_oracle_nne', ['oracle-native-encryption']],
   ['run_ci_images', ['build-ci-images']],
   ['run_smoke', ['smoke-postgres-image-deploy']],
   ['run_smoke_exposed', ['smoke-postgres-image-deploy-exposed']],

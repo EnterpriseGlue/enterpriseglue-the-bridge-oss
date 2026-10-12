@@ -1352,6 +1352,12 @@ jobs:
           retention-days: 30
 
   # ---------------------------------------------------------------------------
+  oracle-native-encryption:
+    name: Oracle AES256 NNE and SSO acceptance
+    needs: detect
+    if: needs.detect.outputs.run_oracle_nne == 'true'
+    uses: ./.github/workflows/oracle-native-encryption-reusable.yml
+
   # Single aggregate gate: required check target for branch protection.
   # Always runs. Succeeds if all work jobs succeeded or were skipped.
   # Fails if any work job failed or was cancelled.
@@ -1359,6 +1365,7 @@ jobs:
 
   ci-complete:
     needs:
+      - oracle-native-encryption
       - release-notes-preflight
       - detect
       - release-authorization-canary

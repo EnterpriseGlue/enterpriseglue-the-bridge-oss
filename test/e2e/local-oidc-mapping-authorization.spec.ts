@@ -165,14 +165,14 @@ async function createMappingThroughUi(page: Page, providerKey: string, groupKey:
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
   const createGroupChoice = page.getByRole('radio', { name: 'Create a new group', exact: true });
-  await createGroupChoice.focus();
-  await page.keyboard.press('Space');
+  // The step's heading focus effect can race a separately focused keyboard
+  // action. Click the associated visible label and still assert radio state.
+  await page.getByText('Create a new group', { exact: true }).click();
   await expect(createGroupChoice).toBeChecked();
   await page.getByLabel('New EnterpriseGlue group name').fill(groupName);
   await page.getByLabel('New group key').fill(groupKey);
   const scopedEngineAccessChoice = page.getByRole('radio', { name: 'Also grant engine access', exact: true });
-  await scopedEngineAccessChoice.focus();
-  await page.keyboard.press('Space');
+  await page.getByText('Also grant engine access', { exact: true }).click();
   await expect(scopedEngineAccessChoice).toBeChecked();
   await page.getByRole('combobox', { name: 'Engine role' }).click();
   await page.getByRole('option', { name: /engine operator/i }).click();
@@ -235,7 +235,7 @@ async function signInWithProvider(context: BrowserContext, providerKey: string):
   // The callback first lands at `/` and the client router then resolves the
   // signed-in tenant route. Wait for the actual dashboard before asserting the
   // canonical URL so a fast callback cannot be mistaken for a ready app shell.
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE === 'oracle-nne' ? 30_000 : 20_000 });
   await expect(page).toHaveURL(new RegExp(`${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?:t/default/?)?(?:[?#].*)?$`));
   return page;
 }
@@ -243,7 +243,7 @@ async function signInWithProvider(context: BrowserContext, providerKey: string):
 test.describe('Local OIDC mapping authorization rehearsal', () => {
   // This exercises browser administration, a real Keycloak redirect, and
   // fresh engine authorization decisions against Docker services.
-  test.setTimeout(120_000);
+  test.setTimeout(process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE === 'oracle-nne' ? 300_000 : 120_000);
   test.skip(!enabled, 'Enable the configured OIDC rehearsal and provide its EnterpriseGlue administrator credentials.');
 
   test(`creates a ${profile} provider and independently adds, revokes, and restores scoped rights through supported administration flows @local-oidc-live @identity-authorization-live`, async ({ browser }) => {

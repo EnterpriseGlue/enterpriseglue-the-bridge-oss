@@ -1,0 +1,56 @@
+name: Oracle Native Encryption Acceptance
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: ''
+      retain_image:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    name: Required AES256 and real Oracle SSO (${{ matrix.architecture }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { architecture: amd64, runner: ubuntu-24.04 }
+          - { architecture: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with: { version: 11.0.8 }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:oracle:nne:unit
+      - run: node --test scripts/oracle-native-encryption-contract.test.mjs
+      - name: Verify existing Oracle 21c Thin-mode database behavior
+        if: matrix.architecture == 'amd64'
+        run: node scripts/run-engine-tenancy-database-matrix.mjs --database=oracle
+      - name: Qualify compiled Oracle image and SSO
+        env:
+          IDENTITY_PROTOCOL_REHEARSAL_SAVE_BACKEND_IMAGE: ${{ inputs.retain_image }}
+        run: pnpm run test:oracle:nne:sso
+      - name: Qualify encryption negotiation and both pool paths
+        run: |
+          image=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('.artifacts/oracle-nne-sso/qualified-image.json'));process.stdout.write(j.Id)")
+          ORACLE_NNE_TEST_IMAGE="$image" node scripts/run-oracle-native-encryption.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: oracle-nne-acceptance-${{ matrix.architecture }}-${{ github.run_id }}
+          path: |
+            .artifacts/oracle-nne-sso
+            .artifacts/oracle-nne
+          if-no-files-found: error
+          retention-days: 7

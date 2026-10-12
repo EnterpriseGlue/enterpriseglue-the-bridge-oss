@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import './load-environment.js';
+import { validateOracleNetworkConfiguration } from '../db/oracle-network-encryption.js';
 
 const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
 
@@ -27,6 +28,8 @@ const databaseConfigSchema = z.object({
   oracleServiceName: z.string().optional(),
   oracleSid: z.string().optional(),
   oracleSchema: schemaName.default('MAIN'),
+  oracleNetworkEncryption: z.enum(['default', 'native-aes256-required']).default('default'),
+  oracleNetConfigDir: z.string().optional(),
 
   mssqlHost: z.string().optional(),
   mssqlPort: z.number().int().positive().default(1433),
@@ -65,6 +68,7 @@ const requireConfig = (name: string, value: unknown, databaseType: string): void
 };
 
 function validateDatabaseConfig(config: DatabaseConfig): void {
+  validateOracleNetworkConfiguration(config);
   switch (config.databaseType) {
     case 'postgres': {
       // POSTGRES_URL is the complete connection alternative. Without it, all
@@ -156,6 +160,8 @@ export function loadDatabaseConfig(environment: NodeJS.ProcessEnv = process.env)
     oracleServiceName: environment.ORACLE_SERVICE_NAME,
     oracleSid: environment.ORACLE_SID,
     oracleSchema: optional(environment.ORACLE_SCHEMA),
+    oracleNetworkEncryption: optional(environment.ORACLE_NETWORK_ENCRYPTION),
+    oracleNetConfigDir: optional(environment.ORACLE_NET_CONFIG_DIR),
 
     mssqlHost: environment.MSSQL_HOST,
     mssqlPort: environment.MSSQL_PORT ? Number(environment.MSSQL_PORT) : undefined,

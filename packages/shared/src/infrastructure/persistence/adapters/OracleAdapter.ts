@@ -2,12 +2,14 @@ import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'node:module';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import {
   isPluginLargeTextColumn,
   pluginKeyColumnLength,
 } from '../pluginColumnPolicy.js';
 import { databaseConfig as config } from '@enterpriseglue/shared/config/database.js';
+import { oracleApplicationConnectString, oracleNetworkEncryptionOptions } from '../../../db/oracle-network-encryption.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
@@ -183,6 +185,13 @@ export class OracleAdapter implements DatabaseAdapter {
           continue;
         }
         column.options.type = 'varchar2';
+        if (['RbacRoleAssignment', 'ConfigRoleAssignmentOverride'].includes(targetName)
+          && column.propertyName === 'assignmentKey') {
+          // A canonical key combines eight identities; the 191-byte limit for
+          // individual indexed identifiers cannot hold a complete assignment.
+          column.options.length = 4000;
+          continue;
+        }
         if (column.options.length == null) {
           column.options.length = isPrimaryOrIndexedOrUnique ? 191 : 4000;
         }
@@ -224,12 +233,12 @@ export class OracleAdapter implements DatabaseAdapter {
 
   private checkDriverAvailability(): void {
     try {
-      require.resolve('oracledb');
+      createRequire(import.meta.url).resolve('oracledb');
     } catch {
       console.warn(
         '⚠️  Oracle driver (oracledb) not installed. ' +
         'Install with: pnpm add oracledb\n' +
-        '   Also requires Oracle Instant Client. See: https://oracle.github.io/node-oracledb/INSTALL.html'
+        '   Oracle Instant Client is required only for the optional native encryption profile.'
       );
     }
   }
@@ -246,13 +255,12 @@ export class OracleAdapter implements DatabaseAdapter {
     //       (ADDRESS=(PROTOCOL=TCP)(HOST=host1)(PORT=1521))
     //       (ADDRESS=(PROTOCOL=TCP)(HOST=host2)(PORT=1521)))
     //     (CONNECT_DATA=(SERVICE_NAME=myservice)))
-    const connectString = config.oracleConnectionString
-      || (config.oracleServiceName
-        ? `${config.oracleHost}:${config.oraclePort}/${config.oracleServiceName}`
-        : `${config.oracleHost}:${config.oraclePort}:${config.oracleSid}`);
+    const connectString = oracleApplicationConnectString(config);
+    const thickMode = oracleNetworkEncryptionOptions(config, connectString);
 
     return {
       type: 'oracle',
+      ...(thickMode ? { thickMode } : {}),
       username: config.oracleUser,
       password: config.oraclePassword,
       schema: this.schema,
@@ -260,7 +268,8 @@ export class OracleAdapter implements DatabaseAdapter {
       logging: this.logging,
       entities,
       migrations: [
-        migrationsPath + (path.isAbsolute(migrationsPath) ? '/[0-9]*.js' : '/[0-9]*.ts')
+        migrationsPath + (path.isAbsolute(migrationsPath) ? '/[0-9]*.js' : '/[0-9]*.ts'),
+        migrationsPath + (path.isAbsolute(migrationsPath) ? '/oracle/[0-9]*.js' : '/oracle/[0-9]*.ts'),
       ],
       extra: {
         connectString,

@@ -1,0 +1,32 @@
+diff --git a/browser/query-builder/QueryBuilder.js b/browser/query-builder/QueryBuilder.js
+index e0cdc0d954d0037540467fe232d45b50c5a4e927..d07113040e9a39e1eff71a2895b90966307b7cce 100644
+--- a/browser/query-builder/QueryBuilder.js
++++ b/browser/query-builder/QueryBuilder.js
+@@ -642,6 +642,11 @@ export class QueryBuilder {
+                             return this.createParameter({
+                                 type: driver.columnTypeToNativeParameter(column.type),
+                                 dir: driver.oracle.BIND_OUT,
++                                // Oracle defaults string OUT binds to 200 bytes. Size
++                                // RETURNING buffers for the declared column and UTF-8.
++                                ...(driver.columnTypeToNativeParameter(column.type) === driver.oracle.DB_TYPE_VARCHAR
++                                    ? { maxSize: Math.min(32767, Math.max(200, Number(column.length || 4000) * 4)) }
++                                    : {}),
+                             });
+                         })
+                             .join(", ");
+diff --git a/query-builder/QueryBuilder.js b/query-builder/QueryBuilder.js
+index a40865e498adcd4a5594c932a6817e05671df13a..2b1d95940b6be06d52fdfa28c3e30da22921571e 100644
+--- a/query-builder/QueryBuilder.js
++++ b/query-builder/QueryBuilder.js
+@@ -645,6 +645,11 @@ class QueryBuilder {
+                             return this.createParameter({
+                                 type: driver.columnTypeToNativeParameter(column.type),
+                                 dir: driver.oracle.BIND_OUT,
++                                // Oracle defaults string OUT binds to 200 bytes. Size
++                                // RETURNING buffers for the declared column and UTF-8.
++                                ...(driver.columnTypeToNativeParameter(column.type) === driver.oracle.DB_TYPE_VARCHAR
++                                    ? { maxSize: Math.min(32767, Math.max(200, Number(column.length || 4000) * 4)) }
++                                    : {}),
+                             });
+                         })
+                             .join(", ");

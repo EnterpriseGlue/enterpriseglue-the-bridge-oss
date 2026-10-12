@@ -579,3 +579,34 @@ test('owned screenshot evidence selects browser acceptance while ordinary docs d
   }
   assert.equal(classifyChangedFiles(['docs/reference/observability-logs.md']).authorization, false);
 });
+
+test('Oracle native encryption selects its required acceptance without broad unknown routing', () => {
+  for (const path of ['packages/shared/src/db/oracle-network-encryption.ts',
+    'backend/Dockerfile.oracle-dev', 'infra/docker/oracle/client/sqlnet.ora',
+    'scripts/run-oracle-native-encryption.mjs', 'scripts/scan-oracle-image.sh',
+    'scripts/run-local-oidc-rehearsal-test.sh', 'scripts/run-local-saml-rehearsal-test.sh',
+    'scripts/run-local-ldap-rehearsal-test.sh',
+    'test/e2e/playwright.config.ts', '.github/workflows/oracle-image-release.yml']) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.run_oracle_nne, true, path);
+    assert.equal(result.unknown_high_risk, false, path);
+  }
+  for (const path of ['packages/shared/src/db/migrations/oracle/1700000000134-expand-oracle-assignment-keys.ts',
+    'packages/shared/src/db/data-source.ts', 'packages/shared/src/db/run-migrations.ts',
+    'packages/shared/src/db/adapters/index.ts',
+    'packages/shared/src/infrastructure/persistence/adapters/index.ts',
+    'packages/shared/src/infrastructure/persistence/adapters/QueryHelpers.ts',
+    'packages/shared/src/db/migrations/1700000000133-add-cloud-email-passkeys.ts',
+    'packages/shared/src/infrastructure/persistence/entities/IdentityProvider.ts',
+    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'backend/package.json',
+    'packages/shared/package.json', 'packages/backend-host/package.json',
+    'infra/kubernetes/helm/enterpriseglue-host/templates/database-jobs.yaml',
+    'infra/kubernetes/openshift/kustomize/components/oracle-nne/backend-oracle-nne.yaml',
+    'scripts/deploy-openshift.sh', 'backend/oracle-runtime-notices.txt']) {
+    assert.equal(classifyChangedFiles([path]).run_oracle_nne, true, path);
+  }
+  assert.equal(classifyChangedFiles(['docs/reference/oracle-network-security.md']).run_oracle_nne, false);
+  assert.equal(classifyChangedFiles(['.release-notes/optional-oracle-native-encryption.json']).run_oracle_nne, false);
+  assert.equal(classifyChangedFiles(['frontend/src/styles/theme.scss']).run_oracle_nne, false);
+  assert.equal(classifyChangedFiles(['new-unknown-path/file.ts']).run_oracle_nne, true);
+});

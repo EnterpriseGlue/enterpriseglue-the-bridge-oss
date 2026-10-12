@@ -20,16 +20,19 @@ installPostgresContextBoundary(AppDataSource);
 export { adapter };
 
 let initialized = false;
+let initializing: Promise<DataSource> | undefined;
 
 export async function getDataSource(): Promise<DataSource> {
-  if (!initialized) {
+  if (initialized) return AppDataSource;
+  initializing ??= (async () => {
     await AppDataSource.initialize();
     try { assertPostgresContextBoundary(AppDataSource); }
     catch (error) { await AppDataSource.destroy(); throw error; }
     initialized = true;
     logger.info('✅ TypeORM DataSource initialized');
-  }
-  return AppDataSource;
+    return AppDataSource;
+  })().finally(() => { initializing = undefined; });
+  return initializing;
 }
 
 /**
@@ -43,6 +46,7 @@ export async function getRepository<T extends ObjectLiteral>(entity: EntityTarge
 }
 
 export async function closeDataSource(): Promise<void> {
+  await initializing?.catch(() => undefined);
   if (initialized && AppDataSource.isInitialized) {
     await AppDataSource.destroy();
     initialized = false;

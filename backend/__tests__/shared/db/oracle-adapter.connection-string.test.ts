@@ -1,8 +1,14 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 const mockConfig = vi.hoisted(() => ({
   nodeEnv: 'test' as const,
+  databaseType: 'oracle',
+  oracleNetworkEncryption: 'default' as 'default' | 'native-aes256-required',
+  oracleNetConfigDir: undefined as string | undefined,
   oracleSchema: 'ENTERPRISEGLUE',
   oracleConnectionString: undefined as string | undefined,
   oracleHost: undefined as string | undefined,
@@ -29,6 +35,8 @@ beforeEach(() => {
   mockConfig.oraclePort = 1521;
   mockConfig.oracleServiceName = undefined;
   mockConfig.oracleSid = undefined;
+  mockConfig.oracleNetworkEncryption = 'default';
+  mockConfig.oracleNetConfigDir = undefined;
 
   const metadata = getMetadataArgsStorage();
   columnSnapshots = metadata.columns.map((c) => ({
@@ -50,6 +58,20 @@ afterEach(() => {
 });
 
 describe('OracleAdapter.getDataSourceOptions — ORACLE_CONNECTION_STRING (multi-host)', () => {
+  it('opts in to one validated native profile without overriding pool sizing', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'eg-oracle-adapter-'));
+    try {
+      writeFileSync(path.join(directory, 'sqlnet.ora'), 'SQLNET.ENCRYPTION_CLIENT=REQUIRED\nSQLNET.ENCRYPTION_TYPES_CLIENT=(AES256)\n');
+      mockConfig.oracleConnectionString = 'db:1521/app';
+      mockConfig.oracleNetworkEncryption = 'native-aes256-required';
+      mockConfig.oracleNetConfigDir = directory;
+      const options = new OracleAdapter().getDataSourceOptions() as any;
+      expect(options.poolSize).toBeUndefined();
+      expect(options.thickMode.configDir).not.toBe(directory);
+      expect(readFileSync(path.join(options.thickMode.configDir, 'sqlnet.ora'), 'utf8')).toContain('SQLNET.ENCRYPTION_CLIENT=REQUIRED');
+      expect(options.migrations.some((entry: string) => entry.includes('/oracle/'))).toBe(true);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
   it('uses ORACLE_CONNECTION_STRING directly as connectString', () => {
     mockConfig.oracleConnectionString = 'host1.example.com:1521,host2.example.com:1521/MYSERVICE';
 
@@ -57,6 +79,8 @@ describe('OracleAdapter.getDataSourceOptions — ORACLE_CONNECTION_STRING (multi
 
     expect(opts.extra.connectString).toBe('host1.example.com:1521,host2.example.com:1521/MYSERVICE');
     expect(opts.type).toBe('oracle');
+    expect(opts.thickMode).toBeUndefined();
+    expect(opts.poolSize).toBeUndefined();
   });
 
   it('uses TNS descriptor as connectString when provided', () => {

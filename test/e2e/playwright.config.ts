@@ -18,7 +18,9 @@ export default defineConfig({
   globalTeardown: './setup/global-teardown.ts',
   timeout: 60_000,
   expect: {
-    timeout: 10_000,
+    // Native Oracle and the IdP share a small disposable runner. Permission
+    // snapshots can exceed ten seconds while both services are warming up.
+    timeout: process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE === 'oracle-nne' ? 30_000 : 10_000,
   },
   use: {
     baseURL,

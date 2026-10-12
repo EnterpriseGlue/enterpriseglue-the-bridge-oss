@@ -41,6 +41,7 @@ spec:
             - configMapRef: { name: {{ .Values.database.configMapName }} }
             - secretRef: { name: {{ .Values.database.applicationSecretName }} }
           env:
+            {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
             - { name: EG_RUNTIME_ROLE, value: "worker" }
             {{- if .Values.database.profile.databaseType }}
@@ -64,6 +65,7 @@ spec:
             initialDelaySeconds: 20
             periodSeconds: 30
           volumeMounts:
+            {{- include "enterpriseglue-host.oracleNativeMount" . | nindent 12 }}
             - { name: tmp, mountPath: /tmp }
             {{- if .Values.pluginAssets.enabled }}
             - name: plugin-assets
@@ -71,6 +73,7 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
+        {{- include "enterpriseglue-host.oracleNativeVolume" . | nindent 8 }}
         - { name: tmp, emptyDir: {} }
         {{- if .Values.pluginAssets.enabled }}
         - name: plugin-assets

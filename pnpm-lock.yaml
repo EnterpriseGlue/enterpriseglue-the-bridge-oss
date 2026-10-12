@@ -30,6 +30,7 @@ overrides:
 
 patchedDependencies:
   tedious@20.0.0: a3525998cbc92f3644ed90670fd54ebb8372d00cb804f3fcec1dc1083afb9b14
+  typeorm@0.3.31: 6fd97564822ac88a2a7b71c09f138a3fe264b0169af85eb5bf7fee473dcfbd4b
 
 importers:
 
@@ -185,7 +186,7 @@ importers:
         version: 5.0.1(express@5.2.1)
       typeorm:
         specifier: ^0.3.31
-        version: 0.3.31(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
+        version: 0.3.31(patch_hash=6fd97564822ac88a2a7b71c09f138a3fe264b0169af85eb5bf7fee473dcfbd4b)(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
       undici:
         specifier: ^7.29.1
         version: 7.30.0
@@ -511,7 +512,7 @@ importers:
         version: 5.0.1(express@5.2.1)
       typeorm:
         specifier: ^0.3.31
-        version: 0.3.31(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
+        version: 0.3.31(patch_hash=6fd97564822ac88a2a7b71c09f138a3fe264b0169af85eb5bf7fee473dcfbd4b)(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -950,7 +951,7 @@ importers:
         version: 6.22.0
       typeorm:
         specifier: ^0.3.31
-        version: 0.3.31(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
+        version: 0.3.31(patch_hash=6fd97564822ac88a2a7b71c09f138a3fe264b0169af85eb5bf7fee473dcfbd4b)(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2)
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -11587,7 +11588,7 @@ snapshots:
       tunnel: 0.0.6
       underscore: 1.13.8
 
-  typeorm@0.3.31(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2):
+  typeorm@0.3.31(patch_hash=6fd97564822ac88a2a7b71c09f138a3fe264b0169af85eb5bf7fee473dcfbd4b)(@google-cloud/spanner@8.11.0)(babel-plugin-macros@3.1.0)(mssql@12.7.0)(mysql2@3.23.4(@types/node@25.9.5))(oracledb@6.10.0)(pg@8.23.0)(sql.js@1.14.2):
     dependencies:
       '@sqltools/formatter': 1.2.5
       ansis: 4.3.1
