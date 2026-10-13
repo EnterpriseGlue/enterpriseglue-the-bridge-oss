@@ -37,7 +37,7 @@
     "migrations": [],
     "rollbackSupported": true,
     "notes": [
-      "No database or application-runtime changes."
+      "The publication-control changes introduce no database migration or application-runtime change. Other capabilities in this release retain their own migration requirements."
     ]
   },
   "security": [
@@ -57,13 +57,13 @@
     "A content change requires a new generated document and qualified candidate; only reviewed publication-only repairs may reuse frozen artifacts."
   ],
   "rollback": [
-    "Revert the reviewed publication tooling and stop new recovery dispatches. Retain signed records and existing releases; never delete or repoint published tags. No package or database rollback is required."
+    "To roll back publication-control changes, revert the reviewed tooling and stop new recovery dispatches. Retain signed records and existing releases; never delete or repoint published tags. This tooling rollback requires no package or database rollback; follow the separate rollback guidance for other capabilities in the release."
   ],
   "validation": [
     "Node 24.19.0 / pnpm 11.0.8: all 71 publication-record regressions passed, including actual Bash guards accepting decorated upstream names and rejecting wrong paths, repositories, fork heads, branches, events, sources and recovery tags. Explicit rejection paths also passed on the local Bash runtime.",
     "The integrated local gate passed 181 CI contracts and the self-validating aggregate, 95 classifier/routing tests, 169 release-note/tooling tests, seven documentation-boundary tests, package-version discipline, both publisher policy checks, Actionlint and the combined diff check.",
-    "The supplemental non-publishing authorization canary passed all 12 scenarios, including the actual verifier's rejection of an unstaged fixture candidate; it performed no publication or registry writes. Hosted exact-head canary and protected CI remain independent pre-merge acceptance.",
-    "The maintained immutable webhook schema requires the selected path and repository fields. No application source, dependencies, database, package/chart payload, scanner policy or frozen release document changed; existing exact-candidate runtime evidence is not a substitute for qualification of the edited controls."
+    "The supplemental non-publishing authorization canary passed all 12 scenarios, including the actual verifier's rejection of an unstaged fixture candidate; it performed no publication or registry writes. Hosted protected CI, source-level non-publishing release readiness and the authorization canary also passed before PR #577 merged.",
+    "The maintained immutable webhook schema requires the selected path and repository fields. The publication-control changes preserve application source, dependencies, database, package/chart payloads and scanner policy. Exact release-artifact and current security acceptance are required independently for the frozen release candidate."
   ],
   "packages": []
 }

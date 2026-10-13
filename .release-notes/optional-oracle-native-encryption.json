@@ -53,12 +53,13 @@
     "Client Oracle release-update and real identity-provider acceptance remain separate qualification gates."
   ],
   "rollback": [
+    "Application rollback retains the widened Oracle assignment-key columns; automatic schema shrinking is unsupported.",
     "Retain a previously qualified encrypted composition or stop service when deployment policy requires NNE; do not recover by disabling encryption."
   ],
   "validation": [
     "60 focused Oracle contracts and 69 affected routing/native-SBOM/publication-authority/browser-preflight contracts passed; 183 CI contracts, 55 portability units, Helm positive/negative profiles and OpenShift rendering passed.",
-    "The initial compiled arm64 Oracle candidate and frontend passed pinned all-severity security scans. All 15 Oracle Free negotiation/upgrade scenarios and 9 Oracle-backed OIDC, Entra-compatible OIDC, signed SAML and LDAP browser journeys passed, with AES256 observed before and after SSO and zero unencrypted application sessions. Exact final-source dual-architecture acceptance remains a protected CI requirement after shipping fixes to bounded file reads, Linux scanner report ownership and ARM64 browser executable discovery.",
-    "PostgreSQL clean installation, populated upgrades, retry, service behavior and rollback passed on the local checkpoint; 5 database-only migration configuration checks passed. Oracle 21c XE fixture initialization stalled under local ARM emulation; native amd64 regression and dual-architecture acceptance remain CI requirements."
+    "Final-source compiled AMD64 and ARM64 Oracle candidates passed pinned all-severity security scans, all 15 Oracle Free negotiation/upgrade scenarios and 9 Oracle-backed OIDC, Entra-compatible OIDC, signed SAML and LDAP browser journeys per architecture. AES256 was observed before and after SSO, with four application sessions and zero unencrypted sessions after sign-in. These protocol-emulator journeys do not establish acceptance of a customer's real identity provider or exact Oracle release update.",
+    "Native AMD64 Oracle 21c Thin-mode regression, the five-adapter migration/runtime qualification matrix, protected PR CI and merge-queue CI passed for PR #579. PostgreSQL clean installation, populated upgrades, retry, service behavior and rollback also passed locally. Exact release-artifact and current security acceptance are required independently for the frozen release candidate."
   ],
   "packages": [
     {
