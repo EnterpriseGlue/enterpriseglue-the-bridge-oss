@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.31.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.1...v0.31.0) (2026-10-13)
+
+### Changes
+
+- **oracle:** Add an optional required AES256 Oracle native network encryption profile across application pools, Oracle-capable images, deployment configuration, and qualification.
+- **release-authorization:** Complete frozen release publication with source-bound image-workflow handoffs, authenticated package observations and retained security evidence without scanner caches.
+
+Full upgrade, compatibility and verification details: [v0.31.0 release notes](docs/releases/v0.31.0.md).
+
 ## [0.30.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.0...v0.30.1) (2026-10-11)
 
 ### Changes
