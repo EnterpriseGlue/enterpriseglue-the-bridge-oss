@@ -179,6 +179,32 @@ Create a new patch release only when shipped content must change. Authentication
 failures, registry timeouts, runner loss, signature retries, and incomplete
 alias promotion are recovery events for the existing release.
 
+## Optional Oracle image recovery
+
+`oracle-image-release.yml` publishes the optional Oracle backend only from an
+existing stable release source. Its pinned Cosign OCI 1.1 signing mode requires
+`COSIGN_EXPERIMENTAL=1` in the publisher environment.
+
+When publication fails before the stable Oracle image tag exists, supply
+`qualification_run_id` to reuse the original run's retained AMD64 and ARM64
+images. The run must be a completed first-party manual publication on `main`
+at the exact released source, with both native qualification jobs passing and
+both artifacts unexpired. Recovery skips rebuilding and requalifying images,
+checks the retained image IDs, architecture, host version and nonzero AES256
+session evidence, then refreshes security scans before signing and publishing.
+An existing stable image tag or an unknown registry response stops writes.
+This recovery does not replace the application release, signed core candidate,
+packages, charts or release notes.
+The retained publication receipt records the released source, protected
+controller revision, original qualification run and unchanged architecture
+image IDs separately.
+
+```bash
+gh workflow run oracle-image-release.yml --ref main \
+  -f source_ref=<frozen-release-SHA> -f release_tag=vX.Y.Z \
+  -f qualification_run_id=<completed-original-publication-run>
+```
+
 ## Backward compatibility
 
 The application runtime, configuration, APIs, database schema, image names,
