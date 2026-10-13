@@ -6,21 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.31.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.1...v0.31.0) (2026-10-13)
 
+### Changes
 
-### Features
+- **oracle:** Add an optional required AES256 Oracle native network encryption profile across application pools, Oracle-capable images, deployment configuration, and qualification.
+- **release-authorization:** Complete frozen release publication with source-bound image-workflow handoffs, authenticated package observations and retained security evidence without scanner caches.
 
-* **oracle:** add optional required AES256 native network encryption ([f524bc7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f524bc7ee25defca9ed36bfea6f2ddd4f8b544c5))
-* **oracle:** add optional required AES256 native network encryption ([e6ef51a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e6ef51a85fa094698908638c55ad533ad6371174))
-* **oracle:** finalize release qualification and rollback documentation ([d325f60](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d325f6031aa1df1675f6081bf927ab9a7f5098bf))
-* **oracle:** finalize release qualification and rollback documentation ([fda3c6f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fda3c6fb1028530c3c8c92b6b5ab9c66a49bf69f))
-
-
-### Bug Fixes
-
-* **oracle:** close configuration races and verify publication authority ([a6dbc10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a6dbc10fd7154108f2a4777a9c335114a1357e90))
-* **oracle:** make native acceptance fixtures portable on Linux ([c14f4d4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c14f4d4512e4ec6be2cb377ac7188c58860b64fb))
-* **release:** repair source-bound publication handoff and evidence retention ([e595e20](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e595e2098d8572ffab07bbe84016a4249d517977))
-* **release:** repair source-bound publication handoff and evidence retention ([3e74554](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3e74554ab2ed937666fdd66bb1ab156a08bf5619))
+Full upgrade, compatibility and verification details: [v0.31.0 release notes](docs/releases/v0.31.0.md).
 
 ## [0.30.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.0...v0.30.1) (2026-10-11)
 
