@@ -201,6 +201,13 @@ test('Oracle stable-tag preflight rejects existing tags and unknown registry sta
   }
 });
 
+const publisherCosignCommands = workflow.split('\n').flatMap((line, index, lines) => {
+  if (!/^cosign (?:sign|attest)\b/.test(line.trim())) return [];
+  let command = line.trim();
+  while (command.endsWith('\\')) command = command.slice(0, -1) + lines[++index].trim();
+  return [command];
+});
+
 if (process.env.ORACLE_COSIGN_MODE_CANARY === 'true') {
   test('pinned Cosign accepts the publisher OCI mode only with its declared experimental environment', () => {
     const version = execFileSync('cosign', ['version', '--json'], { encoding: 'utf8' });
@@ -209,5 +216,43 @@ if (process.env.ORACLE_COSIGN_MODE_CANARY === 'true') {
     const args = ['sign', '--registry-referrers-mode=oci-1-1', '--help'];
     assert.throws(() => execFileSync('cosign', args, { env, stdio: 'pipe' }), /COSIGN_EXPERIMENTAL/);
     execFileSync('cosign', args, { env: { ...env, COSIGN_EXPERIMENTAL: '1' }, stdio: 'pipe' });
+  });
+
+  test('the exact pinned CLI accepts every Cosign invocation from the Oracle publisher', () => {
+    assert.equal(publisherCosignCommands.length, 3);
+    for (const command of publisherCosignCommands) {
+      execFileSync('bash', ['-c', `set -euo pipefail\n${command} --help`], {
+        env: { ...process.env, COSIGN_EXPERIMENTAL: '1', arch: 'amd64',
+          image: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend',
+          ref: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend@sha256:' + 'a'.repeat(64), digest: 'sha256:' + 'a'.repeat(64) },
+        stdio: 'pipe',
+      });
+    }
+  });
+}
+
+if (process.env.ORACLE_COSIGN_SCRATCH_SUBJECT) {
+  test('the publisher CycloneDX command signs and verifies an attestation on the scratch digest', () => {
+    const subject = process.env.ORACLE_COSIGN_SCRATCH_SUBJECT;
+    const identity = process.env.ORACLE_COSIGN_CERTIFICATE_IDENTITY;
+    assert.match(subject, /^ghcr\.io\/enterpriseglue\/enterpriseglue-release-canary-backend@sha256:[0-9a-f]{64}$/);
+    assert.match(identity, /^https:\/\/github\.com\/EnterpriseGlue\/enterpriseglue-the-bridge-oss\/\.github\/workflows\/release-canary\.yml@refs\/heads\/[A-Za-z0-9._/-]+$/);
+    const directory = mkdtempSync(path.join(tmpdir(), 'eg-oracle-attest-canary-'));
+    const predicate = path.join(directory, 'sbom.cdx.json');
+    writeFileSync(predicate, JSON.stringify({ bomFormat: 'CycloneDX', specVersion: '1.6', version: 1, components: [] }));
+    const command = publisherCosignCommands.find(value => value.startsWith('cosign attest '));
+    assert.ok(command);
+    try {
+      execFileSync('bash', ['-c', `set -euo pipefail\n${command.replace('"oracle-${arch}-security/sbom.cdx.json"', '"$CANARY_PREDICATE"')}`], {
+        env: { ...process.env, COSIGN_EXPERIMENTAL: '1', CANARY_PREDICATE: predicate,
+          image: subject.split('@')[0], digest: subject.split('@')[1], arch: 'amd64' },
+        stdio: 'pipe', timeout: 180000,
+      });
+      const verified = execFileSync('cosign', ['verify-attestation', '--type', 'cyclonedx',
+        '--certificate-identity', identity, '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', subject], {
+        env: { ...process.env, COSIGN_EXPERIMENTAL: '1' }, encoding: 'utf8', stdio: 'pipe', timeout: 180000,
+      });
+      assert.ok(verified.trim(), 'The signed CycloneDX attestation must be verified.');
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 }

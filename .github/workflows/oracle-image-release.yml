@@ -175,7 +175,7 @@ jobs:
           for arch in amd64 arm64; do
             ref="$image:${RELEASE_TAG}-${arch}-${GITHUB_RUN_ID}"
             digest="$(oras resolve "$ref")"
-            cosign attest --yes --registry-referrers-mode=oci-1-1 --type cyclonedx \
+            cosign attest --yes --type cyclonedx \
               --predicate "oracle-${arch}-security/sbom.cdx.json" "$image@$digest"
           done
           docker buildx imagetools create -t "$image:$RELEASE_TAG" "${refs[@]}"
