@@ -183,7 +183,11 @@ alias promotion are recovery events for the existing release.
 
 `oracle-image-release.yml` publishes the optional Oracle backend only from an
 existing stable release source. Its pinned Cosign OCI 1.1 signing mode requires
-`COSIGN_EXPERIMENTAL=1` in the publisher environment.
+`COSIGN_EXPERIMENTAL=1` in the publisher environment. The pinned `attest` command
+does not accept `--registry-referrers-mode`; CycloneDX attestations use its
+supported default storage. The release canary checks every publisher Cosign
+invocation against that exact CLI and publishes and verifies an SBOM attestation
+only on its scratch backend digest before a control repair can merge.
 
 When publication fails before the stable Oracle image tag exists, supply
 `qualification_run_id` to reuse the original run's retained AMD64 and ARM64
