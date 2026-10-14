@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "remove-vulnerable-build-globbing",
+  "type": "security",
+  "scope": "backend dependency security",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators",
+    "security"
+  ],
+  "summary": "Remove the vulnerable braces build dependency and upgrade the Spanner SDK to eliminate vulnerable OpenTelemetry dependencies from the backend.",
+  "userImpact": [],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Build from the frozen workspace lockfile or consume the qualified updated backend image to use Spanner SDK 9.1 and OpenTelemetry 2.x."
+    ]
+  },
+  "configuration": [
+    "Backend build commands and supported runtime configuration retain their existing interfaces."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The shared package optional Spanner peer range accepts SDK 9.1 alongside 8.x; HTTP APIs and configuration schemas are unchanged."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The frozen bootstrap predecessor, migration inventory and schema-plan identities are unchanged."
+    ]
+  },
+  "security": [
+    "Remove tsc-alias and its transitive braces 3.0.3 dependency, affected by CVE-2026-93687 (GHSA-vfj7-8cjw-p6xm), without suppressing the advisory.",
+    "The braces package was a build dependency and absent from the production dependency graph and both v0.31.0 Oracle image SBOMs.",
+    "Upgrade the Spanner SDK from 8.11.0 to 9.1.0 with its required Google SDK and OpenTelemetry family to remove OpenTelemetry core 1.30.1, affected by CVE-2026-54285 (GHSA-8988-4f7v-96qf), from production dependencies."
+  ],
+  "documentation": [
+    "docs/development/backend-build.md",
+    "docs/reference/database-architecture.md",
+    "CONTRIBUTING.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "knownLimitations": [
+    "Published artifacts and GitHub's default-branch dependency alert change only after this repair is shipped and the applicable artifacts are published.",
+    "Protected CI, native AMD64 image acceptance and selected cross-database/browser gates remain required before merge; local Spanner evidence uses the emulator."
+  ],
+  "rollback": [
+    "Reverting the build-tool change restores the vulnerable development dependency and requires a security assessment.",
+    "Reverting the production SDK upgrade restores the old OpenTelemetry dependency and requires a security assessment; no schema rollback is needed."
+  ],
+  "validation": [
+    "Six executable resolver fixtures passed; compiled comparison of 744 emitted files retained the same module targets and application code.",
+    "All 3,850 backend and 1,567 frontend unit tests passed; backend and frontend-host typechecks, lint and packed host-package runtime checks passed.",
+    "PostgreSQL and Spanner emulator 1.5.30 each passed seven stages and six populated upgrade baselines. Live Google Cloud Spanner acceptance remains separate.",
+    "The frozen bootstrap image passed its PostgreSQL 16 bootstrap, idempotence, receipt and drift rejection checks with the refreshed production dependencies.",
+    "Frozen dependency installation, peer validation and npm audit passed with zero advisories.",
+    "Native ARM64 standard backend, Oracle and bootstrap images passed the pinned Trivy 0.72.0 all-severity gate with zero vulnerabilities; actual image dependency checks confirmed Spanner 9.1, absent vulnerable packages and capped incoming baggage.",
+    "Release-note tooling, package version discipline, documentation boundary, license checks and CI routing contracts passed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.20.2",
+      "newVersion": "0.20.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.18.1",
+      "newVersion": "0.18.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.25.0",
+      "newVersion": "0.25.1",
+      "impact": "patch"
+    }
+  ]
+}

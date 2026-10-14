@@ -26,6 +26,29 @@ forced row-level security and a non-superuser, non-`BYPASSRLS` application
 role. Engine topology portability across five databases does not imply that
 pooled SaaS tenant isolation is portable to those databases.
 
+## Spanner SDK compatibility
+
+The host's frozen workspace resolves `@google-cloud/spanner` 9.1 with its
+OpenTelemetry 2.x dependencies. This removes OpenTelemetry core 1.30.1, affected
+by CVE-2026-54285, from the production dependency tree. Shared-package consumers
+may use the existing 8.x peer interface or the newly supported 9.1 interface;
+consumers remain responsible for the security of their complete resolved tree.
+
+TypeORM 0.3.31's optional Spanner peer declaration predates SDK 9. The workspace
+uses a version-scoped `typeorm@0.3.31>@google-cloud/spanner` override to resolve
+the qualified SDK 9.1 pairing. External pnpm consumers using this pairing need
+the same override until upstream TypeORM declares support. SDK 9 compatibility
+is verified with the Spanner emulator database lane, including populated
+upgrades, retries, service behavior and rollback; this is emulator evidence,
+not acceptance against a live Google Cloud Spanner deployment.
+
+The SDK change adds no database migration or configuration setting. The frozen
+PostgreSQL bootstrap retains its predecessor's compiled entities, migration
+inventory and schema-plan identity while receiving the same current production
+dependency tree as the application. Application rollback restores the old SDK
+and its vulnerability; database rollback is not needed for this dependency
+change.
+
 ## Schema Rules
 
 - `POSTGRES_SCHEMA` must be **non-public**.

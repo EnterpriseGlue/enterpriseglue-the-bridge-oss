@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-10-08T16:35:45.403Z
+Generated at: 2026-10-14T07:44:31.895Z
 
 Generated from:
 - third_party_licenses.json
@@ -45,7 +45,7 @@ Generated from:
 | @carbon/react | 1.107.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon.git | frontend, packages/frontend-host |
 | @carbon/styles | 1.106.0 | Apache-2.0 | https://github.com/carbon-design-system/carbon.git | frontend, packages/frontend-host |
 | @gitbeaker/rest | 43.8.0 | MIT | https://github.com/jdalrymple/gitbeaker | backend, packages/backend-host |
-| @google-cloud/spanner | 8.11.0 | Apache-2.0 | https://github.com/googleapis/google-cloud-node.git | packages/backend-host |
+| @google-cloud/spanner | 9.1.0 | Apache-2.0 | https://github.com/googleapis/google-cloud-node.git | packages/backend-host |
 | @ibm/plex-mono | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | packages/frontend-host |
 | @ibm/plex-sans-arabic | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | packages/frontend-host |
 | @ibm/plex-sans | 1.1.0 | OFL-1.1 | https://github.com/ibm/plex.git | packages/frontend-host |
