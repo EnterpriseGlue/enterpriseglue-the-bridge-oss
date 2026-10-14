@@ -13,9 +13,19 @@ test('shared browser installation has no server dependencies and server peers re
   assert.ok(Object.keys(shared.peerDependencies).length >= 20);
   for (const [name, version] of Object.entries(shared.peerDependencies)) {
     assert.equal(shared.peerDependenciesMeta[name]?.optional, true, `${name} must not auto-install for browser consumers`);
-    assert.equal(shared.devDependencies[name], version, `${name} must remain available to compile shared server modules`);
-    assert.equal(server.dependencies[name], version, `${name} must be installed in production by the server host`);
+    const buildVersion = shared.devDependencies[name];
+    // An optional public peer can preserve an older supported line while the
+    // host builds and deploys one qualified alternative from that union.
+    assert.ok(version.split('||').map(range => range.trim()).includes(buildVersion), `${name} build range must be an explicit supported peer alternative`);
+    assert.equal(server.dependencies[name], buildVersion, `${name} production and shared compiler ranges must match`);
   }
+});
+
+test('Spanner keeps additive peer compatibility while build and production use the repaired SDK line', () => {
+  assert.equal(shared.peerDependencies['@google-cloud/spanner'], '^8.10.0 || ^9.1.0');
+  assert.equal(shared.devDependencies['@google-cloud/spanner'], '^9.1.0');
+  assert.equal(server.dependencies['@google-cloud/spanner'], '^9.1.0');
+  assert.equal(shared.peerDependenciesMeta['@google-cloud/spanner']?.optional, true);
 });
 
 test('the frontend runtime host belongs to its production graph', () => {

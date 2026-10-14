@@ -1,61 +1,103 @@
 #!/usr/bin/env node
-/**
- * Post-build script: resolves @enterpriseglue/* path aliases in compiled JS
- * output to relative paths, making the dist directory self-contained.
- *
- * This is necessary because tsc-alias skips aliases that are resolvable via
- * node_modules (the file: dependencies create symlinks). At runtime the
- * symlinks point to TypeScript source which Node cannot execute directly,
- * so we rewrite them to point at the compiled .js siblings inside dist/.
- */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+/** Resolve emitted module imports using the compiler's path aliases, without glob dependencies. */
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
-const distDir = join(process.cwd(), 'dist');
+function emittedPath(sourcePath) {
+  return sourcePath.replace(/\.mts$/, '.mjs').replace(/\.cts$/, '.cjs').replace(/\.tsx?$/, '.js');
+}
 
-// Alias prefix → corresponding directory inside the dist tree
-const aliases = [
-  { prefix: '@enterpriseglue/shared/',        distSubdir: 'packages/shared/src/' },
-  { prefix: '@enterpriseglue/backend-host/',   distSubdir: 'packages/backend-host/src/' },
-  { prefix: '@modules/',                       distSubdir: 'packages/backend-host/src/modules/' },
-];
-
-// Build a single regex that matches any of the alias prefixes inside quotes
-const prefixAlternation = aliases
-  .map(a => a.prefix.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&'))
-  .join('|');
-const importRe = new RegExp(`(['"])(${prefixAlternation})([^'"]+)(['"])`, 'g');
-
-function walk(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full));
-    else if (entry.name.endsWith('.js') || entry.name.endsWith('.mjs')) out.push(full);
+function moduleSpecifier(node) {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
+  if (ts.isCallExpression(node)) {
+    const callee = node.expression.getText();
+    if (['import', 'require', 'require.resolve', 'import.meta.resolve',
+      'vi.mock', 'vi.doMock', 'vi.importActual', 'vi.importMock'].includes(callee)) return node.arguments[0];
   }
-  return out;
+  return undefined;
 }
 
-let totalReplacements = 0;
-
-for (const file of walk(distDir)) {
-  let content = readFileSync(file, 'utf8');
-  let changed = false;
-
-  content = content.replace(importRe, (_match, q1, prefix, rest, q2) => {
-    const alias = aliases.find(a => a.prefix === prefix);
-    if (!alias) return _match;
-
-    const targetAbs = join(distDir, alias.distSubdir, rest);
-    let rel = relative(dirname(file), targetAbs).replace(/\\/g, '/');
-    if (!rel.startsWith('.')) rel = './' + rel;
-
-    changed = true;
-    totalReplacements++;
-    return `${q1}${rel}${q2}`;
+export function resolveDistImports({ project = resolve('tsconfig.build.json') } = {}) {
+  const config = ts.getParsedCommandLineOfConfigFile(project, {}, {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic(diagnostic) {
+      throw new Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+    },
   });
+  if (config.errors.length) {
+    throw new Error(config.errors.map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')).join('\n'));
+  }
+  const { rootDir, outDir, baseUrl, paths = {} } = config.options;
+  if (!rootDir || !outDir || !baseUrl) throw new Error('Backend alias resolution requires rootDir, outDir and baseUrl.');
+  const aliases = Object.entries(paths).sort(([a], [b]) => b.indexOf('*') - a.indexOf('*'));
 
-  if (changed) writeFileSync(file, content);
+  function resolveAlias(specifier, file) {
+    // Exact mappings take precedence over wildcards, then the longest prefix wins.
+    const matching = Object.hasOwn(paths, specifier)
+      ? [[specifier, paths[specifier]]]
+      : aliases.filter(([pattern]) => {
+        const star = pattern.indexOf('*');
+        return star >= 0 && specifier.startsWith(pattern.slice(0, star)) && specifier.endsWith(pattern.slice(star + 1));
+      }).slice(0, 1);
+    if (!matching.length) return null;
+    const [pattern, targets] = matching[0];
+    const star = pattern.indexOf('*');
+    const rest = star < 0 ? '' : specifier.slice(star, specifier.length - (pattern.length - star - 1));
+    for (const target of targets) {
+      const source = resolve(baseUrl, target.replaceAll('*', () => rest));
+      if (/\.d\.[cm]?ts$/.test(source)) continue; // Declarations have no emitted runtime module.
+      const subpath = relative(rootDir, emittedPath(source));
+      if (subpath.startsWith('..') || isAbsolute(subpath)) throw new Error(`Alias escapes compiler root: ${specifier}`);
+      const emitted = join(outDir, subpath);
+      const candidates = extname(emitted) ? [emitted] : [`${emitted}.js`, join(emitted, 'index.js')];
+      const destination = candidates.find(p => existsSync(p));
+      if (!destination) continue;
+      const result = relative(dirname(file), destination).replace(/\\/g, '/');
+      return result.startsWith('.') ? result : `./${result}`;
+    }
+    throw new Error(`No emitted module for alias ${specifier} in ${relative(outDir, file)}`);
+  }
+
+  const pendingDirectories = [outDir];
+  const updates = [];
+  let replacements = 0;
+  let files = 0;
+  while (pendingDirectories.length) {
+    const directory = pendingDirectories.pop();
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = join(directory, entry.name);
+      if (entry.isDirectory()) { pendingDirectories.push(file); continue; }
+      if (!entry.isFile() || !/\.[cm]?js$/.test(entry.name)) continue;
+      files++;
+      const content = readFileSync(file, 'utf8');
+      const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      const edits = [];
+      function visit(node) {
+        const literal = moduleSpecifier(node);
+        if (literal && ts.isStringLiteralLike(literal)) {
+          const replacement = resolveAlias(literal.text, file);
+          if (replacement !== null) edits.push({ start: literal.getStart(source) + 1, end: literal.end - 1, replacement });
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+      if (!edits.length) continue;
+      let rewritten = content;
+      for (const edit of edits.sort((a, b) => b.start - a.start)) {
+        rewritten = rewritten.slice(0, edit.start) + edit.replacement + rewritten.slice(edit.end);
+      }
+      replacements += edits.length;
+      updates.push({ file, content: rewritten });
+    }
+  }
+  // Validate the complete tree before writing: missing aliases fail the build without partial rewrites.
+  for (const update of updates) writeFileSync(update.file, update.content);
+  return { files, replacements };
 }
 
-console.log(`✔ Resolved ${totalReplacements} path alias imports in dist/`);
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const { files, replacements } = resolveDistImports();
+  console.log(`Resolved ${replacements} path alias imports in ${files} emitted files.`);
+}

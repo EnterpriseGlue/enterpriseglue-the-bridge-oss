@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.25.0",
+  "version": "0.25.1",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -36,7 +36,7 @@
   "devDependencies": {
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
-    "@google-cloud/spanner": "^8.10.0",
+    "@google-cloud/spanner": "^9.1.0",
     "@node-saml/node-saml": "^5.1.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
@@ -125,7 +125,7 @@
   },
   "peerDependencies": {
     "@azure/msal-node": "^5.0.6",
-    "@google-cloud/spanner": "^8.10.0",
+    "@google-cloud/spanner": "^8.10.0 || ^9.1.0",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",
     "azure-devops-node-api": "^15.1.1",

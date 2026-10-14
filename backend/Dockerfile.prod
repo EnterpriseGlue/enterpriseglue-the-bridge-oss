@@ -41,7 +41,6 @@ RUN pnpm --filter backend-host exec tsc && pnpm --filter backend-host exec node 
 
 COPY backend backend
 RUN pnpm --filter webmodeler-backend exec tsc -p tsconfig.build.json \
-    && pnpm --filter webmodeler-backend exec tsc-alias -p tsconfig.build.json \
     && pnpm --filter webmodeler-backend exec node scripts/resolve-dist-imports.mjs \
     && pnpm --filter webmodeler-backend exec node scripts/copy-build-assets.mjs
 

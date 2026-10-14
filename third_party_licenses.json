@@ -46,7 +46,7 @@
     "repository": "https://github.com/jdalrymple/gitbeaker",
     "publisher": "Justin Dalrymple"
   },
-  "@google-cloud/spanner@8.11.0": {
+  "@google-cloud/spanner@9.1.0": {
     "licenses": "Apache-2.0",
     "repository": "https://github.com/googleapis/google-cloud-node.git",
     "publisher": "Google Inc."

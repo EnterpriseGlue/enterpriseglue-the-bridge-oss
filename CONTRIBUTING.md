@@ -119,6 +119,9 @@ Then run the backend/frontend outside Docker:
 
 Optional: local “production-style” run on the host (advanced):
 
+For backend compilation and import-resolution details, see
+[Backend build](docs/development/backend-build.md).
+
 - `pnpm run deploy:localhost` (or `bash ./scripts/deploy-localhost.sh`)
   - It builds `backend/dist` and `frontend/dist`, then serves the frontend via `vite preview`.
   - For first-time installs, pass `--first-time` to run migrations before startup.

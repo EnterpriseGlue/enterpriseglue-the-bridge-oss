@@ -71,6 +71,28 @@ test('release workflow changes run release readiness without unrelated applicati
   assert.equal(result.run_plugin_checks, false);
 });
 
+test('browser dependency boundary contracts select CI controls and preserve dependency-change acceptance', () => {
+  const path = 'scripts/frontend-dependency-boundary.test.mjs';
+  const focused = classifyChangedFiles([path]);
+  assert.equal(focused.workflow_or_release, true);
+  assert.equal(focused.run_release_readiness, true);
+  assert.equal(focused.unknown_high_risk, false);
+  for (const lane of ['run_tests', 'run_postgres', 'run_oracle', 'run_database_matrix',
+    'run_ci_images', 'run_plugin_images', 'run_native_tenancy', 'run_identity_rehearsal', 'run_deployment_evidence']) {
+    assert.equal(focused[lane], false, lane);
+  }
+  const dependencyChange = ['package.json', 'pnpm-lock.yaml', 'packages/shared/package.json', 'backend/Dockerfile.prod',
+    'backend/__tests__/shared/db/spannerDependencySecurity.test.ts'];
+  const before = classifyChangedFiles(dependencyChange);
+  const after = classifyChangedFiles([...dependencyChange, path]);
+  for (const lane of ['run_tests', 'run_postgres', 'run_oracle', 'run_oracle_nne', 'run_database_matrix',
+    'run_ci_images', 'run_security_scan', 'run_smoke', 'run_smoke_exposed', 'run_engine_browser', 'run_package_discipline']) {
+    assert.equal(before[lane], true, lane);
+    assert.equal(after[lane], true, lane);
+  }
+  assert.equal(classifyChangedFiles(['scripts/unclassified-dependency-boundary-helper.mjs']).unknown_high_risk, true);
+});
+
 test('candidate artifact helpers select release readiness without application or database fan-out', () => {
   for (const path of ['scripts/release-candidate-artifacts.sh', 'scripts/release-candidate-workflow.test.mjs']) {
     const result = classifyChangedFiles([path]);
