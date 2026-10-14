@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.31.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.31.0...v0.31.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **oracle:** support historical boolean migrations on pre-23 databases ([6a2bb64](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6a2bb64d230e32ed61aa6a997365aaec123fcc5a))
+* **oracle:** support historical boolean migrations on pre-23 databases ([c3d155f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c3d155f4ca1ad68ede89f916a9d0ccd9aad2671e))
+* **security:** qualify additive peers and literal alias substitution ([56446f9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/56446f9e89fd8283bc8f8ef593e01c22d248b01b))
+* **security:** remove vulnerable backend dependencies ([14b8315](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/14b8315a6c68db8d680fbed0941fd5f7681bc03f))
+* **security:** remove vulnerable backend dependencies ([1ea2c1e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1ea2c1e2ce0fb4fcc1b8adc8565f256d070dc2cf))
+
 ## [0.31.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.30.1...v0.31.0) (2026-10-13)
 
 ### Changes
