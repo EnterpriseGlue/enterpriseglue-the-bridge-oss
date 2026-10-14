@@ -59,7 +59,7 @@
     "The frozen bootstrap image passed its PostgreSQL 16 bootstrap, idempotence, receipt and drift rejection checks with the refreshed production dependencies.",
     "Frozen dependency installation, peer validation and npm audit passed with zero advisories.",
     "Native ARM64 standard backend, Oracle and bootstrap images passed the pinned Trivy 0.72.0 all-severity gate with zero vulnerabilities; actual image dependency checks confirmed Spanner 9.1, absent vulnerable packages and capped incoming baggage.",
-    "Release-note tooling, package version discipline, documentation boundary, license checks and 184 CI contracts passed. The optional peer boundary requires build and production to use the same explicit supported peer alternative while preserving the public Spanner 8.x/9.1 range."
+    "Release-note tooling, package version discipline, documentation boundary, license checks and CI contracts passed. The optional peer boundary requires build and production to use the same explicit supported peer alternative while preserving the public Spanner 8.x/9.1 range; its exact CI-contract path is classified without removing dependency-change acceptance lanes."
   ],
   "packages": [
     {

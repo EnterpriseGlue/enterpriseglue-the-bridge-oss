@@ -206,6 +206,7 @@ const classifiers = {
     /^docs\/development\/codex-workflow-plugin\.md$/,
   ],
   workflow_or_release: [
+    /^scripts\/frontend-dependency-boundary\.test\.mjs$/,
     /^scripts\/(?:lib\/)?release-publication-/,
     /^\.github\/(?:workflows|actions)\//,
     /^\.release-notes\/schema\.json$/,
