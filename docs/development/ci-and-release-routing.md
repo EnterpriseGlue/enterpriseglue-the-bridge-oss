@@ -210,6 +210,46 @@ superseded cancellations, and manual/external cancellations. The retained JSON
 also records retries, first-attempt success rate, per-workflow queue/execution/
 wall p50 and p95, and the highest runner-minute jobs.
 
+The scheduled issue and report separate active failure observations from
+historical failures with successful recovery evidence and those that need
+verification. Recovery compares the latest completed run with the same workflow
+ID, branch, trigger, and pull-request context. Every failed job and observed
+failed step must complete successfully; skipped jobs or steps do not qualify.
+Only the final attempt's jobs establish recovery, so an earlier successful
+attempt cannot hide a later failure. When run metadata omits the PR, commit
+associations may identify one matching PR by head branch, target repository,
+and head repository when available. If a rewritten commit has no association,
+one PR matching the head repository/branch and the run's timestamp within its
+open lifetime can supply the context. Ambiguous or missing associations restrict
+comparison to the same source SHA. A newer failed run keeps that context active;
+a closed PR without matching success stays historical and needs verification.
+Failed merge-queue contexts whose GitHub branch has been deleted also remain
+historical and need verification; deleting the branch does not prove repair.
+
+Manual dispatches, upstream workflow triggers, and release events need separate
+verification of their inputs and artifact identity, even when the later jobs
+succeed. The report links the failed/latest runs, jobs, and related PRs. PR links
+identify source context, rather than prove which change fixed the cause. A
+successful workflow is not publication, deployment, or customer acceptance.
+
+Workflow counts cover the fetched seven-day window without a 200-run cutoff.
+Time-range subdivision also avoids
+[GitHub's 1,000-run filtered-search limit](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository);
+if an interval cannot be collected completely, the report fails closed.
+Job evidence includes the newest 120 runs, every failure and retry, their latest
+matching runs, and all tagged `Docker Images` runs. Job timing and image-build
+retry measurements cover that disclosed subset. Unexpected API errors fail the
+report rather than close the issue using incomplete evidence. The JSON retains
+all failure/retry observations; the issue displays up to 20 per section, reducing
+detail further when needed to stay within GitHub's body-size limit, and links the
+full artifact.
+
+Recovery labels do not subtract failures or retries from historical metrics.
+The existing thresholds remain unchanged, and the issue closes automatically
+only after the rolling window meets all of them. The additive recovery and job
+coverage fields retain the `enterpriseglue-ci-observability/v2` JSON schema and
+existing metric fields for report consumers.
+
 Operational targets are:
 
 | Flow | p95 target |
