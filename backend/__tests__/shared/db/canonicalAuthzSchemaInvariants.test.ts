@@ -131,6 +131,7 @@ describe('canonical authorization persistence schema invariants', () => {
     await new AddIdentityProviders1700000000056().up({
       hasTable: vi.fn().mockResolvedValue(false),
       createTable,
+      connection: { options: { type: 'postgres' } },
     } as any);
 
     expect(createTable.mock.calls[0][0].columns.map((candidate: { name: string }) => candidate.name))
@@ -198,7 +199,11 @@ describe('canonical authorization persistence schema invariants', () => {
     expect(column(RuntimeResourceSetMaterialization, 'lineageJson')?.options.nullable).not.toBe(true);
 
     const createTable = vi.fn().mockResolvedValue(undefined);
-    const queryRunner = { hasTable: vi.fn().mockResolvedValue(false), createTable };
+    const queryRunner = {
+      hasTable: vi.fn().mockResolvedValue(false),
+      createTable,
+      connection: { options: { type: 'postgres' } },
+    };
     await new AddRuntimeResourceSets1700000000054().up(queryRunner as any);
     await new AddRuntimeResourceInventory1700000000055().up(queryRunner as any);
 

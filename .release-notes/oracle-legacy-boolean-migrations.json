@@ -68,7 +68,7 @@
     "docs/reference/oracle-network-security.md"
   ],
   "knownLimitations": [
-    "Oracle 21c physical qualification for this repair must complete in the supported native AMD64 environment; local SQL-generation and Oracle Free fixture checks do not establish that evidence."
+    "Physical compatibility was verified on Oracle 21c; acceptance against each deployment's exact Oracle version, identity provider and configuration remains separate."
   ],
   "rollback": [
     "Application rollback retains already applied numeric columns and migration ledger entries; do not delete the ledger or rerun the failing older image."
@@ -77,7 +77,8 @@
     "44 focused Oracle SQL-generation, adapter, portability and bridge tests passed. The exact invalid BOOLEAN DEFAULT false DDL is reproduced with TypeORM's actual Oracle compiler; repaired false/true/nullable columns emit numeric SQL.",
     "63 database-portability unit tests, migration identifier and raw-SQL guards passed. Shared package build, backend typecheck, database qualification contracts and documentation contracts passed.",
     "The compiled pending migration passed a populated native Oracle Free fixture: default backfill, preserved settings, numeric true on retry, migration-ledger no-op replay, and rollback. This native fixture is not pre-23 physical acceptance.",
-    "The full PostgreSQL database qualification shard passed all seven stages and six supported upgrade baselines. Cross-database qualification remains required; the Oracle 21c image is AMD64 and its physical lane remains pending in the supported CI environment.",
+    "The full five-database CI qualification passed on PostgreSQL, MySQL, SQL Server, native AMD64 Oracle 21c and the Spanner emulator, including all seven stages and six supported upgrade baselines. Oracle 21c replay of the actual compiled pending SSO migration verified the numeric default, preserved populated settings, true-value retry and rollback.",
+    "All 3,858 backend unit tests passed. Historical migration test doubles now declare their PostgreSQL connection type while retaining their existing schema assertions.",
     "All 25 historical migration syntax trees preserve the original non-Oracle semantics after substituting the Oracle boolean helper; the three duplicate legacy bodies previously matched their canonical originals exactly."
   ],
   "packages": [
