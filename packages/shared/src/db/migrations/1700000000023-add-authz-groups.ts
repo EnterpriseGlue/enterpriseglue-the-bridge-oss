@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -32,8 +33,8 @@ export class AddAuthzGroups1700000000023 implements MigrationInterface {
         { name: 'description', type: 'text', isNullable: true },
         { name: 'source', type: 'text', default: "'manual'" },
         { name: 'source_ref', type: 'text', isNullable: true },
-        { name: 'is_system', type: 'boolean', default: false },
-        { name: 'is_archived', type: 'boolean', default: false },
+        { name: 'is_system', ...legacyBooleanColumn(queryRunner, false) },
+        { name: 'is_archived', ...legacyBooleanColumn(queryRunner, false) },
         { name: 'created_by_id', type: 'text', isNullable: true },
         { name: 'created_at', type: 'bigint' },
         { name: 'updated_at', type: 'bigint' },

@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -19,13 +20,11 @@ export class AddSsoGovernanceAssignmentSettings1700000000036 implements Migratio
     const columns = [
       new TableColumn({
         name: 'sso_engine_owner_assignment_mappings_enabled',
-        type: 'boolean',
-        default: false,
+        ...legacyBooleanColumn(queryRunner, false),
       }),
       new TableColumn({
         name: 'sso_engine_delegate_assignment_mappings_enabled',
-        type: 'boolean',
-        default: false,
+        ...legacyBooleanColumn(queryRunner, false),
       }),
     ];
 

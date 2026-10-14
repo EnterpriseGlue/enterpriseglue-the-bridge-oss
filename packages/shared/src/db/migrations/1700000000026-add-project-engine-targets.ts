@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -31,10 +32,10 @@ export class AddProjectEngineTargets1700000000026 implements MigrationInterface 
         { name: 'status', type: 'text', default: "'active'" },
         { name: 'source', type: 'text', default: "'manual'" },
         { name: 'source_ref', type: 'text', isNullable: true },
-        { name: 'allow_manual_deploy', type: 'boolean', default: true },
-        { name: 'allow_ci_deploy', type: 'boolean', default: false },
-        { name: 'allow_api_deploy', type: 'boolean', default: false },
-        { name: 'allow_import', type: 'boolean', default: true },
+        { name: 'allow_manual_deploy', ...legacyBooleanColumn(queryRunner, true) },
+        { name: 'allow_ci_deploy', ...legacyBooleanColumn(queryRunner, false) },
+        { name: 'allow_api_deploy', ...legacyBooleanColumn(queryRunner, false) },
+        { name: 'allow_import', ...legacyBooleanColumn(queryRunner, true) },
         { name: 'created_by_id', type: 'text', isNullable: true },
         { name: 'approved_by_id', type: 'text', isNullable: true },
         { name: 'last_seen_at', type: 'bigint', isNullable: true },

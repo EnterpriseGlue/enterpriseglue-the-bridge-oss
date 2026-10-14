@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -12,8 +13,8 @@ export class AddPiiSettings1700000000005 implements MigrationInterface {
     }
 
     const columns = [
-      new TableColumn({ name: 'pii_regex_enabled', type: 'boolean', default: false }),
-      new TableColumn({ name: 'pii_external_provider_enabled', type: 'boolean', default: false }),
+      new TableColumn({ name: 'pii_regex_enabled', ...legacyBooleanColumn(queryRunner, false) }),
+      new TableColumn({ name: 'pii_external_provider_enabled', ...legacyBooleanColumn(queryRunner, false) }),
       new TableColumn({ name: 'pii_external_provider_type', type: 'text', isNullable: true }),
       new TableColumn({ name: 'pii_external_provider_endpoint', type: 'text', isNullable: true }),
       new TableColumn({ name: 'pii_external_provider_auth_header', type: 'text', isNullable: true }),

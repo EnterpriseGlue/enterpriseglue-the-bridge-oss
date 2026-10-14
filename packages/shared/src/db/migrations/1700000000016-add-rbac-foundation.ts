@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -35,8 +36,8 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
         { name: 'label', type: 'text' },
         { name: 'description', type: 'text', isNullable: true },
         { name: 'kind', type: 'text', default: "'system'" },
-        { name: 'is_editable', type: 'boolean', default: false },
-        { name: 'is_archived', type: 'boolean', default: false },
+        { name: 'is_editable', ...legacyBooleanColumn(queryRunner, false) },
+        { name: 'is_archived', ...legacyBooleanColumn(queryRunner, false) },
         { name: 'created_by_id', type: 'text', isNullable: true },
         { name: 'created_at', type: 'bigint' },
         { name: 'updated_at', type: 'bigint' },
@@ -56,9 +57,9 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
         { name: 'description', type: 'text', isNullable: true },
         { name: 'scope', type: 'text' },
         { name: 'kind', type: 'text' },
-        { name: 'is_editable', type: 'boolean', default: false },
-        { name: 'is_assignable', type: 'boolean', default: true },
-        { name: 'is_archived', type: 'boolean', default: false },
+        { name: 'is_editable', ...legacyBooleanColumn(queryRunner, false) },
+        { name: 'is_assignable', ...legacyBooleanColumn(queryRunner, true) },
+        { name: 'is_archived', ...legacyBooleanColumn(queryRunner, false) },
         { name: 'created_by_id', type: 'text', isNullable: true },
         { name: 'created_at', type: 'bigint' },
         { name: 'updated_at', type: 'bigint' },
@@ -136,7 +137,7 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
         { name: 'target_role_id', type: 'text' },
         { name: 'sync_mode', type: 'text', default: "'authoritative'" },
         { name: 'priority', type: 'integer', default: 0 },
-        { name: 'is_active', type: 'boolean', default: true },
+        { name: 'is_active', ...legacyBooleanColumn(queryRunner, true) },
         { name: 'created_at', type: 'bigint' },
         { name: 'updated_at', type: 'bigint' },
       ],

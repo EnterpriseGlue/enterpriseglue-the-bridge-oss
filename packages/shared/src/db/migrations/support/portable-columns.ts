@@ -42,6 +42,19 @@ export function portableBoolean(queryRunner: QueryRunner): {
   return { type: 'boolean' };
 }
 
+/** Preserve historical non-Oracle DDL while repairing pre-23 Oracle booleans. */
+export function legacyBooleanColumn(queryRunner: QueryRunner, defaultValue?: boolean): {
+  type: string;
+  precision?: number;
+  scale?: number;
+  default?: boolean | number;
+} {
+  const oracle = migrationDatabase(queryRunner) === 'oracle';
+  const column = oracle ? portableBoolean(queryRunner) : { type: 'boolean' };
+  if (defaultValue === undefined) return column;
+  return { ...column, default: oracle ? Number(defaultValue) : defaultValue };
+}
+
 export function portableInteger(queryRunner: QueryRunner): {
   type: string;
   precision?: number;

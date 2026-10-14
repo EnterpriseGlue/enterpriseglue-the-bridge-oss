@@ -132,6 +132,28 @@ image explicitly through the existing `BACKEND_IMAGE` input.
 
 ## Persistence and upgrade
 
+Historical migration boolean declarations use `NUMBER(1,0)` on Oracle, with
+`0` for false and `1` for true. This works on Oracle releases before SQL
+`BOOLEAN` support and matches the adapter's existing boolean value mapping.
+Non-Oracle migration declarations retain their existing types and defaults.
+
+Older images can fail pending migration
+`AddSsoAutoRedirectSingleProvider1700000000006` with
+`ORA-00904: "FALSE": invalid identifier`. Install an image containing the
+historical boolean migration repair, then rerun apply-mode migrations with the
+schema-owner identity. Keep the existing database and migration ledger;
+already completed migrations remain completed. The repair keeps migration
+identifiers unchanged and does not introduce a new migration or convert
+already-applied columns. Later migration 0107 removes the obsolete redirect
+flag as part of the existing provider-selection model.
+
+Oracle DDL may commit independently of a failed migration transaction. Existing
+column checks make repaired historical migrations safe to retry after partial
+application. Do not bypass pending migrations by deleting or manually stamping
+ledger entries. Application rollback retains completed migration entries and
+their numeric columns; an older image can still fail if it must execute an
+unrepaired historical migration.
+
 The pinned TypeORM patch sizes Oracle string `RETURNING` buffers from column
 metadata to avoid the native driver's 200-byte default. It preserves number,
 LOB, and other database bind behavior.

@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -34,7 +35,7 @@ export class AddEngineSets1700000000025 implements MigrationInterface {
         { name: 'selector_fingerprint', type: 'text' },
         { name: 'source', type: 'text', default: "'manual'" },
         { name: 'source_ref', type: 'text', isNullable: true },
-        { name: 'is_archived', type: 'boolean', default: false },
+        { name: 'is_archived', ...legacyBooleanColumn(queryRunner, false) },
         { name: 'created_by_id', type: 'text', isNullable: true },
         { name: 'last_materialized_at', type: 'bigint', isNullable: true },
         { name: 'materialization_status', type: 'text', default: "'pending'" },

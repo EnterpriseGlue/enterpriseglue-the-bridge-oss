@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -22,7 +23,7 @@ export class AddServiceAccounts1700000000027 implements MigrationInterface {
           { name: 'id', type: 'text', isPrimary: true },
           { name: 'name', type: 'text' },
           { name: 'description', type: 'text', isNullable: true },
-          { name: 'is_active', type: 'boolean', default: true },
+          { name: 'is_active', ...legacyBooleanColumn(queryRunner, true) },
           { name: 'created_by_id', type: 'text', isNullable: true },
           { name: 'revoked_at', type: 'bigint', isNullable: true },
           { name: 'created_at', type: 'bigint' },

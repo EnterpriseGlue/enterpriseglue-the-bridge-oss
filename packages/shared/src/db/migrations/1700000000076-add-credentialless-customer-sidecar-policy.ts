@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -8,8 +9,7 @@ export class AddCredentiallessCustomerSidecarPolicy1700000000076 implements Migr
     if (await queryRunner.hasTable('platform_settings') && !(await queryRunner.hasColumn('platform_settings', 'credentialless_customer_sidecars_enabled'))) {
       await queryRunner.addColumn('platform_settings', new TableColumn({
         name: 'credentialless_customer_sidecars_enabled',
-        type: 'boolean',
-        default: false,
+        ...legacyBooleanColumn(queryRunner, false),
       }));
     }
   }

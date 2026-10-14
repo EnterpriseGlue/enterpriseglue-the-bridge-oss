@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -52,8 +53,8 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
         new TableColumn({ name: 'encrypted_token', type: 'text', isNullable: true }),
         new TableColumn({ name: 'last_validated_at', type: 'bigint', isNullable: true }),
         new TableColumn({ name: 'token_scope_hint', type: 'text', isNullable: true }),
-        new TableColumn({ name: 'auto_push_enabled', type: 'boolean', isNullable: true }),
-        new TableColumn({ name: 'auto_pull_enabled', type: 'boolean', isNullable: true }),
+        new TableColumn({ name: 'auto_push_enabled', ...legacyBooleanColumn(queryRunner), isNullable: true }),
+        new TableColumn({ name: 'auto_pull_enabled', ...legacyBooleanColumn(queryRunner), isNullable: true }),
       ]);
     }
 

@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -10,7 +11,7 @@ export class AddRuntimeResourceInventory1700000000055 implements MigrationInterf
         { name: 'id', type: 'text', isPrimary: true }, { name: 'tenant_id', type: 'text', isNullable: true },
         { name: 'engine_id', type: 'text' }, { name: 'resource_kind', type: 'text' }, { name: 'resource_key', type: 'text' }, { name: 'runtime_tenant_id', type: 'text', default: "''" },
         { name: 'engine_resource_id', type: 'text', isNullable: true }, { name: 'deployment_id', type: 'text', isNullable: true }, { name: 'project_id', type: 'text', isNullable: true }, { name: 'file_id', type: 'text', isNullable: true }, { name: 'version', type: 'integer', isNullable: true },
-        { name: 'labels_json', type: 'text', default: "'{}'" }, { name: 'lineage_json', type: 'text', default: "'{}'" }, { name: 'source', type: 'text', default: "'engine_discovery'" }, { name: 'source_ref', type: 'text', isNullable: true }, { name: 'observed_at', type: 'bigint' }, { name: 'is_active', type: 'boolean', default: true }, { name: 'created_at', type: 'bigint' }, { name: 'updated_at', type: 'bigint' },
+        { name: 'labels_json', type: 'text', default: "'{}'" }, { name: 'lineage_json', type: 'text', default: "'{}'" }, { name: 'source', type: 'text', default: "'engine_discovery'" }, { name: 'source_ref', type: 'text', isNullable: true }, { name: 'observed_at', type: 'bigint' }, { name: 'is_active', ...legacyBooleanColumn(queryRunner, true) }, { name: 'created_at', type: 'bigint' }, { name: 'updated_at', type: 'bigint' },
       ], uniques: [new TableUnique({ name: 'uq_runtime_resources_identity', columnNames: ['engine_id', 'resource_kind', 'resource_key', 'runtime_tenant_id'] })], indices: [new TableIndex({ name: 'idx_runtime_resources_engine_kind', columnNames: ['engine_id', 'resource_kind'] }), new TableIndex({ name: 'idx_runtime_resources_project', columnNames: ['project_id'] }), new TableIndex({ name: 'idx_runtime_resources_active', columnNames: ['engine_id', 'is_active'] })] }), true);
     }
     if (!await queryRunner.hasTable('runtime_resource_set_materializations')) {

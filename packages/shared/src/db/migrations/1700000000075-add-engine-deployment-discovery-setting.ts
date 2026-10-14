@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -6,7 +7,7 @@ export class AddEngineDeploymentDiscoverySetting1700000000075 implements Migrati
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('engines') && !(await queryRunner.hasColumn('engines', 'deployment_discovery_enabled'))) {
-      await queryRunner.addColumn('engines', new TableColumn({ name: 'deployment_discovery_enabled', type: 'boolean', default: true }));
+      await queryRunner.addColumn('engines', new TableColumn({ name: 'deployment_discovery_enabled', ...legacyBooleanColumn(queryRunner, true) }));
     }
   }
 

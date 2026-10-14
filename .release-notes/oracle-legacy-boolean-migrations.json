@@ -1,0 +1,103 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "oracle-legacy-boolean-migrations",
+  "type": "fix",
+  "scope": "oracle",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Repair historical boolean migration SQL for Oracle releases without SQL BOOLEAN support.",
+  "userImpact": [
+    "Existing Oracle application databases can resume pending migrations using numeric boolean storage."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Install the patch and rerun pending migrations with the schema-owner identity; keep the existing database and migration ledger."
+    ]
+  },
+  "configuration": [
+    "No new configuration. Native network encryption and SSO retain their existing independent settings."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": [
+      "Public boolean settings and values remain unchanged."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "MigrateGitTokenToProject1700000000003",
+      "AddPiiSettings1700000000005",
+      "AddSsoAutoRedirectSingleProvider1700000000006",
+      "AddRbacFoundation1700000000016",
+      "AddApiClients1700000000018",
+      "AddCustomPermissionMetadata1700000000020",
+      "AddAuthzGroups1700000000023",
+      "AddSsoGroupMappings1700000000024",
+      "AddEngineSets1700000000025",
+      "AddProjectEngineTargets1700000000026",
+      "AddServiceAccounts1700000000027",
+      "AddExternalEngineSystems1700000000030",
+      "AddSsoAllEnginesAssignmentSetting1700000000035",
+      "AddSsoGovernanceAssignmentSettings1700000000036",
+      "AddSsoRegexClaimMappingSetting1700000000040",
+      "AddSsoSensitivePermissionMappingSettings1700000000041",
+      "AddIdentityEntitlementMappings1700000000048",
+      "AddRuntimeResourceSets1700000000054",
+      "AddRuntimeResourceInventory1700000000055",
+      "AddIdentityProviders1700000000056",
+      "AddEngineMetadataDiscoverySetting1700000000059",
+      "AddEnginePipelineReceiptSetting1700000000060",
+      "AddEngineDeploymentDiscoverySetting1700000000075",
+      "AddCredentiallessCustomerSidecarPolicy1700000000076",
+      "AddSsoBroadEntitlementMappingSetting1700000000087"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "Historical migration identifiers stay unchanged; Oracle boolean DDL uses NUMBER(1,0) with numeric defaults 0/1. Already executed migrations are not replayed or rewritten. Other database migration definitions are preserved."
+    ]
+  },
+  "security": [
+    "Encryption requirements and authentication/authorization policy are unchanged."
+  ],
+  "documentation": [
+    "docs/reference/oracle-network-security.md"
+  ],
+  "knownLimitations": [
+    "Oracle 21c physical qualification for this repair must complete in the supported native AMD64 environment; local SQL-generation and Oracle Free fixture checks do not establish that evidence."
+  ],
+  "rollback": [
+    "Application rollback retains already applied numeric columns and migration ledger entries; do not delete the ledger or rerun the failing older image."
+  ],
+  "validation": [
+    "44 focused Oracle SQL-generation, adapter, portability and bridge tests passed. The exact invalid BOOLEAN DEFAULT false DDL is reproduced with TypeORM's actual Oracle compiler; repaired false/true/nullable columns emit numeric SQL.",
+    "63 database-portability unit tests, migration identifier and raw-SQL guards passed. Shared package build, backend typecheck, database qualification contracts and documentation contracts passed.",
+    "The compiled pending migration passed a populated native Oracle Free fixture: default backfill, preserved settings, numeric true on retry, migration-ledger no-op replay, and rollback. This native fixture is not pre-23 physical acceptance.",
+    "The full PostgreSQL database qualification shard passed all seven stages and six supported upgrade baselines. Cross-database qualification remains required; the Oracle 21c image is AMD64 and its physical lane remains pending in the supported CI environment.",
+    "All 25 historical migration syntax trees preserve the original non-Oracle semantics after substituting the Oracle boolean helper; the three duplicate legacy bodies previously matched their canonical originals exactly."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.20.2",
+      "newVersion": "0.20.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.18.1",
+      "newVersion": "0.18.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.25.0",
+      "newVersion": "0.25.1",
+      "impact": "patch"
+    }
+  ]
+}

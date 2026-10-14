@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -26,8 +27,7 @@ export class AddSsoSensitivePermissionMappingSettings1700000000041 implements Mi
       if (await queryRunner.hasColumn(settingsTable, column)) continue;
       await queryRunner.addColumn(settingsTable, new TableColumn({
         name: column,
-        type: 'boolean',
-        default: false,
+        ...legacyBooleanColumn(queryRunner, false),
       }));
     }
   }
