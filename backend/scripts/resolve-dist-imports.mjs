@@ -46,7 +46,7 @@ export function resolveDistImports({ project = resolve('tsconfig.build.json') } 
     const star = pattern.indexOf('*');
     const rest = star < 0 ? '' : specifier.slice(star, specifier.length - (pattern.length - star - 1));
     for (const target of targets) {
-      const source = resolve(baseUrl, target.replace('*', rest));
+      const source = resolve(baseUrl, target.replaceAll('*', () => rest));
       if (/\.d\.[cm]?ts$/.test(source)) continue; // Declarations have no emitted runtime module.
       const subpath = relative(rootDir, emittedPath(source));
       if (subpath.startsWith('..') || isAbsolute(subpath)) throw new Error(`Alias escapes compiler root: ${specifier}`);

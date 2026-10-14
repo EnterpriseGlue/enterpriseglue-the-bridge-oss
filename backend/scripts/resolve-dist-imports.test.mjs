@@ -70,6 +70,17 @@ test('CommonJS requires, module resolution and test module mocks resolve emitted
   assert.match(f.read('dist/src/main.mjs'), /vi\.mock\('\.\/value\.cjs'/);
 });
 
+test('wildcard substitution treats dollar replacement tokens as literal filename characters', t => {
+  const f = fixture(t);
+  f.put('dist/src/value$&.js', 'export const value = 9;');
+  f.put('dist/src/main.js', `import { value } from '@app/value$&.js'; console.log(value);`);
+  assert.equal(resolveDistImports({ project: f.project }).replacements, 1);
+  assert.equal(f.read('dist/src/main.js'), `import { value } from './value$&.js'; console.log(value);`);
+  const result = spawnSync(process.execPath, [join(f.root, 'dist/src/main.js')], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), '9');
+});
+
 test('ordinary strings, comments and templates retain their original contents', t => {
   const f = fixture(t);
   const content = `// import '@app/missing.js';\nconst label = '@app/missing.js';\nconst text = \`@app/missing.js\`;\n`;

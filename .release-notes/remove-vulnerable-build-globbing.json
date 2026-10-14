@@ -53,13 +53,13 @@
     "Reverting the production SDK upgrade restores the old OpenTelemetry dependency and requires a security assessment; no schema rollback is needed."
   ],
   "validation": [
-    "Six executable resolver fixtures passed; compiled comparison of 744 emitted files retained the same module targets and application code.",
+    "Seven executable resolver fixtures passed, including literal wildcard filename substitution; compiled comparison of 744 emitted files retained the same module targets and application code.",
     "All 3,850 backend and 1,567 frontend unit tests passed; backend and frontend-host typechecks, lint and packed host-package runtime checks passed.",
     "PostgreSQL and Spanner emulator 1.5.30 each passed seven stages and six populated upgrade baselines. Live Google Cloud Spanner acceptance remains separate.",
     "The frozen bootstrap image passed its PostgreSQL 16 bootstrap, idempotence, receipt and drift rejection checks with the refreshed production dependencies.",
     "Frozen dependency installation, peer validation and npm audit passed with zero advisories.",
     "Native ARM64 standard backend, Oracle and bootstrap images passed the pinned Trivy 0.72.0 all-severity gate with zero vulnerabilities; actual image dependency checks confirmed Spanner 9.1, absent vulnerable packages and capped incoming baggage.",
-    "Release-note tooling, package version discipline, documentation boundary, license checks and CI routing contracts passed."
+    "Release-note tooling, package version discipline, documentation boundary, license checks and 184 CI contracts passed. The optional peer boundary requires build and production to use the same explicit supported peer alternative while preserving the public Spanner 8.x/9.1 range."
   ],
   "packages": [
     {
