@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -7,7 +8,7 @@ export class AddIdentityProviders1700000000056 implements MigrationInterface {
     if (await queryRunner.hasTable('identity_providers')) return;
     await queryRunner.createTable(new Table({ name: 'identity_providers', columns: [
       { name: 'id', type: 'text', isPrimary: true }, { name: 'tenant_id', type: 'text', isNullable: true },
-      { name: 'key', type: 'text' }, { name: 'protocol', type: 'text' }, { name: 'is_enabled', type: 'boolean', default: false },
+      { name: 'key', type: 'text' }, { name: 'protocol', type: 'text' }, { name: 'is_enabled', ...legacyBooleanColumn(queryRunner, false) },
       { name: 'authentication_mode', type: 'text', default: "'claims_only'" }, { name: 'directory_tenant_id', type: 'text', isNullable: true },
       { name: 'configuration_json', type: 'text', default: "'{}'" }, { name: 'sync_json', type: 'text', default: "'{}'" },
       { name: 'ownership_mode', type: 'text', default: "'manual'" }, { name: 'source_ref', type: 'text', isNullable: true },

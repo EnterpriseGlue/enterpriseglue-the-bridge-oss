@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -12,8 +13,7 @@ export class AddSsoAutoRedirectSingleProvider1700000000006 implements MigrationI
     }
     const column = new TableColumn({
       name: 'sso_auto_redirect_single_provider',
-      type: 'boolean',
-      default: false,
+      ...legacyBooleanColumn(queryRunner, false),
     });
 
     const exists = await queryRunner.hasColumn(tablePath, column.name);

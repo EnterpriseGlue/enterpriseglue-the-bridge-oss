@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -24,7 +25,7 @@ export class AddApiClients1700000000018 implements MigrationInterface {
           { name: 'token_prefix', type: 'text' },
           { name: 'secret_hash', type: 'text' },
           { name: 'scopes_json', type: 'text' },
-          { name: 'is_active', type: 'boolean', default: true },
+          { name: 'is_active', ...legacyBooleanColumn(queryRunner, true) },
           { name: 'created_by_id', type: 'text', isNullable: true },
           { name: 'last_used_at', type: 'bigint', isNullable: true },
           { name: 'revoked_at', type: 'bigint', isNullable: true },

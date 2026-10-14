@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -33,7 +34,7 @@ export class AddSsoGroupMappings1700000000024 implements MigrationInterface {
         { name: 'target_group_id', type: 'text' },
         { name: 'sync_mode', type: 'text', default: "'authoritative'" },
         { name: 'priority', type: 'integer', default: 0 },
-        { name: 'is_active', type: 'boolean', default: true },
+        { name: 'is_active', ...legacyBooleanColumn(queryRunner, true) },
         { name: 'created_at', type: 'bigint' },
         { name: 'updated_at', type: 'bigint' },
       ],

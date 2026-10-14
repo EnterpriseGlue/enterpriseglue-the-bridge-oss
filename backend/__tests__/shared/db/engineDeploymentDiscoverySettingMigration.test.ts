@@ -4,7 +4,12 @@ import { AddEngineDeploymentDiscoverySetting1700000000075 } from '@enterpriseglu
 describe('AddEngineDeploymentDiscoverySetting1700000000075', () => {
   it('adds the deployment discovery switch once', async () => {
     const addColumn = vi.fn();
-    const queryRunner = { hasTable: vi.fn().mockResolvedValue(true), hasColumn: vi.fn().mockResolvedValue(false), addColumn };
+    const queryRunner = {
+      hasTable: vi.fn().mockResolvedValue(true),
+      hasColumn: vi.fn().mockResolvedValue(false),
+      addColumn,
+      connection: { options: { type: 'postgres' } },
+    };
 
     await new AddEngineDeploymentDiscoverySetting1700000000075().up(queryRunner as any);
 
@@ -13,7 +18,12 @@ describe('AddEngineDeploymentDiscoverySetting1700000000075', () => {
 
   it('does nothing when the switch already exists', async () => {
     const addColumn = vi.fn();
-    const queryRunner = { hasTable: vi.fn().mockResolvedValue(true), hasColumn: vi.fn().mockResolvedValue(true), addColumn };
+    const queryRunner = {
+      hasTable: vi.fn().mockResolvedValue(true),
+      hasColumn: vi.fn().mockResolvedValue(true),
+      addColumn,
+      connection: { options: { type: 'postgres' } },
+    };
 
     await new AddEngineDeploymentDiscoverySetting1700000000075().up(queryRunner as any);
 

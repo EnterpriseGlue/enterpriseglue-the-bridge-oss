@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { Table, TableColumn, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -38,7 +39,7 @@ export class AddExternalEngineSystems1700000000030 implements MigrationInterface
           { name: 'description', type: 'text', isNullable: true },
           { name: 'default_management_mode', type: 'text', default: "'external_managed'" },
           { name: 'default_field_ownership_json', type: 'text', isNullable: true },
-          { name: 'is_active', type: 'boolean', default: true },
+          { name: 'is_active', ...legacyBooleanColumn(queryRunner, true) },
           { name: 'created_by_id', type: 'text', isNullable: true },
           { name: 'created_at', type: 'bigint' },
           { name: 'updated_at', type: 'bigint' },

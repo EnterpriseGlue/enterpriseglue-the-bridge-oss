@@ -11,6 +11,7 @@ import {
 import {
   runMigrations,
 } from '@enterpriseglue/shared/db/run-migrations.js';
+import { AddSsoAutoRedirectSingleProvider1700000000006 } from '@enterpriseglue/shared/db/migrations/1700000000006-add-sso-auto-redirect-single-provider.js';
 import {
   AddEngineTenancyFoundation1700000000096,
 } from '@enterpriseglue/shared/db/migrations/1700000000096-add-engine-tenancy-foundation.js';
@@ -402,6 +403,34 @@ async function qualifyRecentMigrationBaselines(queryRunner, dataSource, expected
   const providerPreference = new ConsolidateLoginProviderPreference1700000000107();
 
   await seedRecentMigrationRows(dataSource);
+  if (database === 'oracle') {
+    // Fresh-schema baselining skips this obsolete column. Replay the actual
+    // historical migration against a populated pre-23 database before 0107
+    // removes it again, preserving the current-schema equivalence contract.
+    const legacy = new AddSsoAutoRedirectSingleProvider1700000000006();
+    const settingsPath = metadataPath(dataSource, PlatformSettings);
+    await legacy.down(queryRunner);
+    const before = await dataSource.getRepository(PlatformSettings).findOneByOrFail({ id: 'default' });
+    await legacy.up(queryRunner);
+    const column = (await queryRunner.getTable(settingsPath)).columns.find(c => c.name === 'sso_auto_redirect_single_provider');
+    assert.equal(column.type, 'number');
+    assert.equal(column.precision, 1);
+    assert.equal(Number(column.default), 0);
+    const table = settingsPath.split('.').map(part => dataSource.driver.escape(part)).join('.');
+    const flag = dataSource.driver.escape('sso_auto_redirect_single_provider');
+    const backfilled = await queryRunner.query(`SELECT ${flag} FROM ${table}`);
+    assert.ok(backfilled.length > 0, 'historical boolean upgrade must exercise populated settings');
+    assert.ok(backfilled.every(row => Number(row.sso_auto_redirect_single_provider) === 0));
+    await queryRunner.query(`UPDATE ${table} SET ${flag} = 1`);
+    await legacy.up(queryRunner);
+    assert.ok((await queryRunner.query(`SELECT ${flag} FROM ${table}`)).every(row => Number(row.sso_auto_redirect_single_provider) === 1));
+    const after = await dataSource.getRepository(PlatformSettings).findOneByOrFail({ id: 'default' });
+    assert.deepEqual(after, before, 'historical boolean upgrade and retry must retain all existing settings');
+    await legacy.down(queryRunner);
+    await legacy.down(queryRunner);
+    assert.equal(await queryRunner.hasColumn(settingsPath, 'sso_auto_redirect_single_provider'), false);
+    observation.legacySsoBooleanMigration = { status: 'passed', migration: legacy.name, numericDefault: 0, retryPreservesTrue: true, rowsPreserved: true };
+  }
   await providerPreference.down(queryRunner);
   await loginExperience.down(queryRunner);
   await governanceOwnership.down(queryRunner);

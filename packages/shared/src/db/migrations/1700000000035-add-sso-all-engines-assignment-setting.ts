@@ -1,3 +1,4 @@
+import { legacyBooleanColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -21,8 +22,7 @@ export class AddSsoAllEnginesAssignmentSetting1700000000035 implements Migration
         settingsTable,
         new TableColumn({
           name: 'sso_all_engines_assignment_mappings_enabled',
-          type: 'boolean',
-          default: true,
+          ...legacyBooleanColumn(queryRunner, true),
         })
       );
     }
