@@ -1,5 +1,6 @@
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function text(queryRunner: QueryRunner, kind: 'key' | 'document' = 'document'): { type: string; length?: string } {
   const database = queryRunner.connection?.options?.type || 'postgres';
@@ -53,7 +54,7 @@ export class AddEngineBackstopFoundation1700000000101 implements MigrationInterf
     const timestamp = bigint(queryRunner);
     const boolean = bool(queryRunner);
     const count = integer(queryRunner);
-    await createIfMissing(queryRunner, new Table({
+    await createIfMissing(queryRunner, portableTable(queryRunner, {
       name: 'engine_backstop_group_mappings',
       columns: [
         { name: 'id', ...key, isPrimary: true }, { name: 'tenant_id', ...document, isNullable: true },
@@ -77,7 +78,7 @@ export class AddEngineBackstopFoundation1700000000101 implements MigrationInterf
         new TableIndex({ name: 'idx_engine_backstop_group_mapping_tenant', columnNames: ['tenant_id'] }),
       ],
     }));
-    await createIfMissing(queryRunner, new Table({
+    await createIfMissing(queryRunner, portableTable(queryRunner, {
       name: 'engine_backstop_sync_runs',
       columns: [
         { name: 'id', ...key, isPrimary: true }, { name: 'tenant_id', ...document, isNullable: true }, { name: 'engine_id', ...key },
@@ -94,7 +95,7 @@ export class AddEngineBackstopFoundation1700000000101 implements MigrationInterf
         new TableIndex({ name: 'idx_engine_backstop_sync_run_snapshot_expiry', columnNames: ['detailed_snapshot_expires_at'] }),
       ],
     }));
-    await createIfMissing(queryRunner, new Table({
+    await createIfMissing(queryRunner, portableTable(queryRunner, {
       name: 'engine_backstop_sync_tasks',
       columns: [
         { name: 'id', ...key, isPrimary: true }, { name: 'tenant_id', ...document, isNullable: true }, { name: 'engine_id', ...key },

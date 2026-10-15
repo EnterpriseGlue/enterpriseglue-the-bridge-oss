@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -35,9 +35,9 @@ export class RequireCanonicalRoleAssignmentShape1700000000084 implements Migrati
       );
     }
 
-    await queryRunner.changeColumn(tableName, 'principal_type', new TableColumn({ name: 'principal_type', type: 'text', isNullable: false }));
-    await queryRunner.changeColumn(tableName, 'principal_id', new TableColumn({ name: 'principal_id', type: 'text', isNullable: false }));
-    await queryRunner.changeColumn(tableName, 'scope_type', new TableColumn({ name: 'scope_type', type: 'text', isNullable: false }));
+    await queryRunner.changeColumn(tableName, 'principal_type', portableColumn(queryRunner, { name: 'principal_type', type: 'text', isNullable: false }));
+    await queryRunner.changeColumn(tableName, 'principal_id', portableColumn(queryRunner, { name: 'principal_id', type: 'text', isNullable: false }));
+    await queryRunner.changeColumn(tableName, 'scope_type', portableColumn(queryRunner, { name: 'scope_type', type: 'text', isNullable: false }));
   }
 
   public async down(): Promise<void> {

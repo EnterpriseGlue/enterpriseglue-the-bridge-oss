@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class CleanupLegacyInvitationsSchema1700000000013 implements MigrationInterface {
   name = 'CleanupLegacyInvitationsSchema1700000000013';
@@ -11,28 +12,28 @@ export class CleanupLegacyInvitationsSchema1700000000013 implements MigrationInt
     }
 
     const columns = [
-      new TableColumn({ name: 'user_id', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'email', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'tenant_slug', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'resource_type', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'resource_id', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'resource_name', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'platform_role', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'resource_role', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'resource_roles_json', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'invite_token_hash', type: 'text', isNullable: true, isUnique: true }),
-      new TableColumn({ name: 'one_time_password_hash', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'delivery_method', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'status', type: 'text', isNullable: true, default: queryRunner.connection.options.type === 'postgres' ? "'pending'" : "'pending'" }),
-      new TableColumn({ name: 'expires_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'created_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'updated_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'created_by_user_id', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'otp_verified_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'completed_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'revoked_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'failed_attempts', type: queryRunner.connection.options.type === 'spanner' ? 'int64' : 'int', isNullable: true, default: '0' }),
-      new TableColumn({ name: 'locked_until', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'user_id', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'email', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'tenant_slug', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'resource_type', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'resource_id', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'resource_name', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'platform_role', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'resource_role', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'resource_roles_json', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'invite_token_hash', type: 'text', isNullable: true, isUnique: true }),
+      portableColumn(queryRunner, { name: 'one_time_password_hash', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'delivery_method', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'status', type: 'text', isNullable: true, default: queryRunner.connection.options.type === 'postgres' ? "'pending'" : "'pending'" }),
+      portableColumn(queryRunner, { name: 'expires_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'created_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'updated_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'created_by_user_id', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'otp_verified_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'completed_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'revoked_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'failed_attempts', type: queryRunner.connection.options.type === 'spanner' ? 'int64' : 'int', isNullable: true, default: '0' }),
+      portableColumn(queryRunner, { name: 'locked_until', type: 'bigint', isNullable: true }),
     ];
 
     for (const column of columns) {
@@ -50,7 +51,7 @@ export class CleanupLegacyInvitationsSchema1700000000013 implements MigrationInt
     for (const columnName of legacyNullableColumns) {
       const existingColumn = table.columns.find((column) => column.name === columnName);
       if (existingColumn && !existingColumn.isNullable) {
-        await queryRunner.changeColumn(tablePath, existingColumn, new TableColumn({
+        await queryRunner.changeColumn(tablePath, existingColumn, portableColumn(queryRunner, {
           ...existingColumn,
           isNullable: true,
         }));

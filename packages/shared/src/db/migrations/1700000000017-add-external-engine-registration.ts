@@ -1,5 +1,6 @@
 import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 async function addColumnIfMissing(queryRunner: QueryRunner, tablePath: string, column: TableColumn): Promise<void> {
   if (!(await queryRunner.hasColumn(tablePath, column.name))) {
@@ -13,10 +14,10 @@ export class AddExternalEngineRegistration1700000000017 implements MigrationInte
   public async up(queryRunner: QueryRunner): Promise<void> {
     const engineTablePath = queryRunner.connection.getMetadata('Engine').tablePath;
     if (await queryRunner.hasTable(engineTablePath)) {
-      await addColumnIfMissing(queryRunner, engineTablePath, new TableColumn({ name: 'external_id', type: 'text', isNullable: true }));
-      await addColumnIfMissing(queryRunner, engineTablePath, new TableColumn({ name: 'labels_json', type: 'text', isNullable: true }));
-      await addColumnIfMissing(queryRunner, engineTablePath, new TableColumn({ name: 'registration_source', type: 'text', isNullable: true }));
-      await addColumnIfMissing(queryRunner, engineTablePath, new TableColumn({ name: 'external_updated_at', type: 'bigint', isNullable: true }));
+      await addColumnIfMissing(queryRunner, engineTablePath, portableColumn(queryRunner, { name: 'external_id', type: 'text', isNullable: true }));
+      await addColumnIfMissing(queryRunner, engineTablePath, portableColumn(queryRunner, { name: 'labels_json', type: 'text', isNullable: true }));
+      await addColumnIfMissing(queryRunner, engineTablePath, portableColumn(queryRunner, { name: 'registration_source', type: 'text', isNullable: true }));
+      await addColumnIfMissing(queryRunner, engineTablePath, portableColumn(queryRunner, { name: 'external_updated_at', type: 'bigint', isNullable: true }));
 
       const engineTable = await queryRunner.getTable(engineTablePath);
       if (!engineTable?.indices.some((index) => index.name === 'idx_engines_external_id')) {
@@ -32,9 +33,9 @@ export class AddExternalEngineRegistration1700000000017 implements MigrationInte
       catch { return 'sso_assignment_mappings'; }
     })();
     if (await queryRunner.hasTable(ssoAssignmentTablePath)) {
-      await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, new TableColumn({ name: 'target_external_engine_id', type: 'text', isNullable: true }));
-      await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, new TableColumn({ name: 'target_label_key', type: 'text', isNullable: true }));
-      await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, new TableColumn({ name: 'target_label_value', type: 'text', isNullable: true }));
+      await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, portableColumn(queryRunner, { name: 'target_external_engine_id', type: 'text', isNullable: true }));
+      await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, portableColumn(queryRunner, { name: 'target_label_key', type: 'text', isNullable: true }));
+      await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, portableColumn(queryRunner, { name: 'target_label_value', type: 'text', isNullable: true }));
     }
   }
 

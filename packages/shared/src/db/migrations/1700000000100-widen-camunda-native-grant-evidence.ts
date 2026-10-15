@@ -1,5 +1,6 @@
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function databaseType(queryRunner: QueryRunner): string {
   return queryRunner.connection?.options?.type || 'postgres';
@@ -16,11 +17,11 @@ function tablePath(queryRunner: QueryRunner): string {
 
 function largeDocumentColumn(queryRunner: QueryRunner, name: string, isNullable: boolean): TableColumn {
   const database = databaseType(queryRunner);
-  if (database === 'mysql') return new TableColumn({ name, type: 'longtext', isNullable });
-  if (database === 'mssql') return new TableColumn({ name, type: 'nvarchar', length: 'MAX', isNullable });
-  if (database === 'oracle') return new TableColumn({ name, type: 'clob', isNullable });
-  if (database === 'spanner') return new TableColumn({ name, type: 'string', length: 'max', isNullable });
-  return new TableColumn({ name, type: 'text', isNullable });
+  if (database === 'mysql') return portableColumn(queryRunner, { name, type: 'longtext', isNullable });
+  if (database === 'mssql') return portableColumn(queryRunner, { name, type: 'nvarchar', length: 'MAX', isNullable });
+  if (database === 'oracle') return portableColumn(queryRunner, { name, type: 'clob', isNullable });
+  if (database === 'spanner') return portableColumn(queryRunner, { name, type: 'string', length: 'max', isNullable });
+  return portableColumn(queryRunner, { name, type: 'text', isNullable });
 }
 
 /**

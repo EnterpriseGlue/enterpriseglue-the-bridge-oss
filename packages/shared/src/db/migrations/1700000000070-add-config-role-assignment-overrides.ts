@@ -1,5 +1,6 @@
-import { Table, TableIndex, TableUnique } from 'typeorm';
+import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 export class AddConfigRoleAssignmentOverrides1700000000070 implements MigrationInterface {
   name = 'AddConfigRoleAssignmentOverrides1700000000070';
@@ -8,7 +9,7 @@ export class AddConfigRoleAssignmentOverrides1700000000070 implements MigrationI
     const tableName = 'config_role_assignment_overrides';
     if (await queryRunner.hasTable(tableName)) return;
 
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: tableName,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

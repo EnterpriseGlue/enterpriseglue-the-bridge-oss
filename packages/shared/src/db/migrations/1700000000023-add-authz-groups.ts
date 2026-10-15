@@ -1,4 +1,4 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -23,7 +23,7 @@ export class AddAuthzGroups1700000000023 implements MigrationInterface {
     const groups = tablePath(queryRunner, 'AuthzGroup', 'authz_groups');
     const memberships = tablePath(queryRunner, 'AuthzGroupMembership', 'authz_group_memberships');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: groups,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -48,7 +48,7 @@ export class AddAuthzGroups1700000000023 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: memberships,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

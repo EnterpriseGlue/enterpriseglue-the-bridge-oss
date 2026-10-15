@@ -1,5 +1,6 @@
-import { Table, TableColumn, TableIndex } from 'typeorm';
+import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn, portableTable } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -21,7 +22,7 @@ export class AddSsoEngineAccessSnapshotsAndAccessAuthority1700000000042 implemen
   public async up(queryRunner: QueryRunner): Promise<void> {
     const snapshotTable = tablePath(queryRunner, 'SsoEngineAccessSnapshot', 'sso_engine_access_snapshots');
     if (!(await queryRunner.hasTable(snapshotTable))) {
-      await queryRunner.createTable(new Table({
+      await queryRunner.createTable(portableTable(queryRunner, {
         name: snapshotTable,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },
@@ -59,12 +60,12 @@ export class AddSsoEngineAccessSnapshotsAndAccessAuthority1700000000042 implemen
     const settingsTable = tablePath(queryRunner, 'PlatformSettings', 'platform_settings');
     if (!(await queryRunner.hasTable(settingsTable))) return;
 
-    await addColumnIfMissing(queryRunner, settingsTable, new TableColumn({
+    await addColumnIfMissing(queryRunner, settingsTable, portableColumn(queryRunner, {
       name: 'engine_access_authority',
       type: 'text',
       default: "'manual'",
     }));
-    await addColumnIfMissing(queryRunner, settingsTable, new TableColumn({
+    await addColumnIfMissing(queryRunner, settingsTable, portableColumn(queryRunner, {
       name: 'project_access_authority',
       type: 'text',
       default: "'manual'",

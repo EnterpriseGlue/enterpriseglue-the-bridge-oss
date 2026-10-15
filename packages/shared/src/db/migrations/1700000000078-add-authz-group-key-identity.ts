@@ -1,5 +1,6 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('AuthzGroup').tablePath; } catch { return 'authz_groups'; }
@@ -18,7 +19,7 @@ export class AddAuthzGroupKeyIdentity1700000000078 implements MigrationInterface
     const table = await queryRunner.getTable(tableName);
     if (!table) return;
     if (!table.columns.some((column) => column.name === 'group_key_identity')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'group_key_identity', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'group_key_identity', type: 'text', isNullable: true }));
     }
     const groups = await queryRunner.query(`SELECT id, tenant_id, key, group_key_identity FROM ${tableName}`) as Array<{
       id: string; tenant_id: string | null; key: string; group_key_identity: string | null;
@@ -33,7 +34,7 @@ export class AddAuthzGroupKeyIdentity1700000000078 implements MigrationInterface
     const refreshed = await queryRunner.getTable(tableName);
     if (!refreshed) return;
     if (refreshed.columns.find((column) => column.name === 'group_key_identity')?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'group_key_identity', new TableColumn({ name: 'group_key_identity', type: 'text', isNullable: false }));
+      await queryRunner.changeColumn(tableName, 'group_key_identity', portableColumn(queryRunner, { name: 'group_key_identity', type: 'text', isNullable: false }));
     }
     const current = await queryRunner.getTable(tableName);
     if (!current || current.uniques.some((unique) => unique.name === 'uq_authz_groups_key_identity') || current.indices.some((index) => index.name === 'uq_authz_groups_key_identity')) return;

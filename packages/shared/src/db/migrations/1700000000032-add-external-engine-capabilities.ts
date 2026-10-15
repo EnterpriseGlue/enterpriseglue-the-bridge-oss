@@ -1,5 +1,6 @@
 import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -40,12 +41,12 @@ export class AddExternalEngineCapabilities1700000000032 implements MigrationInte
     const enginesTable = tablePath(queryRunner, 'Engine', 'engines');
     const registrationsTable = tablePath(queryRunner, 'ExternalEngineRegistration', 'external_engine_registrations');
 
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'capabilities_json', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'capability_status', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'capabilities_json', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'capability_status', type: 'text', isNullable: true }));
     await createIndexIfMissing(queryRunner, enginesTable, new TableIndex({ name: 'idx_engines_capability_status', columnNames: ['capability_status'] }));
 
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'capabilities_json', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'capability_status', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'capabilities_json', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'capability_status', type: 'text', isNullable: true }));
     await createIndexIfMissing(queryRunner, registrationsTable, new TableIndex({ name: 'idx_external_engine_registrations_capability_status', columnNames: ['capability_status'] }));
   }
 

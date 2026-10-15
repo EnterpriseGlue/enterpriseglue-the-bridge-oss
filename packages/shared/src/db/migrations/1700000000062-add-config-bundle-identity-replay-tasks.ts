@@ -1,12 +1,13 @@
-import { Table, TableIndex, TableUnique } from 'typeorm';
+import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 export class AddConfigBundleIdentityReplayTasks1700000000062 implements MigrationInterface {
   name = 'AddConfigBundleIdentityReplayTasks1700000000062';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('config_bundle_identity_replay_tasks')) return;
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: 'config_bundle_identity_replay_tasks',
       columns: [
         { name: 'id', type: 'text', isPrimary: true }, { name: 'tenant_id', type: 'text', isNullable: true },

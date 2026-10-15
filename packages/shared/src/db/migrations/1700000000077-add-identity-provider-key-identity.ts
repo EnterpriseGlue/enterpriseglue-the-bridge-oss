@@ -1,5 +1,6 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('IdentityProvider').tablePath; } catch { return 'identity_providers'; }
@@ -18,7 +19,7 @@ export class AddIdentityProviderKeyIdentity1700000000077 implements MigrationInt
     const table = await queryRunner.getTable(tableName);
     if (!table) return;
     if (!table.columns.some((column) => column.name === 'provider_key_identity')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'provider_key_identity', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'provider_key_identity', type: 'text', isNullable: true }));
     }
     const providers = await queryRunner.query(`SELECT id, tenant_id, key, provider_key_identity FROM ${tableName}`) as Array<{
       id: string; tenant_id: string | null; key: string; provider_key_identity: string | null;
@@ -33,7 +34,7 @@ export class AddIdentityProviderKeyIdentity1700000000077 implements MigrationInt
     const refreshed = await queryRunner.getTable(tableName);
     if (!refreshed) return;
     if (refreshed.columns.find((column) => column.name === 'provider_key_identity')?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'provider_key_identity', new TableColumn({ name: 'provider_key_identity', type: 'text', isNullable: false }));
+      await queryRunner.changeColumn(tableName, 'provider_key_identity', portableColumn(queryRunner, { name: 'provider_key_identity', type: 'text', isNullable: false }));
     }
     const current = await queryRunner.getTable(tableName);
     if (!current || current.uniques.some((unique) => unique.name === 'uq_identity_providers_key_identity') || current.indices.some((index) => index.name === 'uq_identity_providers_key_identity')) return;

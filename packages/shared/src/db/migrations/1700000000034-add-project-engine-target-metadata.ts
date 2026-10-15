@@ -1,5 +1,6 @@
 import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -22,14 +23,14 @@ export class AddProjectEngineTargetMetadata1700000000034 implements MigrationInt
     const targets = tablePath(queryRunner, 'ProjectEngineTarget', 'project_engine_targets');
     if (!(await queryRunner.hasTable(targets))) return;
 
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'external_system_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'external_project_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'external_engine_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'external_target_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'approval_status', type: 'text', default: "'not_required'" }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'approved_at', type: 'bigint', isNullable: true }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'policy_tags_json', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, targets, new TableColumn({ name: 'diagnostics_json', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'external_system_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'external_project_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'external_engine_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'external_target_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'approval_status', type: 'text', default: "'not_required'" }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'approved_at', type: 'bigint', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'policy_tags_json', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, targets, portableColumn(queryRunner, { name: 'diagnostics_json', type: 'text', isNullable: true }));
 
     const table = await queryRunner.getTable(targets);
     if (table && !table.indices.some((index) => index.name === 'idx_project_engine_targets_external')) {

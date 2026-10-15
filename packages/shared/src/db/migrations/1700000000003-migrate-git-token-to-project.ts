@@ -1,5 +1,5 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
-import { TableColumn } from 'typeorm';
+import { legacyBooleanColumn, portableColumn } from './support/portable-columns.js';
+
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 const GIT_REPOS_TABLE = 'git_repositories';
@@ -50,11 +50,11 @@ export class MigrateGitTokenToProject1700000000003 implements MigrationInterface
 
     if (!columnNames.includes('encrypted_token')) {
       await queryRunner.addColumns(reposTable, [
-        new TableColumn({ name: 'encrypted_token', type: 'text', isNullable: true }),
-        new TableColumn({ name: 'last_validated_at', type: 'bigint', isNullable: true }),
-        new TableColumn({ name: 'token_scope_hint', type: 'text', isNullable: true }),
-        new TableColumn({ name: 'auto_push_enabled', ...legacyBooleanColumn(queryRunner), isNullable: true }),
-        new TableColumn({ name: 'auto_pull_enabled', ...legacyBooleanColumn(queryRunner), isNullable: true }),
+        portableColumn(queryRunner, { name: 'encrypted_token', type: 'text', isNullable: true }),
+        portableColumn(queryRunner, { name: 'last_validated_at', type: 'bigint', isNullable: true }),
+        portableColumn(queryRunner, { name: 'token_scope_hint', type: 'text', isNullable: true }),
+        portableColumn(queryRunner, { name: 'auto_push_enabled', ...legacyBooleanColumn(queryRunner), isNullable: true }),
+        portableColumn(queryRunner, { name: 'auto_pull_enabled', ...legacyBooleanColumn(queryRunner), isNullable: true }),
       ]);
     }
 

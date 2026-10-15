@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -17,7 +17,7 @@ export class MakeRoleAssignmentAliasesOptional1700000000046 implements Migration
     const table = await queryRunner.getTable(tableName);
     const userId = table?.columns.find((column) => column.name === 'user_id');
     if (userId && !userId.isNullable) {
-      await queryRunner.changeColumn(tableName, 'user_id', new TableColumn({
+      await queryRunner.changeColumn(tableName, 'user_id', portableColumn(queryRunner, {
         name: 'user_id',
         type: 'text',
         isNullable: true,

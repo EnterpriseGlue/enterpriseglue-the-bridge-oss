@@ -1,5 +1,6 @@
 import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner, Table } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -29,12 +30,12 @@ export class AddPrincipalRoleAssignmentShape1700000000022 implements MigrationIn
     const table = await queryRunner.getTable(tableName);
     if (!table) return;
 
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'principal_type', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'principal_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'scope_type', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'scope_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'source_ref', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'expires_at', type: 'bigint', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'principal_type', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'principal_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'scope_type', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'scope_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'source_ref', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'expires_at', type: 'bigint', isNullable: true }));
 
     const refreshedTable = await queryRunner.getTable(tableName);
     if (!refreshedTable) return;

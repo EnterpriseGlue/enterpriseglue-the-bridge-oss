@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
-import type { QueryRunner } from 'typeorm';
+import { Table, TableColumn } from 'typeorm';
+import type { QueryRunner, TableColumnOptions, TableOptions } from 'typeorm';
 
 type SupportedDatabase = 'postgres' | 'mysql' | 'mssql' | 'oracle' | 'spanner';
 type TextSize = 'key' | 'document' | 'large';
@@ -79,6 +79,67 @@ export function portableBigint(queryRunner: QueryRunner): {
 
 export function sqlStringLiteral(value: string): string {
   return `'${value.split("'").join("''")}'`;
+}
+
+/**
+ * Projects the PostgreSQL-flavoured column spellings used throughout the legacy
+ * migration epoch (`text`, `bigint`, `boolean`) onto the dialect the migration
+ * is actually running against. Text columns that participate in a primary key,
+ * unique constraint or index are bounded because Oracle, MySQL and Spanner all
+ * reject unbounded key columns.
+ */
+function normalizePortableColumn(
+  queryRunner: QueryRunner,
+  column: TableColumnOptions,
+  context: { indexed: boolean },
+): TableColumnOptions {
+  if (column.type === 'boolean') {
+    return {
+      ...column,
+      ...portableBoolean(queryRunner),
+      default: typeof column.default === 'boolean'
+        ? portableBooleanDefault(queryRunner, column.default)
+        : column.default,
+    };
+  }
+  if (column.type === 'bigint') {
+    return { ...column, ...portableBigint(queryRunner) };
+  }
+  // `integer` is ANSI and valid on Oracle/MySQL/SQL Server; only Spanner rejects it.
+  if ((column.type === 'integer' || column.type === 'int') && migrationDatabase(queryRunner) === 'spanner') {
+    return { ...column, type: 'int64' };
+  }
+  if (column.type !== 'text') return column;
+
+  const bounded = Boolean(column.isPrimary)
+    || Boolean(column.isUnique)
+    || context.indexed
+    || column.default !== undefined;
+  return { ...column, ...portableText(queryRunner, bounded ? 'key' : 'document') };
+}
+
+/** Builds a `Table` whose column types are valid on the connected dialect. */
+export function portableTable(queryRunner: QueryRunner, options: TableOptions): Table {
+  const keyColumns = new Set<string>([
+    ...(options.indices ?? []).flatMap((index) => index.columnNames ?? []),
+    ...(options.uniques ?? []).flatMap((unique) => unique.columnNames ?? []),
+  ]);
+  return new Table({
+    ...options,
+    columns: (options.columns ?? []).map((column) =>
+      normalizePortableColumn(queryRunner, column, { indexed: keyColumns.has(column.name) })),
+  });
+}
+
+/** Builds a `TableColumn` whose type is valid on the connected dialect. */
+export function portableColumn(
+  queryRunner: QueryRunner,
+  options: TableColumnOptions,
+  context: { indexed?: boolean } = {},
+): TableColumn {
+  return new TableColumn(
+    normalizePortableColumn(queryRunner, options, { indexed: context.indexed ?? false }),
+  );
 }
 
 export function portableStringDefault(queryRunner: QueryRunner, value: string): string | undefined {

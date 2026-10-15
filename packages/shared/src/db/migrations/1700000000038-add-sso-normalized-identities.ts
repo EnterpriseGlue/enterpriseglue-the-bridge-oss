@@ -1,5 +1,6 @@
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -21,7 +22,7 @@ export class AddSsoNormalizedIdentities1700000000038 implements MigrationInterfa
   public async up(queryRunner: QueryRunner): Promise<void> {
     const identities = tablePath(queryRunner, 'SsoNormalizedIdentity', 'sso_normalized_identities');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: identities,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

@@ -1,5 +1,6 @@
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 const TABLE = 'files';
 
@@ -48,10 +49,10 @@ export class AddFileLinkColumns1700000000000 implements MigrationInterface {
 
     const columnsToAdd: TableColumn[] = [];
     if (!table.columns.some((column) => column.name === 'bpmn_process_id')) {
-      columnsToAdd.push(new TableColumn({ name: 'bpmn_process_id', type: 'text', isNullable: true }));
+      columnsToAdd.push(portableColumn(queryRunner, { name: 'bpmn_process_id', type: 'text', isNullable: true }));
     }
     if (!table.columns.some((column) => column.name === 'dmn_decision_id')) {
-      columnsToAdd.push(new TableColumn({ name: 'dmn_decision_id', type: 'text', isNullable: true }));
+      columnsToAdd.push(portableColumn(queryRunner, { name: 'dmn_decision_id', type: 'text', isNullable: true }));
     }
 
     if (columnsToAdd.length > 0) {

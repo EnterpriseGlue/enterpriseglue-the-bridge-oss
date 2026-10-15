@@ -1,6 +1,7 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner, Table } from 'typeorm';
 import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -19,7 +20,7 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
     if (!table) return;
 
     if (!table.columns.some((column) => column.name === 'assignment_key')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'assignment_key', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'assignment_key', type: 'text', isNullable: true }));
     }
 
     const rows = await queryRunner.query(`SELECT id, tenant_id, user_id, principal_type, principal_id, role_id, resource_type, resource_id, scope_type, scope_id, source, source_mapping_id, source_ref, assignment_key FROM ${tableName}`) as Array<{
@@ -76,7 +77,7 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
     if (!refreshed) return;
     const keyColumn = refreshed.columns.find((column) => column.name === 'assignment_key');
     if (keyColumn?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'assignment_key', new TableColumn({
+      await queryRunner.changeColumn(tableName, 'assignment_key', portableColumn(queryRunner, {
         name: 'assignment_key',
         type: 'text',
         isNullable: false,

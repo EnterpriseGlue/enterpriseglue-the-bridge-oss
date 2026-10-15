@@ -1,12 +1,13 @@
-import { Table, TableIndex, TableUnique } from 'typeorm';
+import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 export class AddConfigBundleApplyRuns1700000000061 implements MigrationInterface {
   name = 'AddConfigBundleApplyRuns1700000000061';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('config_bundle_apply_runs')) return;
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: 'config_bundle_apply_runs',
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

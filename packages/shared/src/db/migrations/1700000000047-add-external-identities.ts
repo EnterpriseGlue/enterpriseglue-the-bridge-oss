@@ -1,5 +1,6 @@
-import { Table, TableIndex, TableUnique } from 'typeorm';
+import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try { return queryRunner.connection.getMetadata(metadataName).tablePath; } catch { return fallback; }
@@ -10,7 +11,7 @@ export class AddExternalIdentities1700000000047 implements MigrationInterface {
   async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = tablePath(queryRunner, 'ExternalIdentity', 'external_identities');
     if (await queryRunner.hasTable(tableName)) return;
-    await queryRunner.createTable(new Table({ name: tableName, columns: [
+    await queryRunner.createTable(portableTable(queryRunner, { name: tableName, columns: [
       { name: 'id', type: 'text', isPrimary: true }, { name: 'identity_key', type: 'text' },
       { name: 'tenant_id', type: 'text', isNullable: true }, { name: 'provider_id', type: 'text' },
       { name: 'provider_type', type: 'text' }, { name: 'subject_id', type: 'text' },

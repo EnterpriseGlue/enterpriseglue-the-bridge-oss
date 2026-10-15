@@ -1,5 +1,5 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
-import { Table, TableIndex } from 'typeorm';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string { try { return queryRunner.connection.getMetadata(metadataName).tablePath; } catch { return fallback; } }
@@ -8,7 +8,7 @@ export class AddIdentityEntitlementMappings1700000000048 implements MigrationInt
   async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = tablePath(queryRunner, 'IdentityEntitlementMapping', 'identity_entitlement_mappings');
     if (await queryRunner.hasTable(tableName)) return;
-    await queryRunner.createTable(new Table({ name: tableName, columns: [
+    await queryRunner.createTable(portableTable(queryRunner, { name: tableName, columns: [
       { name: 'id', type: 'text', isPrimary: true }, { name: 'tenant_id', type: 'text', isNullable: true },
       { name: 'provider_id', type: 'text' }, { name: 'config_key', type: 'text', isNullable: true },
       { name: 'entitlement_type', type: 'text' }, { name: 'external_id', type: 'text', isNullable: true },

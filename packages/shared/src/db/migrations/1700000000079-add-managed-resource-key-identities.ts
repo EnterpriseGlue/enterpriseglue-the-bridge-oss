@@ -1,5 +1,6 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 type KeyedResource = {
   metadataName: string;
@@ -31,7 +32,7 @@ export class AddManagedResourceKeyIdentities1700000000079 implements MigrationIn
       const table = await queryRunner.getTable(tableName);
       if (!table) continue;
       if (!table.columns.some((column) => column.name === resource.column)) {
-        await queryRunner.addColumn(tableName, new TableColumn({ name: resource.column, type: 'text', isNullable: true }));
+        await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: resource.column, type: 'text', isNullable: true }));
       }
       const rows = await queryRunner.query(`SELECT id, tenant_id, key, ${resource.column} FROM ${tableName}`) as Array<{
         id: string; tenant_id: string | null; key: string;
@@ -45,7 +46,7 @@ export class AddManagedResourceKeyIdentities1700000000079 implements MigrationIn
       const refreshed = await queryRunner.getTable(tableName);
       if (!refreshed) continue;
       if (refreshed.columns.find((column) => column.name === resource.column)?.isNullable) {
-        await queryRunner.changeColumn(tableName, resource.column, new TableColumn({ name: resource.column, type: 'text', isNullable: false }));
+        await queryRunner.changeColumn(tableName, resource.column, portableColumn(queryRunner, { name: resource.column, type: 'text', isNullable: false }));
       }
       const current = await queryRunner.getTable(tableName);
       if (current && !current.uniques.some((candidate) => candidate.name === resource.unique) && !current.indices.some((candidate) => candidate.name === resource.unique)) {

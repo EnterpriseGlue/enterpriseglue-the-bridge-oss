@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -52,12 +53,12 @@ export class AddDeploymentHistoryLineage1700000000058 implements MigrationInterf
     if (await queryRunner.hasTable(deployments)) {
       for (const definition of DEPLOYMENT_COLUMNS) {
         if (!(await queryRunner.hasColumn(deployments, definition.name))) {
-          await queryRunner.addColumn(deployments, new TableColumn(definition));
+          await queryRunner.addColumn(deployments, portableColumn(queryRunner, definition));
         }
       }
       const projectColumn = (await queryRunner.getTable(deployments))?.findColumnByName('project_id');
       if (projectColumn && !projectColumn.isNullable) {
-        await queryRunner.changeColumn(deployments, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: true }));
+        await queryRunner.changeColumn(deployments, 'project_id', portableColumn(queryRunner, { name: 'project_id', type: projectColumn.type, isNullable: true }));
       }
       const table = await queryRunner.getTable(deployments);
       if (table && !table.indices.some((index) => index.name === 'uq_engine_deployments_engine_camunda_deployment')) {
@@ -74,7 +75,7 @@ export class AddDeploymentHistoryLineage1700000000058 implements MigrationInterf
     if (await queryRunner.hasTable(artifacts)) {
       const projectColumn = (await queryRunner.getTable(artifacts))?.findColumnByName('project_id');
       if (projectColumn && !projectColumn.isNullable) {
-        await queryRunner.changeColumn(artifacts, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: true }));
+        await queryRunner.changeColumn(artifacts, 'project_id', portableColumn(queryRunner, { name: 'project_id', type: projectColumn.type, isNullable: true }));
       }
     }
   }
@@ -90,14 +91,14 @@ export class AddDeploymentHistoryLineage1700000000058 implements MigrationInterf
       }
       const projectColumn = (await queryRunner.getTable(deployments))?.findColumnByName('project_id');
       if (projectColumn?.isNullable) {
-        await queryRunner.changeColumn(deployments, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: false }));
+        await queryRunner.changeColumn(deployments, 'project_id', portableColumn(queryRunner, { name: 'project_id', type: projectColumn.type, isNullable: false }));
       }
     }
     const artifacts = tablePath(queryRunner, 'EngineDeploymentArtifact', 'engine_deployment_artifacts');
     if (await queryRunner.hasTable(artifacts)) {
       const projectColumn = (await queryRunner.getTable(artifacts))?.findColumnByName('project_id');
       if (projectColumn?.isNullable) {
-        await queryRunner.changeColumn(artifacts, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: false }));
+        await queryRunner.changeColumn(artifacts, 'project_id', portableColumn(queryRunner, { name: 'project_id', type: projectColumn.type, isNullable: false }));
       }
     }
   }

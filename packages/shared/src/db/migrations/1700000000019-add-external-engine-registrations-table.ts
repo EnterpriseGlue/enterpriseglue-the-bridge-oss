@@ -1,5 +1,6 @@
-import { Table, TableIndex, TableUnique } from 'typeorm';
+import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -17,7 +18,7 @@ export class AddExternalEngineRegistrationsTable1700000000019 implements Migrati
     const engines = tablePath(queryRunner, 'Engine', 'engines');
 
     if (!(await queryRunner.hasTable(registrations))) {
-      await queryRunner.createTable(new Table({
+      await queryRunner.createTable(portableTable(queryRunner, {
         name: registrations,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },

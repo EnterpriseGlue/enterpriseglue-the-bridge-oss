@@ -1,5 +1,6 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('IdentityEntitlementMapping').tablePath; } catch { return 'identity_entitlement_mappings'; }
@@ -18,7 +19,7 @@ export class AddIdentityMappingConfigKeyIdentity1700000000080 implements Migrati
     const table = await queryRunner.getTable(tableName);
     if (!table) return;
     if (!table.columns.some((column) => column.name === 'config_key_identity')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'config_key_identity', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'config_key_identity', type: 'text', isNullable: true }));
     }
     const mappings = await queryRunner.query(`SELECT id, tenant_id, config_key, config_key_identity FROM ${tableName}`) as Array<{
       id: string; tenant_id: string | null; config_key: string | null; config_key_identity: string | null;

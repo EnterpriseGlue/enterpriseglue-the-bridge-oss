@@ -1,5 +1,6 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -26,7 +27,7 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
     if (!table) return;
 
     if (!table.columns.some((column) => column.name === 'role_key_identity')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'role_key_identity', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'role_key_identity', type: 'text', isNullable: true }));
     }
 
     const roles = await queryRunner.query(`SELECT id, tenant_id, key, role_key_identity FROM ${tableName}`) as Array<{
@@ -51,7 +52,7 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
     if (!refreshed) return;
     const identityColumn = refreshed.columns.find((column) => column.name === 'role_key_identity');
     if (identityColumn?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'role_key_identity', new TableColumn({ name: 'role_key_identity', type: 'text', isNullable: false }));
+      await queryRunner.changeColumn(tableName, 'role_key_identity', portableColumn(queryRunner, { name: 'role_key_identity', type: 'text', isNullable: false }));
     }
     const current = await queryRunner.getTable(tableName);
     if (!current) return;

@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function portableDocumentText(queryRunner: QueryRunner): { type: string; length?: string } {
   const database = queryRunner.connection.options?.type || 'postgres';
@@ -31,7 +31,7 @@ export class AddEngineTenantMappingReference1700000000097 implements MigrationIn
       await queryRunner.hasTable(mappings)
       && !(await queryRunner.hasColumn(mappings, 'tenant_reference_json'))
     ) {
-      await queryRunner.addColumn(mappings, new TableColumn({
+      await queryRunner.addColumn(mappings, portableColumn(queryRunner, {
         name: 'tenant_reference_json',
         ...portableDocumentText(queryRunner),
         isNullable: true,

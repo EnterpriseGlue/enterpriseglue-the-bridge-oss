@@ -1,5 +1,5 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
-import { Table, TableIndex } from 'typeorm';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
@@ -17,7 +17,7 @@ export class AddServiceAccounts1700000000027 implements MigrationInterface {
     const serviceAccounts = tablePath(queryRunner, 'ServiceAccount', 'service_accounts');
 
     if (!(await queryRunner.hasTable(serviceAccounts))) {
-      await queryRunner.createTable(new Table({
+      await queryRunner.createTable(portableTable(queryRunner, {
         name: serviceAccounts,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },

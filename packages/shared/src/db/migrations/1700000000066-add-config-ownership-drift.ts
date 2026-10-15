@@ -1,5 +1,6 @@
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -16,10 +17,10 @@ function escapeTablePath(queryRunner: QueryRunner, table: string): string {
 async function addOwnershipColumns(queryRunner: QueryRunner, tableName: string): Promise<void> {
   if (!(await queryRunner.hasTable(tableName))) return;
   const columns: Array<[string, TableColumn]> = [
-    ['ownership_mode', new TableColumn({ name: 'ownership_mode', type: 'text', default: "'manual'" })],
-    ['source_hash', new TableColumn({ name: 'source_hash', type: 'text', isNullable: true })],
-    ['last_applied_at', new TableColumn({ name: 'last_applied_at', type: 'bigint', isNullable: true })],
-    ['drift_status', new TableColumn({ name: 'drift_status', type: 'text', isNullable: true })],
+    ['ownership_mode', portableColumn(queryRunner, { name: 'ownership_mode', type: 'text', default: "'manual'" })],
+    ['source_hash', portableColumn(queryRunner, { name: 'source_hash', type: 'text', isNullable: true })],
+    ['last_applied_at', portableColumn(queryRunner, { name: 'last_applied_at', type: 'bigint', isNullable: true })],
+    ['drift_status', portableColumn(queryRunner, { name: 'drift_status', type: 'text', isNullable: true })],
   ];
   for (const [name, column] of columns) {
     if (!(await queryRunner.hasColumn(tableName, name))) await queryRunner.addColumn(tableName, column);

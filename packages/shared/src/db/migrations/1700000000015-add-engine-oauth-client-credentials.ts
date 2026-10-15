@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class AddEngineOauthClientCredentials1700000000015 implements MigrationInterface {
   name = 'AddEngineOauthClientCredentials1700000000015';
@@ -9,9 +9,9 @@ export class AddEngineOauthClientCredentials1700000000015 implements MigrationIn
     if (!(await queryRunner.hasTable(tablePath))) return;
 
     const columns = [
-      new TableColumn({ name: 'oauth_token_url', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'oauth_scopes', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'oauth_audience', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'oauth_token_url', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'oauth_scopes', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'oauth_audience', type: 'text', isNullable: true }),
     ];
 
     for (const column of columns) {

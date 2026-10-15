@@ -1,5 +1,6 @@
-import { Table, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function portableText(
   queryRunner: QueryRunner,
@@ -69,7 +70,7 @@ export class AddCamundaNativeGrantImportRuns1700000000098 implements MigrationIn
     const largeDocumentText = portableLargeDocumentText(queryRunner);
     const boolean = portableBoolean(queryRunner);
     const bigint = portableBigint(queryRunner);
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: tableName,
       columns: [
         { name: 'id', ...keyText, isPrimary: true },
