@@ -113,8 +113,9 @@ function normalizePortableColumn(
 
   const bounded = Boolean(column.isPrimary)
     || Boolean(column.isUnique)
-    || context.indexed
-    || column.default !== undefined;
+    || context.indexed;
+  // A default does not make a document an index key. JSON columns commonly
+  // default to '{}' or '[]' and must retain the full document capacity.
   return { ...column, ...portableText(queryRunner, bounded ? 'key' : 'document') };
 }
 

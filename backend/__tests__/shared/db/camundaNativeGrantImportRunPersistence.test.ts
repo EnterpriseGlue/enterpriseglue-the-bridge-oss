@@ -205,5 +205,27 @@ describe('Camunda native-grant import evidence persistence', () => {
       expect(state.rows).toEqual([{ classifications_json: '{"grants":2}', encrypted_detailed_snapshot: null }]);
       expect(runner.dropColumn).not.toHaveBeenCalled();
     });
+
+    it('restores NOT NULL after a committed rename was interrupted', async () => {
+      const { runner, state } = oracleRunner(
+        [varchar('classifications_json', false), varchar('encrypted_detailed_snapshot', true)],
+        [{ classifications_json: '{"grants":3}', encrypted_detailed_snapshot: 'ciphertext' }],
+      );
+      const rename = runner.renameColumn.getMockImplementation()!;
+      runner.renameColumn.mockImplementationOnce(async (...args) => {
+        await rename(...args);
+        throw new Error('interrupted after Oracle committed the rename');
+      });
+      const migration = new WidenCamundaNativeGrantEvidence1700000000100();
+      await expect(migration.up(runner as any)).rejects.toThrow('interrupted');
+      expect(state.columns.find((column) => column.name === 'classifications_json')?.isNullable).toBe(true);
+
+      await migration.up(runner as any);
+      await migration.up(runner as any);
+
+      expect(state.columns.find((column) => column.name === 'classifications_json')).toMatchObject({ type: 'clob', isNullable: false });
+      expect(state.rows).toEqual([{ classifications_json: '{"grants":3}', encrypted_detailed_snapshot: 'ciphertext' }]);
+      expect(state.columns.some((column) => column.name.endsWith('_clob'))).toBe(false);
+    });
   });
 });

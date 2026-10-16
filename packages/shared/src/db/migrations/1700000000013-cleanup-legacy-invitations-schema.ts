@@ -1,6 +1,6 @@
 import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, setExistingColumnNullability } from './support/portable-columns.js';
 
 export class CleanupLegacyInvitationsSchema1700000000013 implements MigrationInterface {
   name = 'CleanupLegacyInvitationsSchema1700000000013';
@@ -49,13 +49,7 @@ export class CleanupLegacyInvitationsSchema1700000000013 implements MigrationInt
 
     const legacyNullableColumns = ['token', 'tenant_id', 'role', 'invited_by_user_id'];
     for (const columnName of legacyNullableColumns) {
-      const existingColumn = table.columns.find((column) => column.name === columnName);
-      if (existingColumn && !existingColumn.isNullable) {
-        await queryRunner.changeColumn(tablePath, existingColumn, portableColumn(queryRunner, {
-          ...existingColumn,
-          isNullable: true,
-        }));
-      }
+      await setExistingColumnNullability(queryRunner, tablePath, columnName, true);
     }
 
     const refreshedTable = await queryRunner.getTable(tablePath);

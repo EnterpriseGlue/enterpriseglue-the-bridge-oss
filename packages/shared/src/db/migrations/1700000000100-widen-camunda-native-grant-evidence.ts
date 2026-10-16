@@ -43,8 +43,12 @@ async function widenOracleColumnToClob(
   const staging = `${name}_clob`;
   const table = await queryRunner.getTable(tableName);
   const original = table?.findColumnByName(name);
-  if (original?.type === 'clob') return;
-  const isNullable = original?.isNullable ?? expectedNullable;
+  if (original?.type === 'clob') {
+    // The rename commits before NOT NULL is restored. A retry must finish
+    // that constraint change even though the column already has its final type.
+    await setExistingColumnNullability(queryRunner, tableName, name, expectedNullable);
+    return;
+  }
   if (original) {
     if (!table?.findColumnByName(staging)) {
       await queryRunner.addColumn(tableName, new TableColumn({ name: staging, type: 'clob', isNullable: true }));
@@ -57,7 +61,7 @@ async function widenOracleColumnToClob(
   }
   if (!(await queryRunner.getTable(tableName))?.findColumnByName(staging)) return;
   await queryRunner.renameColumn(tableName, staging, name);
-  await setExistingColumnNullability(queryRunner, tableName, name, isNullable);
+  await setExistingColumnNullability(queryRunner, tableName, name, expectedNullable);
 }
 
 /**
