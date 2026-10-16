@@ -4,7 +4,7 @@
 **Observed on:** `enterpriseglue-*-backend-oracle` v0.31.1 (Oracle thick-client configuration)
 **Date:** 2026-10-15
 **Verdict:** Code defect in the legacy migration epoch. **Not** a deployment or `.env` misconfiguration.
-**Status:** Remediated in source — see §11. Not yet verified against a live Oracle target (§12).
+**Status:** Remediated in source — see §11. Verified against live Oracle XE 21c and PostgreSQL 18 (§12).
 
 ---
 
@@ -446,13 +446,44 @@ where the previous behaviour could not have worked for key columns.
 | All 136 migration files parse | Pass (`node --experimental-strip-types --check`) |
 | No unused or missing imports after conversion | Pass |
 | No offending literal left outside a normaliser | Pass — remaining matches are local helper bodies in 096–103 and normalised inputs in 114–123 |
-| `tsc` typecheck | **Not run** — `node_modules` absent in the working tree |
-| Migration test suite | **Not run** — same reason |
-| Live Oracle Path B replay | **Not run** |
+| `tsc` build of `@enterpriseglue/shared` | Pass |
+| Migration unit tests (`backend/__tests__/shared/db`) | No new failures. 18 failures remain that also fail on `main` (mock query runners without `connection.options`) |
+| Live Oracle (XE 21c): fresh schema, then rerun | Pass — baseline path, 136/136 recorded, rerun is a no-op |
+| Live Oracle: full epoch replay over a populated schema | Pass — 136/136 executed |
+| Live PostgreSQL (18): fresh, rerun and full replay | Pass — 135/135 (134 is Oracle-only) |
+| Path B (synchronize, then replay) on either dialect | Stops at 131 — see §12.2 |
 
-Before merging, run `pnpm install`, `pnpm --filter @enterpriseglue/shared build`, and the
-migration suite. The outstanding functional gap is §10: reproduce Path B against a
-partially populated Oracle schema and confirm the epoch now replays to completion.
+The replay scenario clears the migration ledger of a seeded database, drops
+`release_effect_cohorts`, and relaxes the NOT NULL columns that 045, 050, 077–079 and 084
+tighten, so those migrations really alter populated tables.
+
+### 12.1 Migration 084 and ORA-01758
+
+Once the datatype fixes were in place, the replay stopped at
+`RequireCanonicalRoleAssignmentShape1700000000084`:
+
+```
+ALTER TABLE "role_assignments" ADD "principal_type" varchar2(4000) NOT NULL
+ORA-01758: table must be empty to add mandatory (NOT NULL) column
+```
+
+The migration tightened the columns by passing a freshly built `portableColumn(... type: 'text')`
+to `changeColumn()`. On Oracle that produces `varchar2(4000)`, while the live column is
+`varchar2(191)`. TypeORM's `OracleQueryRunner.changeColumn()` drops and re-adds a column
+whenever type or length differ, and re-adding a NOT NULL column fails on a populated
+table. 084 now uses `requireExistingColumn()`, which clones the live column and changes only
+nullability, so Oracle gets `ALTER TABLE ... MODIFY "principal_type" varchar2(191) NOT NULL`
+and PostgreSQL gets `ALTER COLUMN ... SET NOT NULL`. 045, 050 and 077–079 already used the
+helper.
+
+### 12.2 Path B stops at migration 131 on every dialect
+
+When `synchronize()` runs before the replay (§3, Path B), it creates
+`release_effect_cohorts` from the entity model. Migration 131 deliberately refuses a
+pre-existing relation (`Schema-epoch owner transition refuses a pre-existing
+release_effect_cohorts relation`). Migrations 000–130 replay cleanly on Oracle and PostgreSQL
+before that point. This is the schema-epoch guard working as designed, not a portability
+defect, so it is left unchanged here (see §13).
 
 ---
 
@@ -467,7 +498,12 @@ partially populated Oracle schema and confirm the epoch now replays to completio
    doing independently of this fix.
 3. **Helper duplication.** Migrations 096–103 still carry local copies of the dialect
    branches (§7). Safe to consolidate onto the shared module in a separate change.
-4. **Oracle key widths.** 191 characters is a conservative default. Columns that legitimately
+4. **Path B and migration 131.** A Path B bootstrap always stops at 131 (§12.2), on any
+   dialect. Whether 131 should accept a relation whose shape matches
+   `expectedReleaseEffectCohortTable()` is a schema-epoch policy decision.
+5. **Pre-existing unit test failures.** 18 tests in `backend/__tests__/shared/db` fail on
+   `main` as well, because their mock query runners lack `connection.options`.
+6. **Oracle key widths.** 191 characters is a conservative default. Columns that legitimately
    need more should follow the Oracle-only widening pattern rather than raising the default.
 
 ---

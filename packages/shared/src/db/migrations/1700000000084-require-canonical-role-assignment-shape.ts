@@ -1,5 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
+import { requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -48,14 +48,10 @@ export class RequireCanonicalRoleAssignmentShape1700000000084 implements Migrati
       );
     }
 
-    // Rebuilding the column would make Oracle drop and re-add it, which fails on a
-    // populated table; clone the live column so only nullability changes.
+    // Tighten the live columns in place: a rebuilt column whose type differs
+    // makes Oracle drop and re-add it, which fails on a populated table (ORA-01758).
     for (const name of ['principal_type', 'principal_id', 'scope_type']) {
-      const current = (await queryRunner.getTable(tableName))?.findColumnByName(name);
-      if (!current || !current.isNullable) continue;
-      const required = current.clone();
-      required.isNullable = false;
-      await queryRunner.changeColumn(tableName, current, required);
+      await requireExistingColumn(queryRunner, tableName, name);
     }
   }
 
