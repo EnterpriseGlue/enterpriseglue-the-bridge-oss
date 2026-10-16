@@ -199,9 +199,10 @@ test('every Docker workspace install receives the source patch before dependency
 })
 
 
-test('runtime OS floors invalidate stale glibc layers and application Node stays on the declared major', async () => {
+test('runtime OS floors invalidate stale zlib and glibc layers and application Node stays on the declared major', async () => {
   for (const relative of ['backend/Dockerfile.prod', 'frontend/Dockerfile.prod', 'infra/docker/managed-shard-bootstrap/Dockerfile']) {
     const source = await readFile(new URL(relative, root), 'utf8');
+    assert.match(source, /zlib>=1\.3\.2\.1_rc20260921-r0/);
     assert.match(source, /glibc-2\.44>=2\.44-r8/);
     assert.match(source, /glibc-2\.44-locale-posix>=2\.44-r8/);
     assert.match(source, /ld-linux-2\.44>=2\.44-r8/);
