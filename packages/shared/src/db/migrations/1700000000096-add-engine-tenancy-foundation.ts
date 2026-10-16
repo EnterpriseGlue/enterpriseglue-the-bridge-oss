@@ -1,6 +1,5 @@
-import { TableColumn, TableIndex, TableUnique } from 'typeorm';
+import { Table, TableColumn, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn, portableTable } from './support/portable-columns.js';
 
 function portableText(
   queryRunner: QueryRunner,
@@ -136,11 +135,11 @@ export class AddEngineTenancyFoundation1700000000096 implements MigrationInterfa
     const integer = portableInteger(queryRunner);
 
     await addMissingColumns(queryRunner, engines, [
-      portableColumn(queryRunner, { name: 'tenancy_mode', ...keyText, default: "'dedicated'" }),
-      portableColumn(queryRunner, { name: 'tenant_mapping_strategy', ...keyText, isNullable: true }),
-      portableColumn(queryRunner, { name: 'tenant_mapping_version', ...integer, default: 0 }),
-      portableColumn(queryRunner, { name: 'tenant_resolution_status', ...keyText, default: "'migration_required'" }),
-      portableColumn(queryRunner, { name: 'last_tenant_reconciled_at', ...largeInteger, isNullable: true }),
+      new TableColumn({ name: 'tenancy_mode', ...keyText, default: "'dedicated'" }),
+      new TableColumn({ name: 'tenant_mapping_strategy', ...keyText, isNullable: true }),
+      new TableColumn({ name: 'tenant_mapping_version', ...integer, default: 0 }),
+      new TableColumn({ name: 'tenant_resolution_status', ...keyText, default: "'migration_required'" }),
+      new TableColumn({ name: 'last_tenant_reconciled_at', ...largeInteger, isNullable: true }),
     ]);
 
     if (await queryRunner.hasTable(engines)) {
@@ -179,10 +178,10 @@ export class AddEngineTenancyFoundation1700000000096 implements MigrationInterfa
     }
 
     await addMissingColumns(queryRunner, resources, [
-      portableColumn(queryRunner, { name: 'tenant_resolution_status', ...keyText, default: "'unmapped'" }),
-      portableColumn(queryRunner, { name: 'tenant_mapping_id', ...keyText, isNullable: true }),
-      portableColumn(queryRunner, { name: 'tenant_mapping_version', ...integer, default: 0 }),
-      portableColumn(queryRunner, { name: 'tenant_resolution_details_json', ...documentText, default: "'{}'" }),
+      new TableColumn({ name: 'tenant_resolution_status', ...keyText, default: "'unmapped'" }),
+      new TableColumn({ name: 'tenant_mapping_id', ...keyText, isNullable: true }),
+      new TableColumn({ name: 'tenant_mapping_version', ...integer, default: 0 }),
+      new TableColumn({ name: 'tenant_resolution_details_json', ...documentText, default: "'{}'" }),
     ]);
 
     if (await queryRunner.hasTable(resources)) {
@@ -219,7 +218,7 @@ export class AddEngineTenancyFoundation1700000000096 implements MigrationInterfa
     }
 
     if (!(await queryRunner.hasTable(mappings))) {
-      await queryRunner.createTable(portableTable(queryRunner, {
+      await queryRunner.createTable(new Table({
         name: mappings,
         columns: [
           { name: 'id', ...keyText, isPrimary: true },

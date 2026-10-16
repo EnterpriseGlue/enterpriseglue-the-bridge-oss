@@ -447,7 +447,7 @@ where the previous behaviour could not have worked for key columns.
 | No unused or missing imports after conversion | Pass |
 | No offending literal left outside a normaliser | Pass — remaining matches are local helper bodies in 096–103 and normalised inputs in 114–123 |
 | `tsc` build of `@enterpriseglue/shared` | Pass |
-| Migration unit tests (`backend/__tests__/shared/db`) | No new failures. 18 failures remain that also fail on `main` (mock query runners without `connection.options`) |
+| Backend unit tests | Pass — 3860/3860, including all 331 in `__tests__/shared/db` |
 | Live Oracle (XE 21c): fresh schema, then rerun | Pass — baseline path, 136/136 recorded, rerun is a no-op |
 | Live Oracle: full epoch replay over a populated schema | Pass — 136/136 executed |
 | Live PostgreSQL (18): fresh, rerun and full replay | Pass — 135/135 (134 is Oracle-only) |
@@ -457,7 +457,7 @@ The replay scenario clears the migration ledger of a seeded database, drops
 `release_effect_cohorts`, and relaxes the NOT NULL columns that 045, 050, 077–079 and 084
 tighten, so those migrations really alter populated tables.
 
-### 12.1 Migration 084 and ORA-01758
+### 12.1 Changing nullability on populated tables (ORA-01758 and silent data loss)
 
 Once the datatype fixes were in place, the replay stopped at
 `RequireCanonicalRoleAssignmentShape1700000000084`:
@@ -470,13 +470,30 @@ ORA-01758: table must be empty to add mandatory (NOT NULL) column
 The migration tightened the columns by passing a freshly built `portableColumn(... type: 'text')`
 to `changeColumn()`. On Oracle that produces `varchar2(4000)`, while the live column is
 `varchar2(191)`. TypeORM's `OracleQueryRunner.changeColumn()` drops and re-adds a column
-whenever type or length differ, and re-adding a NOT NULL column fails on a populated
-table. 084 now uses `requireExistingColumn()`, which clones the live column and changes only
-nullability, so Oracle gets `ALTER TABLE ... MODIFY "principal_type" varchar2(191) NOT NULL`
-and PostgreSQL gets `ALTER COLUMN ... SET NOT NULL`. 045, 050 and 077–079 already used the
-helper.
+whenever type or length differ, and re-adding a NOT NULL column fails on a populated table.
 
-### 12.2 Path B stops at migration 131 on every dialect
+The same pattern was used to *relax* NOT NULL in 046 (`role_assignments.user_id`) and 058
+(`project_id` on `engine_deployments` and `engine_deployment_artifacts`). There it is worse,
+because re-adding a nullable column succeeds and silently empties it. Against a live Oracle
+table holding `project_id = 'project-a'`, the old 058 code emitted
+`DROP COLUMN "project_id"` followed by `ADD "project_id" varchar2(255)` and left `null` behind.
+
+`support/portable-columns.ts` now has `setExistingColumnNullability()`, which clones the live
+column and changes only nullability. `requireExistingColumn()` delegates to it. Migrations
+045, 050, 077–079 and 084 tighten through it, and 046 and 058 relax through it. Oracle gets
+`MODIFY "col" varchar2(191) [NOT] NULL` and PostgreSQL gets
+`ALTER COLUMN ... SET/DROP NOT NULL`, with the data intact.
+
+### 12.2 Migrations 096–103 restored to their local helpers
+
+The bulk conversion had also wrapped 096–103 in `portableTable()` / `portableColumn()`,
+contrary to §11.3. Their column types were already dialect-correct, so on Oracle and
+PostgreSQL the wrapping did nothing. On MySQL it was a regression: 098 deliberately uses
+`text` for document columns, and the wrapper would have narrowed them to `varchar(4000)`.
+It also broke the tests that cover these migrations with stubs that have no `connection`. These
+eight files are back to their pre-conversion content.
+
+### 12.3 Path B stops at migration 131 on every dialect
 
 When `synchronize()` runs before the replay (§3, Path B), it creates
 `release_effect_cohorts` from the entity model. Migration 131 deliberately refuses a
@@ -498,11 +515,13 @@ defect, so it is left unchanged here (see §13).
    doing independently of this fix.
 3. **Helper duplication.** Migrations 096–103 still carry local copies of the dialect
    branches (§7). Safe to consolidate onto the shared module in a separate change.
-4. **Path B and migration 131.** A Path B bootstrap always stops at 131 (§12.2), on any
+4. **Path B and migration 131.** A Path B bootstrap always stops at 131 (§12.3), on any
    dialect. Whether 131 should accept a relation whose shape matches
    `expectedReleaseEffectCohortTable()` is a schema-epoch policy decision.
-5. **Pre-existing unit test failures.** 18 tests in `backend/__tests__/shared/db` fail on
-   `main` as well, because their mock query runners lack `connection.options`.
+5. **Migration 100 on Oracle.** `WidenCamundaNativeGrantEvidence1700000000100` changes
+   `varchar2(4000)` evidence columns to `clob` through `changeColumn()`. On Oracle that is a drop
+   and re-add, so existing import evidence is lost. Oracle cannot `MODIFY` a `varchar2` to a
+   `clob`, so a safe fix needs an add-copy-drop-rename sequence. Not done here.
 6. **Oracle key widths.** 191 characters is a conservative default. Columns that legitimately
    need more should follow the Oracle-only widening pattern rather than raising the default.
 

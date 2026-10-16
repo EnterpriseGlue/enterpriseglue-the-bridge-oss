@@ -5,7 +5,7 @@ describe('FinalizeLegacyRoleAssignmentProjections1700000000091', () => {
   it('creates the durable marker table only when it is absent', async () => {
     const hasTable = vi.fn().mockResolvedValue(false);
     const createTable = vi.fn();
-    await new FinalizeLegacyRoleAssignmentProjections1700000000091().up({ hasTable, createTable } as never);
+    await new FinalizeLegacyRoleAssignmentProjections1700000000091().up({ hasTable, createTable, connection: { options: { type: 'postgres' } } } as never);
 
     expect(createTable).toHaveBeenCalledWith(expect.objectContaining({
       name: 'authz_migration_states',

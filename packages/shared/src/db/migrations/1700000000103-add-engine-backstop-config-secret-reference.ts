@@ -1,5 +1,5 @@
+import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
 
 function text(queryRunner: QueryRunner): { type: string; length?: string } {
   const database = queryRunner.connection?.options?.type || 'postgres';
@@ -17,7 +17,7 @@ export class AddEngineBackstopConfigSecretReference1700000000103 implements Migr
   async up(queryRunner: QueryRunner): Promise<void> {
     const table = await queryRunner.getTable('engine_backstop_group_mappings');
     if (!table || table.columns.some((column) => column.name === 'native_group_secret_ref')) return;
-    await queryRunner.addColumn('engine_backstop_group_mappings', portableColumn(queryRunner, { name: 'native_group_secret_ref', ...text(queryRunner), isNullable: true }));
+    await queryRunner.addColumn('engine_backstop_group_mappings', new TableColumn({ name: 'native_group_secret_ref', ...text(queryRunner), isNullable: true }));
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

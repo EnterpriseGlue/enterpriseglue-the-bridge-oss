@@ -1,6 +1,5 @@
-import { TableIndex } from 'typeorm';
+import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
 
 function text(queryRunner: QueryRunner): { type: string; length?: string } {
   const database = queryRunner.connection?.options?.type || 'postgres';
@@ -19,7 +18,7 @@ export class AddEngineBackstopDriftObservations1700000000102 implements Migratio
     const table = await queryRunner.getTable('engine_backstop_sync_runs');
     if (!table) return;
     if (!table.columns.some((column) => column.name === 'observed_of_run_id')) {
-      await queryRunner.addColumn('engine_backstop_sync_runs', portableColumn(queryRunner, { name: 'observed_of_run_id', ...text(queryRunner), isNullable: true }));
+      await queryRunner.addColumn('engine_backstop_sync_runs', new TableColumn({ name: 'observed_of_run_id', ...text(queryRunner), isNullable: true }));
     }
     const refreshed = await queryRunner.getTable('engine_backstop_sync_runs');
     if (refreshed && !refreshed.indices.some((index) => index.name === 'idx_engine_backstop_sync_run_observed_source')) {

@@ -1,5 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { setExistingColumnNullability } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -14,15 +14,7 @@ export class MakeRoleAssignmentAliasesOptional1700000000046 implements Migration
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = tablePath(queryRunner, 'RbacRoleAssignment', 'role_assignments');
-    const table = await queryRunner.getTable(tableName);
-    const userId = table?.columns.find((column) => column.name === 'user_id');
-    if (userId && !userId.isNullable) {
-      await queryRunner.changeColumn(tableName, 'user_id', portableColumn(queryRunner, {
-        name: 'user_id',
-        type: 'text',
-        isNullable: true,
-      }));
-    }
+    await setExistingColumnNullability(queryRunner, tableName, 'user_id', true);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

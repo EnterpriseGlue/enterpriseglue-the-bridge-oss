@@ -143,23 +143,34 @@ export function portableColumn(
 }
 
 /**
- * Tightens an existing column to NOT NULL.
+ * Changes only the nullability of an existing column.
  *
- * Passing a freshly built column makes TypeORM drop and re-add it whenever the
- * declared type differs at all from the live one, which Oracle rejects on a
- * populated table (ORA-01758). Cloning the live column keeps the change to
- * nullability alone.
+ * Passing a freshly built column makes TypeORM's Oracle query runner drop and
+ * re-add it whenever the declared type or length differs at all from the live
+ * one. Re-adding a NOT NULL column fails on a populated table (ORA-01758), and
+ * re-adding a nullable one silently discards the column's data. Cloning the
+ * live column keeps the change to nullability alone.
  */
+export async function setExistingColumnNullability(
+  queryRunner: QueryRunner,
+  tableName: string,
+  columnName: string,
+  isNullable: boolean,
+): Promise<void> {
+  const current = (await queryRunner.getTable(tableName))?.findColumnByName(columnName);
+  if (!current || current.isNullable === isNullable) return;
+  const changed = current.clone();
+  changed.isNullable = isNullable;
+  await queryRunner.changeColumn(tableName, current, changed);
+}
+
+/** Tightens an existing column to NOT NULL; see `setExistingColumnNullability`. */
 export async function requireExistingColumn(
   queryRunner: QueryRunner,
   tableName: string,
   columnName: string,
 ): Promise<void> {
-  const current = (await queryRunner.getTable(tableName))?.findColumnByName(columnName);
-  if (!current || !current.isNullable) return;
-  const required = current.clone();
-  required.isNullable = false;
-  await queryRunner.changeColumn(tableName, current, required);
+  await setExistingColumnNullability(queryRunner, tableName, columnName, false);
 }
 
 export function portableStringDefault(queryRunner: QueryRunner, value: string): string | undefined {

@@ -20,6 +20,7 @@ function createQueryRunner(options: {
 
   const runner = {
     connection: {
+      options: { type: options.dialect },
       getMetadata: (_entity: string) => ({ tablePath: options.tablePath }),
       driver: {
         escape: quoteFns[options.dialect],

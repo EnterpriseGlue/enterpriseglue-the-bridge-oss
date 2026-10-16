@@ -1,5 +1,5 @@
+import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
 
 function portableText(queryRunner: QueryRunner): { type: string; length?: string } {
   const database = queryRunner.connection?.options?.type || 'postgres';
@@ -34,14 +34,14 @@ export class AddCamundaNativeGrantRollbackReceipt1700000000099 implements Migrat
     const tableName = tablePath(queryRunner);
     if (!await queryRunner.hasTable(tableName)) return;
     if (!await queryRunner.hasColumn(tableName, 'rollback_config_bundle_run_id')) {
-      await queryRunner.addColumn(tableName, portableColumn(queryRunner, {
+      await queryRunner.addColumn(tableName, new TableColumn({
         name: 'rollback_config_bundle_run_id',
         ...portableText(queryRunner),
         isNullable: true,
       }));
     }
     if (!await queryRunner.hasColumn(tableName, 'rolled_back_at')) {
-      await queryRunner.addColumn(tableName, portableColumn(queryRunner, {
+      await queryRunner.addColumn(tableName, new TableColumn({
         name: 'rolled_back_at',
         ...portableBigint(queryRunner),
         isNullable: true,
