@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.32.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.31.1...v0.32.0) (2026-10-16)
+
+### Breaking changes
+
+- **security:** Use one application-issued, signed and session-bound XSRF-TOKEN cookie echoed in the X-XSRF-TOKEN header.
+
+### Changes
+
+- **oracle:** Make the historical database migrations replay safely on Oracle and PostgreSQL, so partially populated Oracle schemas no longer fail with ORA-00902 or ORA-01758, and nullability or type changes keep existing data.
+- **runtime:** Use vendor-patched zlib runtime packages across application and bootstrap images and remove the expired CVE-2026-85091 scanner exception.
+
+Full upgrade, compatibility and verification details: [v0.32.0 release notes](docs/releases/v0.32.0.md).
+
 ## [0.31.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.31.0...v0.31.1) (2026-10-14)
 
 ### Changes
