@@ -1,12 +1,13 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class AddRefreshTokenProviderLineage1700000000063 implements MigrationInterface {
   name = 'AddRefreshTokenProviderLineage1700000000063';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (!await queryRunner.hasColumn('refresh_tokens', 'identity_provider_id')) {
-      await queryRunner.addColumn('refresh_tokens', new TableColumn({ name: 'identity_provider_id', type: 'text', isNullable: true }));
+      await queryRunner.addColumn('refresh_tokens', portableColumn(queryRunner, { name: 'identity_provider_id', type: 'text', isNullable: true }));
     }
     const table = await queryRunner.getTable('refresh_tokens');
     if (table && !table.indices.some((index) => index.name === 'idx_refresh_tokens_identity_provider')) {

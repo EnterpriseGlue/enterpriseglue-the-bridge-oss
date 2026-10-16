@@ -1,5 +1,6 @@
-import { TableColumn, TableUnique } from 'typeorm';
+import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn, requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -26,10 +27,13 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
     if (!table) return;
 
     if (!table.columns.some((column) => column.name === 'role_key_identity')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'role_key_identity', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'role_key_identity', type: 'text', isNullable: true }));
     }
 
-    const roles = await queryRunner.query(`SELECT id, tenant_id, key, role_key_identity FROM ${tableName}`) as Array<{
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const tableRef = sqlTablePath(queryRunner, tableName);
+    const selectedColumns = ['id', 'tenant_id', 'key', 'role_key_identity'].map(column).join(', ');
+    const roles = await queryRunner.query(`SELECT ${selectedColumns} FROM ${tableRef}`) as Array<{
       id: string;
       tenant_id: string | null;
       key: string;
@@ -41,7 +45,7 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
         const identityParameter = queryRunner.connection.driver.createParameter('roleKeyIdentity', 0);
         const idParameter = queryRunner.connection.driver.createParameter('roleId', 1);
         await queryRunner.query(
-          `UPDATE ${tableName} SET role_key_identity = ${identityParameter} WHERE id = ${idParameter}`,
+          `UPDATE ${tableRef} SET ${column('role_key_identity')} = ${identityParameter} WHERE ${column('id')} = ${idParameter}`,
           [identity, role.id],
         );
       }
@@ -51,7 +55,7 @@ export class MakeRoleKeysTenantScoped1700000000050 implements MigrationInterface
     if (!refreshed) return;
     const identityColumn = refreshed.columns.find((column) => column.name === 'role_key_identity');
     if (identityColumn?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'role_key_identity', new TableColumn({ name: 'role_key_identity', type: 'text', isNullable: false }));
+      await requireExistingColumn(queryRunner, tableName, 'role_key_identity');
     }
     const current = await queryRunner.getTable(tableName);
     if (!current) return;

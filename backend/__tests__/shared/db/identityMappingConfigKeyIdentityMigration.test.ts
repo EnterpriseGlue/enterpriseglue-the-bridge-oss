@@ -16,14 +16,14 @@ describe('AddIdentityMappingConfigKeyIdentity1700000000080', () => {
       addColumn: vi.fn(), createUniqueConstraint: vi.fn(), query,
       connection: {
         getMetadata: () => { throw new Error('metadata unavailable'); },
-        driver: { createParameter: (_name: string, index: number) => `$${index + 1}` },
+        driver: { escape: (name: string) => `"${name}"`, createParameter: (_name: string, index: number) => `$${index + 1}` },
       },
     };
 
     await new AddIdentityMappingConfigKeyIdentity1700000000080().up(queryRunner as any);
 
-    expect(query).toHaveBeenCalledWith('UPDATE identity_entitlement_mappings SET config_key_identity = $1 WHERE id = $2', ['tenant-a:mapping.operators', 'configured']);
-    expect(query).not.toHaveBeenCalledWith('UPDATE identity_entitlement_mappings SET config_key_identity = $1 WHERE id = $2', [null, 'manual']);
+    expect(query).toHaveBeenCalledWith('UPDATE "identity_entitlement_mappings" SET "config_key_identity" = $1 WHERE "id" = $2', ['tenant-a:mapping.operators', 'configured']);
+    expect(query).not.toHaveBeenCalledWith('UPDATE "identity_entitlement_mappings" SET "config_key_identity" = $1 WHERE "id" = $2', [null, 'manual']);
     expect(queryRunner.createUniqueConstraint).toHaveBeenCalledWith('identity_entitlement_mappings', expect.objectContaining({
       name: 'uq_identity_entitlement_mapping_config_key_identity', columnNames: ['config_key_identity'],
     }));

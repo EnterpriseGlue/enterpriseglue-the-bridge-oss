@@ -1,4 +1,4 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -23,7 +23,7 @@ export class AddEngineSets1700000000025 implements MigrationInterface {
     const engineSets = tablePath(queryRunner, 'EngineSet', 'engine_sets');
     const materializations = tablePath(queryRunner, 'EngineSetMaterialization', 'engine_set_materializations');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: engineSets,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -53,7 +53,7 @@ export class AddEngineSets1700000000025 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: materializations,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

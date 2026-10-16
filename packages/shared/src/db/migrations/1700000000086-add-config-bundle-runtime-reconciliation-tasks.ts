@@ -1,12 +1,13 @@
-import { Table, TableIndex, TableUnique } from 'typeorm';
+import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 export class AddConfigBundleRuntimeReconciliationTasks1700000000086 implements MigrationInterface {
   name = 'AddConfigBundleRuntimeReconciliationTasks1700000000086';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('config_bundle_runtime_reconciliation_tasks')) return;
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: 'config_bundle_runtime_reconciliation_tasks',
       columns: [
         { name: 'id', type: 'text', isPrimary: true }, { name: 'tenant_id', type: 'text', isNullable: true }, { name: 'apply_run_id', type: 'text' },

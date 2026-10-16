@@ -1,5 +1,6 @@
-import { Table, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -15,7 +16,7 @@ export class AddSamlAssertionReplays1700000000064 implements MigrationInterface 
   async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = tablePath(queryRunner, 'SamlAssertionReplay', 'saml_assertion_replays');
     if (await queryRunner.hasTable(tableName)) return;
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: tableName,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

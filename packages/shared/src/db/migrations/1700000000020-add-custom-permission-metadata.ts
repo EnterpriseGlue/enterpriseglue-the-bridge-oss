@@ -1,4 +1,4 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
+import { legacyBooleanColumn, portableColumn } from './support/portable-columns.js';
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -23,10 +23,10 @@ export class AddCustomPermissionMetadata1700000000020 implements MigrationInterf
     const permissions = tablePath(queryRunner, 'RbacPermission', 'permissions');
     if (!(await queryRunner.hasTable(permissions))) return;
 
-    await addColumnIfMissing(queryRunner, permissions, new TableColumn({ name: 'kind', type: 'text', default: "'system'" }));
-    await addColumnIfMissing(queryRunner, permissions, new TableColumn({ name: 'is_editable', ...legacyBooleanColumn(queryRunner, false) }));
-    await addColumnIfMissing(queryRunner, permissions, new TableColumn({ name: 'is_archived', ...legacyBooleanColumn(queryRunner, false) }));
-    await addColumnIfMissing(queryRunner, permissions, new TableColumn({ name: 'created_by_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, permissions, portableColumn(queryRunner, { name: 'kind', type: 'text', default: "'system'" }));
+    await addColumnIfMissing(queryRunner, permissions, portableColumn(queryRunner, { name: 'is_editable', ...legacyBooleanColumn(queryRunner, false) }));
+    await addColumnIfMissing(queryRunner, permissions, portableColumn(queryRunner, { name: 'is_archived', ...legacyBooleanColumn(queryRunner, false) }));
+    await addColumnIfMissing(queryRunner, permissions, portableColumn(queryRunner, { name: 'created_by_id', type: 'text', isNullable: true }));
   }
 
   public async down(_queryRunner: QueryRunner): Promise<void> {

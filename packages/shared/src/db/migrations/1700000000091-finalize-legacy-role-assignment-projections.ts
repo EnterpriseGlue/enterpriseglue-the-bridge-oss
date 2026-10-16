@@ -1,5 +1,5 @@
-import { Table } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 /**
  * Adds the durable one-time-projection marker. The projection itself runs
@@ -11,7 +11,7 @@ export class FinalizeLegacyRoleAssignmentProjections1700000000091 implements Mig
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('authz_migration_states')) return;
-    await queryRunner.createTable(new Table({
+    await queryRunner.createTable(portableTable(queryRunner, {
       name: 'authz_migration_states',
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

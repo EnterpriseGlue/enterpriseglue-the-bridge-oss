@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getMetadataArgsStorage } from 'typeorm';
+import { getMetadataArgsStorage, TableColumn } from 'typeorm';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
@@ -104,7 +104,7 @@ describe('canonical authorization persistence schema invariants', () => {
     await migration.up({
       hasTable: vi.fn().mockResolvedValue(false),
       createTable,
-      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+      connection: { options: { type: 'postgres' }, getMetadata: () => { throw new Error('metadata unavailable'); } },
     } as any);
 
     const table = createTable.mock.calls[0][0];
@@ -158,9 +158,10 @@ describe('canonical authorization persistence schema invariants', () => {
         { id: 'stale', engine_id: 'engine-a', camunda_deployment_id: 'deployment-a' },
       ])
       .mockResolvedValue(undefined);
+    const projectId = new TableColumn({ name: 'project_id', type: 'varchar2', length: '191', isNullable: false });
     const table = {
       indices: [],
-      findColumnByName: vi.fn().mockReturnValue({ type: 'text', isNullable: false }),
+      findColumnByName: vi.fn().mockReturnValue(projectId),
     };
     await new AddDeploymentHistoryLineage1700000000058().up({
       hasTable: vi.fn().mockResolvedValue(true),
@@ -171,8 +172,9 @@ describe('canonical authorization persistence schema invariants', () => {
       createIndex,
       query,
       connection: {
+        options: { type: 'oracle' },
         getMetadata: () => { throw new Error('metadata unavailable'); },
-        driver: { createParameter: vi.fn().mockReturnValue('$1') },
+        driver: { escape: (name: string) => `"${name}"`, createParameter: vi.fn().mockReturnValue(':1') },
       },
     } as any);
 
@@ -183,12 +185,16 @@ describe('canonical authorization persistence schema invariants', () => {
       ['engine_deployments', 'reconciled_at'],
       ['engine_deployments', 'lineage_json'],
     ]);
-    expect(changeColumn).toHaveBeenCalledWith('engine_deployments', 'project_id', expect.objectContaining({ isNullable: true }));
-    expect(changeColumn).toHaveBeenCalledWith('engine_deployment_artifacts', 'project_id', expect.objectContaining({ isNullable: true }));
+    // The live column is cloned, so Oracle relaxes it in place instead of dropping and re-adding it.
+    for (const tableName of ['engine_deployments', 'engine_deployment_artifacts']) {
+      expect(changeColumn).toHaveBeenCalledWith(tableName, projectId, expect.objectContaining({
+        name: 'project_id', type: 'varchar2', length: '191', isNullable: true,
+      }));
+    }
     expect(createIndex).toHaveBeenCalledWith('engine_deployments', expect.objectContaining({
       columnNames: ['engine_id', 'camunda_deployment_id'], isUnique: true,
     }));
-    expect(query).toHaveBeenCalledWith('DELETE FROM engine_deployments WHERE id = $1', ['stale']);
+    expect(query).toHaveBeenCalledWith('DELETE FROM "engine_deployments" WHERE "id" = :1', ['stale']);
   });
 
   it('persists canonical runtime resources, sets, and materialization lineage', async () => {

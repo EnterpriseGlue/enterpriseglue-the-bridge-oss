@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 const NEW_DEFAULT_DEPLOY_ROLES = '["owner","delegate","operator"]';
 const PREVIOUS_DEFAULT_DEPLOY_ROLES = '["owner","delegate","operator","deployer"]';
@@ -15,7 +16,8 @@ export class UpdateDefaultDeployRoles1700000000007 implements MigrationInterface
       }
 
       const rows: Array<Record<string, unknown>> = await queryRunner.query(
-        `SELECT "default_deploy_roles" FROM ${tablePath} WHERE "id" = 'default'`
+        `SELECT ${sqlIdentifier(queryRunner, 'default_deploy_roles')} FROM ${sqlTablePath(queryRunner, tablePath)}`
+        + ` WHERE ${sqlIdentifier(queryRunner, 'id')} = 'default'`
       );
 
       if (!rows.length) {
@@ -27,7 +29,8 @@ export class UpdateDefaultDeployRoles1700000000007 implements MigrationInterface
       const currentRoles = String(raw || '').trim();
       if (!currentRoles || currentRoles === PREVIOUS_DEFAULT_DEPLOY_ROLES) {
         await queryRunner.query(
-          `UPDATE ${tablePath} SET "default_deploy_roles" = '${NEW_DEFAULT_DEPLOY_ROLES}' WHERE "id" = 'default'`
+          `UPDATE ${sqlTablePath(queryRunner, tablePath)} SET ${sqlIdentifier(queryRunner, 'default_deploy_roles')} = '${NEW_DEFAULT_DEPLOY_ROLES}'`
+          + ` WHERE ${sqlIdentifier(queryRunner, 'id')} = 'default'`
         );
       }
     } catch (err: any) {
@@ -44,7 +47,8 @@ export class UpdateDefaultDeployRoles1700000000007 implements MigrationInterface
       }
 
       const rows: Array<Record<string, unknown>> = await queryRunner.query(
-        `SELECT "default_deploy_roles" FROM ${tablePath} WHERE "id" = 'default'`
+        `SELECT ${sqlIdentifier(queryRunner, 'default_deploy_roles')} FROM ${sqlTablePath(queryRunner, tablePath)}`
+        + ` WHERE ${sqlIdentifier(queryRunner, 'id')} = 'default'`
       );
 
       if (!rows.length) {
@@ -55,7 +59,8 @@ export class UpdateDefaultDeployRoles1700000000007 implements MigrationInterface
       const currentRoles = String(raw || '').trim();
       if (currentRoles === NEW_DEFAULT_DEPLOY_ROLES) {
         await queryRunner.query(
-          `UPDATE ${tablePath} SET "default_deploy_roles" = '${PREVIOUS_DEFAULT_DEPLOY_ROLES}' WHERE "id" = 'default'`
+          `UPDATE ${sqlTablePath(queryRunner, tablePath)} SET ${sqlIdentifier(queryRunner, 'default_deploy_roles')} = '${PREVIOUS_DEFAULT_DEPLOY_ROLES}'`
+          + ` WHERE ${sqlIdentifier(queryRunner, 'id')} = 'default'`
         );
       }
     } catch (err: any) {

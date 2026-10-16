@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
-import type { QueryRunner } from 'typeorm';
+import { Table, TableColumn } from 'typeorm';
+import type { QueryRunner, TableColumnOptions, TableOptions } from 'typeorm';
 
 type SupportedDatabase = 'postgres' | 'mysql' | 'mssql' | 'oracle' | 'spanner';
 type TextSize = 'key' | 'document' | 'large';
@@ -79,6 +79,109 @@ export function portableBigint(queryRunner: QueryRunner): {
 
 export function sqlStringLiteral(value: string): string {
   return `'${value.split("'").join("''")}'`;
+}
+
+/**
+ * Projects the PostgreSQL-flavoured column spellings used throughout the legacy
+ * migration epoch (`text`, `bigint`, `boolean`) onto the dialect the migration
+ * is actually running against. Text columns that participate in a primary key,
+ * unique constraint or index are bounded because Oracle, MySQL and Spanner all
+ * reject unbounded key columns.
+ */
+function normalizePortableColumn(
+  queryRunner: QueryRunner,
+  column: TableColumnOptions,
+  context: { indexed: boolean },
+): TableColumnOptions {
+  if (column.type === 'boolean') {
+    return {
+      ...column,
+      ...portableBoolean(queryRunner),
+      default: typeof column.default === 'boolean'
+        ? portableBooleanDefault(queryRunner, column.default)
+        : column.default,
+    };
+  }
+  if (column.type === 'bigint') {
+    return { ...column, ...portableBigint(queryRunner) };
+  }
+  // `integer` is ANSI and valid on Oracle/MySQL/SQL Server; only Spanner rejects it.
+  if ((column.type === 'integer' || column.type === 'int') && migrationDatabase(queryRunner) === 'spanner') {
+    return { ...column, type: 'int64' };
+  }
+  if (column.type !== 'text') return column;
+
+  const bounded = Boolean(column.isPrimary)
+    || Boolean(column.isUnique)
+    || context.indexed;
+  // A default does not make a document an index key. JSON columns commonly
+  // default to '{}' or '[]' and must retain the full document capacity.
+  return { ...column, ...portableText(queryRunner, bounded ? 'key' : 'document') };
+}
+
+/** Builds a `Table` whose column types are valid on the connected dialect. */
+export function portableTable(queryRunner: QueryRunner, options: TableOptions): Table {
+  const keyColumns = new Set<string>([
+    ...(options.indices ?? []).flatMap((index) => index.columnNames ?? []),
+    ...(options.uniques ?? []).flatMap((unique) => unique.columnNames ?? []),
+  ]);
+  return new Table({
+    ...options,
+    columns: (options.columns ?? []).map((column) =>
+      normalizePortableColumn(queryRunner, column, { indexed: keyColumns.has(column.name) })),
+  });
+}
+
+/** Builds a `TableColumn` whose type is valid on the connected dialect. */
+export function portableColumn(
+  queryRunner: QueryRunner,
+  options: TableColumnOptions,
+  context: { indexed?: boolean } = {},
+): TableColumn {
+  return new TableColumn(
+    normalizePortableColumn(queryRunner, options, { indexed: context.indexed ?? false }),
+  );
+}
+
+const ORACLE_LOB_TYPES = new Set(['clob', 'nclob', 'blob']);
+
+/**
+ * Changes only the nullability of an existing column.
+ *
+ * Passing a freshly built column makes TypeORM's Oracle query runner drop and
+ * re-add it whenever the declared type or length differs at all from the live
+ * one. Re-adding a NOT NULL column fails on a populated table (ORA-01758), and
+ * re-adding a nullable one silently discards the column's data. Cloning the
+ * live column keeps the change to nullability alone.
+ */
+export async function setExistingColumnNullability(
+  queryRunner: QueryRunner,
+  tableName: string,
+  columnName: string,
+  isNullable: boolean,
+): Promise<void> {
+  const current = (await queryRunner.getTable(tableName))?.findColumnByName(columnName);
+  if (!current || current.isNullable === isNullable) return;
+  if (migrationDatabase(queryRunner) === 'oracle' && ORACLE_LOB_TYPES.has(current.type.toLowerCase())) {
+    // TypeORM restates the type in MODIFY, which Oracle rejects for LOBs (ORA-22296).
+    await queryRunner.query(
+      `ALTER TABLE ${sqlTablePath(queryRunner, tableName)}`
+      + ` MODIFY (${sqlIdentifier(queryRunner, columnName)} ${isNullable ? 'NULL' : 'NOT NULL'})`,
+    );
+    return;
+  }
+  const changed = current.clone();
+  changed.isNullable = isNullable;
+  await queryRunner.changeColumn(tableName, current, changed);
+}
+
+/** Tightens an existing column to NOT NULL; see `setExistingColumnNullability`. */
+export async function requireExistingColumn(
+  queryRunner: QueryRunner,
+  tableName: string,
+  columnName: string,
+): Promise<void> {
+  await setExistingColumnNullability(queryRunner, tableName, columnName, false);
 }
 
 export function portableStringDefault(queryRunner: QueryRunner, value: string): string | undefined {

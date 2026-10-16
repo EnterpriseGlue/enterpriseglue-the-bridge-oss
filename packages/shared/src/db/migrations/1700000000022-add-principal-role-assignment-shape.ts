@@ -1,5 +1,6 @@
 import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner, Table } from 'typeorm';
+import { portableColumn, sqlIdentifier } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -29,12 +30,12 @@ export class AddPrincipalRoleAssignmentShape1700000000022 implements MigrationIn
     const table = await queryRunner.getTable(tableName);
     if (!table) return;
 
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'principal_type', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'principal_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'scope_type', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'scope_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'source_ref', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, table, new TableColumn({ name: 'expires_at', type: 'bigint', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'principal_type', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'principal_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'scope_type', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'scope_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'source_ref', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, table, portableColumn(queryRunner, { name: 'expires_at', type: 'bigint', isNullable: true }));
 
     const refreshedTable = await queryRunner.getTable(tableName);
     if (!refreshedTable) return;
@@ -48,17 +49,22 @@ export class AddPrincipalRoleAssignmentShape1700000000022 implements MigrationIn
       columnNames: ['scope_type', 'scope_id'],
     }));
 
+    // Raw `set`/`where` fragments bypass TypeORM quoting, so Oracle would fold them to upper case.
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    // A Path B bootstrap can create this table from the current entity model, where the
+    // legacy source columns this backfill reads were already dropped by later migrations.
+    const has = (name: string) => refreshedTable.columns.some((existing) => existing.name === name);
     await queryRunner.manager
       .createQueryBuilder()
       .update(tableName)
       .set({
         principalType: () => "'user'",
-        principalId: () => 'user_id',
-        scopeType: () => 'resource_type',
-        scopeId: () => 'resource_id',
-        sourceRef: () => 'source_mapping_id',
+        ...(has('user_id') ? { principalId: () => column('user_id') } : {}),
+        ...(has('resource_type') ? { scopeType: () => column('resource_type') } : {}),
+        ...(has('resource_id') ? { scopeId: () => column('resource_id') } : {}),
+        ...(has('source_mapping_id') ? { sourceRef: () => column('source_mapping_id') } : {}),
       })
-      .where('principal_type IS NULL')
+      .where(`${column('principal_type')} IS NULL`)
       .execute();
   }
 

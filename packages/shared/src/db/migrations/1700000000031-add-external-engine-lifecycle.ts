@@ -1,5 +1,6 @@
 import { TableColumn, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -40,12 +41,12 @@ export class AddExternalEngineLifecycle1700000000031 implements MigrationInterfa
     const enginesTable = tablePath(queryRunner, 'Engine', 'engines');
     const registrationsTable = tablePath(queryRunner, 'ExternalEngineRegistration', 'external_engine_registrations');
 
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'lifecycle_status', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'last_external_sync_at', type: 'bigint', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'lifecycle_status', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'last_external_sync_at', type: 'bigint', isNullable: true }));
     await createIndexIfMissing(queryRunner, enginesTable, new TableIndex({ name: 'idx_engines_lifecycle_status', columnNames: ['lifecycle_status'] }));
 
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'lifecycle_status', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'last_external_sync_at', type: 'bigint', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'lifecycle_status', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'last_external_sync_at', type: 'bigint', isNullable: true }));
     await createIndexIfMissing(queryRunner, registrationsTable, new TableIndex({ name: 'idx_external_engine_registrations_lifecycle_status', columnNames: ['lifecycle_status'] }));
   }
 
