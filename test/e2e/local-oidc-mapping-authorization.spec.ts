@@ -61,7 +61,7 @@ async function captureLiveScreenshot(page: Page, fileName: string): Promise<void
 async function csrfToken(page: Page): Promise<string> {
   const response = await page.request.get('/api/csrf-token');
   expect(response.status()).toBe(200);
-  const token = response.headers()['x-csrf-token'];
+  const token = response.headers()['x-xsrf-token'];
   expect(token).toBeTruthy();
   return token;
 }
@@ -70,7 +70,7 @@ async function requestJson<T>(page: Page, path: string, options: { method?: 'GET
   const response = await page.request.fetch(path, {
     method: options.method || 'GET',
     headers: {
-      ...(options.csrf ? { 'X-CSRF-Token': options.csrf } : {}),
+      ...(options.csrf ? { 'X-XSRF-TOKEN': options.csrf } : {}),
     },
     ...(options.data === undefined ? {} : { data: options.data }),
   });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { useOpenApiFixture } from '../../../../test/utils/openapi-fixture.js';
 import { ExternalEngineDecommissionRequestSchema } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 
 describe('engine registration OpenAPI contracts', () => {
+  const generateOpenApi = useOpenApiFixture();
   it('publishes one connection-mode enum across manual, external, and config registration', () => {
     const document = generateOpenApi();
     const schemas = document.components?.schemas;

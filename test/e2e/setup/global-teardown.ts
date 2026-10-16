@@ -93,7 +93,7 @@ async function fetchJson<T>(
     headers: {
       'Content-Type': 'application/json',
       ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-      ...(_csrfToken ? { 'X-CSRF-Token': _csrfToken } : {}),
+      ...(_csrfToken ? { 'X-XSRF-TOKEN': _csrfToken } : {}),
       ...(options?.headers || {}),
     },
   });
@@ -109,7 +109,7 @@ async function fetchJson<T>(
   }
 
   // Capture CSRF token from response headers
-  const csrf = res.headers.get('X-CSRF-Token');
+  const csrf = res.headers.get('X-XSRF-TOKEN');
   if (csrf) {
     _csrfToken = csrf;
   }

@@ -32,13 +32,13 @@ async function json<T>(response: Awaited<ReturnType<Page['request']['get']>>, la
 async function csrf(page: Page): Promise<string> {
   const response = await page.request.get('/api/csrf-token');
   expect(response.status()).toBe(200);
-  const token = response.headers()['x-csrf-token'];
+  const token = response.headers()['x-xsrf-token'];
   expect(token).toBeTruthy();
   return token;
 }
 
 async function mutation(page: Page, data?: unknown) {
-  return { headers: { 'X-CSRF-Token': await csrf(page) }, ...(data === undefined ? {} : { data }) };
+  return { headers: { 'X-XSRF-TOKEN': await csrf(page) }, ...(data === undefined ? {} : { data }) };
 }
 
 async function postWithFreshCsrf(page: Page, path: string, data: unknown) {

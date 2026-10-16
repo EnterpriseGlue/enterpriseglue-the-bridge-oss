@@ -133,17 +133,17 @@ describe('physical PostgreSQL session derivation and logout', () => {
     };
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => csrfSecret,
-      getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
-      cookieName: 'csrf_secret',
-      cookieOptions: { httpOnly: true, secure: false, sameSite: 'lax', path: '/' },
-      getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
+      getSessionIdentifier: (req) => req.res?.locals.xsrfSessionIdentifier ?? req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
+      cookieName: 'XSRF-TOKEN',
+      cookieOptions: { httpOnly: false, secure: false, sameSite: 'lax', path: '/' },
+      getCsrfTokenFromRequest: (req) => req.headers['x-xsrf-token'] as string,
       skipCsrfProtection,
     });
     app.use((req, res, next) => {
       // Fail closed on a missing double-submit cookie. Keep the full library
       // check for the HMAC, header, and session binding on every admitted request.
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !skipCsrfProtection(req)
-        && req.cookies?.csrf_secret === undefined) {
+        && req.cookies?.['XSRF-TOKEN'] === undefined) {
         res.status(403).json({ error: 'CSRF cookie required' });
         return;
       }
@@ -251,13 +251,13 @@ describe('physical PostgreSQL session derivation and logout', () => {
       { token: tokenResponse.body.csrfToken, cookies: browserCookies },
     ]) {
       const logout = request(app).post('/api/auth/logout').set('Cookie', cookies);
-      if (token) logout.set('X-CSRF-Token', token);
+      if (token) logout.set('X-XSRF-TOKEN', token);
       expect((await logout.send({})).status).toBe(403);
       expect((await db.getRepository(User).findOneByOrFail({ id: user.id })).authSessionVersion).toBe(user.authSessionVersion);
       expect((await db.getRepository(RefreshToken).findOneByOrFail({ id: verifyToken(source.accessToken).sessionId! })).revokedAt).toBeNull();
     }
     const logout = await request(app).post('/api/auth/logout').set('Cookie', [...browserCookies, ...csrfCookies])
-      .set('X-CSRF-Token', tokenResponse.body.csrfToken).send({});
+      .set('X-XSRF-TOKEN', tokenResponse.body.csrfToken).send({});
     expect(logout.status).toBe(200);
     await assertDead(source);
   });

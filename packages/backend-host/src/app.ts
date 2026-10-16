@@ -4,6 +4,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
 import { doubleCsrf } from 'csrf-csrf';
+import { XSRF_COOKIE_NAME, XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -117,7 +118,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   app.use(cors({
     origin: config.frontendUrl, // Exact origin (not wildcard) for credentials
     credentials: true, // Allow cookies to be sent
-    exposedHeaders: ['X-CSRF-Token'], // Let the SPA read the CSRF token from response headers
+    exposedHeaders: [XSRF_HEADER_NAME], // Expose the same token to non-cookie API clients
   }));
 
   // Logging
@@ -141,15 +142,17 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
       next
     );
   });
-  app.use((req, _res, next) => {
+  app.use((req, res, next) => {
     const cookieHeader = req.headers.cookie;
     const cookies: Record<string, string> = Object.create(null);
+    let duplicateXsrfCookie = false;
 
     if (typeof cookieHeader === 'string' && cookieHeader.length > 0) {
       for (const part of cookieHeader.split(';')) {
         const [nameRaw, ...rest] = part.trim().split('=');
         if (!nameRaw || nameRaw === '__proto__' || nameRaw === 'constructor' || nameRaw === 'prototype') continue;
 
+        if (nameRaw === XSRF_COOKIE_NAME && nameRaw in cookies) duplicateXsrfCookie = true;
         const valueRaw = rest.join('=') || '';
         try {
           cookies[nameRaw] = decodeURIComponent(valueRaw);
@@ -160,20 +163,22 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     }
 
     req.cookies = cookies;
+    res.locals.duplicateXsrfCookie = duplicateXsrfCookie;
     next();
   });
 
   const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
     getSecret: () => config.jwtSecret,
-    getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
-    cookieName: 'csrf_secret',
+    getSessionIdentifier: (req) => req.res?.locals.xsrfSessionIdentifier ?? req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
+    cookieName: XSRF_COOKIE_NAME,
     cookieOptions: {
-      httpOnly: true,
+      httpOnly: false, // Only this signed token cookie is readable by the frontend.
+      domain: config.xsrfCookieDomain,
       secure: shouldUseSecureCookies(),
       sameSite: 'lax',
       path: '/',
     },
-    getCsrfTokenFromRequest: (req: any) => req.headers['x-csrf-token'],
+    getCsrfTokenFromRequest: (req: any) => req.res?.locals.duplicateXsrfCookie ? undefined : req.headers[XSRF_HEADER_NAME.toLowerCase()],
     skipCsrfProtection: (req) => {
       // Skip CSRF for login/refresh and CSRF token fetch (these endpoints validate credentials directly)
       if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/csrf-token') return true;
@@ -195,10 +200,10 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   app.use(doubleCsrfProtection);
 
   // Endpoint for the frontend to obtain a CSRF token.
-  // This will also set the CSRF secret cookie defined above.
+  // This also bootstraps the readable XSRF-TOKEN cookie.
   app.get('/api/csrf-token', (req, res) => {
     const csrfToken = generateCsrfToken(req, res);
-    res.setHeader('X-CSRF-Token', csrfToken);
+    res.setHeader(XSRF_HEADER_NAME, csrfToken);
     res.json({ csrfToken });
   });
 
@@ -210,11 +215,12 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     next(err);
   });
 
-  // Send the CSRF token in a response header for the SPA to echo back in X-CSRF-Token.
+  // Bootstrap/renew the readable cookie on safe requests. Auth routes rotate it after setting session cookies.
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!['GET', 'HEAD'].includes(req.method)) return next();
     try {
       const token = generateCsrfToken(req as any, res as any);
-      res.setHeader('X-CSRF-Token', token);
+      res.setHeader(XSRF_HEADER_NAME, token);
     } catch {
       // ignore — token generation may fail for skipped requests
     }

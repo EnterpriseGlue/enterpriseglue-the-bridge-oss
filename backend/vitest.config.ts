@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { availableParallelism } from 'node:os';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -8,6 +9,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // Contract generation is CPU-heavy; leave headroom instead of spawning a worker per host CPU.
+    maxWorkers: Math.min(4, availableParallelism()),
     setupFiles: ['./test/unit.setup.ts'],
     include: ['**/*.test.ts'],
     coverage: {

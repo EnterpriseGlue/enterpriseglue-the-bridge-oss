@@ -41,7 +41,7 @@ async function csrfToken(page: Page): Promise<string> {
 async function createOwnedProject(page: Page, name: string): Promise<{ id: string; name: string }> {
   const token = await csrfToken(page);
   const response = await page.request.post('/starbase-api/projects', {
-    headers: { 'X-CSRF-Token': token },
+    headers: { 'X-XSRF-TOKEN': token },
     data: { name },
   });
   return responseJson<{ id: string; name: string }>(response, 'create E2E project');

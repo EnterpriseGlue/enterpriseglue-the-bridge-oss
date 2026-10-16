@@ -344,7 +344,7 @@ describe('native plugin frontend host', () => {
 
     const historyBack = vi.fn();
     vi.stubGlobal('window', {
-      location: { pathname: '/' },
+      location: { pathname: '/', origin: 'http://localhost', href: 'http://localhost/' },
       history: { back: historyBack },
     });
     const fetchMock = vi

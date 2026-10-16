@@ -1,3 +1,4 @@
+import { clearXsrfToken } from '../../../utils/xsrf.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
@@ -89,6 +90,7 @@ router.post('/api/auth/logout', apiLimiter, requireCloudAccountOrTenantAuth, val
   // Clear auth cookies
   res.clearCookie('accessToken', { path: '/' });
   res.clearCookie('refreshToken', { path: '/' });
+  clearXsrfToken(res);
 
   let federatedLogoutUrl: string | null = null;
   if (providerSession?.identityProviderId && providerSession.providerSubjectId) {

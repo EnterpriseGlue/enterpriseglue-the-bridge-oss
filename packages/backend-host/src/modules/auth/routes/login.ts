@@ -1,3 +1,4 @@
+import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router, type Request, type Response } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
@@ -291,6 +292,7 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
     maxAge: config.jwtRefreshTokenExpires * 1000,
     path: '/',
   });
+  rotateXsrfToken(req, res, session.refreshToken);
 
   // Return user info (tokens are in cookies, not in body)
   res.json(AuthenticatedSessionLoginResponseSchema.parse({

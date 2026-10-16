@@ -123,24 +123,24 @@ async function applyTenantEligibility(input: {
 async function csrfToken(page: Page): Promise<string> {
   const response = await page.request.get('/api/csrf-token');
   expect(response.status()).toBe(200);
-  const token = response.headers()['x-csrf-token'];
+  const token = response.headers()['x-xsrf-token'];
   expect(token).toBeTruthy();
   return token;
 }
 
 async function post(page: Page, path: string, data?: JsonObject): Promise<APIResponse> {
   return page.request.post(path, {
-    headers: { 'X-CSRF-Token': await csrfToken(page) },
+    headers: { 'X-XSRF-TOKEN': await csrfToken(page) },
     ...(data === undefined ? {} : { data }),
   });
 }
 
 async function put(page: Page, path: string, data: JsonObject): Promise<APIResponse> {
-  return page.request.put(path, { headers: { 'X-CSRF-Token': await csrfToken(page) }, data });
+  return page.request.put(path, { headers: { 'X-XSRF-TOKEN': await csrfToken(page) }, data });
 }
 
 async function remove(page: Page, path: string): Promise<APIResponse> {
-  return page.request.delete(path, { headers: { 'X-CSRF-Token': await csrfToken(page) } });
+  return page.request.delete(path, { headers: { 'X-XSRF-TOKEN': await csrfToken(page) } });
 }
 
 async function newAppContext(browser: Browser): Promise<BrowserContext> {

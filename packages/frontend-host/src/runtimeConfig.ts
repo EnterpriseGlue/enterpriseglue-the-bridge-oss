@@ -22,7 +22,7 @@
  *     - otherwise                                 -> warn and fall back to the
  *       build-time configuration.
  *
- * Security note: `assertSafeRequestUrl` in the HTTP interceptor derives its
+ * Security note: `assertApiRequestUrl` in the HTTP interceptor derives its
  * allowed request origin from `config.apiBaseUrl`. Because this loader runs
  * before the first API request, a runtime-provided base URL feeds that
  * allow-list. The trust boundary therefore moves from build time to whoever
@@ -133,7 +133,7 @@ function validateApiBaseUrl(value: string, sourceUrl: string): string {
  * Reject a configured URL that does not resolve same-origin as the application.
  *
  * The runtime document dictates `apiBaseUrl`, which in turn seeds the request
- * allow-list in {@link import('./utils/httpInterceptor').assertSafeRequestUrl}.
+ * allow-list in {@link import('./utils/apiFetch').assertApiRequestUrl}.
  * A cross-origin config URL would therefore hand that trust boundary to a foreign
  * host — the exact thing the same-origin deployment model exists to prevent. So
  * we confine the document to the app's own origin and refuse anything else
@@ -154,7 +154,7 @@ function validateApiBaseUrl(value: string, sourceUrl: string): string {
  * (e.g. an `https://api.<app-domain>` subdomain serving the API). That is the
  * whole point of runtime config: a trusted, same-origin document declares which
  * — possibly foreign — origin the API lives on, and that value then seeds the
- * request allow-list in {@link import('./utils/httpInterceptor').assertSafeRequestUrl}.
+ * request allow-list in {@link import('./utils/apiFetch').assertApiRequestUrl}.
  * Note the returned `apiBaseUrl` must be an absolute URL *with a scheme*
  * (`https://api.example`, not `api.example`): the interceptor derives the
  * allowed origin via `new URL(apiBaseUrl)`, which rejects a scheme-less value.

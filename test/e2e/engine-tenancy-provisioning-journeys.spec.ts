@@ -73,7 +73,7 @@ async function csrfToken(page: Page): Promise<string> {
 
 function mutationOptions(token: string, data?: unknown) {
   return {
-    headers: { 'X-CSRF-Token': token },
+    headers: { 'X-XSRF-TOKEN': token },
     ...(data === undefined ? {} : { data }),
   };
 }

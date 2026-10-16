@@ -11,6 +11,73 @@ Every workspace manifest declares the same Node runtime range; the root
 `packageManager` field pins pnpm. Use Corepack so package scripts do not fall
 back to an incompatible globally installed pnpm.
 
+## Browser XSRF token transport
+
+EnterpriseGlue issues one signed, session-bound token in the `XSRF-TOKEN`
+cookie. Before each API request, the frontend reads and URL-decodes that cookie
+and echoes it in `X-XSRF-TOKEN`. The backend requires matching cookie/header
+values and validates the signature against the current session on protected
+cookie-authenticated requests. An automatic Cookie header alone is insufficient.
+The cookie/header names are fixed; no additional token-header configuration is
+required. Browser tokens are not forwarded to BPMN engines.
+
+Only `XSRF-TOKEN` is readable by JavaScript. Authentication/session cookies stay
+HttpOnly. The XSRF cookie uses Path `/`, SameSite `Lax`, and Secure when
+`FRONTEND_URL` uses HTTPS. It is host-only by default. For a split deployment
+such as `app.example.test` and `api.example.test`, explicitly configure the
+narrowest trusted shared parent domain on the backend:
+
+```dotenv
+EG_XSRF_COOKIE_DOMAIN=example.test
+```
+
+The domain must contain the configured `FRONTEND_URL` host and be valid for the
+API host that sets the cookie. Compose reads this from the backend env file;
+OpenShift forwards it from the deployment environment to the application
+ConfigMap. Helm deployments can add it to their backend ConfigMap.
+Use only domains whose relevant subdomains are
+trusted. Restart the backend after a scope change and remove old cookies with
+conflicting domains or paths. No parent domain is inferred automatically. For
+frontend/API hosts without a suitable shared parent, use a same-origin API
+proxy so the frontend can read the application cookie.
+
+The frontend reads the cookie at dispatch, including public bootstrap, login,
+refresh and retries. Caller-supplied token headers are replaced with the current
+cookie, and removed when the cookie is absent or empty. Duplicate cookies,
+malformed encoding, non-printable/non-ASCII values and values larger than 8192
+characters reject the request without exposing token contents. Tokens are sent
+only to the configured API origin; API redirects are rejected. Static assets
+and the runtime-config document do not receive token headers. Safe GET lock
+streams retain their native EventSource transport and require no token header.
+
+Login, invitation completion and passkey/SSO session issuance generate a fresh
+token bound to the newly issued session. Refresh renews the token before the
+frontend retries; concurrent failed requests share one refresh. Logout clears
+the cookie using the configured domain and path. Safe API requests bootstrap or
+renew a missing/invalid token. Signature validation rejects tokens from another
+session, even if both cookie and header match. Same-session renewal changes the
+browser cookie but does not revoke previously issued pairs independently of the
+authentication session.
+
+For split frontend/API origins, allow credentialed requests from the exact
+frontend origin and permit `X-XSRF-TOKEN` in `Access-Control-Allow-Headers`.
+OPTIONS preflight must not require a token. The backend also returns this same
+token in `X-XSRF-TOKEN` and in the `/api/csrf-token` JSON response for API clients;
+the frontend uses the readable cookie as its token source. A token independently
+issued by a proxy or gateway is not an EnterpriseGlue token and cannot satisfy
+its signature/session checks. Reserve the application cookie name accordingly.
+
+When upgrading from the previous transport, update API clients from
+`X-CSRF-Token`/`csrf_secret` to `X-XSRF-TOKEN`/`XSRF-TOKEN`, deploy frontend and
+backend together, and reload active browser tabs. Remove the old cookie when
+cleaning up a deployment. Existing endpoint paths and JSON token response fields
+are unchanged.
+
+Run `pnpm run test:xsrf:browser` to verify cookie forwarding, login/refresh
+rotation, session binding, forged-token rejection and credentialed requests
+between separate frontend/API subdomains in Chromium. The check requires the
+Playwright Chromium browser and does not access a database or external gateway.
+
 ## Backend Configuration
 Primary sources:
 - `.local/docker/env/docker.env` (Docker Compose, Postgres default)

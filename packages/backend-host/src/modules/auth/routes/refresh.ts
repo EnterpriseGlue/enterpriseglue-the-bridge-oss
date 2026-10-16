@@ -1,3 +1,4 @@
+import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -159,6 +160,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     maxAge: config.jwtAccessTokenExpires * 1000,
     path: '/',
   });
+  rotateXsrfToken(req, res, req.cookies?.refreshToken ?? accessToken);
 
   res.json(RefreshAccessTokenResponseSchema.parse({
     expiresIn: config.jwtAccessTokenExpires,

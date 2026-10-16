@@ -103,7 +103,7 @@ async function csrfToken(page: Pick<Page, 'request'>): Promise<string> {
 async function mutationOptions(page: Pick<Page, 'request'>, data?: unknown) {
   const token = await csrfToken(page);
   return {
-    headers: { 'X-CSRF-Token': token },
+    headers: { 'X-XSRF-TOKEN': token },
     ...(data === undefined ? {} : { data }),
   };
 }

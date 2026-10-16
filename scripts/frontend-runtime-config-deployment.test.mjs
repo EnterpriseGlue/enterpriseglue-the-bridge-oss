@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const runtimeUrlKey = 'EG_FRONTEND_RUNTIME_API_BASE_URL';
@@ -127,4 +128,18 @@ test('operator examples and the configuration matrix expose both runtime control
   const matrix = read('docs/reference/configuration-matrix.md');
   assert.match(matrix, new RegExp(`\\| ${runtimeUrlKey} \\|`));
   assert.match(matrix, new RegExp(`\\| ${runtimeRequiredKey} \\|`));
+});
+
+
+test('OpenShift serializes only a safe optional XSRF cookie domain into the backend ConfigMap', () => {
+  const script = new URL('../scripts/deploy-openshift.sh', import.meta.url).pathname;
+  const run = (domain) => spawnSync('bash', ['-c', 'source "$1"; oc() { cat; }; apply_runtime_config', 'xsrf-config-test', script], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, OPENSHIFT_NAMESPACE: 'xsrf-test', OPENSHIFT_ROUTE_HOST: 'app.example.test', DATABASE_TYPE: 'postgres', EG_XSRF_COOKIE_DOMAIN: domain },
+  });
+  for (const domain of ['', 'example.test']) {
+    const result = run(domain);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(result.stdout.includes(`EG_XSRF_COOKIE_DOMAIN: "${domain}"`));
+  }
+  assert.notEqual(run('example.test"\ninjected: true').status, 0);
 });

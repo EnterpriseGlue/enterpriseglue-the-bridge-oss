@@ -161,6 +161,18 @@ pnpm run test:ci             # All tests (unit + integration + e2e)
 
 Playwright uses `test/e2e/playwright.config.ts` as the canonical E2E config path.
 
+Backend unit tests cap concurrent workers at four (or the available CPU count,
+if lower). The unit setup keeps Supertest's client in the same address family
+as its listener. This prevents an IPv6 test listener from sending requests to
+an unrelated IPv4 service that happens to use the same port. Keep explicitly
+owned listeners bound to loopback and close them after the suite.
+
+For suites that inspect or mutate the static OpenAPI contract, use
+`backend/test/utils/openapi-fixture.ts`: it generates the real document once
+before the suite and supplies a fresh deep copy for every check. Avoid rebuilding
+the full contract inside each assertion. Security assertions and test time
+limits must remain intact when addressing resource-related test failures.
+
 **Note:** Integration and E2E tests require:
 - PostgreSQL running (Docker or local)
 - Database schema synced (see above)

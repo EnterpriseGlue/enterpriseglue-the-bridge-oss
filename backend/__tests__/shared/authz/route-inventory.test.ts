@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { useOpenApiFixture } from '../../../test/utils/openapi-fixture.js';
 import {
   AUTHZ_OPENAPI_EXTENSION_KEY,
   AUTHZ_OPENAPI_EXEMPTION_KEY,
@@ -8,6 +8,15 @@ import {
 } from '@enterpriseglue/shared/authz/index.js';
 
 describe('authorization route inventory validation', () => {
+  const generateOpenApi = useOpenApiFixture();
+  it('isolates contract mutations from the baseline used by other checks', () => {
+    const baseline = generateOpenApi();
+    const modified = generateOpenApi();
+    modified.paths['/fixture-only'] = { get: { responses: { 200: { description: 'fixture' } } } };
+    modified.components.schemas = {};
+    expect(generateOpenApi()).toEqual(baseline);
+  });
+
   const platformCloudIdentityActions = [
     'platform.tenants.manage',
     'platform.tenants.read',
