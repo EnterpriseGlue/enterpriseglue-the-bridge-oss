@@ -1,7 +1,7 @@
 import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner, Table } from 'typeorm';
 import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -23,7 +23,18 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
       await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'assignment_key', type: 'text', isNullable: true }));
     }
 
-    const rows = await queryRunner.query(`SELECT id, tenant_id, user_id, principal_type, principal_id, role_id, resource_type, resource_id, scope_type, scope_id, source, source_mapping_id, source_ref, assignment_key FROM ${tableName}`) as Array<{
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const tableRef = sqlTablePath(queryRunner, tableName);
+    // Later migrations drop the legacy alias columns, so a Path B bootstrap can
+    // present this table without them; read only what the schema still has.
+    const withKeyColumn = await queryRunner.getTable(tableName);
+    const present = new Set((withKeyColumn ?? table).columns.map((existing) => existing.name));
+    const selectedColumns = [
+      'id', 'tenant_id', 'user_id', 'principal_type', 'principal_id', 'role_id',
+      'resource_type', 'resource_id', 'scope_type', 'scope_id', 'source',
+      'source_mapping_id', 'source_ref', 'assignment_key',
+    ].filter((name) => present.has(name)).map(column).join(', ');
+    const rows = await queryRunner.query(`SELECT ${selectedColumns} FROM ${tableRef}`) as Array<{
       id: string;
       tenant_id: string | null;
       user_id: string | null;
@@ -61,7 +72,7 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
         const keyParameter = queryRunner.connection.driver.createParameter('assignmentKey', 0);
         const idParameter = queryRunner.connection.driver.createParameter('assignmentId', 1);
         await queryRunner.query(
-          `UPDATE ${tableName} SET assignment_key = ${keyParameter} WHERE id = ${idParameter}`,
+          `UPDATE ${tableRef} SET ${column('assignment_key')} = ${keyParameter} WHERE ${column('id')} = ${idParameter}`,
           [key, row.id],
         );
       }
@@ -70,18 +81,14 @@ export class AddCanonicalRoleAssignmentKey1700000000045 implements MigrationInte
     // unique guard. This is intentionally source-lineage aware through key.
     for (const id of duplicateIds) {
       const idParameter = queryRunner.connection.driver.createParameter('assignmentId', 0);
-      await queryRunner.query(`DELETE FROM ${tableName} WHERE id = ${idParameter}`, [id]);
+      await queryRunner.query(`DELETE FROM ${tableRef} WHERE ${column('id')} = ${idParameter}`, [id]);
     }
 
     const refreshed = await queryRunner.getTable(tableName);
     if (!refreshed) return;
     const keyColumn = refreshed.columns.find((column) => column.name === 'assignment_key');
     if (keyColumn?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'assignment_key', portableColumn(queryRunner, {
-        name: 'assignment_key',
-        type: 'text',
-        isNullable: false,
-      }));
+      await requireExistingColumn(queryRunner, tableName, 'assignment_key');
     }
     const tableWithRequiredKey = await queryRunner.getTable(tableName);
     if (!tableWithRequiredKey) return;

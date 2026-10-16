@@ -1,6 +1,6 @@
 import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('AuthzGroup').tablePath; } catch { return 'authz_groups'; }
@@ -21,7 +21,10 @@ export class AddAuthzGroupKeyIdentity1700000000078 implements MigrationInterface
     if (!table.columns.some((column) => column.name === 'group_key_identity')) {
       await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'group_key_identity', type: 'text', isNullable: true }));
     }
-    const groups = await queryRunner.query(`SELECT id, tenant_id, key, group_key_identity FROM ${tableName}`) as Array<{
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const tableRef = sqlTablePath(queryRunner, tableName);
+    const selected = ['id', 'tenant_id', 'key', 'group_key_identity'].map(column).join(', ');
+    const groups = await queryRunner.query(`SELECT ${selected} FROM ${tableRef}`) as Array<{
       id: string; tenant_id: string | null; key: string; group_key_identity: string | null;
     }>;
     for (const group of groups) {
@@ -29,12 +32,12 @@ export class AddAuthzGroupKeyIdentity1700000000078 implements MigrationInterface
       if (group.group_key_identity === identity) continue;
       const identityParameter = queryRunner.connection.driver.createParameter('groupKeyIdentity', 0);
       const idParameter = queryRunner.connection.driver.createParameter('groupId', 1);
-      await queryRunner.query(`UPDATE ${tableName} SET group_key_identity = ${identityParameter} WHERE id = ${idParameter}`, [identity, group.id]);
+      await queryRunner.query(`UPDATE ${tableRef} SET ${column('group_key_identity')} = ${identityParameter} WHERE ${column('id')} = ${idParameter}`, [identity, group.id]);
     }
     const refreshed = await queryRunner.getTable(tableName);
     if (!refreshed) return;
     if (refreshed.columns.find((column) => column.name === 'group_key_identity')?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'group_key_identity', portableColumn(queryRunner, { name: 'group_key_identity', type: 'text', isNullable: false }));
+      await requireExistingColumn(queryRunner, tableName, 'group_key_identity');
     }
     const current = await queryRunner.getTable(tableName);
     if (!current || current.uniques.some((unique) => unique.name === 'uq_authz_groups_key_identity') || current.indices.some((index) => index.name === 'uq_authz_groups_key_identity')) return;

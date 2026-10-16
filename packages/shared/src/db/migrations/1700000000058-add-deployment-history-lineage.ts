@@ -1,6 +1,6 @@
 import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -25,11 +25,14 @@ const DEPLOYMENT_COLUMNS: Array<{ name: string; type: string; isNullable?: boole
  * not fail midway through migration.
  */
 async function removeDuplicateDeployments(queryRunner: QueryRunner, deployments: string): Promise<void> {
+  const column = (name: string) => sqlIdentifier(queryRunner, name);
+  const deploymentsRef = sqlTablePath(queryRunner, deployments);
   const rows = await queryRunner.query(
-    `SELECT id, engine_id, camunda_deployment_id
-     FROM ${deployments}
-     WHERE camunda_deployment_id IS NOT NULL
-     ORDER BY engine_id ASC, camunda_deployment_id ASC, updated_at DESC, created_at DESC, id DESC`,
+    `SELECT ${column('id')}, ${column('engine_id')}, ${column('camunda_deployment_id')}
+     FROM ${deploymentsRef}
+     WHERE ${column('camunda_deployment_id')} IS NOT NULL
+     ORDER BY ${column('engine_id')} ASC, ${column('camunda_deployment_id')} ASC,`
+    + ` ${column('updated_at')} DESC, ${column('created_at')} DESC, ${column('id')} DESC`,
   ) as Array<{ id: string; engine_id: string; camunda_deployment_id: string }>;
   const seenDeployments = new Set<string>();
 
@@ -40,7 +43,7 @@ async function removeDuplicateDeployments(queryRunner: QueryRunner, deployments:
       continue;
     }
     const idParameter = queryRunner.connection.driver.createParameter('deploymentId', 0);
-    await queryRunner.query(`DELETE FROM ${deployments} WHERE id = ${idParameter}`, [row.id]);
+    await queryRunner.query(`DELETE FROM ${deploymentsRef} WHERE ${column('id')} = ${idParameter}`, [row.id]);
   }
 }
 

@@ -142,6 +142,26 @@ export function portableColumn(
   );
 }
 
+/**
+ * Tightens an existing column to NOT NULL.
+ *
+ * Passing a freshly built column makes TypeORM drop and re-add it whenever the
+ * declared type differs at all from the live one, which Oracle rejects on a
+ * populated table (ORA-01758). Cloning the live column keeps the change to
+ * nullability alone.
+ */
+export async function requireExistingColumn(
+  queryRunner: QueryRunner,
+  tableName: string,
+  columnName: string,
+): Promise<void> {
+  const current = (await queryRunner.getTable(tableName))?.findColumnByName(columnName);
+  if (!current || !current.isNullable) return;
+  const required = current.clone();
+  required.isNullable = false;
+  await queryRunner.changeColumn(tableName, current, required);
+}
+
 export function portableStringDefault(queryRunner: QueryRunner, value: string): string | undefined {
   return migrationDatabase(queryRunner) === 'spanner' ? undefined : sqlStringLiteral(value);
 }

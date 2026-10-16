@@ -1,6 +1,6 @@
 import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('IdentityEntitlementMapping').tablePath; } catch { return 'identity_entitlement_mappings'; }
@@ -21,7 +21,10 @@ export class AddIdentityMappingConfigKeyIdentity1700000000080 implements Migrati
     if (!table.columns.some((column) => column.name === 'config_key_identity')) {
       await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'config_key_identity', type: 'text', isNullable: true }));
     }
-    const mappings = await queryRunner.query(`SELECT id, tenant_id, config_key, config_key_identity FROM ${tableName}`) as Array<{
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const tableRef = sqlTablePath(queryRunner, tableName);
+    const selected = ['id', 'tenant_id', 'config_key', 'config_key_identity'].map(column).join(', ');
+    const mappings = await queryRunner.query(`SELECT ${selected} FROM ${tableRef}`) as Array<{
       id: string; tenant_id: string | null; config_key: string | null; config_key_identity: string | null;
     }>;
     for (const mapping of mappings) {
@@ -29,7 +32,7 @@ export class AddIdentityMappingConfigKeyIdentity1700000000080 implements Migrati
       if (mapping.config_key_identity === identity) continue;
       const identityParameter = queryRunner.connection.driver.createParameter('configKeyIdentity', 0);
       const idParameter = queryRunner.connection.driver.createParameter('mappingId', 1);
-      await queryRunner.query(`UPDATE ${tableName} SET config_key_identity = ${identityParameter} WHERE id = ${idParameter}`, [identity, mapping.id]);
+      await queryRunner.query(`UPDATE ${tableRef} SET ${column('config_key_identity')} = ${identityParameter} WHERE ${column('id')} = ${idParameter}`, [identity, mapping.id]);
     }
     const current = await queryRunner.getTable(tableName);
     if (!current || current.uniques.some((candidate) => candidate.name === 'uq_identity_entitlement_mapping_config_key_identity') || current.indices.some((candidate) => candidate.name === 'uq_identity_entitlement_mapping_config_key_identity')) return;

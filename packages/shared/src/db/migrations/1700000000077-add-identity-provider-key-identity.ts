@@ -1,6 +1,6 @@
 import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('IdentityProvider').tablePath; } catch { return 'identity_providers'; }
@@ -21,7 +21,10 @@ export class AddIdentityProviderKeyIdentity1700000000077 implements MigrationInt
     if (!table.columns.some((column) => column.name === 'provider_key_identity')) {
       await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'provider_key_identity', type: 'text', isNullable: true }));
     }
-    const providers = await queryRunner.query(`SELECT id, tenant_id, key, provider_key_identity FROM ${tableName}`) as Array<{
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const tableRef = sqlTablePath(queryRunner, tableName);
+    const selected = ['id', 'tenant_id', 'key', 'provider_key_identity'].map(column).join(', ');
+    const providers = await queryRunner.query(`SELECT ${selected} FROM ${tableRef}`) as Array<{
       id: string; tenant_id: string | null; key: string; provider_key_identity: string | null;
     }>;
     for (const provider of providers) {
@@ -29,12 +32,12 @@ export class AddIdentityProviderKeyIdentity1700000000077 implements MigrationInt
       if (provider.provider_key_identity === identity) continue;
       const identityParameter = queryRunner.connection.driver.createParameter('providerKeyIdentity', 0);
       const idParameter = queryRunner.connection.driver.createParameter('providerId', 1);
-      await queryRunner.query(`UPDATE ${tableName} SET provider_key_identity = ${identityParameter} WHERE id = ${idParameter}`, [identity, provider.id]);
+      await queryRunner.query(`UPDATE ${tableRef} SET ${column('provider_key_identity')} = ${identityParameter} WHERE ${column('id')} = ${idParameter}`, [identity, provider.id]);
     }
     const refreshed = await queryRunner.getTable(tableName);
     if (!refreshed) return;
     if (refreshed.columns.find((column) => column.name === 'provider_key_identity')?.isNullable) {
-      await queryRunner.changeColumn(tableName, 'provider_key_identity', portableColumn(queryRunner, { name: 'provider_key_identity', type: 'text', isNullable: false }));
+      await requireExistingColumn(queryRunner, tableName, 'provider_key_identity');
     }
     const current = await queryRunner.getTable(tableName);
     if (!current || current.uniques.some((unique) => unique.name === 'uq_identity_providers_key_identity') || current.indices.some((index) => index.name === 'uq_identity_providers_key_identity')) return;

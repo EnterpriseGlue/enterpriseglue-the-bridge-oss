@@ -1,6 +1,6 @@
 import { TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableTable } from './support/portable-columns.js';
+import { portableTable, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -43,34 +43,37 @@ export class AddExternalEngineRegistrationsTable1700000000019 implements Migrati
     }
 
     if (await queryRunner.hasTable(engines)) {
+      const column = (name: string) => sqlIdentifier(queryRunner, name);
+      const registrationsRef = sqlTablePath(queryRunner, registrations);
       await queryRunner.query(`
-        INSERT INTO ${registrations} (
-          id,
-          engine_id,
-          external_id,
-          labels_json,
-          registration_source,
-          api_client_id,
-          last_registered_at,
-          created_at,
-          updated_at
+        INSERT INTO ${registrationsRef} (
+          ${column('id')},
+          ${column('engine_id')},
+          ${column('external_id')},
+          ${column('labels_json')},
+          ${column('registration_source')},
+          ${column('api_client_id')},
+          ${column('last_registered_at')},
+          ${column('created_at')},
+          ${column('updated_at')}
         )
         SELECT
-          e.id,
-          e.id,
-          e.external_id,
-          e.labels_json,
-          COALESCE(e.registration_source, 'user'),
+          e.${column('id')},
+          e.${column('id')},
+          e.${column('external_id')},
+          e.${column('labels_json')},
+          COALESCE(e.${column('registration_source')}, 'user'),
           NULL,
-          e.external_updated_at,
-          e.created_at,
-          e.updated_at
-        FROM ${engines} e
-        WHERE e.external_id IS NOT NULL
+          e.${column('external_updated_at')},
+          e.${column('created_at')},
+          e.${column('updated_at')}
+        FROM ${sqlTablePath(queryRunner, engines)} e
+        WHERE e.${column('external_id')} IS NOT NULL
           AND NOT EXISTS (
             SELECT 1
-            FROM ${registrations} r
-            WHERE r.engine_id = e.id OR r.external_id = e.external_id
+            FROM ${registrationsRef} r
+            WHERE r.${column('engine_id')} = e.${column('id')}
+               OR r.${column('external_id')} = e.${column('external_id')}
           )
       `);
     }

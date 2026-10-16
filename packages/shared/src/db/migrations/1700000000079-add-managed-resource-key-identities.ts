@@ -1,6 +1,6 @@
 import { TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
-import { portableColumn } from './support/portable-columns.js';
+import { portableColumn, requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 type KeyedResource = {
   metadataName: string;
@@ -34,19 +34,22 @@ export class AddManagedResourceKeyIdentities1700000000079 implements MigrationIn
       if (!table.columns.some((column) => column.name === resource.column)) {
         await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: resource.column, type: 'text', isNullable: true }));
       }
-      const rows = await queryRunner.query(`SELECT id, tenant_id, key, ${resource.column} FROM ${tableName}`) as Array<{
+      const column = (name: string) => sqlIdentifier(queryRunner, name);
+      const tableRef = sqlTablePath(queryRunner, tableName);
+      const selected = ['id', 'tenant_id', 'key', resource.column].map(column).join(', ');
+      const rows = await queryRunner.query(`SELECT ${selected} FROM ${tableRef}`) as Array<{
         id: string; tenant_id: string | null; key: string;
       }>;
       for (const row of rows) {
         const identity = keyIdentity(row.tenant_id, row.key);
         const identityParameter = queryRunner.connection.driver.createParameter('keyIdentity', 0);
         const idParameter = queryRunner.connection.driver.createParameter('resourceId', 1);
-        await queryRunner.query(`UPDATE ${tableName} SET ${resource.column} = ${identityParameter} WHERE id = ${idParameter}`, [identity, row.id]);
+        await queryRunner.query(`UPDATE ${tableRef} SET ${column(resource.column)} = ${identityParameter} WHERE ${column('id')} = ${idParameter}`, [identity, row.id]);
       }
       const refreshed = await queryRunner.getTable(tableName);
       if (!refreshed) continue;
       if (refreshed.columns.find((column) => column.name === resource.column)?.isNullable) {
-        await queryRunner.changeColumn(tableName, resource.column, portableColumn(queryRunner, { name: resource.column, type: 'text', isNullable: false }));
+        await requireExistingColumn(queryRunner, tableName, resource.column);
       }
       const current = await queryRunner.getTable(tableName);
       if (current && !current.uniques.some((candidate) => candidate.name === resource.unique) && !current.indices.some((candidate) => candidate.name === resource.unique)) {

@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('RbacRoleAssignment').tablePath; } catch { return 'role_assignments'; }
@@ -19,8 +20,12 @@ export class BackfillSsoAssignmentSourceMapping1700000000081 implements Migratio
       || !table.columns.some((column) => column.name === 'source_mapping_id')
       || !table.columns.some((column) => column.name === 'source_ref')) return;
     const sourceParameter = queryRunner.connection.driver.createParameter('source', 0);
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
     await queryRunner.query(
-      `UPDATE ${tableName} SET source_mapping_id = source_ref WHERE source = ${sourceParameter} AND source_mapping_id IS NULL AND source_ref IS NOT NULL`,
+      `UPDATE ${sqlTablePath(queryRunner, tableName)}`
+      + ` SET ${column('source_mapping_id')} = ${column('source_ref')}`
+      + ` WHERE ${column('source')} = ${sourceParameter}`
+      + ` AND ${column('source_mapping_id')} IS NULL AND ${column('source_ref')} IS NOT NULL`,
       ['sso'],
     );
   }
