@@ -17,6 +17,7 @@ describe('AddAuthzGroupKeyIdentity1700000000078', () => {
       hasColumn: vi.fn().mockResolvedValue(true),
       addColumn: vi.fn(), changeColumn: vi.fn(), createUniqueConstraint: vi.fn(), query,
       connection: {
+        options: { type: 'postgres' },
         getMetadata: () => { throw new Error('metadata unavailable'); },
         driver: { escape: (name: string) => `"${name}"`, createParameter: (_name: string, index: number) => `$${index + 1}` },
       },

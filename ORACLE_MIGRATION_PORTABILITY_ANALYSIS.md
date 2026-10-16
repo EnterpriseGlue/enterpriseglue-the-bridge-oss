@@ -447,11 +447,12 @@ where the previous behaviour could not have worked for key columns.
 | No unused or missing imports after conversion | Pass |
 | No offending literal left outside a normaliser | Pass — remaining matches are local helper bodies in 096–103 and normalised inputs in 114–123 |
 | `tsc` build of `@enterpriseglue/shared` | Pass |
-| Backend unit tests | Pass — 3860/3860, including all 331 in `__tests__/shared/db` |
+| Backend unit tests | Pass — 3861/3861, including all 332 in `__tests__/shared/db` |
 | Live Oracle (XE 21c): fresh schema, then rerun | Pass — baseline path, 136/136 recorded, rerun is a no-op |
 | Live Oracle: full epoch replay over a populated schema | Pass — 136/136 executed |
 | Live PostgreSQL (18): fresh, rerun and full replay | Pass — 135/135 (134 is Oracle-only) |
-| Path B (synchronize, then replay) on either dialect | Stops at 131 — see §12.2 |
+| Live Oracle: migration 100 on legacy VARCHAR2 evidence, and resume after interruption | Pass — values and nullability preserved (§12.3) |
+| Path B (synchronize, then replay) on either dialect | Stops at 131 — see §12.4 |
 
 The replay scenario clears the migration ledger of a seeded database, drops
 `release_effect_cohorts`, and relaxes the NOT NULL columns that 045, 050, 077–079 and 084
@@ -493,7 +494,30 @@ PostgreSQL the wrapping did nothing. On MySQL it was a regression: 098 deliberat
 It also broke the tests that cover these migrations with stubs that have no `connection`. These
 eight files are back to their pre-conversion content.
 
-### 12.3 Path B stops at migration 131 on every dialect
+### 12.3 Migration 100 widens Oracle evidence without losing it
+
+`WidenCamundaNativeGrantEvidence1700000000100` widens `classifications_json` and
+`encrypted_detailed_snapshot` for schemas created by an earlier 098 that stored them as
+`varchar2(4000)`. It called `changeColumn()` to change them to `clob`. On Oracle that is a drop
+and re-add, which discards the evidence. Oracle cannot `MODIFY` a `varchar2` to a `clob`.
+
+On Oracle, 100 now copies each column through a staging `clob` column (`<name>_clob`): add,
+`UPDATE` copy, drop the original, rename, then restore NOT NULL. Oracle DDL commits implicitly,
+so each step checks the live schema first. A rerun skips columns that are already `clob` and
+finishes a widening interrupted after the drop. Other databases keep the `changeColumn()` path,
+which widens them in place.
+
+Restoring NOT NULL on the new `clob` column surfaced one more Oracle rule. TypeORM's
+`changeColumn()` restates the type (`MODIFY "col" clob NOT NULL`), and Oracle rejects that for
+LOBs with ORA-22296. For LOB columns on Oracle, `setExistingColumnNullability()` therefore
+issues `MODIFY ("col" NOT NULL)` directly.
+
+Verified on Oracle XE 21c against a legacy-shaped table holding `'{"grants":1}'`, `'ciphertext'`
+and a 3990-character value. All three values and the original nullability were kept, and a rerun
+was a no-op. The interrupted case (original dropped, staging column holding the data) resumed to
+the same final shape.
+
+### 12.4 Path B stops at migration 131 on every dialect
 
 When `synchronize()` runs before the replay (§3, Path B), it creates
 `release_effect_cohorts` from the entity model. Migration 131 deliberately refuses a
@@ -515,14 +539,10 @@ defect, so it is left unchanged here (see §13).
    doing independently of this fix.
 3. **Helper duplication.** Migrations 096–103 still carry local copies of the dialect
    branches (§7). Safe to consolidate onto the shared module in a separate change.
-4. **Path B and migration 131.** A Path B bootstrap always stops at 131 (§12.3), on any
+4. **Path B and migration 131.** A Path B bootstrap always stops at 131 (§12.4), on any
    dialect. Whether 131 should accept a relation whose shape matches
    `expectedReleaseEffectCohortTable()` is a schema-epoch policy decision.
-5. **Migration 100 on Oracle.** `WidenCamundaNativeGrantEvidence1700000000100` changes
-   `varchar2(4000)` evidence columns to `clob` through `changeColumn()`. On Oracle that is a drop
-   and re-add, so existing import evidence is lost. Oracle cannot `MODIFY` a `varchar2` to a
-   `clob`, so a safe fix needs an add-copy-drop-rename sequence. Not done here.
-6. **Oracle key widths.** 191 characters is a conservative default. Columns that legitimately
+5. **Oracle key widths.** 191 characters is a conservative default. Columns that legitimately
    need more should follow the Oracle-only widening pattern rather than raising the default.
 
 ---

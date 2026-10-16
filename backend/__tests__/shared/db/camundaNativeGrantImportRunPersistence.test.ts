@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getMetadataArgsStorage } from 'typeorm';
+import { getMetadataArgsStorage, Table, TableColumn } from 'typeorm';
 import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
 import { AddCamundaNativeGrantImportRuns1700000000098 } from '@enterpriseglue/shared/db/migrations/1700000000098-add-camunda-native-grant-import-runs.js';
 import { AddCamundaNativeGrantRollbackReceipt1700000000099 } from '@enterpriseglue/shared/db/migrations/1700000000099-add-camunda-native-grant-rollback-receipt.js';
@@ -48,7 +48,6 @@ describe('Camunda native-grant import evidence persistence', () => {
     ['postgres', 'text', undefined],
     ['mysql', 'longtext', undefined],
     ['mssql', 'nvarchar', 'MAX'],
-    ['oracle', 'clob', undefined],
     ['spanner', 'string', 'max'],
   ])('uses unbounded evidence columns for %s without assuming a connection in simple stubs', async (database, type, length) => {
     const createTable = vi.fn().mockResolvedValue(undefined);
@@ -91,7 +90,6 @@ describe('Camunda native-grant import evidence persistence', () => {
     ['postgres', 'text', undefined],
     ['mysql', 'longtext', undefined],
     ['mssql', 'nvarchar', 'MAX'],
-    ['oracle', 'clob', undefined],
     ['spanner', 'string', 'max'],
   ])('widens existing evidence columns safely for %s', async (database, type, length) => {
     const changeColumn = vi.fn().mockResolvedValue(undefined);
@@ -109,5 +107,103 @@ describe('Camunda native-grant import evidence persistence', () => {
       { name: 'classifications_json', type, length, isNullable: false },
       { name: 'encrypted_detailed_snapshot', type, length, isNullable: true },
     ]);
+  });
+
+  describe('on Oracle', () => {
+    type Row = Record<string, string | null>;
+
+    // In-memory Oracle table: DDL changes the column list, the UPDATE copies values.
+    function oracleRunner(columns: TableColumn[], rows: Row[]) {
+      const tableName = 'camunda_native_grant_import_runs';
+      const state = { columns: columns.map((column) => column.clone()), rows };
+      const runner = {
+        connection: {
+          options: { type: 'oracle' },
+          getMetadata: vi.fn().mockImplementation(() => { throw new Error('no metadata'); }),
+          driver: { escape: (name: string) => `"${name}"` },
+        },
+        getTable: vi.fn(async () => new Table({ name: tableName, columns: state.columns })),
+        addColumn: vi.fn(async (_table: string, column: TableColumn) => {
+          state.columns.push(column.clone());
+          for (const row of state.rows) row[column.name] = null;
+        }),
+        query: vi.fn(async (sql: string) => {
+          const modify = /MODIFY \("([^"]+)" (NOT NULL|NULL)\)/.exec(sql);
+          if (modify) {
+            state.columns.find((column) => column.name === modify[1])!.isNullable = modify[2] === 'NULL';
+            return;
+          }
+          const [, target, source] = /SET "([^"]+)" = "([^"]+)"/.exec(sql) ?? [];
+          for (const row of state.rows) row[target] = row[source];
+        }),
+        dropColumn: vi.fn(async (_table: string, name: string) => {
+          state.columns = state.columns.filter((column) => column.name !== name);
+          for (const row of state.rows) delete row[name];
+        }),
+        renameColumn: vi.fn(async (_table: string, from: string, to: string) => {
+          state.columns.find((column) => column.name === from)!.name = to;
+          for (const row of state.rows) { row[to] = row[from]; delete row[from]; }
+        }),
+        changeColumn: vi.fn(async (_table: string, oldColumn: TableColumn, newColumn: TableColumn) => {
+          // Mirrors TypeORM's Oracle rule: a type or length change drops and re-adds the column.
+          if (oldColumn.type !== newColumn.type || oldColumn.length !== newColumn.length) {
+            throw new Error('changeColumn would drop and re-add the column');
+          }
+          state.columns = state.columns.map((column) => (column.name === oldColumn.name ? newColumn.clone() : column));
+        }),
+      };
+      return { runner, state };
+    }
+
+    const varchar = (name: string, isNullable: boolean) => new TableColumn({ name, type: 'varchar2', length: '4000', isNullable });
+    const clob = (name: string, isNullable: boolean) => new TableColumn({ name, type: 'clob', isNullable });
+
+    it('copies VARCHAR2 evidence into CLOB columns instead of dropping it', async () => {
+      const { runner, state } = oracleRunner(
+        [new TableColumn({ name: 'id', type: 'varchar2', length: '191', isPrimary: true }), varchar('classifications_json', false), varchar('encrypted_detailed_snapshot', true)],
+        [{ id: 'run-1', classifications_json: '{"grants":1}', encrypted_detailed_snapshot: 'ciphertext' }],
+      );
+
+      await new WidenCamundaNativeGrantEvidence1700000000100().up(runner as any);
+
+      expect(state.columns.map(({ name, type, isNullable }) => ({ name, type, isNullable }))).toEqual([
+        { name: 'id', type: 'varchar2', isNullable: false },
+        { name: 'classifications_json', type: 'clob', isNullable: false },
+        { name: 'encrypted_detailed_snapshot', type: 'clob', isNullable: true },
+      ]);
+      expect(state.rows).toEqual([{ id: 'run-1', classifications_json: '{"grants":1}', encrypted_detailed_snapshot: 'ciphertext' }]);
+      expect(runner.query).toHaveBeenCalledWith(
+        'UPDATE "camunda_native_grant_import_runs" SET "classifications_json_clob" = "classifications_json"',
+      );
+      // Oracle rejects restating a LOB type in MODIFY, so NOT NULL is applied on its own.
+      expect(runner.query).toHaveBeenCalledWith('ALTER TABLE "camunda_native_grant_import_runs" MODIFY ("classifications_json" NOT NULL)');
+      expect(runner.changeColumn).not.toHaveBeenCalled();
+    });
+
+    it('leaves columns that are already CLOB untouched', async () => {
+      const { runner } = oracleRunner([clob('classifications_json', false), clob('encrypted_detailed_snapshot', true)], []);
+
+      await new WidenCamundaNativeGrantEvidence1700000000100().up(runner as any);
+
+      expect(runner.addColumn).not.toHaveBeenCalled();
+      expect(runner.dropColumn).not.toHaveBeenCalled();
+      expect(runner.changeColumn).not.toHaveBeenCalled();
+    });
+
+    it('resumes a widening interrupted after the original column was dropped', async () => {
+      const { runner, state } = oracleRunner(
+        [clob('classifications_json_clob', true), clob('encrypted_detailed_snapshot', true)],
+        [{ classifications_json_clob: '{"grants":2}', encrypted_detailed_snapshot: null }],
+      );
+
+      await new WidenCamundaNativeGrantEvidence1700000000100().up(runner as any);
+
+      expect(state.columns.map(({ name, type, isNullable }) => ({ name, type, isNullable }))).toEqual([
+        { name: 'classifications_json', type: 'clob', isNullable: false },
+        { name: 'encrypted_detailed_snapshot', type: 'clob', isNullable: true },
+      ]);
+      expect(state.rows).toEqual([{ classifications_json: '{"grants":2}', encrypted_detailed_snapshot: null }]);
+      expect(runner.dropColumn).not.toHaveBeenCalled();
+    });
   });
 });

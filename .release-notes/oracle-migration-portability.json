@@ -1,0 +1,68 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "oracle-migration-portability",
+  "type": "fix",
+  "scope": "oracle",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Make the historical database migrations replay safely on Oracle and PostgreSQL, so partially populated Oracle schemas no longer fail with ORA-00902 or ORA-01758, and nullability or type changes keep existing data.",
+  "userImpact": [
+    "Oracle databases that replay the historical migration epoch no longer stop with ORA-00902 (invalid datatype) or ORA-01758 (table must be empty to add mandatory column).",
+    "Migrations that relax or tighten NOT NULL on populated Oracle tables change the column in place instead of dropping and re-adding it, so role-assignment and deployment-lineage data is preserved.",
+    "Oracle installations whose Camunda native-grant import evidence was stored as VARCHAR2 are widened to CLOB without losing the stored classifications or encrypted snapshots."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [
+      "RequireCanonicalRoleAssignmentShape1700000000084",
+      "MakeRoleAssignmentAliasesOptional1700000000046",
+      "AddDeploymentHistoryLineage1700000000058",
+      "WidenCamundaNativeGrantEvidence1700000000100"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "Existing migrations were corrected in place; no new migration is added and already-applied migrations are not re-run.",
+      "Legacy migrations resolve column types for the connected database. PostgreSQL schemas built from text columns receive the same DDL as before.",
+      "Nullability changes clone the live column, so Oracle receives MODIFY ... [NOT] NULL and PostgreSQL receives ALTER COLUMN ... SET/DROP NOT NULL with data intact.",
+      "On Oracle, migration 100 widens VARCHAR2 evidence to CLOB through a staging column (add, copy, drop, rename). Each step checks the live schema, so a rerun resumes an interrupted widening.",
+      "A bootstrap that runs synchronize() before replaying the epoch still stops at AddReleaseEffectCohorts1700000000131 by design; that schema-epoch guard is unchanged."
+    ]
+  },
+  "security": [],
+  "documentation": [
+    "ORACLE_MIGRATION_PORTABILITY_ANALYSIS.md"
+  ],
+  "knownLimitations": [
+    "A schema-epoch bootstrap that has already created release_effect_cohorts through synchronize() is still refused by migration 131 on every database."
+  ],
+  "rollback": [
+    "Redeploy the previous shared package or application image. Widened Oracle CLOB evidence columns and relaxed or tightened nullability are retained; automatic schema shrinking is unsupported."
+  ],
+  "validation": [
+    "Live Oracle XE 21c: fresh schema, idempotent rerun and a full replay of all 136 migrations over a seeded schema with relaxed NOT NULL columns passed.",
+    "Live PostgreSQL 18: fresh schema, idempotent rerun and a full replay of all 135 applicable migrations passed.",
+    "Live Oracle migration 100: VARCHAR2(4000) evidence including a 3990-character value was widened to CLOB with every value and the original nullability preserved, and a widening interrupted after the drop step resumed correctly.",
+    "Live Oracle and PostgreSQL: relaxing NOT NULL on a populated column kept its value with the new helper, while the previous pattern emptied it.",
+    "Backend unit tests passed, including all migration tests in backend/__tests__/shared/db."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.25.2",
+      "newVersion": "0.25.3",
+      "impact": "patch"
+    }
+  ]
+}

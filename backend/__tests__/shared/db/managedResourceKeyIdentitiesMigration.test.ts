@@ -17,6 +17,7 @@ describe('AddManagedResourceKeyIdentities1700000000079', () => {
       getTable: vi.fn().mockResolvedValue(table), hasColumn: vi.fn().mockResolvedValue(true),
       addColumn: vi.fn(), changeColumn: vi.fn(), createUniqueConstraint: vi.fn(), query,
       connection: {
+        options: { type: 'postgres' },
         getMetadata: () => { throw new Error('metadata unavailable'); },
         driver: { escape: (name: string) => `"${name}"`, createParameter: (_name: string, index: number) => `$${index + 1}` },
       },

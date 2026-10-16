@@ -142,6 +142,8 @@ export function portableColumn(
   );
 }
 
+const ORACLE_LOB_TYPES = new Set(['clob', 'nclob', 'blob']);
+
 /**
  * Changes only the nullability of an existing column.
  *
@@ -159,6 +161,14 @@ export async function setExistingColumnNullability(
 ): Promise<void> {
   const current = (await queryRunner.getTable(tableName))?.findColumnByName(columnName);
   if (!current || current.isNullable === isNullable) return;
+  if (migrationDatabase(queryRunner) === 'oracle' && ORACLE_LOB_TYPES.has(current.type.toLowerCase())) {
+    // TypeORM restates the type in MODIFY, which Oracle rejects for LOBs (ORA-22296).
+    await queryRunner.query(
+      `ALTER TABLE ${sqlTablePath(queryRunner, tableName)}`
+      + ` MODIFY (${sqlIdentifier(queryRunner, columnName)} ${isNullable ? 'NULL' : 'NOT NULL'})`,
+    );
+    return;
+  }
   const changed = current.clone();
   changed.isNullable = isNullable;
   await queryRunner.changeColumn(tableName, current, changed);
