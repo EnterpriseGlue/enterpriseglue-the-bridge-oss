@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.32.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.31.1...v0.32.0) (2026-10-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **security:** unify browser XSRF token transport
+
+### Features
+
+* **security:** unify browser XSRF token transport ([8b5e424](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8b5e424d0b4711ea1f52feab294ef8dac19d4d50))
+
+
+### Bug Fixes
+
+* implement Oracle migration portability to all migrations ([bb36ef9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bb36ef93707c1445a030372404be747b92743266))
+* implement Oracle migration portability to all migrations ([e9b7513](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e9b7513347e1468265c278401b27cd5bc2edceb2))
+* **oracle:** enhance migration portability for Oracle ([6350a40](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6350a40906ca507af770e350ad69df22559e4136))
+* **oracle:** preserve migration data and finish interrupted widening ([5326089](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/53260899405e3f24ece2221eb7f99092e860a6b9))
+* preserve data when migrations change nullability on Oracle ([ea2ee05](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ea2ee05bfd4bc37d7905528886034615577b0135))
+* **security:** encode snapshot identifiers and complete browser fixtures ([59576e6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/59576e6fc4697b4c1114ef99aa1b427b0b185c2b))
+* **security:** refresh zlib in frontend and bootstrap runtimes ([1d2b79c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1d2b79ca3b5e323adb5f89e539584c17fcda6384))
+* **security:** use vendor-patched zlib without expired exception ([bf3225b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bf3225b8a698695f71e5b0df16a9fb992bec3cd5))
+* **security:** use vendor-patched zlib without expired exception ([2d2c782](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2d2c78273efa00683f9257d7345f07142937b44c))
+* tighten migration 084 columns in place to avoid ORA-01758 ([ccebdea](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ccebdea6cef67dd9e7adc2af7740cac681aa4f32))
+* widen Oracle evidence in migration 100 without losing it ([f90f02b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f90f02bfba3c8729110d4a29695ef95d16022d22))
+
 ## [0.31.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.31.0...v0.31.1) (2026-10-14)
 
 ### Changes
