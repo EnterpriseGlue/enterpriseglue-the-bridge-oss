@@ -41,6 +41,7 @@
   ],
   "validation": [
     "CI contracts passed: 207 tests; release-note preflight passed: 169 tests, semantic version recommendation, fragment validation and documentation boundary.",
+    "The 34 pooled-tenancy/bootstrap contracts passed, and the rebuilt bootstrap image passed real PostgreSQL creation, idempotence, bounded receipts, and drift-rejection qualification.",
     "Backend runtime-base, full frontend, and full managed-shard bootstrap images built for linux/amd64 and linux/arm64. Non-root Node gzip checks passed for backend and bootstrap; actual Nginx gzip delivery of the built JavaScript bundle passed on both frontend architectures.",
     "The pinned release scanner and current vulnerability database reported zero unignored findings at all severities on all six locally checked images, with the zlib exception removed. Full protected CI and exact-candidate qualification remain separate requirements."
   ],
