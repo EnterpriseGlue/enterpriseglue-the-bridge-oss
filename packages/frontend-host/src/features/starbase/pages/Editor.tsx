@@ -1724,7 +1724,7 @@ export default function Editor() {
   const viewSnapshotQ = useQuery({
     queryKey: ['vcs', 'snapshots', fileQ.data?.projectId, phase2CommitId],
     queryFn: () => apiClient.get<{ files: Array<{ name: string; type: string; content: string | null; changeType: string }> }>(
-      `/vcs-api/projects/${fileQ.data!.projectId}/commits/${phase2CommitId}/snapshots`
+      `/vcs-api/projects/${encodeURIComponent(fileQ.data!.projectId)}/commits/${encodeURIComponent(phase2CommitId!)}/snapshots`
     ),
     enabled: !!fileQ.data?.projectId && !!phase2CommitId && editorMode === 'view',
     staleTime: Infinity,

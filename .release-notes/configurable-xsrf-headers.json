@@ -39,7 +39,8 @@
   "security": [
     "The existing signed, session-bound validator remains active; cookie-only, mismatched, forged and foreign-session tokens are rejected.",
     "Authentication cookies remain HttpOnly. Only the application XSRF token cookie becomes JavaScript-readable.",
-    "The transport rereads the cookie for each request and retry, rejects ambiguous/malformed values, restricts token delivery to the configured API origin and rejects redirects."
+    "The transport rereads the cookie for each request and retry, rejects ambiguous/malformed values, restricts token delivery to the configured API origin and rejects redirects.",
+    "Editor snapshot requests encode project and query-supplied commit identifiers as path segments."
   ],
   "documentation": [
     "CONTRIBUTING.md",
@@ -55,7 +56,7 @@
   ],
   "validation": [
     "Node 24.10.0 and pnpm 11.0.8: repository typecheck and lint passed; backend typecheck and repository lint were repeated after the final test-harness corrections.",
-    "Frontend unit suite passed: 318 files / 1575 tests with maxWorkers=2. Final focused backend app/refresh tests passed: 23 tests, including both cookie and body refresh clients.",
+    "Frontend unit suite passed: 318 files / 1575 tests. The frontend plugin bridge passed all 43 tests with browser-valid location fixtures. Final focused backend app/refresh tests passed: 23 tests, including both cookie and body refresh clients.",
     "Focused backend and frontend security/configuration tests passed, including cookie/header forwarding, URL decoding, cookie deletion and rotation, concurrent refresh, missing/duplicate/mismatched tokens, forged signatures, foreign sessions, and cookie/body refresh-token clients.",
     "Chromium integration across app.xsrf.test and api.xsrf.test passed with the actual frontend transport and backend CSRF middleware/issuance helpers: a single application cookie, HttpOnly authentication cookies, login/refresh/session rotation, explicit header proof, CORS, logout cleanup and redirect leakage prevention.",
     "Disposable physical PostgreSQL session qualification passed again after the test-harness corrections: 45 tests. No persistence or database schema changed.",
