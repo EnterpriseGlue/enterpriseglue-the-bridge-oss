@@ -1,3 +1,4 @@
+import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { IsNull, LessThan, MoreThan } from 'typeorm';
@@ -89,9 +90,10 @@ async function existingUser(email: string): Promise<User | null> {
   return query.getOne();
 }
 
-function setSessionCookies(res: Response, session: IssuedAuthSession): void {
+function setSessionCookies(req: Request, res: Response, session: IssuedAuthSession): void {
   cookie(res, 'accessToken', session.accessToken, session.expiresIn * 1000, '/');
   cookie(res, 'refreshToken', session.refreshToken, config.jwtRefreshTokenExpires * 1000, '/');
+  rotateXsrfToken(req, res, session.refreshToken);
 }
 
 /** Requesting a link never creates a user, membership, or identity-provider association. */
@@ -223,7 +225,7 @@ router.post('/api/auth/cloud-signup/email/passkey/complete', apiLimiter, identit
       return { user, session };
     });
     clearCookie(res, emailCookie, '/api/auth/cloud-signup/email');
-    setSessionCookies(res, session);
+    setSessionCookies(req, res, session);
     await logAudit({ userId: user.id, action: AuditActions.LOGIN_SUCCESS, details: { method: 'passkey', event: 'cloud_account_created' } });
     res.status(201).json({ success: true });
   }));
@@ -294,7 +296,7 @@ router.post('/api/auth/cloud-passkey/complete', apiLimiter, identityFlowLimiter,
       });
     });
     clearCookie(res, loginCookie, '/api/auth/cloud-passkey');
-    setSessionCookies(res, session);
+    setSessionCookies(req, res, session);
     await logAudit({ userId: user.id, action: AuditActions.LOGIN_SUCCESS, details: { method: 'passkey' } });
     res.json({ success: true });
   }));

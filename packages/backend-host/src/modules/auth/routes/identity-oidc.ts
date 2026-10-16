@@ -1,3 +1,4 @@
+import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { timingSafeEqual } from 'node:crypto';
@@ -305,14 +306,15 @@ async function setProviderSession(
       nameIdFormat: evidence.nameIdFormat,
     },
   });
-  setSessionCookies(res, session);
+  setSessionCookies(req, res, session);
   return session;
 }
 
-function setSessionCookies(res: Response, session: IssuedAuthSession, enrolled = false): void {
+function setSessionCookies(req: Request, res: Response, session: IssuedAuthSession, enrolled = false): void {
   const cookieOptions = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, maxAge: session.expiresIn * 1000, path: '/' };
   res.cookie('accessToken', session.accessToken, cookieOptions);
   res.cookie('refreshToken', session.refreshToken, { ...cookieOptions, maxAge: config.jwtRefreshTokenExpires * 1000 });
+  rotateXsrfToken(req, res, session.refreshToken);
   if (enrolled) res.clearCookie('onboardingToken', { path: '/' });
 }
 
@@ -335,7 +337,7 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
       mfaVerified: false,
       subjectId: identity.subjectId,
     });
-    if (enrolled) setSessionCookies(res, session, true);
+    if (enrolled) setSessionCookies(req, res, session, true);
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
     const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id]);
     res.json(AuthenticatedSessionLoginResponseSchema.parse({
@@ -619,7 +621,7 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       if (parsed.accountLink) {
         await logAudit(auditFromRequest(req, { action: 'identity.provider.account_linked', resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
       } else {
-        if (enrolled) setSessionCookies(res, enrolled.session, true);
+        if (enrolled) setSessionCookies(req, res, enrolled.session, true);
         else await setProviderSession(req, res, user, provider, evidence);
         await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
         recordLoginExperienceMetric({ method: 'oidc', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });
@@ -689,7 +691,7 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
         enrollmentEvidence(req, { subjectId: evidence.subjectId, sessionId: evidence.sessionId, nameIdFormat: evidence.nameIdFormat }, evidence.mfaVerified)) : null;
       const user = enrolled ? enrolled.user : await identityProviderProvisioningService.reconcileSamlLogin(provider, input);
       if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
-      if (enrolled) setSessionCookies(res, enrolled.session, true);
+      if (enrolled) setSessionCookies(req, res, enrolled.session, true);
       else await setProviderSession(req, res, user, provider, evidence);
       await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'saml' } }));
       recordLoginExperienceMetric({ method: 'saml', event: 'succeeded', durationMs: stateDuration(parsed.timestamp) });

@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "id": "configurable-xsrf-headers",
+  "type": "feature",
+  "scope": "security",
+  "breaking": true,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Use one application-issued, signed and session-bound XSRF-TOKEN cookie echoed in the X-XSRF-TOKEN header.",
+  "userImpact": [
+    "Browser API requests use one readable application token cookie and one request token header, including after session and token rotation."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Deploy frontend and backend together and reload existing browser tabs.",
+      "Update API clients to echo XSRF-TOKEN in X-XSRF-TOKEN instead of csrf_secret and X-CSRF-Token. Token endpoint paths and JSON response fields are unchanged.",
+      "For split frontend/API subdomains, set the backend EG_XSRF_COOKIE_DOMAIN to the narrowest trusted shared parent domain or use a same-origin proxy."
+    ]
+  },
+  "configuration": [
+    "Cookie/header names are fixed to XSRF-TOKEN and X-XSRF-TOKEN; there is no separate gateway token or configurable header-name mode.",
+    "Optional backend EG_XSRF_COOKIE_DOMAIN controls the readable cookie scope; the default is host-only."
+  ],
+  "api": {
+    "compatibility": "breaking",
+    "changes": [
+      "Protected cookie-authenticated API clients must echo XSRF-TOKEN in X-XSRF-TOKEN. Cookie/header equality, cryptographic signature and session binding are required."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The existing signed, session-bound validator remains active; cookie-only, mismatched, forged and foreign-session tokens are rejected.",
+    "Authentication cookies remain HttpOnly. Only the application XSRF token cookie becomes JavaScript-readable.",
+    "The transport rereads the cookie for each request and retry, rejects ambiguous/malformed values, restricts token delivery to the configured API origin and rejects redirects."
+  ],
+  "documentation": [
+    "CONTRIBUTING.md",
+    "docs/reference/configuration.md",
+    "docs/reference/configuration-matrix.md"
+  ],
+  "knownLimitations": [
+    "Split frontend/API subdomains require a suitable explicitly configured shared cookie domain or a same-origin API proxy.",
+    "Independently gateway-issued tokens are unsupported. Same-session token renewal does not revoke older valid pairs independently of the authentication session."
+  ],
+  "rollback": [
+    "Roll frontend and backend back together and restore API clients to the previous cookie/header contract. Clear cookies left by the changed deployment."
+  ],
+  "validation": [
+    "Node 24.10.0 and pnpm 11.0.8: repository typecheck and lint passed; backend typecheck and repository lint were repeated after the final test-harness corrections.",
+    "Frontend unit suite passed: 318 files / 1575 tests with maxWorkers=2. Final focused backend app/refresh tests passed: 23 tests, including both cookie and body refresh clients.",
+    "Focused backend and frontend security/configuration tests passed, including cookie/header forwarding, URL decoding, cookie deletion and rotation, concurrent refresh, missing/duplicate/mismatched tokens, forged signatures, foreign sessions, and cookie/body refresh-token clients.",
+    "Chromium integration across app.xsrf.test and api.xsrf.test passed with the actual frontend transport and backend CSRF middleware/issuance helpers: a single application cookie, HttpOnly authentication cookies, login/refresh/session rotation, explicit header proof, CORS, logout cleanup and redirect leakage prevention.",
+    "Disposable physical PostgreSQL session qualification passed again after the test-harness corrections: 45 tests. No persistence or database schema changed.",
+    "Shared, plugin-runtime, backend-host, frontend-host and production frontend builds and the frontend bundle budget passed.",
+    "All five plugin/API and three host tarballs passed dependency and exported-entrypoint checks; the isolated packed backend-host runtime import passed.",
+    "Runtime deployment contracts passed (8 tests), including actual OpenShift ConfigMap generation and unsafe-domain rejection. Documentation contracts, documentation boundary, configuration parity and package version discipline passed.",
+    "Full backend unit gate passed: 475 files / 3872 tests, plus seven build-resolver tests and the raw-SQL guard. Regression tests cover IPv4/IPv6 listeners sharing one port and isolation of OpenAPI contract mutations.",
+    "Prior intermittent route failures were traced to Supertest connecting to an unrelated IPv4 service while its owned listener used IPv6; the test setup now preserves the listener address family. OpenAPI suites generate the static contract once and clone it for each check, and backend workers are bounded at four. Security assertions and time limits remain unchanged."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.20.4",
+      "newVersion": "0.21.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.18.3",
+      "newVersion": "0.19.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.25.2",
+      "newVersion": "0.26.0",
+      "impact": "minor"
+    }
+  ]
+}

@@ -127,7 +127,7 @@ async function csrfToken(page: Page): Promise<string> {
 }
 
 function mutationOptions(token: string, data: unknown) {
-  return { headers: { 'X-CSRF-Token': token }, data };
+  return { headers: { 'X-XSRF-TOKEN': token }, data };
 }
 
 async function evaluateRuntimeAccess(

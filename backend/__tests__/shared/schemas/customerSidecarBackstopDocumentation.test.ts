@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { useOpenApiFixture } from '../../../test/utils/openapi-fixture.js';
 import { CreateEngineRequestSchema } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 
 const repoRoot = resolve(import.meta.dirname, '../../../..');
@@ -16,6 +16,7 @@ const engineApiReference = readFileSync(
 const documentationIndex = readFileSync(resolve(repoRoot, 'docs/index.md'), 'utf8');
 
 describe('customer-sidecar backstop API documentation contracts', () => {
+  const generateOpenApi = useOpenApiFixture();
   it('publishes the bounded v1 customer-sidecar adapter contract', () => {
     for (const requiredText of [
       'Customer Sidecar Backstop Adapter API (v1)',

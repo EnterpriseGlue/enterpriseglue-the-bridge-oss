@@ -59,7 +59,7 @@ run_auth_flow_smoke() {
   csrf_token="$(sed -n 's/.*"csrfToken":"\([^"]*\)".*/\1/p' "$csrf_body" | head -n 1)"
   [[ -n "$csrf_token" ]] || error "$label CSRF token missing in response"
 
-  logout_status="$(curl -sS -o "$logout_body" -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" -H "X-CSRF-Token: $csrf_token" -H 'Content-Type: application/json' -X POST "$base_url/api/auth/logout" -d '{}')"
+  logout_status="$(curl -sS -o "$logout_body" -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" -H "X-XSRF-TOKEN: $csrf_token" -H 'Content-Type: application/json' -X POST "$base_url/api/auth/logout" -d '{}')"
   [[ "$logout_status" == "200" ]] || error "$label auth logout failed (status $logout_status)"
 
   me_after_status="$(curl -sS -o "$me_after_body" -w '%{http_code}' -b "$cookie_jar" "$base_url/api/auth/me")"

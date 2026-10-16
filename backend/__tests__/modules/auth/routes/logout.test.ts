@@ -54,14 +54,14 @@ describe('POST /api/auth/logout', () => {
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => 'test-secret',
       getSessionIdentifier: (req: any) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
-      cookieName: 'csrf_secret',
+      cookieName: 'XSRF-TOKEN',
       cookieOptions: {
-        httpOnly: true,
+        httpOnly: false,
         secure: false,
         sameSite: 'lax',
         path: '/',
       },
-      getCsrfTokenFromRequest: (req: any) => req.headers['x-csrf-token'],
+      getCsrfTokenFromRequest: (req: any) => req.headers['x-xsrf-token'],
       skipCsrfProtection: (req: any) => {
         if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/csrf-token') return true;
         const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
@@ -144,7 +144,7 @@ describe('POST /api/auth/logout', () => {
     const response = await agent
       .post('/api/auth/logout')
       .set('Cookie', 'accessToken=test-cookie-token')
-      .set('X-CSRF-Token', csrfToken)
+      .set('X-XSRF-TOKEN', csrfToken)
       .send({});
 
     expect(response.status).toBe(200);
@@ -174,7 +174,7 @@ describe('POST /api/auth/logout', () => {
     const response = await agent
       .post('/api/auth/logout')
       .set('Cookie', 'accessToken=test-cookie-token')
-      .set('X-CSRF-Token', csrfToken)
+      .set('X-XSRF-TOKEN', csrfToken)
       .send({ refreshToken: 'refresh-1' });
 
     expect(response.status).toBe(200);

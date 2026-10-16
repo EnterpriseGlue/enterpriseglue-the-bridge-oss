@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import { databaseConfig } from './database.js';
+import { normalizeXsrfCookieDomain } from '../utils/xsrf.js';
 
 /**
  * Application configuration with validation
@@ -109,6 +110,12 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   
   // Authentication configuration
   jwtSecret: z.string().min(32),
+  xsrfCookieDomain: z.string().optional().transform((value, ctx) => {
+    try { return normalizeXsrfCookieDomain(value); } catch {
+      ctx.addIssue({ code: 'custom', message: 'EG_XSRF_COOKIE_DOMAIN must be a DNS domain without a scheme, port, or path.' });
+      return z.NEVER;
+    }
+  }),
   jwtAccessTokenExpires: z.number().int().positive().default(900), // 15 minutes in seconds
   jwtRefreshTokenExpires: z.number().int().positive().default(604800), // 7 days in seconds
   
@@ -224,6 +231,7 @@ function loadConfig(): Config {
     managedEngineInternalDnsSuffix: envOrUndefined(process.env.EG_MANAGED_ENGINE_INTERNAL_DNS_SUFFIX),
     enterpriseSchema: envOrUndefined(process.env.ENTERPRISE_SCHEMA || process.env.ENTERPRISE_POSTGRES_SCHEMA), // ENTERPRISE_POSTGRES_SCHEMA is deprecated
     jwtSecret: process.env.JWT_SECRET || generatedJwtSecret,
+    xsrfCookieDomain: process.env.EG_XSRF_COOKIE_DOMAIN,
     jwtAccessTokenExpires: process.env.JWT_ACCESS_TOKEN_EXPIRES ? Number(process.env.JWT_ACCESS_TOKEN_EXPIRES) : undefined,
     jwtRefreshTokenExpires: process.env.JWT_REFRESH_TOKEN_EXPIRES ? Number(process.env.JWT_REFRESH_TOKEN_EXPIRES) : undefined,
     adminEmail: process.env.ADMIN_EMAIL,
@@ -273,6 +281,12 @@ function loadConfig(): Config {
 
   try {
     const parsed = configSchema.parse(raw);
+    if (parsed.xsrfCookieDomain) {
+      const frontendHost = new URL(parsed.frontendUrl).hostname;
+      if (frontendHost !== parsed.xsrfCookieDomain && !frontendHost.endsWith(`.${parsed.xsrfCookieDomain}`)) {
+        throw new Error('EG_XSRF_COOKIE_DOMAIN must include the configured FRONTEND_URL host.');
+      }
+    }
     return Object.assign(databaseConfig, parsed);
   } catch (error) {
     if (error instanceof z.ZodError) {

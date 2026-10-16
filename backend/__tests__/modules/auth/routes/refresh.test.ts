@@ -67,13 +67,14 @@ describe('POST /api/auth/refresh', () => {
     // CSRF protection — mirrors production config with skipCsrfProtection for this endpoint.
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => 'test-secret',
-      getSessionIdentifier: () => 'test',
-      cookieName: 'csrf_secret',
+      getSessionIdentifier: (req) => req.res?.locals.xsrfSessionIdentifier ?? req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
+      cookieName: 'XSRF-TOKEN',
+      cookieOptions: { httpOnly: false, secure: false, sameSite: 'lax', path: '/' },
       // In tests, we still exempt this endpoint from CSRF enforcement.
       skipCsrfProtection: () => true,
       // Provide a token extractor so CSRF middleware is fully configured.
       getCsrfTokenFromRequest: (req: any) =>
-        (req.headers['x-csrf-token'] as string) ||
+        (req.headers['x-xsrf-token'] as string) ||
         (req.body && (req.body._csrf as string)) ||
         (req.query && (req.query._csrf as string)) ||
         '',
@@ -92,7 +93,7 @@ describe('POST /api/auth/refresh', () => {
     vi.clearAllMocks();
   });
 
-  it('refreshes access token with valid refresh token', async () => {
+  it.each(['cookie', 'body'])('refreshes via %s and immediately issues a token bound to the resulting cookies', async (source) => {
     const mockUser = {
       id: 'user-1',
       email: 'test@example.com',
@@ -125,12 +126,18 @@ describe('POST /api/auth/refresh', () => {
     });
     (jwt.generateAccessToken as any).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
 
-    const response = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: TEST_REFRESH_TOKEN });
+    const refresh = request(app).post('/api/auth/refresh');
+    if (source === 'cookie') refresh.set('Cookie', `refreshToken=${TEST_REFRESH_TOKEN}`);
+    const response = await refresh.send(source === 'body' ? { refreshToken: TEST_REFRESH_TOKEN } : {});
 
     expect(response.status).toBe(200);
     expect(response.body.expiresIn).toBe(3600);
+    const issuedCookies = response.headers['set-cookie'] as unknown as string[];
+    const cookiePairs = issuedCookies.map((cookie) => cookie.split(';')[0]);
+    if (source === 'cookie') cookiePairs.push(`refreshToken=${TEST_REFRESH_TOKEN}`);
+    const next = await request(app).get('/api/csrf-token').set('Cookie', cookiePairs.join('; '));
+    expect(next.body.csrfToken).toBe(response.headers['x-xsrf-token']);
+
     expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, {
       administratorRecovery: false,
       authenticationMethod: undefined,

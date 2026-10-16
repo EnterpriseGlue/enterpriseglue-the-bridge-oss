@@ -29,7 +29,7 @@ async function csrfToken(page: Page) {
 }
 
 function mutationOptions(token: string, data?: unknown) {
-  return { headers: { 'X-CSRF-Token': token }, ...(data === undefined ? {} : { data }) };
+  return { headers: { 'X-XSRF-TOKEN': token }, ...(data === undefined ? {} : { data }) };
 }
 
 async function selectSection(page: Page, name: string) {

@@ -136,17 +136,17 @@ describe('provider-neutral OIDC routes', () => {
     };
     const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
       getSecret: () => csrfSecret,
-      getSessionIdentifier: (req) => req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
-      cookieName: 'csrf_secret',
-      cookieOptions: { httpOnly: true, secure: false, sameSite: 'lax', path: '/' },
-      getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
+      getSessionIdentifier: (req) => req.res?.locals.xsrfSessionIdentifier ?? req.cookies?.refreshToken ?? req.cookies?.accessToken ?? req.ip ?? '',
+      cookieName: 'XSRF-TOKEN',
+      cookieOptions: { httpOnly: false, secure: false, sameSite: 'lax', path: '/' },
+      getCsrfTokenFromRequest: (req) => req.headers['x-xsrf-token'] as string,
       skipCsrfProtection,
     });
     app.use((req, res, next) => {
       // Fail closed on a missing double-submit cookie. Keep the full library
       // check for the HMAC, header, and session binding on every admitted request.
       if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !skipCsrfProtection(req)
-        && req.cookies?.csrf_secret === undefined) {
+        && req.cookies?.['XSRF-TOKEN'] === undefined) {
         res.status(403).json({ error: 'CSRF cookie required' });
         return;
       }
@@ -305,7 +305,7 @@ describe('provider-neutral OIDC routes', () => {
     const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
     const enrollmentRequest = request(app).post('/api/auth/onboarding/providers/provider-1/login')
       .set('Cookie', [...browserCookies, ...(proof === 'missing-cookie' ? [] : csrfCookies)]);
-    if (proof !== 'missing') enrollmentRequest.set('X-CSRF-Token', proof === 'mismatched' ? 'invalid-token' : tokenResponse.body.csrfToken);
+    if (proof !== 'missing') enrollmentRequest.set('X-XSRF-TOKEN', proof === 'mismatched' ? 'invalid-token' : tokenResponse.body.csrfToken);
     const response = await enrollmentRequest.send({ username: 'person', password: 'directory-password' });
     expect(response.status).toBe(403);
     expect(identityProviderService.getDirectLoginProviderById).not.toHaveBeenCalled();
@@ -322,7 +322,7 @@ describe('provider-neutral OIDC routes', () => {
     const rawCookies = tokenResponse.headers['set-cookie'];
     const csrfCookies = (Array.isArray(rawCookies) ? rawCookies : [rawCookies]).map((cookie) => cookie.split(';')[0]);
     const response = await request(app).post('/api/auth/onboarding/providers/provider-1/login')
-      .set('Cookie', [...browserCookies, ...csrfCookies]).set('X-CSRF-Token', tokenResponse.body.csrfToken)
+      .set('Cookie', [...browserCookies, ...csrfCookies]).set('X-XSRF-TOKEN', tokenResponse.body.csrfToken)
       .send({ username: 'person', password: 'directory-password' });
     expect(response.status).toBe(200);
     expect(identityProviderProvisioningService.enrollLdapInvitation).toHaveBeenCalledOnce();

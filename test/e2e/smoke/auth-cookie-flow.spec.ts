@@ -35,7 +35,7 @@ test.describe('Smoke: auth cookie flow', () => {
 
     const logoutRes = await request.post('/api/auth/logout', {
       headers: {
-        'X-CSRF-Token': csrfBody.csrfToken,
+        'X-XSRF-TOKEN': csrfBody.csrfToken,
       },
       data: {},
     });

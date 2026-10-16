@@ -54,6 +54,7 @@ vi.mock('dotenv', () => ({
 describe('hermetic test configuration', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.stubEnv('EG_XSRF_COOKIE_DOMAIN', '');
     dotenvConfig.mockClear();
     process.env.NODE_ENV = 'test';
     process.env.EG_LOAD_ENV_IN_TESTS = 'false';
@@ -66,6 +67,7 @@ describe('hermetic test configuration', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (originalDatabaseType === undefined) delete process.env.DATABASE_TYPE;
     else process.env.DATABASE_TYPE = originalDatabaseType;
     if (originalTenancyMode === undefined) delete process.env.EG_TENANCY_MODE;
@@ -94,6 +96,26 @@ describe('hermetic test configuration', () => {
       else process.env[name] = value;
     }
   });
+
+  it('keeps the XSRF cookie host-only unless a shared domain is explicit', async () => {
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config.xsrfCookieDomain).toBeUndefined();
+  });
+
+  it('normalizes an explicit shared domain for split frontend/API subdomains', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://app.example.test');
+    vi.stubEnv('EG_XSRF_COOKIE_DOMAIN', '.Example.Test');
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config.xsrfCookieDomain).toBe('example.test');
+  });
+
+  it.each(['https://example.test', 'example.test:443', 'example.test/path', 'example.test; Secure', 'other.test'])(
+    'rejects an invalid or unrelated XSRF cookie domain %s', async (domain) => {
+      vi.stubEnv('FRONTEND_URL', 'https://app.example.test');
+      vi.stubEnv('EG_XSRF_COOKIE_DOMAIN', domain);
+      await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow();
+    },
+  );
 
   it('does not read developer environment files in the unit-test lane', async () => {
     await import('@enterpriseglue/shared/config/index.js');

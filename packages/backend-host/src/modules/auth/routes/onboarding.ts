@@ -1,3 +1,4 @@
+import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
@@ -80,6 +81,7 @@ const completeOnboarding = asyncHandler(async (req, res) => {
     maxAge: config.jwtRefreshTokenExpires * 1000,
     path: '/',
   });
+  rotateXsrfToken(req, res, session.refreshToken);
 
   res.json(AuthenticatedSessionOnboardingResponseSchema.parse({
     user: {

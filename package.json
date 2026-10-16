@@ -253,7 +253,8 @@
     "test:compiled-migration-upgrades": "pnpm --dir backend run build:skip-generate && node scripts/test-compiled-migration-upgrades.mjs",
     "test:oracle:nne:unit": "pnpm --dir backend exec vitest run __tests__/shared/db/oracle- --config vitest.config.ts --reporter=dot",
     "test:oracle:nne:sso": "IDENTITY_PROTOCOL_REHEARSAL_DATABASE=oracle-nne IDENTITY_PROTOCOL_REHEARSAL_ARTIFACT_DIR=.artifacts/oracle-nne-sso bash scripts/run-ci-identity-protocol-rehearsals.sh",
-    "test:oracle:nne:negotiation": "node scripts/run-oracle-native-encryption.mjs"
+    "test:oracle:nne:negotiation": "node scripts/run-oracle-native-encryption.mjs",
+    "test:xsrf:browser": "pnpm --filter @enterpriseglue/backend-host run build && node --test scripts/xsrf-browser.test.mjs"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.4.3",

@@ -140,6 +140,9 @@ apply_config_reference_secret() {
 }
 
 apply_runtime_config() {
+  # Keep the public domain name safe for YAML serialization; backend startup validates its scope.
+  local xsrf_cookie_domain="${EG_XSRF_COOKIE_DOMAIN:-}"
+  [[ "$xsrf_cookie_domain" =~ ^[A-Za-z0-9.-]*$ ]] || error "Invalid EG_XSRF_COOKIE_DOMAIN"
   cat <<EOF | oc -n "$OPENSHIFT_NAMESPACE" apply -f -
 apiVersion: v1
 kind: ConfigMap
@@ -152,6 +155,7 @@ data:
   NODE_ENV: "production"
   API_PORT: "8787"
   FRONTEND_URL: "https://${OPENSHIFT_ROUTE_HOST}"
+  EG_XSRF_COOKIE_DOMAIN: "$xsrf_cookie_domain"
   API_BASE_URL: ""
   DATABASE_TYPE: "$DATABASE_TYPE"
 

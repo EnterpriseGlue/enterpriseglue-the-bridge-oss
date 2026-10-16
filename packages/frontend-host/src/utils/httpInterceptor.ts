@@ -11,6 +11,7 @@
 import { USER_KEY } from '../constants/storageKeys.js';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils.js';
 import { config } from '../config.js';
+import { apiFetch } from './apiFetch';
 import { getTenancyCapabilities } from '../services/tenancy.js';
 import { getPublicAuthRoutePolicy } from './publicAuthRoute.js';
 
@@ -108,76 +109,13 @@ function applyApiBaseUrl(url: string): string {
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-function assertSafeRequestUrl(url: string): void {
-  if (url.startsWith('/')) return;
-  try {
-    const parsed = new URL(url);
-    const allowedOrigin = config.apiBaseUrl
-      ? new URL(config.apiBaseUrl).origin
-      : window.location.origin;
-    if (parsed.origin !== allowedOrigin) {
-      throw new Error(`Blocked request to disallowed origin: ${parsed.origin}`);
-    }
-  } catch (e) {
-    if (e instanceof TypeError) {
-      throw new Error(`Invalid request URL: ${url}`);
-    }
-    throw e;
-  }
-}
-
 function getTenantLoginPath(pathname: string): string {
   const tenantSlug = getTenantSlugFromPathname(pathname);
   return tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
 }
 
-function getCookieValue(name: string): string | null {
-  const needle = `${name}=`;
-  const parts = String(document.cookie || '').split(';');
-  for (const part of parts) {
-    const p = part.trim();
-    if (!p.startsWith(needle)) continue;
-    const v = p.slice(needle.length);
-    try {
-      return decodeURIComponent(v);
-    } catch {
-      return v;
-    }
-  }
-  return null;
-}
-
-// Track if a token refresh is in progress to avoid multiple simultaneous refreshes
-let isRefreshing = false;
-let refreshSubscribers: Array<(success: boolean) => void> = [];
-
-// Store CSRF token from response headers (avoids non-httpOnly cookie)
-let csrfToken: string | null = null;
-
-/**
- * Update stored CSRF token from response headers
- */
-function updateCsrfToken(response: Response): void {
-  const token = response.headers.get('X-CSRF-Token');
-  if (token) {
-    csrfToken = token;
-  }
-}
-
-/**
- * Subscribe to token refresh completion
- */
-function subscribeTokenRefresh(callback: (success: boolean) => void): void {
-  refreshSubscribers.push(callback);
-}
-
-/**
- * Notify all subscribers when token refresh completes
- */
-function onTokenRefreshed(success: boolean): void {
-  refreshSubscribers.forEach((callback) => callback(success));
-  refreshSubscribers = [];
-}
+// Share one refresh across concurrent 401 responses. Retries reread the rotated cookie.
+let refreshPromise: Promise<boolean> | null = null;
 
 /**
  * Clear authentication and redirect to login
@@ -198,7 +136,7 @@ function handleAuthFailure(): void {
  */
 async function refreshAccessToken(): Promise<boolean> {
   try {
-    const response = await fetch(applyApiBaseUrl(`${API_BASE_URL}/auth/refresh`), {
+    const response = await apiFetch(applyApiBaseUrl(`${API_BASE_URL}/auth/refresh`), {
       method: 'POST',
       credentials: 'include',
       // The SaaS edge uses this as a bounded shard-routing hint. It is not
@@ -246,68 +184,18 @@ export async function interceptedFetch(
   // Ensure credentials are included so cookies are sent
   const fetchOptions: RequestInit = { ...options, credentials: 'include' };
 
-  // Validate URL origin before making request
-  assertSafeRequestUrl(requestUrl);
-
   // Make the original request with prefixed URL
-  let response = await fetch(requestUrl, fetchOptions);
-
-  // Extract CSRF token from response headers
-  updateCsrfToken(response);
+  let response = await apiFetch(requestUrl, fetchOptions);
 
   // If we get a 401 and it's not an auth endpoint and not on a public route, try to refresh the token
   if (response.status === 401 && !isAuthEndpoint && !onPublicRoute) {
-    if (!isRefreshing) {
-      // Start refresh process
-      isRefreshing = true;
-
-      const success = await refreshAccessToken();
-      isRefreshing = false;
-
-      // Notify all waiting requests
-      onTokenRefreshed(success);
-
-      if (success) {
-        // After refresh the accessToken cookie changed; get a fresh CSRF token
-        // by making a lightweight GET that goes through CSRF middleware.
-        try {
-          const csrfResp = await fetch(applyApiBaseUrl('/api/auth/me'), {
-            credentials: 'include',
-            headers: getAuthHeaders(),
-          });
-          updateCsrfToken(csrfResp);
-        } catch { /* best effort */ }
-
-        // Rebuild headers with the fresh CSRF token for the retry
-        const retryHeaders = new Headers(getAuthHeaders());
-        if (fetchOptions.headers) {
-          const orig = new Headers(fetchOptions.headers);
-          orig.forEach((v, k) => { if (k.toLowerCase() !== 'x-csrf-token') retryHeaders.set(k, v); });
-        }
-        response = await fetch(requestUrl, { ...fetchOptions, headers: retryHeaders });
-        updateCsrfToken(response);
-      } else {
-        // Refresh failed, user will be redirected to login
-        return response;
-      }
-    } else {
-      // Wait for the ongoing refresh to complete
-      const success = await new Promise<boolean>((resolve) => {
-        subscribeTokenRefresh((ok) => {
-          resolve(ok);
-        });
-      });
-
-      if (success) {
-        // Rebuild headers with fresh CSRF token after refresh
-        const retryHeaders = new Headers(getAuthHeaders());
-        if (fetchOptions.headers) {
-          const orig = new Headers(fetchOptions.headers);
-          orig.forEach((v, k) => { if (k.toLowerCase() !== 'x-csrf-token') retryHeaders.set(k, v); });
-        }
-        response = await fetch(requestUrl, { ...fetchOptions, headers: retryHeaders });
-        updateCsrfToken(response);
-      }
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => { refreshPromise = null; });
+    }
+    if (await refreshPromise) {
+      const headers = new Headers(getAuthHeaders());
+      new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));
+      response = await apiFetch(requestUrl, { ...fetchOptions, headers });
     }
   }
 
@@ -315,13 +203,12 @@ export async function interceptedFetch(
 }
 
 /**
- * Helper to create auth headers with current token
+ * Helper to create content and tenant headers; apiFetch adds the current XSRF token.
  */
 export function getAuthHeaders(): Record<string, string> {
   const tenantSlug = getTenantSlugFromPathname(window.location.pathname);
   return {
     'Content-Type': 'application/json',
     ...(tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {}),
-    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
   };
 }

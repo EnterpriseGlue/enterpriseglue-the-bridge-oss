@@ -28,7 +28,7 @@ type ConfigBundleRunSummary = { bundleKey: string; status: string };
 async function requestJson<T>(page: Page, path: string, options: { method?: 'GET' | 'POST'; csrf?: string; data?: unknown } = {}) {
   const response = await page.request.fetch(path, {
     method: options.method || 'GET',
-    headers: options.csrf ? { 'x-csrf-token': options.csrf } : undefined,
+    headers: options.csrf ? { 'x-xsrf-token': options.csrf } : undefined,
     data: options.data,
     timeout: 30_000,
   });
@@ -40,7 +40,7 @@ async function requestJson<T>(page: Page, path: string, options: { method?: 'GET
 async function csrfToken(page: Page): Promise<string> {
   const response = await page.request.get('/api/csrf-token');
   expect(response.status()).toBe(200);
-  const token = response.headers()['x-csrf-token'];
+  const token = response.headers()['x-xsrf-token'];
   expect(token).toBeTruthy();
   return token;
 }

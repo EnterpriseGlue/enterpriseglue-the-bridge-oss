@@ -36,11 +36,11 @@ test.describe('Local LDAP rehearsal', () => {
       await loginLocalAdministrator(admin);
       const csrf = await admin.request.get('/api/csrf-token');
       expect(csrf.status()).toBe(200);
-      const csrfToken = csrf.headers()['x-csrf-token'];
+      const csrfToken = csrf.headers()['x-xsrf-token'];
       expect(csrfToken).toBeTruthy();
 
       const reconciliation = await admin.request.post(`/api/identity/providers/${encodeURIComponent(providerKey)}/reconcile`, {
-        headers: { 'X-CSRF-Token': csrfToken },
+        headers: { 'X-XSRF-TOKEN': csrfToken },
       });
       const result = await reconciliation.json().catch(() => null) as { processed?: number; runId?: string | null } | null;
       expect(reconciliation.status(), JSON.stringify(result)).toBe(200);

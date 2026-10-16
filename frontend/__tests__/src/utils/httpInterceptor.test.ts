@@ -28,7 +28,7 @@ describe('httpInterceptor', () => {
       origin: 'http://localhost',
       href: 'http://localhost/dashboard',
     } as any;
-    document.cookie = '; Secure';
+    vi.spyOn(document, 'cookie', 'get').mockReturnValue('');
   });
 
   afterEach(() => {
@@ -40,6 +40,19 @@ describe('httpInterceptor', () => {
   });
 
   describe('getAuthHeaders', () => {
+    it('rereads the app cookie after refresh instead of reusing caller headers', async () => {
+      const cookie = vi.spyOn(document, 'cookie', 'get').mockReturnValue('XSRF-TOKEN=before');
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockImplementationOnce(async () => { cookie.mockReturnValue('XSRF-TOKEN=after'); return new Response('{}'); })
+        .mockResolvedValueOnce(new Response('{}'));
+      await interceptedFetch('/api/data', { method: 'POST', headers: { 'X-XSRF-TOKEN': 'stale', 'Custom-Header': 'preserved' } });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('X-XSRF-TOKEN')).toBe('before');
+      const retry = new Headers(fetchMock.mock.calls[2][1]?.headers);
+      expect(retry.get('X-XSRF-TOKEN')).toBe('after');
+      expect(retry.get('Custom-Header')).toBe('preserved');
+    });
     it('does not invent a tenant hint on unprefixed pooled pages', () => {
       vi.mocked(getTenancyCapabilities).mockReturnValue({ mode: 'pooled' } as ReturnType<typeof getTenancyCapabilities>);
       expect(getAuthHeaders()['X-Tenant-Slug']).toBeUndefined();
@@ -63,17 +76,14 @@ describe('httpInterceptor', () => {
       expect(headers['X-Tenant-Slug']).toBe('acme');
     });
 
-    it('includes CSRF token after intercepted request', async () => {
-      const response = new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'X-CSRF-Token': 'csrf-token-123' },
-      });
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
-
+    it('ignores response token headers and reads the cookie at dispatch', async () => {
+      const cookie = vi.spyOn(document, 'cookie', 'get').mockReturnValue('XSRF-TOKEN=from-cookie');
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { headers: { 'X-XSRF-TOKEN': 'from-header' } }));
       await interceptedFetch('/api/test');
-
-      const headers = getAuthHeaders();
-      expect(headers['X-CSRF-Token']).toBe('csrf-token-123');
+      expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('X-XSRF-TOKEN')).toBe('from-cookie');
+      cookie.mockReturnValue('');
+      await interceptedFetch('/api/test');
+      expect(new Headers(fetchMock.mock.calls[1][1]?.headers).has('X-XSRF-TOKEN')).toBe(false);
     });
 
     it('handles URL-encoded tenant slugs', () => {
@@ -93,7 +103,7 @@ describe('httpInterceptor', () => {
 
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/t/alpha/identity/providers/tenant-sso/test-connection',
-        { credentials: 'include' },
+        expect.objectContaining({ credentials: 'include', redirect: 'error' }),
       );
     });
 
@@ -106,7 +116,7 @@ describe('httpInterceptor', () => {
 
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/t/alpha/identity/provider-secrets',
-        { method: 'POST', credentials: 'include' },
+        expect.objectContaining({ method: 'POST', credentials: 'include' }),
       );
     });
 
@@ -117,20 +127,7 @@ describe('httpInterceptor', () => {
       const result = await interceptedFetch('/api/data');
 
       expect(result.status).toBe(200);
-      expect(fetchMock).toHaveBeenCalledWith('/api/data', { credentials: 'include' });
-    });
-
-    it('extracts CSRF token from response headers', async () => {
-      const response = new Response(null, {
-        status: 200,
-        headers: { 'X-CSRF-Token': 'new-csrf' },
-      });
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
-
-      await interceptedFetch('/api/test');
-
-      const headers = getAuthHeaders();
-      expect(headers['X-CSRF-Token']).toBe('new-csrf');
+      expect(fetchMock).toHaveBeenCalledWith('/api/data', expect.objectContaining({ credentials: 'include' }));
     });
 
     it('does not intercept auth endpoints', async () => {
@@ -190,7 +187,6 @@ describe('httpInterceptor', () => {
         const fetchMock = vi.spyOn(globalThis, 'fetch')
           .mockResolvedValueOnce(new Response(null, { status: 401 }))
           .mockResolvedValueOnce(new Response('{}', { status: 200 }))
-          .mockResolvedValueOnce(new Response(null, { status: 200 }))
           .mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
         const result = await interceptedFetch('/api/data');
@@ -199,7 +195,6 @@ describe('httpInterceptor', () => {
         expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
           '/api/data',
           '/api/auth/refresh',
-          '/api/auth/me',
           '/api/data',
         ]);
       },
@@ -217,25 +212,24 @@ describe('httpInterceptor', () => {
     });
 
     describe('token refresh on 401', () => {
-      it('keeps pooled hostname routing through refresh, CSRF recovery and retry', async () => {
+      it('keeps pooled hostname routing through refresh and retry', async () => {
         vi.mocked(getTenancyCapabilities).mockReturnValue({ mode: 'pooled' } as ReturnType<typeof getTenancyCapabilities>);
         const fetchMock = vi.spyOn(globalThis, 'fetch')
           .mockResolvedValueOnce(new Response(null, { status: 401 }))
           .mockResolvedValueOnce(new Response('{}', { status: 200 }))
-          .mockResolvedValueOnce(new Response(null, { status: 200, headers: { 'X-CSRF-Token': 'host-csrf' } }))
           .mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
         const result = await interceptedFetch('/engines-api/engines', { headers: getAuthHeaders() });
 
         expect(result.status).toBe(200);
         expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-          '/engines-api/engines', '/api/auth/refresh', '/api/auth/me', '/engines-api/engines',
+          '/engines-api/engines', '/api/auth/refresh', '/engines-api/engines',
         ]);
         for (const [, init] of fetchMock.mock.calls) {
           expect(new Headers(init?.headers).has('X-Tenant-Slug')).toBe(false);
           expect(init?.credentials).toBe('include');
         }
-        expect(new Headers(fetchMock.mock.calls[3]?.[1]?.headers).get('X-CSRF-Token')).toBe('host-csrf');
+        expect(fetchMock).toHaveBeenCalledTimes(3);
       });
 
       it('keeps the current pooled hostname login route after refresh rejection', async () => {
@@ -256,22 +250,19 @@ describe('httpInterceptor', () => {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
-        const csrfSuccess = new Response(null, { status: 200, headers: { 'X-CSRF-Token': 'csrf-after-refresh' } });
         const retrySuccess = new Response(JSON.stringify({ data: 'success' }), { status: 200 });
 
         const fetchMock = vi.spyOn(globalThis, 'fetch')
           .mockResolvedValueOnce(first401)
           .mockResolvedValueOnce(refreshSuccess)
-          .mockResolvedValueOnce(csrfSuccess)
           .mockResolvedValueOnce(retrySuccess);
 
         const result = await interceptedFetch('/api/data');
 
         expect(result.status).toBe(200);
-        expect(fetchMock).toHaveBeenCalledTimes(4);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
         expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/auth/refresh');
         expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('x-tenant-slug')).toBe('alpha');
-        expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/auth/me');
         expect(new Headers(fetchMock.mock.calls[2]?.[1]?.headers).get('x-tenant-slug')).toBe('alpha');
       });
 
@@ -368,9 +359,6 @@ describe('httpInterceptor', () => {
             if (urlStr.includes('/auth/refresh')) {
               return Promise.resolve(new Response(JSON.stringify({ accessToken: TEST_REFRESHED_TOKEN }), { status: 200 }));
             }
-            if (urlStr.includes('/auth/me')) {
-              return Promise.resolve(new Response(null, { status: 200, headers: { 'X-CSRF-Token': 'csrf-after-refresh' } }));
-            }
             // First call per data URL → 401, second call → 200
             if (count === 1) {
               return Promise.resolve(new Response(null, { status: 401 }));
@@ -386,8 +374,8 @@ describe('httpInterceptor', () => {
 
         expect(result1.status).toBe(200);
         expect(result2.status).toBe(200);
-        // 2 initial 401s + 1 refresh + 1 CSRF + 2 retries = 6
-        expect(fetchMock).toHaveBeenCalledTimes(6);
+        // Two original requests, one shared refresh, two retries.
+        expect(fetchMock).toHaveBeenCalledTimes(5);
       });
     });
 
@@ -403,7 +391,8 @@ describe('httpInterceptor', () => {
 
       await interceptedFetch('/api/test', options);
 
-      expect(fetchMock).toHaveBeenCalledWith('/api/test', { ...options, credentials: 'include' });
+      expect(fetchMock).toHaveBeenCalledWith('/api/test', expect.objectContaining({ method: options.method, body: options.body, credentials: 'include' }));
+      expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('Custom-Header')).toBe('value');
     });
   });
 });

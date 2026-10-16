@@ -36,7 +36,7 @@ cookie_values() {
       value = $0
       sub(/^[^:]*:[[:space:]]*/, "", value)
       sub(/;.*/, "", value)
-      if (value ~ /^(accessToken|refreshToken|csrf_secret)=/) print value
+      if (value ~ /^(accessToken|refreshToken|XSRF-TOKEN)=/) print value
     }'
 }
 
@@ -101,7 +101,7 @@ login_payload="$(jq -nc --arg email "$admin_email" --arg password "$admin_passwo
 # route so the rehearsal remains runnable after ordinary local login is
 # correctly disabled by an SSO-only policy.
 login_headers="$(curl "${curl_args[@]}" --dump-header - --output /dev/null --header 'Content-Type: application/json' --data "$login_payload" "$base_url/api/auth/recovery/login")"
-session_cookies="$(printf '%s\n' "$login_headers" | cookie_values | paste -sd ';' -)"
+session_cookies="$(printf '%s\n' "$login_headers" | cookie_values | awk '!/^XSRF-TOKEN=/' | paste -sd ';' -)"
 
 if [[ -z "$session_cookies" || "$session_cookies" != *'accessToken='* ]]; then
   echo 'Local administrator login did not establish an access session.' >&2
@@ -109,8 +109,8 @@ if [[ -z "$session_cookies" || "$session_cookies" != *'accessToken='* ]]; then
 fi
 
 csrf_headers="$(curl "${curl_args[@]}" --dump-header - --output /dev/null --header "Cookie: $session_cookies" "$base_url/api/csrf-token")"
-csrf_token="$(printf '%s\n' "$csrf_headers" | header_value 'x-csrf-token')"
-csrf_cookie="$(printf '%s\n' "$csrf_headers" | cookie_values | awk '/^csrf_secret=/{print; exit}')"
+csrf_token="$(printf '%s\n' "$csrf_headers" | header_value 'x-xsrf-token')"
+csrf_cookie="$(printf '%s\n' "$csrf_headers" | cookie_values | awk '/^XSRF-TOKEN=/{print; exit}')"
 
 if [[ -z "$csrf_token" || -z "$csrf_cookie" ]]; then
   echo 'Unable to obtain the local CSRF token required for provider configuration.' >&2
@@ -128,7 +128,7 @@ all_cookies="$session_cookies;$csrf_cookie"
 provider_status="$(curl "${curl_args[@]}" --output /dev/null --write-out '%{http_code}' \
   --header 'Content-Type: application/json' \
   --header "Cookie: $all_cookies" \
-  --header "X-CSRF-Token: $csrf_token" \
+  --header "X-XSRF-TOKEN: $csrf_token" \
   --data "$provider_payload" \
   "$base_url/api/identity/providers")"
 
@@ -140,7 +140,7 @@ fi
 connection_status="$(curl "${curl_args[@]}" --output /dev/null --write-out '%{http_code}' \
   --request POST \
   --header "Cookie: $all_cookies" \
-  --header "X-CSRF-Token: $csrf_token" \
+  --header "X-XSRF-TOKEN: $csrf_token" \
   "$base_url/api/identity/providers/$provider_key/test-connection")"
 
 if [[ "$connection_status" != '200' ]]; then

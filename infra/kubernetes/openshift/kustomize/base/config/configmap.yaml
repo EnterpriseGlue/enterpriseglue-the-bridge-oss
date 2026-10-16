@@ -9,6 +9,7 @@ metadata:
 data:
   NODE_ENV: "production"
   API_PORT: "8787"
+  EG_XSRF_COOKIE_DOMAIN: ""
   FRONTEND_URL: "https://enterpriseglue.example.com"
   API_BASE_URL: ""
   API_UPSTREAM: "enterpriseglue-backend:8787"

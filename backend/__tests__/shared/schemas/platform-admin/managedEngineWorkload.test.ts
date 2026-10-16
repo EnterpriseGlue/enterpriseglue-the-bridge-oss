@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { useOpenApiFixture } from '../../../../test/utils/openapi-fixture.js';
 
 describe('managed engine workload contracts', () => {
+  const generateOpenApi = useOpenApiFixture();
   const request = {
     operationId: 'managed-engine-operation-0001',
     engineRef: 'managed-alpha-01',

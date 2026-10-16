@@ -1,5 +1,8 @@
 import './setup.js';
 import { vi } from 'vitest';
+import { installSupertestLoopback } from './utils/supertest-loopback.js';
+
+installSupertestLoopback();
 
 // Route unit suites provide deliberately narrow data-source doubles for the
 // feature under test. Dedicated policy and integration suites use the real

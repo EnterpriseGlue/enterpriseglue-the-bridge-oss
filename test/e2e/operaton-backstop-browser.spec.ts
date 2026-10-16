@@ -34,13 +34,13 @@ async function json<T>(response: Awaited<ReturnType<Page['request']['get']>>, la
 async function csrf(page: Page, timeout = 30_000): Promise<string> {
   const response = await page.request.get('/api/csrf-token', { timeout });
   expect(response.status()).toBe(200);
-  const value = response.headers()['x-csrf-token'];
+  const value = response.headers()['x-xsrf-token'];
   expect(value).toBeTruthy();
   return value;
 }
 
 async function mutation(page: Page, data?: unknown, timeout = 30_000) {
-  return { headers: { 'X-CSRF-Token': await csrf(page, timeout) }, timeout, ...(data === undefined ? {} : { data }) };
+  return { headers: { 'X-XSRF-TOKEN': await csrf(page, timeout) }, timeout, ...(data === undefined ? {} : { data }) };
 }
 
 async function login(page: Page): Promise<void> {
