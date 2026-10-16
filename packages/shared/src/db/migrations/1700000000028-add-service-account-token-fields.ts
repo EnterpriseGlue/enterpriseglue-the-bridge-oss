@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -17,10 +17,10 @@ export class AddServiceAccountTokenFields1700000000028 implements MigrationInter
     if (!(await queryRunner.hasTable(serviceAccounts))) return;
 
     const columns = [
-      new TableColumn({ name: 'token_prefix', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'secret_hash', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'scopes_json', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'last_used_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'token_prefix', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'secret_hash', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'scopes_json', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'last_used_at', type: 'bigint', isNullable: true }),
     ];
 
     for (const column of columns) {

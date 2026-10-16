@@ -1,5 +1,5 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
-import { Table, TableColumn, TableIndex, TableUnique } from 'typeorm';
+import { legacyBooleanColumn, portableColumn, portableTable } from './support/portable-columns.js';
+import { TableColumn, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
@@ -29,7 +29,7 @@ export class AddExternalEngineSystems1700000000030 implements MigrationInterface
     const registrationsTable = tablePath(queryRunner, 'ExternalEngineRegistration', 'external_engine_registrations');
 
     if (!(await queryRunner.hasTable(externalSystemsTable))) {
-      await queryRunner.createTable(new Table({
+      await queryRunner.createTable(portableTable(queryRunner, {
         name: externalSystemsTable,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },
@@ -62,10 +62,10 @@ export class AddExternalEngineSystems1700000000030 implements MigrationInterface
       );
     }
 
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'external_system_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'management_mode', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'field_ownership_json', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, enginesTable, new TableColumn({ name: 'drift_status', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'external_system_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'management_mode', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'field_ownership_json', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, enginesTable, portableColumn(queryRunner, { name: 'drift_status', type: 'text', isNullable: true }));
     if (await queryRunner.hasTable(enginesTable)) {
       const enginesTableObject = await queryRunner.getTable(enginesTable);
       if (enginesTableObject && !enginesTableObject.indices.some((index) => index.name === 'idx_engines_external_system')) {
@@ -76,10 +76,10 @@ export class AddExternalEngineSystems1700000000030 implements MigrationInterface
       }
     }
 
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'external_system_id', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'management_mode', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'field_ownership_json', type: 'text', isNullable: true }));
-    await addColumnIfMissing(queryRunner, registrationsTable, new TableColumn({ name: 'drift_status', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'external_system_id', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'management_mode', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'field_ownership_json', type: 'text', isNullable: true }));
+    await addColumnIfMissing(queryRunner, registrationsTable, portableColumn(queryRunner, { name: 'drift_status', type: 'text', isNullable: true }));
     if (await queryRunner.hasTable(registrationsTable)) {
       const registrationsTableObject = await queryRunner.getTable(registrationsTable);
       if (registrationsTableObject && !registrationsTableObject.indices.some((index) => index.name === 'idx_external_engine_registrations_system')) {

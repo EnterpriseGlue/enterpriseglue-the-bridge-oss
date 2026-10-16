@@ -1,5 +1,6 @@
-import { Table, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 export class AddNotificationsTable1700000000001 implements MigrationInterface {
   name = 'AddNotificationsTable1700000000001';
@@ -11,7 +12,7 @@ export class AddNotificationsTable1700000000001 implements MigrationInterface {
     }
 
     await queryRunner.createTable(
-      new Table({
+      portableTable(queryRunner, {
         name: tablePath,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },

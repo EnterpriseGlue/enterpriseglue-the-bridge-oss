@@ -1,0 +1,83 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "oracle-migration-portability",
+  "type": "fix",
+  "scope": "oracle",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Make the historical database migrations replay safely on Oracle and PostgreSQL, so partially populated Oracle schemas no longer fail with ORA-00902 or ORA-01758, and nullability or type changes keep existing data.",
+  "userImpact": [
+    "Oracle databases that replay the historical migration epoch no longer stop with ORA-00902 (invalid datatype) or ORA-01758 (table must be empty to add mandatory column).",
+    "Migrations that relax or tighten NOT NULL on populated Oracle tables change the column in place instead of dropping and re-adding it, so role-assignment and deployment-lineage data is preserved.",
+    "Oracle installations whose Camunda native-grant import evidence was stored as VARCHAR2 are widened to CLOB without losing the stored classifications or encrypted snapshots."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "No environment variables or deployment configuration changes are required; Oracle datatype repair is performed by the historical migrations."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [
+      "CleanupLegacyInvitationsSchema1700000000013",
+      "RequireCanonicalRoleAssignmentShape1700000000084",
+      "MakeRoleAssignmentAliasesOptional1700000000046",
+      "AddDeploymentHistoryLineage1700000000058",
+      "WidenCamundaNativeGrantEvidence1700000000100"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "Existing migrations were corrected in place; no new migration is added and already-applied migrations are not re-run.",
+      "Legacy migrations resolve column types for the connected database. PostgreSQL schemas built from text columns receive the same DDL as before.",
+      "Nullability changes clone the live column, so Oracle receives MODIFY ... [NOT] NULL and PostgreSQL receives ALTER COLUMN ... SET/DROP NOT NULL with data intact.",
+      "Migration 013 changes only nullability on live invitation alias columns, preserving their existing types and values on MySQL as well as Oracle.",
+      "Defaults do not imply index-key sizing: non-indexed text, including SSO JSON documents, retains the established document width of 4000 (4096 on Spanner; text on PostgreSQL).",
+      "On Oracle, migration 100 widens VARCHAR2 evidence to CLOB through a staging column (add, copy, drop, rename). Each step checks the live schema; a rerun after the rename also restores the canonical required classifications constraint.",
+      "A bootstrap that runs synchronize() before replaying the epoch still stops at AddReleaseEffectCohorts1700000000131 by design; that schema-epoch guard is unchanged."
+    ]
+  },
+  "security": [],
+  "documentation": [
+    "docs/architecture/oracle-migration-portability.md"
+  ],
+  "knownLimitations": [
+    "A schema-epoch bootstrap that has already created release_effect_cohorts through synchronize() is still refused by migration 131 on every database."
+  ],
+  "rollback": [
+    "Redeploy the previous shared package or application image. Widened Oracle CLOB evidence columns and relaxed or tightened nullability are retained; automatic schema shrinking is unsupported."
+  ],
+  "validation": [
+    "Regression coverage uses the real MySQL query runner in SQL-memory mode to reject DROP/ADD during invitation alias nullability changes.",
+    "Migration tests cover SSO JSON document capacity on all five dialects and Oracle widening retries after both the drop and committed rename steps.",
+    "Physical database, compiled-upgrade, and aggregate CI qualification are retained as separate revision-specific run artifacts."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.20.4",
+      "newVersion": "0.20.5",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.18.3",
+      "newVersion": "0.18.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.25.2",
+      "newVersion": "0.25.3",
+      "impact": "patch"
+    }
+  ]
+}

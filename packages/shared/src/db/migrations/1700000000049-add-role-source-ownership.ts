@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -17,10 +18,10 @@ export class AddRoleSourceOwnership1700000000049 implements MigrationInterface {
     const tableName = tablePath(queryRunner, 'RbacRole', 'roles');
     if (!(await queryRunner.hasTable(tableName))) return;
     if (!(await queryRunner.hasColumn(tableName, 'source'))) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'source', type: 'text', default: "'manual'" }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'source', type: 'text', default: "'manual'" }));
     }
     if (!(await queryRunner.hasColumn(tableName, 'source_ref'))) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'source_ref', type: 'text', isNullable: true }));
+      await queryRunner.addColumn(tableName, portableColumn(queryRunner, { name: 'source_ref', type: 'text', isNullable: true }));
     }
     const table = await queryRunner.getTable(tableName);
     if (table && !table.indices.some((index) => index.name === 'idx_roles_source')) {

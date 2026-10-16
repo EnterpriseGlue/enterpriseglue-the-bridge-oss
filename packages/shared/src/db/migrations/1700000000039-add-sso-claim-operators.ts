@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -12,7 +12,7 @@ function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: str
 async function addColumnIfMissing(queryRunner: QueryRunner, tableName: string): Promise<void> {
   if (!(await queryRunner.hasTable(tableName))) return;
   if (await queryRunner.hasColumn(tableName, 'claim_operator')) return;
-  await queryRunner.addColumn(tableName, new TableColumn({
+  await queryRunner.addColumn(tableName, portableColumn(queryRunner, {
     name: 'claim_operator',
     type: 'text',
     isNullable: true,

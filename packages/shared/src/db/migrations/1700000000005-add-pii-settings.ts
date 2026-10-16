@@ -1,5 +1,5 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
-import { TableColumn } from 'typeorm';
+import { legacyBooleanColumn, portableColumn } from './support/portable-columns.js';
+
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddPiiSettings1700000000005 implements MigrationInterface {
@@ -13,21 +13,21 @@ export class AddPiiSettings1700000000005 implements MigrationInterface {
     }
 
     const columns = [
-      new TableColumn({ name: 'pii_regex_enabled', ...legacyBooleanColumn(queryRunner, false) }),
-      new TableColumn({ name: 'pii_external_provider_enabled', ...legacyBooleanColumn(queryRunner, false) }),
-      new TableColumn({ name: 'pii_external_provider_type', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'pii_external_provider_endpoint', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'pii_external_provider_auth_header', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'pii_external_provider_auth_token', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'pii_external_provider_project_id', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'pii_external_provider_region', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'pii_redaction_style', type: 'text', default: "'<TYPE>'" }),
-      new TableColumn({
+      portableColumn(queryRunner, { name: 'pii_regex_enabled', ...legacyBooleanColumn(queryRunner, false) }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_enabled', ...legacyBooleanColumn(queryRunner, false) }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_type', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_endpoint', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_auth_header', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_auth_token', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_project_id', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'pii_external_provider_region', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'pii_redaction_style', type: 'text', default: "'<TYPE>'" }),
+      portableColumn(queryRunner, {
         name: 'pii_scopes',
         type: 'text',
         default: "'[\"processDetails\",\"history\",\"logs\",\"errors\",\"audit\"]'",
       }),
-      new TableColumn({ name: 'pii_max_payload_size_bytes', type: 'integer', default: 262144 }),
+      portableColumn(queryRunner, { name: 'pii_max_payload_size_bytes', type: 'integer', default: 262144 }),
     ];
 
     for (const column of columns) {

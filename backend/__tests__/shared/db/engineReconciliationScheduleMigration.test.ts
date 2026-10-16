@@ -8,6 +8,7 @@ describe('AddEngineReconciliationSchedule1700000000074', () => {
       hasTable: vi.fn().mockResolvedValue(true),
       hasColumn: vi.fn().mockResolvedValue(false),
       addColumn,
+      connection: { options: { type: 'postgres' } },
     };
 
     await new AddEngineReconciliationSchedule1700000000074().up(queryRunner as any);
@@ -25,6 +26,7 @@ describe('AddEngineReconciliationSchedule1700000000074', () => {
       hasTable: vi.fn().mockResolvedValue(true),
       hasColumn: vi.fn().mockResolvedValue(true),
       addColumn,
+      connection: { options: { type: 'postgres' } },
     };
 
     await new AddEngineReconciliationSchedule1700000000074().up(queryRunner as any);

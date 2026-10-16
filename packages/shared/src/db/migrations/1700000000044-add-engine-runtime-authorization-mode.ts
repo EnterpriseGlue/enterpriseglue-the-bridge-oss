@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -17,7 +17,7 @@ export class AddEngineRuntimeAuthorizationMode1700000000044 implements Migration
     if (!(await queryRunner.hasTable(settingsTable)) || await queryRunner.hasColumn(settingsTable, 'engine_runtime_authorization_mode')) {
       return;
     }
-    await queryRunner.addColumn(settingsTable, new TableColumn({
+    await queryRunner.addColumn(settingsTable, portableColumn(queryRunner, {
       name: 'engine_runtime_authorization_mode',
       type: 'text',
       default: "'enterpriseglue_authoritative'",

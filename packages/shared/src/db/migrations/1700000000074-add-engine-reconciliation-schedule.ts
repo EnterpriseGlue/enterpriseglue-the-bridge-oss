@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class AddEngineReconciliationSchedule1700000000074 implements MigrationInterface {
   name = 'AddEngineReconciliationSchedule1700000000074';
@@ -7,9 +7,9 @@ export class AddEngineReconciliationSchedule1700000000074 implements MigrationIn
   async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('engines'))) return;
     const columns = [
-      new TableColumn({ name: 'reconciliation_interval_seconds', type: 'integer', default: 300 }),
-      new TableColumn({ name: 'last_metadata_reconciled_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'last_metadata_reconciliation_status', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'reconciliation_interval_seconds', type: 'integer', default: 300 }),
+      portableColumn(queryRunner, { name: 'last_metadata_reconciled_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'last_metadata_reconciliation_status', type: 'text', isNullable: true }),
     ];
     for (const column of columns) {
       if (!(await queryRunner.hasColumn('engines', column.name))) await queryRunner.addColumn('engines', column);

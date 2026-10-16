@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class AddGitLockSessionState1700000000014 implements MigrationInterface {
   name = 'AddGitLockSessionState1700000000014';
@@ -11,9 +11,9 @@ export class AddGitLockSessionState1700000000014 implements MigrationInterface {
     }
 
     const columns = [
-      new TableColumn({ name: 'last_interaction_at', type: 'bigint', isNullable: true }),
-      new TableColumn({ name: 'visibility_state', type: 'text', isNullable: true, default: "'visible'" }),
-      new TableColumn({ name: 'visibility_changed_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'last_interaction_at', type: 'bigint', isNullable: true }),
+      portableColumn(queryRunner, { name: 'visibility_state', type: 'text', isNullable: true, default: "'visible'" }),
+      portableColumn(queryRunner, { name: 'visibility_changed_at', type: 'bigint', isNullable: true }),
     ];
 
     for (const column of columns) {

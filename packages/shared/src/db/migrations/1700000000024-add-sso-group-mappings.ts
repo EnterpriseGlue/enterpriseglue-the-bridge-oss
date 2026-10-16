@@ -1,4 +1,4 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -22,7 +22,7 @@ export class AddSsoGroupMappings1700000000024 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const mappings = tablePath(queryRunner, 'SsoGroupMapping', 'sso_group_mappings');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: mappings,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

@@ -1,4 +1,4 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -22,7 +22,7 @@ export class AddProjectEngineTargets1700000000026 implements MigrationInterface 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const targets = tablePath(queryRunner, 'ProjectEngineTarget', 'project_engine_targets');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: targets,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

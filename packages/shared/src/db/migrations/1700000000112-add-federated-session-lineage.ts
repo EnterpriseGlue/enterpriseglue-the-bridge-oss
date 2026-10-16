@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('RefreshToken').tablePath; } catch { return 'refresh_tokens'; }
@@ -18,9 +19,9 @@ export class AddFederatedSessionLineage1700000000112 implements MigrationInterfa
     const table = tablePath(queryRunner);
     if (!(await queryRunner.hasTable(table))) return;
     for (const column of [
-      new TableColumn({ name: 'provider_subject_id', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'provider_session_id', type: 'text', isNullable: true }),
-      new TableColumn({ name: 'provider_name_id_format', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'provider_subject_id', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'provider_session_id', type: 'text', isNullable: true }),
+      portableColumn(queryRunner, { name: 'provider_name_id_format', type: 'text', isNullable: true }),
     ]) {
       if (!(await queryRunner.hasColumn(table, column.name))) await queryRunner.addColumn(table, column);
     }

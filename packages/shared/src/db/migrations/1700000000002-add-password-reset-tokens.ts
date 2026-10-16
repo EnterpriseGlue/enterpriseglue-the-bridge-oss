@@ -1,5 +1,6 @@
-import { Table, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 export class AddPasswordResetTokensTable1700000000002 implements MigrationInterface {
   name = 'AddPasswordResetTokensTable1700000000002';
@@ -11,7 +12,7 @@ export class AddPasswordResetTokensTable1700000000002 implements MigrationInterf
     }
 
     await queryRunner.createTable(
-      new Table({
+      portableTable(queryRunner, {
         name: tablePath,
         columns: [
           { name: 'id', type: 'text', isPrimary: true },

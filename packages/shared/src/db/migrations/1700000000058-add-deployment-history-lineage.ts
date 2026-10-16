@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn, setExistingColumnNullability, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -24,11 +25,14 @@ const DEPLOYMENT_COLUMNS: Array<{ name: string; type: string; isNullable?: boole
  * not fail midway through migration.
  */
 async function removeDuplicateDeployments(queryRunner: QueryRunner, deployments: string): Promise<void> {
+  const column = (name: string) => sqlIdentifier(queryRunner, name);
+  const deploymentsRef = sqlTablePath(queryRunner, deployments);
   const rows = await queryRunner.query(
-    `SELECT id, engine_id, camunda_deployment_id
-     FROM ${deployments}
-     WHERE camunda_deployment_id IS NOT NULL
-     ORDER BY engine_id ASC, camunda_deployment_id ASC, updated_at DESC, created_at DESC, id DESC`,
+    `SELECT ${column('id')}, ${column('engine_id')}, ${column('camunda_deployment_id')}
+     FROM ${deploymentsRef}
+     WHERE ${column('camunda_deployment_id')} IS NOT NULL
+     ORDER BY ${column('engine_id')} ASC, ${column('camunda_deployment_id')} ASC,`
+    + ` ${column('updated_at')} DESC, ${column('created_at')} DESC, ${column('id')} DESC`,
   ) as Array<{ id: string; engine_id: string; camunda_deployment_id: string }>;
   const seenDeployments = new Set<string>();
 
@@ -39,7 +43,7 @@ async function removeDuplicateDeployments(queryRunner: QueryRunner, deployments:
       continue;
     }
     const idParameter = queryRunner.connection.driver.createParameter('deploymentId', 0);
-    await queryRunner.query(`DELETE FROM ${deployments} WHERE id = ${idParameter}`, [row.id]);
+    await queryRunner.query(`DELETE FROM ${deploymentsRef} WHERE ${column('id')} = ${idParameter}`, [row.id]);
   }
 }
 
@@ -52,13 +56,10 @@ export class AddDeploymentHistoryLineage1700000000058 implements MigrationInterf
     if (await queryRunner.hasTable(deployments)) {
       for (const definition of DEPLOYMENT_COLUMNS) {
         if (!(await queryRunner.hasColumn(deployments, definition.name))) {
-          await queryRunner.addColumn(deployments, new TableColumn(definition));
+          await queryRunner.addColumn(deployments, portableColumn(queryRunner, definition));
         }
       }
-      const projectColumn = (await queryRunner.getTable(deployments))?.findColumnByName('project_id');
-      if (projectColumn && !projectColumn.isNullable) {
-        await queryRunner.changeColumn(deployments, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: true }));
-      }
+      await setExistingColumnNullability(queryRunner, deployments, 'project_id', true);
       const table = await queryRunner.getTable(deployments);
       if (table && !table.indices.some((index) => index.name === 'uq_engine_deployments_engine_camunda_deployment')) {
         await removeDuplicateDeployments(queryRunner, deployments);
@@ -72,10 +73,7 @@ export class AddDeploymentHistoryLineage1700000000058 implements MigrationInterf
 
     const artifacts = tablePath(queryRunner, 'EngineDeploymentArtifact', 'engine_deployment_artifacts');
     if (await queryRunner.hasTable(artifacts)) {
-      const projectColumn = (await queryRunner.getTable(artifacts))?.findColumnByName('project_id');
-      if (projectColumn && !projectColumn.isNullable) {
-        await queryRunner.changeColumn(artifacts, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: true }));
-      }
+      await setExistingColumnNullability(queryRunner, artifacts, 'project_id', true);
     }
   }
 
@@ -88,17 +86,11 @@ export class AddDeploymentHistoryLineage1700000000058 implements MigrationInterf
       for (const definition of [...DEPLOYMENT_COLUMNS].reverse()) {
         if (await queryRunner.hasColumn(deployments, definition.name)) await queryRunner.dropColumn(deployments, definition.name);
       }
-      const projectColumn = (await queryRunner.getTable(deployments))?.findColumnByName('project_id');
-      if (projectColumn?.isNullable) {
-        await queryRunner.changeColumn(deployments, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: false }));
-      }
+      await setExistingColumnNullability(queryRunner, deployments, 'project_id', false);
     }
     const artifacts = tablePath(queryRunner, 'EngineDeploymentArtifact', 'engine_deployment_artifacts');
     if (await queryRunner.hasTable(artifacts)) {
-      const projectColumn = (await queryRunner.getTable(artifacts))?.findColumnByName('project_id');
-      if (projectColumn?.isNullable) {
-        await queryRunner.changeColumn(artifacts, 'project_id', new TableColumn({ name: 'project_id', type: projectColumn.type, isNullable: false }));
-      }
+      await setExistingColumnNullability(queryRunner, artifacts, 'project_id', false);
     }
   }
 }

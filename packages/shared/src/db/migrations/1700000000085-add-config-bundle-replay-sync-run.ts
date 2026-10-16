@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class AddConfigBundleReplaySyncRun1700000000085 implements MigrationInterface {
   name = 'AddConfigBundleReplaySyncRun1700000000085';
@@ -8,7 +9,7 @@ export class AddConfigBundleReplaySyncRun1700000000085 implements MigrationInter
     if (!await queryRunner.hasTable('config_bundle_identity_replay_tasks')) return;
     const table = await queryRunner.getTable('config_bundle_identity_replay_tasks');
     if (!table?.findColumnByName('sync_run_id')) {
-      await queryRunner.addColumn('config_bundle_identity_replay_tasks', new TableColumn({ name: 'sync_run_id', type: 'text', isNullable: true }));
+      await queryRunner.addColumn('config_bundle_identity_replay_tasks', portableColumn(queryRunner, { name: 'sync_run_id', type: 'text', isNullable: true }));
     }
     const refreshed = await queryRunner.getTable('config_bundle_identity_replay_tasks');
     if (!refreshed?.indices.some((index) => index.name === 'idx_config_bundle_identity_replay_task_sync_run')) {

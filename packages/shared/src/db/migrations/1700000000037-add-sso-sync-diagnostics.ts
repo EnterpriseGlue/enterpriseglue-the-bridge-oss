@@ -1,5 +1,6 @@
 import { Table, TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableTable } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -22,7 +23,7 @@ export class AddSsoSyncDiagnostics1700000000037 implements MigrationInterface {
     const runs = tablePath(queryRunner, 'SsoSyncRun', 'sso_sync_runs');
     const events = tablePath(queryRunner, 'SsoSyncEvent', 'sso_sync_events');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: runs,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -51,7 +52,7 @@ export class AddSsoSyncDiagnostics1700000000037 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: events,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

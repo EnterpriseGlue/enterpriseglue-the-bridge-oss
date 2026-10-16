@@ -1,5 +1,6 @@
-import { TableColumn, TableIndex } from 'typeorm';
+import { TableIndex } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -30,7 +31,7 @@ export class AddEngineConfigOwnershipAndRuntimeScope1700000000051 implements Mig
     if (!(await queryRunner.hasTable(tableName))) return;
     for (const definition of COLUMNS) {
       if (!(await queryRunner.hasColumn(tableName, definition.name))) {
-        await queryRunner.addColumn(tableName, new TableColumn(definition));
+        await queryRunner.addColumn(tableName, portableColumn(queryRunner, definition));
       }
     }
     const table = await queryRunner.getTable(tableName);

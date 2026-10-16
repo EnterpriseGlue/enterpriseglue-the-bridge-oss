@@ -1,4 +1,4 @@
-import { legacyBooleanColumn } from './support/portable-columns.js';
+import { legacyBooleanColumn, portableTable } from './support/portable-columns.js';
 import { Table, TableIndex, TableUnique } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -26,7 +26,7 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
     const roleAssignments = tablePath(queryRunner, 'RbacRoleAssignment', 'role_assignments');
     const ssoAssignmentMappings = tablePath(queryRunner, 'SsoAssignmentMapping', 'sso_assignment_mappings');
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: permissions,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -48,7 +48,7 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: roles,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -70,7 +70,7 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: rolePermissions,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -87,7 +87,7 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: roleAssignments,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },
@@ -123,7 +123,7 @@ export class AddRbacFoundation1700000000016 implements MigrationInterface {
       ],
     }));
 
-    await createTableIfMissing(queryRunner, new Table({
+    await createTableIfMissing(queryRunner, portableTable(queryRunner, {
       name: ssoAssignmentMappings,
       columns: [
         { name: 'id', type: 'text', isPrimary: true },

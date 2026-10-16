@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 export class AddHotfixMetadata1700000000008 implements MigrationInterface {
   name = 'AddHotfixMetadata1700000000008';
@@ -15,10 +16,14 @@ export class AddHotfixMetadata1700000000008 implements MigrationInterface {
     const hasHotfixVersion = cols?.columns.some(c => c.name === 'hotfix_from_file_version');
 
     if (!hasHotfixCommit) {
-      await queryRunner.query(`ALTER TABLE ${tablePath} ADD COLUMN "hotfix_from_commit_id" text`);
+      await queryRunner.addColumn(tablePath, portableColumn(queryRunner, {
+        name: 'hotfix_from_commit_id', type: 'text', isNullable: true,
+      }));
     }
     if (!hasHotfixVersion) {
-      await queryRunner.query(`ALTER TABLE ${tablePath} ADD COLUMN "hotfix_from_file_version" integer`);
+      await queryRunner.addColumn(tablePath, portableColumn(queryRunner, {
+        name: 'hotfix_from_file_version', type: 'integer', isNullable: true,
+      }));
     }
   }
 
@@ -30,10 +35,10 @@ export class AddHotfixMetadata1700000000008 implements MigrationInterface {
 
     const cols = await queryRunner.getTable(tablePath);
     if (cols?.columns.some(c => c.name === 'hotfix_from_commit_id')) {
-      await queryRunner.query(`ALTER TABLE ${tablePath} DROP COLUMN "hotfix_from_commit_id"`);
+      await queryRunner.dropColumn(tablePath, 'hotfix_from_commit_id');
     }
     if (cols?.columns.some(c => c.name === 'hotfix_from_file_version')) {
-      await queryRunner.query(`ALTER TABLE ${tablePath} DROP COLUMN "hotfix_from_file_version"`);
+      await queryRunner.dropColumn(tablePath, 'hotfix_from_file_version');
     }
   }
 }

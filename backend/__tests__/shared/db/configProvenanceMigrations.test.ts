@@ -81,7 +81,7 @@ describe('config provenance migrations', () => {
     await migration.up(queryRunner as any);
     expect(queryRunner.addColumn).toHaveBeenCalledTimes(1);
     expect(queryRunner.addColumn).toHaveBeenCalledWith('main.runtime_resource_sets', expect.objectContaining({ name: 'ownership_mode', default: "'manual'" }));
-    expect(queryRunner.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE main.runtime_resource_sets SET ownership_mode = 'config_locked'"));
+    expect(queryRunner.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE "main"."runtime_resource_sets" SET "ownership_mode" = \'config_locked\''));
   });
 
   it('preserves existing mapping locks while adding explicit mapping ownership', async () => {

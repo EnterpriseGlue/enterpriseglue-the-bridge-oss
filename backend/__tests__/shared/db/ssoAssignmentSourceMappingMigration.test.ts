@@ -9,14 +9,14 @@ describe('BackfillSsoAssignmentSourceMapping1700000000081', () => {
       query,
       connection: {
         getMetadata: () => { throw new Error('metadata unavailable'); },
-        driver: { createParameter: (_name: string, index: number) => `$${index + 1}` },
+        driver: { escape: (name: string) => `"${name}"`, createParameter: (_name: string, index: number) => `$${index + 1}` },
       },
     };
 
     await new BackfillSsoAssignmentSourceMapping1700000000081().up(queryRunner as any);
 
     expect(query).toHaveBeenCalledWith(
-      'UPDATE role_assignments SET source_mapping_id = source_ref WHERE source = $1 AND source_mapping_id IS NULL AND source_ref IS NOT NULL',
+      'UPDATE "role_assignments" SET "source_mapping_id" = "source_ref" WHERE "source" = $1 AND "source_mapping_id" IS NULL AND "source_ref" IS NOT NULL',
       ['sso'],
     );
   });
@@ -26,7 +26,7 @@ describe('BackfillSsoAssignmentSourceMapping1700000000081', () => {
     const queryRunner = {
       getTable: vi.fn().mockResolvedValue({ columns: [{ name: 'source_ref' }] }),
       query,
-      connection: { getMetadata: () => { throw new Error('metadata unavailable'); }, driver: { createParameter: vi.fn() } },
+      connection: { getMetadata: () => { throw new Error('metadata unavailable'); }, driver: { escape: (name: string) => `"${name}"`, createParameter: vi.fn() } },
     };
 
     await new BackfillSsoAssignmentSourceMapping1700000000081().up(queryRunner as any);

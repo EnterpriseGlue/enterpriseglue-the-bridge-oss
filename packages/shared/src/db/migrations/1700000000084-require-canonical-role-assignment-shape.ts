@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { requireExistingColumn, sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -16,8 +16,17 @@ export class RequireCanonicalRoleAssignmentShape1700000000084 implements Migrati
     const tableName = tablePath(queryRunner, 'RbacRoleAssignment', 'role_assignments');
     const table = await queryRunner.getTable(tableName);
     if (!table) return;
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const tableRef = sqlTablePath(queryRunner, tableName);
+    // Later migrations drop the legacy alias columns, so a Path B bootstrap can
+    // present this table without them; read only what the schema still has.
+    const present = new Set(table.columns.map((existing) => existing.name));
+    const selected = [
+      'id', 'user_id', 'principal_type', 'principal_id',
+      'resource_type', 'resource_id', 'scope_type', 'scope_id',
+    ].filter((name) => present.has(name)).map(column).join(', ');
     const rows = await queryRunner.query(
-      `SELECT id, user_id, principal_type, principal_id, resource_type, resource_id, scope_type, scope_id FROM ${tableName}`,
+      `SELECT ${selected} FROM ${tableRef}`,
     ) as Array<Record<string, string | null>>;
 
     for (const row of rows) {
@@ -30,14 +39,20 @@ export class RequireCanonicalRoleAssignmentShape1700000000084 implements Migrati
       }
       const parameters = [principalType, principalId, scopeType, scopeId, row.id];
       await queryRunner.query(
-        `UPDATE ${tableName} SET principal_type = ${queryRunner.connection.driver.createParameter('principalType', 0)}, principal_id = ${queryRunner.connection.driver.createParameter('principalId', 1)}, scope_type = ${queryRunner.connection.driver.createParameter('scopeType', 2)}, scope_id = ${queryRunner.connection.driver.createParameter('scopeId', 3)} WHERE id = ${queryRunner.connection.driver.createParameter('assignmentId', 4)}`,
+        `UPDATE ${tableRef} SET ${column('principal_type')} = ${queryRunner.connection.driver.createParameter('principalType', 0)},`
+        + ` ${column('principal_id')} = ${queryRunner.connection.driver.createParameter('principalId', 1)},`
+        + ` ${column('scope_type')} = ${queryRunner.connection.driver.createParameter('scopeType', 2)},`
+        + ` ${column('scope_id')} = ${queryRunner.connection.driver.createParameter('scopeId', 3)}`
+        + ` WHERE ${column('id')} = ${queryRunner.connection.driver.createParameter('assignmentId', 4)}`,
         parameters,
       );
     }
 
-    await queryRunner.changeColumn(tableName, 'principal_type', new TableColumn({ name: 'principal_type', type: 'text', isNullable: false }));
-    await queryRunner.changeColumn(tableName, 'principal_id', new TableColumn({ name: 'principal_id', type: 'text', isNullable: false }));
-    await queryRunner.changeColumn(tableName, 'scope_type', new TableColumn({ name: 'scope_type', type: 'text', isNullable: false }));
+    // Tighten the live columns in place: a rebuilt column whose type differs
+    // makes Oracle drop and re-add it, which fails on a populated table (ORA-01758).
+    for (const name of ['principal_type', 'principal_id', 'scope_type']) {
+      await requireExistingColumn(queryRunner, tableName, name);
+    }
   }
 
   public async down(): Promise<void> {

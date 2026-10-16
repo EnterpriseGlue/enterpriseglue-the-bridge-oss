@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 const TABLE = 'working_files';
 const FILES_TABLE = 'files';
@@ -29,7 +29,7 @@ export class AddWorkingFilesMainFileId1700000000009 implements MigrationInterfac
     if (!table) return;
 
     if (!table.columns.some((column) => column.name === 'main_file_id')) {
-      await queryRunner.addColumn(table, new TableColumn({
+      await queryRunner.addColumn(table, portableColumn(queryRunner, {
         name: 'main_file_id',
         type: 'text',
         isNullable: true,

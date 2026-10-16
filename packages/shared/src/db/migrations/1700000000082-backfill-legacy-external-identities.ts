@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { sqlIdentifier, sqlTablePath } from './support/portable-columns.js';
 
 type LegacyUser = {
   id: string;
@@ -46,8 +47,12 @@ export class BackfillLegacyExternalIdentities1700000000082 implements MigrationI
     if (!requiredUserColumns.every((name) => users.columns.some((column) => column.name === name))
       || !requiredIdentityColumns.every((name) => identities.columns.some((column) => column.name === name))) return;
 
+    const column = (name: string) => sqlIdentifier(queryRunner, name);
+    const usersRef = sqlTablePath(queryRunner, usersTable);
+    const identitiesRef = sqlTablePath(queryRunner, identitiesTable);
     const legacyUsers = await queryRunner.query(
-      `SELECT id, email, auth_provider, entra_id, google_id, created_at, updated_at, last_login_at FROM ${usersTable} WHERE entra_id IS NOT NULL OR google_id IS NOT NULL`,
+      `SELECT ${requiredUserColumns.map(column).join(', ')} FROM ${usersRef}`
+      + ` WHERE ${column('entra_id')} IS NOT NULL OR ${column('google_id')} IS NOT NULL`,
     ) as LegacyUser[];
     const now = Date.now();
     for (const user of legacyUsers) {
@@ -60,7 +65,7 @@ export class BackfillLegacyExternalIdentities1700000000082 implements MigrationI
         const key = identityKey(provider.id, subject.subjectId);
         const keyParameter = queryRunner.connection.driver.createParameter('identityKey', 0);
         const existing = await queryRunner.query(
-          `SELECT id, user_id FROM ${identitiesTable} WHERE identity_key = ${keyParameter}`,
+          `SELECT ${column('id')}, ${column('user_id')} FROM ${identitiesRef} WHERE ${column('identity_key')} = ${keyParameter}`,
           [key],
         ) as ExistingLink[];
         if (existing[0]) {
@@ -73,7 +78,8 @@ export class BackfillLegacyExternalIdentities1700000000082 implements MigrationI
         const parameters = [id, key, provider.id, provider.type, subject.subjectId, user.id, user.email.toLowerCase(), user.created_at ?? now, user.last_login_at ?? now, user.created_at ?? now, user.updated_at ?? now];
         const parameter = (index: number) => queryRunner.connection.driver.createParameter(`value${index}`, index);
         await queryRunner.query(
-          `INSERT INTO ${identitiesTable} (id, identity_key, tenant_id, provider_id, provider_type, subject_id, directory_tenant_id, user_id, email_hint, status, linked_at, last_seen_at, created_at, updated_at) VALUES (${parameter(0)}, ${parameter(1)}, NULL, ${parameter(2)}, ${parameter(3)}, ${parameter(4)}, NULL, ${parameter(5)}, ${parameter(6)}, 'active', ${parameter(7)}, ${parameter(8)}, ${parameter(9)}, ${parameter(10)})`,
+          `INSERT INTO ${identitiesRef} (${requiredIdentityColumns.map(column).join(', ')})`
+          + ` VALUES (${parameter(0)}, ${parameter(1)}, NULL, ${parameter(2)}, ${parameter(3)}, ${parameter(4)}, NULL, ${parameter(5)}, ${parameter(6)}, 'active', ${parameter(7)}, ${parameter(8)}, ${parameter(9)}, ${parameter(10)})`,
           parameters,
         );
       }

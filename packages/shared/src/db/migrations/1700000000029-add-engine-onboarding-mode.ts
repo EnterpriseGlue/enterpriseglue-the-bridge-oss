@@ -1,5 +1,5 @@
-import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { portableColumn } from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner, metadataName: string, fallback: string): string {
   try {
@@ -19,7 +19,7 @@ export class AddEngineOnboardingMode1700000000029 implements MigrationInterface 
     if (!(await queryRunner.hasColumn(settingsTable, 'engine_onboarding_mode'))) {
       await queryRunner.addColumn(
         settingsTable,
-        new TableColumn({
+        portableColumn(queryRunner, {
           name: 'engine_onboarding_mode',
           type: 'text',
           default: "'manual_allowed'",
