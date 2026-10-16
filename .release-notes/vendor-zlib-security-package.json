@@ -3,16 +3,16 @@
   "schemaVersion": 1,
   "id": "vendor-zlib-security-package",
   "type": "security",
-  "scope": "backend-runtime",
+  "scope": "runtime",
   "breaking": false,
   "audiences": [
     "operators",
     "developers",
     "security"
   ],
-  "summary": "Use the vendor-patched zlib runtime package and remove the expired CVE-2026-85091 scanner exception.",
+  "summary": "Use vendor-patched zlib runtime packages across application and bootstrap images and remove the expired CVE-2026-85091 scanner exception.",
   "userImpact": [
-    "The backend image uses a corrected vendor library with matching package metadata; application interfaces are unchanged."
+    "Application and managed-shard bootstrap images use corrected vendor libraries with matching package metadata; application interfaces are unchanged."
   ],
   "upgrade": {
     "required": false,
@@ -29,7 +29,7 @@
     "notes": []
   },
   "security": [
-    "The backend installs signed Chainguard zlib 1.3.2.1_rc20260921-r0 or later instead of overwriting the older package with a custom library build.",
+    "The backend, frontend, and managed-shard bootstrap images require signed Chainguard zlib 1.3.2.1_rc20260921-r0 or later; the backend no longer overwrites the older package with a custom library build.",
     "CVE-2026-85091 is no longer suppressed; the existing scanner and all-severity application image gates are unchanged."
   ],
   "documentation": [
@@ -41,8 +41,8 @@
   ],
   "validation": [
     "CI contracts passed: 207 tests; release-note preflight passed: 169 tests, semantic version recommendation, fragment validation and documentation boundary.",
-    "Backend runtime-base images built for linux/amd64 and linux/arm64; both passed non-root Node 24.21.0 gzip smoke checks with vendor zlib 1.3.2.1_rc20260921-r0.",
-    "The pinned release scanner and freshly downloaded vulnerability database reported zero unignored findings at all severities on both runtime-base images, with the zlib exception removed. These focused checks do not replace full exact-candidate qualification."
+    "Backend runtime-base, full frontend, and full managed-shard bootstrap images built for linux/amd64 and linux/arm64. Non-root Node gzip checks passed for backend and bootstrap; actual Nginx gzip delivery of the built JavaScript bundle passed on both frontend architectures.",
+    "The pinned release scanner and current vulnerability database reported zero unignored findings at all severities on all six locally checked images, with the zlib exception removed. Full protected CI and exact-candidate qualification remain separate requirements."
   ],
   "packages": []
 }

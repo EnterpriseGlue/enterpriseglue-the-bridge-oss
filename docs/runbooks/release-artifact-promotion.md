@@ -127,10 +127,13 @@ writes an application release tag or production `latest` alias.
 
 ## Runtime library security
 
-The backend runtime installs the signed Chainguard zlib package at
-`1.3.2.1_rc20260921-r0` or later to address CVE-2026-85091. Its library bytes
-remain owned by that package; the image no longer replaces them with a locally
-rebuilt zlib 1.3.2 library. The expired scanner exception is removed, so the
+The backend, frontend, and managed-shard bootstrap runtimes install the signed
+Chainguard zlib package at
+`1.3.2.1_rc20260921-r0` or later to address CVE-2026-85091. Their library bytes
+remain owned by that package; the backend no longer replaces them with a locally
+rebuilt zlib 1.3.2 library. Explicit version floors invalidate older cached
+frontend layers and update the bootstrap image's pinned predecessor library.
+The expired scanner exception is removed, so the
 existing all-severity candidate and publication scans evaluate this advisory
 without suppression on both architectures.
 
