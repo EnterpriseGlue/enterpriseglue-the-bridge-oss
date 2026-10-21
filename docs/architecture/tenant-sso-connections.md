@@ -1,3 +1,10 @@
+---
+doc_class: technical
+audience: [architect, developer, operator, maintainer]
+publication: github
+lifecycle: as-built
+---
+
 # Tenant SSO connection contract
 
 This contract is for host developers and deployment operators. It describes the

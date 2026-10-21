@@ -82,7 +82,7 @@ test('uses package.json as the authority for every explicit pnpm toolchain pin',
       if (!lines[index].includes(actionSetupMarker)) continue;
       actionSetupCount += 1;
       const setup = lines.slice(index + 1, index + 7).join('\n');
-      const version = /\n\s*version:\s*['"]?(\d+\.\d+\.\d+)['"]?/.exec(`\n${setup}`)?.[1];
+      const version = /\bversion:\s*['"]?(\d+\.\d+\.\d+)['"]?/.exec(setup)?.[1];
       if (version !== expectedVersion) {
         mismatches.push(`${path}:${index + 1}: pnpm/action-setup version ${version ?? 'missing'}`);
       }
@@ -253,6 +253,7 @@ test('packages compiled shared migrations in the production backend image', asyn
 test('removes build-only node-gyp from the production backend runtime', async () => {
   const dockerfile = await readFile(new URL('backend/Dockerfile.prod', rootUrl), 'utf8');
 
-  assert.match(dockerfile, /apk del --no-network node-gyp \$\{npm_packages\}/);
+  assert.match(dockerfile, /runtime_tools="\$\(apk info \| awk '\/\^\(nodejs\|npm\|node-gyp\|corepack\)\(-\|\$\)\/'\)"/);
+  assert.match(dockerfile, /apk del --no-network \$\{runtime_tools\}/);
   assert.match(dockerfile, /! apk info -e node-gyp/);
 });

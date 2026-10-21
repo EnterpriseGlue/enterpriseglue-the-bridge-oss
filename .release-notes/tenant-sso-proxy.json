@@ -43,7 +43,8 @@
     ]
   },
   "security": [
-    "Proxy failures never trigger direct fallback; profile selection is tenant-scoped and approved by platform operators."
+    "Proxy failures never trigger direct fallback; profile selection is tenant-scoped and approved by platform operators.",
+    "Refreshes pinned backend/frontend Chainguard runtime bases and requires patched ca-certificates-bundle and libcurl-openssl4 versions for CVE-2026-111943 and CVE-2026-92392."
   ],
   "documentation": [
     "docs/architecture/tenant-sso-connections.md"
@@ -52,8 +53,7 @@
     "HTTP CONNECT without proxy authentication only; private network connectivity is provisioned separately.",
     "Cloud control-plane release compatibility remains an operator-owned rollout prerequisite.",
     "Connection tests verify network/discovery/JWKS reachability; a real sign-in must verify client credentials, MFA and permissions.",
-    "The first version limits a catalogue to 32 profiles and 256 distinct assigned scopes.",
-    "Shipping is blocked until the two recorded base-image vulnerabilities are remediated and exact-image security qualification passes."
+    "The first version limits a catalogue to 32 profiles and 256 distinct assigned scopes."
   ],
   "rollback": [
     "Restore reviewed prior connection configuration before downgrading tenants that require scoped proxy routing."
@@ -64,9 +64,11 @@
     "Full identity local suite and security suite, authorization structure/inventory and 128 authorization PR tests pass using owned local PostgreSQL.",
     "PostgreSQL forced-RLS/identity integration passes; the repaired session-race fixture passes all 45 tests.",
     "All five database adapters pass the migration/upgrade/retry/schema-equivalence matrix as a local development run, not a clean release candidate receipt.",
-    "Disposable PostgreSQL browser protocol rehearsal passes OIDC, Entra-compatible OIDC, SAML and LDAP; proxy activated through UI and 37 CONNECT tunnels observed.",
-    "All five technical/customer-guide Mermaid diagrams render in light and dark themes. Helm/schema-epoch/receipt/package-version contract checks pass.",
-    "Pinned Trivy 0.72.0 image scans on 21 October 2026 find two HIGH vulnerabilities per arm64 backend/frontend image: CVE-2026-111943 (ca-certificates-bundle) and CVE-2026-92392 (libcurl-openssl4), inherited from unchanged base-image inputs. Image acceptance is blocked; no publication or deployment is claimed."
+    "The exact rebuilt, scanned application images pass the disposable PostgreSQL protocol rehearsal: SCIM HTTP, OIDC, Entra-compatible OIDC, SAML and LDAP; proxy activated through UI and 37 CONNECT tunnels observed.",
+    "The technical guide Mermaid sequence diagram renders in light and dark themes. Helm/schema-epoch/receipt/package-version contract checks pass.",
+    "Fresh pinned Trivy 0.72.0 scans on 21 October 2026 pass for both rebuilt Linux arm64 application images: zero unignored CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN vulnerabilities and zero secret findings, with the committed ignore policy unchanged. SBOMs are retained locally; other architectures require their own image qualification.",
+    "Docker/runtime and configuration contracts pass all 35 tests; CI/release contracts pass all 208 tests and the self-validating ci-complete aggregate. Corrects stale ownership/tool-removal expectations, inline pnpm-pin parsing and the plugin-manager example version.",
+    "The non-publishing release authorization canary passes 12 scenarios, including the actual candidate verifier's rejection of a missing fixture; no publication or registry writes."
   ],
   "packages": [
     {

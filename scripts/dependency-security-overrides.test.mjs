@@ -213,3 +213,11 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
   assert.match(backend, /nodejs\|npm\|node-gyp\|corepack/);
   assert.match(backend, /process\.versions\.node\.split\("\."\)\[0\] !== "24"/);
 });
+
+test('application images require patched CA bundles and curl libraries', async () => {
+  for (const relative of ['backend/Dockerfile.prod', 'frontend/Dockerfile.prod']) {
+    const source = await readFile(new URL(relative, root), 'utf8');
+    assert.match(source, /ca-certificates-bundle>=20260909-r3/);
+    assert.match(source, /libcurl-openssl4>=8\.23\.0-r0/);
+  }
+});

@@ -26,7 +26,10 @@ test('Docker images expose a non-root config and separate secret mount target', 
   const production = read('backend/Dockerfile.prod');
 
   assert.match(development, /mkdir -p \/etc\/enterpriseglue\/config \/var\/run\/secrets\/enterpriseglue/);
-  assert.match(development, /chown -R node:node \/etc\/enterpriseglue \/var\/run\/secrets\/enterpriseglue/);
+  assert.match(development, /ARG DEV_UID=1000/);
+  assert.match(development, /ARG DEV_GID=1000/);
+  assert.match(development, /chown -R "\$\{DEV_UID\}:\$\{DEV_GID\}" \/etc\/enterpriseglue \/var\/run\/secrets\/enterpriseglue/);
+  assert.match(development, /^USER node$/m);
   assert.match(production, /mkdir -p \/etc\/enterpriseglue\/config \/var\/run\/secrets\/enterpriseglue/);
   assert.match(production, /chown -R 65532:65532 \/etc\/enterpriseglue \/var\/run\/secrets\/enterpriseglue/);
 });
