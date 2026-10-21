@@ -232,7 +232,7 @@ router.post('/api/identity/providers/:key/test-connection', requireAuth, identit
     const page = await directLdapIdentityService.listDirectoryPage(provider);
     result = { status: 'connected', protocol: 'ldap', sampledIdentities: page.identities.length };
   } else if (provider.protocol === 'oidc') {
-    const metadata = await genericOidcService.testConnection(JSON.parse(provider.configurationJson));
+    const metadata = await genericOidcService.testConnection(JSON.parse(provider.configurationJson), {tenantId:provider.tenantId});
     result = { status: 'metadata_reachable', protocol: 'oidc', issuer: metadata.issuer };
   } else {
     const metadata = await samlMetadataService.testConnection(provider.configurationJson, { tenantId: provider.tenantId, ...(correlationId(req) ? { correlationId: correlationId(req) } : {}) });

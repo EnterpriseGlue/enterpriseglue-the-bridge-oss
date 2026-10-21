@@ -157,7 +157,7 @@ describe('identity provider routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'metadata_reachable', protocol: 'oidc', issuer: 'https://login.example.test' });
-    expect(service.testConnection).toHaveBeenCalledWith(JSON.parse(provider.configurationJson));
+    expect(service.testConnection).toHaveBeenCalledWith(JSON.parse(provider.configurationJson),{tenantId:provider.tenantId});
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.connection_test', resourceId: 'provider-1' }));
   });
 

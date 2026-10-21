@@ -1,3 +1,4 @@
+import { loadBundledSchemaEpochManifest } from '@enterpriseglue/shared/db/schema-epoch.js';
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
@@ -237,20 +238,18 @@ describe('runMigrations bootstrap behavior', () => {
     const dataSource = {
       migrations: registeredMigrationIdentities(),
       createQueryRunner: vi.fn()
-        .mockReturnValueOnce(policyRunner)
-        .mockReturnValueOnce(policyRunner)
-        .mockReturnValueOnce(policyRunner),
+        .mockReturnValue(policyRunner),
       getMetadata: vi.fn((entity: { name: string } | string) => ({
         tablePath: `public.${(typeof entity === 'string' ? entity : entity.name).toLowerCase()}`,
       })),
       entityMetadatas: [],
       synchronize: vi.fn(),
-      showMigrations: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(true),
+      showMigrations: vi.fn().mockResolvedValue(true),
       runMigrations: vi.fn().mockImplementation(async () => {
         const last = dataSource.migrations[dataSource.migrations.length - 1]?.name;
         expect(last).toBe(dataSource.runMigrations.mock.calls.length === 1
           ? 'EnforceExplicitPostgresContext1700000000132'
-          : 'AddCloudEmailPasskeys1700000000133');
+          : dataSource.runMigrations.mock.calls.length===2?'AddCloudEmailPasskeys1700000000133':'AddSsoConnections1700000000134');
       }),
       transaction: vi.fn(),
     };
@@ -266,13 +265,14 @@ describe('runMigrations bootstrap behavior', () => {
         id: 'cloud-email-passkeys', through: 1700000000133, count: 135,
         sha256: 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d',
         postgresPolicyProfile: 'explicit-context/v1',
-      });
+      })
+      .mockResolvedValue({ ...loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[3] });
 
     try {
       await runSchemaEpochOwnerMigrations();
-      expect(dataSource.runMigrations).toHaveBeenCalledTimes(2);
+      expect(dataSource.runMigrations).toHaveBeenCalledTimes(3);
       expect(verifyOwnerMigrationStartingEpoch).toHaveBeenCalledOnce();
-      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddCloudEmailPasskeys1700000000133');
+      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddSsoConnections1700000000134');
       expect(dataSource.migrations.some((migration: { name?: string }) =>
         migration.name === 'EnforceExplicitPostgresContext1700000000132')).toBe(true);
       expect(dataSource.synchronize).not.toHaveBeenCalled();
@@ -366,15 +366,15 @@ describe('runMigrations bootstrap behavior', () => {
     };
     vi.mocked(getDataSource).mockResolvedValue(dataSource as any);
     vi.mocked(verifyOwnerMigrationStartingEpoch).mockResolvedValue('post-enforcement');
-    vi.mocked(verifyExecutedSchemaEpoch).mockReset().mockResolvedValue({
+    vi.mocked(verifyExecutedSchemaEpoch).mockReset().mockResolvedValueOnce({
       id: 'cloud-email-passkeys', through: 1700000000133, count: 135,
       sha256: 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d',
       postgresPolicyProfile: 'explicit-context/v1',
-    });
+    }).mockResolvedValue(loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[3]);
     try {
       await runSchemaEpochOwnerMigrations();
-      expect(dataSource.runMigrations).toHaveBeenCalledOnce();
-      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddCloudEmailPasskeys1700000000133');
+      expect(dataSource.runMigrations).toHaveBeenCalledTimes(2);
+      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddSsoConnections1700000000134');
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(1, runner, 'explicit-context/v1');
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(2, runner, 'explicit-context/v1');
       expect(dataSource.synchronize).not.toHaveBeenCalled();

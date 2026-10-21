@@ -161,6 +161,10 @@ export class OracleAdapter implements DatabaseAdapter {
       }
 
       if (column.options.type === 'text') {
+      if ((targetName==='PlatformSettings'&&['ssoConnectionJson','ssoProxyCatalogueJson'].includes(column.propertyName))||(targetName==='TenantLoginPolicy'&&column.propertyName==='ssoConnectionJson')){
+        column.options.type='clob';delete column.options.length;continue;
+      }
+
         if ((targetName === 'CamundaNativeGrantImportRun' || targetName === 'EngineBackstopSyncRun')
           && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
           column.options.type = 'clob';

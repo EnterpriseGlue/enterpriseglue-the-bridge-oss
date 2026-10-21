@@ -1,0 +1,91 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "tenant-sso-proxy",
+  "type": "feature",
+  "scope": "identity",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds tenant-scoped outbound proxy routing for SSO, with portal and headless configuration.",
+  "userImpact": [
+    "Organizations can route backend OIDC requests through an approved proxy without changing engine or other tenants' traffic."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Run migration 1700000000134 before rolling out the new runtime. Pooled PostgreSQL deployments use the separately credentialed schema-epoch v4 owner job.",
+      "Existing tenants preserve runtime routing until explicitly migrated; new tenants receive Direct.",
+      "Before enabling Cloud proxies, qualify the target release/shard route, drain incompatible runtimes and reject incompatible release fallbacks."
+    ]
+  },
+  "configuration": [
+    "Adds approved SSO proxy profiles and tenant connection selection with source ownership."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds tenant and operator SSO connection configuration and diagnostic contracts."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000134-add-sso-connections"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "Adds nullable SSO connection/catalogue JSON columns to existing settings and tenant policy tables; PostgreSQL pooled schema-epoch ceiling advances to 0134.",
+      "No new runtime table privileges. DOWN refuses populated scoped settings; older schema-epoch runtimes reject the new ledger."
+    ]
+  },
+  "security": [
+    "Proxy failures never trigger direct fallback; profile selection is tenant-scoped and approved by platform operators."
+  ],
+  "documentation": [
+    "docs/architecture/tenant-sso-connections.md"
+  ],
+  "knownLimitations": [
+    "HTTP CONNECT without proxy authentication only; private network connectivity is provisioned separately.",
+    "Cloud control-plane release compatibility remains an operator-owned rollout prerequisite.",
+    "Connection tests verify network/discovery/JWKS reachability; a real sign-in must verify client credentials, MFA and permissions.",
+    "The first version limits a catalogue to 32 profiles and 256 distinct assigned scopes.",
+    "Shipping is blocked until the two recorded base-image vulnerabilities are remediated and exact-image security qualification passes."
+  ],
+  "rollback": [
+    "Restore reviewed prior connection configuration before downgrading tenants that require scoped proxy routing."
+  ],
+  "validation": [
+    "Shared, backend and frontend TypeScript checks and ESLint pass.",
+    "SSO service, real TLS/CONNECT transport, API authorization, signed-state/release-fence, configuration-bundle lifecycle and UI tests pass.",
+    "Full identity local suite and security suite, authorization structure/inventory and 128 authorization PR tests pass using owned local PostgreSQL.",
+    "PostgreSQL forced-RLS/identity integration passes; the repaired session-race fixture passes all 45 tests.",
+    "All five database adapters pass the migration/upgrade/retry/schema-equivalence matrix as a local development run, not a clean release candidate receipt.",
+    "Disposable PostgreSQL browser protocol rehearsal passes OIDC, Entra-compatible OIDC, SAML and LDAP; proxy activated through UI and 37 CONNECT tunnels observed.",
+    "All five technical/customer-guide Mermaid diagrams render in light and dark themes. Helm/schema-epoch/receipt/package-version contract checks pass.",
+    "Pinned Trivy 0.72.0 image scans on 21 October 2026 find two HIGH vulnerabilities per arm64 backend/frontend image: CVE-2026-111943 (ca-certificates-bundle) and CVE-2026-92392 (libcurl-openssl4), inherited from unchanged base-image inputs. Image acceptance is blocked; no publication or deployment is claimed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.21.0",
+      "newVersion": "0.22.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.19.0",
+      "newVersion": "0.20.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.26.0",
+      "newVersion": "0.27.0",
+      "impact": "minor"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { config } from '../../config/index.js';
+import { ssoConnectionService } from './SsoConnectionService.js';
 import { IsNull, type EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
@@ -343,6 +345,7 @@ class ConfigBundleApplyService {
       return fail('Configuration bundle secret preflight failed', 422);
     }
     const unsupported = Object.keys(compilation.files).filter((path) => ![
+      './sso-connection.json', './sso-proxy-catalogue.json',
       './platform-settings.json', './environment-tags.json', './git-providers.json',
       './email-configurations.json', './email-templates.json', './permissions.json',
       './authorization-policies.json', './machine-principals.json', './external-engine-systems.json',
@@ -1283,6 +1286,20 @@ class ConfigBundleApplyService {
         }
       }
 
+      for(const change of diff.changes.filter(c=>c.objectType==='sso_proxy_catalogue'||c.objectType==='sso_connection').sort((a,b)=>a.objectType==='sso_proxy_catalogue'?-1:b.objectType==='sso_proxy_catalogue'?1:0)) {
+        if(change.operation==='noop'||change.operation==='conflict')continue;
+        const sourceRef=`config_bundle:${manifest.metadata.key}`;
+        if(change.objectType==='sso_proxy_catalogue') {
+          if(config.tenancyMode==='pooled'&&tenantId)fail('Tenant configuration cannot approve SSO proxy destinations',403);
+          const desired=(compilation.files!['./sso-proxy-catalogue.json'] as any).ssoProxyCatalogue;
+          await ssoConnectionService.saveCatalogue({profiles:desired.profiles},change.expectedSsoVersion,input.actorId,{store:manager,sourceRef,ownershipMode:desired.ownershipMode});
+        } else {
+          const desired=(compilation.files!['./sso-connection.json'] as any).ssoConnection;
+          await ssoConnectionService.saveConnection(tenantId,desired.connection,change.expectedSsoVersion,input.actorId,{store:manager,sourceRef,ownershipMode:desired.ownershipMode,providerKey:desired.providerKey});
+        }
+        await writeAudit(manager,{tenantId,actorId:input.actorId,action:`authz.config_bundle.${change.objectType}.${change.operation}`,resourceType:change.objectType,resourceId:change.key,details:{bundleKey:manifest.metadata.key,canonicalHash:diff.canonicalHash}});
+        if(change.operation==='create')created+=1;else updated+=1;
+      }
       if (permissionArchiveChanges.length > 0) {
         await headlessAdminCatalogService.applyChanges(manager, {
           files: compilation.files!,

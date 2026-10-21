@@ -1,3 +1,4 @@
+import { ConfigSsoConnectionFileSchema, ConfigSsoProxyCatalogueFileSchema } from '../../schemas/platform-admin/sso-connection.js';
 import { z } from 'zod';
 import {
   ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineBackstopMappingsFileSchema, ConfigEngineSetsFileSchema, ConfigEngineTenantMappingsFileSchema, ConfigGroupsFileSchema,
@@ -21,6 +22,8 @@ import type {
 } from './EngineTenancyProvisioningService.js';
 
 const FILE_SCHEMAS: Record<string, z.ZodType> = {
+  './sso-connection.json': ConfigSsoConnectionFileSchema,
+  './sso-proxy-catalogue.json': ConfigSsoProxyCatalogueFileSchema,
   './platform-settings.json': ConfigPlatformSettingsFileSchema,
   './environment-tags.json': ConfigEnvironmentTagsFileSchema,
   './git-providers.json': ConfigGitProvidersFileSchema,

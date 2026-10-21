@@ -90,6 +90,32 @@ async function loginLocalAdministrator(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
+async function configureRehearsalSsoProxy(page:Page):Promise<void>{
+  const host=process.env.LOCAL_OIDC_SSO_PROXY_HOST;if(!host)return;
+  await page.goto('/admin/settings/identity-providers');
+  const key='rehearsal.sso.proxy';
+  const catalogue=await requestJson<{catalogue:{profiles:Array<{key:string}>}}>(page,'/api/identity/sso-proxy-catalogue');
+  expect(catalogue.status).toBe(200);
+  if(!catalogue.body!.catalogue.profiles.some(p=>p.key===key)){
+    await page.getByRole('button',{name:'Add proxy profile',exact:true}).click();
+    await page.getByLabel('Profile key',{exact:true}).fill(key);
+    await page.getByLabel('Profile name',{exact:true}).fill('Rehearsal SSO proxy');
+    await page.getByLabel('Proxy hostname',{exact:true}).fill(host);
+    await page.getByRole('spinbutton',{name:'Proxy port'}).fill('28090');
+    await page.getByLabel('Approved identity-provider hostnames',{exact:true}).fill('localhost');
+    const privateNetwork=page.getByRole('switch',{name:'Private proxy address approval',exact:true});await privateNetwork.scrollIntoViewIfNeeded();await privateNetwork.press('Space');await expect(privateNetwork).toHaveAttribute('aria-checked','true');
+    await page.getByRole('button',{name:'Save approved profile',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Edit Rehearsal SSO proxy',exact:true})).toBeVisible();
+  }
+  await page.getByLabel('Connection',{exact:true}).selectOption(`proxy:${key}`);
+  await page.getByLabel('OIDC provider for connection test',{exact:true}).selectOption(process.env.LOCAL_OIDC_PROVIDER_KEY||'local-keycloak-oidc');
+  const tested=page.waitForResponse(r=>r.url().endsWith('/api/identity/sso-connection/test')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Test connection',exact:true}).click();expect((await tested).status()).toBe(200);
+  await page.getByRole('button',{name:'Activate connection',exact:true}).click();
+  await expect(page.getByText('SSO connection activated. Complete a real sign-in to verify MFA and permissions.',{exact:true})).toBeVisible();
+  await captureLiveScreenshot(page,'sso-proxy-activated.png');
+}
+
 async function createEngine(page: Page, csrf: string, name: string): Promise<Engine> {
   const result = await requestJson<Engine>(page, '/engines-api/engines', {
     method: 'POST',
@@ -269,6 +295,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
 
     try {
       await loginLocalAdministrator(admin);
+      await configureRehearsalSsoProxy(admin);
       const csrf = await csrfToken(admin);
       const allowedEngine = await createEngine(admin, csrf, 'OIDC scoped-access test engine');
       const siblingEngine = await createEngine(admin, csrf, 'OIDC sibling test engine');

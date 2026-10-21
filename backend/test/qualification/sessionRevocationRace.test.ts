@@ -1,3 +1,5 @@
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -113,7 +115,7 @@ describe('physical PostgreSQL session derivation and logout', () => {
     admin = new Pool(options);
     await admin.query(`CREATE DATABASE "${database}"`);
     db = new DataSource({ type: 'postgres', host: options.host, port: options.port, username: options.user,
-      password: options.password, database, entities: [User, RefreshToken, IdentityProvider, Invitation, ExternalIdentity,
+      password: options.password, database, entities: [PlatformSettings,TenantLoginPolicy,User, RefreshToken, IdentityProvider, Invitation, ExternalIdentity,
         Project, ProjectMember, ProjectMemberRole, RbacRoleAssignment, RbacRole, AuditLog, Engine, Tenant,
         SsoNormalizedIdentity, AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping],
       extra: { max: 8, statement_timeout: 10000, lock_timeout: 8000 } });

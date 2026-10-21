@@ -37,7 +37,7 @@ export const identityMappingFixture = {
 
 export function identityApiFailureHandlers(message = 'Identity provider unavailable') {
   return [
-    http.get('/api/identity/providers', () => HttpResponse.text(message, { status: 503 })),
+  http.get('/api/identity/providers', () => HttpResponse.text(message, { status: 503 })),
     http.get('/api/identity/mappings', () => HttpResponse.text(message, { status: 503 })),
   ];
 }
@@ -78,6 +78,8 @@ export const handlers = [
       engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
     });
   }),
+    http.get('/api/identity/sso-connection',()=>HttpResponse.json({connection:{mode:'direct'},profiles:[],requiredProxyProfileKey:null,version:'test',ownership:{ownershipMode:'manual',sourceRef:null,driftStatus:null},lastTest:null})),
+  http.get('/api/identity/sso-proxy-catalogue',()=>HttpResponse.json({catalogue:{profiles:[]},version:'test',ownership:{ownershipMode:'manual',sourceRef:null,driftStatus:null}})),
   http.get('/api/identity/providers', () => HttpResponse.json([identityProviderFixture])),
   http.get('/api/identity/providers/:key/sync-runs', () => HttpResponse.json([])),
   http.post('/api/identity/providers/:key/test-connection', () => HttpResponse.json({ status: 'connected', protocol: 'oidc', issuer: 'https://identity.example.test' })),

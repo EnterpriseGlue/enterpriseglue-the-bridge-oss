@@ -1,3 +1,5 @@
+import { config } from '../../config/index.js';
+import { ssoConnectionService } from './SsoConnectionService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
@@ -46,7 +48,7 @@ import { isProductSeededEnvironmentTag } from './EnvironmentTagService.js';
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'environment_tag' | 'git_provider' | 'email_configuration' | 'email_template' | 'permission' | 'authorization_policy' | 'api_client' | 'service_account' | 'external_engine_system' | 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_provisioning_directory' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
+  objectType: 'sso_connection' | 'sso_proxy_catalogue' | 'environment_tag' | 'git_provider' | 'email_configuration' | 'email_template' | 'permission' | 'authorization_policy' | 'api_client' | 'service_account' | 'external_engine_system' | 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_provisioning_directory' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -77,6 +79,7 @@ export interface ConfigBundleDiffChange {
     latestSnapshotAt: number | null;
     warnings: string[];
   };
+  expectedSsoVersion?: string;
 }
 
 function configEngineIdentity(tenantId: string | null, key: string): string {
@@ -1708,6 +1711,29 @@ class ConfigBundleDiffService {
       affectedUserCount: affectedUserIds.size,
       externalIdentityMappingChangeCount: changes.filter((change) => change.objectType === 'identity_mapping' && change.operation !== 'noop' && change.operation !== 'conflict').length,
     };
+    for (const [path, property, objectType, key] of [
+      ['./sso-proxy-catalogue.json','ssoProxyCatalogue','sso_proxy_catalogue','sso.proxy-catalogue'],
+      ['./sso-connection.json','ssoConnection','sso_connection','sso.connection'],
+    ] as const) {
+      const desired = (compilation.files?.[path] as Record<string, any> | undefined)?.[property];
+      if (!desired) continue;
+      const current = objectType==='sso_proxy_catalogue'
+        ? await ssoConnectionService.readCatalogue()
+        : await ssoConnectionService.readConnection(normalizedTenantId);
+      if(objectType==='sso_proxy_catalogue' && config.tenancyMode==='pooled' && normalizedTenantId) {
+        changes.push({objectType,key,operation:'conflict',reason:'Only platform-scoped configuration may approve SSO proxy profiles'});
+        continue;
+      }
+      const conflict = current?.sourceRef && current.sourceRef!==sourceRef;
+      const locked = current?.ownershipMode==='config_locked' && current.sourceRef!==sourceRef;
+      const desiredValue=objectType==='sso_proxy_catalogue'?{profiles:desired.profiles}:desired.connection;
+      const currentValue=objectType==='sso_proxy_catalogue'?(current as any)?.catalogue:(current as any)?.connection;
+      const version=objectType==='sso_proxy_catalogue'?hashCanonicalConfig(currentValue||{profiles:[]}):hashCanonicalConfig(current);
+      changes.push({objectType,key,expectedSsoVersion:version,
+        operation:conflict||locked?'conflict':hashCanonicalConfig(desiredValue)===hashCanonicalConfig(currentValue??null)&&current?.ownershipMode===desired.ownershipMode&&current?.sourceRef===sourceRef&&(objectType!=='sso_connection'||!desired.providerKey||(current as any)?.lastTest?.providerKey===desired.providerKey)?'noop':currentValue?'update':'create',
+        reason:conflict||locked?'SSO configuration belongs to another source':'Apply reviewed SSO connection configuration'});
+    }
+
     return {
       valid: true,
       canonicalHash: compilation.preview.canonicalHash,

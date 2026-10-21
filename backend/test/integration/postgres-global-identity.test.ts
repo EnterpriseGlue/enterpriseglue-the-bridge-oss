@@ -1,3 +1,5 @@
+import { ssoConnectionService } from '@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js';
+import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -120,6 +122,25 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const callback=await browser.get('/api/auth/identity/callback').query({state,code:'verified-code'});
     return {browser,callback};
   }
+  it('reads scoped SSO policy through forced RLS and protects active tenant proxy routes',async()=>{
+    const tenant=await tenantService.create({name:'SSO policy fixture',slug:'sso-policy-fixture'});
+    const profile={key:'rls.proxy',displayName:'RLS proxy',host:'proxy.example.net',port:8090,enabled:true,scopeKeys:[tenant.id],requiredScopeKeys:[],allowedIdentityProviderHosts:['login.microsoftonline.com'],allowPrivateProxy:false};
+    try{
+      const initial=await ssoConnectionService.view(tenant.id);expect(initial.connection).toEqual({mode:'direct'});
+      await ssoConnectionService.saveCatalogue({profiles:[profile]},undefined,'fixture');
+      await runWithTenantDatabaseContext({tenantId:tenant.id,tenantSlug:tenant.slug},()=>runtime.getRepository(TenantLoginPolicy).update({tenantId:tenant.id},{ssoConnectionJson:JSON.stringify({connection:{mode:'proxy',proxyProfileKey:profile.key},ownershipMode:'manual',sourceRef:null,driftStatus:null,lastTest:null})}));
+      // A platform service has no ambient tenant DB context. It must not mistake
+      // RLS-hidden policy for unset/legacy and permit a direct route.
+      expect(getTenantDatabaseContext()).toBeUndefined();
+      await expect(ssoConnectionService.resolve(tenant.id)).rejects.toThrow('not qualified');
+      await expect(ssoConnectionService.saveCatalogue({profiles:[{...profile,host:'replacement.example.net'}]},undefined,'fixture')).rejects.toThrow('replacement');
+      expect((await ssoConnectionService.view(tenant.id)).connection).toEqual({mode:'proxy',proxyProfileKey:profile.key});
+    }finally{
+      await runWithTenantDatabaseContext({tenantId:tenant.id,tenantSlug:tenant.slug},()=>runtime.getRepository(TenantLoginPolicy).update({tenantId:tenant.id},{ssoConnectionJson:JSON.stringify({connection:{mode:'direct'},ownershipMode:'manual',sourceRef:null,driftStatus:null,lastTest:null})}));
+      await ssoConnectionService.saveCatalogue({profiles:[]},undefined,'fixture');
+    }
+  });
+
   it('lists only public global choices, exchanges a real signed token, persists identity and renews a tenant-neutral session', async()=>{
     const listed=await request(server).get('/api/auth/cloud-signup/providers');expect(listed.status).toBe(200);
     expect(listed.body).toEqual([{id:providerId,displayName:'Verified fixture',protocol:'oidc'}]);

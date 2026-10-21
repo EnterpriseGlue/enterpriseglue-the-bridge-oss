@@ -80,6 +80,10 @@ export class MySQLAdapter implements DatabaseAdapter {
     for (const column of metadata.columns) {
       if (column.options.type !== 'text') continue;
       const targetName = this.getTargetName(column.target);
+      if ((targetName==='PlatformSettings'&&['ssoConnectionJson','ssoProxyCatalogueJson'].includes(column.propertyName))||(targetName==='TenantLoginPolicy'&&column.propertyName==='ssoConnectionJson')){
+        column.options.type='longtext';delete column.options.length;continue;
+      }
+
       const isNativeGrantEvidence = (targetName === 'CamundaNativeGrantImportRun'
         || targetName === 'EngineBackstopSyncRun')
         && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName);

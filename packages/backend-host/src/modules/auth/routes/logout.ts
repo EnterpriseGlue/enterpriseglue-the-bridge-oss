@@ -102,6 +102,7 @@ router.post('/api/auth/logout', apiLimiter, requireCloudAccountOrTenantAuth, val
           federatedLogoutUrl = await genericOidcService.createLogoutRequest(
             rawConfiguration,
             signFederatedLogoutState(JSON.stringify({ providerId: provider.id, issuedAt: Date.now(), nonce: randomBytes(24).toString('base64url') })),
+            {tenantId:provider.tenantId},
           );
         } else if (provider.protocol === 'saml') {
           const callbackUrl = typeof rawConfiguration.logoutCallbackUrl === 'string' ? new URL(rawConfiguration.logoutCallbackUrl) : null;

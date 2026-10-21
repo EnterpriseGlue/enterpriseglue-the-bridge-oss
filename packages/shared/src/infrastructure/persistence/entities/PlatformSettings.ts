@@ -5,6 +5,12 @@ export class PlatformSettings {
   @PrimaryColumn({ type: 'text', default: 'default' })
   id!: string;
 
+  @Column({ name: 'sso_proxy_catalogue_json', type: 'text', nullable: true })
+  ssoProxyCatalogueJson!: string | null;
+
+  @Column({ name: 'sso_connection_json', type: 'text', nullable: true })
+  ssoConnectionJson!: string | null;
+
   @Column({ name: 'default_environment_tag_id', type: 'text', nullable: true })
   defaultEnvironmentTagId!: string | null;
 

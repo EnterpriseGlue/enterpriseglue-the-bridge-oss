@@ -1,3 +1,4 @@
+import ssoConnectionsRoute from '../modules/platform-admin/routes/sso-connections.js';
 import { Express, Router } from 'express';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
@@ -164,10 +165,11 @@ function createTenantScopedRouter(options: CreateTenantScopedRouterOptions = {})
   router.use(createNotificationsRouter({ tenantResolver: notificationTenantResolver }));
   router.use(dashboardStatsRoute);
   router.use(dashboardContextRoute);
-  router.use('/api/identity/providers', (_req, res, next) => {
+  router.use('/api/identity', (_req, res, next) => {
     res.locals.tenantIdentityProviderScope = true;
     next();
   });
+  router.use(ssoConnectionsRoute);
   router.use(identityProvidersRoute);
 
   return router;
@@ -179,7 +181,7 @@ function createTenantIdentityProviderRouter(): Router {
   router.use((req, res, next) => {
     res.locals.tenantIdentityProviderScope = true;
     req.url = `/api${req.url}`;
-    identityProvidersRoute(req, res, next);
+    ssoConnectionsRoute(req, res, () => identityProvidersRoute(req, res, next));
   });
   return router;
 }
@@ -229,6 +231,7 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   app.use('/api/admin', platformAdminRoute);
 
   // SSO Provider Management API (platform-level)
+  app.use(ssoConnectionsRoute);
   if (config.tenancyMode !== 'pooled') app.use(identityProvidersRoute);
   app.use('/api/t/:tenantSlug', createTenantIdentityProviderRouter());
   app.use(identityMappingsRoute);

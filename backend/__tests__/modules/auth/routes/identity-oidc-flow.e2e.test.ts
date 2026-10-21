@@ -5,6 +5,7 @@ import request from 'supertest';
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
 import { MockOidcProvider } from '../../../../test/identity-mocks/index.js';
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js',()=>({ssoConnectionService:{resolve:vi.fn(async()=>({version:'a'.repeat(64),profile:null,legacy:true}))}}));
 const identityProviderService = vi.hoisted(() => ({
   getByKey: vi.fn(),
   getById: vi.fn(),

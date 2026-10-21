@@ -5,6 +5,7 @@ import { signOidcState, signSamlRelayState, verifyOidcState, verifySamlRelayStat
 import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/services/invitations.js';
 
 export interface SsoState {
+  ssoConnectionVersion?: string;
   timestamp: number;
   nonce: string;
   providerId?: string;
@@ -103,7 +104,7 @@ export function createSamlRequestId(): string {
 export function buildSsoState(
   req: Request,
   providerId?: string,
-  identityProvider?: { key: string; tenantId?: string | null },
+  identityProvider?: { key: string; tenantId?: string | null; ssoConnectionVersion?: string },
   samlRequestId?: string,
   enrollment?: InvitationEnrollmentContext,
   accountLink?: AccountLinkContext,
@@ -124,6 +125,7 @@ export function buildSsoState(
     || sanitizeTenantSlug(req.tenant?.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
   const payload: SsoState = {
+    ...(identityProvider?.ssoConnectionVersion ? {ssoConnectionVersion:identityProvider.ssoConnectionVersion}:{}),
     timestamp: Date.now(),
     nonce: randomBytes(32).toString('base64url'),
     ...(sanitizeProviderId(providerId) ? { providerId: sanitizeProviderId(providerId) } : {}),
@@ -144,7 +146,7 @@ export function buildSsoState(
  * cookie. The signed RelayState keeps provider/tenant/return-path binding
  * intact without relaxing the session cookie policy.
  */
-export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }, samlRequestId: string, enrollment?: InvitationEnrollmentContext): string {
+export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null; ssoConnectionVersion?: string }, samlRequestId: string, enrollment?: InvitationEnrollmentContext): string {
   const state = buildSsoState(req, providerId, identityProvider, samlRequestId, enrollment);
   return signSamlRelayState(state);
 }
@@ -152,7 +154,7 @@ export function buildSignedSamlState(req: Request, providerId: string, identityP
 export function buildSignedOidcState(
   req: Request,
   providerId: string,
-  identityProvider: { key: string; tenantId?: string | null },
+  identityProvider: { key: string; tenantId?: string | null; ssoConnectionVersion?: string },
   enrollment?: InvitationEnrollmentContext,
   accountLink?: AccountLinkContext,
 ): string {
@@ -184,6 +186,7 @@ export function parseSsoState(rawState: unknown): SsoState | null {
     if (hasAccountLink && (!accountLink || hasEnrollment || !providerId || !identityProviderKey
       || !accountLinkProviderScopeMatches(accountLink.tenantId, identityProviderTenantId) || !tenantSlug)) return null;
     return {
+      ...(typeof parsed.ssoConnectionVersion==='string'&&/^[a-f0-9]{64}$/.test(parsed.ssoConnectionVersion)?{ssoConnectionVersion:parsed.ssoConnectionVersion}:{}),
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,
       ...(providerId ? { providerId } : {}),

@@ -159,10 +159,10 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- define "enterpriseglue-host.schemaEpochManifest" -}}
 {{- $manifestBytes := required "files/schema-epoch-manifest.json is required" (.Files.Get "files/schema-epoch-manifest.json") -}}
 {{- $manifest := mustFromJson $manifestBytes -}}
-{{- if ne $manifest.schemaVersion "enterpriseglue-schema-epoch/v3" -}}
+{{- if ne $manifest.schemaVersion "enterpriseglue-schema-epoch/v4" -}}
 {{- fail "unsupported schema-epoch manifest version" -}}
 {{- end -}}
-{{- if ne $manifest.id "postgres-cloud-email-passkeys-v3" -}}
+{{- if ne $manifest.id "postgres-tenant-sso-connections-v4" -}}
 {{- fail "unsupported schema-epoch manifest identity" -}}
 {{- end -}}
 {{- if ne $manifest.roles.applicationStartup.mode "verify-only" -}}
@@ -183,11 +183,11 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if or (ne $manifest.upgradeContract.minimumDatabaseEpoch.postgresPolicyProfile "dual-context-compatibility/v1") (ne (int $manifest.upgradeContract.minimumDatabaseEpoch.through) 1700000000131) -}}
 {{- fail "Cloud passkey minimum epoch must use the exact 0131 dual-context policy" -}}
 {{- end -}}
-{{- if or (ne (int $manifest.roles.ownerMigration.through) 1700000000133) (ne (int $manifest.executableMigrationInventory.through) 1700000000133) -}}
-{{- fail "Cloud passkey owner migration ceiling must equal the 0133 executable inventory" -}}
+{{- if or (ne (int $manifest.roles.ownerMigration.through) 1700000000134) (ne (int $manifest.executableMigrationInventory.through) 1700000000134) -}}
+{{- fail "Cloud passkey owner migration ceiling must equal the 0134 executable inventory" -}}
 {{- end -}}
-{{- if ne (len $manifest.acceptedDatabaseEpochs) 3 -}}
-{{- fail "compatibility bridge must declare exactly three accepted database epochs" -}}
+{{- if ne (len $manifest.acceptedDatabaseEpochs) 4 -}}
+{{- fail "compatibility bridge must declare exactly four accepted database epochs" -}}
 {{- end -}}
 {{- $preEpoch := index $manifest.acceptedDatabaseEpochs 0 -}}
 {{- $postEpoch := index $manifest.acceptedDatabaseEpochs 1 -}}
@@ -207,13 +207,17 @@ enterpriseglue.io/release-effect-inventory-sha256: {{ .Values.database.releaseEf
 {{- if or (ne $futureEpoch.id "cloud-email-passkeys") (ne $futureEpoch.postgresPolicyProfile "explicit-context/v1") (ne (int $futureEpoch.through) 1700000000133) (ne $futureEpoch.sha256 "fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d") -}}
 {{- fail "compatibility bridge future epoch must use the exact explicit-context policy" -}}
 {{- end -}}
-{{- if or (ne $manifest.executableMigrationInventory.sha256 $futureEpoch.sha256) (ne (int $manifest.executableMigrationInventory.count) (int $futureEpoch.count)) -}}
-{{- fail "Cloud passkey executable inventory must equal the signed 0133 ledger" -}}
+{{- $ssoEpoch := index $manifest.acceptedDatabaseEpochs 3 -}}
+{{- if or (ne $ssoEpoch.id "tenant-sso-connections") (ne (int $ssoEpoch.through) 1700000000134) (ne $ssoEpoch.postgresPolicyProfile "explicit-context/v1") (ne $ssoEpoch.sha256 "3ff5b5798ef9942c4d30998c5496b7c03e5c55fbe3a201228a7681bcce1c18d5") -}}
+{{- fail "SSO connection epoch must equal the signed 0134 inventory" -}}
+{{- end -}}
+{{- if or (ne $manifest.executableMigrationInventory.sha256 $ssoEpoch.sha256) (ne (int $manifest.executableMigrationInventory.count) (int $ssoEpoch.count)) -}}
+{{- fail "Cloud passkey executable inventory must equal the signed 0134 ledger" -}}
 {{- end -}}
 {{- if or (ne $manifest.plannedMigration.name "AddCloudEmailPasskeys1700000000133") (ne (int $manifest.plannedMigration.timestamp) 1700000000133) -}}
 {{- fail "compatibility bridge must bind the exact planned migration identity" -}}
 {{- end -}}
-{{- if ne $manifest.executableImplementationInventory.purpose "owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1" -}}
+{{- if ne $manifest.executableImplementationInventory.purpose "owner-transition-1700000000131-to-1700000000134-sso-connections/v1" -}}
 {{- fail "compatibility bridge implementation purpose is unsupported" -}}
 {{- end -}}
 {{- if ne $manifest.roles.ownerMigration.runtimeGrant "configured-role-release-effect-cohorts-and-cloud-passkeys/v1" -}}

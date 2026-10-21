@@ -128,6 +128,10 @@ export class SqlServerAdapter implements DatabaseAdapter {
       }
 
       if (column.options.type !== 'text') continue;
+      if ((targetName==='PlatformSettings'&&['ssoConnectionJson','ssoProxyCatalogueJson'].includes(column.propertyName))||(targetName==='TenantLoginPolicy'&&column.propertyName==='ssoConnectionJson')){
+        column.options.type='nvarchar';column.options.length='MAX';continue;
+      }
+
 
       if ((targetName === 'CamundaNativeGrantImportRun' || targetName === 'EngineBackstopSyncRun')
         && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {

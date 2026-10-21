@@ -274,7 +274,15 @@ chmod 644 "$identity_secret_dir/keycloak-saml-signing.crt"
 chmod 711 "$identity_secret_dir"
 run_compose exec -T backend node -e "require('node:fs').accessSync('/etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt')"
 
+# The proxy shares the disposable backend/IdP network namespace. Its port is
+# private to the isolated Compose network and CONNECT is restricted to this IdP.
+run_compose cp "$root_dir/test/fixtures/identity/sso-connect-proxy.mjs" backend:/tmp/eg-sso-connect-proxy.mjs
+run_compose exec -T -d -e EG_SSO_REHEARSAL_IDP_PORT="$keycloak_port" backend node /tmp/eg-sso-connect-proxy.mjs
+run_compose exec -T backend node --input-type=module -e 'for(let i=0;;i++){try{const r=await fetch("http://127.0.0.1:28090/stats");if(r.ok)break;}catch{}if(i>=50)throw new Error("SSO proxy fixture did not start");await new Promise(r=>setTimeout(r,100));}'
+
 common_env=(
+  LOCAL_OIDC_SSO_PROXY_HOST=backend
+  LOCAL_OIDC_SCREENSHOT_DIR="$artifact_dir/ui"
   IDENTITY_PROTOCOL_REHEARSAL_DATABASE="$database_profile"
   LOCAL_OIDC_ADMIN_ENV_FILE="$env_file"
   LOCAL_SAML_ADMIN_ENV_FILE="$env_file"
@@ -304,6 +312,8 @@ env "${common_env[@]}" pnpm run test:oidc:local-rehearsal 2>&1 | tee "$artifact_
 echo '[identity-protocol-rehearsal] Running Entra-compatible OIDC provider/mapping/browser authorization rehearsal.'
 env "${common_env[@]}" pnpm run test:entra:local-rehearsal 2>&1 | tee "$artifact_dir/entra-oidc-rehearsal.log"
 
+run_compose exec -T backend node --input-type=module -e 'const r=await fetch("http://127.0.0.1:28090/stats");const s=await r.json();if(s.connects<6)throw new Error("OIDC browser journeys did not use CONNECT");console.log("Verified OIDC browser traffic through CONNECT:",s.connects);'
+
 echo '[identity-protocol-rehearsal] Running signed SAML browser callback rehearsal.'
 env "${common_env[@]}" pnpm run test:saml:local-rehearsal 2>&1 | tee "$artifact_dir/saml-rehearsal.log"
 
@@ -327,6 +337,7 @@ writeFileSync(process.argv[2], [
   `database=${process.env.IDENTITY_PROTOCOL_REHEARSAL_DATABASE}`,
   'protocols=scim-http-relational,oidc-config,oidc,entra-compatible-oidc,saml,ldap',
   'scope=scim-http-relational-harness,disposable-localhost-docker-stack',
+  'oidcTransport=tenant-scoped-http-connect-with-ui-activation',
   'artifacts=compose-status,service-logs,playwright-output,protocol-run-logs',
   'credentials=ephemeral-and-not-retained',
   '',

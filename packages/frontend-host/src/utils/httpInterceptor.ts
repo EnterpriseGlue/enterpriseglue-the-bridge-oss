@@ -31,6 +31,7 @@ const TENANT_SCOPED_API_PREFIXES = [
   '/api/dashboard',
   '/api/identity/providers',
   '/api/identity/provider-secrets',
+  '/api/identity/sso-connection',
 ];
 
 // API prefixes that are platform-level (no tenant prefix needed)
@@ -84,7 +85,7 @@ function isTenantScopedUrl(url: string): boolean {
 }
 
 function isIdentityProviderAdminUrl(url: string): boolean {
-  return url.startsWith('/api/identity/providers') || url.startsWith('/api/identity/provider-secrets');
+  return url.startsWith('/api/identity/providers') || url.startsWith('/api/identity/provider-secrets') || url.startsWith('/api/identity/sso-connection');
 }
 
 /**
