@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.33.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.32.1...v0.33.0) (2026-10-21)
+
+
+### Features
+
+* **identity:** add tenant-scoped SSO proxy connections ([367b1d8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/367b1d860cb4d5f464a13f60a55ac513d3ce9067))
+
 ## [0.32.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.32.0...v0.32.1) (2026-10-21)
 
 ### Changes
