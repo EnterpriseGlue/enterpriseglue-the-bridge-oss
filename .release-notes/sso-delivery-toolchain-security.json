@@ -45,7 +45,8 @@
     "Pinned-scanner exact Linux arm64 installer/manager scans pass the committed HIGH/CRITICAL policy. The same four-image gate also passes the unchanged all-severity backend/frontend policy.",
     "Patched ORAS and Cosign build for Linux arm64 and amd64; compiled binary metadata confirms Go 1.26.10 and the patched compression dependency.",
     "The disposable local OCI rehearsal passes actual bundled tool execution, signatures, deterministic charts, digest repulls, signed offline-bundle verification, tamper rejection and disconnected-registry import.",
-    "Toolchain release policy, package/chart version bindings, dependency security floors and documentation boundary checks pass."
+    "Toolchain release policy, package/chart version bindings, dependency security floors and documentation boundary checks pass.",
+    "Installer, manager, reference-plugin and backend/frontend host plugin suites pass, along with plugin-acceptance type checks, chart verification, actual Compose lifecycle and multi-replica acceptance. Package-level acquisition tests require the patched Go/compression pins."
   ],
   "packages": [
     {
