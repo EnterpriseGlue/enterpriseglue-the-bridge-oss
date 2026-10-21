@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.32.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.32.0...v0.32.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **security:** patch plugin toolchain compression dependency ([2f292ed](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2f292eda618454f8e4df79af63b5fd197f2286fe))
+* **security:** patch runtime certificate and curl dependencies ([c2141af](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c2141af1d8c8022cf76d862b6eba45663696eeab))
+* **security:** patch runtime certificates and plugin toolchain dependencies ([0ba380b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0ba380b4a650cee4aeca1df6afbe0db5bf5b2b7c))
+
 ## [0.32.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.31.1...v0.32.0) (2026-10-16)
 
 ### Breaking changes
