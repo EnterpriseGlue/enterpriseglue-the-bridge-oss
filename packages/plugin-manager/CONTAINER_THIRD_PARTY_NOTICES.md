@@ -17,3 +17,6 @@ The embedded tools also pin `golang.org/x/net` to 0.60.0, with its required
 CVE-2026-78669 (GO-2026-6611) in the separately compiled HTTP/2 implementation;
 the patched standard-library compiler alone does not fix older x/net modules.
 These Go Authors modules use the retained BSD-3-Clause license.
+
+Cosign also pins `github.com/klauspost/compress` to 1.18.7 to address
+CVE-2026-63209 (GHSA-259r-337f-4rfw). The module uses the BSD-3-Clause license.

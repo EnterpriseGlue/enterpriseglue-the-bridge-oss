@@ -1,0 +1,24 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-cosign-compression-security",
+  "type": "security",
+  "scope": "plugin-toolchain",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Pins the compression library embedded in the plugin installer and manager's Cosign binary to the patched release.",
+  "userImpact": ["Plugin acquisition and signature verification retain their existing interfaces."],
+  "upgrade": {"required": true, "instructions": ["Use the rebuilt, signed plugin installer and manager images after their release qualifies; existing published image digests remain unchanged."]},
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["No database or migration changes."]},
+  "security": ["Pins github.com/klauspost/compress to v1.18.7 in both Cosign builds to address CVE-2026-63209 (GHSA-259r-337f-4rfw).", "Build-time binary inspection requires the patched module version. Vulnerability severity and ignore policies remain unchanged."],
+  "documentation": ["Both plugin container third-party notices identify the patched Cosign dependency."],
+  "knownLimitations": ["An existing signed distribution lock cannot be silently retargeted to rebuilt toolchain images; a new signed release composition is required."],
+  "rollback": ["Restoring earlier toolchain images reintroduces the vulnerable dependency; prefer a forward fix."],
+  "validation": ["Installer and manager suites: 88 tests passed; both package type checks passed.", "Helm security, rendering and compatibility checks passed; package/chart version bindings, release-note validation and documentation boundary checks passed.", "Both local rebuilt images passed the unchanged HIGH/CRITICAL Trivy gate on linux/amd64 and linux/arm64, using the pinned scanner and 2026-10-21 vulnerability database. Patched Cosign verified the existing signed release candidate from non-root read-only containers; the manager package import smoke passed.", "Protected CI and the new exact-source release candidate remain required before publication; no patched artifact is published by these local checks."],
+  "packages": [
+    {"name": "@enterpriseglue/plugin-installer", "previousVersion": "0.2.11", "newVersion": "0.2.12", "impact": "patch"},
+    {"name": "@enterpriseglue/plugin-manager", "previousVersion": "0.1.11", "newVersion": "0.1.12", "impact": "patch"}
+  ]
+}

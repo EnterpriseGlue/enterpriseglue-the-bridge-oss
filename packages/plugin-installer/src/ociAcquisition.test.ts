@@ -479,6 +479,8 @@ describe('connected OCI plugin acquisition', () => {
     expect(dockerfile).toContain('golang.org/x/mod@v0.41.0');
     expect(dockerfile).toContain('golang.org/x/text@v0.42.0');
     expect(dockerfile).toContain('google.golang.org/grpc@v1.83.2');
+    expect(dockerfile).toContain('github.com/klauspost/compress@v1.18.7');
+    expect(dockerfile).toContain('github.com/klauspost/compress[[:space:]]+v1\\.18\\.7([[:space:]]|$)');
     expect(dockerfile).toContain(
       'enterpriseglue-plugin-installer/Apache-2.0.txt',
     );
