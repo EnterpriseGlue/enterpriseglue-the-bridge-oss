@@ -89,8 +89,13 @@ assert.doesNotMatch(
   /^  (?:push|pull_request|pull_request_target|release|schedule):/m,
 );
 for (const dockerfile of [installerDockerfile, managerDockerfile]) {
-  assert.match(dockerfile, /golang:1\.26\.10-alpine3\.23@sha256:[a-f0-9]{64}/);
-  assert.match(dockerfile, /github\.com\/klauspost\/compress@v1\.18\.7/);
+  assert.match(dockerfile, /^FROM --platform=\$BUILDPLATFORM golang:1\.26\.10-alpine3\.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS oras$/m);
+  for (const binary of ['oras', 'cosign']) {
+    assert.ok(
+      dockerfile.includes(`go version -m /out/${binary} | grep -E '^/out/${binary}: go1\\.26\\.10$'`),
+      `The emitted ${binary} binary must verify the patched Go compiler version`,
+    );
+  }
   assert.match(dockerfile, /oras\.land\/oras\/cmd\/oras@v1\.3\.4/);
   assert.match(dockerfile, /go build -buildvcs=false -trimpath -o \/out\/oras/);
   assert.doesNotMatch(dockerfile, /go install oras\.land\/oras\/cmd\/oras/);

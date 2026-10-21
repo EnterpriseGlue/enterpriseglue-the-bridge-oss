@@ -74,23 +74,24 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && cd /cosign-build \
   && go mod init enterpriseglue.local/cosign-build \
   && retry go get github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3 \
+      github.com/klauspost/compress@v1.18.7 \
       golang.org/x/crypto@v0.57.0 \
       golang.org/x/net@v0.60.0 \
-      github.com/klauspost/compress@v1.18.7 \
       google.golang.org/grpc@v1.83.2 \
       golang.org/x/mod@v0.41.0 \
       golang.org/x/text@v0.42.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
       go build -buildvcs=false -trimpath \
-        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.6 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-10-21T00:00:00Z' \
+        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.6 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
         -o /out/cosign github.com/sigstore/cosign/v3/cmd/cosign \
   && go version -m /out/cosign | grep -E 'golang.org/x/crypto[[:space:]]+v0\.57\.0' \
   && go version -m /out/cosign | grep -E 'golang.org/x/net[[:space:]]+v0\.60\.0' \
   && go version -m /out/cosign | grep -E 'golang.org/x/mod[[:space:]]+v0\.41\.0' \
   && go version -m /out/cosign | grep -E 'golang.org/x/text[[:space:]]+v0\.42\.0' \
-  && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.83\.2' \
-  && go version -m /out/cosign | grep -E 'github.com/klauspost/compress[[:space:]]+v1\.18\.7' \
-  && cp /go/pkg/mod/github.com/klauspost/compress@v1.18.7/LICENSE /out/compress-LICENSE
+  && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.83\.2'
+RUN go version -m /out/cosign | grep -E 'github.com/klauspost/compress[[:space:]]+v1\.18\.7([[:space:]]|$)'
+RUN go version -m /out/oras | grep -E '^/out/oras: go1\.26\.10$' \
+  && go version -m /out/cosign | grep -E '^/out/cosign: go1\.26\.10$'
 
 FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
@@ -106,7 +107,6 @@ COPY --from=oras /out/oras /usr/local/bin/oras
 COPY --from=oras /out/cosign /usr/local/bin/cosign
 COPY LICENSE /usr/share/licenses/enterpriseglue-plugin-installer/Apache-2.0.txt
 COPY --from=oras /usr/local/go/LICENSE /usr/share/licenses/enterpriseglue-plugin-installer/Go-BSD-3-Clause.txt
-COPY --from=oras /out/compress-LICENSE /usr/share/licenses/enterpriseglue-plugin-installer/klauspost-compress-BSD-3-Clause.txt
 COPY packages/plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md /usr/share/licenses/enterpriseglue-plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md
 
 USER 65532:65532

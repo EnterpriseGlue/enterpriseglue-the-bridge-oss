@@ -115,9 +115,18 @@ test('runner never invokes TypeORM synchronize and executes only the signed sche
   assert.match(runner, /Managed shard ordinary business relation is not empty/)
   assert.match(runner, /Managed shard direct column privileges are forbidden/)
   assert.match(dockerfile, /^FROM ghcr\.io\/enterpriseglue\/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9/m)
-  assert.match(dockerfile, /^RUN apk add --no-cache --upgrade \\\n\s+'zlib>=1\.3\.2\.1_rc20260921-r0' \\\n(?:\s+[a-z0-9.'>=-]+ \\\n){6}\s+'libcrypt1-2\.44>=2\.44-r8'$/m)
-  assert.match(dockerfile, /^\s+libcurl-openssl4 \\$/m)
-  assert.match(dockerfile, /^\s+wget \\$/m)
+  const upgradedPackages = dockerfile.match(/^RUN apk add --no-cache --upgrade \\\n((?:[ \t]+[^\n]*\\\n)*[ \t]+[^\n]*)(?:\n|$)/m)?.[1]
+  assert.deepEqual(upgradedPackages?.split(/\\\n/).map((line) => line.trim()), [
+    "'ca-certificates-bundle>=20260909-r3'",
+    "'zlib>=1.3.2.1_rc20260921-r0'",
+    "'glibc-2.44>=2.44-r8'",
+    "'glibc-2.44-dev>=2.44-r8'",
+    "'glibc-2.44-locale-posix>=2.44-r8'",
+    "'ld-linux-2.44>=2.44-r8'",
+    "'libcurl-openssl4>=8.23.0-r0'",
+    'wget',
+    "'libcrypt1-2.44>=2.44-r8'",
+  ])
   assert.match(dockerfile, /RUN apk del --no-network node-gyp && ! apk info -e node-gyp/)
   assert.doesNotMatch(dockerfile, /EG_MANAGED_SHARD_BOOTSTRAP_ENABLED/)
   assert.match(postgresHarness, /postgres:16\.15-alpine3\.24@sha256:cf78e766/)
