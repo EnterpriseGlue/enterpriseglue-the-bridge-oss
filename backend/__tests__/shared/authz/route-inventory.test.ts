@@ -616,6 +616,10 @@ describe('authorization route inventory validation', () => {
         risk: 'critical',
         surfaceId: 'admin.sso.providers.actions',
         routes: [
+          ['PUT', '/api/identity/sso-connection', 'platform.self'],
+          ['POST', '/api/identity/sso-connection/test', 'platform.self'],
+          ['GET', '/api/identity/sso-proxy-catalogue', 'platform.self'],
+          ['PUT', '/api/identity/sso-proxy-catalogue', 'platform.self'],
           ['POST', '/api/identity/providers', 'platform.self'],
           ['POST', '/api/identity/provider-secrets', 'platform.self'],
           ['POST', '/api/identity/provider-secrets/retire', 'platform.self'],
