@@ -19,12 +19,13 @@ FROM ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a
 
 USER root
 RUN apk add --no-cache --upgrade \
+      'ca-certificates-bundle>=20260909-r3' \
       'zlib>=1.3.2.1_rc20260921-r0' \
       'glibc-2.44>=2.44-r8' \
       'glibc-2.44-dev>=2.44-r8' \
       'glibc-2.44-locale-posix>=2.44-r8' \
       'ld-linux-2.44>=2.44-r8' \
-      libcurl-openssl4 \
+      'libcurl-openssl4>=8.23.0-r0' \
       wget \
       'libcrypt1-2.44>=2.44-r8'
 

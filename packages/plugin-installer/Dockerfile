@@ -35,7 +35,7 @@ RUN pnpm --filter @enterpriseglue/plugin-sdk build \
       /packs/enterpriseglue-plugin-installer-*.tgz \
   && test -z "$(find /output -type f -name '*.node' -print -quit)"
 
-FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine3.23@sha256:96123126ac58e910f4dd3619a8901e2fb6d1ad84b59b1232cac7c9ea65a8f888 AS oras
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine3.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS oras
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -90,6 +90,8 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && go version -m /out/cosign | grep -E 'golang.org/x/text[[:space:]]+v0\.42\.0' \
   && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.83\.2'
 RUN go version -m /out/cosign | grep -E 'github.com/klauspost/compress[[:space:]]+v1\.18\.7([[:space:]]|$)'
+RUN go version -m /out/oras | grep -E '^/out/oras: go1\.26\.10$' \
+  && go version -m /out/cosign | grep -E '^/out/cosign: go1\.26\.10$'
 
 FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 

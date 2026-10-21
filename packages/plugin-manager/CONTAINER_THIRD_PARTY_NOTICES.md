@@ -7,7 +7,7 @@ pinned in the `Dockerfile`. Cosign also pins `google.golang.org/grpc` to 1.83.2 
 CVE-2026-84445. Both tools are Apache-2.0 licensed. Release automation generates the
 authoritative third-party notice inventory and SBOM for each published image.
 
-The pinned Go 1.26.9 standard library fixes CVE-2026-78667 and
+The pinned Go 1.26.10 standard library also fixes CVE-2026-111943 and retains the fixes for CVE-2026-78667 and
 CVE-2026-97031. Its BSD-3-Clause license text is installed at
 `/usr/share/licenses/enterpriseglue-plugin-manager/Go-BSD-3-Clause.txt`.
 

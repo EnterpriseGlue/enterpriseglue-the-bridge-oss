@@ -3,22 +3,68 @@
   "schemaVersion": 1,
   "id": "plugin-cosign-compression-security",
   "type": "security",
-  "scope": "plugin-toolchain",
+  "scope": "runtime-security",
   "breaking": false,
-  "audiences": ["operators", "developers", "security"],
-  "summary": "Pins the compression library embedded in the plugin installer and manager's Cosign binary to the patched release.",
-  "userImpact": ["Plugin acquisition and signature verification retain their existing interfaces."],
-  "upgrade": {"required": true, "instructions": ["Use the rebuilt, signed plugin installer and manager images after their release qualifies; existing published image digests remain unchanged."]},
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Patches the plugin verification tools and runtime certificate and curl security floors.",
+  "userImpact": [
+    "Plugin acquisition and signature verification retain their existing interfaces."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Use the new signed application, bootstrap and plugin-toolchain image composition after qualification; existing published image digests remain unchanged."
+    ]
+  },
   "configuration": [],
-  "api": {"compatibility": "none", "changes": []},
-  "database": {"migrations": [], "rollbackSupported": true, "notes": ["No database or migration changes."]},
-  "security": ["Pins github.com/klauspost/compress to v1.18.7 in both Cosign builds to address CVE-2026-63209 (GHSA-259r-337f-4rfw).", "Build-time binary inspection requires the patched module version. Vulnerability severity and ignore policies remain unchanged."],
-  "documentation": ["Both plugin container third-party notices identify the patched Cosign dependency."],
-  "knownLimitations": ["An existing signed distribution lock cannot be silently retargeted to rebuilt toolchain images; a new signed release composition is required."],
-  "rollback": ["Restoring earlier toolchain images reintroduces the vulnerable dependency; prefer a forward fix."],
-  "validation": ["Installer and manager suites: 88 tests passed; both package type checks passed.", "Helm security, rendering and compatibility checks passed; package/chart version bindings, release-note validation and documentation boundary checks passed.", "Both local rebuilt images passed the unchanged HIGH/CRITICAL Trivy gate on linux/amd64 and linux/arm64, using the pinned scanner and 2026-10-21 vulnerability database. Patched Cosign verified the existing signed release candidate from non-root read-only containers; the manager package import smoke passed.", "Protected CI and the new exact-source release candidate remain required before publication; no patched artifact is published by these local checks."],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database or migration changes."
+    ]
+  },
+  "security": [
+    "Pins github.com/klauspost/compress to v1.18.7 in both Cosign builds to address CVE-2026-63209 (GHSA-259r-337f-4rfw).",
+    "Build-time binary inspection requires the patched module version. Vulnerability severity and ignore policies remain unchanged.",
+    "Requires Go 1.26.10 for both ORAS and Cosign to address CVE-2026-111943, with build-time inspection of both emitted binaries.",
+    "Requires ca-certificates-bundle 20260909-r3 and libcurl-openssl4 8.23.0-r0 in the application and bootstrap runtimes, addressing CVE-2026-111943 and CVE-2026-92392. Explicit floors override vulnerable package pins inherited from the base images."
+  ],
+  "documentation": [
+    "Both plugin container third-party notices identify the patched Cosign dependency."
+  ],
+  "knownLimitations": [
+    "An existing signed distribution lock cannot be silently retargeted to rebuilt toolchain images; a new signed release composition is required."
+  ],
+  "rollback": [
+    "Restoring earlier runtime or toolchain images reintroduces the vulnerable dependencies; prefer a forward fix."
+  ],
+  "validation": [
+    "Installer and manager suites: 88 tests passed. The 13 dependency-security contracts, package/chart version discipline, release metadata and documentation boundary checks passed.",
+    "Both patched backend runtime-base platforms passed the unchanged all-severity application Trivy policy using the pinned scanner and vulnerability database updated 2026-10-21T07:13:45Z. These runtime-base checks are separate from complete candidate image qualification.",
+    "Both acquisition binaries report Go 1.26.10; Cosign retains the patched compression module and verifies the existing signed release candidate from a non-root read-only container.",
+    "Publication requires protected CI and an exact-source signed candidate with current security acceptance for every runtime image on both supported architectures."
+  ],
   "packages": [
-    {"name": "@enterpriseglue/plugin-installer", "previousVersion": "0.2.11", "newVersion": "0.2.12", "impact": "patch"},
-    {"name": "@enterpriseglue/plugin-manager", "previousVersion": "0.1.11", "newVersion": "0.1.12", "impact": "patch"}
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.11",
+      "newVersion": "0.2.12",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.11",
+      "newVersion": "0.1.12",
+      "impact": "patch"
+    }
   ]
 }
