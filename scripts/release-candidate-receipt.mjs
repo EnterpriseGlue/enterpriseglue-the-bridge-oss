@@ -116,8 +116,8 @@ async function collectArtifacts(artifactDirectory) {
 async function readSchemaEpochManifest(artifactDirectory) {
   const manifest = JSON.parse(await readFile(path.join(artifactDirectory, SCHEMA_EPOCH_MANIFEST_PATH), 'utf8'))
   if (
-    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v3'
-    || manifest?.id !== 'postgres-cloud-email-passkeys-v3'
+    manifest?.schemaVersion !== 'enterpriseglue-schema-epoch/v4'
+    || manifest?.id !== 'postgres-tenant-sso-connections-v4'
     || manifest?.roles?.applicationStartup?.mode !== 'verify-only'
     || manifest?.roles?.preflight?.mode !== 'verify-runtime-grant'
     || manifest?.roles?.ownerMigration?.mode !== 'apply-through-executable'
@@ -133,9 +133,9 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.roles?.ownerMigration?.intermediate?.timestamp !== 1700000000132
     || manifest?.target?.databaseType !== 'postgres'
     || manifest?.target?.tenancyMode !== 'pooled'
-    || manifest?.executableMigrationInventory?.through !== 1700000000133
-    || manifest?.executableMigrationInventory?.count !== 135
-    || manifest?.executableMigrationInventory?.sha256 !== 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'
+    || manifest?.executableMigrationInventory?.through !== 1700000000134
+    || manifest?.executableMigrationInventory?.count !== 136
+    || manifest?.executableMigrationInventory?.sha256 !== '3ff5b5798ef9942c4d30998c5496b7c03e5c55fbe3a201228a7681bcce1c18d5'
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.through !== 1700000000131
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.count !== manifest?.roles?.ownerMigration?.from?.count
     || manifest?.upgradeContract?.minimumDatabaseEpoch?.sha256 !== manifest?.roles?.ownerMigration?.from?.sha256
@@ -143,15 +143,15 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest?.upgradeContract?.freshDatabase !== 'requires-separate-signed-bootstrap'
     || manifest?.upgradeContract?.emptyMigrationLedger !== 'requires-separate-signed-recovery'
     || manifest?.executableImplementationInventory?.algorithm !== 'sha256-source-v1'
-    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1'
+    || manifest?.executableImplementationInventory?.purpose !== 'owner-transition-1700000000131-to-1700000000134-sso-connections/v1'
     || manifest?.roles?.ownerMigration?.runtimeGrant !== 'configured-role-release-effect-cohorts-and-cloud-passkeys/v1'
-    || manifest?.executableImplementationInventory?.count !== 22
+    || manifest?.executableImplementationInventory?.count !== 25
     || !/^[0-9a-f]{64}$/.test(manifest?.executableImplementationInventory?.sha256 || '')
     || manifest?.releaseEffectInventory?.version !== 'release-effect-inventory.enterpriseglue.io/v1'
     || !/^[0-9a-f]{64}$/.test(manifest?.releaseEffectInventory?.sha256 || '')
     || manifest?.roles?.ownerMigration?.through !== manifest.executableMigrationInventory.through
     || !Array.isArray(manifest?.acceptedDatabaseEpochs)
-    || manifest.acceptedDatabaseEpochs.length !== 3
+    || manifest.acceptedDatabaseEpochs.length !== 4
     || manifest.acceptedDatabaseEpochs[0]?.through !== 1700000000131
     || manifest.acceptedDatabaseEpochs[0]?.id !== 'pre-enforcement'
     || manifest.acceptedDatabaseEpochs[0]?.postgresPolicyProfile !== DUAL_POLICY_PROFILE
@@ -165,10 +165,14 @@ async function readSchemaEpochManifest(artifactDirectory) {
     || manifest.acceptedDatabaseEpochs[2]?.id !== 'cloud-email-passkeys'
     || manifest.acceptedDatabaseEpochs[2]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
     || manifest.acceptedDatabaseEpochs[2]?.sha256 !== 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d'
-    || manifest.acceptedDatabaseEpochs[2]?.sha256 !== manifest.executableMigrationInventory.sha256
+    || manifest.acceptedDatabaseEpochs[3]?.sha256 !== manifest.executableMigrationInventory.sha256
+    || manifest.acceptedDatabaseEpochs[3]?.through !== 1700000000134
+    || manifest.acceptedDatabaseEpochs[3]?.count !== 136
+    || manifest.acceptedDatabaseEpochs[3]?.id !== 'tenant-sso-connections'
+    || manifest.acceptedDatabaseEpochs[3]?.postgresPolicyProfile !== EXPLICIT_POLICY_PROFILE
     || manifest?.plannedMigration?.name !== 'AddCloudEmailPasskeys1700000000133'
     || manifest?.plannedMigration?.timestamp !== 1700000000133
-  ) fail('Candidate schema-epoch manifest is not the bounded Cloud passkey owner transition')
+  ) fail('Candidate schema-epoch manifest is not the bounded SSO connection owner transition')
   return manifest
 }
 

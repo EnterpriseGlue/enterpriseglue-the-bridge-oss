@@ -1,3 +1,6 @@
+import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
+import { ssoConnectionService } from '@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
@@ -304,6 +307,7 @@ function setupDataSource() {
     if (entity === AuditLog) return auditRepo;
     if (entity === ConfigBundleApplyRun) return configRunRepo;
     if (entity === PlatformSettings) return platformSettingsRepo;
+    if(entity===TenantLoginPolicy)return {find:async()=>[],findOneBy:async()=>null};
     if (entity === EnvironmentTag) return environmentTagRepo;
     if (entity === PlatformSettingsSectionOwnership) return ownershipRepo;
     if (entity === AdminConfigObjectOwnership) return { find: vi.fn().mockResolvedValue([]) };
@@ -331,6 +335,25 @@ describe('configBundleApplyService', () => {
     process.env.SCIM_PROVISIONING_TOKEN = `egscim_configcred.${'s'.repeat(48)}`;
   });
 
+  it('applies and exports SSO files through the real bundle lifecycle and retains explicit routing when omitted',async()=>{
+    const previous=config.tenancyMode;(config as any).tenancyMode='single';
+    try {
+      const fixture=setupDataSource();
+      const proxyFiles={'./sso-proxy-catalogue.json':{ssoProxyCatalogue:{profiles:[{key:'corporate',displayName:'Corporate proxy',host:'proxy.example.net',port:8090,scopeKeys:['platform'],allowedIdentityProviderHosts:['login.microsoftonline.com']}] }},'./sso-connection.json':{ssoConnection:{connection:{mode:'direct'}}}};
+      const manifest={...bundle,imports:Object.keys(proxyFiles)};
+      const preview=configBundlePreviewService.preview({bundle:manifest,files:proxyFiles});expect(preview.valid).toBe(true);
+      await configBundleApplyService.apply({bundle:manifest,files:proxyFiles,expectedPreviewHash:preview.canonicalHash!,tenantId:'tenant-a',actorId:'admin-1'});
+      expect(JSON.parse(fixture.platformSettingsRow.ssoConnectionJson)).toMatchObject({connection:{mode:'direct'},sourceRef:'config_bundle:acme.authz',ownershipMode:'config_locked'});
+      const exported=await configBundleExportService.exportBundle({bundleKey:'acme.authz',tenantId:'tenant-a'} as any);
+      expect(exported.files['./sso-connection.json']).toMatchObject({ssoConnection:{connection:{mode:'direct'}}});
+      expect(exported.files['./sso-proxy-catalogue.json']).toMatchObject({ssoProxyCatalogue:{profiles:[{key:'corporate'}]}});
+      expect(JSON.stringify(exported.files)).not.toContain('qualifications');
+      await expect(ssoConnectionService.saveConnection(null,{mode:'direct'},undefined,'portal')).rejects.toThrow('locked');
+      const omitted={...manifest,imports:['./groups.json']};const omittedFiles={'./groups.json':{groups:[]}};const omittedPreview=configBundlePreviewService.preview({bundle:omitted,files:omittedFiles});
+      await configBundleApplyService.apply({bundle:omitted,files:omittedFiles,expectedPreviewHash:omittedPreview.canonicalHash!,tenantId:'tenant-a',actorId:'admin-1'});
+      expect(JSON.parse(fixture.platformSettingsRow.ssoConnectionJson).connection).toEqual({mode:'direct'});
+    }finally{(config as any).tenancyMode=previous;}
+  });
   it('applies a hash-bound role and group bundle through one transaction with audit records', async () => {
     const {
       roleInsert,

@@ -13,6 +13,8 @@ import { getTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant
 import { config } from '@enterpriseglue/shared/config/index.js';
 
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), getDirectLoginProviderByKey: vi.fn(), getDirectLoginProviderById: vi.fn(), listEnabledDirectLoginProviders: vi.fn(), listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn() }));
+const ssoConnectionService = vi.hoisted(()=>({resolve:vi.fn(async()=>({version:'a'.repeat(64),profile:null,legacy:true}))}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js',()=>({ssoConnectionService}));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn(), withCallbackUser: vi.fn(), authenticationAssurance: vi.fn(), verifyBackChannelLogoutToken: vi.fn() }));
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn(), authenticationAssurance: vi.fn(), validatePostLogoutRequest: vi.fn(), createLogoutResponse: vi.fn(), validatePostLogoutResponse: vi.fn(), validateRedirectLogoutResponse: vi.fn() }));
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
@@ -70,6 +72,7 @@ describe('provider-neutral OIDC routes', () => {
   let app: express.Application;
   beforeEach(() => {
     vi.clearAllMocks();
+    ssoConnectionService.resolve.mockResolvedValue({version:'a'.repeat(64),profile:null,legacy:true});
     identityProviderService.getByKey.mockResolvedValue(provider);
     identityProviderService.getById.mockResolvedValue(provider);
     identityProviderService.getDirectLoginProviderByKey.mockResolvedValue(provider);
@@ -163,12 +166,22 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe('https://issuer.example.test/authorize');
     expect(genericOidcService.createAuthorizationRequest).toHaveBeenCalledWith(
-      expect.any(Object), expect.any(String), expect.any(String),
+      expect.any(Object), expect.any(String), expect.any(String), {tenantId:null,expectedVersion:'a'.repeat(64)},
     );
     const setCookie = response.headers['set-cookie'];
     const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
     expect(cookies.join(';')).toContain('identity_oidc_state=');
     expect(cookies.join(';')).toContain('identity_oidc_verifier=verifier');
+  });
+
+  it('rejects a signed callback after its SSO connection changes before exchanging the code',async()=>{
+    const browser=request.agent(app);
+    await browser.get('/api/auth/identity/identity.oidc.main/start').redirects(0);
+    const state=genericOidcService.createAuthorizationRequest.mock.calls[0][1];
+    expect(parseSignedOidcState(state)?.ssoConnectionVersion).toBe('a'.repeat(64));
+    ssoConnectionService.resolve.mockResolvedValue({version:'b'.repeat(64),profile:null,legacy:false});
+    const callback=await browser.get('/api/auth/identity/callback').query({state,code:'old-code'}).redirects(0);
+    expect(callback.status).toBe(401);expect(callback.body.error).toContain('SSO connection changed');expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 
   it.each(['/cloud/onboarding', '/documentation/access'])('admits a global account provider and returns to %s without tenant membership', async (returnTo) => {
@@ -827,6 +840,7 @@ describe('provider-neutral OIDC routes', () => {
       expect.any(Object),
       { code: 'code-1', codeVerifier: 'verifier', nonce: expect.any(String) },
       { tenantId: null },
+      { tenantId:null,expectedVersion:undefined },
     );
     expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc' }), expect.objectContaining({ sub: 'subject-1', email: 'person@example.test' }));
     expect(identityProviderProvisioningService.reconcileOidcLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
@@ -854,6 +868,7 @@ describe('provider-neutral OIDC routes', () => {
       expect.any(Object),
       { code: 'apple-code', codeVerifier: 'verifier', nonce: expect.any(String) },
       { tenantId },
+      { tenantId,expectedVersion:undefined },
     );
   });
 
@@ -1216,7 +1231,7 @@ describe('provider-neutral OIDC routes', () => {
       .send({ logout_token: 'signed-logout-token' });
 
     expect(response.status).toBe(200);
-    expect(genericOidcService.verifyBackChannelLogoutToken).toHaveBeenCalledWith(expect.any(Object), 'signed-logout-token');
+    expect(genericOidcService.verifyBackChannelLogoutToken).toHaveBeenCalledWith(expect.any(Object), 'signed-logout-token', {tenantId:null});
     expect(identityProviderRepository.update).toHaveBeenCalledWith(expect.objectContaining({ id: provider.id, updatedAt: provider.updatedAt, configurationJson: provider.configurationJson, protocol: 'oidc', isEnabled: true, authenticationMode: 'direct' }), { isEnabled: true });
     expect(identityProviderRepository.update.mock.invocationCallOrder[0]).toBeLessThan(refreshTokenRepository.update.mock.invocationCallOrder[0]);
     expect(refreshTokenRepository.update).toHaveBeenCalledWith(expect.objectContaining({

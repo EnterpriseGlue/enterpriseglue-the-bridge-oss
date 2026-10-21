@@ -120,6 +120,22 @@ describe('httpInterceptor', () => {
       );
     });
 
+    it.each(['','/test'])('routes tenant SSO connection requests through the native tenant API: %s',async suffix=>{
+      vi.mocked(getTenancyCapabilities).mockReturnValue({mode:'pooled'} as ReturnType<typeof getTenancyCapabilities>);
+      window.location.pathname='/t/alpha/admin/settings/identity-providers';
+      const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('{}',{status:200}));
+      await interceptedFetch(`/api/identity/sso-connection${suffix}`);
+      expect(fetch).toHaveBeenCalledWith(`/api/t/alpha/identity/sso-connection${suffix}`,expect.objectContaining({credentials:'include'}));
+    });
+    it('keeps proxy approval platform-scoped and preserves verified-host tenant routing',async()=>{
+      vi.mocked(getTenancyCapabilities).mockReturnValue({mode:'pooled'} as ReturnType<typeof getTenancyCapabilities>);
+      const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('{}',{status:200}));
+      window.location.pathname='/t/alpha/admin/settings/identity-providers';
+      await interceptedFetch('/api/identity/sso-proxy-catalogue');expect(fetch.mock.calls[0][0]).toBe('/api/identity/sso-proxy-catalogue');
+      window.location.pathname='/admin/settings/identity-providers';
+      await interceptedFetch('/api/identity/sso-connection');expect(fetch.mock.calls[1][0]).toBe('/api/identity/sso-connection');
+    });
+
     it('passes through successful requests', async () => {
       const response = new Response(JSON.stringify({ data: 'test' }), { status: 200 });
       const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);

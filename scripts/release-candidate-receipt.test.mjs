@@ -88,7 +88,7 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
   assert.equal(created.schemaEpoch.freshDatabase, 'requires-separate-signed-bootstrap')
   assert.equal(created.schemaEpoch.emptyMigrationLedger, 'requires-separate-signed-recovery')
   assert.match(created.schemaEpoch.executableImplementationSha256, /^[0-9a-f]{64}$/)
-  assert.equal(created.schemaEpoch.executableImplementationPurpose, 'owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1')
+  assert.equal(created.schemaEpoch.executableImplementationPurpose, 'owner-transition-1700000000131-to-1700000000134-sso-connections/v1')
   assert.equal(created.schemaEpoch.releaseEffectInventoryVersion, 'release-effect-inventory.enterpriseglue.io/v1')
   assert.equal(created.schemaEpoch.releaseEffectInventorySha256, 'c35183c2dee4ec8477948fdcd00d8b0b5e10de051d6e5ce9001950e2dac36087')
   assert.deepEqual(created.schemaEpoch.acceptedDatabaseEpochs.map(({ id, through, postgresPolicyProfile }) => ({
@@ -97,6 +97,7 @@ test('creates and verifies an exact immutable candidate receipt', async () => {
     { id: 'pre-enforcement', through: 1700000000131, postgresPolicyProfile: 'dual-context-compatibility/v1' },
     { id: 'post-enforcement', through: 1700000000132, postgresPolicyProfile: 'explicit-context/v1' },
     { id: 'cloud-email-passkeys', through: 1700000000133, postgresPolicyProfile: 'explicit-context/v1' },
+    { id: 'tenant-sso-connections', through: 1700000000134, postgresPolicyProfile: 'explicit-context/v1' },
   ])
   assert.deepEqual(created.schemaEpoch.plannedMigration, {
     name: 'AddCloudEmailPasskeys1700000000133', timestamp: 1700000000133,

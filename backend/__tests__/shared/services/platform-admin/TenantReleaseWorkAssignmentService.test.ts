@@ -1,3 +1,5 @@
+import { ssoConnectionService } from '@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js';
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js',()=>({ssoConnectionService:{resolve:vi.fn()}}));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataSource, type EntityManager } from 'typeorm';
 
@@ -14,8 +16,16 @@ const originalRelease = config.tenantPlacementReleaseId;
 
 describe('TenantReleaseWorkAssignmentService', () => {
   beforeEach(() => { config.tenantPlacementReleaseId = 'release-preview'; });
-  afterEach(() => { config.tenantPlacementReleaseId = originalRelease; });
+  afterEach(() => { config.tenantPlacementReleaseId = originalRelease;vi.unstubAllEnvs(); });
 
+  it('blocks a Cloud release transition before mutation when SSO is not qualified on its runtime',async()=>{
+    const original=config.tenancyCloudRequired;config.tenancyCloudRequired=true;
+    vi.mocked(ssoConnectionService.resolve).mockRejectedValueOnce(new Error('SSO proxy connectivity is not qualified on this runtime'));
+    const assignment={findOne:vi.fn(),insert:vi.fn(),update:vi.fn()},events={count:vi.fn(),update:vi.fn()},schedules={count:vi.fn(),update:vi.fn()};
+    const service=new TenantReleaseWorkAssignmentService(async()=>dataSource({assignment,events,schedules}));
+    await expect(service.assign({tenantId:'tenant-alpha',releaseId:'release-preview',assignmentEpoch:4})).rejects.toThrow('not qualified');
+    expect(assignment.insert).not.toHaveBeenCalled();expect(events.update).not.toHaveBeenCalled();config.tenancyCloudRequired=original;
+  });
   it('atomically rebinds queued events and schedules to a monotonic assignment epoch', async () => {
     const assignment = { findOne: vi.fn(async () => null), insert: vi.fn(async () => ({})), update: vi.fn() };
     const events = { count: vi.fn(async () => 0), update: vi.fn(async () => ({ affected: 3 })) };

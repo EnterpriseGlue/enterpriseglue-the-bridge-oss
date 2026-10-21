@@ -1,3 +1,4 @@
+import { AddSsoConnections1700000000134 } from '@enterpriseglue/shared/db/migrations/1700000000134-add-sso-connections.js';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -659,6 +660,14 @@ async function qualifyNativeSaasTenancyBaseline(queryRunner, dataSource, expecte
 }
 
 async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerprint) {
+  const scopedSso=new AddSsoConnections1700000000134();
+  await scopedSso.down(queryRunner);
+  await assertColumn(queryRunner,dataSource,PlatformSettings,'sso_proxy_catalogue_json',false);
+  await assertColumn(queryRunner,dataSource,TenantLoginPolicy,'sso_connection_json',false);
+  await scopedSso.up(queryRunner);await scopedSso.up(queryRunner);
+  await assertColumn(queryRunner,dataSource,PlatformSettings,'sso_proxy_catalogue_json',true);
+  await assertColumn(queryRunner,dataSource,TenantLoginPolicy,'sso_connection_json',true);
+  assert.equal(fingerprint(await logicalSchema(queryRunner,dataSource)),expectedFingerprint,`${database}: SSO connection migration must match clean installation`);
   const foundation = new AddEngineTenancyFoundation1700000000096();
   const reference = new AddEngineTenantMappingReference1700000000097();
   const importRuns = new AddCamundaNativeGrantImportRuns1700000000098();

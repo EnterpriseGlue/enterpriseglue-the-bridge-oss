@@ -1,3 +1,4 @@
+import SsoConnectionSettings from './SsoConnectionSettings';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActionableNotification, Button, Callout, DataTable, InlineNotification, Modal, NumberInput, Select, SelectItem, SkeletonText, Table, TableBody,
@@ -623,6 +624,7 @@ export default function IdentityProvidersSettingsTab({
   ];
   return <>
     {!open && <>
+    <SsoConnectionSettings tenantAdminMode={tenantAdminMode} tenantId={tenantId} canRead={read.allowed} canManage={manage.allowed} providers={providersQuery.data||[]}/>
     {loginPolicy && <Tile style={{ marginBottom: 'var(--spacing-5)' }}>
       <h3 style={{ margin: 0, fontSize: '1rem' }}>Sign-in policy</h3>
       <p style={{ margin: 'var(--spacing-2) 0 var(--spacing-5)', color: 'var(--cds-text-secondary)' }}>Control how users reach organization sign-in. Platform administrator recovery remains a separate restricted route.</p>

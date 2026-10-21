@@ -7,6 +7,8 @@ const MAX_ARCHIVE_ENTRIES = 64;
 const MANIFEST_PATH = 'bundle.json';
 const ALLOWED_ARCHIVE_PATHS = new Set([
   MANIFEST_PATH,
+  'sso-connection.json',
+  'sso-proxy-catalogue.json',
   'platform-settings.json',
   'environment-tags.json',
   'git-providers.json',

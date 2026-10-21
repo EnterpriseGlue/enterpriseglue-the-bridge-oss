@@ -68,13 +68,13 @@ COPY patches patches
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --prod --frozen-lockfile --filter webmodeler-backend...
 
-FROM cgr.dev/chainguard/node:latest-dev@sha256:9df8062d1bc926d1eafd0be518d308bf92adde1b13093905cdf8dd45e4beaf9e AS runtime-root
+FROM cgr.dev/chainguard/node:latest-dev@sha256:cf779c59fe663d07b5c19e6f85a9286032c4ca097403a78e9b146626c06556ac AS runtime-root
 
 FROM runtime-root AS runtime-base
 USER root
 RUN set -eux; \
     apk upgrade --no-cache; \
-    apk add --no-cache 'ca-certificates-bundle>=20260909-r3' 'libcurl-openssl4>=8.23.0-r0'; \
+    apk add --no-cache --upgrade 'ca-certificates-bundle>=20260909-r3' 'libcurl-openssl4>=8.23.0-r0'; \
     runtime_tools="$(apk info | awk '/^(nodejs|npm|node-gyp|corepack)(-|$)/')"; \
     apk del --no-network ${runtime_tools}; \
     apk add --no-cache 'nodejs-24=24.21.0-r4' \

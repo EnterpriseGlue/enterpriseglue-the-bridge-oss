@@ -4,6 +4,13 @@ import { SystemRoleDefinitions } from '@enterpriseglue/shared/services/platform-
 
 const bundle = { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'acme.authz', owner: 'platform' }, tenantKey: 'acme', mode: 'preview_only', settings: {}, imports: ['./groups.json'] };
 describe('configBundlePreviewService', () => {
+  it('validates the executable SSO connection and operator catalogue file contracts',()=>{
+    const files={'./sso-connection.json':{ssoConnection:{connection:{mode:'proxy',proxyProfileKey:'corporate'},providerKey:'entra'}},'./sso-proxy-catalogue.json':{ssoProxyCatalogue:{profiles:[{key:'corporate',displayName:'Corporate proxy',host:'proxy.example.net',port:8090,scopeKeys:['platform'],allowedIdentityProviderHosts:['login.microsoftonline.com'],allowPrivateProxy:true}]}}};
+    const result=configBundlePreviewService.preview({bundle:{...bundle,imports:Object.keys(files)},files});
+    expect(result.valid).toBe(true);
+    expect(configBundlePreviewService.compile({bundle:{...bundle,imports:Object.keys(files)},files}).files?.['./sso-connection.json']).toMatchObject({ssoConnection:{ownershipMode:'config_locked'}});
+    expect(configBundlePreviewService.preview({bundle:{...bundle,imports:['./sso-connection.json']},files:{'./sso-connection.json':{ssoConnection:{connection:{mode:'proxy',proxyProfileKey:'corporate'},proxyUrl:'http://unapproved'}}}}).valid).toBe(false);
+  });
   it('validates declared files and produces a deterministic canonical hash', () => {
     const input = { bundle, files: { './groups.json': { groups: [{ key: 'group.ops', name: 'Ops' }] } } };
     const first = configBundlePreviewService.preview(input);

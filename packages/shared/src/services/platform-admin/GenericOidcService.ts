@@ -1,3 +1,4 @@
+import { fetchSsoHttp, withSsoHttpContext, type SsoHttpContext } from './SsoHttpTransport.js';
 import { createHash, createPrivateKey, createPublicKey, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { secretResolver } from './SecretResolver.js';
@@ -115,7 +116,7 @@ function config(input: Record<string, unknown>): GenericOidcProviderConfiguratio
 }
 
 async function fetchJson(url: URL): Promise<Record<string, unknown>> {
-  const response = await fetch(url, { redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+  const response = await fetchSsoHttp(url, { redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined);
     throw new Error(`OIDC discovery request failed (${response.status})`);
@@ -239,7 +240,8 @@ export class GenericOidcService {
     };
   }
 
-  async testConnection(rawConfiguration: Record<string, unknown>): Promise<{ issuer: string; authorizationEndpoint: string; tokenEndpoint: string; jwksUri: string }> {
+  async testConnection(rawConfiguration: Record<string, unknown>, network?: SsoHttpContext): Promise<{ issuer: string; authorizationEndpoint: string; tokenEndpoint: string; jwksUri: string }> {
+    if(network)return withSsoHttpContext(network,()=>this.testConnection(rawConfiguration));
     try {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);
@@ -247,7 +249,8 @@ export class GenericOidcService {
     } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
-  async createAuthorizationRequest(rawConfiguration: Record<string, unknown>, state: string, nonce: string): Promise<OidcAuthorizationRequest> {
+  async createAuthorizationRequest(rawConfiguration: Record<string, unknown>, state: string, nonce: string, network?: SsoHttpContext): Promise<OidcAuthorizationRequest> {
+    if(network)return withSsoHttpContext(network,()=>this.createAuthorizationRequest(rawConfiguration, state, nonce));
     try {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);
@@ -285,7 +288,8 @@ export class GenericOidcService {
     return { mfaVerified: amrMatch || acrMatch };
   }
 
-  async createLogoutRequest(rawConfiguration: Record<string, unknown>, state: string): Promise<string | null> {
+  async createLogoutRequest(rawConfiguration: Record<string, unknown>, state: string, network?: SsoHttpContext): Promise<string | null> {
+    if(network)return withSsoHttpContext(network,()=>this.createLogoutRequest(rawConfiguration, state));
     try {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);
@@ -302,7 +306,9 @@ export class GenericOidcService {
     rawConfiguration: Record<string, unknown>,
     input: { code: string; codeVerifier: string; nonce: string },
     secretContext?: { tenantId?: string | null; correlationId?: string },
+    network?: SsoHttpContext,
   ): Promise<OidcIdentityClaims> {
+    if(network)return withSsoHttpContext(network,()=>this.exchangeCode(rawConfiguration,input,secretContext));
     try {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);
@@ -312,7 +318,7 @@ export class GenericOidcService {
         : await resolveSecretReference(provider.clientSecretRef, secretContext);
       if (clientSecret) body.set('client_secret', clientSecret);
       if (provider.clientAuthentication === 'apple_private_key_jwt') body.delete('code_verifier');
-      const response = await fetch(metadata.token_endpoint, {
+      const response = await fetchSsoHttp(metadata.token_endpoint, {
         method: 'POST', redirect: 'error', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) {
@@ -326,7 +332,8 @@ export class GenericOidcService {
   }
 
   /** Verifies an OpenID Connect Back-Channel Logout token before any local session is revoked. */
-  async verifyBackChannelLogoutToken(rawConfiguration: Record<string, unknown>, token: string): Promise<OidcBackChannelLogoutClaims> {
+  async verifyBackChannelLogoutToken(rawConfiguration: Record<string, unknown>, token: string, network?: SsoHttpContext): Promise<OidcBackChannelLogoutClaims> {
+    if(network)return withSsoHttpContext(network,()=>this.verifyBackChannelLogoutToken(rawConfiguration, token));
     try {
       const provider = config(rawConfiguration);
       const metadata = await discover(provider.issuerUrl);

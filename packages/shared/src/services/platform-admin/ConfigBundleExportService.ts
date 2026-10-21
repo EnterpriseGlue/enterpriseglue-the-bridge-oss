@@ -1,3 +1,5 @@
+import { config } from '../../config/index.js';
+import { ssoConnectionService } from './SsoConnectionService.js';
 import { In, IsNull, Like } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
@@ -622,6 +624,9 @@ class ConfigBundleExportService {
         },
       };
     }
+    const ssoConnection=await ssoConnectionService.readConnection(tenantId);
+    if(ssoConnection?.sourceRef===sourceRef)files['./sso-connection.json']={ssoConnection:{connection:ssoConnection.connection,ownershipMode:ssoConnection.ownershipMode,...(ssoConnection.lastTest?{providerKey:ssoConnection.lastTest.providerKey}:{})}};
+    if(config.tenancyMode!=='pooled'||!tenantId){const ssoCatalogue=await ssoConnectionService.readCatalogue();if(ssoCatalogue.sourceRef===sourceRef)files['./sso-proxy-catalogue.json']={ssoProxyCatalogue:{profiles:ssoCatalogue.catalogue.profiles,ownershipMode:ssoCatalogue.ownershipMode}};}
     const imports = Object.keys(files);
     const governance = platformSettings?.accessGovernanceSourceRef === sourceRef
       ? {

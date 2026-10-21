@@ -8,6 +8,9 @@ export type TenantProviderSelectionMode = 'auto_redirect_single' | 'chooser' | '
 @Entity({ name: 'tenant_login_policies', schema: 'main' })
 @Index('uq_tenant_login_policies_tenant', ['tenantId'], { unique: true })
 export class TenantLoginPolicy extends AppBaseEntity {
+  @Column({ name: 'sso_connection_json', type: 'text', nullable: true })
+  ssoConnectionJson!: string | null;
+
   @Column({ name: 'tenant_id', type: 'text' })
   tenantId!: string;
 

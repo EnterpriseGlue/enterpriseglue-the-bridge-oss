@@ -747,7 +747,7 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       await expect(admin.getByRole('heading', { name: 'Tenant sign-in and identity' })).toBeVisible();
       await expect(admin.getByText('alpha.example', { exact: true })).toBeVisible();
       await captureManualScreenshot(admin, '03-alpha-tenant-sign-in-settings.jpg');
-      const alphaProviderLabel = admin.getByText('Alpha OIDC', { exact: true }).first();
+      const alphaProviderLabel = admin.getByRole('cell', { name: 'Alpha OIDC', exact: true });
       await alphaProviderLabel.scrollIntoViewIfNeeded();
       await expect(alphaProviderLabel).toBeVisible();
       await captureManualScreenshot(admin, '04-alpha-tenant-segregated-oidc.jpg', { stabilize: false });

@@ -34,6 +34,11 @@ const FutureDatabaseEpochSchema = MigrationInventorySchema.extend({
   postgresPolicyProfile: z.literal('explicit-context/v1'),
 }).strict();
 
+const SsoDatabaseEpochSchema = MigrationInventorySchema.extend({
+  id: z.literal('tenant-sso-connections'),
+  postgresPolicyProfile: z.literal('explicit-context/v1'),
+}).strict();
+
 const PlannedMigrationSchema = z.object({
   name: z.literal('AddCloudEmailPasskeys1700000000133'),
   timestamp: z.literal(1700000000133),
@@ -41,7 +46,7 @@ const PlannedMigrationSchema = z.object({
 
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
-  purpose: z.literal('owner-transition-1700000000131-to-1700000000133-cloud-passkeys/v1'),
+  purpose: z.literal('owner-transition-1700000000131-to-1700000000134-sso-connections/v1'),
   count: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
@@ -52,8 +57,8 @@ const ReleaseEffectInventorySchema = z.object({
 }).strict();
 
 const SchemaEpochManifestSchema = z.object({
-  schemaVersion: z.literal('enterpriseglue-schema-epoch/v3'),
-  id: z.literal('postgres-cloud-email-passkeys-v3'),
+  schemaVersion: z.literal('enterpriseglue-schema-epoch/v4'),
+  id: z.literal('postgres-tenant-sso-connections-v4'),
   target: z.object({
     databaseType: z.literal('postgres'),
     tenancyMode: z.literal('pooled'),
@@ -82,7 +87,7 @@ const SchemaEpochManifestSchema = z.object({
   executableMigrationInventory: MigrationInventorySchema,
   executableImplementationInventory: ImplementationInventorySchema,
   releaseEffectInventory: ReleaseEffectInventorySchema,
-  acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema, FutureDatabaseEpochSchema]),
+  acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema, FutureDatabaseEpochSchema, SsoDatabaseEpochSchema]),
   plannedMigration: PlannedMigrationSchema,
 }).strict();
 
@@ -138,7 +143,7 @@ function assertInventory(
 
 export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
   const manifest = SchemaEpochManifestSchema.parse(value);
-  const [pre, post, future] = manifest.acceptedDatabaseEpochs;
+  const [pre, post, future, sso] = manifest.acceptedDatabaseEpochs;
   if (
     pre.id !== 'pre-enforcement'
     || pre.postgresPolicyProfile !== 'dual-context-compatibility/v1'
@@ -146,9 +151,9 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || post.postgresPolicyProfile !== 'explicit-context/v1'
     || future.id !== 'cloud-email-passkeys'
     || future.postgresPolicyProfile !== 'explicit-context/v1'
-    || manifest.executableMigrationInventory.through !== future.through
-    || manifest.executableMigrationInventory.count !== future.count
-    || manifest.executableMigrationInventory.sha256 !== future.sha256
+    || manifest.executableMigrationInventory.through !== sso.through
+    || manifest.executableMigrationInventory.count !== sso.count
+    || manifest.executableMigrationInventory.sha256 !== sso.sha256
     || manifest.roles.ownerMigration.through !== manifest.executableMigrationInventory.through
     || manifest.roles.ownerMigration.from.through !== pre.through
     || manifest.roles.ownerMigration.from.count !== pre.count
@@ -159,8 +164,8 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || manifest.roles.ownerMigration.intermediate.sha256 !== post.sha256
     || manifest.roles.ownerMigration.intermediate.postgresPolicyProfile !== post.postgresPolicyProfile
     || manifest.roles.ownerMigration.intermediate.timestamp !== post.through
-    || manifest.roles.ownerMigration.from.through + 2 !== manifest.executableMigrationInventory.through
-    || manifest.roles.ownerMigration.from.count + 2 !== manifest.executableMigrationInventory.count
+    || manifest.roles.ownerMigration.from.through + 3 !== manifest.executableMigrationInventory.through
+    || manifest.roles.ownerMigration.from.count + 3 !== manifest.executableMigrationInventory.count
     || manifest.upgradeContract.minimumDatabaseEpoch.through !== manifest.roles.ownerMigration.from.through
     || manifest.upgradeContract.minimumDatabaseEpoch.count !== manifest.roles.ownerMigration.from.count
     || manifest.upgradeContract.minimumDatabaseEpoch.sha256 !== manifest.roles.ownerMigration.from.sha256
@@ -170,8 +175,10 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || future.through !== post.through + 1
     || future.count !== post.count + 1
     || manifest.plannedMigration.timestamp !== future.through
+    || sso.through !== future.through + 1
+    || sso.count !== future.count + 1
   ) {
-    throw new Error('Schema-epoch manifest does not describe the bounded Cloud passkey owner transition');
+    throw new Error('Schema-epoch manifest does not describe the bounded SSO connection owner transition');
   }
   return manifest;
 }
@@ -212,7 +219,7 @@ export function assertSchemaEpochInvocation(
  * Bind this process to the manifest's bounded executable migration inventory.
  *
  * The application and separately credentialed owner job use the same signed
- * bytes. The owner may apply only 0132 and 0133 in order, verifying the
+ * bytes. The owner may apply only 0132, 0133 and 0134 in order, verifying the
  * explicit-context policy after 0132; application startup is verify-only.
  */
 export function bindDataSourceToSchemaEpoch(
@@ -242,17 +249,9 @@ export function bindDataSourceToSchemaEpoch(
     throw new Error('Runtime contains migrations beyond the immutable schema-epoch manifest');
   }
 
-  const future = manifest.acceptedDatabaseEpochs[2];
-  const registeredFuture = registered.filter((migration) => migration.timestamp > manifest.acceptedDatabaseEpochs[1].through);
-  if (registeredFuture.length > 0) {
-    if (registeredFuture.length !== 1 || registeredFuture[0].name !== manifest.plannedMigration.name) {
-      throw new Error('Runtime contains an unplanned schema-epoch migration');
-    }
-    assertInventory('Registered future migration inventory', registered, future);
-  } else {
-    assertInventory('Planned future migration inventory',
-      [...registered, manifest.plannedMigration], future);
-  }
+  // Every registered migration must be represented by the exact executable
+  // inventory. Additive epochs do not authorize an arbitrary later migration.
+  assertInventory('Registered executable migration inventory', registered, manifest.executableMigrationInventory);
 
   const executableNames = new Set(
     canonicalMigrationInventory(dataSource.migrations, manifest.executableMigrationInventory.through)

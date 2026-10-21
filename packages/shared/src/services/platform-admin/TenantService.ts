@@ -1,3 +1,4 @@
+import { TenantLoginPolicy } from '../../infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { resolveTxt } from 'node:dns/promises';
 import { In, IsNull, MoreThan, type EntityManager } from 'typeorm';
@@ -164,6 +165,11 @@ export class TenantService {
           createdAt: now,
           updatedAt: now,
         });
+        await runWithTenantDatabaseContext({tenantId,tenantSlug:slug},()=>manager.getRepository(TenantLoginPolicy).insert({
+          id:generateId(),tenantId,localPasswordMode:'auto',providerSelectionMode:'chooser',
+          ssoConnectionJson:JSON.stringify({connection:{mode:'direct'},lastTest:null,ownershipMode:'manual',sourceRef:null,driftStatus:null}),
+          createdAt:now,updatedAt:now,updatedByUserId:ownerUserId,
+        }));
         if (ownerUserId) {
           // The registry row now exists in this transaction. Scope its owner
           // assignment and audit to that canonical tenant, not the caller's

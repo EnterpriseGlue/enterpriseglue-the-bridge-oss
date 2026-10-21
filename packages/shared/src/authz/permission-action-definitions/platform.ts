@@ -1124,6 +1124,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       description: 'Read configured SSO identity providers.',
       ui: [{ surfaceId: 'admin.sso.providers', behavior: 'hide' }],
       routes: [
+        { method:'GET',route:'/api/identity/sso-connection',resourceResolver:'platform.self'},
         { method: 'GET', route: '/api/identity/providers', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers/{key}/sync-runs', resourceResolver: 'platform.self' },
@@ -1145,6 +1146,10 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       description: 'Create, update, delete, enable, or disable SSO identity providers.',
       ui: [{ surfaceId: 'admin.sso.providers.actions', behavior: 'disable' }],
       routes: [
+        { method:'PUT',route:'/api/identity/sso-connection',resourceResolver:'platform.self'},
+        { method:'POST',route:'/api/identity/sso-connection/test',resourceResolver:'platform.self'},
+        { method:'GET',route:'/api/identity/sso-proxy-catalogue',resourceResolver:'platform.self'},
+        { method:'PUT',route:'/api/identity/sso-proxy-catalogue',resourceResolver:'platform.self'},
         { method: 'POST', route: '/api/identity/providers', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/provider-secrets', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/provider-secrets/retire', resourceResolver: 'platform.self' },

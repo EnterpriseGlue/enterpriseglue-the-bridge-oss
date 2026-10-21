@@ -1,3 +1,4 @@
+import { ssoConnectionService } from '@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js';
 import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
@@ -220,10 +221,11 @@ async function startOidcLogin(
   accountLink?: AccountLinkContext,
 ): Promise<void> {
   requireDirectOidc(provider);
-  const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, enrollment, accountLink);
+  const network = await ssoConnectionService.resolve(provider.tenantId);
+  const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId, ssoConnectionVersion:network.version }, enrollment, accountLink);
   const parsed = parseSignedOidcState(state);
   if (!parsed) throw Errors.internal('Unable to initialize identity provider state');
-  const request = await genericOidcService.createAuthorizationRequest(configuration(provider), state, parsed.nonce);
+  const request = await genericOidcService.createAuthorizationRequest(configuration(provider), state, parsed.nonce, {tenantId:provider.tenantId,expectedVersion:network.version});
   const secure = shouldUseSecureCookies();
   const cookieOptions = {
     httpOnly: true,
@@ -599,7 +601,11 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
         throw Errors.unauthorized('Account linking requires the current authenticated tenant session');
       }
       const rawConfiguration = configuration(provider);
-      const verifiedClaims = await genericOidcService.exchangeCode(rawConfiguration, { code: callback.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider));
+      const callbackNetwork=await ssoConnectionService.resolve(provider.tenantId);
+      if(parsed.ssoConnectionVersion&&parsed.ssoConnectionVersion!==callbackNetwork.version)throw Errors.unauthorized('SSO connection changed; restart sign-in');
+      if(!parsed.ssoConnectionVersion&&!callbackNetwork.legacy)throw Errors.unauthorized('SSO connection changed; restart sign-in');
+      const verifiedClaims = await genericOidcService.exchangeCode(rawConfiguration, { code: callback.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider), {tenantId:provider.tenantId,expectedVersion:parsed.ssoConnectionVersion});
+      if(parsed.ssoConnectionVersion&&(await ssoConnectionService.resolve(provider.tenantId)).version!==parsed.ssoConnectionVersion)throw Errors.unauthorized('SSO connection changed; restart sign-in');
       const claims = genericOidcService.withCallbackUser(rawConfiguration, verifiedClaims, callback?.user);
       const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
       const evidence = {
@@ -731,7 +737,7 @@ router.post('/api/auth/providers/:providerId/oidc/backchannel-logout', apiLimite
   if (!parsed.success) throw Errors.validation('OIDC logout_token is invalid');
   const provider = await directProviderById(String(req.params.providerId || ''));
   requireDirectOidc(provider);
-  const claims = await genericOidcService.verifyBackChannelLogoutToken(providerLogoutConfiguration(provider), parsed.data.logout_token);
+  const claims = await genericOidcService.verifyBackChannelLogoutToken(providerLogoutConfiguration(provider), parsed.data.logout_token, {tenantId:provider.tenantId});
   const revoked = await revokeFederatedSessions(provider, {
     ...(claims.sub ? { subjectId: claims.sub } : {}),
     ...(claims.sid ? { sessionId: claims.sid } : {}),

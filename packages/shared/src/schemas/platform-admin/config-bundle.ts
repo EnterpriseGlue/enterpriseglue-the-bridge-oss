@@ -1,3 +1,4 @@
+export { ConfigSsoConnectionFileSchema, ConfigSsoProxyCatalogueFileSchema } from './sso-connection.js';
 import { z } from 'zod';
 import {
   ExternalEntitlementTypeSchema,
@@ -101,6 +102,7 @@ const LabelKeySchema = z.string().min(1).max(128).regex(/^[a-z][A-Za-z0-9]*(?:[.
 const LabelSchema = z.record(LabelKeySchema, z.string().min(1).max(512));
 
 const AllowedImportPaths = [
+  './sso-connection.json', './sso-proxy-catalogue.json',
   './platform-settings.json',
   './environment-tags.json',
   './git-providers.json',
@@ -219,6 +221,7 @@ export const ConfigBundleSecretPreflightResponseSchema = z.object({
 
 export const ConfigBundleDiffOperationSchema = z.enum(['create', 'update', 'noop', 'archive', 'conflict']);
 export const ConfigBundleDiffObjectTypeSchema = z.enum([
+  'sso_connection', 'sso_proxy_catalogue',
   'environment_tag',
   'git_provider', 'email_configuration', 'email_template', 'permission',
   'authorization_policy', 'api_client', 'service_account', 'external_engine_system',
@@ -235,6 +238,7 @@ const ConfigBundleRuntimeResourceReferenceSchema = z.object({
 
 export const ConfigBundleDiffChangeSchema = z.object({
   objectType: ConfigBundleDiffObjectTypeSchema,
+  expectedSsoVersion: z.string().optional(),
   key: z.string(),
   operation: ConfigBundleDiffOperationSchema,
   reason: z.string(),

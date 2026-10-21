@@ -74,3 +74,10 @@ test('workspace production assemblies provide shared server peer links from the 
     assert.match(source, /COPY --from=(?:deps|dependencies)(?: --chown=65532:65532)? \/repo\/packages\/backend-host\/node_modules (?:\.\/dist|\/app\/dist)\/packages\/shared\/node_modules/);
   }
 });
+
+test('the compiled backend owns the SSO transport runtime peers', () => {
+  const backend = read('backend/package.json');
+  for (const name of ['ip-address', 'undici']) {
+    assert.equal(backend.dependencies[name], shared.devDependencies[name], `${name} must resolve from the compiled backend tree without workspace hoisting`);
+  }
+});

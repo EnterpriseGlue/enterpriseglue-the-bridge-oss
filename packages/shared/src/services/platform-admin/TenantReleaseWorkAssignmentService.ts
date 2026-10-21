@@ -1,3 +1,5 @@
+import { config } from '../../config/index.js';
+import { ssoConnectionService } from './SsoConnectionService.js';
 import { randomUUID } from 'node:crypto';
 import { In, Not, type EntityManager } from 'typeorm';
 
@@ -52,6 +54,7 @@ export class TenantReleaseWorkAssignmentService {
       throw Errors.conflict('Release assignment must be applied through its target host release');
     }
     const apply = async (manager: EntityManager) => {
+      if(config.tenancyCloudRequired)await ssoConnectionService.resolve(input.tenantId,manager);
       if (input.expectedPlacementEpoch !== undefined) {
         // Acquire the Tenant write fence BEFORE assignment/event/schedule locks.
         // Same-value conditional DML also works on Spanner and SQLite, where

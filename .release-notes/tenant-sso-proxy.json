@@ -1,0 +1,96 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "tenant-sso-proxy",
+  "type": "feature",
+  "scope": "identity",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds tenant-scoped outbound proxy routing for SSO, with portal and headless configuration.",
+  "userImpact": [
+    "Organizations can route backend OIDC requests through an approved proxy without changing engine or other tenants' traffic."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Run migration 1700000000134 before rolling out the new runtime. Pooled PostgreSQL deployments use the separately credentialed schema-epoch v4 owner job.",
+      "Existing tenants preserve runtime routing until explicitly migrated; new tenants receive Direct.",
+      "Before enabling Cloud proxies, qualify the target release/shard route, drain incompatible runtimes and reject incompatible release fallbacks."
+    ]
+  },
+  "configuration": [
+    "Adds approved SSO proxy profiles and tenant connection selection with source ownership."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds tenant and operator SSO connection configuration and diagnostic contracts."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "1700000000134-add-sso-connections"
+    ],
+    "rollbackSupported": false,
+    "notes": [
+      "Adds nullable SSO connection/catalogue JSON columns to existing settings and tenant policy tables; PostgreSQL pooled schema-epoch ceiling advances to 0134.",
+      "No new runtime table privileges. DOWN refuses populated scoped settings; older schema-epoch runtimes reject the new ledger."
+    ]
+  },
+  "security": [
+    "Proxy failures never trigger direct fallback; profile selection is tenant-scoped and approved by platform operators.",
+    "Refreshes pinned backend/frontend Chainguard runtime bases and requires patched ca-certificates-bundle and libcurl-openssl4 versions for CVE-2026-111943 and CVE-2026-92392."
+  ],
+  "documentation": [
+    "docs/architecture/tenant-sso-connections.md"
+  ],
+  "knownLimitations": [
+    "HTTP CONNECT without proxy authentication only; private network connectivity is provisioned separately.",
+    "Cloud control-plane release compatibility remains an operator-owned rollout prerequisite.",
+    "Connection tests verify network/discovery/JWKS reachability; a real sign-in must verify client credentials, MFA and permissions.",
+    "The first version limits a catalogue to 32 profiles and 256 distinct assigned scopes."
+  ],
+  "rollback": [
+    "Restore reviewed prior connection configuration before downgrading tenants that require scoped proxy routing."
+  ],
+  "validation": [
+    "Shared, backend and frontend TypeScript checks and ESLint pass. Full backend/frontend unit suites pass 3,926 and 1,586 tests respectively.",
+    "SSO service, real TLS/CONNECT transport, API authorization, signed-state/release-fence, configuration-bundle lifecycle and UI tests pass.",
+    "Full identity local suite and security suite, authorization structure/inventory and 128 authorization PR tests pass using owned local PostgreSQL.",
+    "All seven pull-request deployment-evidence lanes pass locally, including the complete audited SSO administration route inventory. This does not replace external release acceptance.",
+    "PostgreSQL forced-RLS/identity integration passes; the repaired session-race fixture passes all 45 tests.",
+    "All five database adapters pass the migration/upgrade/retry/schema-equivalence matrix as a local development run, not a clean release candidate receipt.",
+    "The exact rebuilt, scanned application images pass the disposable PostgreSQL protocol rehearsal: SCIM HTTP, OIDC, Entra-compatible OIDC, SAML and LDAP; proxy activated through UI and 37 CONNECT tunnels observed.",
+    "The technical guide Mermaid sequence diagram renders in light and dark themes. Helm/schema-epoch/receipt/package-version contract checks pass.",
+    "Fresh pinned Trivy 0.72.0 scans on 21 October 2026 pass for both rebuilt Linux arm64 application images: zero unignored CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN vulnerabilities and zero secret findings, with the committed ignore policy unchanged. SBOMs are retained locally; other architectures require their own image qualification.",
+    "Docker/runtime and configuration contracts pass; CI/release contracts pass and the self-validating ci-complete aggregate. Corrects stale ownership/tool-removal expectations, inline pnpm-pin parsing and the plugin-manager example version.",
+    "The compiled backend starts and returns healthy against a fresh, owned Oracle XE 21 fixture. The backend explicitly owns the existing IP-address parser dependency used by its compiled SSO transport; dependency-boundary regression contracts pass.",
+    "The non-publishing release authorization canary passes 12 scenarios, including the actual candidate verifier's rejection of a missing fixture; no publication or registry writes.",
+    "The disposable pooled-tenant browser scenario passes organization discovery, segregated OIDC/SAML/LDAP sign-in, tenant permissions and plugin lifecycle with a restricted PostgreSQL role and 31 forced-RLS tenant tables. The provider assertion targets its visible table cell rather than the proxy selector option."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.21.0",
+      "newVersion": "0.22.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.19.0",
+      "newVersion": "0.20.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.26.0",
+      "newVersion": "0.27.0",
+      "impact": "minor"
+    }
+  ]
+}
