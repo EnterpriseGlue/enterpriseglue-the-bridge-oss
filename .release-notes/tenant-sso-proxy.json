@@ -68,8 +68,10 @@
     "The exact rebuilt, scanned application images pass the disposable PostgreSQL protocol rehearsal: SCIM HTTP, OIDC, Entra-compatible OIDC, SAML and LDAP; proxy activated through UI and 37 CONNECT tunnels observed.",
     "The technical guide Mermaid sequence diagram renders in light and dark themes. Helm/schema-epoch/receipt/package-version contract checks pass.",
     "Fresh pinned Trivy 0.72.0 scans on 21 October 2026 pass for both rebuilt Linux arm64 application images: zero unignored CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN vulnerabilities and zero secret findings, with the committed ignore policy unchanged. SBOMs are retained locally; other architectures require their own image qualification.",
-    "Docker/runtime and configuration contracts pass all 35 tests; CI/release contracts pass all 208 tests and the self-validating ci-complete aggregate. Corrects stale ownership/tool-removal expectations, inline pnpm-pin parsing and the plugin-manager example version.",
-    "The non-publishing release authorization canary passes 12 scenarios, including the actual candidate verifier's rejection of a missing fixture; no publication or registry writes."
+    "Docker/runtime and configuration contracts pass; CI/release contracts pass all 210 tests and the self-validating ci-complete aggregate. Corrects stale ownership/tool-removal expectations, inline pnpm-pin parsing and the plugin-manager example version.",
+    "The compiled backend starts and returns healthy against a fresh, owned Oracle XE 21 fixture. The backend explicitly owns the existing IP-address parser dependency used by its compiled SSO transport; dependency-boundary regression contracts pass.",
+    "The non-publishing release authorization canary passes 12 scenarios, including the actual candidate verifier's rejection of a missing fixture; no publication or registry writes.",
+    "The disposable pooled-tenant browser scenario passes organization discovery, segregated OIDC/SAML/LDAP sign-in, tenant permissions and plugin lifecycle with a restricted PostgreSQL role and 31 forced-RLS tenant tables. The provider assertion targets its visible table cell rather than the proxy selector option."
   ],
   "packages": [
     {

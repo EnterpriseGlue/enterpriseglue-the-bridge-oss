@@ -132,8 +132,8 @@ services:
     networks:
       - enterpriseglue-network
 
-  # Current code owns exactly 0131 -> 0132 -> 0133 and verifies the 0132
-  # ledger and explicit-context policy before creating passkey tables.
+  # Current code owns exactly 0131 -> 0132 -> 0133 -> 0134 and verifies each
+  # ledger and explicit-context policy before advancing to the next stage.
   schema-owner-migration:
     image: node:24-bookworm-slim
     user: node

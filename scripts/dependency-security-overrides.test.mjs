@@ -221,3 +221,12 @@ test('application images require patched CA bundles and curl libraries', async (
     assert.match(source, /libcurl-openssl4>=8\.23\.0-r0/);
   }
 });
+
+test('bundled artifact tools retain patched Go and compression builds', async () => {
+  for (const name of ['plugin-installer', 'plugin-manager']) {
+    const source = await readFile(new URL(`packages/${name}/Dockerfile`, root), 'utf8');
+    assert.match(source, /golang:1\.26\.10-alpine3\.23@sha256:[a-f0-9]{64}/);
+    assert.match(source, /github\.com\/klauspost\/compress@v1\.18\.7/);
+    assert.match(source, /klauspost-compress-BSD-3-Clause\.txt/);
+  }
+});
