@@ -39,7 +39,8 @@
   },
   "security": [
     "General documentation access never authorizes customer content.",
-    "Every asset rechecks the current verified email, account, source session and exact configured workspace domain. Domain admission must be explicitly selected; legacy policies retain individual-reader restrictions."
+    "Every asset rechecks the current verified email, account, source session and exact configured workspace domain. Domain admission must be explicitly selected; legacy policies retain individual-reader restrictions.",
+    "Automatic verified-domain admission requires a centrally verified Cloud account session; another tenant's provider email assertion cannot grant customer access."
   ],
   "documentation": [
     "docs/reference/documentation-account-access.md"
@@ -52,7 +53,7 @@
     "Remove customer bundles before rolling back the account contract. An older account response cannot authorize a customer-scoped read."
   ],
   "validation": [
-    "Local auth routes: 15 files and 195 tests passed, including verified-domain admission, other-domain/subdomain denial, unverified/disabled users, policy removal and legacy individual-grant compatibility.",
+    "Local auth routes and domain-authority regression tests cover automatic domain admission, other-domain/subdomain denial, unverified/disabled accounts, policy removal, tenant-provider spoofing and legacy individual-grant compatibility.",
     "Exact gateway/account HTTP qualification with owned PostgreSQL: 2 files and 3 tests passed, including both customers and protected pages, search, downloads, JavaScript and receipts.",
     "Backend host/shared build, backend TypeScript check and affected lint passed. Portal compilation/browser, publication and infrastructure gates are recorded separately in their owning repositories.",
     "No hosted CI, live rollout or customer-content publication is claimed by this local evidence."

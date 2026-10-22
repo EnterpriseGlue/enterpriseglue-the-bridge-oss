@@ -16,8 +16,12 @@ export class DocumentationWorkspaceService {
       const domain = email?.slice(email.lastIndexOf('@') + 1);
       return policy.workspaces.filter(workspace => workspace.active
         && domain && workspace.allowedEmailDomains.includes(domain)
+        // The auth middleware verifies this class against the persisted source
+        // session. A tenant-controlled provider's email assertion is not
+        // central account proof, even when its local user is marked verified.
         && (workspace.accessMode === 'verified_domain'
-          || workspace.readers.some(reader => reader.userId === principal.userId && reader.expiresAt > Date.now())))
+          ? principal.sessionClass === 'cloud_account'
+          : workspace.readers.some(reader => reader.userId === principal.userId && reader.expiresAt > Date.now())))
         .map(({ id, name }) => ({ id, name }));
     } catch { throw Errors.serviceUnavailable('Documentation workspace policy'); }
   }
