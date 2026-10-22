@@ -112,7 +112,10 @@ The bounded policy has this shape; identifiers and domains below are fixtures:
 ```
 
 `accessMode: "verified_domain"` admits any current active account with a verified
-email address at an allowed domain. Selecting this mode is the publisher's
+email address at an allowed domain through a central `cloud_account` session.
+The source session class is checked against persistence by authentication; a
+tenant-controlled identity provider cannot establish domain authority merely by
+asserting an allowed email address or a verified-email claim. Selecting this mode is the publisher's
 explicit domain admission decision; it requires no individual reader grant.
 `readers` must be empty in this mode so restrictions are never silently ignored.
 When `accessMode` is absent or `"explicit_readers"`, both the exact domain and
