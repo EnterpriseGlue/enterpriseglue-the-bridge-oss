@@ -1,5 +1,5 @@
 import { SsoConnectionViewSchema, SsoConnectionUpdateSchema, SsoConnectionTestSchema, SsoConnectionTestResultSchema, SsoProxyCatalogueViewSchema, SsoProxyCatalogueUpdateSchema } from './platform-admin/sso-connection.js';
-import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantRequestSchema, DocumentationGrantResponseSchema, DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema } from './auth/documentation.js';
+import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantRequestSchema, DocumentationGrantResponseSchema, DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from './auth/documentation.js';
 import { z } from 'zod';
 import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
 
@@ -4074,9 +4074,11 @@ for (const [method, path, requestSchema, responseSchema] of [
   ['post', '/api/auth/documentation/grant', DocumentationGrantRequestSchema, DocumentationGrantResponseSchema],
   ['post', '/api/auth/documentation/exchange', DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema],
   ['get', '/api/auth/documentation/session', null, DocumentationAccessResponseSchema],
+  ['get', '/api/auth/documentation/workspaces', null, DocumentationWorkspacesResponseSchema],
   ['post', '/api/auth/documentation/logout', null, DocumentationLogoutResponseSchema],
 ] as const) {
   registry.registerPath({ method, path, ...authzExemption(method.toUpperCase(), path),
+    ...(path === '/api/auth/documentation/session' ? {request: {query: DocumentationWorkspaceQuerySchema}} : {}),
     ...(requestSchema ? { request: { body: { content: { 'application/json': { schema: requestSchema } } } } } : {}),
     responses: { 200: { description: 'Documentation-only account access without tenant provisioning', content: { 'application/json': { schema: responseSchema } } }, 401: { description: 'Invalid, expired, revoked or reused credential' }, 403: { description: 'Account or browser proof is not eligible' }, 404: { description: 'Documentation integration is disabled' } },
   });

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "workspaces": [
+    {
+      "id": "customer-a",
+      "name": "Customer A",
+      "active": false,
+      "allowedEmailDomains": [
+        "customer-a.example.test"
+      ],
+      "readers": [],
+      "accessMode": "verified_domain"
+    }
+  ]
+}

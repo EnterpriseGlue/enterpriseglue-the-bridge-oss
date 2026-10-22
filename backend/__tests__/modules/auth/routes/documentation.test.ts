@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import type { Server } from 'node:http';
 import request from 'supertest';
+import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -29,7 +30,7 @@ let server: Server;
 let updates: number;
 beforeEach(async () => {
   Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true, frontendUrl: 'https://app.staging.enterpriseglue.ai', documentationOrigin: 'https://docs.enterpriseglue.ai', documentationGatewaySecret: 'gateway-secret-'.repeat(4) });
-  updates = 0;
+  updates = 0; config.documentationWorkspacesJson = undefined;
   user = { id: 'reader', isActive: true, isEmailVerified: true, email: 'reader@example.test', authSessionVersion: 0 } as User;
   row = { id: sessionId, userId: user.id, tenantId: null, deviceInfo: JSON.stringify({ sessionClass: 'cloud_account' }), revokedAt: null, expiresAt: Date.now() + 600_000 } as RefreshToken;
   const repository = {
@@ -69,7 +70,7 @@ describe('documentation account boundary', () => {
   it('exposes only configured public origins for environment-correct entry and deployment preflight', async () => {
     const result = await request(server).get('/api/auth/documentation/configuration');
     expect(result.status).toBe(200);
-    expect(result.body).toEqual({ documentationOrigin: config.documentationOrigin, accountOrigin: config.frontendUrl });
+    expect(result.body).toEqual({ documentationOrigin: config.documentationOrigin, accountOrigin: config.frontendUrl, workspaceContract: 'customer-documentation/v1' });
     expect(updates).toBe(0);
   });
   it('uses an existing verified account without accessing any tenant persistence', async () => {
@@ -142,5 +143,86 @@ describe('documentation account boundary', () => {
     expect(JSON.parse(row.deviceInfo!).documentationSessions).toHaveLength(4);
     expect((await check(tokens[0]!)).status).toBe(401);
     expect((await check(tokens[4]!)).status).toBe(200);
+  });
+});
+
+describe('customer documentation entitlement boundary', () => {
+  async function credential() {
+    const code = new URL((await grant()).body.callbackUrl).searchParams.get('code')!;
+    return (await exchange(code)).body.session as string;
+  }
+  const policy = () => JSON.stringify({ schemaVersion: 1, workspaces: [
+    { id: 'alpha', name: 'Alpha customer', active: true, allowedEmailDomains: ['example.test'], readers: [{ userId: 'reader', expiresAt: Date.now() + 60_000 }] },
+    { id: 'beta', name: 'Beta customer', active: true, allowedEmailDomains: ['other.test'], readers: [{ userId: 'other-reader', expiresAt: Date.now() + 60_000 }] },
+  ] });
+  async function scoped(token: string, workspace: string) {
+    return request(server).get('/api/auth/documentation/session').query({ workspace }).set('x-enterpriseglue-documentation-key', config.documentationGatewaySecret!).set('Authorization', `Bearer ${token}`);
+  }
+  async function list(token: string) {
+    return request(server).get('/api/auth/documentation/workspaces').set('x-enterpriseglue-documentation-key', config.documentationGatewaySecret!).set('Authorization', `Bearer ${token}`);
+  }
+  it('the operator policy template grants no customer access by default', async () => {
+    config.documentationWorkspacesJson = readFileSync(new URL('../../../../../examples/documentation-workspaces/policy.example.json', import.meta.url), 'utf8');
+    expect((await list(await credential())).body).toEqual({ workspaces: [] });
+  });
+  it('returns only the explicitly granted customer and denies a sibling customer even with a valid general session', async () => {
+    config.documentationWorkspacesJson = policy(); const token = await credential();
+    expect((await list(token)).body).toEqual({ workspaces: [{ id: 'alpha', name: 'Alpha customer' }] });
+    expect((await scoped(token, 'alpha')).body.workspaceId).toBe('alpha');
+    expect((await scoped(token, 'beta')).status).toBe(404);
+    expect((await scoped(token, 'unknown')).status).toBe(404);
+    expect((await check(token)).status).toBe(200);
+    expect((await request(server).get('/api/auth/documentation/workspaces').set('Authorization', `Bearer ${browserToken}`)).status).toBe(401);
+  });
+  it('admits verified exact-domain accounts automatically only when the publisher enables domain admission', async () => {
+    const changed = JSON.parse(policy());
+    changed.workspaces[0].accessMode = 'verified_domain';
+    changed.workspaces[0].readers = [];
+    config.documentationWorkspacesJson = JSON.stringify(changed);
+    const token = await credential();
+    expect((await scoped(token, 'alpha')).status).toBe(200);
+    expect((await scoped(token, 'beta')).status).toBe(404);
+    for (const email of ['reader@other.test', 'reader@sub.example.test', 'reader@example.test.evil.test']) {
+      user.email = email; expect((await scoped(token, 'alpha')).status).toBe(404);
+    }
+    user.email = 'reader@EXAMPLE.TEST'; expect((await scoped(token, 'alpha')).status).toBe(200);
+    user.isEmailVerified = false; expect((await scoped(token, 'alpha')).status).toBe(403);
+    user.isEmailVerified = true; user.isActive = false; expect((await scoped(token, 'alpha')).status).toBe(401);
+  });
+  it('domain admission respects policy removal and rejects contradictory reader restrictions', async () => {
+    const changed = JSON.parse(policy()); changed.workspaces[0].accessMode = 'verified_domain';
+    config.documentationWorkspacesJson = JSON.stringify(changed);
+    const token = await credential(); expect((await scoped(token, 'alpha')).status).toBe(503);
+    changed.workspaces[0].readers = []; config.documentationWorkspacesJson = JSON.stringify(changed);
+    expect((await scoped(token, 'alpha')).status).toBe(200);
+    changed.workspaces[0].active = false; config.documentationWorkspacesJson = JSON.stringify(changed);
+    expect((await scoped(token, 'alpha')).status).toBe(404);
+    config.documentationWorkspacesJson = undefined; expect((await scoped(token, 'alpha')).status).toBe(404);
+  });
+  it('never infers customer access from a matching domain or a previously issued token', async () => {
+    const token = await credential(); expect((await list(token)).body).toEqual({ workspaces: [] });
+    config.documentationWorkspacesJson = policy(); expect((await scoped(token, 'alpha')).status).toBe(200);
+    const changed = JSON.parse(policy()); changed.workspaces[0].readers = []; config.documentationWorkspacesJson = JSON.stringify(changed);
+    expect((await scoped(token, 'alpha')).status).toBe(404);
+    config.documentationWorkspacesJson = policy(); user.email = 'reader@example.test.evil.test';
+    expect((await scoped(token, 'alpha')).status).toBe(404);
+    user.email = 'reader@sub.example.test'; expect((await scoped(token, 'alpha')).status).toBe(404);
+    user.email = 'reader@EXAMPLE.TEST'; expect((await scoped(token, 'alpha')).status).toBe(200);
+  });
+  it('rejects expired, inactive and malformed policies without falling back to general reading permission', async () => {
+    const token = await credential();
+    for (const change of ['expired', 'inactive', 'duplicate', 'wildcard']) {
+      const changed = JSON.parse(policy());
+      if (change === 'expired') changed.workspaces[0].readers[0].expiresAt = Date.now() - 1;
+      if (change === 'inactive') changed.workspaces[0].active = false;
+      if (change === 'duplicate') changed.workspaces.push(changed.workspaces[0]);
+      if (change === 'wildcard') changed.workspaces[0].allowedEmailDomains = ['*.example.test'];
+      config.documentationWorkspacesJson = JSON.stringify(changed);
+      expect((await scoped(token, 'alpha')).status).toBe(change === 'duplicate' || change === 'wildcard' ? 503 : 404);
+    }
+    config.documentationWorkspacesJson = '{'; expect((await list(token)).status).toBe(503);
+    config.documentationWorkspacesJson = policy(); user.isEmailVerified = false;
+    expect((await scoped(token, 'alpha')).status).toBe(403);
+    user.isEmailVerified = true; row.revokedAt = Date.now(); expect((await scoped(token, 'alpha')).status).toBe(401);
   });
 });
