@@ -15,10 +15,14 @@ import {generateAccessToken} from '@enterpriseglue/shared/utils/jwt.js';
 import {requireAuth} from '@enterpriseglue/shared/middleware/auth.js';
 import {AppError} from '@enterpriseglue/shared/middleware/errorHandler.js';
 import {apiLimiter} from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import meRoute from '../../../packages/backend-host/src/modules/auth/routes/me.js';
 import route from '../../../packages/backend-host/src/modules/auth/routes/documentation.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js',()=>({getDataSource:vi.fn()}));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js',()=>({updateBpmnEngineRequestContext:vi.fn()}));
+vi.mock('@enterpriseglue/shared/services/audit.js',()=>({logAudit:vi.fn(),AuditActions:{USER_UPDATE:'USER_UPDATE'}}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js',()=>({getActivePlatformAdministratorUserIds:vi.fn().mockResolvedValue(new Set())}));
+vi.mock('@enterpriseglue/shared/services/capabilities.js',()=>({buildUserCapabilities:vi.fn().mockResolvedValue({canViewAdminMenu:false,canAccessAdminRoutes:false,canManageUsers:false,canViewAuditLogs:false,canManagePlatformSettings:false,canViewMissionControl:false,canManageTenants:false})}));
 const schema=`documentation_gateway_${Date.now()}`;
 const accountOrigin='https://account.example.test';
 const docsOrigin='https://docs.example.test';
@@ -47,7 +51,7 @@ beforeAll(async()=>{
   await fixture.getRepository(User).save(user);
   await fixture.getRepository(RefreshToken).insert({id:sessionId,userId:user.id,tenantId:null,tokenHash:'owned-test-session',createdAt:now,expiresAt:now+600_000,revokedAt:null,deviceInfo:JSON.stringify({sessionClass:'cloud_account'})});
   browserToken=generateAccessToken(user,{sessionId,authenticationMethod:'oidc',sessionClass:'cloud_account'});
-  const app=express();app.use(express.json());app.use(route);
+  const app=express();app.use(express.json());app.use(route);app.use(meRoute);
   app.get('/application-api',apiLimiter,requireAuth,(_req,res)=>res.json({unexpected:true}));
   app.use((error:unknown,_req:express.Request,res:express.Response,_next:express.NextFunction)=>res.status(error instanceof AppError?error.statusCode:500).json({error:error instanceof Error?error.message:'error'}));
   await new Promise<void>(done=>{server=app.listen(0,'127.0.0.1',()=>done());});
@@ -78,6 +82,14 @@ it('completes real account HTTP grant/exchange/read with PostgreSQL, then handle
   const article=await gateway.fetch(new Request(`${docsOrigin}/docs/0.29/start`,{headers:{cookie}}),gatewayEnv);
   expect(article.status).toBe(200);expect(await article.text()).toBe('qualified protected article');expect(article.headers.get('cache-control')).toBe('private, no-store');
   const proof=cookie.slice(cookie.indexOf('=')+1);
+  const profileEntry=await gateway.fetch(new Request(`${docsOrigin}/auth/account?returnTo=https://untrusted.test`),gatewayEnv);
+  expect(profileEntry.headers.get('location')).toBe(accountOrigin+'/documentation/access?view=account');
+  const profile=await request(server).patch('/api/auth/me').set('Authorization',`Bearer ${browserToken}`).send({firstName:'Alex',lastName:'Reader'});
+  expect(profile.status,JSON.stringify(profile.body)).toBe(200);
+  expect(profile.body.session.tenant.id).toBeNull();
+  expect(await fixture.getRepository(User).findOneByOrFail({id:'documentation-reader'})).toMatchObject({firstName:'Alex',lastName:'Reader'});
+  expect((await request(server).patch('/api/auth/me').set('Authorization',`Bearer ${proof}`).send({firstName:'Denied'})).status).toBe(401);
+  expect((await fixture.getRepository(User).findOneByOrFail({id:'documentation-reader'})).firstName).toBe('Alex');
   expect((await request(server).get('/application-api').set('Authorization',`Bearer ${proof}`)).status).toBe(401);
   expect((await gateway.fetch(new Request(created.body.callbackUrl,{headers:{cookie:pending}}),gatewayEnv)).status).toBe(401);
   const signedOut=await gateway.fetch(new Request(`${docsOrigin}/auth/logout`,{method:'POST',headers:{origin:docsOrigin,cookie}}),gatewayEnv);

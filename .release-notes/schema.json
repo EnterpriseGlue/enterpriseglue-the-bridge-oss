@@ -72,6 +72,76 @@
     },
     "security": { "$ref": "#/$defs/stringList" },
     "documentation": { "$ref": "#/$defs/nonEmptyStringList" },
+    "customerDocumentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "impact",
+        "owner",
+        "pages"
+      ],
+      "properties": {
+        "impact": {
+          "enum": [
+            "required",
+            "none"
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,99}$"
+          }
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 20
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "impact": {
+                "const": "required"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "pages": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "impact": {
+                "const": "none"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "pages": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
     "knownLimitations": { "$ref": "#/$defs/stringList" },
     "rollback": { "$ref": "#/$defs/stringList" },
     "validation": { "$ref": "#/$defs/nonEmptyStringList" },

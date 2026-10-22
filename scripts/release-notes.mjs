@@ -9,6 +9,8 @@ import {
   publishedPackageForChangedPath,
 } from './lib/package-version-authority.mjs'
 
+import { validateDocumentationImpact } from './lib/documentation-release-policy.mjs'
+
 const FRAGMENT_DIR = '.release-notes'
 const FRAGMENT_SCHEMA_VERSION = 1
 const TYPES = new Set(['feature', 'fix', 'security', 'performance', 'deprecation', 'breaking', 'docs', 'internal'])
@@ -112,7 +114,8 @@ function assertStringList(value, context, { nonEmpty = false } = {}) {
 
 export function validateFragment(fragment, source = 'release-note fragment') {
   assertObject(fragment, source)
-  const allowedFields = new Set(['$schema', ...REQUIRED_FIELDS])
+  if ('customerDocumentation' in fragment) validateDocumentationImpact(fragment.customerDocumentation)
+  const allowedFields = new Set(['$schema', 'customerDocumentation', ...REQUIRED_FIELDS])
   const unknownFields = Object.keys(fragment).filter((key) => !allowedFields.has(key))
   if (unknownFields.length > 0) fail(`${source} contains unsupported field(s): ${unknownFields.join(', ')}.`)
   const missingFields = REQUIRED_FIELDS.filter((key) => !(key in fragment))
@@ -557,6 +560,11 @@ function runValidate(root, options) {
   const selection = releaseSelection(root, baseRef)
   const changedFragmentPaths = new Set(selection.selected.map((entry) => entry.path))
   const fragments = selection.all.filter((entry) => changedFragmentPaths.has(entry.path)).map((entry) => entry.value)
+  for (const entry of selection.selected) {
+    // Previously published fragments stay readable; every new/edited change
+    // must declare documentation impact during its own implementation review.
+    validateDocumentationImpact(entry.value.customerDocumentation)
+  }
   const exempt = String(process.env.RELEASE_NOTE_EXEMPT || '').toLowerCase() === 'true'
   const coverage = validatePathCoverage(selection.changedFiles, fragments, {
     exempt,

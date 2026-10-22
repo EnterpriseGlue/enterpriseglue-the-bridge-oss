@@ -364,3 +364,13 @@ test('evidence corrections and a newly qualified package bump can share one chan
     assert.equal(releaseRange.status, 'passed', releaseRange.violations.join('\n'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('release fragment schema changes are metadata, not package-version records', () => {
+  const root=createFixture();
+  try {
+    writeJson(join(root,'.release-notes/schema.json'),{type:'object',properties:{customerDocumentation:{type:'object'}}});
+    const plan=planRepositoryPackageVersions({root,baseRef:'origin/main'});
+    assert.equal(plan.status,'passed');
+    assert.deepEqual(plan.directPackages,[]);
+  } finally {rmSync(root,{recursive:true,force:true});}
+});

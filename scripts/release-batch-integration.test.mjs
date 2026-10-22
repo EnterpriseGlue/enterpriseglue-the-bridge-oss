@@ -11,6 +11,8 @@ import { detailedNotesMarker } from './lib/release-publication-policy.mjs'
 const repository = 'EnterpriseGlue/enterpriseglue-the-bridge-oss'
 const template = JSON.parse(readFileSync(new URL('../.release-notes/operator-controlled-release-batches.json', import.meta.url), 'utf8'))
 
+template.customerDocumentation = {impact: 'none', owner: 'fixture-maintainer', pages: [], reason: 'Synthetic maintainer test does not change customer tasks.'}
+
 function fixture(t, { wrongDocument = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'eg-release-batch-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -213,3 +215,12 @@ test('replacement preparation accepts a reserved unpublished release but never a
     assert.throws(()=>verifyPublication({root:f.root,env:f.env,runApi:endpoint=>endpoint.endsWith(endpointSuffix) ? [{}] : missing(endpoint)}),/cannot be replaced/)
   }
 })
+
+test('OSS approval requires canonical release notes but no CMS, documentation receipt or publisher token', t => {
+  const f=releaseFixture(t);
+  const approval=verifyPublication({root:f.root,env:f.env,runApi:f.runApi});
+  assert.equal(approval.shouldPublish,true);
+  const record=JSON.parse(readFileSync(join(f.root,'.artifacts/release-publication/authorization.json'),'utf8'));
+  assert.equal(record.customerDocumentation,undefined);
+  assert.ok(record.documentation.sha256);
+});

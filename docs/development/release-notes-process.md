@@ -417,3 +417,41 @@ the already qualified release document. Newly selected release content requires
 new generation and candidate qualification. See the
 [artifact promotion runbook](../runbooks/release-artifact-promotion.md) for the
 recovery protocol and observed publication states.
+
+## Independent customer documentation updates
+
+The existing structured fragments and `scripts/release-notes.mjs` remain the sole
+release-note generator. Versioned Markdown and the GitHub release body must still
+agree with the exact approved batch; the documentation site mirrors that content.
+Essential migration, upgrade and security instructions remain required here.
+
+New/edited fragments declare `customerDocumentation` with `impact`, an owner and
+flat stable page IDs (for example `configure-sso`, independent of paths), or
+`impact: "none"`, an empty page list and a specific reason.
+This is fast change metadata, not a requirement for an available CMS or a completed
+customer-content build. Customer guides and internal authoring material remain
+outside this repository under the documentation publication policy.
+
+`documentation-release-handoff.yml` independently observes published releases and
+completed first-party Release Please runs, and supports an explicit catch-up tag.
+It reads
+the canonical versioned Markdown from the exact published source and verifies
+that GitHub exposes the same release body before dispatching private draft work.
+It is not a `needs` dependency, publication authorization step or required
+aggregate context. Missing documentation credentials, transport failures, draft
+validation failures and publication approval do not block OSS tag/image/package
+publication. The release-note and signed-candidate gates are unchanged.
+
+Configure `DOCUMENTATION_UPDATE_TOKEN` with only the private homepage Actions
+workflow-dispatch permission. Failed delivery is visible in the separate workflow
+and its step summary; retry it with the same release tag. The private receiver
+verifies the released tag/source/body independently and produces an idempotent,
+source-bound draft result. It preserves the current navigation and records page
+updates for review. Reorganizing navigation requires an explicit content change.
+
+Documentation status is separate from immutable release notes: pending, needs
+review, approved and published identify content delivery, never application
+availability. A failed documentation build keeps the previously approved site
+available. Full customer-content approval is enforced only by the documentation
+publisher. No CMS credential or customer documentation receipt enters OSS
+release approval or publication recovery.

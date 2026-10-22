@@ -1,0 +1,68 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "documentation-account-profile",
+  "type": "fix",
+  "scope": "documentation account",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Allow documentation readers to manage their shared account profile without organization onboarding.",
+  "userImpact": [
+    "The documentation user icon opens the existing account service for first/last-name updates without creating a tenant."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "PATCH /api/auth/me admits verified active managed Cloud account sessions for name changes; documentation tokens cannot update profiles."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Account edits retain exact live-session validation, standard browser XSRF checks, rate limiting, bounded name fields and audit logging. No documentation credential is sent through the account redirect."
+  ],
+  "documentation": [
+    "docs/reference/documentation-account-access.md"
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "documentation-access"
+    ]
+  },
+  "knownLimitations": [
+    "The matching account-service release must be deployed before the documentation profile link can be enabled in a deployed portal."
+  ],
+  "rollback": [
+    "Revert the account profile entry and profile middleware change together; no data migration is required."
+  ],
+  "validation": [
+    "Focused authentication and shared-account tests; exact-source gateway, profile persistence and customer isolation on disposable PostgreSQL; Chromium, Firefox and WebKit sign-in/profile checks; frontend build/typecheck and route guards."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.1",
+      "newVersion": "0.23.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.2",
+      "newVersion": "0.20.3",
+      "impact": "patch"
+    }
+  ]
+}

@@ -27,6 +27,8 @@ import {
 const fragment = JSON.parse(
   readFileSync(new URL('../.release-notes/sso-engine-assignments.json', import.meta.url), 'utf8'),
 )
+fragment.customerDocumentation = {impact: 'none', owner: 'fixture-maintainer', pages: [], reason: 'Synthetic maintainer test does not change customer tasks.'}
+
 
 test('the current feature release fragment satisfies the contract', () => {
   assert.equal(validateFragment(structuredClone(fragment)).id, 'sso-engine-assignments')

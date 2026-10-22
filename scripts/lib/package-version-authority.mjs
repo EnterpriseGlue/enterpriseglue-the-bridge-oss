@@ -259,7 +259,7 @@ export function directlyChangedPackages({ root, authority, mergeBase, paths }) {
 
 function changedReleaseFragments(root, paths, mergeBase) {
   return paths
-    .filter((path) => /^\.release-notes\/[a-z0-9][a-z0-9-]*\.json$/.test(path))
+    .filter((path) => path !== '.release-notes/schema.json' && /^\.release-notes\/[a-z0-9][a-z0-9-]*\.json$/.test(path))
     .filter((path) => existsSync(resolve(root, path)))
     .map((path) => {
       const value = readJson(resolve(root, path));

@@ -79,7 +79,7 @@ const updateProfileSchema = z.object({
  * PATCH /api/auth/me
  * Update current user profile (firstName, lastName)
  */
-router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfileSchema), asyncHandler(async (req, res) => {
+router.patch('/api/auth/me', apiLimiter, requireCloudAccountOrTenantAuth, validateBody(updateProfileSchema), asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
   const userId = req.user!.userId;

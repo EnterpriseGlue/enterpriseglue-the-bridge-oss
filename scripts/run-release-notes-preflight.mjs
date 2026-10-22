@@ -52,6 +52,7 @@ function defaultToolTests(root) {
   execFileSync(process.execPath, [
     '--test',
     'scripts/release-notes.test.mjs',
+    'scripts/documentation-release-policy.test.mjs',
     'scripts/release-notes-preflight.test.mjs',
   ], { cwd: root, stdio: 'inherit' })
 }

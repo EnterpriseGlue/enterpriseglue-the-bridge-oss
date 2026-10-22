@@ -1,0 +1,54 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-documentation-sync",
+  "type": "feature",
+  "scope": "documentation publication",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "operators"
+  ],
+  "summary": "Prepare customer documentation independently from OSS releases using the existing canonical release notes and stable page impact metadata.",
+  "userImpact": [
+    "Documentation preparation failures do not prevent an otherwise qualified software release."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Configure DOCUMENTATION_UPDATE_TOKEN only for the independent private documentation workflow handoff."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Canonical published Markdown, GitHub release identity and source commit are checked before private draft preparation; customer publication retains its own approval gates."
+  ],
+  "documentation": [
+    "docs/development/release-notes-process.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "release-maintainers",
+    "pages": [],
+    "reason": "This change enforces maintainer publication controls without changing application tasks or runtime contracts."
+  },
+  "knownLimitations": [
+    "Private CMS export/draft storage and documentation publisher environments need configuration before hosted preparation and publication."
+  ],
+  "rollback": [
+    "Revert the control-flow change through reviewed protected source; no runtime or database rollback is required."
+  ],
+  "validation": [
+    "Local release-note, detached handoff, canonical equality, idempotence, failed-delivery and publication-authorization regression checks."
+  ],
+  "packages": []
+}
