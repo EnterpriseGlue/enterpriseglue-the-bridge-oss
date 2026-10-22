@@ -1,0 +1,78 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "customer-documentation-domain-authority",
+  "type": "fix",
+  "scope": "documentation",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Requires central account proof for automatic customer documentation domain admission.",
+  "userImpact": [
+    "Verified-domain customer workspaces admit only centrally verified Cloud account sessions. Tenant-provider email assertions alone no longer authorize domain-based access. Individual-reader policies retain their immutable-account restrictions."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Install the corrected account service before enabling verified-domain customer documentation bundles."
+    ]
+  },
+  "configuration": [
+    "No policy schema change. The publisher-selected verified_domain mode requires the persisted central cloud_account session class; explicit_readers remains unchanged."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Configuration, session and workspace-discovery responses advertise customer-documentation/v2. The matching gateway requires this central domain-authority contract on every customer read; older account responses fail closed."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Reuses the existing persisted source session class. No database migration."
+    ]
+  },
+  "security": [
+    "A tenant-controlled identity provider cannot establish customer email-domain authority merely by asserting an allowed email or verified-email claim.",
+    "The v2 account contract prevents older account service instances from authorizing customer reads during rollout or rollback."
+  ],
+  "documentation": [
+    "docs/reference/documentation-account-access.md"
+  ],
+  "knownLimitations": [
+    "Real corporate sign-in and deployed account/gateway isolation still require acceptance before customer content publication."
+  ],
+  "rollback": [
+    "Disable customer bundles before rolling back the corrected account contract; the matching gateway rejects responses that lack the v2 contract."
+  ],
+  "validation": [
+    "Local auth routes and domain-authority regressions: 16 files and 197 tests passed.",
+    "Exact account/gateway HTTP qualification with owned PostgreSQL: 2 files and 3 tests passed.",
+    "Backend/shared build, backend typecheck and affected lint passed. No deployed or customer-content publication acceptance is claimed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.0",
+      "newVersion": "0.28.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.0",
+      "newVersion": "0.23.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.1",
+      "newVersion": "0.20.2",
+      "impact": "patch"
+    }
+  ]
+}
