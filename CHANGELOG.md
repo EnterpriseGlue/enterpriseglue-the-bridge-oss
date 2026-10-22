@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.33.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.32.1...v0.33.0) (2026-10-21)
+
+### Changes
+
+- **identity:** Adds tenant-scoped outbound proxy routing for SSO, with portal and headless configuration.
+
+Full upgrade, compatibility and verification details: [v0.33.0 release notes](docs/releases/v0.33.0.md).
+
 ## [0.32.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.32.0...v0.32.1) (2026-10-21)
 
 ### Changes
