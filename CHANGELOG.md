@@ -6,18 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.34.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.33.0...v0.34.0) (2026-10-22)
 
+### Changes
 
-### Features
+- **documentation:** Requires central account proof for automatic customer documentation domain admission.
+- **documentation:** Adds private customer documentation workspaces with verified-domain or individual-reader admission, checked on every protected request.
 
-* **docs:** add customer-specific workspace admission ([42c4444](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/42c44446dc26ed052fa0aa9bd7066fcc33efb1f6))
-* **docs:** add customer-specific workspace admission ([9404512](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/94045125b4f14cb0cee871073b5342da891ac991))
-
-
-### Bug Fixes
-
-* **docs:** expose corrected domain admission contract ([39c6eef](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/39c6eef2a9d34f3fe7cef71c3149c713ddfc45bf))
-* **docs:** require central domain authority for automatic admission ([9a15d3a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9a15d3aecb670108196c9965c41d6f12966f988c))
-* **docs:** require central domain authority for automatic admission ([27133a4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/27133a4e5226634e37ee6d3fc228cf6f4baf65d7))
+Full upgrade, compatibility and verification details: [v0.34.0 release notes](docs/releases/v0.34.0.md).
 
 ## [0.33.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.32.1...v0.33.0) (2026-10-21)
 
