@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Button, InlineLoading, InlineNotification, Stack } from '@carbon/react';
+import { Button, InlineLoading, InlineNotification, Stack, TextInput } from '@carbon/react';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
 import LoginProviderButton from '../shared/components/LoginProviderButton';
 import { apiClient } from '../shared/api/client';
@@ -10,7 +10,27 @@ import { clearDocumentationRequest, getDocumentationRequest } from '../utils/doc
 type Provider = { id: string; displayName: string; protocol: 'oidc' | 'saml' };
 export default function DocumentationAccess() {
   const location = useLocation();
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, refreshUser } = useAuth();
+  const [accountView] = useState(() => {
+    const query = new URLSearchParams(location.search);
+    if (query.has('state') || query.has('challenge')) {
+      try { sessionStorage.removeItem('enterpriseglue.documentation.account-view'); } catch { /* View only. */ }
+      return false;
+    }
+    if (query.get('view') === 'account') return true;
+    try { return sessionStorage.getItem('enterpriseglue.documentation.account-view') === 'true'; } catch { return false; }
+  });
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setFirstName(user?.firstName || ''); setLastName(user?.lastName || ''); }, [user]);
+  useEffect(() => {
+    if (!accountView) return;
+    try {
+      if (isAuthenticated) sessionStorage.removeItem('enterpriseglue.documentation.account-view');
+      else sessionStorage.setItem('enterpriseglue.documentation.account-view', 'true');
+    } catch { /* This flag only preserves a view; it grants no access. */ }
+  }, [accountView, isAuthenticated]);
   const [request] = useState(() => getDocumentationRequest(location.search));
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(true);
@@ -18,7 +38,7 @@ export default function DocumentationAccess() {
   const [documentationOrigin, setDocumentationOrigin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (request) return;
+    if (request && !accountView) return;
     let active = true;
     void apiClient.get<{documentationOrigin: string}>('/api/auth/documentation/configuration').then((value) => {
       const origin = new URL(value.documentationOrigin);
@@ -26,7 +46,7 @@ export default function DocumentationAccess() {
       if (active) setDocumentationOrigin(origin.origin);
     }).catch(() => { if (active) setError('Documentation access is not available yet. Please return to the documentation link supplied to you.'); });
     return () => { active = false; };
-  }, [request]);
+  }, [request, accountView]);
   const continueToDocumentation = useCallback(async () => {
     if (!request) return;
     setBusy(true); setError(null);
@@ -40,21 +60,39 @@ export default function DocumentationAccess() {
     } catch { setBusy(false); setError('We could not open documentation. Try again, or return to the documentation site to restart sign-in.'); }
   }, [request]);
   useEffect(() => {
-    if (isLoading || isAuthenticated || !request) return;
+    if (isLoading || isAuthenticated || (!request && !accountView)) return;
     let active = true;
     void apiClient.get<Provider[]>('/api/auth/cloud-signup/providers')
       .then((value) => { if (active) setProviders(value); })
       .catch(() => { if (active) setError('Account sign-in is temporarily unavailable. Please try again later.'); })
       .finally(() => { if (active) setLoadingProviders(false); });
     return () => { active = false; };
-  }, [isLoading, isAuthenticated, request]);
-  return <PublicAuthShell title="Documentation access" description="Use your EnterpriseGlue account to read documentation. No Cloud organization or workspace is required.">
+  }, [isLoading, isAuthenticated, request, accountView]);
+  const saveProfile = async (event: React.FormEvent) => {
+    event.preventDefault(); setBusy(true); setError(null); setSaved(false);
+    try {
+      await apiClient.patch('/api/auth/me', { firstName, lastName });
+      await refreshUser(); setSaved(true);
+    } catch { setError('Your profile could not be saved. Please try again.'); }
+    finally { setBusy(false); }
+  };
+  return <PublicAuthShell title={accountView ? 'Your EnterpriseGlue account' : 'Documentation access'} description="Use your EnterpriseGlue account to read documentation. No Cloud organization or workspace is required.">
     <Stack gap={5}>
       {error && <InlineNotification kind="error" lowContrast hideCloseButton title="Could not continue" subtitle={error} />}
-      {!request ? <><InlineNotification kind="info" lowContrast hideCloseButton title="Start from the documentation site" subtitle="Open the configured documentation site to begin a secure sign-in. Your account remains available without creating a Cloud organization." />{documentationOrigin && <Button as="a" href={documentationOrigin} kind="primary">Open documentation</Button>}</>
+      {!request && !accountView ? <><InlineNotification kind="info" lowContrast hideCloseButton title="Start from the documentation site" subtitle="Open the configured documentation site to begin a secure sign-in. Your account remains available without creating a Cloud organization." />{documentationOrigin && <Button as="a" href={documentationOrigin} kind="primary">Open documentation</Button>}</>
         : isLoading ? <InlineLoading description="Checking your account session…" />
         : isAuthenticated && user?.mustResetPassword ? <Button as={Link} to="/reset-password">Complete required password reset</Button>
         : isAuthenticated && user?.isEmailVerified === false ? <Button as={Link} to="/resend-verification">Verify your email address</Button>
+        : isAuthenticated && accountView ? <form onSubmit={event => void saveProfile(event)}>
+          <Stack gap={5}>
+            <p style={{ overflowWrap: 'anywhere' }}>{user?.email}</p>
+            <TextInput id="documentation-first-name" labelText="First name" autoComplete="given-name" maxLength={100} value={firstName} onChange={event => { setFirstName(event.target.value); setSaved(false); }} />
+            <TextInput id="documentation-last-name" labelText="Last name" autoComplete="family-name" maxLength={100} value={lastName} onChange={event => { setLastName(event.target.value); setSaved(false); }} />
+            {saved && <p role="status">Your profile has been updated.</p>}
+            <Button type="submit" disabled={busy || (firstName === (user?.firstName || '') && lastName === (user?.lastName || ''))}>{busy ? 'Saving…' : 'Save profile'}</Button>
+            {documentationOrigin && <Button as="a" href={documentationOrigin} kind="ghost">Back to documentation</Button>}
+          </Stack>
+        </form>
         : isAuthenticated ? <Button disabled={busy} onClick={() => void continueToDocumentation()}>{busy ? 'Opening documentation…' : 'Continue to documentation'}</Button>
         : <>
           {loadingProviders && <InlineLoading description="Loading sign-in methods…" />}

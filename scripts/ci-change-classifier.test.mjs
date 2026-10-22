@@ -645,3 +645,10 @@ test('Oracle native encryption selects its required acceptance without broad unk
   assert.equal(classifyChangedFiles(['frontend/src/styles/theme.scss']).run_oracle_nne, false);
   assert.equal(classifyChangedFiles(['new-unknown-path/file.ts']).run_oracle_nne, true);
 });
+
+test('documentation handoff selects release controls without application or database suites', () => {
+  for(const file of ['scripts/documentation-release-policy.test.mjs','scripts/lib/documentation-release-policy.mjs','scripts/request-documentation-update.mjs']) {
+    const result=classifyChangedFiles([file]);assert.equal(result.workflow_or_release,true);assert.equal(result.unknown_high_risk,false);assert.equal(result.run_tests,false);assert.equal(result.run_postgres,false);assert.equal(result.run_release_readiness,true);
+  }
+  assert.equal(classifyChangedFiles(['scripts/unrecognized-control.mjs']).unknown_high_risk,true);
+});

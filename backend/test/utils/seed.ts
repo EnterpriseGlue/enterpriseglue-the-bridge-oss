@@ -52,13 +52,21 @@ type SeedUserOptions = {
   platformRole?: 'admin' | 'user';
 };
 
-const authorizationFoundationDataSources = new WeakSet<object>();
+const authorizationFoundationDataSources = new WeakMap<object, Promise<void>>();
 
 async function ensureAuthorizationFoundation(dataSource: Awaited<ReturnType<typeof getDataSource>>): Promise<void> {
-  if (authorizationFoundationDataSources.has(dataSource)) return;
-  await permissionService.seedRbacFoundation(dataSource);
-  await authzGroupService.seedDefaultPlatformGroups(dataSource);
-  authorizationFoundationDataSources.add(dataSource);
+  let foundation = authorizationFoundationDataSources.get(dataSource);
+  if (!foundation) {
+    foundation = (async () => {
+      await permissionService.seedRbacFoundation(dataSource);
+      await authzGroupService.seedDefaultPlatformGroups(dataSource);
+    })().catch(error => {
+      authorizationFoundationDataSources.delete(dataSource);
+      throw error;
+    });
+    authorizationFoundationDataSources.set(dataSource, foundation);
+  }
+  await foundation;
 }
 
 export async function seedUser(prefix: string, options: SeedUserOptions = {}): Promise<SeedUser> {

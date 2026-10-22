@@ -47,3 +47,8 @@ Provide steps to validate the change.
 ## Related issues
 
 Link to issues/discussions (optional).
+
+- Customer documentation impact: `required` with page IDs and owner, or `none`
+  with owner and reason, recorded as `customerDocumentation` in the fragment.
+- Customer content is reviewed in the external documentation publisher; do not
+  add customer drafts or internal plans to this source repository.

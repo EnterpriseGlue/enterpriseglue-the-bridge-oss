@@ -11,6 +11,7 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { verifyDocumentationIdentity } from '@enterpriseglue/shared/utils/documentation-identity.js';
+import meRoute from '../../../../../packages/backend-host/src/modules/auth/routes/me.js';
 import documentationRoute from '../../../../../packages/backend-host/src/modules/auth/routes/documentation.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -18,6 +19,9 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => ({ updateBpmnEngineRequestContext: vi.fn() }));
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn(), AuditActions: { USER_UPDATE: 'USER_UPDATE' } }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({ getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()) }));
+vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({ buildUserCapabilities: vi.fn().mockResolvedValue({ canViewAdminMenu: false, canAccessAdminRoutes: false, canManageUsers: false, canViewAuditLogs: false, canManagePlatformSettings: false, canViewMissionControl: false, canManageTenants: false }) }));
 const sessionId = '11111111-1111-4111-8111-111111111111';
 const verifier = 'v'.repeat(43);
 const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -30,8 +34,8 @@ let server: Server;
 let updates: number;
 beforeEach(async () => {
   Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true, frontendUrl: 'https://app.staging.enterpriseglue.ai', documentationOrigin: 'https://docs.enterpriseglue.ai', documentationGatewaySecret: 'gateway-secret-'.repeat(4) });
-  updates = 0; config.documentationWorkspacesJson = undefined;
-  user = { id: 'reader', isActive: true, isEmailVerified: true, email: 'reader@example.test', authSessionVersion: 0 } as User;
+updates = 0; config.documentationWorkspacesJson = undefined;
+  user = { id: 'reader', isActive: true, isEmailVerified: true, email: 'reader@example.test', authSessionVersion: 0, createdAt: Date.now() } as User;
   row = { id: sessionId, userId: user.id, tenantId: null, deviceInfo: JSON.stringify({ sessionClass: 'cloud_account' }), revokedAt: null, expiresAt: Date.now() + 600_000 } as RefreshToken;
   const repository = {
     findOneBy: vi.fn(async () => row.revokedAt === null ? { ...row } : null),
@@ -41,13 +45,13 @@ beforeEach(async () => {
     }),
   };
   vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => {
-    if (entity === User) return { findOneBy: async () => user.isActive ? user : null };
+    if (entity === User) return { findOneBy: async () => user.isActive ? user : null, update: async (criteria: { id: string }, changes: Partial<User>) => { expect(criteria).toEqual({ id: user.id }); Object.assign(user, changes); return { affected: 1 }; } };
     if (entity === RefreshToken) return repository;
     // Any attempt to touch Tenant, placement or provisioning persistence fails this suite.
     throw new Error('Documentation must not access tenant persistence');
   } } as never);
   browserToken = generateAccessToken(user, { sessionId, authenticationMethod: 'oidc', sessionClass: 'cloud_account' });
-  app = express(); app.use(express.json()); app.use(documentationRoute);
+  app = express(); app.use(express.json()); app.use(documentationRoute); app.use(meRoute);
   app.get('/tenant-api', apiLimiter, requireAuth, (_req, res) => res.json({ forbidden: true }));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(error instanceof AppError ? error.statusCode : 500).json({ error: error instanceof Error ? error.message : 'error' }));
   // Keep one IPv4 listener for each test, including its concurrent requests.
@@ -81,6 +85,18 @@ describe('documentation account boundary', () => {
     expect(claims.permission).toBe('documentation:read'); expect(claims.source.tenantId).toBeUndefined();
     expect((await check(exchanged.body.session)).status).toBe(200); expect(updates).toBe(2);
     expect(JSON.parse(row.deviceInfo!)).toEqual({ sessionClass: 'cloud_account', documentationSessions: [claims.jti] });
+  });
+  it('updates the same account profile without tenant access and rejects documentation credentials', async () => {
+    const result = await request(server).patch('/api/auth/me').set('Authorization', `Bearer ${browserToken}`).send({ firstName: 'Alex', lastName: 'Reader', email: 'cannot-change@example.test' });
+    expect(result.status).toBe(200); expect(result.body).toMatchObject({ firstName: 'Alex', lastName: 'Reader', email: user.email, session: { tenant: { id: null } } });
+    expect(user.firstName).toBe('Alex'); expect(user.lastName).toBe('Reader'); expect(user.email).toBe('reader@example.test');
+    expect((await request(server).patch('/api/auth/me').set('Authorization', `Bearer ${browserToken}`).send({ firstName: 'x'.repeat(101) })).status).toBe(400);
+    const code = new URL((await grant()).body.callbackUrl).searchParams.get('code')!;
+    const token = (await exchange(code)).body.session;
+    for (const credential of [code, token]) expect((await request(server).patch('/api/auth/me').set('Authorization', `Bearer ${credential}`).send({ firstName: 'Unauthorized' })).status).toBe(401);
+    row.revokedAt = Date.now();
+    expect((await request(server).patch('/api/auth/me').set('Authorization', `Bearer ${browserToken}`).send({ firstName: 'Revoked' })).status).toBe(401);
+    expect(user.firstName).toBe('Alex');
   });
   it('consumes a grant atomically once, including concurrent exchanges', async () => {
     const code = new URL((await grant()).body.callbackUrl).searchParams.get('code')!;

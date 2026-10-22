@@ -163,3 +163,18 @@ The public configuration endpoint also returns `workspaceContract` equal to
 capability before sending its dedicated credential. An older account runtime
 cannot pass workspace rollout preflight. No workspace names, domains, readers
 or policy values are exposed in this public response.
+
+## Shared account profile
+
+The documentation user icon links through `GET /auth/account` on the gateway to
+`/documentation/access?view=account` on this account service. This is the existing
+neutral account shell, so it requires no new Cloud edge path or tenant selection.
+The page shows the signed-in account email and edits first/last name through
+`PATCH /api/auth/me`, with the same 100-character limits and audit as ordinary
+profile editing. The API accepts verified, active Cloud-account browser sessions
+as well as its existing tenant sessions. Documentation reading/grant tokens remain
+invalid for profile changes; the browser client retains its standard XSRF checks.
+
+The existing documentation-intent login preserves the account view using a
+view-only session-storage marker. No authentication authority is stored there.
+Returning to documentation uses the configured HTTPS documentation origin.

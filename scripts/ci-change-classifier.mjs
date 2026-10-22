@@ -63,6 +63,7 @@ const metadataPatterns = [
   /^(?:LICENSE|NOTICE)$/,
   /^(?:THIRD_PARTY_NOTICES\.md|third_party_licenses\.json)$/,
   /^\.github\/(?:ISSUE_TEMPLATE|PULL_REQUEST_TEMPLATE)\//,
+  /^\.github\/PULL_REQUEST_TEMPLATE\.md$/,
   /^\.github\/(?:CODEOWNERS|dependabot\.yml)$/,
   /^(?:\.sync|\.windsurf|\.vscode|archive)\//,
 ];
@@ -206,6 +207,8 @@ const classifiers = {
     /^docs\/development\/codex-workflow-plugin\.md$/,
   ],
   workflow_or_release: [
+    /^scripts\/(?:lib\/)?documentation-release-/,
+    /^scripts\/request-documentation-update\.mjs$/,
     /^scripts\/frontend-dependency-boundary\.test\.mjs$/,
     /^scripts\/(?:lib\/)?release-publication-/,
     /^\.github\/(?:workflows|actions)\//,
