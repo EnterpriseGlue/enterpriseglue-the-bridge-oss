@@ -55,7 +55,7 @@ beforeAll(async()=>{
   globalThis.fetch=async(input,options)=>{
     const url=new URL(String(input));if(url.origin!==accountOrigin)throw new Error('Unexpected outbound account origin');
     calls.push(url.pathname);
-    return originalFetch(`http://127.0.0.1:${address.port}${url.pathname}`,options);
+    return originalFetch(`http://127.0.0.1:${address.port}${url.pathname}${url.search}`,options);
   };
 },60_000);
 afterAll(async()=>{
@@ -101,4 +101,49 @@ it('completes real account HTTP grant/exchange/read with PostgreSQL, then handle
   expect(await fixture.getRepository(RefreshToken).count()).toBe(1);
   expect((await fixture.query('SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename',[schema])).map((row:{tablename:string})=>row.tablename)).toEqual(['refresh_tokens','users']);
   expect(calls.every(path=>['/api/auth/documentation/exchange','/api/auth/documentation/session','/api/auth/documentation/logout'].includes(path))).toBe(true);
+});
+
+
+it('enforces customer page, search and download isolation through real account routes and PostgreSQL', async () => {
+  const customers = ['alpha', 'beta'];
+  const cookies = new Map<string, string>();
+  const now = Date.now();
+  config.documentationWorkspacesJson = JSON.stringify({ schemaVersion: 1, workspaces: customers.map(id => ({
+    id, name: `${id} customer`, active: true, accessMode: 'verified_domain', allowedEmailDomains: [`${id}.example.test`], readers: [],
+  })) });
+  for (const id of customers) {
+    const sourceSessionId = id === 'alpha' ? '33333333-3333-4333-8333-333333333333' : '44444444-4444-4444-8444-444444444444';
+    const user = fixture.getRepository(User).create({ id: `${id}-reader`, email: `reader@${id}.example.test`, isActive: true, isEmailVerified: true, authSessionVersion: 0, createdAt: now, updatedAt: now });
+    await fixture.getRepository(User).save(user);
+    await fixture.getRepository(RefreshToken).insert({ id: sourceSessionId, userId: user.id, tenantId: null, tokenHash: `owned-${id}`, createdAt: now, expiresAt: now + 600_000, revokedAt: null, deviceInfo: JSON.stringify({ sessionClass: 'cloud_account' }) });
+    const browser = generateAccessToken(user, { sessionId: sourceSessionId, authenticationMethod: 'oidc', sessionClass: 'cloud_account' });
+    const start = await gateway.fetch(new Request(`${docsOrigin}/workspaces/${id}/docs/0.29/start`), gatewayEnv);
+    const target = new URL(start.headers.get('location')!);
+    const granted = await request(server).post('/api/auth/documentation/grant').set('Origin', accountOrigin).set('Authorization', `Bearer ${browser}`).send({ state: target.searchParams.get('state'), challenge: target.searchParams.get('challenge') });
+    expect(granted.status).toBe(200);
+    const callback = await gateway.fetch(new Request(granted.body.callbackUrl, { headers: { cookie: start.headers.get('set-cookie')!.split(';')[0]! } }), gatewayEnv);
+    expect(callback.status).toBe(303); cookies.set(id, callback.headers.get('set-cookie')!.split(';')[0]!);
+  }
+  for (const id of customers) {
+    const sibling = id === 'alpha' ? 'beta' : 'alpha';
+    for (const path of ['docs/0.29/start', 'documentation-search.json', 'assets/private-guide.pdf', 'assets/js/private.chunk.js', '_publication.json']) {
+      expect((await gateway.fetch(new Request(`${docsOrigin}/workspaces/${id}/${path}`, { headers: { cookie: cookies.get(id)! } }), gatewayEnv)).status).toBe(200);
+      const reads = gatewayEnv.ASSETS.fetch.mock.calls.length;
+      const denied = await gateway.fetch(new Request(`${docsOrigin}/workspaces/${sibling}/${path}`, { headers: { cookie: cookies.get(id)! } }), gatewayEnv);
+      expect(denied.status).toBe(404); expect(gatewayEnv.ASSETS.fetch.mock.calls.length).toBe(reads);
+      expect(await denied.text()).not.toContain('qualified protected article');
+    }
+    const menu = await gateway.fetch(new Request(`${docsOrigin}/workspaces`, { headers: { cookie: cookies.get(id)! } }), gatewayEnv);
+    const html = await menu.text(); expect(html).toContain(`>${id} customer</a>`); expect(html).not.toContain(`>${sibling} customer</a>`);
+  }
+  const changed = JSON.parse(config.documentationWorkspacesJson!); changed.workspaces[0].active = false;
+  config.documentationWorkspacesJson = JSON.stringify(changed);
+  const reads = gatewayEnv.ASSETS.fetch.mock.calls.length;
+  for (const path of ['docs/0.29/start', 'documentation-search.json', 'assets/private-guide.pdf']) {
+    expect((await gateway.fetch(new Request(`${docsOrigin}/workspaces/alpha/${path}`, { headers: { cookie: cookies.get('alpha')! } }), gatewayEnv)).status).toBe(404);
+  }
+  expect(gatewayEnv.ASSETS.fetch.mock.calls.length).toBe(reads);
+  await fixture.getRepository(User).update({ id: 'beta-reader' }, { isEmailVerified: false });
+  expect((await gateway.fetch(new Request(`${docsOrigin}/workspaces/beta/documentation-search.json`, { headers: { cookie: cookies.get('beta')! } }), gatewayEnv)).status).toBe(404);
+  expect((await fixture.query('SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename', [schema])).map((row: {tablename: string}) => row.tablename)).toEqual(['refresh_tokens', 'users']);
 });

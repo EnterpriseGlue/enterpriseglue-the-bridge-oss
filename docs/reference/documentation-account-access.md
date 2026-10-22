@@ -84,3 +84,74 @@ and refresh-session rows. Static content uses a controlled asset fixture. The
 homepage publisher's separate browser gate exercises the compiled site and real
 TLS/cookie/form behavior with a controlled account API. Neither gate establishes
 real-provider signup, installed releases or live Cloud acceptance.
+
+
+## Customer documentation workspaces
+
+General `documentation:read` admission does not authorize customer content.
+The optional private `EG_DOCUMENTATION_WORKSPACES_JSON` setting defines explicit
+admission policy. The default is no customer workspaces. Keep real policy values
+in protected deployment configuration outside source control and public logs.
+
+The bounded policy has this shape; identifiers and domains below are fixtures:
+
+```json
+{
+  "schemaVersion": 1,
+  "workspaces": [
+    {
+      "id": "customer-a",
+      "name": "Customer A",
+      "active": true,
+      "accessMode": "verified_domain",
+      "allowedEmailDomains": ["customer-a.example.test"],
+      "readers": []
+    }
+  ]
+}
+```
+
+`accessMode: "verified_domain"` admits any current active account with a verified
+email address at an allowed domain. Selecting this mode is the publisher's
+explicit domain admission decision; it requires no individual reader grant.
+`readers` must be empty in this mode so restrictions are never silently ignored.
+When `accessMode` is absent or `"explicit_readers"`, both the exact domain and
+an unexpired individual reader grant are required. `expiresAt` is an absolute
+Unix timestamp in milliseconds; resolve immutable IDs through account administration.
+Domains are lowercase exact matches; subdomains and suffix matches are
+not included. Duplicate workspace/reader IDs, wildcards and malformed policies
+fail closed. Limits are 32 workspaces, 32 domains per workspace, 500 reader grants
+per workspace and 256 KiB for the complete JSON setting.
+
+`GET /api/auth/documentation/workspaces` requires a dedicated gateway credential
+and current documentation token. It returns only the active, unexpired workspaces
+for the freshly verified user's actual email and the selected admission mode.
+`GET /api/auth/documentation/session?workspace=customer-a` repeats those checks
+and returns `workspaceId` only when that workspace is authorized. Unknown and
+unauthorized workspaces both return 404. This authority is independent of tenant
+membership and does not provision an application tenant. Browser access tokens,
+machine credentials and caller-supplied customer headers cannot bypass the
+existing documentation-token boundary.
+
+The policy is publisher-managed deployment configuration. Verified-domain admission
+uses the existing verified portal account; it neither queries AD nor creates an
+AD group-provisioning integration. Individual grants remain available through
+`explicit_readers` mode. Changes take effect on the
+runtime instances receiving the revised configuration; drain older instances
+before asserting that a grant is revoked everywhere. Individual grant expiry is evaluated
+on every read without waiting for documentation-token expiry. Existing account
+and exact-session revocation is checked against persistence before every read.
+Upstream AD removal takes effect when the existing account/directory revocation
+workflow records it locally; this endpoint does not query AD itself.
+
+Roll out the new account contract before enabling customer bundles. Old account
+responses lacking the requested `workspaceId` cannot authorize customer delivery.
+Remove customer bundles before rolling back the account feature. Customer source,
+compiled content and sensitive acceptance evidence belong in private authoring,
+publication and artifact storage; public CI should use synthetic fixtures only.
+
+The public configuration endpoint also returns `workspaceContract` equal to
+`customer-documentation/v1`. The gateway deployment preflight requires this
+capability before sending its dedicated credential. An older account runtime
+cannot pass workspace rollout preflight. No workspace names, domains, readers
+or policy values are exposed in this public response.

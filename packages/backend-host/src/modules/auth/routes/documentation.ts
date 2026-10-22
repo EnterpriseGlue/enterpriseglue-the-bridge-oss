@@ -1,4 +1,4 @@
-import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantResponseSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema } from '@enterpriseglue/shared/schemas/auth/documentation.js';
+import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantResponseSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from '@enterpriseglue/shared/schemas/auth/documentation.js';
 import { Router } from 'express';
 import { apiLimiter, identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireCloudAccountOrTenantAuth, requireDocumentationAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -8,13 +8,15 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { documentationConfiguration, requireDocumentationGatewaySecret, verifyDocumentationIdentity, DocumentationExchangeRequestSchema, DocumentationGrantRequestSchema } from '@enterpriseglue/shared/utils/documentation-identity.js';
 import { documentationSessionService } from '@enterpriseglue/shared/services/DocumentationSessionService.js';
 
+import { documentationWorkspaceService } from '@enterpriseglue/shared/services/DocumentationWorkspaceService.js';
+
 const router = Router();
 router.use('/api/auth/documentation', (_req, res, next) => {
   res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
   try { documentationConfiguration(); next(); } catch (error) { next(error); }
 });
 router.get('/api/auth/documentation/configuration', apiLimiter, (_req, res) => {
-  res.json(DocumentationConfigurationResponseSchema.parse({ documentationOrigin: documentationConfiguration().origin, accountOrigin: new URL(config.frontendUrl).origin }));
+  res.json(DocumentationConfigurationResponseSchema.parse({ documentationOrigin: documentationConfiguration().origin, accountOrigin: new URL(config.frontendUrl).origin, workspaceContract: 'customer-documentation/v1' }));
 });
 router.post('/api/auth/documentation/grant', apiLimiter, identityFlowLimiter, requireCloudAccountOrTenantAuth, validateBody(DocumentationGrantRequestSchema), asyncHandler(async (req, res) => {
   // Grants are a same-origin browser operation; a cross-site form must not mint one.
@@ -27,8 +29,13 @@ router.post('/api/auth/documentation/grant', apiLimiter, identityFlowLimiter, re
 router.post('/api/auth/documentation/exchange', apiLimiter, identityFlowLimiter, validateBody(DocumentationExchangeRequestSchema), requireDocumentationAuth('grant'), asyncHandler(async (req, res) => {
   res.json(DocumentationExchangeResponseSchema.parse({ session: await documentationSessionService.exchange(req.body.code, req.body.verifier) }));
 }));
-router.get('/api/auth/documentation/session', apiLimiter, requireDocumentationAuth('session'), (_req, res) => {
-  res.json(DocumentationAccessResponseSchema.parse({ authenticated: true, permission: 'documentation:read' }));
+router.get('/api/auth/documentation/session', apiLimiter, requireDocumentationAuth('session'), asyncHandler(async (req, res) => {
+  const query = DocumentationWorkspaceQuerySchema.parse(req.query);
+  if (query.workspace) documentationWorkspaceService.require(req.user!, query.workspace);
+  res.json(DocumentationAccessResponseSchema.parse({ authenticated: true, permission: 'documentation:read', ...(query.workspace ? { workspaceId: query.workspace } : {}) }));
+}));
+router.get('/api/auth/documentation/workspaces', apiLimiter, requireDocumentationAuth('session'), (req, res) => {
+  res.json(DocumentationWorkspacesResponseSchema.parse({ workspaces: documentationWorkspaceService.list(req.user!) }));
 });
 router.post('/api/auth/documentation/logout', apiLimiter, asyncHandler(async (req, res) => {
   // Revocation must also work when the source account becomes ineligible.

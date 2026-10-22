@@ -1,0 +1,80 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "customer-documentation-workspaces",
+  "type": "feature",
+  "scope": "documentation",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds private customer documentation workspaces with verified-domain or individual-reader admission, checked on every protected request.",
+  "userImpact": [
+    "Publishers can admit verified accounts at exact approved email domains automatically, or require additional expiring individual grants."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Roll out the account contract before enabling customer documentation bundles."
+    ]
+  },
+  "configuration": [
+    "Adds optional private EG_DOCUMENTATION_WORKSPACES_JSON. accessMode verified_domain admits current verified exact-domain accounts without individual grants; the default explicit_readers mode retains individual expiry checks. Both default to no configured workspaces. Policy changes require rollout to every runtime instance."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds customer workspace discovery, scoped session authorization and workspaceContract capability metadata for deployment preflight."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Reuses existing verified accounts and exact session rows; no tenants or grants are inferred from application memberships."
+    ]
+  },
+  "security": [
+    "General documentation access never authorizes customer content.",
+    "Every asset rechecks the current verified email, account, source session and exact configured workspace domain. Domain admission must be explicitly selected; legacy policies retain individual-reader restrictions."
+  ],
+  "documentation": [
+    "docs/reference/documentation-account-access.md"
+  ],
+  "knownLimitations": [
+    "The admission policy is publisher-managed deployment configuration. There is no grant administration UI or automatic upstream AD group provisioning.",
+    "Existing upstream account revocation and directory reconciliation determine when upstream AD changes become locally visible."
+  ],
+  "rollback": [
+    "Remove customer bundles before rolling back the account contract. An older account response cannot authorize a customer-scoped read."
+  ],
+  "validation": [
+    "Local auth routes: 15 files and 195 tests passed, including verified-domain admission, other-domain/subdomain denial, unverified/disabled users, policy removal and legacy individual-grant compatibility.",
+    "Exact gateway/account HTTP qualification with owned PostgreSQL: 2 files and 3 tests passed, including both customers and protected pages, search, downloads, JavaScript and receipts.",
+    "Backend host/shared build, backend TypeScript check and affected lint passed. Portal compilation/browser, publication and infrastructure gates are recorded separately in their owning repositories.",
+    "No hosted CI, live rollout or customer-content publication is claimed by this local evidence."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.22.0",
+      "newVersion": "0.23.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.0",
+      "newVersion": "0.20.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.27.0",
+      "newVersion": "0.28.0",
+      "impact": "minor"
+    }
+  ]
+}

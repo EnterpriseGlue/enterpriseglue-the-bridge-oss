@@ -78,6 +78,7 @@ async function openAssignments(page: Page): Promise<Array<Record<string, unknown
   await page.route('**/api/authz/runtime-resources**', (route) => json(route, [runtimeResource]));
   await page.route('**/api/authz/runtime-resource-sets**', (route) => json(route, [runtimeResourceSet]));
   await page.route('**/engines-api/engines', (route) => json(route, [engine]));
+  await page.route('**/api/admin/engines**', (route) => json(route, [engine]));
   await page.route('**/api/admin/users/search**', (route) => json(route, [{
     id: 'grant-user',
     email: 'grant.user@example.test',
@@ -145,12 +146,18 @@ test.describe('Access Control direct resource grants', () => {
       if (type === 'engine_set') {
         await captureManualScreenshot(page, '58-role-assignment-human-resource-picker.jpg');
       }
+      if (type === 'engine_runtime_resource') await captureManualScreenshot(page, '80-runtime-resource-assignment-picker.jpg');
+      if (type === 'engine_runtime_resource_set') await captureManualScreenshot(page, '81-runtime-resource-set-assignment-picker.jpg');
       await page.getByRole('button', { name: 'Assign role', exact: true }).click();
       await expect.poll(() => created.length).toBe(scopeTypes.indexOf(type) + 1);
       expect(created.at(-1)).toEqual(expect.objectContaining({
         principalType: 'user', principalId: 'grant-user', roleId: 'grant-engine-viewer', resourceType: type,
         resourceId: type === 'engine' ? engine.id : type === 'engine_set' ? engineSet.id : type === 'engine_runtime_resource' ? runtimeResource.id : runtimeResourceSet.id,
       }));
+      if (type === 'engine_runtime_resource') {
+        const saved = page.getByRole('row').filter({hasText:runtimeResource.id}).filter({hasText:'Engine Viewer'});
+        await expect(saved).toBeVisible(); await captureManualScreenshot(page, '82-runtime-resource-assignment-saved.jpg');
+      }
       if (type === 'engine_set') {
         const savedRow = page.getByRole('row').filter({ hasText: 'Production engines' }).filter({ hasText: 'Engine Viewer' });
         await expect(savedRow).toContainText('User: grant.user@example.test');
@@ -198,6 +205,7 @@ test.describe('Access Control resource-type policies', () => {
     await page.route('**/api/authz/runtime-resources**', (route) => json(route, [runtimeResource]));
     await page.route('**/api/authz/runtime-resource-sets**', (route) => json(route, [runtimeResourceSet]));
     await page.route('**/engines-api/engines', (route) => json(route, [engine]));
+    await page.route('**/api/admin/engines**', (route) => json(route, [engine]));
     await page.route('**/api/authz/role-assignments', (route) => json(route, []));
     await page.route('**/api/authz/policies', async (route) => {
       if (route.request().method() === 'POST') {
@@ -291,4 +299,21 @@ test.describe('Access Control resource-type policies', () => {
     await expect(page.getByRole('button', { name: 'Add policy', exact: true })).toBeVisible();
     await expect(page.getByText('No authorization policies are configured.', { exact: true })).toBeVisible();
   });
+});
+
+
+test('captures a group resource-scoped assignment without a broader engine or engine-set grant', async ({ page }) => {
+  const created = await openAssignments(page);
+  await selectOption(page, 'Principal', 'Group');
+  await selectOption(page, 'Group', group.name);
+  await chooseEngineScopeTarget(page, 'engine_runtime_resource');
+  await captureManualScreenshot(page, '80-runtime-resource-assignment-picker.jpg');
+  await page.getByRole('button', {name:'Assign role',exact:true}).click();
+  await expect.poll(() => created.length).toBe(1);
+  expect(created[0]).toMatchObject({principalType:'group',principalId:group.id,resourceType:'engine_runtime_resource',resourceId:runtimeResource.id,roleId:'grant-engine-viewer'});
+  expect(created.some(assignment => assignment.resourceType === 'engine' || assignment.resourceType === 'engine_set')).toBe(false);
+  await expect(page.getByRole('row').filter({hasText:runtimeResource.id})).toBeVisible();
+  await captureManualScreenshot(page, '82-runtime-resource-assignment-saved.jpg');
+  await chooseEngineScopeTarget(page, 'engine_runtime_resource_set');
+  await captureManualScreenshot(page, '81-runtime-resource-set-assignment-picker.jpg');
 });
