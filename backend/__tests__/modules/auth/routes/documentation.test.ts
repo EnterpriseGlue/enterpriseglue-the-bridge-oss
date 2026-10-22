@@ -70,7 +70,7 @@ describe('documentation account boundary', () => {
   it('exposes only configured public origins for environment-correct entry and deployment preflight', async () => {
     const result = await request(server).get('/api/auth/documentation/configuration');
     expect(result.status).toBe(200);
-    expect(result.body).toEqual({ documentationOrigin: config.documentationOrigin, accountOrigin: config.frontendUrl, workspaceContract: 'customer-documentation/v1' });
+    expect(result.body).toEqual({ documentationOrigin: config.documentationOrigin, accountOrigin: config.frontendUrl, workspaceContract: 'customer-documentation/v2' });
     expect(updates).toBe(0);
   });
   it('uses an existing verified account without accessing any tenant persistence', async () => {
@@ -163,12 +163,12 @@ describe('customer documentation entitlement boundary', () => {
   }
   it('the operator policy template grants no customer access by default', async () => {
     config.documentationWorkspacesJson = readFileSync(new URL('../../../../../examples/documentation-workspaces/policy.example.json', import.meta.url), 'utf8');
-    expect((await list(await credential())).body).toEqual({ workspaces: [] });
+    expect((await list(await credential())).body).toEqual({ workspaceContract: 'customer-documentation/v2', workspaces: [] });
   });
   it('returns only the explicitly granted customer and denies a sibling customer even with a valid general session', async () => {
     config.documentationWorkspacesJson = policy(); const token = await credential();
-    expect((await list(token)).body).toEqual({ workspaces: [{ id: 'alpha', name: 'Alpha customer' }] });
-    expect((await scoped(token, 'alpha')).body.workspaceId).toBe('alpha');
+    expect((await list(token)).body).toEqual({ workspaceContract: 'customer-documentation/v2', workspaces: [{ id: 'alpha', name: 'Alpha customer' }] });
+    expect((await scoped(token, 'alpha')).body).toEqual(JSON.parse(readFileSync(new URL('../../../../../examples/documentation-workspaces/session-response.example.json', import.meta.url), 'utf8')));
     expect((await scoped(token, 'beta')).status).toBe(404);
     expect((await scoped(token, 'unknown')).status).toBe(404);
     expect((await check(token)).status).toBe(200);
@@ -200,7 +200,7 @@ describe('customer documentation entitlement boundary', () => {
     config.documentationWorkspacesJson = undefined; expect((await scoped(token, 'alpha')).status).toBe(404);
   });
   it('never infers customer access from a matching domain or a previously issued token', async () => {
-    const token = await credential(); expect((await list(token)).body).toEqual({ workspaces: [] });
+    const token = await credential(); expect((await list(token)).body).toEqual({ workspaceContract: 'customer-documentation/v2', workspaces: [] });
     config.documentationWorkspacesJson = policy(); expect((await scoped(token, 'alpha')).status).toBe(200);
     const changed = JSON.parse(policy()); changed.workspaces[0].readers = []; config.documentationWorkspacesJson = JSON.stringify(changed);
     expect((await scoped(token, 'alpha')).status).toBe(404);

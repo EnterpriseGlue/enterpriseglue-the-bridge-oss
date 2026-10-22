@@ -1,0 +1,6 @@
+{
+  "authenticated": true,
+  "permission": "documentation:read",
+  "workspaceContract": "customer-documentation/v2",
+  "workspaceId": "alpha"
+}

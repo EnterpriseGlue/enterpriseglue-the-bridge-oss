@@ -130,7 +130,11 @@ per workspace and 256 KiB for the complete JSON setting.
 and current documentation token. It returns only the active, unexpired workspaces
 for the freshly verified user's actual email and the selected admission mode.
 `GET /api/auth/documentation/session?workspace=customer-a` repeats those checks
-and returns `workspaceId` only when that workspace is authorized. Unknown and
+and returns `workspaceId` only when that workspace is authorized. Both scoped
+session and workspace-discovery responses carry `workspaceContract` equal to
+`customer-documentation/v2`, identifying the central domain-authority backstop.
+The [scoped response example](../../examples/documentation-workspaces/session-response.example.json)
+is checked against the HTTP route response in the auth suite. Unknown and
 unauthorized workspaces both return 404. This authority is independent of tenant
 membership and does not provision an application tenant. Browser access tokens,
 machine credentials and caller-supplied customer headers cannot bypass the
@@ -148,13 +152,14 @@ Upstream AD removal takes effect when the existing account/directory revocation
 workflow records it locally; this endpoint does not query AD itself.
 
 Roll out the new account contract before enabling customer bundles. Old account
-responses lacking the requested `workspaceId` cannot authorize customer delivery.
+responses lacking the requested `workspaceId` or the v2 workspace contract cannot
+authorize customer delivery, including after an account rollback.
 Remove customer bundles before rolling back the account feature. Customer source,
 compiled content and sensitive acceptance evidence belong in private authoring,
 publication and artifact storage; public CI should use synthetic fixtures only.
 
 The public configuration endpoint also returns `workspaceContract` equal to
-`customer-documentation/v1`. The gateway deployment preflight requires this
+`customer-documentation/v2`. The gateway deployment preflight requires this
 capability before sending its dedicated credential. An older account runtime
 cannot pass workspace rollout preflight. No workspace names, domains, readers
 or policy values are exposed in this public response.

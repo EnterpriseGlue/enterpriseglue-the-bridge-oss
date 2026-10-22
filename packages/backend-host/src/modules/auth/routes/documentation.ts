@@ -16,7 +16,7 @@ router.use('/api/auth/documentation', (_req, res, next) => {
   try { documentationConfiguration(); next(); } catch (error) { next(error); }
 });
 router.get('/api/auth/documentation/configuration', apiLimiter, (_req, res) => {
-  res.json(DocumentationConfigurationResponseSchema.parse({ documentationOrigin: documentationConfiguration().origin, accountOrigin: new URL(config.frontendUrl).origin, workspaceContract: 'customer-documentation/v1' }));
+  res.json(DocumentationConfigurationResponseSchema.parse({ documentationOrigin: documentationConfiguration().origin, accountOrigin: new URL(config.frontendUrl).origin, workspaceContract: 'customer-documentation/v2' }));
 });
 router.post('/api/auth/documentation/grant', apiLimiter, identityFlowLimiter, requireCloudAccountOrTenantAuth, validateBody(DocumentationGrantRequestSchema), asyncHandler(async (req, res) => {
   // Grants are a same-origin browser operation; a cross-site form must not mint one.
@@ -32,10 +32,10 @@ router.post('/api/auth/documentation/exchange', apiLimiter, identityFlowLimiter,
 router.get('/api/auth/documentation/session', apiLimiter, requireDocumentationAuth('session'), asyncHandler(async (req, res) => {
   const query = DocumentationWorkspaceQuerySchema.parse(req.query);
   if (query.workspace) documentationWorkspaceService.require(req.user!, query.workspace);
-  res.json(DocumentationAccessResponseSchema.parse({ authenticated: true, permission: 'documentation:read', ...(query.workspace ? { workspaceId: query.workspace } : {}) }));
+  res.json(DocumentationAccessResponseSchema.parse({ authenticated: true, permission: 'documentation:read', workspaceContract: 'customer-documentation/v2', ...(query.workspace ? { workspaceId: query.workspace } : {}) }));
 }));
 router.get('/api/auth/documentation/workspaces', apiLimiter, requireDocumentationAuth('session'), (req, res) => {
-  res.json(DocumentationWorkspacesResponseSchema.parse({ workspaces: documentationWorkspaceService.list(req.user!) }));
+  res.json(DocumentationWorkspacesResponseSchema.parse({ workspaceContract: 'customer-documentation/v2', workspaces: documentationWorkspaceService.list(req.user!) }));
 });
 router.post('/api/auth/documentation/logout', apiLimiter, asyncHandler(async (req, res) => {
   // Revocation must also work when the source account becomes ineligible.
