@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { analyzeParity } from '../../enterpriseglue-contract-parity/scripts/check-contract-parity.mjs'
 
 function exec(command, args, cwd, { optional = false } = {}) {
   try {
@@ -16,9 +17,11 @@ function exec(command, args, cwd, { optional = false } = {}) {
 
 export function classifyChangedFiles(files) {
   const matches = (pattern) => files.some((file) => pattern.test(file))
+  const parity = analyzeParity(files)
   return {
     releaseFragments: files.filter((file) => /^\.release-notes\/[^/]+\.json$/.test(file)),
-    api: matches(/openapi|enterprise-plugin-api|packages\/shared\/src\/schemas/i),
+    api: parity.surfaces.api,
+    routes: parity.surfaces.routes,
     auth: matches(/(?:^|\/)(?:auth|authz|identity|sso)(?:\/|[-_.])/i),
     database: matches(/(?:^|\/)(?:migrations?|entities|persistence)(?:\/|[-_.])/i),
     docs: matches(/^(?:docs\/|README\.md|CONTRIBUTING\.md)/),
@@ -72,6 +75,9 @@ export function collectReadiness(root, baseRef) {
   if (dirty) warnings.push('The worktree has uncommitted changes.')
   if (!pr) warnings.push('No pull request metadata was available from gh.')
   if (pendingChecks.length > 0) warnings.push(`${pendingChecks.length} GitHub check(s) are still pending.`)
+  if (surfaces.api) {
+    warnings.push('Reconcile generated OpenAPI route/schema coverage with actual handlers and regression-test evidence through contract-parity; this collector does not execute coverage checks.')
+  }
   if ((surfaces.api || surfaces.config || surfaces.database) && !surfaces.docs) {
     warnings.push('Contract, configuration, or persistence paths changed without a documentation path in the diff.')
   }

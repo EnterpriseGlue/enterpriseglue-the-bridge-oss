@@ -22,6 +22,17 @@ them, enable their auto-merge, dispatch publication, or create release tags.
 4. Review compatibility across public APIs, OpenAPI, configuration, database
    migrations, published packages, UI behavior, authentication, authorization,
    and rollback.
+   For backend HTTP or public-schema changes, follow
+   [contract-parity](../enterpriseglue-contract-parity/SKILL.md) before the first
+   push, including when only backend route files changed. Require evidence that
+   every affected method and resolved path appears in generated OpenAPI,
+   including public/bootstrap, auth-only, tenant and compatibility variants;
+   request/response schemas must match actual validation and payloads. Require
+   the affected source-to-generated-document regression tests. Missing
+   operations, stale schemas or missing required coverage evidence block
+   shipping. A diff classifier or passing authorization inventory alone does
+   not establish OpenAPI coverage. Reuse passing evidence while its source,
+   dependencies, configuration and environment remain applicable.
 5. Treat OSS as the sole EnterpriseGlue product host. Ship shared host,
    runtime, SDK, installer, manager, deployment, and reference-plugin changes
    from OSS; ship proprietary product behavior from its owning plugin

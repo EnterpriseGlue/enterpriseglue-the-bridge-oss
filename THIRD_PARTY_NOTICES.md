@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-10-14T07:44:31.895Z
+Generated at: 2026-10-23T04:10:42.695Z
 
 Generated from:
 - third_party_licenses.json
@@ -84,7 +84,7 @@ Generated from:
 | google-auth-library | 10.9.1 | Apache-2.0 | https://github.com/googleapis/google-cloud-node.git | backend, packages/backend-host |
 | helmet | 8.3.0 | MIT | git://github.com/helmetjs/helmet.git | backend, packages/backend-host |
 | inferno | 5.6.3 | MIT | https://github.com/infernojs/inferno | frontend, packages/frontend-host |
-| ip-address | 10.7.3 | MIT | https://github.com/beaugunderson/ip-address.git | backend, packages/backend-host |
+| ip-address | 10.7.4 | MIT | https://github.com/beaugunderson/ip-address.git | backend, packages/backend-host |
 | jsonwebtoken | 9.0.3 | MIT | https://github.com/auth0/node-jsonwebtoken | backend, packages/backend-host |
 | jspdf | 4.2.1 | MIT | https://github.com/parallax/jsPDF.git | packages/frontend-host |
 | ldapts | 9.0.0 | MIT | git+https://github.com/ldapts/ldapts.git | backend, packages/backend-host |

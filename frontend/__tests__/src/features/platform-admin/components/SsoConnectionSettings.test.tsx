@@ -7,7 +7,9 @@ import SsoConnectionSettings from "@src/features/platform-admin/components/SsoCo
 import { server } from "../../../../../test/mocks/server";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
-let view: any, put: ReturnType<typeof vi.fn>, test: ReturnType<typeof vi.fn>;
+let view: any,
+  put: ReturnType<typeof vi.fn<(payload: unknown) => void>>,
+  test: ReturnType<typeof vi.fn<(payload: unknown) => void>>;
 function renderSettings(overrides = {}) {
   return render(
     <QueryClientProvider

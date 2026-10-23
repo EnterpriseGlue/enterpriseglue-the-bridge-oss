@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/backend-host",
-  "version": "0.23.2",
+  "version": "0.23.3",
   "description": "OSS backend host for EnterpriseGlue — Express app, route modules, enterprise loader, and server bootstrap",
   "license": "Apache-2.0",
   "repository": {
@@ -46,7 +46,7 @@
     "express-rate-limit": "^8.2.1",
     "google-auth-library": "^10.6.2",
     "helmet": "^8.1.0",
-    "ip-address": "^10.7.1",
+    "ip-address": "^10.7.4",
     "jsonwebtoken": "^9.0.2",
     "ldapts": "^9.0.0",
     "morgan": "^1.12.1",

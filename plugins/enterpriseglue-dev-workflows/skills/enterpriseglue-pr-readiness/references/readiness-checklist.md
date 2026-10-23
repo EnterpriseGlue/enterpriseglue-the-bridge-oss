@@ -6,6 +6,7 @@ Use only the rows selected by the diff.
 |---|---|
 | Release impact | Valid changed fragment or permitted documented exemption; title, label, package versions, and expected release version agree |
 | API and configuration | OpenAPI, public schemas, JSON configuration, examples, portal controls, and compatibility notes agree |
+| HTTP and schema coverage | Registered methods and resolved paths, including public/bootstrap, auth-only, tenant and compatibility variants, exist in generated OpenAPI; request/response schemas match actual validation and payloads, with affected regression-test evidence |
 | Persistence | TypeORM migration, entity registration, upgrade/rollback notes, and supported database qualification agree |
 | Security | Authentication, authorization, tenant isolation, secrets, audit behavior, denials, and revocation are tested |
 | UI | Unit/browser/accessibility coverage and current visual evidence at the standard viewport |

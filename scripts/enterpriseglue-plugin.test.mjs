@@ -191,6 +191,22 @@ test('PR readiness classifies contract, persistence, UI, and release surfaces', 
   assert.equal(result.docs, true)
 })
 
+test('PR readiness selects API coverage review for backend-only HTTP changes', () => {
+  for (const file of [
+    'packages/backend-host/src/plugins/pluginRuntime.ts',
+    'packages/backend-host/src/modules/auth/routes/login.ts',
+    'packages/backend-host/src/app.ts',
+    'backend/src/routes/index.ts',
+  ]) {
+    const result = classifyChangedFiles([file])
+    assert.equal(result.api, true, file)
+    assert.equal(result.routes, true, file)
+  }
+  for (const file of ['scripts/format.mjs', 'packages/backend-host/src/plugins/pluginRuntime.test.ts']) {
+    assert.equal(classifyChangedFiles([file]).api, false, file)
+  }
+})
+
 test('UI evidence helper reads canonical PNG dimensions', () => {
   const buffer = Buffer.alloc(24)
   Buffer.from('89504e470d0a1a0a', 'hex').copy(buffer)
@@ -216,4 +232,17 @@ test('contract parity reports missing tests for an undocumented public schema ch
   assert.equal(result.surfaces.api, true)
   assert.ok(result.findings.some((finding) => finding.code === 'missing-tests' && finding.severity === 'error'))
   assert.ok(result.findings.some((finding) => finding.code === 'missing-docs'))
+})
+
+test('contract parity routes a bootstrap-only implementation change to API documentation review', () => {
+  const result = analyzeParity(['packages/backend-host/src/plugins/pluginRuntime.ts'])
+  assert.equal(result.surfaces.api, true)
+  assert.ok(result.findings.some(({ code }) => code === 'verify-route-openapi'))
+  assert.ok(result.findings.some(({ code, severity }) => code === 'missing-tests' && severity === 'error'))
+  assert.ok(result.findings.some(({ code }) => code === 'missing-docs'))
+  const unrelated = analyzeParity(['scripts/format.mjs'])
+  assert.equal(unrelated.surfaces.api, false)
+  assert.equal(unrelated.findings.length, 0)
+  assert.equal(analyzeParity(['packages/backend-host/src/plugins/pluginRuntime.test.ts']).surfaces.routes, false)
+  assert.equal(analyzeParity(['packages/backend-host/src/app.ts']).surfaces.routes, true)
 })

@@ -1,0 +1,82 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "plugin-frontend-bootstrap-openapi",
+  "type": "fix",
+  "scope": "plugins",
+  "breaking": false,
+  "audiences": [
+    "developers",
+    "security"
+  ],
+  "summary": "Documents both v1 frontend bootstrap APIs and requires OpenAPI coverage evidence before shipping; also patches the IPv6 parser vulnerability that blocked Oracle image qualification.",
+  "userImpact": [
+    "API developers can distinguish frontend plugin discovery from administrative plugin lifecycle inventory in Swagger.",
+    "Host IPv6 validation uses the patched ip-address parser while retaining existing endpoint-policy and SSO transport behavior."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds OpenAPI descriptions for GET /api/plugins/v1/frontend and GET /t/{tenantSlug}/api/plugins/v1/frontend, with their shared response and distinct authentication requirements. Existing v1 routes and runtime behavior are preserved."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Documents the existing public root bootstrap and authenticated tenant bootstrap without changing access control.",
+    "Raises the ip-address minimum and resolved version to 10.7.4 for CVE-2026-111997 (GHSA-rxp7-6hxx-x8q5). The pinned image scanner, severity gate and ignore policy are unchanged."
+  ],
+  "documentation": [
+    "Adds bootstrap response, tenant scope, authentication and cache semantics to OpenAPI and the technical plugin authoring guide.",
+    "Requires source-to-generated-OpenAPI regression coverage for public, auth-only and tenant variants in contract-parity, shipping, testing and PR-readiness workflows; missing operations, stale schemas or missing required evidence block shipping.",
+    "Refreshes third-party license notices for ip-address 10.7.4."
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "OSS maintainers",
+    "pages": [],
+    "reason": "This correction documents the existing developer bootstrap API and maintainer verification workflow; it changes no customer or administrator procedure."
+  },
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the documentation and workflow change; runtime routes and persisted data are unaffected."
+  ],
+  "validation": [
+    "All 52 backend schema and endpoint-policy test files pass (246 tests), including source-discovered root/tenant bootstrap regressions. All 14 SSO HTTP transport tests and 13 dependency security-floor checks also pass.",
+    "Strict authorization route inventory passes with 482/482 authenticated backend routes classified. Shared-package compilation, full workspace typecheck, workspace lint and the packed backend-host runtime dependency guard pass.",
+    "Documentation contracts and publication-boundary checks, all 13 workflow-plugin tests, 173 release-note tests, release-fragment validation and the published-package version plan pass.",
+    "Every bundled skill passes the official skill validator, and native Codex CLI installation of workflow plugin 0.1.18 succeeds. The combined plugin validation script cannot finish because the separate official plugin validator is not installed locally.",
+    "A type-only correction gives two existing SSO test mocks explicit callable signatures under the pinned Vitest version. All eight SSO connection settings tests and the full workspace typecheck pass without changing assertions or runtime behavior.",
+    "CI change-detection contracts (120 tests), workspace runtime contracts (8 tests), the CI aggregate contract, current/next plugin API compatibility and release-note preflight (176 tests) pass; the generated preview was reviewed.",
+    "The rebuilt native ARM64 Oracle backend image passes the pinned Trivy 0.72 image scan with all severities and the unchanged ignore policy; runtime inspection confirms ip-address 10.7.4, and security JSON plus a complete CycloneDX SBOM are retained outside Git.",
+    "The v1 runtime routes and database schema are unchanged. Protected CI retains native AMD64/ARM64 Oracle encryption, real SSO and browser acceptance for the proposed revision."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.2",
+      "newVersion": "0.23.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.3",
+      "newVersion": "0.20.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.1",
+      "newVersion": "0.28.2",
+      "impact": "patch"
+    }
+  ]
+}

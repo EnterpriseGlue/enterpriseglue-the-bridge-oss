@@ -170,6 +170,34 @@ not receive Docker, Kubernetes, registry, or publisher-build authority.
 
 ## Public contracts
 
+### Frontend bootstrap discovery
+
+`GET /api/plugins/v1/frontend` is the public pre-login discovery endpoint.
+`GET /t/{tenantSlug}/api/plugins/v1/frontend` uses the same response contract
+after authentication and tenant resolution. Both return only enabled frontend
+plugins, set `Cache-Control: no-store`, and appear in the generated OpenAPI
+document served by `/api/docs`. The root route uses an existing request tenant
+context or the default tenant; the scoped route validates the requested tenant.
+
+The response contains `apiVersion: frontend-bootstrap.plugin.enterpriseglue.io/v1`,
+the installer `revision`, a `plugins` array with identity, plugin version,
+display name, manifest and same-origin `entryUrl`, optional nullable
+`contributionAvailability`, and an `issues` array of safe loading codes with
+optional plugin IDs. An unavailable installer state may produce an empty list
+with an issue rather than an HTTP error. The tenant route can also return 401
+for invalid authentication or placement, 403 for a tenant mismatch or inactive
+tenant, and 404 for an unresolved tenant.
+
+The URL's `v1` identifies the bootstrap API contract independently of host and
+plugin release versions. The administrative
+`GET /api/plugin-platform/v1/plugins` endpoint requires
+`platform.settings.read` and returns lifecycle inventory; it cannot substitute
+for frontend discovery. Discovery grants no permission to invoke plugin
+operations. Contract tests compare registered bootstrap routes with generated
+OpenAPI, including the tenant variant and their distinct auth classifications.
+
+### SDK contracts
+
 The authoritative TypeScript and Zod contracts are in
 [`packages/plugin-sdk`](../../packages/plugin-sdk). The runtime implementation is in
 [`packages/plugin-runtime`](../../packages/plugin-runtime).
