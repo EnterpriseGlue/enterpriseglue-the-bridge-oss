@@ -327,6 +327,8 @@ const {
 const {
   pluginPlatformCapabilityCatalogV1Schema,
 } = await import('@enterpriseglue/plugin-sdk/platform');
+const { enterpriseGluePluginManifestV1Schema } = await import('@enterpriseglue/plugin-sdk/manifest');
+const { pluginContributionAvailabilityProjectionV1Schema } = await import('@enterpriseglue/plugin-sdk/availability');
 const {
   pluginCatalogV2Schema,
   pluginInstallApprovalV1Schema,
@@ -404,6 +406,30 @@ const PluginControlErrorResponseSchema = z.object({
     'approval_conflict',
     'lease_invalid',
   ]),
+});
+const PluginFrontendBootstrapSchema = registry.register('PluginFrontendBootstrap', z.object({
+  apiVersion: z.literal('frontend-bootstrap.plugin.enterpriseglue.io/v1'),
+  revision: z.number().int().nonnegative(),
+  plugins: z.array(z.object({
+    pluginId: enterpriseGluePluginManifestV1Schema.shape.metadata.shape.id,
+    version: enterpriseGluePluginManifestV1Schema.shape.metadata.shape.version,
+    displayName: z.string(),
+    manifest: enterpriseGluePluginManifestV1Schema,
+    entryUrl: z.string().describe('Same-origin frontend module asset path.'),
+    contributionAvailability: pluginContributionAvailabilityProjectionV1Schema.nullable().optional(),
+  })),
+  issues: z.array(z.object({
+    pluginId: enterpriseGluePluginManifestV1Schema.shape.metadata.shape.id.optional(),
+    code: z.string().describe('Safe plugin resolution or asset availability issue code.'),
+  })),
+}));
+registry.registerComponent('securitySchemes', 'BearerAuth', {
+  type: 'http', scheme: 'bearer', bearerFormat: 'JWT',
+  description: 'Access token accepted by the host authentication middleware.',
+});
+registry.registerComponent('securitySchemes', 'AccessTokenCookie', {
+  type: 'apiKey', in: 'cookie', name: 'accessToken',
+  description: 'Existing authenticated browser session access token.',
 });
 const PluginIdPathSchema = z.object({
   pluginId: z.string().min(3).max(200),
@@ -2517,6 +2543,36 @@ for (const action of ['cancel', 'retry'] as const) {
     responses: {
       200: { description: `Installation ${action} accepted at the expected revision`, content: { 'application/json': { schema: PluginInstallationRevisionResponseSchema } } },
       409: { description: 'State, lease, or revision conflicts with the recovery request', content: { 'application/json': { schema: PluginControlErrorResponseSchema } } },
+    },
+  });
+}
+for (const tenantScoped of [false, true]) {
+  const route = tenantScoped ? '/t/:tenantSlug/api/plugins/v1/frontend' : '/api/plugins/v1/frontend';
+  registry.registerPath({
+    method: 'get',
+    path: tenantScoped ? '/t/{tenantSlug}/api/plugins/v1/frontend' : route,
+    summary: tenantScoped ? 'Load enabled frontend plugins for an authenticated tenant' : 'Load enabled frontend plugins for application startup',
+    description: 'Returns frontend manifests, module entry URLs, bootstrap revision and safe loading issues. The v1 segment versions the bootstrap contract independently of host and plugin releases. This is frontend discovery, not the administrative plugin lifecycle inventory. ' +
+      (tenantScoped ? 'Requires an authenticated session and a matching resolved tenant context; no platform administrator permission is required.' : 'Available before login; uses the request tenant context when present, otherwise the default tenant.'),
+    ...authzExemption('GET', route),
+    ...(tenantScoped ? {
+      request: { params: z.object({ tenantSlug: TenantSlugSchema }) },
+      security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+    } : { security: [] }),
+    responses: {
+      200: {
+        description: 'Enabled frontend contributions; loading failures may be reported in issues with an empty plugins array.',
+        headers: { 'Cache-Control': { description: 'Bootstrap responses must not be cached.', schema: { type: 'string', enum: ['no-store'] } } },
+        content: { 'application/json': {
+          schema: PluginFrontendBootstrapSchema,
+          example: { apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 0, plugins: [], issues: [] },
+        } },
+      },
+      ...(tenantScoped ? {
+        401: { description: 'Authentication or tenant placement assertion is missing or invalid.' },
+        403: { description: 'The tenant is inactive or does not match the authenticated context.' },
+        404: { description: 'Tenant could not be resolved.' },
+      } : {}),
     },
   });
 }

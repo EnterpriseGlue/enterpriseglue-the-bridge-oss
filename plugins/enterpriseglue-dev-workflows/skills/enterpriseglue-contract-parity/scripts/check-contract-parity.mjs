@@ -6,8 +6,11 @@ import { pathToFileURL } from 'node:url'
 
 export function analyzeParity(files) {
   const any = (pattern) => files.some((file) => pattern.test(file))
+  const routes = files.some((file) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(file)
+    && /^(?:backend|packages\/backend-host)\/src\/(?:app\.[cm]?[jt]s$|.*(?:routes?(?:\/|\.[cm]?[jt]s$)|plugins\/[^/]+\.[cm]?[jt]s$))/i.test(file))
   const surfaces = {
-    api: any(/openapi|enterprise-plugin-api|packages\/shared\/src\/schemas/i),
+    api: routes || any(/openapi|enterprise-plugin-api|packages\/shared\/src\/schemas/i),
+    routes,
     config: any(/config[-_.]?bundle|configuration/i) || any(/(?:^|\/)\.env\.example$/i),
     docs: any(/^(?:docs\/|README\.md|CONTRIBUTING\.md)/),
     persistence: any(/(?:migrations?|entities|persistence|repositories?)\//i),
@@ -16,6 +19,9 @@ export function analyzeParity(files) {
     examples: any(/(?:^|\/)(?:examples?|fixtures?)\//i),
   }
   const findings = []
+  if (routes) {
+    findings.push({ severity: 'warning', code: 'verify-route-openapi', message: 'Inspect actual HTTP registrations and prove generated OpenAPI coverage for every affected method/path, including public, auth-only and tenant variants; this diff heuristic does not verify route coverage.' })
+  }
   if ((surfaces.api || surfaces.config || surfaces.persistence || surfaces.ui) && !surfaces.docs) {
     findings.push({ severity: 'warning', code: 'missing-docs', message: 'Contract-facing changes have no documentation path in the diff.' })
   }

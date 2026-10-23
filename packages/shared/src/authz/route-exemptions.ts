@@ -30,6 +30,7 @@ function tokenAuthenticatedRoute(method: string, route: string, risk: AuthzActio
 }
 
 export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
+  publicRoute('GET', '/api/plugins/v1/frontend', 'low', 'plugin-platform', 'The pre-login application bootstrap discovers enabled frontend modules and safe loading issues; discovery grants no authorization to plugin operations.'),
   publicRoute('GET', '/api/auth/documentation/configuration', 'low', 'platform-runtime', 'Public documentation/account origins only; no user, session, gateway credential or tenant data.'),
   tokenAuthenticatedRoute('POST', '/api/auth/documentation/logout', 'high', 'A dedicated gateway credential and current documentation token revoke only that documentation session; the source Cloud session stays active.'),
   tokenAuthenticatedRoute('POST', '/api/auth/documentation/grant', 'high', 'A current verified browser session and same-origin request can mint only a PKCE-bound documentation grant; it creates no tenant.'),

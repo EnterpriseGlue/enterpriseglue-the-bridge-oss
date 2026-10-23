@@ -5,7 +5,11 @@ For every changed field, setting, or resource, inspect these surfaces:
 1. Canonical shared schema and validation/defaults.
 2. TypeORM entity, migration, repository/adapter, and database qualification.
 3. Service behavior, authorization, audit, redaction, and rollback.
-4. REST routes and generated OpenAPI request/response schemas.
+4. Actual HTTP registrations and generated OpenAPI operations, request/response
+   schemas, errors, auth classification and cache behavior. Include bootstrap,
+   public/auth-only, tenant-scoped and compatibility variants; administrative
+   inventory endpoints do not substitute for frontend discovery. Require a
+   source-to-generated-document regression test for the affected route family.
 5. Headless JSON configuration, preview/diff/apply/export, and secret handling.
 6. Portal create/edit/view behavior, config ownership, help text, and errors.
 7. Example configuration and API payloads.

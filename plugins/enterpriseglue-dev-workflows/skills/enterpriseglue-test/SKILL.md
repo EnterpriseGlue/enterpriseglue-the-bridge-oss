@@ -17,7 +17,9 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
      `enterpriseglue-access-governance-verify`;
    - screenshots, accessibility, or browser presentation:
      `enterpriseglue-ui-evidence`;
-   - OpenAPI, JSON configuration, TypeORM, or documentation parity:
+   - backend HTTP routes (including public/bootstrap, auth-only and tenant
+     variants), OpenAPI, public schemas, JSON configuration, TypeORM, or
+     documentation parity:
      `enterpriseglue-contract-parity`;
    - migration portability: `pnpm run test:engine-tenancy:database-matrix`.
 4. Check PostgreSQL, Docker, browsers, ports, worktree-local environment, and
