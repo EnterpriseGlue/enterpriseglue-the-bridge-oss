@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.34.0...v0.35.0) (2026-10-23)
+
+
+### Features
+
+* **docs:** add shared account profiles and independent release drafting ([777fbe0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/777fbe019561ff3366e6ab178f7e98b3d6fe8295))
+* **docs:** add shared account profiles and independent release drafting ([f568f87](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f568f87071c89283ddd74acc356cf52dcdae9041))
+
+
+### Bug Fixes
+
+* **plugins:** document frontend bootstrap and require OpenAPI parity ([107a849](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/107a849c1beae6ea169a027f5d11469c67ed0280))
+* **plugins:** document frontend bootstrap and require OpenAPI parity ([2174329](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2174329efa57e60d8cc01c77b7641e38f736a624))
+* **security:** raise ip-address parser security floor ([b953add](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b953add6c7a7f17d71f62df507be982b6f780242))
+
 ## [0.34.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.33.0...v0.34.0) (2026-10-22)
 
 ### Changes
