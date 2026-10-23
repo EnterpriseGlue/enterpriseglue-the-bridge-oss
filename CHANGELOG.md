@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.34.0...v0.35.0) (2026-10-23)
+
+### Changes
+
+- **documentation account:** Allow documentation readers to manage their shared account profile without organization onboarding.
+- **plugins:** Documents both v1 frontend bootstrap APIs and requires OpenAPI coverage evidence before shipping; also patches the IPv6 parser vulnerability that blocked Oracle image qualification.
+- **documentation publication:** Prepare customer documentation independently from OSS releases using the existing canonical release notes and stable page impact metadata.
+
+Full upgrade, compatibility and verification details: [v0.35.0 release notes](docs/releases/v0.35.0.md).
+
 ## [0.34.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.33.0...v0.34.0) (2026-10-22)
 
 ### Changes
