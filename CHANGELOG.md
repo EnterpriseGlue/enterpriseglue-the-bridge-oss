@@ -6,18 +6,13 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.34.0...v0.35.0) (2026-10-23)
 
+### Changes
 
-### Features
+- **documentation account:** Allow documentation readers to manage their shared account profile without organization onboarding.
+- **plugins:** Documents both v1 frontend bootstrap APIs and requires OpenAPI coverage evidence before shipping; also patches the IPv6 parser vulnerability that blocked Oracle image qualification.
+- **documentation publication:** Prepare customer documentation independently from OSS releases using the existing canonical release notes and stable page impact metadata.
 
-* **docs:** add shared account profiles and independent release drafting ([777fbe0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/777fbe019561ff3366e6ab178f7e98b3d6fe8295))
-* **docs:** add shared account profiles and independent release drafting ([f568f87](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f568f87071c89283ddd74acc356cf52dcdae9041))
-
-
-### Bug Fixes
-
-* **plugins:** document frontend bootstrap and require OpenAPI parity ([107a849](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/107a849c1beae6ea169a027f5d11469c67ed0280))
-* **plugins:** document frontend bootstrap and require OpenAPI parity ([2174329](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2174329efa57e60d8cc01c77b7641e38f736a624))
-* **security:** raise ip-address parser security floor ([b953add](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b953add6c7a7f17d71f62df507be982b6f780242))
+Full upgrade, compatibility and verification details: [v0.35.0 release notes](docs/releases/v0.35.0.md).
 
 ## [0.34.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.33.0...v0.34.0) (2026-10-22)
 
