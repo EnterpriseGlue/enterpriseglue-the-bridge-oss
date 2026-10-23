@@ -75,7 +75,7 @@ test('approved mail/Git upgrades and compatible runtime dependencies cannot regr
   const floors = {
     '@grpc/grpc-js': [1, 14, 5],
     '@simple-git/argv-parser': [2, 0, 1],
-    'ip-address': [10, 7, 1],
+    'ip-address': [10, 7, 4],
     nodemailer: [10, 0, 16],
     'proxy-addr': [2, 0, 8],
     'simple-git': [4, 0, 2],
