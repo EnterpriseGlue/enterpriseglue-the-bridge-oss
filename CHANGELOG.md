@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.0...v0.35.1) (2026-10-24)
+
+### Changes
+
+- **runtime-dependencies:** Repair runtime and browser/build dependency vulnerabilities in MSAL, parsing, mail, HTTP, schema validation, DOMPurify and Vite/Vitest while preserving database adapters and tenant controls.
+
+Full upgrade, compatibility and verification details: [v0.35.1 release notes](docs/releases/v0.35.1.md).
+
 ## [0.35.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.34.0...v0.35.0) (2026-10-23)
 
 ### Changes
