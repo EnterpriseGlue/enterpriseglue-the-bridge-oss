@@ -1,0 +1,111 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "runtime-dependency-security-refresh",
+  "type": "security",
+  "scope": "runtime-dependencies",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Repair runtime dependency vulnerabilities in MSAL, request parsing, URI parsing, mail, HTTP and schema validation while preserving database adapters and tenant controls.",
+  "userImpact": [
+    "Authentication and tenant isolation retain their existing application behavior while runtime dependency vulnerabilities are repaired."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade the host and published workspace packages together after exact-candidate qualification.",
+      "Standalone package consumers must reproduce the scoped Azure Identity 4.13.2 to MSAL Node 7.1.0 root override and qualify their installed dependency closure."
+    ]
+  },
+  "configuration": [
+    "No new runtime configuration is required."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": [
+      "Remove the unused optional MSAL peer requirement from the shared package; no shared public types or runtime imports use MSAL."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Migration inventories and schema-plan identities remain unchanged."
+    ]
+  },
+  "security": [
+    "Pin MSAL Node 7.1.0 directly and in Azure Identity 4.13.2 through a scoped workspace override; real Tedious credential compatibility regressions preserve token acquisition, cache separation and refusals.",
+    "Require body-parser 2.4.0, fast-uri 3.1.9, nodemailer 10.1.4, undici 7.30.1 and zod 4.6.6 or later within their existing major release lines; the lockfile resolves zod 4.6.7.",
+    "Retain the existing scanner severity and ignore policy; final release images require current exact-image security qualification."
+  ],
+  "documentation": [
+    "docs/runbooks/security-dependency-updates.md documents the Azure Identity override, standalone consumer boundary and required runtime qualification."
+  ],
+  "knownLimitations": [
+    "The scoped root override does not automatically propagate to standalone npm consumers.",
+    "Synthetic HTTP credential compatibility tests do not establish live Azure authentication or SaaS tenant isolation."
+  ],
+  "rollback": [
+    "Restore the previous package set only after independently verifying current security acceptance; earlier signed image bytes alone are insufficient."
+  ],
+  "validation": [
+    "Application/package builds and backend/frontend typechecks pass with the upgraded dependency closure.",
+    "All 3,940 backend and 1,586 frontend unit tests pass. Sixteen dependency regressions include actual Tedious Azure Identity token acquisition, caching, tenant-cache separation and refusal over a synthetic provider transport.",
+    "Frozen installation, strict license checks, CI routing/contracts, documentation boundaries and package-version/release-note preflight pass.",
+    "Exact-candidate native image scans, all five database adapters and the pinned real-engine browser gate remain required before publication."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.3",
+      "newVersion": "0.23.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.4",
+      "newVersion": "0.20.5",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.12",
+      "newVersion": "0.2.13",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.12",
+      "newVersion": "0.1.13",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-runtime",
+      "previousVersion": "0.2.3",
+      "newVersion": "0.2.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-sdk",
+      "previousVersion": "0.6.0",
+      "newVersion": "0.6.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.2",
+      "newVersion": "0.28.3",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "This security dependency repair does not change configuration, public workflows or administrator procedures."
+  }
+}

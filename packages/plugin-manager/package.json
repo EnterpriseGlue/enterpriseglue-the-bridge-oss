@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/plugin-manager",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Isolated OSS orchestration service for EnterpriseGlue plugin installation lifecycles",
   "license": "Apache-2.0",
   "private": false,
@@ -33,7 +33,7 @@
     "@enterpriseglue/plugin-installer": "workspace:*",
     "@enterpriseglue/plugin-runtime": "workspace:*",
     "@enterpriseglue/plugin-sdk": "workspace:*",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",

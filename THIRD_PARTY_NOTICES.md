@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-10-23T04:10:42.695Z
+Generated at: 2026-10-24T09:46:14.198Z
 
 Generated from:
 - third_party_licenses.json
@@ -37,7 +37,7 @@ Generated from:
 | Package | Version | License | Repository | Source(s) |
 |---|---|---|---|---|
 | @asteasolutions/zod-to-openapi | 8.5.0 | MIT | https://github.com/asteasolutions/zod-to-openapi | backend, frontend, packages/shared, root |
-| @azure/msal-node | 5.6.0 | MIT | https://github.com/AzureAD/microsoft-authentication-library-for-js.git | backend, packages/backend-host |
+| @azure/msal-node | 7.1.0 | MIT | https://github.com/AzureAD/microsoft-authentication-library-for-js.git | backend, packages/backend-host |
 | @bpmn-io/properties-panel | 3.51.2 | MIT | git+https://github.com/bpmn-io/properties-panel.git | frontend, packages/frontend-host |
 | @carbon/charts-react | 1.27.18 | Apache-2.0 | git+https://github.com/carbon-design-system/carbon-charts.git | frontend |
 | @carbon/charts | 1.27.18 | Apache-2.0 | git+https://github.com/carbon-design-system/carbon-charts.git | frontend |
@@ -92,7 +92,7 @@ Generated from:
 | morgan | 1.12.1 | MIT | expressjs/morgan | backend, packages/backend-host |
 | mssql | 12.7.0 | MIT | git+https://github.com/tediousjs/node-mssql.git | backend, packages/backend-host |
 | mysql2 | 3.23.4 | MIT | git+https://github.com/sidorares/node-mysql2.git | backend, packages/backend-host |
-| nodemailer | 10.0.16 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, packages/backend-host |
+| nodemailer | 10.1.4 | MIT-0 | https://github.com/nodemailer/nodemailer.git | backend, packages/backend-host |
 | octokit | 5.0.5 | MIT | github:octokit/octokit.js | backend, packages/backend-host |
 | oracledb | 6.10.0 | (Apache-2.0 OR UPL-1.0) | git://github.com/oracle/node-oracledb.git | backend, packages/backend-host |
 | pg | 8.23.0 | MIT | git://github.com/brianc/node-postgres.git | backend, packages/backend-host |
@@ -115,10 +115,10 @@ Generated from:
 | tailwind-merge | 3.6.0 | MIT | https://github.com/dcastil/tailwind-merge.git | frontend, packages/frontend-host |
 | typeorm | 0.3.31 | MIT | https://github.com/typeorm/typeorm.git | backend, packages/backend-host |
 | typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript.git | packages/backend-host |
-| undici | 7.30.0 | MIT | git+https://github.com/nodejs/undici.git | backend, packages/backend-host |
+| undici | 7.30.1 | MIT | git+https://github.com/nodejs/undici.git | backend, packages/backend-host |
 | uuid | 14.0.2 | MIT | https://github.com/uuidjs/uuid.git | packages/backend-host, root |
 | yaml | 2.9.0 | ISC | github:eemeli/yaml | packages/plugin-installer |
-| zod | 4.4.3 | MIT | git+https://github.com/colinhacks/zod.git | backend, frontend, packages/backend-host, packages/plugin-manager, packages/plugin-sdk, packages/shared, root |
+| zod | 4.6.7 | MIT | git+https://github.com/colinhacks/zod.git | backend, frontend, packages/backend-host, packages/plugin-manager, packages/plugin-sdk, packages/shared, root |
 | zustand | 5.0.15 | MIT | git+https://github.com/pmndrs/zustand.git | frontend, packages/frontend-host |
 
 ---

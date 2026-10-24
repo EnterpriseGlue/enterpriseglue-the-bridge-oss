@@ -44,6 +44,19 @@ The patch is root-workspace composition, not an upstream fix. Consumers of
 standalone npm packages do not automatically inherit pnpm root patches. A
 driver upgrade must revisit this patch and qualify real SQL Server behavior.
 
+The host pins MSAL Node 7.1.0 and redirects Azure Identity 4.13.2's MSAL
+dependency to that same version. Azure Identity's declared range still selects
+the affected MSAL 5 release line, so the scoped root override is required for
+the reviewed SQL Server dependency closure. Its real ClientSecretCredential
+path is tested for token acquisition, caching, separate tenant caches and
+credential refusal through a synthetic HTTP boundary. This is library
+compatibility evidence, not live Azure authentication or application tenant
+isolation acceptance; physical SQL Server and exact-image gates remain required.
+Standalone package consumers must reproduce the scoped root override and
+qualify their installed dependency tree; published package manifests do not
+propagate pnpm workspace overrides. Revisit the override when Azure Identity
+changes its MSAL dependency.
+
 If a remaining runtime dependency has no qualified upstream fix, stop dependent
 release qualification. Removing or replacing that dependency requires caller
 compatibility and regression evidence. Do not falsify versions, suppress the
