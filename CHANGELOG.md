@@ -6,15 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.0...v0.35.1) (2026-10-24)
 
+### Changes
 
-### Bug Fixes
+- **runtime-dependencies:** Repair runtime and browser/build dependency vulnerabilities in MSAL, parsing, mail, HTTP, schema validation, DOMPurify and Vite/Vitest while preserving database adapters and tenant controls.
 
-* enforce patched Brotli runtime package floors ([e170ec2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e170ec29012b6299e8dd8ea6aa5d058c9b81d674))
-* patch acquisition toolchain Node 24 runtime ([0cc3ebb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0cc3ebbd3851c82521c97d4e4625bccee36c3720))
-* patch browser sanitization and test toolchain advisories ([635038e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/635038e6b168a70dd7c7c07cfd61307440ddc07b))
-* refresh vulnerable runtime dependencies for v0.35.1 ([4ce3c85](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4ce3c8597de2ed2560b745f491364a346574fd34))
-* require current Node security patches in host and bootstrap ([f43603a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f43603a119c0d95d0fbb63cfe07c0acba167b5ac))
-* **security:** refresh runtime dependencies for v0.35.1 ([183a589](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/183a5895cd71855be497e785c4ee40fcfc62e893))
+Full upgrade, compatibility and verification details: [v0.35.1 release notes](docs/releases/v0.35.1.md).
 
 ## [0.35.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.34.0...v0.35.0) (2026-10-23)
 
