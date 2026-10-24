@@ -21,9 +21,9 @@ const isAtLeast = (version, minimum) => {
 const isPatchedFastUri = (version) => {
   const [major, minor, patch] = parseVersion(version)
   const minimumByMajor = new Map([
-    [2, [2, 4, 7]],
-    [3, [3, 1, 8]],
-    [4, [4, 1, 5]],
+    [2, [2, 4, 8]],
+    [3, [3, 1, 9]],
+    [4, [4, 2, 3]],
   ])
   const minimum = minimumByMajor.get(major)
   if (!minimum) return major > 4
@@ -51,7 +51,7 @@ test('fast-uri security override and lockfile stay on a patched release line', a
   const packageJson = JSON.parse(packageText)
 
   assert.equal(packageJson.overrides, undefined, 'pnpm-workspace.yaml owns effective security overrides')
-  assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}fast-uri: \^3\.1\.8$/m)
+  assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}fast-uri: \^3\.1\.9$/m)
   assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}qs: \^6\.16\.0$/m)
 
   const lockedVersions = [...lockText.matchAll(/^ {2}fast-uri@(\d+\.\d+\.\d+):$/gm)]
@@ -74,13 +74,20 @@ test('approved mail/Git upgrades and compatible runtime dependencies cannot regr
   const lockText = await readFile(new URL('pnpm-lock.yaml', root), 'utf8')
   const floors = {
     '@grpc/grpc-js': [1, 14, 5],
+    '@azure/msal-node': [7, 1, 0],
+    'body-parser': [2, 4, 0],
+    dompurify: [3, 4, 17],
+    vite: [7, 3, 7],
+    vitest: [4, 1, 12],
+    '@vitest/mocker': [4, 1, 12],
+    zod: [4, 6, 6],
     '@simple-git/argv-parser': [2, 0, 1],
     'ip-address': [10, 7, 4],
-    nodemailer: [10, 0, 16],
+    nodemailer: [10, 1, 4],
     'proxy-addr': [2, 0, 8],
     'simple-git': [4, 0, 2],
     'source-map-js': [1, 2, 2],
-    undici: [7, 29, 1],
+    undici: [7, 30, 1],
   }
   for (const [name, minimum] of Object.entries(floors)) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -134,6 +141,88 @@ test('production dependency assembly excludes build dependencies without alterin
 const backendRequire = createRequire(new URL('backend/package.json', root))
 const mssqlRequire = createRequire(backendRequire.resolve('mssql'))
 const tediousRequire = createRequire(mssqlRequire.resolve('tedious'))
+
+// Exercise the actual Azure Identity dependency loaded by Tedious. Only the
+// HTTP boundary is synthetic: no provider, ambient credential or network call.
+const identityRequire = createRequire(tediousRequire.resolve('@azure/identity'))
+const { ClientSecretCredential, AuthenticationRequiredError } = tediousRequire('@azure/identity')
+const { createHttpHeaders } = identityRequire('@azure/core-rest-pipeline')
+const credentialTenantA = '11111111-1111-4111-8111-111111111111'
+const credentialTenantB = '22222222-2222-4222-8222-222222222222'
+const credentialClient = '33333333-3333-4333-8333-333333333333'
+const credentialScope = 'https://database.windows.net/.default'
+function azureCredentialWire(rejectToken = false) {
+  const calls = []
+  return {
+    calls,
+    async sendRequest(request) {
+      const url = new URL(request.url)
+      assert.equal(url.origin, 'https://login.microsoftonline.com')
+      const tenant = url.pathname.split('/')[1]
+      assert.ok([credentialTenantA, credentialTenantB].includes(tenant))
+      calls.push({ method: request.method, path: url.pathname })
+      let body
+      let status = 200
+      if (request.method === 'GET' && url.pathname.endsWith('/.well-known/openid-configuration')) {
+        body = {
+          authorization_endpoint: `${url.origin}/${tenant}/oauth2/v2.0/authorize`,
+          token_endpoint: `${url.origin}/${tenant}/oauth2/v2.0/token`,
+          issuer: `${url.origin}/${tenant}/v2.0`,
+          jwks_uri: `${url.origin}/${tenant}/discovery/v2.0/keys`,
+        }
+      } else {
+        assert.equal(request.method, 'POST')
+        assert.equal(url.pathname, `/${tenant}/oauth2/v2.0/token`)
+        const form = new URLSearchParams(request.body)
+        assert.equal(form.get('client_id'), credentialClient)
+        assert.equal(form.get('grant_type'), 'client_credentials')
+        assert.equal(form.get('scope'), credentialScope)
+        assert.equal(form.get('client_secret'), `synthetic-${tenant}`)
+        if (rejectToken) {
+          status = 400
+          body = { error: 'invalid_client', error_description: 'Synthetic credential rejection' }
+        } else {
+          body = { access_token: `synthetic-token-${tenant}`, token_type: 'Bearer', expires_in: 3600,
+            ext_expires_in: 3600, scope: credentialScope }
+        }
+      }
+      return { request, status, headers: createHttpHeaders({ 'content-type': 'application/json' }), bodyAsText: JSON.stringify(body) }
+    },
+  }
+}
+const sqlCredential = (tenant, httpClient) => new ClientSecretCredential(tenant, credentialClient, `synthetic-${tenant}`, {
+  authorityHost: 'https://login.microsoftonline.com', disableInstanceDiscovery: true, httpClient,
+  retryOptions: { maxRetries: 0 },
+})
+
+test('Tedious Azure Identity acquires and caches a SQL token through the patched MSAL release', async () => {
+  assert.ok(isAtLeast(identityRequire('@azure/msal-node').version, [7, 1, 0]))
+  const wire = azureCredentialWire()
+  const credential = sqlCredential(credentialTenantA, wire)
+  const first = await credential.getToken(credentialScope)
+  const repeated = await credential.getToken(credentialScope)
+  assert.equal(first.token, `synthetic-token-${credentialTenantA}`)
+  assert.equal(repeated.token, first.token)
+  assert.ok(first.expiresOnTimestamp > Date.now())
+  assert.equal(wire.calls.filter(call => call.method === 'POST').length, 1)
+})
+
+test('Tedious Azure Identity retains separate tenant token caches with the upgraded MSAL dependency', async () => {
+  const wire = azureCredentialWire()
+  const a = await sqlCredential(credentialTenantA, wire).getToken(credentialScope)
+  const b = await sqlCredential(credentialTenantB, wire).getToken(credentialScope)
+  assert.notEqual(a.token, b.token)
+  assert.equal(a.token, `synthetic-token-${credentialTenantA}`)
+  assert.equal(b.token, `synthetic-token-${credentialTenantB}`)
+  assert.equal(wire.calls.filter(call => call.method === 'POST').length, 2)
+})
+
+test('Tedious Azure Identity propagates credential refusal without a fallback or accepted token', async () => {
+  const wire = azureCredentialWire(true)
+  await assert.rejects(sqlCredential(credentialTenantA, wire).getToken(credentialScope), error =>
+    error instanceof AuthenticationRequiredError && error.message.includes('invalid_client'))
+  assert.equal(wire.calls.filter(call => call.method === 'POST').length, 1)
+})
 
 test('the SQL Server driver retains its real package identity and no longer loads sprintf-js', async () => {
   const lock = await readFile(new URL('pnpm-lock.yaml', root), 'utf8')
@@ -209,9 +298,16 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
     assert.match(source, /libcrypt1-2\.44>=2\.44-r8/);
     assert.match(source, /ca-certificates-bundle>=20260909-r3/);
     assert.match(source, /libcurl-openssl4>=8\.23\.0-r0/);
+    for (const name of ['libbrotlicommon1', 'libbrotlidec1', 'libbrotlienc1']) {
+      assert.ok(source.includes(`${name}>=1.2.0-r7`), `${relative} must invalidate cached vulnerable Brotli packages`);
+    }
   }
   const backend = await readFile(new URL('backend/Dockerfile.prod', root), 'utf8');
-  assert.match(backend, /nodejs-24=24\.21\.0-r4/);
+  assert.match(backend, /nodejs-24=24\.22\.1-r2/);
+  assert.ok(backend.includes('c-ares>=1.34.9-r0'));
+  const bootstrap = await readFile(new URL('infra/docker/managed-shard-bootstrap/Dockerfile', root), 'utf8');
+  assert.ok(bootstrap.includes('nodejs-26=26.12.1-r2'));
+  assert.ok(bootstrap.includes('c-ares>=1.34.9-r0'));
   assert.match(backend, /nodejs\|npm\|node-gyp\|corepack/);
   assert.match(backend, /process\.versions\.node\.split\("\."\)\[0\] !== "24"/);
 });
@@ -220,6 +316,10 @@ test('both acquisition toolchains require the patched certificate verification s
   for (const relative of ['packages/plugin-installer/Dockerfile', 'packages/plugin-manager/Dockerfile']) {
     const source = await readFile(new URL(relative, root), 'utf8');
     assert.match(source, /golang:1\.26\.10-alpine3\.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0/);
+    assert.ok(source.includes('brotli-libs>=1.2.1-r0'), `${relative} must retain Alpine's Brotli security floor`);
+    assert.match(source, /FROM alpine:3\.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a/);
+    assert.ok(source.includes("'nodejs>=24.22.1-r0'"), `${relative} must invalidate cached vulnerable Node packages`);
+    assert.ok(source.includes("process.versions.node.split('.')[0] !== '24'"), `${relative} must retain the supported Node major`);
     assert.ok(source.includes('^/out/oras: go1\\.26\\.10$'));
     assert.ok(source.includes('^/out/cosign: go1\\.26\\.10$'));
   }

@@ -44,6 +44,19 @@ The patch is root-workspace composition, not an upstream fix. Consumers of
 standalone npm packages do not automatically inherit pnpm root patches. A
 driver upgrade must revisit this patch and qualify real SQL Server behavior.
 
+The host pins MSAL Node 7.1.0 and redirects Azure Identity 4.13.2's MSAL
+dependency to that same version. Azure Identity's declared range still selects
+the affected MSAL 5 release line, so the scoped root override is required for
+the reviewed SQL Server dependency closure. Its real ClientSecretCredential
+path is tested for token acquisition, caching, separate tenant caches and
+credential refusal through a synthetic HTTP boundary. This is library
+compatibility evidence, not live Azure authentication or application tenant
+isolation acceptance; physical SQL Server and exact-image gates remain required.
+Standalone package consumers must reproduce the scoped root override and
+qualify their installed dependency tree; published package manifests do not
+propagate pnpm workspace overrides. Revisit the override when Azure Identity
+changes its MSAL dependency.
+
 If a remaining runtime dependency has no qualified upstream fix, stop dependent
 release qualification. Removing or replacing that dependency requires caller
 compatibility and regression evidence. Do not falsify versions, suppress the
@@ -57,7 +70,22 @@ and frozen-bootstrap assemblies require the glibc 2.44 runtime family at
 2.44-r8 or later. The application removes the base image's Node/npm/Corepack
 family and installs the qualified Node 24 package; a runtime assertion protects
 the repository's declared major even when a digest-pinned vendor image contains
-a newer Node major. The bootstrap retains its exact predecessor code and
-runtime identity; package floors do not change its signed migration inventory
+a newer Node major. The bootstrap retains its exact predecessor compiled code
+and schema contract; package floors do not change its signed migration inventory
 or schema plan. Scan the final exact application and bootstrap subjects with
 fresh vulnerability data before acceptance.
+
+Wolfi runtime assemblies also require the Brotli common, decoder and encoder
+packages at 1.2.0-r7 or later. These floors belong in the Dockerfile command so
+cached package-upgrade layers cannot retain an earlier vulnerable revision.
+The Alpine acquisition toolchains require `brotli-libs` at 1.2.1-r0 or later,
+matching that distribution's security fix rather than Wolfi's revision scheme.
+Their runtime base is pinned to Alpine 3.24, whose Node package includes the
+Node 24.22.1 security fixes; the older Alpine 3.23 repository does not provide
+that patched package. An explicit `nodejs>=24.22.1-r0` floor invalidates stale
+install layers, and a build assertion retains the supported Node 24 major.
+The Wolfi application pins Node 24.22.1-r2, and the frozen bootstrap pins
+Node 26.12.1-r2 within its existing runtime major. Both require c-ares 1.34.9-r0
+or later. These runtime updates preserve the frozen compiled bootstrap code
+and schema contract; upstream security advisories must also be checked when
+distribution vulnerability metadata has not yet caught up.

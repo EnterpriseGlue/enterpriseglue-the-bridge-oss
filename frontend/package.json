@@ -67,7 +67,7 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.17",
     "immutable": "5.1.9",
     "lodash": "4.17.23",
     "lodash-es": "4.17.23",

@@ -60,11 +60,11 @@ test('DOMPurify stays above the advisory floor and overrides have one authority'
   const workspace = readFileSync(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
   const lock = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
   assert.equal(read('package.json').overrides, undefined);
-  assert.match(workspace, /^  dompurify: \^3\.4\.16$/m);
+  assert.match(workspace, /^  dompurify: \^3\.4\.17$/m);
   const versions = [...lock.matchAll(/^  dompurify@(\d+)\.(\d+)\.(\d+):$/gm)];
   assert.ok(versions.length);
   for (const [, major, minor, patch] of versions) {
-    assert.ok(Number(major) > 3 || Number(major) === 3 && (Number(minor) > 4 || Number(minor) === 4 && Number(patch) >= 16));
+    assert.ok(Number(major) > 3 || Number(major) === 3 && (Number(minor) > 4 || Number(minor) === 4 && Number(patch) >= 17));
   }
 });
 

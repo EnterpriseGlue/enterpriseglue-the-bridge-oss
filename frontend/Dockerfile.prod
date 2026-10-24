@@ -50,7 +50,7 @@ FROM cgr.dev/chainguard/nginx:latest-dev@sha256:bcb55921c1e04d784618dc2580eb20e4
 
 USER root
 RUN apk upgrade --no-cache \
-    && apk add --no-cache --upgrade 'ca-certificates-bundle>=20260909-r3' 'libcurl-openssl4>=8.23.0-r0' \
+    && apk add --no-cache --upgrade 'ca-certificates-bundle>=20260909-r3' 'libcurl-openssl4>=8.23.0-r0' 'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7' \
     && apk add --no-cache --upgrade 'zlib>=1.3.2.1_rc20260921-r0' 'glibc-2.44>=2.44-r8' 'glibc-2.44-locale-posix>=2.44-r8' 'ld-linux-2.44>=2.44-r8' 'libcrypt1-2.44>=2.44-r8' \
     && apk add --no-cache busybox-static \
     && mkdir -p /busybox \

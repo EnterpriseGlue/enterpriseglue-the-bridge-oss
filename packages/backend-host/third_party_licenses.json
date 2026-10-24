@@ -1,5 +1,5 @@
 {
-  "@azure/msal-node@5.6.0": {
+  "@azure/msal-node@7.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
     "publisher": "Microsoft",
@@ -136,7 +136,7 @@
     "publisher": "Andrey Sidorov",
     "email": "andrey.sidorov@gmail.com"
   },
-  "nodemailer@10.0.16": {
+  "nodemailer@10.1.4": {
     "licenses": "MIT-0",
     "repository": "https://github.com/nodemailer/nodemailer.git",
     "publisher": "Andris Reinman"
@@ -185,7 +185,7 @@
     "repository": "https://github.com/microsoft/TypeScript.git",
     "publisher": "Microsoft Corp."
   },
-  "undici@7.30.0": {
+  "undici@7.30.1": {
     "licenses": "MIT",
     "repository": "git+https://github.com/nodejs/undici.git"
   },
@@ -193,7 +193,7 @@
     "licenses": "MIT",
     "repository": "https://github.com/uuidjs/uuid.git"
   },
-  "zod@4.4.3": {
+  "zod@4.6.7": {
     "licenses": "MIT",
     "repository": "git+https://github.com/colinhacks/zod.git",
     "publisher": "Colin McDonnell",
