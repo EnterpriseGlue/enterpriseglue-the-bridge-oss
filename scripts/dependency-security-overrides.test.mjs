@@ -313,6 +313,9 @@ test('both acquisition toolchains require the patched certificate verification s
     const source = await readFile(new URL(relative, root), 'utf8');
     assert.match(source, /golang:1\.26\.10-alpine3\.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0/);
     assert.ok(source.includes('brotli-libs>=1.2.1-r0'), `${relative} must retain Alpine's Brotli security floor`);
+    assert.match(source, /FROM alpine:3\.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a/);
+    assert.ok(source.includes("'nodejs>=24.22.1-r0'"), `${relative} must invalidate cached vulnerable Node packages`);
+    assert.ok(source.includes("process.versions.node.split('.')[0] !== '24'"), `${relative} must retain the supported Node major`);
     assert.ok(source.includes('^/out/oras: go1\\.26\\.10$'));
     assert.ok(source.includes('^/out/cosign: go1\\.26\\.10$'));
   }

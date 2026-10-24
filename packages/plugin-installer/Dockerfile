@@ -93,10 +93,11 @@ RUN go version -m /out/cosign | grep -E 'github.com/klauspost/compress[[:space:]
 RUN go version -m /out/oras | grep -E '^/out/oras: go1\.26\.10$' \
   && go version -m /out/cosign | grep -E '^/out/cosign: go1\.26\.10$'
 
-FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 RUN apk upgrade --no-cache \
-  && apk add --no-cache 'brotli-libs>=1.2.1-r0' ca-certificates nodejs docker-cli docker-cli-compose helm kubectl \
+  && apk add --no-cache 'brotli-libs>=1.2.1-r0' 'nodejs>=24.22.1-r0' ca-certificates docker-cli docker-cli-compose helm kubectl \
+  && node -e "if (process.versions.node.split('.')[0] !== '24') process.exit(1)" \
   && addgroup -S -g 65532 plugininstaller \
   && adduser -S -D -H -u 65532 -G plugininstaller plugininstaller \
   && mkdir -p /usr/share/licenses/enterpriseglue-plugin-installer

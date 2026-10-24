@@ -42,6 +42,7 @@
     "Require body-parser 2.4.0, fast-uri 3.1.9, nodemailer 10.1.4, undici 7.30.1 and zod 4.6.6 or later within their existing major release lines; the lockfile resolves zod 4.6.7.",
     "Require DOMPurify 3.4.17 for browser sanitization and patched Vite 7.3.7 and Vitest 4.1.12 in the managed build/test dependency closure; preserve the existing security policy.",
     "Set explicit Brotli vendor package floors in runtime assemblies so cached build layers cannot retain the vulnerable revision.",
+    "Use a digest-pinned Alpine 3.24 runtime and an explicit Node 24.22.1 security floor in the installer and manager, retaining the Node 24 major.",
     "Retain the existing scanner severity and ignore policy; final release images require current exact-image security qualification."
   ],
   "documentation": [

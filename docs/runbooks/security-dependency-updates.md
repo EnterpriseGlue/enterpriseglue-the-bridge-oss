@@ -80,3 +80,7 @@ packages at 1.2.0-r7 or later. These floors belong in the Dockerfile command so
 cached package-upgrade layers cannot retain an earlier vulnerable revision.
 The Alpine acquisition toolchains require `brotli-libs` at 1.2.1-r0 or later,
 matching that distribution's security fix rather than Wolfi's revision scheme.
+Their runtime base is pinned to Alpine 3.24, whose Node package includes the
+Node 24.22.1 security fixes; the older Alpine 3.23 repository does not provide
+that patched package. An explicit `nodejs>=24.22.1-r0` floor invalidates stale
+install layers, and a build assertion retains the supported Node 24 major.
