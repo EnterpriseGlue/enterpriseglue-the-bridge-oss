@@ -26,6 +26,7 @@ RUN apk add --no-cache --upgrade \
       'glibc-2.44-locale-posix>=2.44-r8' \
       'ld-linux-2.44>=2.44-r8' \
       'libcurl-openssl4>=8.23.0-r0' \
+      'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7' \
       wget \
       'libcrypt1-2.44>=2.44-r8'
 

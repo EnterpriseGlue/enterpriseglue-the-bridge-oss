@@ -102,7 +102,7 @@ RUN go version -m /out/oras | grep -E '^/out/oras: go1\.26\.10$' \
 FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
 RUN apk upgrade --no-cache \
-  && apk add --no-cache ca-certificates nodejs docker-cli docker-cli-compose helm kubectl tini \
+  && apk add --no-cache 'brotli-libs>=1.2.1-r0' ca-certificates nodejs docker-cli docker-cli-compose helm kubectl tini \
   && addgroup -S -g 65532 pluginmanager \
   && adduser -S -D -H -u 65532 -G pluginmanager pluginmanager \
   && mkdir -p /usr/share/licenses/enterpriseglue-plugin-manager \

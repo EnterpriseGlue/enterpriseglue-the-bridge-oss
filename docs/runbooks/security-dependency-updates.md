@@ -74,3 +74,9 @@ a newer Node major. The bootstrap retains its exact predecessor code and
 runtime identity; package floors do not change its signed migration inventory
 or schema plan. Scan the final exact application and bootstrap subjects with
 fresh vulnerability data before acceptance.
+
+Wolfi runtime assemblies also require the Brotli common, decoder and encoder
+packages at 1.2.0-r7 or later. These floors belong in the Dockerfile command so
+cached package-upgrade layers cannot retain an earlier vulnerable revision.
+The Alpine acquisition toolchains require `brotli-libs` at 1.2.1-r0 or later,
+matching that distribution's security fix rather than Wolfi's revision scheme.

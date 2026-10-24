@@ -298,6 +298,9 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
     assert.match(source, /libcrypt1-2\.44>=2\.44-r8/);
     assert.match(source, /ca-certificates-bundle>=20260909-r3/);
     assert.match(source, /libcurl-openssl4>=8\.23\.0-r0/);
+    for (const name of ['libbrotlicommon1', 'libbrotlidec1', 'libbrotlienc1']) {
+      assert.ok(source.includes(`${name}>=1.2.0-r7`), `${relative} must invalidate cached vulnerable Brotli packages`);
+    }
   }
   const backend = await readFile(new URL('backend/Dockerfile.prod', root), 'utf8');
   assert.match(backend, /nodejs-24=24\.21\.0-r4/);
@@ -309,6 +312,7 @@ test('both acquisition toolchains require the patched certificate verification s
   for (const relative of ['packages/plugin-installer/Dockerfile', 'packages/plugin-manager/Dockerfile']) {
     const source = await readFile(new URL(relative, root), 'utf8');
     assert.match(source, /golang:1\.26\.10-alpine3\.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0/);
+    assert.ok(source.includes('brotli-libs>=1.2.1-r0'), `${relative} must retain Alpine's Brotli security floor`);
     assert.ok(source.includes('^/out/oras: go1\\.26\\.10$'));
     assert.ok(source.includes('^/out/cosign: go1\\.26\\.10$'));
   }
