@@ -84,3 +84,8 @@ Their runtime base is pinned to Alpine 3.24, whose Node package includes the
 Node 24.22.1 security fixes; the older Alpine 3.23 repository does not provide
 that patched package. An explicit `nodejs>=24.22.1-r0` floor invalidates stale
 install layers, and a build assertion retains the supported Node 24 major.
+The Wolfi application pins Node 24.22.1-r2, and the frozen bootstrap pins
+Node 26.12.1-r2 within its existing runtime major. Both require c-ares 1.34.9-r0
+or later. These runtime updates preserve the frozen compiled bootstrap code
+and schema contract; upstream security advisories must also be checked when
+distribution vulnerability metadata has not yet caught up.

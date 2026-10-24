@@ -19,6 +19,7 @@ FROM ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend@sha256:21b196a
 
 USER root
 RUN apk add --no-cache --upgrade \
+      'nodejs-26=26.12.1-r2' 'c-ares>=1.34.9-r0' \
       'ca-certificates-bundle>=20260909-r3' \
       'zlib>=1.3.2.1_rc20260921-r0' \
       'glibc-2.44>=2.44-r8' \
