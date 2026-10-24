@@ -10,7 +10,7 @@
     "developers",
     "security"
   ],
-  "summary": "Repair runtime dependency vulnerabilities in MSAL, request parsing, URI parsing, mail, HTTP and schema validation while preserving database adapters and tenant controls.",
+  "summary": "Repair runtime and browser/build dependency vulnerabilities in MSAL, parsing, mail, HTTP, schema validation, DOMPurify and Vite/Vitest while preserving database adapters and tenant controls.",
   "userImpact": [
     "Authentication and tenant isolation retain their existing application behavior while runtime dependency vulnerabilities are repaired."
   ],
@@ -40,6 +40,7 @@
   "security": [
     "Pin MSAL Node 7.1.0 directly and in Azure Identity 4.13.2 through a scoped workspace override; real Tedious credential compatibility regressions preserve token acquisition, cache separation and refusals.",
     "Require body-parser 2.4.0, fast-uri 3.1.9, nodemailer 10.1.4, undici 7.30.1 and zod 4.6.6 or later within their existing major release lines; the lockfile resolves zod 4.6.7.",
+    "Require DOMPurify 3.4.17 for browser sanitization and patched Vite 7.3.7 and Vitest 4.1.12 in the managed build/test dependency closure; preserve the existing security policy.",
     "Retain the existing scanner severity and ignore policy; final release images require current exact-image security qualification."
   ],
   "documentation": [
@@ -53,9 +54,7 @@
     "Restore the previous package set only after independently verifying current security acceptance; earlier signed image bytes alone are insufficient."
   ],
   "validation": [
-    "Application/package builds and backend/frontend typechecks pass with the upgraded dependency closure.",
-    "All 3,940 backend and 1,586 frontend unit tests pass. Sixteen dependency regressions include actual Tedious Azure Identity token acquisition, caching, tenant-cache separation and refusal over a synthetic provider transport.",
-    "Frozen installation, strict license checks, CI routing/contracts, documentation boundaries and package-version/release-note preflight pass.",
+    "Source builds, typechecks, unit regressions, package/runtime checks, PostgreSQL 16 compatibility and exact-image security qualification are required for this dependency set.",
     "Exact-candidate native image scans, all five database adapters and the pinned real-engine browser gate remain required before publication."
   ],
   "packages": [
