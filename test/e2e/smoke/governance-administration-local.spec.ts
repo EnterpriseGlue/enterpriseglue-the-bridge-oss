@@ -115,7 +115,7 @@ test.describe.serial('Governance administration with the real local API', () => 
 
     await selectSection(page, 'Policies');
     await page.getByRole('button', { name: 'Add policy', exact: true }).click();
-    const workflow = page.getByRole('dialog', { name: 'Add policy' });
+    const workflow = page.getByRole('region', { name: 'Add policy', exact: true });
     await workflow.getByLabel('Policy name', { exact: true }).fill(policyName);
     await workflow.getByLabel('Description', { exact: true }).fill('Real browser policy lifecycle verification.');
     await selectCarbonOption(page, workflow.getByRole('combobox', { name: 'Effect' }), 'Deny');
@@ -125,7 +125,7 @@ test.describe.serial('Governance administration with the real local API', () => 
     await permission.fill('platform:dashboard:view');
     await page.getByRole('option', { name: /platform:dashboard:view/ }).click();
     const createPolicyResponse = page.waitForResponse((response) => response.url().endsWith('/api/authz/policies') && response.request().method() === 'POST');
-    await workflow.locator('footer').getByRole('button', { name: 'Create', exact: true }).click();
+    await workflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Create', exact: true }).click();
     const createdPolicy = await responseJson<{ id: string }>(await createPolicyResponse, 'create policy');
     const policyRow = page.getByRole('row').filter({ hasText: policyName }).first();
     await expect(policyRow).toContainText('Deny');

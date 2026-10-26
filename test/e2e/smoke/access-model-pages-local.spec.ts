@@ -77,15 +77,16 @@ test.describe('Access Model pages with the real local API', () => {
     // page reload and is returned by the authenticated real API.
     await selectAccessModelSection(page, 'Permissions');
     await page.getByRole('button', { name: 'Add permission', exact: true }).click();
-    const permissionWorkflow = page.getByRole('dialog', { name: 'Create custom permission' });
+    const permissionWorkflow = page.getByRole('region', { name: 'Create custom permission', exact: true });
     await selectCarbonOption(page, permissionWorkflow.getByRole('combobox', { name: 'Permission scope' }), 'Platform');
     await permissionWorkflow.getByLabel('Permission key', { exact: true }).fill(permissionKey);
     await permissionWorkflow.getByLabel('Category', { exact: true }).fill('E2E verification');
     await permissionWorkflow.getByLabel('Label', { exact: true }).fill(permissionLabel);
     await permissionWorkflow.getByLabel('Description', { exact: true }).fill('Created by the real-backend Access Model browser test.');
     const permissionCreated = page.waitForResponse((response) => response.url().endsWith('/api/authz/permissions') && response.request().method() === 'POST');
-    await permissionWorkflow.locator('footer').getByRole('button', { name: 'Create', exact: true }).click();
+    await permissionWorkflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Create', exact: true }).click();
     expect((await permissionCreated).status()).toBe(201);
+    await expect(permissionWorkflow).toBeHidden();
     await page.reload();
     await selectAccessModelSection(page, 'Permissions');
     await page.getByRole('searchbox', { name: 'Filter table' }).fill(permissionKey);
@@ -101,7 +102,7 @@ test.describe('Access Model pages with the real local API', () => {
     // Roles: use the newly persisted permission in a custom platform role.
     await selectAccessModelSection(page, 'Roles');
     await page.getByRole('button', { name: 'Create role', exact: true }).click();
-    const roleWorkflow = page.getByRole('dialog', { name: 'Create custom role' });
+    const roleWorkflow = page.getByRole('region', { name: 'Create custom role', exact: true });
     await roleWorkflow.getByLabel('Role name', { exact: true }).fill(roleName);
     await roleWorkflow.getByLabel('Description', { exact: true }).fill('Verifies persisted Access Model administration.');
     await selectCarbonOption(page, roleWorkflow.getByRole('combobox', { name: 'Role scope' }), 'Platform');
@@ -115,10 +116,11 @@ test.describe('Access Model pages with the real local API', () => {
       await expect(riskAcknowledgement).toBeChecked();
     }
     const roleCreated = page.waitForResponse((response) => response.url().endsWith('/api/authz/roles') && response.request().method() === 'POST');
-    await roleWorkflow.locator('footer').getByRole('button', { name: 'Create', exact: true }).click();
+    await roleWorkflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Create', exact: true }).click();
     const roleResponse = await roleCreated;
     expect(roleResponse.status()).toBe(201);
     const { id: roleId } = await roleResponse.json();
+    await expect(roleWorkflow).toBeHidden();
     await page.reload();
     await selectAccessModelSection(page, 'Roles');
     await page.getByPlaceholder('Search roles').fill(roleName);
