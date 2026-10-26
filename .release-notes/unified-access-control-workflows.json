@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "id": "unified-access-control-workflows",
+  "type": "fix",
+  "scope": "frontend-host",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "security"
+  ],
+  "summary": "Keep substantial access-control editors within their existing settings navigation.",
+  "userImpact": [
+    "Policy, custom-role, custom-permission, engine-set and project-target editors retain the Access Control page and section navigation.",
+    "Alternate policy and Role Library entry points use the same bounded editor layout with unsaved-change protection."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Preserve existing authorization, configuration ownership and broad-impact acknowledgements while protecting unsaved administrative changes."
+  ],
+  "documentation": [
+    "docs/development/identity-access-ui-evidence-report.md"
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "frontend-maintainers",
+    "pages": [
+      "access-control"
+    ]
+  },
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the previous frontend-host package; no data migration is required."
+  ],
+  "validation": [
+    "Platform-administration unit gate: 35 files and 176 tests passed.",
+    "27 workflow cases passed across Chromium, Firefox and WebKit, including compact group-dialog and unchanged role-scope regression checks.",
+    "23 existing Access Control resource-grant, layout/accessibility and identity-administration browser cases passed in Chromium.",
+    "Frontend-host compilation, frontend TypeScript check, production build and bundle budget passed; seven UI screenshots were refreshed and audited.",
+    "Browser checks use deterministic API fixtures. The frontend-only change has no backend, schema or database migration changes."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.5",
+      "newVersion": "0.20.6",
+      "impact": "patch"
+    }
+  ]
+}

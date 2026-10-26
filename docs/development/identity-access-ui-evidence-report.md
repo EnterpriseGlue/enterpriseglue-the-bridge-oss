@@ -532,3 +532,43 @@ All 14 retained files are unique and dimension-valid: 11 desktop captures are
 The Compose E2E overlay permits only the named `camunda-mock` HTTP/private
 endpoint so the backend container can exercise reconciliation. Production
 endpoint-policy defaults remain unchanged.
+
+## Access Control editor workflow
+
+Access Control creates and edits custom roles, custom permissions, Engine Sets,
+project-engine targets and authorization policies inside its existing content
+column. `SettingsFormWorkflow` reuses the bounded header, scrollable body and
+persistent action bar from identity administration. Desktop section navigation
+remains visible. Narrow layouts reuse the existing Settings workflow rules.
+Group creation/editing and short confirmations remain Carbon dialogs.
+
+`useSettingsWorkflowExit` protects Back, Cancel, Escape, local section changes,
+SPA navigation and browser unload through the existing unsaved-changes guard.
+Keeping a draft cancels the pending local destination. Confirmed navigation
+closes the form; failed saves retain the draft and report errors within it.
+Pending saves disable the form and its exit actions.
+
+The standalone Authorization Policies entry point renders the canonical Access
+Control policy editor. Role Library creation, duplication, configuration export
+and explicit custom-role editing use the same form container. Existing role-scope
+choices, configuration ownership, assignability editing, risk acknowledgements
+and configuration-role export contracts are preserved. Assignments retain their
+existing inline grant form and table.
+
+The focused browser gate is:
+
+```bash
+E2E_SEED_USER=false PLAYWRIGHT_BASE_URL=http://127.0.0.1:4198 \
+PLAYWRIGHT_BROWSERS=chromium,firefox,webkit \
+pnpm exec playwright test --config test/e2e/playwright.config.ts \
+  test/e2e/admin-form-workflows.spec.ts --workers=1
+```
+
+This lane renders the actual frontend with deterministic browser-local API
+fixtures. It checks the five Access Control editor families, navigation
+cancellation, retained save errors, policy request payloads, Role Library editing
+and export, keyboard focus, 390-pixel reflow and 200-percent zoom. It does not
+establish an external identity-provider connection, deployed customer
+authorization, database portability or production acceptance. Screenshots and
+transient qualification evidence remain outside repository documentation;
+retain their source revision with the verification results.

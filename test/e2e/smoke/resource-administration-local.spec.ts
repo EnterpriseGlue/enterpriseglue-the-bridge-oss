@@ -154,7 +154,7 @@ test.describe('Resource administration with the real local API', () => {
     // authenticated API and reload state, inspect details, edit, and refresh.
     await selectResourceSection(page, 'Engine sets');
     await page.getByRole('button', { name: 'Create engine set', exact: true }).click();
-    const engineSetWorkflow = page.getByRole('dialog', { name: 'Create engine set' });
+    const engineSetWorkflow = page.getByRole('region', { name: 'Create engine set', exact: true });
     await engineSetWorkflow.getByLabel('Engine set key', { exact: true }).fill(engineSetKey);
     await engineSetWorkflow.getByLabel('Engine set name', { exact: true }).fill(engineSetName);
     await engineSetWorkflow.getByLabel('Description', { exact: true }).fill('Real-backend Resource administration verification.');
@@ -173,7 +173,7 @@ test.describe('Resource administration with the real local API', () => {
       response.request().method() === 'POST'
       && new URL(response.url()).pathname === '/api/authz/engine-sets',
     );
-    await engineSetWorkflow.locator('footer').getByRole('button', { name: 'Create', exact: true }).click();
+    await engineSetWorkflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Create', exact: true }).click();
     const engineSetCreateResponse = await engineSetCreated;
     expect(engineSetCreateResponse.status()).toBe(201);
     const { id: engineSetId } = await engineSetCreateResponse.json() as { id: string };
@@ -198,13 +198,13 @@ test.describe('Resource administration with the real local API', () => {
     await captureManualScreenshot(page, '241-resource-engine-set-persisted-desktop.jpg');
 
     await clickOverflowAction(page, engineSetName, 'Edit');
-    const editEngineSetWorkflow = page.getByRole('dialog', { name: 'Edit engine set' });
+    const editEngineSetWorkflow = page.getByRole('region', { name: 'Edit engine set', exact: true });
     await editEngineSetWorkflow.getByLabel('Engine set name', { exact: true }).fill(updatedEngineSetName);
     const engineSetUpdated = page.waitForResponse((response) =>
       response.request().method() === 'PUT'
       && new URL(response.url()).pathname === `/api/authz/engine-sets/${engineSetId}`,
     );
-    await editEngineSetWorkflow.locator('footer').getByRole('button', { name: 'Save', exact: true }).click();
+    await editEngineSetWorkflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Save', exact: true }).click();
     expect((await engineSetUpdated).status()).toBe(200);
     await expect(page.getByRole('row').filter({ hasText: updatedEngineSetName }).first()).toBeVisible();
 
@@ -241,7 +241,7 @@ test.describe('Resource administration with the real local API', () => {
     // edit behavior, then simulate both an allowed owner and a denied persona.
     await selectResourceSection(page, 'Project Targets');
     await page.getByRole('button', { name: 'Create target', exact: true }).click();
-    const targetWorkflow = page.getByRole('dialog', { name: 'Create project target' });
+    const targetWorkflow = page.getByRole('region', { name: 'Create project target', exact: true });
     await selectCarbonComboBox(page, targetWorkflow.getByRole('combobox', { name: 'Project', exact: true }), project.name);
     await selectCarbonComboBox(page, targetWorkflow.getByRole('combobox', { name: 'Engine', exact: true }), fixture.scopeAssignmentEngineName!);
     await expect(targetWorkflow.getByRole('checkbox', { name: 'Manual deploy', exact: true })).toBeChecked();
@@ -255,7 +255,7 @@ test.describe('Resource administration with the real local API', () => {
       response.request().method() === 'POST'
       && new URL(response.url()).pathname === '/api/authz/project-engine-targets',
     );
-    await targetWorkflow.locator('footer').getByRole('button', { name: 'Create', exact: true }).click();
+    await targetWorkflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Create', exact: true }).click();
     const projectTargetCreateResponse = await projectTargetCreated;
     expect(projectTargetCreateResponse.status()).toBe(201);
     const { id: projectTargetId } = await projectTargetCreateResponse.json() as { id: string };
@@ -279,13 +279,13 @@ test.describe('Resource administration with the real local API', () => {
     await captureManualScreenshot(page, '246-resource-project-target-persisted-desktop.jpg');
 
     await clickOverflowAction(page, project.name, 'Edit');
-    const editTargetWorkflow = page.getByRole('dialog', { name: 'Edit project target' });
+    const editTargetWorkflow = page.getByRole('region', { name: 'Edit project target', exact: true });
     await editTargetWorkflow.getByText('API deploy', { exact: true }).click();
     const projectTargetUpdated = page.waitForResponse((response) =>
       response.request().method() === 'PUT'
       && new URL(response.url()).pathname === `/api/authz/project-engine-targets/${projectTargetId}`,
     );
-    await editTargetWorkflow.locator('footer').getByRole('button', { name: 'Save', exact: true }).click();
+    await editTargetWorkflow.locator('.eg-settings-workflow__actions').getByRole('button', { name: 'Save', exact: true }).click();
     expect((await projectTargetUpdated).status()).toBe(200);
     await expect(page.getByRole('row').filter({ hasText: project.name }).first()).toContainText('Manual, CI, API, Import');
 

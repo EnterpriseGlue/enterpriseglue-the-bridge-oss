@@ -467,7 +467,7 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '210-platform-settings-access-control-desktop.jpg');
 
     await page.getByRole('button', { name: 'Create role', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: 'Create custom role', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Create custom role', exact: true })).toBeVisible();
     await captureManualScreenshot(page, '211-access-control-full-page-workflow-desktop.jpg');
     await page.keyboard.press('Escape');
 
@@ -571,10 +571,12 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '05-custom-role-scope-selector.jpg');
     await page.getByRole('option', { name: 'Platform', exact: true }).click();
     await captureManualScreenshot(page, '06-custom-role-editor-platform-permissions.jpg');
-    await page.getByRole('dialog', { name: 'Create custom role' })
-      .locator('footer')
+    await page.getByRole('region', { name: 'Create custom role', exact: true })
+      .locator('.eg-settings-workflow__actions')
       .getByRole('button', { name: 'Cancel', exact: true })
       .click();
+    await page.getByRole('dialog', { name: 'Leave without saving?' })
+      .locator('button.cds--btn--danger', { hasText: 'Leave' }).click();
 
     await page.getByRole('link', { name: 'Permissions', exact: true }).click();
     const permissionSearch = page.getByRole('searchbox', { name: 'Filter table' });
@@ -597,26 +599,28 @@ test.describe('Carbon UX screenshot gallery', () => {
     await captureManualScreenshot(page, '09-role-assignments.jpg');
 
     await page.getByRole('link', { name: 'Effective Access', exact: true }).click();
-    await page.getByRole('textbox', { name: 'User', exact: true }).fill('operator');
-    await page.getByRole('button', { name: /Operations User.*operator@example\.test/ }).click();
-    await page.getByRole('combobox', { name: 'Resource type', exact: true }).click();
+    const effectivePanel = page.getByRole('tabpanel', { name: 'Effective Access', exact: true });
+    await expect(effectivePanel).toBeVisible();
+    await effectivePanel.getByRole('textbox', { name: 'User', exact: true }).fill('operator');
+    await effectivePanel.getByRole('button', { name: /Operations User.*operator@example\.test/ }).click();
+    await effectivePanel.getByRole('combobox', { name: 'Resource type', exact: true }).click();
     await page.getByRole('option', { name: 'Engine set', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Engine set', exact: true }).click();
+    await effectivePanel.getByRole('combobox', { name: 'Engine set', exact: true }).click();
     await page.getByRole('option', { name: 'Production engines (production)', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Permission', exact: true }).click();
+    await effectivePanel.getByRole('combobox', { name: 'Permission', exact: true }).click();
     await page.getByRole('option', { name: /View process instances/ }).click();
-    await page.getByRole('button', { name: 'Check access', exact: true }).click();
+    await effectivePanel.getByRole('button', { name: 'Check access', exact: true }).click();
     await expect(page.getByText('Access is allowed', { exact: true })).toBeVisible();
     await expect(page.getByText('The Workflow Operator assignment grants access to Production engines.', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '10-effective-access-platform-allow.jpg');
-    await page.getByRole('button', { name: 'Check access', exact: true }).click();
+    await effectivePanel.getByRole('button', { name: 'Check access', exact: true }).click();
     await expect(page.getByText('Access is denied', { exact: true })).toBeVisible();
     await expect(page.getByText('No active assignment grants this permission.', { exact: true })).toBeVisible();
     await expect(page.getByText(/Denied because no active assignment/)).toHaveCount(0);
     await captureManualScreenshot(page, '11-effective-access-platform-deny.jpg');
-    await page.getByRole('combobox', { name: 'Resource type', exact: true }).click();
+    await effectivePanel.getByRole('combobox', { name: 'Resource type', exact: true }).click();
     await page.getByRole('option', { name: 'Tenant', exact: true }).click();
-    await expect(page.getByRole('combobox', { name: 'Permission', exact: true })).toBeDisabled();
+    await expect(effectivePanel.getByRole('combobox', { name: 'Permission', exact: true })).toBeDisabled();
     await expect(page.getByText('No compatible permissions', { exact: true })).toBeVisible();
     await expect(page.getByText('No permissions available for Tenant', { exact: true })).toBeVisible();
     await expect(page.getByText('Access is denied', { exact: true })).toHaveCount(0);
@@ -651,12 +655,14 @@ test.describe('Carbon UX screenshot gallery', () => {
     await page.getByLabel('Engine set name', { exact: true }).fill('Regulated production engines');
     await page.getByLabel('Label key', { exact: true }).fill('environment');
     await page.getByLabel('Label value', { exact: true }).fill('production');
-    await page.getByRole('dialog', { name: 'Create engine set', exact: true })
-      .locator('.eg-access-control-workflow__body')
+    await page.getByRole('region', { name: 'Create engine set', exact: true })
+      .locator('.eg-settings-workflow__body')
       .evaluate((element) => { element.scrollTop = element.scrollHeight; });
     await expect(page.getByRole('combobox', { name: 'Label match', exact: true })).toBeVisible();
     await captureManualScreenshot(page, '15-engine-set-editor.jpg');
     await page.keyboard.press('Escape');
+    await page.getByRole('dialog', { name: 'Leave without saving?' })
+      .locator('button.cds--btn--danger', { hasText: 'Leave' }).click();
 
     await page.getByRole('link', { name: 'Project Targets', exact: true }).click();
     await expect(page.getByRole('cell', { name: 'Payments automation', exact: true })).toBeVisible();
@@ -784,8 +790,9 @@ test.describe('Carbon UX screenshot gallery', () => {
 
     await page.goto('/admin/settings/role-library');
     await page.getByRole('button', { name: /Workflow Operator/ }).click();
+    await page.getByRole('button', { name: 'Edit role', exact: true }).click();
     await expect(page.locator('#role-library-edit-name')).toHaveValue('Workflow Operator');
-    await expect(page.getByText('3 selected', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Edit custom role', exact: true }).getByText('3 selected', { exact: true })).toBeVisible();
     await captureManualScreenshot(page, '31-role-library-custom-role-editor.jpg');
 
     await page.goto('/mission-control/processes');

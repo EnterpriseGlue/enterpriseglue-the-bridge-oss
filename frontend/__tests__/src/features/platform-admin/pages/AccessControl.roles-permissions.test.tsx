@@ -286,7 +286,7 @@ describe('AccessControl roles and permissions', () => {
     fireEvent.change(document.getElementById('custom-permission-label')!, { target: { value: 'Approve release' } });
     fireEvent.change(document.getElementById('custom-permission-description')!, { target: { value: 'Allows release approval.' } });
 
-    const permissionModal = screen.getByText('Create custom permission').closest('.eg-access-control-workflow')!;
+    const permissionModal = screen.getByText('Create custom permission').closest('.eg-admin-form-workflow')!;
     const createButton = Array.from(permissionModal.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Create') as HTMLButtonElement | undefined;
     expect(createButton).toBeDefined();
     expect(createButton).not.toBeDisabled();
