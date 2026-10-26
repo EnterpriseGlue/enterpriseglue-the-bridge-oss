@@ -45,6 +45,8 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...await importOriginal<typeof import('react-router-dom')>(),
   useSearchParams: () => [new URLSearchParams(), vi.fn()] as const,
+  useNavigate: () => vi.fn(),
+  useBlocker: () => ({ state: 'unblocked', reset: vi.fn(), proceed: vi.fn() }),
 }));
 
 vi.mock('@src/features/platform-admin/hooks/useAdminApi', async (importOriginal) => ({

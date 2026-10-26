@@ -5,13 +5,13 @@ import {
   Accordion,
   AccordionItem,
   Button,
+  Modal,
   Checkbox,
   ComboBox,
   DataTable,
   DataTableSkeleton,
   Dropdown,
   InlineNotification,
-  Modal,
   NumberInput,
   SideNav,
   SideNavItems,
@@ -39,6 +39,7 @@ import {
 } from '@carbon/react';
 import { Add, Security, TrashCan } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
+import { SettingsFormWorkflow as AccessControlWorkflow, useSettingsWorkflowExit, WorkflowDiscardDialog } from '../components/SettingsFormWorkflow';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { fetchList } from '../../../shared/api/fetchList';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
@@ -358,91 +359,6 @@ function VisibleTabPanels({ children }: { children: React.ReactNode }) {
   // panel. React conditional children can leave false placeholders behind,
   // which would otherwise shift later panels for a partially authorized user.
   return <TabPanels>{React.Children.toArray(children)}</TabPanels>;
-}
-
-function AccessControlWorkflow({
-  open,
-  title,
-  description,
-  primaryButtonText,
-  primaryButtonDisabled,
-  onCancel,
-  onSubmit,
-  children,
-}: {
-  open: boolean;
-  title: string;
-  description: string;
-  primaryButtonText: string;
-  primaryButtonDisabled?: boolean;
-  onCancel: () => void;
-  onSubmit: () => void;
-  children: React.ReactNode;
-}) {
-  const titleRef = React.useRef<HTMLHeadingElement>(null);
-  const workflowRef = React.useRef<HTMLElement>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    titleRef.current?.focus();
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  const handleWorkflowKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onCancel();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-    const focusable = Array.from(workflowRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ) || []).filter((element) => !element.hasAttribute('hidden'));
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
-  return (
-    <section
-      ref={workflowRef}
-      className="eg-access-control-workflow"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="access-control-workflow-title"
-      aria-describedby="access-control-workflow-description"
-      onKeyDown={handleWorkflowKeyDown}
-    >
-      <header className="eg-access-control-workflow__header">
-        <div>
-          <p className="eg-access-control-workflow__eyebrow">Access Control</p>
-          <h1 id="access-control-workflow-title" ref={titleRef} tabIndex={-1}>{title}</h1>
-          <p id="access-control-workflow-description">{description}</p>
-        </div>
-        <Button kind="ghost" type="button" onClick={onCancel}>Cancel</Button>
-      </header>
-      <div className="eg-access-control-workflow__body">{children}</div>
-      <footer className="eg-access-control-workflow__actions">
-        <Button kind="secondary" type="button" onClick={onCancel}>Cancel</Button>
-        <Button kind="primary" type="button" disabled={primaryButtonDisabled} onClick={onSubmit}>
-          {primaryButtonText}
-        </Button>
-      </footer>
-    </section>
-  );
 }
 
 interface AuthzGroupFormState {
@@ -773,7 +689,7 @@ export function filterRoles(roles: RoleSummary[], searchQuery: string, scopeFilt
 }
 
 
-export default function AccessControl({ embedded = false }: { embedded?: boolean }) {
+export default function AccessControl({ embedded = false, initialSection = 'roles' }: { embedded?: boolean; initialSection?: AccessControlTabId }) {
   const platformSettingsQ = usePlatformSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const rolesQ = useRbacRoles();
@@ -983,11 +899,17 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
     showExternalRegistrationTab,
   ]);
   const [selectedTabId, setSelectedTabId] = React.useState<AccessControlTabId>(() => (
-    accessControlTabFromSearchParams(searchParams) || 'roles'
+    accessControlTabFromSearchParams(searchParams) || initialSection
   ));
   const selectedTabIndex = Math.max(0, visibleTabIds.indexOf(selectedTabId));
 
+  const previousSearch = React.useRef(searchParams.toString());
   React.useEffect(() => {
+    if (previousSearch.current !== searchParams.toString()) {
+      previousSearch.current = searchParams.toString();
+      setRoleModalOpen(false); setPermissionModalOpen(false); setEngineSetModalOpen(false);
+      setProjectTargetModalOpen(false); setPolicyModalOpen(false); setError(null);
+    }
     const requestedTabId = accessControlTabFromSearchParams(searchParams);
     if (requestedTabId && visibleTabIds.includes(requestedTabId) && requestedTabId !== selectedTabId) {
       setSelectedTabId(requestedTabId);
@@ -1070,6 +992,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   }, [groups, selectedGroupId]);
 
   const openCreateRole = () => {
+    setError(null);
     setEditingRole(null);
     setDuplicatingRole(null);
     setRoleRiskAcknowledged(false);
@@ -1084,6 +1007,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openDuplicateRole = (role: RoleSummary) => {
+    setError(null);
     setEditingRole(null);
     setDuplicatingRole(role);
     setRoleRiskAcknowledged(false);
@@ -1098,6 +1022,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openEditRole = (role: RoleSummary) => {
+    setError(null);
     setEditingRole(role);
     setDuplicatingRole(null);
     setRoleRiskAcknowledged(false);
@@ -1155,6 +1080,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openCreatePermission = () => {
+    setError(null);
     setPermissionForm({
       key: '',
       scope: 'project',
@@ -1250,6 +1176,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openCreatePolicy = () => {
+    setError(null);
     setEditingPolicy(null);
     setPolicyForm(DEFAULT_AUTHZ_POLICY_FORM);
     setPolicyConditionsJson('{}');
@@ -1259,6 +1186,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openEditPolicy = (policy: AuthzPolicy) => {
+    setError(null);
     setEditingPolicy(policy);
     setPolicyForm({
       name: policy.name,
@@ -1326,6 +1254,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openCreateEngineSet = () => {
+    setError(null);
     setEditingEngineSet(null);
     setEngineSetForm(DEFAULT_ENGINE_SET_FORM);
     setEngineSetRiskAcknowledged(false);
@@ -1334,6 +1263,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openEditEngineSet = (engineSet: EngineSetSummary) => {
+    setError(null);
     setEditingEngineSet(engineSet);
     setEngineSetForm(engineSetFormFromSummary(engineSet));
     setEngineSetRiskAcknowledged(false);
@@ -1400,12 +1330,14 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   };
 
   const openCreateProjectTarget = () => {
+    setError(null);
     setEditingProjectTarget(null);
     setProjectTargetForm(DEFAULT_PROJECT_ENGINE_TARGET_FORM);
     setProjectTargetModalOpen(true);
   };
 
   const openEditProjectTarget = (target: ProjectEngineTarget) => {
+    setError(null);
     setEditingProjectTarget(target);
     setProjectTargetForm(projectEngineTargetFormFromTarget(target));
     setProjectTargetModalOpen(true);
@@ -1625,6 +1557,38 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
     }
   };
 
+  const workflowOpen = roleModalOpen || permissionModalOpen || engineSetModalOpen || projectTargetModalOpen || policyModalOpen;
+  const workflowBusy = createRoleM.isPending || updateRoleM.isPending || createPermissionM.isPending
+    || createEngineSetM.isPending || updateEngineSetM.isPending || createProjectEngineTargetM.isPending
+    || updateProjectEngineTargetM.isPending || createPolicyM.isPending || updatePolicyM.isPending;
+  const initialRole = editingRole || duplicatingRole;
+  const roleBaseline = {
+    name: duplicatingRole ? `Copy of ${roleDetailQ.data?.name || duplicatingRole.name}` : roleDetailQ.data?.name || initialRole?.name || '',
+    description: roleDetailQ.data?.description || initialRole?.description || '',
+    scope: roleDetailQ.data?.scope || initialRole?.scope || 'engine',
+    permissionIds: [...(initialRole ? roleDetailQ.data?.permissions || [] : [])].sort(),
+  };
+  const changed = (draft: unknown, baseline: unknown) => JSON.stringify(draft) !== JSON.stringify(baseline);
+  const workflowDirty = Boolean(
+    (roleModalOpen && !roleDetailQ.isLoading && (roleRiskAcknowledged || changed({ ...roleForm, permissionIds: [...roleForm.permissionIds].sort() }, roleBaseline)))
+    || (permissionModalOpen && changed(permissionForm, { key: '', scope: 'project', category: '', label: '', description: '' }))
+    || (engineSetModalOpen && (engineSetRiskAcknowledged || changed(engineSetForm, editingEngineSet ? engineSetFormFromSummary(editingEngineSet) : DEFAULT_ENGINE_SET_FORM)))
+    || (projectTargetModalOpen && changed(projectTargetForm, editingProjectTarget ? projectEngineTargetFormFromTarget(editingProjectTarget) : DEFAULT_PROJECT_ENGINE_TARGET_FORM))
+    || (policyModalOpen && (policyRiskAcknowledged || changed(policyForm, editingPolicy ? {
+      name: editingPolicy.name, description: editingPolicy.description || '', effect: editingPolicy.effect,
+      priority: editingPolicy.priority, resourceType: editingPolicy.resourceType || POLICY_ALL_RESOURCES, action: editingPolicy.action || '',
+    } : DEFAULT_AUTHZ_POLICY_FORM) || policyConditionsJson !== (editingPolicy ? getPolicyConditionsJson(editingPolicy) : '{}')
+      || policyMatchAllActions !== Boolean(editingPolicy && !editingPolicy.action)))
+  );
+  const closeWorkflow = () => {
+    setRoleModalOpen(false); setPermissionModalOpen(false); setEngineSetModalOpen(false);
+    setProjectTargetModalOpen(false); setPolicyModalOpen(false);
+    setEditingRole(null); setDuplicatingRole(null); setEditingEngineSet(null); setEditingProjectTarget(null); setEditingPolicy(null);
+    setError(null);
+  };
+  const workflowExit = useSettingsWorkflowExit(workflowOpen && (workflowDirty || workflowBusy), closeWorkflow);
+  const cancelWorkflow = () => { if (!workflowBusy) workflowExit.requestExit(); };
+
   const roleScopePermissions = permissions.filter((permission) =>
     permission.scope === roleForm.scope || (roleForm.scope === 'tenant' && permission.tenantSafe));
   const filteredRoleScopePermissions = roleScopePermissions.filter((permission) => {
@@ -1736,6 +1700,15 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
   const selectedSectionGroup = visibleSectionGroups.find((group) => group.sections.includes(selectedTabId));
   const selectAccessControlSection = (nextTabId: AccessControlTabId) => {
     if (!visibleTabIds.includes(nextTabId)) return;
+    if (workflowBusy) return;
+    if (workflowOpen) {
+      workflowExit.requestExit(() => {
+        setSelectedTabId(nextTabId);
+        const next = new URLSearchParams(searchParams); next.set('tab', nextTabId.replace(/_/g, '-'));
+        setSearchParams(next, { replace: true });
+      });
+      return;
+    }
     setSelectedTabId(nextTabId);
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.set('tab', nextTabId.replace(/_/g, '-'));
@@ -1768,7 +1741,7 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
         gradient={PAGE_GRADIENTS.red}
       />}
 
-      {error && (
+      {error && !workflowOpen && (
         <InlineNotification kind="error" title={error} onCloseButtonClick={() => setError(null)} lowContrast />
       )}
 
@@ -1815,13 +1788,14 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
           </SideNav>
         </aside>
 
-        <section className="eg-access-control-content" aria-labelledby="access-control-section-title">
-          <header className="eg-access-control-section-header">
+        <section className="eg-access-control-content" aria-labelledby={workflowOpen ? undefined : "access-control-section-title"} aria-label={workflowOpen ? "Access Control form" : undefined}>
+          {!workflowOpen && <header className="eg-access-control-section-header">
             <p>{selectedSectionGroup?.label || 'Access Control'}</p>
             <h2 id="access-control-section-title">{ACCESS_CONTROL_TAB_LABELS[selectedTabId]}</h2>
             <p>{ACCESS_CONTROL_SECTION_DESCRIPTIONS[selectedTabId]}</p>
-          </header>
+          </header>}
 
+      <div hidden={workflowOpen}>
       <Tabs
         selectedIndex={selectedTabIndex}
         onChange={({ selectedIndex }: { selectedIndex: number }) => {
@@ -2149,12 +2123,14 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
           )}
         </VisibleTabPanels>
       </Tabs>
-        </section>
       </div>
 
       <AccessControlWorkflow
         open={permissionModalOpen}
-        onCancel={() => setPermissionModalOpen(false)}
+        onCancel={cancelWorkflow}
+        busy={workflowBusy}
+        error={error}
+        backLabel={`Back to ${ACCESS_CONTROL_TAB_LABELS[selectedTabId].toLowerCase()}`}
         onSubmit={submitPermission}
         title="Create custom permission"
         description="Define a scoped action that can be assigned through roles and policies."
@@ -2259,13 +2235,10 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
 
       <AccessControlWorkflow
         open={roleModalOpen}
-        onCancel={() => {
-          setRoleModalOpen(false);
-          setEditingRole(null);
-          setDuplicatingRole(null);
-          setRoleRiskAcknowledged(false);
-          setRolePermissionSearch('');
-        }}
+        onCancel={cancelWorkflow}
+        busy={workflowBusy}
+        error={error}
+        backLabel={`Back to ${ACCESS_CONTROL_TAB_LABELS[selectedTabId].toLowerCase()}`}
         onSubmit={submitRole}
         title={editingRole ? 'Edit custom role' : duplicatingRole ? 'Duplicate system role' : 'Create custom role'}
         description="Name the role, choose its scope, and review every permission before saving."
@@ -2366,12 +2339,10 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
 
       <AccessControlWorkflow
         open={engineSetModalOpen}
-        onCancel={() => {
-          setEngineSetModalOpen(false);
-          setEditingEngineSet(null);
-          setEngineSetRiskAcknowledged(false);
-          previewEngineSetM.reset();
-        }}
+        onCancel={cancelWorkflow}
+        busy={workflowBusy}
+        error={error}
+        backLabel={`Back to ${ACCESS_CONTROL_TAB_LABELS[selectedTabId].toLowerCase()}`}
         onSubmit={submitEngineSet}
         title={editingEngineSet ? 'Edit engine set' : 'Create engine set'}
         description="Configure a governed engine selector and preview its current reach before saving."
@@ -2526,10 +2497,10 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
 
       <AccessControlWorkflow
         open={projectTargetModalOpen}
-        onCancel={() => {
-          setProjectTargetModalOpen(false);
-          setEditingProjectTarget(null);
-        }}
+        onCancel={cancelWorkflow}
+        busy={workflowBusy}
+        error={error}
+        backLabel={`Back to ${ACCESS_CONTROL_TAB_LABELS[selectedTabId].toLowerCase()}`}
         onSubmit={submitProjectTarget}
         title={editingProjectTarget ? 'Edit project target' : 'Create project target'}
         description="Choose a project and engine, then define the deployment paths this target permits."
@@ -2598,12 +2569,10 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
 
       <AccessControlWorkflow
         open={policyModalOpen}
-        onCancel={() => {
-          setPolicyModalOpen(false);
-          setEditingPolicy(null);
-          setPolicyMatchAllActions(false);
-          setPolicyRiskAcknowledged(false);
-        }}
+        onCancel={cancelWorkflow}
+        busy={workflowBusy}
+        error={error}
+        backLabel={`Back to ${ACCESS_CONTROL_TAB_LABELS[selectedTabId].toLowerCase()}`}
         onSubmit={submitPolicy}
         title={editingPolicy ? 'Edit policy' : 'Add policy'}
         description="Define the effect, governed resource, permission, and optional conditions in one reviewable flow."
@@ -2730,6 +2699,9 @@ export default function AccessControl({ embedded = false }: { embedded?: boolean
           </Accordion>
         </div>
       </AccessControlWorkflow>
+        </section>
+      </div>
+      <WorkflowDiscardDialog guard={workflowExit} busy={workflowBusy} />
     </PageLayout>
   );
 }

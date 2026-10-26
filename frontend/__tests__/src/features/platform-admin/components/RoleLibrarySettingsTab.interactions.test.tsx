@@ -1,3 +1,4 @@
+vi.mock('react-router-dom', async (importOriginal) => ({ ...await importOriginal<typeof import('react-router-dom')>(), useNavigate: () => vi.fn(), useBlocker: () => ({ state: 'unblocked', reset: vi.fn(), proceed: vi.fn() }) }));
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -60,6 +61,7 @@ describe('RoleLibrarySettingsTab interactions', () => {
     expect(screen.queryByRole('button', { name: /System Operator system engine/ })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search roles' }), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: /Custom Operator custom engine/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit role' }));
 
     expect(await screen.findByRole('button', { name: 'Save' })).toBeDisabled();
     fireEvent.click(category('Access (1)'));
@@ -67,7 +69,7 @@ describe('RoleLibrarySettingsTab interactions', () => {
     expect(screen.getAllByText('Change engine membership')).not.toHaveLength(0);
     expect(screen.getAllByText('Access control')).not.toHaveLength(0);
     expect(screen.getAllByText('Can change who has access to resources.')).not.toHaveLength(0);
-    fireEvent.click(document.getElementById('role-library-engine:members:manage')!);
+    fireEvent.click(document.getElementById('role-library-edit-engine:members:manage')!);
     expect(screen.getByText('Sensitive permissions added')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     fireEvent.click(screen.getByLabelText('I understand these changes add sensitive permissions.'));
@@ -100,6 +102,7 @@ describe('RoleLibrarySettingsTab interactions', () => {
     renderTab();
     await screen.findByText('Custom Operator');
     fireEvent.click(screen.getByRole('button', { name: /Custom Operator custom engine/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit role' }));
     await waitFor(() => expect(document.getElementById('role-library-edit-name')).toHaveValue('Custom Operator'));
     fireEvent.click(screen.getByRole('button', { name: 'Archive custom role' }));
     expect(screen.getByText('Archive custom role')).toBeInTheDocument();

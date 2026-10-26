@@ -1,3 +1,4 @@
+vi.mock('react-router-dom', async (importOriginal) => ({ ...await importOriginal<typeof import('react-router-dom')>(), useNavigate: () => vi.fn(), useBlocker: () => ({ state: 'unblocked', reset: vi.fn(), proceed: vi.fn() }) }));
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';

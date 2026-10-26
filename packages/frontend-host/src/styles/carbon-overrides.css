@@ -2331,8 +2331,7 @@
   margin-block-end: var(--spacing-5);
 }
 
-.eg-access-control-section-header > p:first-child,
-.eg-access-control-workflow__eyebrow {
+.eg-access-control-section-header > p:first-child {
   margin: 0 0 var(--spacing-2);
   color: var(--cds-text-secondary);
   font-size: var(--cds-label-01-font-size, 0.75rem);
@@ -2341,15 +2340,13 @@
   text-transform: uppercase;
 }
 
-.eg-access-control-section-header h2,
-.eg-access-control-workflow__header h1 {
+.eg-access-control-section-header h2 {
   margin: 0;
   font-size: var(--cds-heading-04-font-size, 1.75rem);
   font-weight: 400;
 }
 
-.eg-access-control-section-header > p:last-child,
-.eg-access-control-workflow__header > div > p:last-child {
+.eg-access-control-section-header > p:last-child {
   margin: var(--spacing-2) 0 0;
   color: var(--cds-text-secondary);
 }
@@ -2393,51 +2390,10 @@
   display: none;
 }
 
-.eg-access-control-workflow {
-  position: fixed;
-  inset: 3rem 0 0;
-  z-index: 10000;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  background: var(--cds-background);
-}
-
-.eg-access-control-workflow__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-5);
-  padding: var(--spacing-5) var(--spacing-6);
-  border-block-end: 1px solid var(--cds-border-subtle-01);
-  background: var(--cds-layer-01);
-}
-
-.eg-access-control-workflow__header > div {
-  min-inline-size: 0;
-  max-inline-size: 48rem;
-}
-
-.eg-access-control-workflow__body {
-  inline-size: min(100%, 64rem);
-  padding: var(--spacing-6);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.eg-access-control-workflow__body > div,
-.eg-access-control-workflow__body .cds--form-item {
-  inline-size: 100%;
-  max-inline-size: 40rem;
-}
-
-.eg-access-control-workflow__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1px;
-  padding: var(--spacing-5) var(--spacing-6);
-  border-block-start: 1px solid var(--cds-border-subtle-01);
-  background: var(--cds-layer-02);
-}
+/* Access-control forms retain section navigation and share Settings geometry. */
+.eg-admin-form-workflow { margin-inline: 0; inline-size: 100%; }
+.eg-admin-form-workflow .eg-settings-workflow__fieldset > div { inline-size: 100%; max-inline-size: 48rem; }
+.eg-admin-form-workflow [tabindex="-1"]:focus { outline: none; }
 
 @media (max-width: 66rem) {
   .eg-access-control-workspace {
@@ -2500,26 +2456,10 @@
     padding: var(--spacing-4);
   }
 
-  .eg-access-control-content,
-  .eg-access-control-workflow__header,
-  .eg-access-control-workflow__body,
-  .eg-access-control-workflow__actions {
+  .eg-access-control-content {
     padding-inline: var(--spacing-4);
   }
 
-  .eg-access-control-workflow__header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .eg-access-control-workflow__header .cds--btn {
-    padding-inline: var(--spacing-3);
-  }
-
-  .eg-access-control-workflow__actions .cds--btn {
-    flex: 1 1 50%;
-    max-inline-size: none;
-  }
 
   .eg-admin-data-table::before {
     content: 'Scroll horizontally to review every column. The first column remains visible for context.';

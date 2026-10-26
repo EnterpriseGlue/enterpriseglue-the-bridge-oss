@@ -179,7 +179,7 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getByText('Enter one or more engine IDs, separated by commas.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Engine set name'), { target: { value: 'All Engines' } });
 
-    const engineSetModal = screen.getByRole('heading', { name: /^Create engine set$/i }).closest('.eg-access-control-workflow') as HTMLElement;
+    const engineSetModal = screen.getByRole('heading', { name: /^Create engine set$/i }).closest('.eg-admin-form-workflow') as HTMLElement;
     fireEvent.click(within(engineSetModal).getByRole('combobox', { name: /Selector/i }));
     const allEnginesOption = screen.getAllByText('All engines')
       .find((element) => element.classList.contains('cds--list-box__menu-item__option')) as HTMLElement;
@@ -266,7 +266,7 @@ describe('AccessControl resources and policies', () => {
     fireEvent.change(document.getElementById('project-target-external-project-id')!, { target: { value: 'cmdb-project-new' } });
     fireEvent.change(document.getElementById('project-target-policy-tags')!, { target: { value: 'prod, sox' } });
 
-    const projectTargetModal = screen.getByRole('heading', { name: /^Create Project Target$/i }).closest('.eg-access-control-workflow') as HTMLElement;
+    const projectTargetModal = screen.getByRole('heading', { name: /^Create Project Target$/i }).closest('.eg-admin-form-workflow') as HTMLElement;
     const createButton = within(projectTargetModal).getByRole('button', { name: /^Create$/i });
     expect(createButton).toBeDefined();
     await act(async () => fireEvent.click(createButton!));

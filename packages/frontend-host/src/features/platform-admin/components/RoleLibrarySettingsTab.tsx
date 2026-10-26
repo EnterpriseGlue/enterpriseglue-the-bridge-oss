@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Add, Copy, Download, Save } from '@carbon/icons-react';
+import { Add, Copy, Download } from '@carbon/icons-react';
 import { Accordion, AccordionItem, Button, Checkbox, InlineNotification, Modal, Search, Select, SelectItem, SkeletonText, Tag, TextArea, TextInput, Tile } from '@carbon/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import { SettingsFormWorkflow, useSettingsWorkflowExit, WorkflowDiscardDialog } from './SettingsFormWorkflow';
 import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 import {
   authzQueryKeys,
@@ -141,6 +142,7 @@ export default function RoleLibrarySettingsTab() {
   const [draft, setDraft] = useState<string[]>([]);
   const [metadataDraft, setMetadataDraft] = useState({ name: '', description: '', isAssignable: true });
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<'manual' | 'config'>('manual');
   const [archiveConfirmation, setArchiveConfirmation] = useState(false);
   const [createRiskAcknowledged, setCreateRiskAcknowledged] = useState(false);
@@ -148,6 +150,7 @@ export default function RoleLibrarySettingsTab() {
   const [form, setForm] = useState(blank);
   const [configForm, setConfigForm] = useState(blankConfig);
   const [error, setError] = useState<string | null>(null);
+  const [createBaseline, setCreateBaseline] = useState('');
   const roles = rolesQuery.data || [];
   const selected = roles.find((role) => role.id === selectedId) || roles[0] || null;
   const detailQuery = useRoleDetail(selected?.id, { enabled: read.allowed });
@@ -186,6 +189,8 @@ export default function RoleLibrarySettingsTab() {
   const save = useMutation({
     mutationFn: () => apiClient.put(`/api/authz/roles/${selected!.id}`, { name: metadataDraft.name.trim(), description: metadataDraft.description.trim() || null, permissionIds: draft, isAssignable: metadataDraft.isAssignable }),
     onSuccess: () => {
+      setEditOpen(false);
+      setError(null);
       queryClient.invalidateQueries({ queryKey: authzQueryKeys.roleDetail(selected?.id) });
       queryClient.invalidateQueries({ queryKey: authzQueryKeys.roles });
     },
@@ -207,6 +212,7 @@ export default function RoleLibrarySettingsTab() {
       queryClient.invalidateQueries({ queryKey: authzQueryKeys.roles });
       setSelectedId(null);
       setArchiveConfirmation(false);
+      setEditOpen(false);
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to archive role').message),
   });
@@ -221,7 +227,13 @@ export default function RoleLibrarySettingsTab() {
     setCreateRiskAcknowledged(false);
     setForm(copy && selected ? { name: `${selected.name} copy`, description: selected.description || '', scope: copiedScope } : blank);
     setConfigForm(copy && selected ? { ...blankConfig, roleKey: configRoleKeyFromSystemRoleKey(selected.key) } : blankConfig);
-    setDraft(copy ? detail?.permissions || [] : []);
+    const nextDraft = copy ? detail?.permissions || [] : [];
+    setDraft(nextDraft);
+    setCreateBaseline(JSON.stringify({
+      form: copy && selected ? { name: `${selected.name} copy`, description: selected.description || '', scope: copiedScope } : blank,
+      config: copy && selected ? { ...blankConfig, roleKey: configRoleKeyFromSystemRoleKey(selected.key) } : blankConfig,
+      permissions: [...nextDraft].sort(),
+    }));
     setCreateOpen(true);
   };
   const exportConfigRole = () => {
@@ -249,10 +261,21 @@ export default function RoleLibrarySettingsTab() {
     }
   };
 
+  const closeWorkflow = () => {
+    setCreateOpen(false);
+    setEditOpen(false);
+    setDraft(detail?.permissions || []);
+    setMetadataDraft({ name: detail?.name || '', description: detail?.description || '', isAssignable: detail?.isAssignable ?? true });
+    setError(null);
+  };
+  const creationDirty = createOpen && (createRiskAcknowledged || JSON.stringify({ form, config: configForm, permissions: [...draft].sort() }) !== createBaseline);
+  const workflowExit = useSettingsWorkflowExit(creationDirty || (editOpen && editable && hasUnsavedRoleChanges), closeWorkflow);
+
   if (!read.allowed) return <UnauthorizedEmptyState title="Role library unavailable" reason={read.reason || 'Missing role read permission.'} />;
   if (rolesQuery.isLoading || permissionsQuery.isLoading) return <SkeletonText paragraph lineCount={8} />;
 
   return <Tile>
+    <div hidden={createOpen || editOpen}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', flexWrap: 'wrap', marginBottom: 'var(--spacing-5)' }}>
       <div><h3 style={{ margin: 0, fontSize: '1rem' }}>Role Library</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Create custom roles that grant permissions. Configure denials under Policies.</p></div>
       <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Add} onClick={() => startCreate()}>Create role</Button></GuardedAction>
@@ -262,32 +285,28 @@ export default function RoleLibrarySettingsTab() {
       <div>
         <Search id="role-library-search" labelText="Search roles" value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} />
         <div style={{ marginTop: 'var(--spacing-3)', border: '1px solid var(--cds-border-subtle)', maxHeight: '34rem', overflowY: 'auto' }}>
-          {visibleRoles.map((role) => <button key={role.id} type="button" onClick={() => setSelectedId(role.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 'var(--spacing-4)', border: 0, borderBottom: '1px solid var(--cds-border-subtle)', background: selected?.id === role.id ? 'var(--cds-layer-selected)' : 'transparent', color: 'inherit', cursor: 'pointer' }}><strong>{role.name}</strong><div style={{ marginTop: 'var(--spacing-2)', display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={role.kind === 'system' ? 'cool-gray' : 'blue'}>{role.kind}</Tag><Tag type="gray">{role.scope}</Tag>{role.source === 'config' && <Tag type={role.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'}>{role.ownershipMode === 'config_warn' ? 'Configuration-linked' : 'Managed by configuration'}</Tag>}{role.driftStatus === 'drifted' && <Tag type="red">Different from configuration</Tag>}</div></button>)}
+          {visibleRoles.map((role) => <button key={role.id} type="button" onClick={() => workflowExit.requestExit(() => setSelectedId(role.id))} style={{ display: 'block', width: '100%', textAlign: 'left', padding: 'var(--spacing-4)', border: 0, borderBottom: '1px solid var(--cds-border-subtle)', background: selected?.id === role.id ? 'var(--cds-layer-selected)' : 'transparent', color: 'inherit', cursor: 'pointer' }}><strong>{role.name}</strong><div style={{ marginTop: 'var(--spacing-2)', display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={role.kind === 'system' ? 'cool-gray' : 'blue'}>{role.kind}</Tag><Tag type="gray">{role.scope}</Tag>{role.source === 'config' && <Tag type={role.ownershipMode === 'config_warn' ? 'warm-gray' : 'purple'}>{role.ownershipMode === 'config_warn' ? 'Configuration-linked' : 'Managed by configuration'}</Tag>}{role.driftStatus === 'drifted' && <Tag type="red">Different from configuration</Tag>}</div></button>)}
         </div>
       </div>
       <div>{selected && detail ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--spacing-4)', alignItems: 'start', flexWrap: 'wrap' }}><div><h4 style={{ margin: 0 }}>{selected.name}</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{selected.description || 'No description'} · {selected.permissionCount} permissions</p></div><div style={{ display: 'flex', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>{selected.kind === 'system' && <><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={() => startCreate(true)}>Duplicate</Button></GuardedAction><GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" renderIcon={Download} onClick={() => startCreate(true, 'config')}>Export config role</Button></GuardedAction></>}</div></div>
         {selected.source === 'config' && <InlineNotification kind={configWarnEditable ? 'warning' : 'info'} title={configWarnEditable ? 'Configuration-linked' : 'Managed by configuration'} subtitle={configWarnEditable ? 'Local changes are allowed, but the next configuration apply may overwrite them.' : 'Update this role in its configuration bundle.'} hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-4)' }} />}
-        {editable && <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}>
-            <TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={(event) => setMetadataDraft((current) => ({ ...current, name: event.target.value }))} />
-            <TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} rows={2} />
-          </div>
-          <Checkbox id="role-library-edit-assignable" labelText="Assignable to principals" checked={metadataDraft.isAssignable} onChange={(_event, { checked }) => setMetadataDraft((current) => ({ ...current, isAssignable: Boolean(checked) }))} />
-          {newlySelectedSensitivePermissionIds.length > 0 && <div style={{ display: 'grid', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-4)' }}>
-            <InlineNotification kind="warning" title="Sensitive permissions added" subtitle={newlySelectedSensitivePermissionIds.join(', ')} hideCloseButton lowContrast />
-            <Checkbox id="role-library-edit-risk-acknowledged" labelText="I understand these changes add sensitive permissions." checked={editRiskAcknowledged} onChange={(_event, { checked }) => setEditRiskAcknowledged(Boolean(checked))} />
-          </div>}
-          <div style={{ position: 'sticky', top: 'var(--spacing-3)', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', marginTop: 'var(--spacing-4)', background: 'var(--cds-layer-01)', border: '1px solid var(--cds-border-subtle)' }}>
-            <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button kind="tertiary" size="sm" disabled={!hasUnsavedRoleChanges || save.isPending} onClick={() => { setDraft(detail.permissions); setMetadataDraft({ name: detail.name, description: detail.description || '', isAssignable: detail.isAssignable ?? true }); }}>Cancel</Button></GuardedAction>
-            <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button></GuardedAction>
-            <GuardedAction actionId="platform.authz.roles.manage" resource={resource}><Button size="sm" renderIcon={Save} disabled={!hasUnsavedRoleChanges || save.isPending || !metadataDraft.name.trim() || (newlySelectedSensitivePermissionIds.length > 0 && !editRiskAcknowledged)} onClick={() => save.mutate()}>Save</Button></GuardedAction>
-          </div>
-        </>}
-        <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={editable && manage.allowed} idPrefix="role-library" onToggle={toggle} /></div>
+        {editable && <GuardedAction actionId="platform.authz.roles.manage" resource={resource}>
+          <Button size="sm" onClick={() => { setError(null); setEditRiskAcknowledged(false); setEditOpen(true); }}>Edit role</Button>
+        </GuardedAction>}
+        <div style={{ marginTop: 'var(--spacing-5)' }}><PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={false} idPrefix="role-library" onToggle={toggle} /></div>
       </> : <InlineNotification kind="info" title="Select a role" subtitle="Choose a role from the library to inspect its permissions." hideCloseButton lowContrast />}</div>
     </div>
-    <Modal open={createOpen} size="lg" modalHeading={createTarget === 'config' ? 'Export configuration role' : 'Create custom role'} primaryButtonText={createTarget === 'config' ? 'Export JSON' : 'Create'} secondaryButtonText="Cancel" onRequestClose={() => setCreateOpen(false)} onRequestSubmit={() => createTarget === 'config' ? exportConfigRole() : create.mutate()} primaryButtonDisabled={!form.name.trim() || !draft.length || create.isPending || (createTarget === 'manual' && createSelectedRiskyPermissions.length > 0 && !createRiskAcknowledged) || (createTarget === 'config' && (!isStableConfigKey(configForm.bundleKey) || !isStableConfigKey(configForm.tenantKey) || !isStableConfigKey(configForm.roleKey) || !configForm.roleKey.startsWith('custom.')))}>
+    </div>
+    <SettingsFormWorkflow open={createOpen}
+      title={createTarget === 'config' ? 'Export configuration role' : 'Create custom role'}
+      description="Name the role, choose its scope, and review every permission before saving."
+      backLabel="Back to role library" primaryButtonText={createTarget === 'config' ? 'Export JSON' : 'Create'}
+      busy={create.isPending} error={error}
+      onCancel={() => workflowExit.requestExit()}
+      onSubmit={() => createTarget === 'config' ? exportConfigRole() : create.mutate()}
+      primaryButtonDisabled={!manage.allowed || !form.name.trim() || !draft.length || create.isPending || (createTarget === 'manual' && createSelectedRiskyPermissions.length > 0 && !createRiskAcknowledged) || (createTarget === 'config' && (!isStableConfigKey(configForm.bundleKey) || !isStableConfigKey(configForm.tenantKey) || !isStableConfigKey(configForm.roleKey) || !configForm.roleKey.startsWith('custom.')))}
+    >
       <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
         {createTarget === 'config' && <InlineNotification kind="info" title="Configuration-managed duplicate" subtitle="Exports an explicit, reproducible permission snapshot. Import the JSON in Platform settings > Configuration bundles, preview it, then apply the exact preview." hideCloseButton lowContrast />}
         <TextInput id="role-library-name" labelText="Role name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
@@ -302,7 +321,27 @@ export default function RoleLibrarySettingsTab() {
         <PermissionPicker key={form.scope} permissions={createRolePermissions} draft={draft} editable={manage.allowed} idPrefix="create-role" onToggle={toggle} />
         {createTarget === 'manual' && createSelectedRiskyPermissions.length > 0 && <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}><InlineNotification kind="warning" title="Sensitive permissions selected" subtitle={createSelectedRiskyPermissions.map((permission) => permission.key).join(', ')} hideCloseButton lowContrast /><Checkbox id="role-library-risk-acknowledged" labelText="I understand this role includes sensitive permissions." checked={createRiskAcknowledged} onChange={(_event, { checked }) => setCreateRiskAcknowledged(Boolean(checked))} /></div>}
       </div>
-    </Modal>
+    </SettingsFormWorkflow>
+    <SettingsFormWorkflow open={editOpen} title="Edit custom role"
+      description="Review the role metadata and permission changes before saving."
+      backLabel="Back to role library" primaryButtonText="Save" busy={save.isPending} error={error}
+      onCancel={() => workflowExit.requestExit()} onSubmit={() => save.mutate()}
+      primaryButtonDisabled={!manage.allowed || !editable || !hasUnsavedRoleChanges || !metadataDraft.name.trim() || (newlySelectedSensitivePermissionIds.length > 0 && !editRiskAcknowledged)}>
+      <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+        <TextInput id="role-library-edit-name" labelText="Role name" value={metadataDraft.name} onChange={event => setMetadataDraft(current => ({ ...current, name: event.target.value }))} />
+        <TextArea id="role-library-edit-description" labelText="Description" value={metadataDraft.description} onChange={event => setMetadataDraft(current => ({ ...current, description: event.target.value }))} rows={2} />
+        <Checkbox id="role-library-edit-assignable" labelText="Assignable to principals" checked={metadataDraft.isAssignable} onChange={(_event, { checked }) => setMetadataDraft(current => ({ ...current, isAssignable: Boolean(checked) }))} />
+        {newlySelectedSensitivePermissionIds.length > 0 && <>
+          <InlineNotification kind="warning" title="Sensitive permissions added" subtitle={newlySelectedSensitivePermissionIds.join(', ')} hideCloseButton lowContrast />
+          <Checkbox id="role-library-edit-risk-acknowledged" labelText="I understand these changes add sensitive permissions." checked={editRiskAcknowledged} onChange={(_event, { checked }) => setEditRiskAcknowledged(Boolean(checked))} />
+        </>}
+        <PermissionPicker permissions={selectedRolePermissions} draft={draft} editable={manage.allowed && editable} idPrefix="role-library-edit" onToggle={toggle} />
+        <GuardedAction actionId="platform.authz.roles.manage" resource={resource}>
+          <Button aria-label="Archive custom role" kind="danger--tertiary" size="sm" disabled={archive.isPending || save.isPending} onClick={() => setArchiveConfirmation(true)}>Archive</Button>
+        </GuardedAction>
+      </div>
+    </SettingsFormWorkflow>
+    <WorkflowDiscardDialog guard={workflowExit} busy={create.isPending || save.isPending} />
     <Modal open={archiveConfirmation} danger modalHeading="Archive custom role" primaryButtonText="Archive" secondaryButtonText="Cancel" onRequestClose={() => setArchiveConfirmation(false)} onRequestSubmit={() => archive.mutate()} primaryButtonDisabled={archive.isPending}>
       <p>Archive {selected?.name}? New assignments will no longer be allowed.</p>
     </Modal>
