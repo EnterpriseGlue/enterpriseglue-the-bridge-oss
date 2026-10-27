@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.1...v0.35.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* **deps:** patch qs serialization denial of service ([612f80a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/612f80a28e29b154ad6dd017bc784de2eafded31))
+* **deps:** patch qs serialization denial of service ([848db70](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/848db706d47074831a7a6c716aa335f710af63cd))
+* **frontend:** preserve navigation in access-control editors ([49643b8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/49643b8d0df99d91e1747d6fb4539a59c913eb31))
+* **frontend:** preserve navigation in access-control editors ([e2ab688](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e2ab6881cce950cf05802b12140ea2c123996ccf))
+
 ## [0.35.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.0...v0.35.1) (2026-10-24)
 
 ### Changes
