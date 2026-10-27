@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.1...v0.35.2) (2026-10-27)
+
+### Changes
+
+- **runtime-dependencies:** Upgrade qs to 6.16.1 across the production dependency closure to repair CVE-2026-110816 query serialization denial of service.
+- **frontend-host:** Keep substantial access-control editors within their existing settings navigation.
+
+Full upgrade, compatibility and verification details: [v0.35.2 release notes](docs/releases/v0.35.2.md).
+
 ## [0.35.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.0...v0.35.1) (2026-10-24)
 
 ### Changes
