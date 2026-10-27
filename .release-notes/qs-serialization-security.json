@@ -1,0 +1,58 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "qs-serialization-security",
+  "type": "security",
+  "scope": "runtime-dependencies",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Upgrade qs to 6.16.1 across the production dependency closure to repair CVE-2026-110816 query serialization denial of service.",
+  "userImpact": [
+    "Runtime images use a patched query-string serialization dependency."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade to the qualified release images. Standalone consumers must refresh their own qs dependency resolution to 6.16.1 or later in the supported 6.x line."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The frozen bootstrap retains its existing predecessor code, migration inventory and schema-plan identity while refreshing its production dependency store."
+    ]
+  },
+  "security": [
+    "The workspace qs minimum is 6.16.1. Existing all-severity scanner gates and ignore policy remain unchanged."
+  ],
+  "documentation": [
+    "docs/runbooks/security-dependency-updates.md"
+  ],
+  "knownLimitations": [
+    "Exact-image security, supported database adapters and real-engine browser qualification remain required before publication."
+  ],
+  "rollback": [
+    "Prefer a qualified forward release. Restoring qs 6.16.0 restores the known denial-of-service risk."
+  ],
+  "validation": [
+    "Twenty-two focused dependency and frozen-bootstrap contracts pass, including eight malformed comma-serialization combinations and ordinary query behavior.",
+    "Published-package version planning and release-note preflight pass. Exact-image security, all supported database adapters and the real-engine browser candidate gates remain required before publication."
+  ],
+  "packages": [],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "This transitive security repair does not change application configuration, public workflows or administrator procedures."
+  }
+}

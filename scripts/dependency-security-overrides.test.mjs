@@ -52,7 +52,7 @@ test('fast-uri security override and lockfile stay on a patched release line', a
 
   assert.equal(packageJson.overrides, undefined, 'pnpm-workspace.yaml owns effective security overrides')
   assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}fast-uri: \^3\.1\.9$/m)
-  assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}qs: \^6\.16\.0$/m)
+  assert.match(workspaceText, /^overrides:\n(?: {2}.+\n)* {2}qs: \^6\.16\.1$/m)
 
   const lockedVersions = [...lockText.matchAll(/^ {2}fast-uri@(\d+\.\d+\.\d+):$/gm)]
     .map((match) => match[1])
@@ -66,8 +66,28 @@ test('fast-uri security override and lockfile stay on a patched release line', a
     .map((match) => match[1])
   assert.ok(lockedQsVersions.length > 0, 'expected qs to be represented in the lockfile')
   for (const version of lockedQsVersions) {
-    assert.ok(isAtLeast(version, [6, 16, 0]), `qs ${version} is below 6.16.0`)
+    assert.ok(isAtLeast(version, [6, 16, 1]), `qs ${version} is below 6.16.1`)
   }
+})
+
+test('patched qs handles hostile comma-format array values without throwing', () => {
+  const requireBackend = createRequire(new URL('backend/package.json', root))
+  const requireExpress = createRequire(requireBackend.resolve('express/package.json'))
+  const qs = requireExpress('qs')
+  assert.ok(isAtLeast(requireExpress('qs/package.json').version, [6, 16, 1]))
+  const values = [
+    qs.parse('a[0][toString]=x', { allowPrototypes: true }),
+    JSON.parse('{"a":[{"toString":"x"}]}'),
+    { a: [Object.create(null)] },
+    { a: [[{ toString: 'x' }]] },
+  ]
+  for (const value of values) {
+    for (const encodeValuesOnly of [false, true]) {
+      assert.doesNotThrow(() => qs.stringify(value, { arrayFormat: 'comma', encodeValuesOnly }))
+    }
+  }
+  assert.equal(qs.stringify({ a: ['b', 'c'] }, { arrayFormat: 'comma' }), 'a=b%2Cc')
+  assert.deepEqual(qs.parse('a[b]=c'), { a: { b: 'c' } })
 })
 
 test('approved mail/Git upgrades and compatible runtime dependencies cannot regress below reviewed security floors', async () => {

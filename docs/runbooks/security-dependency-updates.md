@@ -19,6 +19,13 @@ published workspace consumer versions with the package-version authority.
 Named major upgrades require explicit approval. Compile and test real library
 entrypoints as well as mocks; qualify affected runtime and database behavior.
 
+The workspace requires qs 6.16.1 or later in its supported 6.x release line for
+[CVE-2026-110816](https://github.com/ljharb/qs/security/advisories/GHSA-6pq8-jhm2-2vcw). Qualify comma-format serialization with non-callable own
+`toString` values and null-prototype objects, plus ordinary query serialization.
+Application and frozen-bootstrap production stores consume this same patched
+lockfile. Rebuild and scan both exact images; standalone consumers must also
+refresh their own installed qs resolution.
+
 Keep full dependencies in the application build stage and production-only
 dependencies in the runtime assembly stage. Runtime modules must remain
 explicitly declared; do not remove a database driver to make an image scan pass
