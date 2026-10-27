@@ -6,13 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.1...v0.35.2) (2026-10-27)
 
+### Changes
 
-### Bug Fixes
+- **runtime-dependencies:** Upgrade qs to 6.16.1 across the production dependency closure to repair CVE-2026-110816 query serialization denial of service.
+- **frontend-host:** Keep substantial access-control editors within their existing settings navigation.
 
-* **deps:** patch qs serialization denial of service ([612f80a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/612f80a28e29b154ad6dd017bc784de2eafded31))
-* **deps:** patch qs serialization denial of service ([848db70](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/848db706d47074831a7a6c716aa335f710af63cd))
-* **frontend:** preserve navigation in access-control editors ([49643b8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/49643b8d0df99d91e1747d6fb4539a59c913eb31))
-* **frontend:** preserve navigation in access-control editors ([e2ab688](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e2ab6881cce950cf05802b12140ea2c123996ccf))
+Full upgrade, compatibility and verification details: [v0.35.2 release notes](docs/releases/v0.35.2.md).
 
 ## [0.35.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.0...v0.35.1) (2026-10-24)
 
