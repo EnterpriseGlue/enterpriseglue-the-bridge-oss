@@ -20,3 +20,7 @@ These Go Authors modules use the retained BSD-3-Clause license.
 
 Cosign also pins `github.com/klauspost/compress` to 1.18.7 to address
 CVE-2026-63209 (GHSA-259r-337f-4rfw). The module uses the BSD-3-Clause license.
+
+The Cosign rebuild pins `github.com/go-jose/go-jose/v4` to 4.1.6 to address
+CVE-2026-116587 (GHSA-mgcc-cww5-fp2q). The Apache-2.0 module retains its upstream
+4096-bit RSA modulus limit for JWK parsing; the build does not raise this bound.

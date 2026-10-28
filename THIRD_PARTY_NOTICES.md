@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-10-24T09:46:14.198Z
+Generated at: 2026-10-28T02:14:14.907Z
 
 Generated from:
 - third_party_licenses.json
@@ -27,7 +27,7 @@ Generated from:
 | BSD-2-Clause | 1 |
 | BSD-3-Clause | 1 |
 | ISC | 4 |
-| MIT | 61 |
+| MIT | 60 |
 | MIT-0 | 1 |
 | OFL-1.1 | 3 |
 | SEE LICENSE IN LICENSE | 2 |
@@ -58,7 +58,6 @@ Generated from:
 | archiver | 7.0.1 | MIT | https://github.com/archiverjs/node-archiver.git | backend, packages/backend-host |
 | azure-devops-node-api | 15.1.3 | MIT | https://github.com/Microsoft/azure-devops-node-api | backend, packages/backend-host |
 | bcryptjs | 3.0.3 | BSD-3-Clause | https://github.com/dcodeIO/bcrypt.js.git | backend, packages/backend-host |
-| bitbucket | 2.12.0 | MIT | github:MunifTanjim/node-bitbucket | backend, packages/backend-host |
 | bpmn-js-bpmnlint | 0.24.0 | MIT | git+https://github.com/bpmn-io/bpmn-js-bpmnlint.git | frontend, packages/frontend-host |
 | bpmn-js-create-append-anything | 1.3.1 | MIT | git+https://github.com/bpmn-io/bpmn-js-create-append-anything.git | frontend |
 | bpmn-js-element-templates | 2.33.0 | MIT | https://github.com/bpmn-io/bpmn-js-element-templates | frontend |

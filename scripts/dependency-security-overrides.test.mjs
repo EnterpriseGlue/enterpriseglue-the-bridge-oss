@@ -344,3 +344,13 @@ test('both acquisition toolchains require the patched certificate verification s
     assert.ok(source.includes('^/out/cosign: go1\\.26\\.10$'));
   }
 });
+
+test('both Cosign builds require the patched JWK parser in the emitted binary', async () => {
+  for (const relative of ['packages/plugin-installer/Dockerfile', 'packages/plugin-manager/Dockerfile']) {
+    const source = await readFile(new URL(relative, root), 'utf8');
+    assert.ok(source.includes('github.com/go-jose/go-jose/v4@v4.1.6'));
+    assert.ok(source.includes('github.com/go-jose/go-jose/v4[[:space:]]+v4\\.1\\.6([[:space:]]|$)'));
+    assert.ok(source.includes('v3.1.3-enterpriseglue.7'));
+    assert.ok(!source.includes('MaxRSAModulusBits'), 'the upstream RSA size bound must not be raised');
+  }
+});

@@ -37,7 +37,6 @@
     "archiver": "^7.0.1",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",
-    "bitbucket": "^2.12.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",
