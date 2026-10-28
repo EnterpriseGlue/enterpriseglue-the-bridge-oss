@@ -1,0 +1,75 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cosign-jwk-security",
+  "type": "security",
+  "scope": "plugin-toolchain",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Rebuild plugin acquisition tools with the patched Go JOSE JWK parser.",
+  "userImpact": [
+    "Plugin acquisition and signature verification keep their existing interfaces."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Adopt the newly qualified signed installer and manager image composition; existing published digests remain unchanged."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database or migration changes."
+    ]
+  },
+  "security": [
+    "Pin github.com/go-jose/go-jose/v4 to v4.1.6 in both Cosign builds to address CVE-2026-116587 (GHSA-mgcc-cww5-fp2q).",
+    "Inspect the emitted binaries for the fixed module version. Preserve the upstream 4096-bit JWK RSA modulus limit and all existing scanner thresholds and ignore policy."
+  ],
+  "documentation": [
+    "packages/plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md",
+    "packages/plugin-manager/CONTAINER_THIRD_PARTY_NOTICES.md"
+  ],
+  "knownLimitations": [
+    "The security fix refuses JWK RSA moduli larger than 4096 bits. Exact-candidate cross-architecture and signature compatibility qualification remains required."
+  ],
+  "rollback": [
+    "Prefer a qualified forward release; older toolchain images retain the vulnerable JWK parser."
+  ],
+  "validation": [
+    "Installer and manager unit suites, dependency-security contracts, package/chart version discipline, chart validation, release policy, strict licenses and documentation checks pass locally.",
+    "Real Go JOSE tests verify supported RSA signing and reject oversized moduli and inconsistent private factors without raising the upstream 4096-bit limit.",
+    "Native ARM64 installer and manager images pass the unchanged HIGH/CRITICAL toolchain gate; lower-severity observations remain in scan artifacts. The same patched Cosign bytes verify real public Fulcio/Rekor candidate signatures and local blob-signature/tamper checks.",
+    "Protected exact-candidate cross-architecture and complete runtime qualification remains required before publication."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.13",
+      "newVersion": "0.2.14",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.13",
+      "newVersion": "0.1.14",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "The internal signature-tool dependency update requires no customer configuration or user-interface change."
+  }
+}
