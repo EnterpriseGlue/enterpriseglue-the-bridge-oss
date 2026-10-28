@@ -3,8 +3,6 @@
  * Uses Bitbucket API for interactions
  */
 
-import bitbucketModule from 'bitbucket';
-const { Bitbucket } = bitbucketModule;
 import type {
   GitProviderClient,
   ProviderCredentials,
@@ -21,17 +19,64 @@ import type {
 } from './types.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
+type RepositoryPath = { workspace: string; repo_slug: string };
+const requestError = (status: number) =>
+  Object.assign(new Error(`Bitbucket request failed (HTTP ${status})`), { status });
+const segment = (value: string) => {
+  if (!value || value === '.' || value === '..') throw new Error('Invalid Bitbucket path segment');
+  return encodeURIComponent(value);
+};
+const repositoryPath = ({ workspace, repo_slug }: RepositoryPath) =>
+  `/repositories/${segment(workspace)}/${segment(repo_slug)}`;
+
+// Only the endpoints this provider uses. Native fetch avoids the obsolete SDK's
+// deepmerge dependency; request data is never merged into client defaults.
+function createBitbucketApi(token: string) {
+  const request = async (path: string, method = 'GET', query?: Record<string, string | number>, body?: unknown) => {
+    const url = new URL(`https://api.bitbucket.org/2.0${path}`);
+    for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, String(value));
+    const response = await fetch(url, {
+      method, redirect: 'error',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw requestError(response.status);
+    }
+    const text = await response.text();
+    return { data: text && /(?:application\/json|\+json)(?:;|$)/i.test(response.headers.get('content-type') ?? '') ? JSON.parse(text) : text };
+  };
+  const refs = (p: RepositoryPath, kind: 'branches' | 'tags') => `${repositoryPath(p)}/refs/${kind}`;
+  return {
+    user: { get: (_options: Record<string, never>) => request('/user') },
+    workspaces: { getWorkspaces: (_options: Record<string, never>) => request('/workspaces') },
+    repositories: {
+      create: (p: RepositoryPath & { _body: unknown }) => request(repositoryPath(p), 'POST', undefined, p._body),
+      get: (p: RepositoryPath) => request(repositoryPath(p)),
+      list: (p: { workspace: string; pagelen: number; sort: string }) => request(`/repositories/${segment(p.workspace)}`, 'GET', { pagelen: p.pagelen, sort: p.sort }),
+      delete: (p: RepositoryPath) => request(repositoryPath(p), 'DELETE'),
+      listBranches: (p: RepositoryPath) => request(refs(p, 'branches')),
+      getBranch: (p: RepositoryPath & { name: string }) => request(`${refs(p, 'branches')}/${segment(p.name)}`),
+      listCommits: (p: RepositoryPath & { pagelen: number }) => request(`${repositoryPath(p)}/commits`, 'GET', { pagelen: p.pagelen }),
+      readSrc: (p: RepositoryPath & { commit: string; path: string }) => request(`${repositoryPath(p)}/src/${segment(p.commit)}/${p.path ? p.path.split('/').map(segment).join('/') : ''}`),
+    },
+    refs: {
+      createBranch: (p: RepositoryPath & { _body: unknown }) => request(refs(p, 'branches'), 'POST', undefined, p._body),
+      tags: { create: (p: RepositoryPath & { _body: unknown }) => request(refs(p, 'tags'), 'POST', undefined, p._body) },
+    },
+  };
+}
+
 export class BitbucketClient implements GitProviderClient {
   readonly type = 'bitbucket' as const;
-  private bitbucket: InstanceType<typeof Bitbucket>;
+  private bitbucket: ReturnType<typeof createBitbucketApi>;
+  private readonly token: string;
   private username: string | null = null;
 
   constructor(credentials: ProviderCredentials) {
-    this.bitbucket = new Bitbucket({
-      auth: {
-        token: credentials.token,
-      },
-    });
+    this.token = credentials.token;
+    this.bitbucket = createBitbucketApi(this.token);
   }
 
   async validateCredentials(): Promise<boolean> {
@@ -213,19 +258,22 @@ export class BitbucketClient implements GitProviderClient {
     
     // Use raw fetch for multipart upload
     const response = await fetch(
-      `https://api.bitbucket.org/2.0/repositories/${workspace}/${repoSlug}/src`,
+      `https://api.bitbucket.org/2.0${repositoryPath({ workspace, repo_slug: repoSlug })}/src`,
       {
         method: 'POST',
+        redirect: 'error',
         headers: {
-          'Authorization': `Bearer ${(this.bitbucket as any).auth?.token}`,
+          'Authorization': `Bearer ${this.token}`,
         },
         body: formData,
       }
     );
     
     if (!response.ok) {
-      throw new Error(`Failed to push files: ${response.statusText}`);
+      await response.body?.cancel();
+      throw requestError(response.status);
     }
+    await response.body?.cancel();
     
     // Get the latest commit
     const { data: commits } = await this.bitbucket.repositories.listCommits({

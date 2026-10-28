@@ -64,6 +64,13 @@ qualify their installed dependency tree; published package manifests do not
 propagate pnpm workspace overrides. Revisit the override when Azure Identity
 changes its MSAL dependency.
 
+The Bitbucket provider uses the platform's native fetch API for its fixed
+Bitbucket Cloud REST endpoints. The removed Bitbucket SDK depended on deepmerge
+4.3.1, which has no qualified fix for CVE-2026-93753. Repository, branch, tag,
+commit and file operations retain their provider interface; bearer credentials
+are sent only to the fixed API origin, and redirects are refused. Qualify the
+HTTP contracts and multipart upload behavior when changing this adapter.
+
 If a remaining runtime dependency has no qualified upstream fix, stop dependent
 release qualification. Removing or replacing that dependency requires caller
 compatibility and regression evidence. Do not falsify versions, suppress the

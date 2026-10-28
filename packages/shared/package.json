@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.28.3",
+  "version": "0.28.4",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -51,7 +51,6 @@
     "@types/uuid": "^10.0.0",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",
-    "bitbucket": "^2.12.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -129,7 +128,6 @@
     "@node-saml/node-saml": "^5.1.0",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",
-    "bitbucket": "^2.12.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -167,9 +165,6 @@
       "optional": true
     },
     "bcryptjs": {
-      "optional": true
-    },
-    "bitbucket": {
       "optional": true
     },
     "cookie-parser": {

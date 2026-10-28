@@ -1,0 +1,80 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "bitbucket-dependency-security",
+  "type": "security",
+  "scope": "git-providers",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Remove the Bitbucket SDK and its unfixed deepmerge dependency while preserving the Bitbucket Cloud provider API.",
+  "userImpact": [
+    "Bitbucket repository, branch, file, commit and tag operations retain their provider interface.",
+    "Bitbucket multipart uploads use the supplied provider credential directly."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade to qualified release images or refresh the corresponding published host packages."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema or migration changes."
+    ]
+  },
+  "security": [
+    "Remove production deepmerge 4.3.1 rather than suppress CVE-2026-93753. All-severity scanner gates and ignore policy remain unchanged."
+  ],
+  "documentation": [
+    "docs/runbooks/security-dependency-updates.md"
+  ],
+  "knownLimitations": [
+    "Protected database, real-engine browser and exact-image security candidate gates remain required before publication."
+  ],
+  "rollback": [
+    "Prefer a qualified forward release; rolling back restores the vulnerable deepmerge dependency."
+  ],
+  "validation": [
+    "Native-fetch HTTP contracts cover the Bitbucket provider operations and real loopback JSON/multipart transfer, authentication, redirect refusal and sanitized errors.",
+    "Backend units, typecheck, compiled package-consumer checks and release/package/license/documentation guards pass locally.",
+    "Native ARM64 application and frozen-bootstrap images have no unignored findings under the unchanged all-severity scanner policy. Real PostgreSQL bootstrap, idempotence, drift rejection and compiled historical upgrades pass.",
+    "Protected exact-candidate cross-architecture, physical database and real-engine browser checks remain publication gates."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.3",
+      "newVersion": "0.28.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.4",
+      "newVersion": "0.23.5",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.6",
+      "newVersion": "0.20.7",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "The dependency replacement preserves the existing Bitbucket operations and requires no configuration change."
+  }
+}

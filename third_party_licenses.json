@@ -114,12 +114,6 @@
     "publisher": "Daniel Wirtz",
     "email": "dcode@dcode.io"
   },
-  "bitbucket@2.12.0": {
-    "licenses": "MIT",
-    "repository": "github:MunifTanjim/node-bitbucket",
-    "publisher": "MunifTanjim",
-    "url": "https://muniftanjim.dev"
-  },
   "bpmn-js-bpmnlint@0.24.0": {
     "licenses": "MIT",
     "repository": "git+https://github.com/bpmn-io/bpmn-js-bpmnlint.git",
