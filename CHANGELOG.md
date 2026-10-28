@@ -6,12 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.2...v0.35.3) (2026-10-28)
 
+### Changes
 
-### Bug Fixes
+- **git-providers:** Remove the Bitbucket SDK and its unfixed deepmerge dependency while preserving the Bitbucket Cloud provider API.
+- **plugin-toolchain:** Rebuild plugin acquisition tools with the patched Go JOSE JWK parser.
 
-* **security:** patch Cosign JWK parser in acquisition tools ([2be1546](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2be15463f6b4b89bff61a1fc1a1064c875116261))
-* **security:** remove deepmerge and patch Cosign JWK parsing ([b58f515](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b58f51505a2e8b6cc449275959c52287baeb1da4))
-* **security:** remove vulnerable Bitbucket SDK dependency ([7e5ce5a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7e5ce5aef5e5e8c490b12cd5e73be1245bc4c94b))
+Full upgrade, compatibility and verification details: [v0.35.3 release notes](docs/releases/v0.35.3.md).
 
 ## [0.35.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.1...v0.35.2) (2026-10-27)
 
