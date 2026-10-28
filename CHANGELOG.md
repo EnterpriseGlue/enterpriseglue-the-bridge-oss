@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.2...v0.35.3) (2026-10-28)
+
+### Changes
+
+- **git-providers:** Remove the Bitbucket SDK and its unfixed deepmerge dependency while preserving the Bitbucket Cloud provider API.
+- **plugin-toolchain:** Rebuild plugin acquisition tools with the patched Go JOSE JWK parser.
+
+Full upgrade, compatibility and verification details: [v0.35.3 release notes](docs/releases/v0.35.3.md).
+
 ## [0.35.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.1...v0.35.2) (2026-10-27)
 
 ### Changes
