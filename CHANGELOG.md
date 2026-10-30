@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.3...v0.35.4) (2026-10-30)
+
+### Changes
+
+- **engines:** Keep externally managed engines readable in the authorization-filtered engine inventory after workload registration.
+
+Full upgrade, compatibility and verification details: [v0.35.4 release notes](docs/releases/v0.35.4.md).
+
 ## [0.35.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.2...v0.35.3) (2026-10-28)
 
 ### Changes
