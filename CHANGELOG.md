@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.3...v0.35.4) (2026-10-30)
+
+
+### Bug Fixes
+
+* **engines:** accept workload-managed inventory ownership ([eb40e28](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eb40e28e684e3bfc6adaa5e2369248f2577b92ee))
+* **engines:** accept workload-managed inventory ownership ([7c1fdcd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7c1fdcd64cf41ebb3fdbd3484b141e1cbcaf5a0c))
+
 ## [0.35.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.2...v0.35.3) (2026-10-28)
 
 ### Changes
