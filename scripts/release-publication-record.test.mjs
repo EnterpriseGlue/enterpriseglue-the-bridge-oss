@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -144,8 +144,8 @@ fi
         env:{PATH:bin,FIXTURE_STATE:directory,FIXTURE_ERROR:error,FIXTURE_SIGN_FAILURE:String(signFailure),GITHUB_SERVER_URL:'https://github.com',
           GITHUB_REPOSITORY:'EnterpriseGlue/enterpriseglue-the-bridge-oss',GITHUB_WORKFLOW:'Release Canary',GITHUB_REF:'refs/heads/fixture',
           GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',EG_PUBLICATION_CANARY:'true',EG_PUBLICATION_REPOSITORY:'ghcr.io/enterpriseglue/enterpriseglue-release-canary-publication'},encoding:'utf8'})
-      const calls=spawnSync('cat',[join(directory,'sign-calls')],{encoding:'utf8'})
-      return {result,signs:calls.status===0?calls.stdout.trim().split('\n').length:0}
+      const calls=join(directory,'sign-calls')
+      return {result,signs:existsSync(calls)?readFileSync(calls,'utf8').trim().split('\n').length:0}
     }
     const ok=run();assert.equal(ok.result.status,0,ok.result.stderr);assert.equal(ok.signs,2)
     for(const options of [{recovery:false},{expectedBytes:bytes+'\n'},
