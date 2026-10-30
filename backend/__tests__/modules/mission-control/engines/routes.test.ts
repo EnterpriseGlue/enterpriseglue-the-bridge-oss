@@ -485,6 +485,29 @@ describe('mission-control engines routes', () => {
     expect(permissionServiceMock.getKnownEngineIdsForUser).not.toHaveBeenCalled();
   });
 
+  it('lists an authorized workload-managed engine without exposing its encrypted credential', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ find: vi.fn().mockResolvedValue([{
+        id: 'e1', name: 'Managed Operaton', type: 'operaton',
+        tenantId: 'tenant-default', tenancyMode: 'dedicated',
+        registrationSource: 'managed_workload', ownershipMode: 'external_managed',
+        managementMode: 'external_managed', runtimeAccessScope: 'resource_aware',
+        tenantResolutionStatus: 'ready', authType: 'basic',
+        passwordEnc: 'private-encrypted-engine-credential',
+      }]) }),
+    });
+    const response = await request(server).get('/engines-api/engines');
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0]).toMatchObject({
+      id: 'e1', registrationSource: 'managed_workload', ownershipMode: 'external_managed',
+      managementMode: 'external_managed', runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'dedicated', tenantResolutionStatus: 'ready', passwordEnc: null, hasCredential: true,
+    });
+    expect(response.text).not.toContain('private-encrypted-engine-credential');
+  });
+
   it('normalizes PostgreSQL bigint timestamps in an authorization-filtered inventory response', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     (getDataSource as any).mockResolvedValue({

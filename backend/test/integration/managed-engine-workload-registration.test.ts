@@ -29,6 +29,7 @@ import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { TenantLifecycleOperation } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLifecycleOperation.js';
 import { managedEngineWorkloadRegistrationService } from '@enterpriseglue/shared/services/platform-admin/ManagedEngineWorkloadRegistrationService.js';
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js';
+import { AccessibleEngineSummarySchema } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 
 const integrationEnv = (name: string, fallback: string): string =>
   process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
@@ -157,6 +158,25 @@ describePostgres('managed engine workload lifecycle with PostgreSQL', () => {
       tenantId: 'tenant-pg', externalId: engineRef, tenancyMode: 'dedicated',
       lifecycleStatus: 'active', registrationSource: 'managed_workload',
     });
+    const inventory = AccessibleEngineSummarySchema.parse({
+      ...active,
+      passwordEnc: null,
+      hasCredential: Boolean(active.passwordEnc),
+      createdAt: Number(active.createdAt),
+      updatedAt: Number(active.updatedAt),
+      lastAppliedAt: Number(active.lastAppliedAt),
+      lastExternalSyncAt: Number(active.lastExternalSyncAt),
+      lastTenantReconciledAt: Number(active.lastTenantReconciledAt),
+      externalUpdatedAt: Number(active.externalUpdatedAt),
+    });
+    expect(inventory).toMatchObject({
+      id: active.id, ownershipMode: 'external_managed', registrationSource: 'managed_workload',
+      managementMode: 'external_managed', runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'dedicated', hasCredential: true,
+    });
+    expect(inventory.tenantId).toBe('tenant-pg');
+    expect(JSON.stringify(inventory)).not.toContain(active.passwordEnc!);
+    expect(JSON.stringify(inventory)).not.toContain(password);
     expect(active.passwordEnc).toMatch(/^v2:/);
     expect(secretResolver.resolveStored(active.passwordEnc)).toBe(password);
 
