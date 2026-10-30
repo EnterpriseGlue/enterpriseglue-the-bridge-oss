@@ -22,6 +22,49 @@ import {
 import { ConfigEngineSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 describe('EngineSchema', () => {
+  const managedEngine = {
+    id: 'managed-engine-1', name: 'Managed Operaton',
+    baseUrl: 'https://managed.example.test/engine-rest', type: 'operaton',
+    authType: 'basic', username: 'engine-user', passwordEnc: 'encrypted-private-value',
+    active: true, version: null, createdAt: 1, updatedAt: 2,
+    registrationSource: 'managed_workload', ownershipMode: 'external_managed',
+    managementMode: 'external_managed', runtimeAccessScope: 'resource_aware',
+    tenancyMode: 'dedicated', tenantId: 'tenant-alpha', tenantResolutionStatus: 'ready',
+  };
+
+  it('accepts persisted managed engine ownership in both redacted response contracts', () => {
+    const serialized = EngineSchema.parse(managedEngine);
+    const inventory = AccessibleEngineSummarySchema.parse(serialized);
+    expect(inventory).toMatchObject({
+      ownershipMode: 'external_managed', registrationSource: 'managed_workload',
+      managementMode: 'external_managed', tenancyMode: 'dedicated',
+      runtimeAccessScope: 'resource_aware', hasCredential: true,
+    });
+    expect(JSON.stringify(inventory)).not.toContain('encrypted-private-value');
+    expect(inventory.passwordEnc).toBeUndefined();
+  });
+
+  it.each(['manual', 'config_warn', 'config_locked'])(
+    'preserves the existing %s response ownership mode', (ownershipMode) => {
+      expect(EngineSchema.parse({ ...managedEngine, ownershipMode }).ownershipMode).toBe(ownershipMode);
+      expect(AccessibleEngineSummarySchema.parse({ id: 'engine-1', name: 'Engine', ownershipMode }).ownershipMode).toBe(ownershipMode);
+    },
+  );
+
+  it.each(['unknown', 'externally_managed', 'cloud_managed'])(
+    'rejects the undeclared %s response ownership mode', (ownershipMode) => {
+      expect(EngineSchema.safeParse({ ...managedEngine, ownershipMode }).success).toBe(false);
+      expect(AccessibleEngineSummarySchema.safeParse({ id: 'engine-1', name: 'Engine', ownershipMode }).success).toBe(false);
+    },
+  );
+
+  it('does not let ordinary create or update requests assign workload ownership', () => {
+    expect(CreateEngineRequestSchema.safeParse({
+      name: 'Manual', baseUrl: 'https://manual.example.test/engine-rest', ownershipMode: 'external_managed',
+    }).success).toBe(false);
+    expect(UpdateEngineRequestSchema.safeParse({ ownershipMode: 'external_managed' }).success).toBe(false);
+  });
+
   it('keeps manageable shared-engine collection widening explicit and bounded', () => {
     expect(EngineInventoryQuerySchema.parse({})).toEqual({});
     expect(EngineInventoryQuerySchema.parse({ includeManageableShared: 'true' })).toEqual({

@@ -319,3 +319,16 @@ before accepting the receipt.
 - Replace broker-backed provider references with verified local references
   before rolling back tenant-secret support, and keep the broker available
   until no persisted provider depends on it.
+
+## Managed engine inventory ownership
+
+Workload registration persists a dedicated engine with
+`registrationSource: managed_workload`, `ownershipMode: external_managed`, and
+`managementMode: external_managed`. Both the persistence-shaped engine response
+and sanitized `GET /engines-api/engines` inventory recognize that ownership
+mode. The normal authorization filter still selects the caller's visible
+engines, and encrypted engine credentials remain write-only.
+
+This response metadata does not permit an ordinary engine create or update
+request to assign workload ownership. Existing managed-engine records require
+no migration, ownership rewrite, or credential rotation when upgrading.

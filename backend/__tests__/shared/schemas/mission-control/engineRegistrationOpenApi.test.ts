@@ -4,6 +4,16 @@ import { ExternalEngineDecommissionRequestSchema } from '@enterpriseglue/shared/
 
 describe('engine registration OpenAPI contracts', () => {
   const generateOpenApi = useOpenApiFixture();
+  it('documents workload ownership on inventory responses without granting ownership in write requests', () => {
+    const document = generateOpenApi();
+    const inventory = document.paths?.['/engines-api/engines']?.get?.responses?.['200']
+      ?.content?.['application/json']?.schema;
+    expect(inventory?.items?.properties?.ownershipMode?.enum?.filter((value: unknown) => value !== null))
+      .toEqual(['manual', 'config_warn', 'config_locked', 'external_managed']);
+    expect(document.components?.schemas?.CreateEngineRequest?.properties).not.toHaveProperty('ownershipMode');
+    expect(document.components?.schemas?.UpdateEngineRequest?.properties).not.toHaveProperty('ownershipMode');
+  });
+
   it('publishes one connection-mode enum across manual, external, and config registration', () => {
     const document = generateOpenApi();
     const schemas = document.components?.schemas;

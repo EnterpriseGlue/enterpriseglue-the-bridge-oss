@@ -442,6 +442,10 @@ function normalizeExternalEngineCapabilities(value: unknown, capabilitiesJson: s
   }
 }
 
+// Response metadata also includes ownership assigned by workload registration.
+// Ordinary engine write schemas do not accept this field.
+const EngineResponseOwnershipModeSchema = z.enum(['manual', 'config_warn', 'config_locked', 'external_managed']);
+
 // Raw schema - matches TypeORM Engine entity
 export const EngineSchemaRaw = z.object({
   id: z.string(),
@@ -462,7 +466,7 @@ export const EngineSchemaRaw = z.object({
   configKey: z.string().nullable().optional(),
   sourceHash: z.string().nullable().optional(),
   lastAppliedAt: z.number().nullable().optional(),
-  ownershipMode: z.enum(['manual', 'config_warn', 'config_locked']).nullable().optional(),
+  ownershipMode: EngineResponseOwnershipModeSchema.nullable().optional(),
   externalSystemId: z.string().nullable().optional(),
   managementMode: z.string().nullable().optional(),
   fieldOwnership: z.record(z.string(), z.enum(['manual', 'external'])).optional(),
@@ -579,7 +583,7 @@ export const AccessibleEngineSummarySchema = z.object({
   configKey: z.string().nullable().optional(),
   sourceHash: z.string().nullable().optional(),
   lastAppliedAt: z.number().nullable().optional(),
-  ownershipMode: z.enum(['manual', 'config_warn', 'config_locked']).nullable().optional(),
+  ownershipMode: EngineResponseOwnershipModeSchema.nullable().optional(),
   externalSystemId: z.string().nullable().optional(),
   managementMode: z.string().nullable().optional(),
   fieldOwnership: z.record(z.string(), z.enum(['manual', 'external'])).optional(),

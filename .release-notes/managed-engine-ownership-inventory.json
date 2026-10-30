@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "managed-engine-ownership-inventory",
+  "type": "fix",
+  "scope": "engines",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers"
+  ],
+  "summary": "Keep externally managed engines readable in the authorization-filtered engine inventory after workload registration.",
+  "userImpact": [
+    "Connected managed engines can appear in engine selectors and project deployment targets."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade the host packages or application images together; existing managed engine records require no repair."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Engine response schemas accept the existing external_managed ownership mode while ordinary engine write requests remain unchanged."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Persistence and tenant ownership are unchanged. Downgrading restores the previous inventory validation failure for managed engines."
+    ]
+  },
+  "security": [
+    "Existing authorization, tenant filtering, secret redaction and workload ownership controls remain enforced."
+  ],
+  "documentation": [
+    "docs/reference/tenant-workload-lifecycle-api.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "EnterpriseGlue",
+    "pages": [],
+    "reason": "Restores an existing managed-engine workflow without changing user configuration or administration instructions."
+  },
+  "knownLimitations": [],
+  "rollback": [
+    "Revert to the previous qualified host composition; existing records remain intact."
+  ],
+  "validation": [
+    "140 affected schema, HTTP inventory, workload service and workload route tests passed.",
+    "21 engine selector and project deployment-target UI tests passed.",
+    "Engine-tenancy and OpenAPI contracts passed, including managed ownership response and write-boundary assertions.",
+    "Native ARM64 PostgreSQL managed registration/replay/decommission integration passed with the real persisted row projected into the inventory contract.",
+    "Shared, backend-host and frontend-host builds, application typechecks, package version discipline, plugin API compatibility and documentation boundary checks passed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.4",
+      "newVersion": "0.28.5",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.5",
+      "newVersion": "0.23.6",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.7",
+      "newVersion": "0.20.8",
+      "impact": "patch"
+    }
+  ]
+}
