@@ -97,6 +97,13 @@ test('an explicit dispatch binds one release identity and a multi-PR batch', () 
   assert.equal(result.sourceRef, sha)
 })
 
+test('unsigned identity recovery requires an explicit publication and a closed original run number',()=>{
+  assert.equal(resolveReleasePublication({...publicationContext,inputs:{...approvedInputs,identity_signature_recovery_run:'123'}}).shouldPublish,true)
+  for(const value of ['-1','0','123/zip','1\n2','x'.repeat(100)])
+    assert.throws(()=>resolveReleasePublication({...publicationContext,inputs:{...approvedInputs,identity_signature_recovery_run:value}}))
+  assert.throws(()=>resolveReleasePublication({...publicationContext,inputs:{identity_signature_recovery_run:'123'}}))
+})
+
 test('an unpublished reserved version can prepare a replacement only through an explicit protected dispatch', () => {
   const inputs={publish_release:false,prepare_replacement:true,source_ref:sha,release_tag:'v0.30.0',release_pr:'900'}
   const result=resolveReleasePublication({...publicationContext,commitMessage:'fix: patch candidate content',inputs})
