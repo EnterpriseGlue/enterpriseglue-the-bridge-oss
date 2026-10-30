@@ -25,6 +25,10 @@ export function resolveReleasePublication({ eventName, ref, sha, sourceSha = sha
   const requested = inputs.publish_release
   requireValue([undefined, '', false, true, 'false', 'true'].includes(requested), 'publish_release must be a boolean.')
   const publish = requested === true || requested === 'true'
+  if (inputs.identity_signature_recovery_run) {
+    requireValue(publish && /^[1-9][0-9]{0,19}$/.test(inputs.identity_signature_recovery_run),
+      'Identity signature recovery requires an explicit publication and original run number.')
+  }
   const replacing = inputs.prepare_replacement === true || inputs.prepare_replacement === 'true'
   requireValue([undefined, '', false, true, 'false', 'true'].includes(inputs.prepare_replacement), 'prepare_replacement must be a boolean.')
   requireValue(!(publish && replacing), 'Replacement preparation and publication are separate operations.')

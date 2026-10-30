@@ -7,6 +7,11 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${1:-}"
 record="${2:-}"
 phase="${3:-result}"
+recovery_record="${4:-}"
+[[ $# -le 4 ]]
+if [[ -n "$recovery_record" ]]; then
+  [[ "$mode" == save && "$phase" == pre-tag ]]
+fi
 repository="${EG_PUBLICATION_REPOSITORY:-ghcr.io/enterpriseglue/enterpriseglue-oss-release-publication}"
 identity_prefix="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
 identity_prefix="${identity_prefix//./\\.}"
@@ -18,6 +23,9 @@ if [[ "$repository" != ghcr.io/enterpriseglue/enterpriseglue-oss-release-publica
   identity_pattern="^$identity_prefix/\\.github/workflows/release-canary\\.yml@refs/heads/.*$"
 else
   [[ "$GITHUB_REF" == refs/heads/main ]]
+  if [[ -n "$recovery_record" ]]; then
+    [[ "$GITHUB_WORKFLOW" == 'Release Please' && "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+  fi
 fi
 resolve_existing() {
   local reference="$1" error_file result
@@ -65,11 +73,27 @@ elif [[ "$mode" == save ]]; then
   tag="identity-sha-$source_ref"
   digest="$(resolve_existing "$repository:$tag")"
   if [[ -n "$digest" ]]; then
-    verify_subject "$repository@$digest"
     mkdir -p "$work/existing"
-    oras pull "$repository@$digest" --output "$work/existing" >&2
+    if verify_subject "$repository@$digest" 2>"$work/verify-error"; then
+      oras pull "$repository@$digest" --output "$work/existing" >&2
+    else
+      # Only an explicitly authenticated original GitHub-run artifact may supply
+      # the expected bytes. An unsigned registry body or matching hash alone is
+      # never authority. Unknown, invalid-signature and transport errors stop.
+      [[ -n "$recovery_record" ]]
+      grep -Eq '^Error: no signatures found( for image)?' "$work/verify-error"
+      oras manifest fetch "$repository@$digest" > "$work/unsigned-manifest.json"
+      node "$root/scripts/release-publication-signature-recovery.mjs" verify-manifest "$work/unsigned-manifest.json" "$recovery_record"
+      oras pull "$repository@$digest" --output "$work/existing" >&2
+      cmp "$recovery_record" "$work/existing/publication.json"
+      node "$root/scripts/release-publication-record.mjs" compare --existing "$recovery_record" --proposed "$record"
+      [[ "$(oras resolve "$repository:$tag")" == "$digest" ]]
+      cosign sign --yes --registry-referrers-mode=oci-1-1 "$repository@$digest" >&2
+      verify_subject "$repository@$digest"
+    fi
     node "$root/scripts/release-publication-record.mjs" compare --existing "$work/existing/publication.json" --proposed "$record"
   else
+    [[ -z "$recovery_record" ]]
     # The identity is write-once. Observation attempts have separate immutable tags.
     (cd "$work" && oras push "$repository:$tag" --artifact-type application/vnd.enterpriseglue.release-publication.v1 \
       publication.json:application/vnd.enterpriseglue.release-publication.v1+json >&2)

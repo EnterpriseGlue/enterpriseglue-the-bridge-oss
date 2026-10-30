@@ -1,6 +1,12 @@
 {
   "$schema": "./schema.json",
   "schemaVersion": 1,
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "EnterpriseGlue release engineering",
+    "pages": [],
+    "reason": "This publication-control repair changes the protected operator workflow and technical runbook; customer product behavior and administration remain unchanged."
+  },
   "id": "resumable-release-publication",
   "type": "fix",
   "scope": "release-authorization",
@@ -22,6 +28,7 @@
     ]
   },
   "configuration": [
+    "An explicit identity_signature_recovery_run may recover an unsigned pre-tag identity only from the original failed protected run's authenticated artifact; it preserves the frozen release and separately reviewed recovery_prs.",
     "Explicit release dispatch retains source_ref, release_tag, release_pr and required_prs; optional recovery_prs lists every reviewed publication-only repair after the frozen source.",
     "Signed publication identities and append-only observations are stored in enterpriseglue-oss-release-publication on GHCR.",
     "Release Publication Reconcile automatically observes publisher completion. Manual resume=true renews approval and security acceptance before dispatching only incomplete publishers.",
@@ -41,6 +48,7 @@
     ]
   },
   "security": [
+    "Unsigned identity repair compares every original record byte after authenticating GitHub artifact custody, independently reconstructs the approved candidate identity, requires absent GitHub release/tag and fresh exact-image security, and verifies the real new signature without replacing the identity tag or bypassing transparency logging.",
     "Automatic events remain non-publishing. Frozen batch ancestry, generated-document and managed-comment equality, exact candidate signatures and immutable payload hashes remain mandatory.",
     "Recovery requires explicit first-party repair PRs and a strict path allowlist. Application sources, dependency locks, package manifests, Dockerfiles, charts, migrations, scanner policy and unknown paths cannot qualify as publication-only repairs.",
     "Fresh scans cover all five exact image roles on AMD64 and ARM64 under the pinned scanner and unchanged severity/ignore policy, with current vulnerability database metadata and hashed reports.",

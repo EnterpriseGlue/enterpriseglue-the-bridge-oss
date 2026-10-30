@@ -9,6 +9,8 @@ import { observePublication, resumePublication } from './lib/release-publication
 import { reconcileHistoricalReleaseLabels, reservedVersionCommitOverride, prepareReplacementMetadata } from './release-publication-labels.mjs'
 import { createSecurityProof, SECURITY_ROLES, validateSecurityProof } from './lib/release-publication-security.mjs'
 import { productionObservers } from './release-publication-observe.mjs'
+import { createHash } from 'node:crypto'
+import { verifyFailedIdentityArtifact, readIdentityArchive, verifyUnsignedIdentityManifest } from './release-publication-signature-recovery.mjs'
 
 export function recordFixture() {
   const source = 'a'.repeat(40)
@@ -29,6 +31,151 @@ export function recordFixture() {
 
 const passing = () => ({status: 'verified'})
 const adapters = changes => ({ release: passing, oci: passing, package: passing, distribution: passing, workflow: passing, ...changes })
+
+function identityRecoveryFixture() {
+  const {candidate, authorization: old} = recordFixture()
+  const authorization = {schemaVersion:1,...old,controlRef:candidate.sourceRevision,recoveryPRs:[],workflowRun:'123',publicationPerformed:false}
+  const original = createPublicationRecord({authorization,candidate,candidateRef:`ghcr.io/enterpriseglue/enterpriseglue-oss-release-candidate@sha256:${'f'.repeat(64)}`})
+  const security = {schemaVersion:'enterpriseglue-release-publication-security/v1',status:'passed',sourceRef:candidate.sourceRevision,
+    scanner:'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+    ignorePolicySha256:'e'.repeat(64),database:{UpdatedAt:new Date(Date.now()-1000).toISOString(),NextUpdate:new Date(Date.now()+86400000).toISOString()},
+    reports:SECURITY_ROLES.flatMap(role=>['amd64','arm64'].map(arch=>({role,platform:`linux/${arch}`,subject:candidate.subjects[role].subject,sha256:'e'.repeat(64)})))}
+  original.security=security
+  const documents=Object.fromEntries(Object.entries({'authorization.json':authorization,'publication.json':original,'security/security.json':security})
+    .map(([name,value])=>[name,JSON.stringify(value,null,2)+'\n']))
+  const archive=Buffer.from('authenticated GitHub archive fixture')
+  const run={id:123,status:'completed',conclusion:'failure',event:'workflow_dispatch',path:'.github/workflows/release-please.yml',head_branch:'main',
+    head_sha:candidate.sourceRevision,head_repository:{full_name:'EnterpriseGlue/enterpriseglue-the-bridge-oss'},actor:{login:authorization.requestedBy}}
+  const steps=[['Resolve release preparation or explicitly approved publication','success'],['Verify signed candidate before tag creation','success'],
+    ['Refresh security evidence for the exact frozen images','success'],['Persist the signed publication identity before creating any tag','failure'],
+    ['Run Release Please','skipped'],['Retain batch publication authorization','success']].map(([name,conclusion])=>({name,conclusion}))
+  return {candidate,documents,archive,proposed:structuredClone(original),run,jobs:[{run_id:123,name:'release-please',head_sha:run.head_sha,conclusion:'failure',steps}],
+    artifact:{name:'release-publication-authorization-123',expired:false,workflow_run:{id:123,head_sha:run.head_sha},size_in_bytes:archive.length,
+      digest:`sha256:${createHash('sha256').update(archive).digest('hex')}`}}
+}
+
+test('original unsigned identity bytes require authenticated failed-run custody and a freshly approved identical publication',()=>{
+  const f=identityRecoveryFixture()
+  assert.deepEqual(verifyFailedIdentityArtifact(f),Buffer.from(f.documents['publication.json']))
+})
+
+for(const [name,mutate] of [
+  ['wrong workflow',f=>{f.run.path='.github/workflows/other.yml'}],
+  ['automatic event',f=>{f.run.event='push'}],
+  ['unprotected branch',f=>{f.run.head_branch='feature'}],
+  ['foreign job run',f=>{f.jobs[0].run_id=124}],
+  ['fork',f=>{f.run.head_repository.full_name='outsider/repository'}],
+  ['wrong source',f=>{f.run.head_sha='b'.repeat(40)}],
+  ['incomplete run',f=>{f.run.status='in_progress'}],
+  ['successful run',f=>{f.run.conclusion='success'}],
+  ['duplicate jobs',f=>{f.jobs.push(f.jobs[0])}],
+  ['missing security acceptance',f=>{f.jobs[0].steps[2].conclusion='failure'}],
+  ['tag step ran',f=>{f.jobs[0].steps[4].conclusion='success'}],
+  ['unretained authority',f=>{f.jobs[0].steps[5].conclusion='failure'}],
+  ['foreign artifact',f=>{f.artifact.name='other'}],
+  ['expired artifact',f=>{f.artifact.expired=true}],
+  ['foreign artifact run',f=>{f.artifact.workflow_run.id=124}],
+  ['size drift',f=>{f.artifact.size_in_bytes++}],
+  ['archive digest drift',f=>{f.archive[0]^=1}],
+  ['missing digest',f=>{delete f.artifact.digest}],
+  ['expired fresh security',f=>{f.proposed.security.database.NextUpdate='2000-01-01T00:00:00Z'}],
+  ['unknown original field',f=>{const r=JSON.parse(f.documents['publication.json']);r.authorized=true;f.documents['publication.json']=JSON.stringify(r)}],
+  ['fabricated observation',f=>{const r=JSON.parse(f.documents['publication.json']);r.observations=[{name:'fake',status:'verified'}];f.documents['publication.json']=JSON.stringify(r)}],
+  ['authority run drift',f=>{const a=JSON.parse(f.documents['authorization.json']);a.workflowRun='124';f.documents['authorization.json']=JSON.stringify(a)}],
+  ['authority actor drift',f=>{const a=JSON.parse(f.documents['authorization.json']);a.requestedBy='foreign';f.documents['authorization.json']=JSON.stringify(a)}],
+  ['retargeted candidate',f=>{f.proposed.identity.candidateRef=f.proposed.identity.candidateRef.replace(/f/g,'a');f.proposed.identityHash=identityHash(f.proposed.identity)}],
+]) test(`unsigned identity recovery rejects ${name}`,()=>{
+  const f=identityRecoveryFixture();mutate(f);assert.throws(()=>verifyFailedIdentityArtifact(f))
+})
+
+test('original custody ZIP reader accepts exact files and rejects duplicate, linked and escaping members',()=>{
+  const f=identityRecoveryFixture()
+  const zip=kind=>spawnSync('python3',['-c',`import io,sys,json,zipfile
+b=io.BytesIO()
+with zipfile.ZipFile(b,'w') as z:
+ for n,v in json.load(sys.stdin).items(): z.writestr(n,v)
+ if sys.argv[1]=='duplicate': z.writestr('publication.json','{}')
+ if sys.argv[1]=='escape': z.writestr('../escape','{}')
+ if sys.argv[1]=='link':
+  i=zipfile.ZipInfo('link');i.external_attr=0o120777<<16;z.writestr(i,'publication.json')
+sys.stdout.buffer.write(b.getvalue())`,kind],{input:JSON.stringify(f.documents),maxBuffer:1024*1024}).stdout
+  assert.deepEqual(readIdentityArchive(zip('valid')),f.documents)
+  for(const kind of ['duplicate','escape','link'])assert.throws(()=>readIdentityArchive(zip(kind)))
+})
+
+test('production store repairs only exact authenticated bytes on a genuine missing-signature response and never retries uncertain signing',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'eg-identity-signature-'))
+  try {
+    const bin=join(directory,'bin');mkdirSync(bin)
+    for(const command of ['bash','dirname','mktemp','rm','cat','grep','jq','cp','mv','mkdir','cmp']){
+      const p=spawnSync('sh',['-c',`command -v ${command}`],{encoding:'utf8'});assert.equal(p.status,0);symlinkSync(p.stdout.trim(),join(bin,command))
+    }
+    symlinkSync(process.execPath,join(bin,'node'))
+    writeFileSync(join(bin,'oras'),`#!/bin/bash
+set -euo pipefail
+if [[ "$1" == resolve ]]; then
+ if [[ "$2" == *:attempt-* && ! -f "$FIXTURE_STATE/attempt" ]]; then
+  printf 'Error response from registry: failed to resolve digest: %s: not found\\n' "$2" >&2;exit 1
+ fi
+ printf 'sha256:%064d\\n' 0
+elif [[ "$1" == manifest ]]; then cat "$FIXTURE_STATE/manifest.json"
+elif [[ "$1" == pull ]]; then cp "$FIXTURE_STATE/original.json" "$4/publication.json"
+elif [[ "$1" == push ]]; then : > "$FIXTURE_STATE/attempt"
+else exit 93
+fi
+`,{mode:0o755})
+    writeFileSync(join(bin,'cosign'),`#!/bin/bash
+set -euo pipefail
+if [[ "$1" == verify && ! -f "$FIXTURE_STATE/signed" ]]; then printf '%s\\n' "$FIXTURE_ERROR" >&2;exit 10;fi
+if [[ "$1" == sign ]]; then
+ printf 'sign\\n' >> "$FIXTURE_STATE/sign-calls"
+ : > "$FIXTURE_STATE/signed"
+ [[ "$FIXTURE_SIGN_FAILURE" == false ]]
+fi
+`,{mode:0o755})
+    const {record}=recordFixture();record.canary={fixture:true,publicationPerformed:false}
+    const proposed=join(directory,'proposed.json'),original=join(directory,'original.json'),expected=join(directory,'expected.json')
+    const bytes=JSON.stringify(record);writeFileSync(proposed,bytes);writeFileSync(original,bytes)
+    writeFileSync(join(directory,'manifest.json'),JSON.stringify(unsignedManifest(Buffer.from(bytes))))
+    const run=({error='Error: no signatures found',expectedBytes=bytes,recovery=true,signFailure=false}={})=>{
+      for(const file of ['attempt','signed','sign-calls'])rmSync(join(directory,file),{force:true})
+      writeFileSync(expected,expectedBytes)
+      const result=spawnSync('/bin/bash',['scripts/release-publication-record-store.sh','save',proposed,'pre-tag',...(recovery?[expected]:[])],{
+        env:{PATH:bin,FIXTURE_STATE:directory,FIXTURE_ERROR:error,FIXTURE_SIGN_FAILURE:String(signFailure),GITHUB_SERVER_URL:'https://github.com',
+          GITHUB_REPOSITORY:'EnterpriseGlue/enterpriseglue-the-bridge-oss',GITHUB_WORKFLOW:'Release Canary',GITHUB_REF:'refs/heads/fixture',
+          GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',EG_PUBLICATION_CANARY:'true',EG_PUBLICATION_REPOSITORY:'ghcr.io/enterpriseglue/enterpriseglue-release-canary-publication'},encoding:'utf8'})
+      const calls=spawnSync('cat',[join(directory,'sign-calls')],{encoding:'utf8'})
+      return {result,signs:calls.status===0?calls.stdout.trim().split('\n').length:0}
+    }
+    const ok=run();assert.equal(ok.result.status,0,ok.result.stderr);assert.equal(ok.signs,2)
+    for(const options of [{recovery:false},{expectedBytes:bytes+'\n'},
+      {error:'Error: no matching signatures: invalid certificate'},{error:'Error: registry transport timeout'},
+      {error:'Error: invalid signature'},{error:'Error: unauthorized: no signatures found'}]){
+      const rejected=run(options);assert.notEqual(rejected.result.status,0);assert.equal(rejected.signs,0)
+    }
+    const lost=run({signFailure:true});assert.notEqual(lost.result.status,0);assert.equal(lost.signs,1)
+  }finally{rmSync(directory,{recursive:true,force:true})}
+})
+
+function unsignedManifest(bytes) {
+  return {schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',artifactType:'application/vnd.enterpriseglue.release-publication.v1',
+    config:{mediaType:'application/vnd.oci.empty.v1+json',digest:'sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a',size:2,data:'e30='},
+    layers:[{mediaType:'application/vnd.enterpriseglue.release-publication.v1+json',digest:`sha256:${createHash('sha256').update(bytes).digest('hex')}`,size:bytes.length,
+      annotations:{'org.opencontainers.image.title':'publication.json'}}],annotations:{'org.opencontainers.image.created':'2026-10-30T15:52:10Z'}}
+}
+
+test('unsigned identity signing rejects extra OCI content, aliases and duplicate metadata before any layer download',()=>{
+  const bytes=Buffer.from(identityRecoveryFixture().documents['publication.json'])
+  const original=unsignedManifest(bytes)
+  assert.doesNotThrow(()=>verifyUnsignedIdentityManifest(Buffer.from(JSON.stringify(original)),bytes))
+  for(const mutate of [m=>{m.layers.push(m.layers[0])},m=>{m.layers[0].size++},m=>{m.layers[0].digest='sha256:'+'0'.repeat(64)},
+    m=>{m.layers[0].annotations['org.opencontainers.image.title']='../publication.json'},m=>{m.layers[0].urls=['https://other.example/file']},
+    m=>{m.config.data='untrusted'},m=>{m.subject={digest:'sha256:'+'1'.repeat(64)}},m=>{m.annotations.extra='untrusted'}]){
+    const changed=structuredClone(original);mutate(changed)
+    assert.throws(()=>verifyUnsignedIdentityManifest(Buffer.from(JSON.stringify(changed)),bytes))
+  }
+  assert.throws(()=>verifyUnsignedIdentityManifest(Buffer.from(JSON.stringify(original).replace('"schemaVersion":2','"schemaVersion":1,"schemaVersion":2')),bytes))
+})
 
 const ordinaryPull = () => ({number: 571, title: 'fix(release): make publication resumable', body: 'Reviewed code and validation.\n',
   head: {ref: 'fix/publication', repo: {full_name: 'EnterpriseGlue/enterpriseglue-the-bridge-oss'}}})
@@ -456,7 +603,9 @@ test('publication retention selects all authority/security evidence without trav
     const block=step.match(/          path: \|\n((?:            [^\n]+\n)+)/)
     assert.ok(block,`${file}: evidence must use an explicit path inventory`)
     const paths=block[1].trim().split('\n').map(line=>line.trim())
-    assert.deepEqual(paths,expected)
+    const required=[...expected]
+    if(file==='release-please.yml')required.splice(required.indexOf(prefix+'identity/publication.json')+1,0,prefix+'identity-recovery/publication.json')
+    assert.deepEqual(paths,required)
     assert.ok(!paths.some(path=>path.includes('cache')||path.includes('*')||path===prefix.slice(0,-1)||path===prefix+'security'))
     assert.match(step,/if-no-files-found: error/)
   }

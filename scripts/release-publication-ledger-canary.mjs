@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createPublicationRecord, identityHash } from './lib/release-publication-record.mjs'
@@ -28,6 +29,23 @@ mkdirSync(directory,{recursive:true})
 const file=join(directory,'publication.json')
 writeFileSync(file,JSON.stringify(record,null,2)+'\n')
 const save=phase=>execFileSync('bash',['scripts/release-publication-record-store.sh','save',file,phase],{encoding:'utf8',timeout:180000})
+// Create a distinct, deliberately unsigned scratch identity, then exercise the
+// production exact-byte signature repair. It never touches a semantic tag.
+const orphan=structuredClone(record)
+orphan.identity.sourceRef=createHash('sha1').update(`${source}:${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT}:unsigned`).digest('hex')
+orphan.identityHash=identityHash(orphan.identity)
+const orphanDirectory=join(directory,'unsigned')
+mkdirSync(orphanDirectory,{recursive:true})
+const orphanFile=join(orphanDirectory,'publication.json')
+writeFileSync(orphanFile,JSON.stringify(orphan,null,2)+'\n')
+const orphanTag=`${process.env.EG_PUBLICATION_REPOSITORY}:identity-sha-${orphan.identity.sourceRef}`
+execFileSync('oras',['push',orphanTag,'--artifact-type','application/vnd.enterpriseglue.release-publication.v1',
+  'publication.json:application/vnd.enterpriseglue.release-publication.v1+json'],{cwd:orphanDirectory,timeout:180000})
+const unsignedDigest=execFileSync('oras',['resolve',orphanTag],{encoding:'utf8'}).trim()
+const refusal=spawnSync('bash',['scripts/release-publication-record-store.sh','save',orphanFile,'pre-tag'],{encoding:'utf8',timeout:180000})
+assert.notEqual(refusal.status,0,'Unsigned registry data cannot authorize its own repair.')
+execFileSync('bash',['scripts/release-publication-record-store.sh','save',orphanFile,'pre-tag',orphanFile],{timeout:180000})
+assert.equal(execFileSync('oras',['resolve',orphanTag],{encoding:'utf8'}).trim(),unsignedDigest,'Signature repair must not replace the identity.')
 const first=save('first').trim()
 assert.equal(save('first').trim(),first,'An identical attempt must reuse the same immutable digest.')
 const repository=process.env.EG_PUBLICATION_REPOSITORY
@@ -47,5 +65,6 @@ assert.equal(JSON.parse(readFileSync(join(loaded,'publication.json'),'utf8')).id
 writeFileSync(join(directory,'receipt.json'),JSON.stringify({kind:'release-publication-ledger-canary',sourceRevision:source,
   signedScratchRecord:first,immutableIdentity:`${repository}@${before}`,fixtureApi:true,signedCandidateAccepted:false,
   duplicateAttemptReused:true,identityConflictRejected:true,immutableRepullVerified:true,publicationPerformed:false,
+  unsignedRefusedWithoutCustody:true,exactByteSignatureRepairVerified:true,unsignedIdentityDigestUnchanged:true,
   productionTagsWritten:false,productionAliasesChanged:false,packagePublicationPerformed:false},null,2)+'\n')
 console.log('[release-publication-ledger-canary] signed scratch identity, duplicate reuse, conflict rejection and repull passed; production publication=false.')

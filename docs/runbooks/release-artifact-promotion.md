@@ -249,6 +249,26 @@ queue/runtime/cancellation metrics, see
 
 ## Frozen publication identity and resumable recovery
 
+If a pre-tag run uploaded its immutable identity but signing failed, ordinary
+publication refuses the unsigned record. An explicit publication dispatch may
+set `identity_signature_recovery_run` to the original failed run number, while
+preserving the frozen source, candidate, document and approved PR batch. The
+protected workflow authenticates that run's exact path, owning repository,
+source and step outcomes, verifies its retained GitHub artifact digest, and
+reconstructs the approved record from its authority and candidate inputs.
+Both the Git tag and GitHub release must still be absent. Current exact-image
+security and the usual publication approval remain mandatory.
+
+Only a genuine missing-signature response permits one signing attempt. The
+registry record must match every authenticated original byte before signing;
+its identity must also match the freshly approved proposal. Registry errors,
+invalid signatures, artifact drift and changed destinations stop the operation.
+The identity tag is never rewritten, transparency logging stays enabled, and
+the newly attached signature must independently verify before tag creation.
+The scratch publication-ledger canary exercises this path without public tags,
+package publication or production aliases. Publication-only source repairs
+still require the reviewed `recovery_prs` list.
+
 The release source and publication workflow revision are distinct. The release
 source remains the qualified merge-group/release-PR commit; its batch,
 versioned document, changelog, candidate digest, tarballs and charts are frozen.

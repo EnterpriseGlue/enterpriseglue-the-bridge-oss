@@ -36,8 +36,13 @@ on:
         description: JSON array of merged code PR numbers included in the approved batch.
         type: string
         default: ''
+      identity_signature_recovery_run:
+        description: Original failed pre-tag publication run whose authenticated artifact must match the unsigned identity exactly.
+        type: string
+        default: ''
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
   issues: write
@@ -163,6 +168,8 @@ jobs:
           DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IDENTITY_RECOVERY_RUN: ${{ inputs.identity_signature_recovery_run }}
         run: |
           set -euo pipefail
           namespace=''
@@ -172,7 +179,13 @@ jobs:
             --artifacts "$RUNNER_TEMP/release-candidate" --candidate-ref "$CANDIDATE_REF" \
             --security .artifacts/release-publication/security/security.json \
             --dockerhub-namespace "$namespace" --output .artifacts/release-publication/publication.json
-          bash scripts/release-publication-record-store.sh save .artifacts/release-publication/publication.json pre-tag
+          recovery_record=''
+          if [[ -n "$IDENTITY_RECOVERY_RUN" ]]; then
+            recovery_record=.artifacts/release-publication/identity-recovery/publication.json
+            node scripts/release-publication-signature-recovery.mjs "$IDENTITY_RECOVERY_RUN" \
+              .artifacts/release-publication/publication.json "$RUNNER_TEMP/release-candidate" "$recovery_record"
+          fi
+          bash scripts/release-publication-record-store.sh save .artifacts/release-publication/publication.json pre-tag "$recovery_record"
 
       - name: Reconcile superseded pending labels against the previous published baseline
         if: steps.publication.outputs.is_release == 'true'
@@ -376,6 +389,7 @@ jobs:
             .artifacts/release-publication/replacement.json
             .artifacts/release-publication/recovery.json
             .artifacts/release-publication/identity/publication.json
+            .artifacts/release-publication/identity-recovery/publication.json
             .artifacts/release-publication/security/security.json
             .artifacts/release-publication/security/vulnerability-database.json
             .artifacts/release-publication/security/backend-amd64.json
