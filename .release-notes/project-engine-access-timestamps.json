@@ -9,7 +9,7 @@
     "operators",
     "developers"
   ],
-  "summary": "Restore project deployment options with PostgreSQL BIGINT timestamps and preserve native JSON variable contents across runtime, task and history reads.",
+  "summary": "Restore project deployment options and native JSON variable editing, and update filesystem matching dependencies to their patched releases.",
   "userImpact": [
     "Pending engine access requests no longer prevent a project's active deployment targets from loading.",
     "Mission Control displays native JSON content correctly and serializes JSON edits without losing their value type."
@@ -37,11 +37,13 @@
   },
   "security": [
     "Project and engine authorization, tenant filtering and deployment eligibility are unchanged.",
-    "Variable-value permissions and PII redaction still run on normalized values; malformed JSON returns a sanitized error."
+    "Variable-value permissions and PII redaction still run on normalized values; malformed JSON returns a sanitized error.",
+    "Pin glob 14.0.2 and minimatch 11.0.1 in the application and frozen-bootstrap workspace closure for CVE-2026-118773 and CVE-2026-118764; no advisory suppression or severity changes."
   ],
   "documentation": [
     "docs/reference/engine-tenancy-data-model.md",
-    "docs/development/mission-control-engine-selection.md"
+    "docs/development/mission-control-engine-selection.md",
+    "docs/runbooks/security-dependency-updates.md"
   ],
   "customerDocumentation": {
     "impact": "none",
@@ -49,7 +51,9 @@
     "pages": [],
     "reason": "Restores existing deployment options without changing user configuration or administration procedures."
   },
-  "knownLimitations": [],
+  "knownLimitations": [
+    "Standalone npm consumers must reproduce the glob/minimatch root overrides and qualify their installed tree; pnpm workspace overrides are not propagated by published package manifests."
+  ],
   "rollback": [
     "Revert to the previous qualified host composition. Persisted data is unchanged; the earlier timestamp validation failure can recur."
   ],
