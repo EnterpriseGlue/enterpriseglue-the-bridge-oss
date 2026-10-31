@@ -756,6 +756,24 @@ async function decodeBpmnEngineResponse<T>(
   }
 }
 
+function variableResponseShape(path: string): 'map' | 'item' | 'list' | null {
+  if (/^\/(?:history\/)?variable-instance\/count$/.test(path)) return null
+  if (/^\/(?:process-instance|execution|task)\/[^/]+\/(?:variables|localVariables)$/.test(path)) return 'map'
+  if (/^\/(?:process-instance|execution|task)\/[^/]+\/(?:variables|localVariables)\/[^/]+$/.test(path)) return 'item'
+  if (/^\/(?:history\/)?variable-instance$/.test(path) || path === '/history/detail') return 'list'
+  if (/^\/(?:history\/)?variable-instance\/[^/]+$/.test(path)) return 'item'
+  return null
+}
+
+function decodeJsonVariable(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const variable = value as Record<string, unknown>
+  if ((variable.type === 'Json' || variable.variableType === 'Json') && typeof variable.value === 'string') {
+    return { ...variable, value: JSON.parse(variable.value) }
+  }
+  return value
+}
+
 async function camundaGetUsingConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, path: string, params?: Record<string, any>): Promise<T> {
   const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
   if (params) {
@@ -766,6 +784,11 @@ async function camundaGetUsingConnection<T = unknown>(engineId: string, cfg: Eng
     }
   }
   const queryIndex = path.indexOf('?')
+  const variableShape = variableResponseShape(queryIndex >= 0 ? path.slice(0, queryIndex) : path)
+  // A JavaScript client needs the serialized JSON, not a Java/Spin object bean.
+  // Keep this policy at the shared transport so runtime, task and history reads
+  // agree. Decode only native Json values; Java Object payloads stay serialized.
+  if (variableShape) url.searchParams.set('deserializeValues', 'false')
   const requestPath = `${queryIndex >= 0 ? path.slice(0, queryIndex) : path}${url.search}`
   const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
   try {
@@ -775,8 +798,18 @@ async function camundaGetUsingConnection<T = unknown>(engineId: string, cfg: Eng
       throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status, connectionMode: diagnostics.connectionMode })
     }
     const decoded = await decodeBpmnEngineResponse<T>(res, { method: 'GET', path, connectionMode: diagnostics.connectionMode })
+    let result: unknown = decoded
+    try {
+      if (variableShape === 'map' && decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+        result = Object.fromEntries(Object.entries(decoded).map(([name, value]) => [name, decodeJsonVariable(value)])) as T
+      }
+      if (variableShape === 'list' && Array.isArray(decoded)) result = decoded.map(decodeJsonVariable) as T
+      if (variableShape === 'item') result = decodeJsonVariable(decoded) as T
+    } catch {
+      throw new BpmnEngineMalformedResponseError({ method: 'GET', path, connectionMode: diagnostics.connectionMode })
+    }
     await auditBpmnEngineOperation({ engineId, method: 'GET', path, connectionMode: diagnostics.connectionMode })
-    return decoded
+    return result as T
   } catch (error) {
     await auditBpmnEngineOperation({ engineId, method: 'GET', path, connectionMode, error })
     throw error

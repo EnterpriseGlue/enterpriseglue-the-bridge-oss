@@ -23,6 +23,26 @@ shown explicitly rather than leaving an empty runtime shell. This behavior is
 shared by the dashboard, Mission Control overview pages, detail routes, and
 other consumers of `useSelectedEngine`.
 
+## Variable transport
+
+The shared engine client requests `deserializeValues=false` for runtime, task,
+and historic variable reads. Native `Json` values are parsed from their serialized
+JSON representation before response presentation and permission-based redaction.
+The variable editor serializes edited native JSON for engine writes while keeping
+the parsed value in UI state after a successful save.
+Java `Object` values remain serialized; the client does not instantiate engine
+classes. Malformed JSON rejects with a sanitized engine-response error. Other
+engine endpoints retain their existing query parameters and response values.
+This follows the [Operaton REST variable contract](https://docs.operaton.org/docs/documentation/reference/rest/overview/variables/).
+
+The focused real-engine check requires an independently started disposable,
+loopback Operaton fixture and removes only its own deployment:
+
+```bash
+OPERATON_VARIABLE_FIXTURE_URL=http://127.0.0.1:18080/engine-rest \
+  pnpm --dir backend exec vitest run test/qualification/operaton-variable-values.test.ts --config vitest.config.ts
+```
+
 ## Browser coverage
 
 The process-instance smoke test deliberately removes the persisted

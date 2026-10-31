@@ -101,6 +101,15 @@ strategy. Otherwise it is persisted as `unmapped` or `conflict`, with no tenant.
 
 ## Database Portability
 
+`EngineAccessRequest.createdAt`, nullable `EngineAccessRequest.reviewedAt`, and
+`EngineProjectAccess.createdAt` use the shared safe-integer BIGINT transformer.
+Database drivers may return BIGINT columns as decimal strings; repository reads
+convert them to the numeric API contract without changing global driver parsing.
+Malformed or unsafe values reject rather than lose precision. This keeps pending
+requests and access grants readable alongside active project deployment targets.
+The column types, migrations, tenant filtering, and authorization rules are
+unchanged.
+
 `TEN-MODEL-004`: `EngineTenantMapping` is registered in the PostgreSQL, MySQL,
 SQL Server, Oracle, and Spanner adapters. Migration
 `1700000000096-add-engine-tenancy-foundation` uses portable TypeORM table,

@@ -65,6 +65,43 @@ describe('bpmn-engine-client', () => {
     });
   });
 
+  it.each([
+    ['/process-instance/instance-1/variables', { details: { type: 'Json', value: '{"scope":"tenant-a"}' } }, { details: { type: 'Json', value: { scope: 'tenant-a' } } }],
+    ['/execution/execution-1/localVariables', { details: { type: 'Json', value: '[1,true,null]' } }, { details: { type: 'Json', value: [1, true, null] } }],
+    ['/task/task-1/variables', { details: { type: 'Json', value: '"text"' } }, { details: { type: 'Json', value: 'text' } }],
+    ['/process-instance/instance-1/variables/details', { type: 'Json', value: '42' }, { type: 'Json', value: 42 }],
+    ['/history/variable-instance', [{ type: 'Json', value: '{"scope":"tenant-a"}' }], [{ type: 'Json', value: { scope: 'tenant-a' } }]],
+    ['/history/variable-instance/variable-1', { type: 'Json', value: 'null' }, { type: 'Json', value: null }],
+    ['/history/detail', [{ variableType: 'Json', value: 'false' }], [{ variableType: 'Json', value: false }]],
+  ])('reads serialized native JSON values at %s and preserves their JSON type', async (path, wire, expected) => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(wire), { headers: { 'content-type': 'application/json' } }) as any);
+    expect(await camundaGet('engine-1', path as string, { deserializeValues: true, processInstanceId: 'instance-1' })).toEqual(expected);
+    const url = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+    expect(url.searchParams.get('deserializeValues')).toBe('false');
+    expect(url.searchParams.get('processInstanceId')).toBe('instance-1');
+  });
+
+  it('keeps scalar, already decoded JSON, and serialized Java Object values intact', async () => {
+    const wire = { text: { type: 'String', value: '{not-json}' }, count: { type: 'Integer', value: 42 },
+      details: { type: 'Json', value: { scope: 'tenant-a' } }, java: { type: 'Object', value: '{"classData":1}', valueInfo: { objectTypeName: 'java.example.Type' } } };
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(wire), { headers: { 'content-type': 'application/json' } }) as any);
+    expect(await camundaGet('engine-1', '/task/task-1/variables')).toEqual(wire);
+  });
+
+  it('rejects malformed serialized JSON with no variable contents in the error', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ details: { type: 'Json', value: 'private-invalid-json' } }), { headers: { 'content-type': 'application/json' } }) as any);
+    await expect(camundaGet('engine-1', '/process-instance/instance-1/variables')).rejects.toMatchObject({
+      code: 'ENGINE_MALFORMED_RESPONSE', statusCode: 502, message: 'The engine returned a malformed response',
+    });
+  });
+
+  it.each(['/version', '/history/activity-instance', '/history/variable-instance/count'])('does not interpret ordinary response fields at %s as variable values', async (path) => {
+    const wire = { type: 'Json', value: 'not a variable value' };
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(wire), { headers: { 'content-type': 'application/json' } }) as any);
+    expect(await camundaGet('engine-1', path)).toEqual(wire);
+    expect(new URL(String(vi.mocked(fetch).mock.calls[0][0])).searchParams.has('deserializeValues')).toBe(false);
+  });
+
   it('sends EnterpriseGlue request metadata headers for sidecar-compatible reads', async () => {
     await runWithBpmnEngineRequestContext({ requestId: 'req-1' }, async () => {
       updateBpmnEngineRequestContext({

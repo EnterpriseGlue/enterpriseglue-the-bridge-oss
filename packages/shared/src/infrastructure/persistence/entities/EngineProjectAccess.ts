@@ -1,5 +1,6 @@
 import { Entity, Column, Index, Unique } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
+import { bigintNumberTransformer } from '../transformers/bigintNumber.js';
 
 @Entity({ name: 'engine_project_access', schema: 'main' })
 @Unique(['engineId', 'projectId'])
@@ -18,6 +19,6 @@ export class EngineProjectAccess extends AppBaseEntity {
   @Column({ name: 'auto_approved', type: 'boolean', default: false })
   autoApproved!: boolean;
 
-  @Column({ name: 'created_at', type: 'bigint' })
+  @Column({ name: 'created_at', type: 'bigint', transformer: bigintNumberTransformer })
   createdAt!: number;
 }

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "project-engine-access-timestamps",
+  "type": "fix",
+  "scope": "deployments",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers"
+  ],
+  "summary": "Restore project deployment options with PostgreSQL BIGINT timestamps and preserve native JSON variable contents across runtime, task and history reads.",
+  "userImpact": [
+    "Pending engine access requests no longer prevent a project's active deployment targets from loading.",
+    "Mission Control displays native JSON content correctly and serializes JSON edits without losing their value type."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade the qualified host composition; existing access requests and grants need no data repair."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": [
+      "Project engine access timestamps retain their existing numeric response contract.",
+      "Native Json variable values are returned as JSON values; scalar types and serialized Java Object values are preserved."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Existing BIGINT columns are unchanged. Persistence converts their values to safe JavaScript integers and rejects precision loss."
+    ]
+  },
+  "security": [
+    "Project and engine authorization, tenant filtering and deployment eligibility are unchanged.",
+    "Variable-value permissions and PII redaction still run on normalized values; malformed JSON returns a sanitized error."
+  ],
+  "documentation": [
+    "docs/reference/engine-tenancy-data-model.md",
+    "docs/development/mission-control-engine-selection.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "EnterpriseGlue",
+    "pages": [],
+    "reason": "Restores existing deployment options without changing user configuration or administration procedures."
+  },
+  "knownLimitations": [],
+  "rollback": [
+    "Revert to the previous qualified host composition. Persisted data is unchanged; the earlier timestamp validation failure can recur."
+  ],
+  "validation": [
+    "205 affected backend HTTP, schema, access, engine transport, variable visibility and history tests passed.",
+    "27 affected frontend variable-editor and project tests passed, including JSON object, array, string, boolean, number and null writes.",
+    "Five real PostgreSQL 16 persistence cases passed, including unsafe-integer rejection.",
+    "Real pinned Operaton 2.1.0 runtime, task, JSON read/edit and completed-history round trip passed on an emulated amd64 local fixture.",
+    "Shared, backend-host and frontend-host builds, backend typecheck, authorization structure, package-version discipline, ESLint, release-note preflight and documentation checks passed.",
+    "Protected exact-candidate database portability, browser and image qualification remain required before publication."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.6",
+      "newVersion": "0.23.7",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.8",
+      "newVersion": "0.20.9",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.5",
+      "newVersion": "0.28.6",
+      "impact": "patch"
+    }
+  ]
+}

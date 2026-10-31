@@ -94,7 +94,7 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
         }
       }
       await modifyProcessInstanceVariables(instanceId, {
-        modifications: { [editingVarKey]: { value: parsed, type: editingVarType } },
+        modifications: { [editingVarKey]: { value: editingVarType === 'Json' ? JSON.stringify(parsed) : parsed, type: editingVarType } },
         engineId: requestEngineId,
       })
       if (!isCurrentRequest()) return
