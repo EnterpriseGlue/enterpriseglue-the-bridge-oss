@@ -12,7 +12,8 @@
   "summary": "Restore project deployment options and native JSON variable editing, and update filesystem matching dependencies to their patched releases.",
   "userImpact": [
     "Pending engine access requests no longer prevent a project's active deployment targets from loading.",
-    "Mission Control displays native JSON content correctly and serializes JSON edits without losing their value type."
+    "Mission Control displays native JSON content correctly and serializes JSON edits without losing their value type.",
+    "Fresh managed-shard bootstrap creates Git-provider defaults with consistent timestamps, avoiding an intermittent rejection at a millisecond boundary."
   ],
   "upgrade": {
     "required": true,
@@ -32,7 +33,8 @@
     "migrations": [],
     "rollbackSupported": true,
     "notes": [
-      "Existing BIGINT columns are unchanged. Persistence converts their values to safe JavaScript integers and rejects precision loss."
+      "Existing BIGINT columns are unchanged. Persistence converts their values to safe JavaScript integers and rejects precision loss.",
+      "Fresh-bootstrap Git-provider defaults use one creation/update timestamp and one atomic insert; existing databases need no repair or bootstrap rerun. Frozen predecessor, migrations, seed profile and strict validation remain unchanged."
     ]
   },
   "security": [

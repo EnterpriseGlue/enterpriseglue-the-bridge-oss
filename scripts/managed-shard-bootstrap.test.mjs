@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { seedExactGitProviders } from './managed-shard-bootstrap.mjs'
 
 import {
   assertBootstrapEnabled,
@@ -61,6 +62,42 @@ test('bootstrap requires an explicit pooled-PostgreSQL controller invocation', (
   assert.doesNotThrow(() => assertBootstrapEnabled(enabledEnvironment(), manifest))
 })
 
+test('fresh Git provider seeds retain exact defaults and equal timestamps when the clock advances', async (context) => {
+  let clock = 1700000000000
+  const now = context.mock.method(Date, 'now', () => ++clock)
+  const writes = []
+  const source = { getRepository(name) {
+    assert.equal(name, 'GitProvider')
+    return { count: async () => 0, insert: async (rows) => writes.push(rows) }
+  } }
+  try {
+    await seedExactGitProviders(source, manifest)
+    assert.equal(now.mock.callCount(), 1)
+    assert.equal(writes.length, 1, 'all defaults must use one atomic insert')
+    const rows = writes[0]
+    assert.equal(rows.length, 4)
+    assert.equal(new Set(rows.map(row => row.id)).size, 4)
+    for (const row of rows) {
+      assert.match(row.id, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/)
+      assert.equal(row.createdAt, 1700000000001)
+      assert.equal(row.updatedAt, row.createdAt)
+    }
+    assert.deepEqual(rows.map(({ id, createdAt, updatedAt, ...defaults }) => defaults), manifest.postcondition.gitProviders)
+  } finally {
+    now.mock.restore()
+  }
+})
+
+test('fresh Git provider seeding refuses existing rows and an invalid clock before writing', async (context) => {
+  let writes = 0
+  const source = (count) => ({ getRepository: () => ({ count: async () => count, insert: async () => { writes++ } }) })
+  await assert.rejects(seedExactGitProviders(source(1), manifest), /requires an empty relation/)
+  const now = context.mock.method(Date, 'now', () => Number.NaN)
+  try { await assert.rejects(seedExactGitProviders(source(0), manifest), /clock is invalid/) }
+  finally { now.mock.restore() }
+  assert.equal(writes, 0)
+})
+
 test('classifier accepts only a pristine schema or the exact signed ledger', () => {
   assert.equal(classifyStartingState({ schemaExists: false }, manifest), 'pristine-schema')
   assert.equal(classifyStartingState({ schemaExists: true, ledgerExists: false, ledger: [], relations: [], policies: [] }, manifest), 'pristine-schema')
@@ -114,6 +151,8 @@ test('runner never invokes TypeORM synchronize and executes only the signed sche
   assert.match(runner, /canonicalJson\(auditResourceIds\) !== canonicalJson\(membershipIds\)/)
   assert.match(runner, /Managed shard ordinary business relation is not empty/)
   assert.match(runner, /Managed shard direct column privileges are forbidden/)
+  assert.match(runner, /Number\(row\.updatedAt\) !== Number\(row\.createdAt\)/)
+  assert.doesNotMatch(runner, /gitProvidersModule\.seedGitProviders|relocateGitProvidersToDefaultTenant/)
   assert.match(dockerfile, /^FROM ghcr\.io\/enterpriseglue\/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9/m)
   const upgradedPackages = dockerfile.match(/^RUN apk add --no-cache --upgrade \\\n((?:[ \t]+[^\n]*\\\n)*[ \t]+[^\n]*)(?:\n|$)/m)?.[1]
   assert.deepEqual(upgradedPackages?.split(/\\\n/).map((line) => line.trim()), [

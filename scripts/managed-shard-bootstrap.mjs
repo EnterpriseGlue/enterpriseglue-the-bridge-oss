@@ -2,6 +2,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import process from 'node:process'
 import {
@@ -370,12 +371,16 @@ async function assertOwnerAndRuntimeGrants(runner, snapshot, schema, ledgerName,
   if (canonicalJson(defaults) !== canonicalJson(expectedDefaults)) throw new Error(`Managed shard runtime default privileges drifted (${canonicalJson(defaults)})`)
 }
 
-async function relocateGitProvidersToDefaultTenant(dataSource, tenantId) {
+async function seedExactGitProviders(dataSource, manifest) {
+  // The frozen predecessor reads Date.now() independently for createdAt and
+  // updatedAt. Construct the signed defaults here so the strict timestamp
+  // equality invariant holds even when the clock advances during construction.
+  const defaults = manifest.postcondition.gitProviders.map((provider) => ({ ...provider }))
   const repo = dataSource.getRepository('GitProvider')
-  const providers = await repo.find()
-  for (const provider of providers) {
-    if (provider.tenantId !== tenantId) await repo.save({ ...provider, tenantId })
-  }
+  if (await repo.count() !== 0) throw new Error('Managed shard Git provider seeding requires an empty relation')
+  const timestamp = Date.now()
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) throw new Error('Managed shard seed clock is invalid')
+  await repo.insert(defaults.map((provider) => ({ ...provider, id: randomUUID(), createdAt: timestamp, updatedAt: timestamp })))
 }
 
 async function applySignedSchemaPlan(dataSource, runner, manifest, MigrationExecutor) {
@@ -417,7 +422,6 @@ async function main() {
   const dataSourceModule = await import(`${sharedRoot}/db/data-source.js`)
   const migrationsModule = await import(`${sharedRoot}/db/run-migrations.js`)
   const bootstrapModule = await import(`${sharedRoot}/db/bootstrap.js`)
-  const gitProvidersModule = await import(`${sharedRoot}/db/seed/gitProviders.js`)
   const environmentTagsModule = await import(`${sharedRoot}/services/platform-admin/EnvironmentTagService.js`)
   const permissionsModule = await import(`${sharedRoot}/services/platform-admin/permissions.js`)
   const passwordModule = await import(`${sharedRoot}/utils/password.js`)
@@ -458,8 +462,7 @@ async function main() {
       assertMigrationInventory('Executed ledger', executed, manifest.predecessor.migrationInventory)
       await migrationsModule.seedInitialData()
       await bootstrapModule.bootstrapAdmin()
-      await gitProvidersModule.seedGitProviders()
-      await relocateGitProvidersToDefaultTenant(source, manifest.postcondition.defaultTenant.id)
+      await seedExactGitProviders(source, manifest)
       await environmentTagsModule.environmentTagService.seedDefaults()
       await grantsModule.refreshPostgresRuntimeGrants(runner, process.env.EG_POSTGRES_RUNTIME_ROLE)
       snapshot = await readSnapshot(runner, schema, ledgerName)
@@ -497,4 +500,4 @@ if (import.meta.url === `file://${process.argv[1]}`) main().catch((error) => {
   process.exitCode = 1
 })
 
-export { assertExactRoleSafety, assertExactSchemaObjects, assertExactSeeds, assertNoTypeOrmSchemaDrift, assertOrdinaryTablesEmpty, assertOwnerAndRuntimeGrants, readSnapshot }
+export { assertExactRoleSafety, assertExactSchemaObjects, assertExactSeeds, assertNoTypeOrmSchemaDrift, assertOrdinaryTablesEmpty, assertOwnerAndRuntimeGrants, readSnapshot, seedExactGitProviders }

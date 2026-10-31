@@ -38,6 +38,15 @@ and file selection. Standalone package consumers must reproduce these root
 overrides and verify their installed tree; published package manifests do not
 propagate pnpm workspace overrides.
 
+The bootstrap constructs the four Git-provider defaults from its signed manifest
+with one timestamp for creation and update. The frozen predecessor's seeder
+reads the clock twice per row, which can cross a millisecond boundary. Its
+compiled bytes stay unchanged; the bootstrap-owned writer requires an empty
+relation and inserts all four exact defaults atomically. Timestamp equality and
+all seed-content checks remain strict. Qualify an advancing-clock case and a
+real PostgreSQL timestamp-tamper rejection; existing installations need no seed
+repair or bootstrap rerun.
+
 Keep full dependencies in the application build stage and production-only
 dependencies in the runtime assembly stage. Runtime modules must remain
 explicitly declared; do not remove a database driver to make an image scan pass

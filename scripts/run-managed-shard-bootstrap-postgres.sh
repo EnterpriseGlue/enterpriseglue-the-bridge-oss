@@ -209,6 +209,10 @@ fi
 run_success bootstrapped
 run_success verified-existing
 
+owner_sql -c "UPDATE ${schema_name}.git_providers SET updated_at=created_at+1 WHERE type='github'"
+run_failure 'Managed shard Git provider seed timestamps drifted'
+owner_sql -c "UPDATE ${schema_name}.git_providers SET updated_at=created_at WHERE type='github'"
+
 first_membership_id="$(owner_query -At -c "SELECT id FROM ${schema_name}.authz_group_memberships ORDER BY id LIMIT 1")"
 second_membership_id="$(owner_query -At -c "SELECT id FROM ${schema_name}.authz_group_memberships ORDER BY id OFFSET 1 LIMIT 1")"
 second_audit_id="$(owner_query -At -c "SELECT id FROM ${schema_name}.audit_logs WHERE resource_id='${second_membership_id}'")"
