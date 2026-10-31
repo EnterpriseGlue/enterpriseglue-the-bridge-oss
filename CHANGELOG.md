@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.4...v0.35.5) (2026-10-31)
+
+
+### Bug Fixes
+
+* **bootstrap:** make strict Git provider seed timestamps deterministic ([ea0c6f1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ea0c6f1ccb9b2bca73c91292e1a3d138454c5313))
+* **release:** recover authenticated unsigned publication identity ([e98da17](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e98da172cf2e80794df1fbfaa521a797909a75bb))
+* **release:** recover authenticated unsigned publication identity ([015557e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/015557ef5828ddc1840d9c8da6476a5f8ff7f27d))
+* restore deployment options and JSON variable editing ([7b97e66](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7b97e6658b4a2522d2e2fef2b07cbe660e59a296))
+* restore deployment options, JSON variables and secure matching ([fe1440b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fe1440b198484e046c26e1fa91723ddd5049bcab))
+* **security:** qualify patched glob and minimatch runtime dependencies ([654448b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/654448b3cb2a5cb0883f28c21b637c0e156523d6))
+
 ## [0.35.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.3...v0.35.4) (2026-10-30)
 
 ### Changes
