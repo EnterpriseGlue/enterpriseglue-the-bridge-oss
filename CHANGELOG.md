@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.4...v0.35.5) (2026-10-31)
+
+### Changes
+
+- **deployments:** Restore project deployment options and native JSON variable editing, and update filesystem matching dependencies to their patched releases.
+- **release-authorization:** Complete frozen release publication with source-bound image-workflow handoffs, authenticated package observations and retained security evidence without scanner caches.
+
+Full upgrade, compatibility and verification details: [v0.35.5 release notes](docs/releases/v0.35.5.md).
+
 ## [0.35.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.3...v0.35.4) (2026-10-30)
 
 ### Changes
