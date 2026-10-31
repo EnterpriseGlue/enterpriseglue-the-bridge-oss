@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import test from 'node:test'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const root = new URL('../', import.meta.url)
 
@@ -102,7 +104,9 @@ test('approved mail/Git upgrades and compatible runtime dependencies cannot regr
     '@vitest/mocker': [4, 1, 12],
     zod: [4, 6, 6],
     '@simple-git/argv-parser': [2, 0, 1],
+    glob: [14, 0, 2],
     'ip-address': [10, 7, 4],
+    minimatch: [11, 0, 1],
     nodemailer: [10, 1, 4],
     'proxy-addr': [2, 0, 8],
     'simple-git': [4, 0, 2],
@@ -118,6 +122,56 @@ test('approved mail/Git upgrades and compatible runtime dependencies cannot regr
   for (const version of [...lockText.matchAll(/^ {2}brace-expansion@(\d+\.\d+\.\d+):$/gm)].map(match => match[1])) {
     const [major] = parseVersion(version)
     assert.ok(isAtLeast(version, major === 2 ? [2, 1, 7] : [5, 0, 12]), 'brace-expansion ' + version + ' regressed')
+  }
+})
+
+test('TypeORM discovers only matching entity and migration files through its installed glob dependency', async () => {
+  const requireBackend = createRequire(new URL('backend/package.json', root))
+  const { importClassesFromDirectories } = requireBackend('typeorm/util/DirectoryExportedClassesLoader.js')
+  const directory = await mkdtemp(join(tmpdir(), 'eg-typeorm-discovery-'))
+  try {
+    await mkdir(join(directory, 'nested'))
+    await writeFile(join(directory, 'first.entity.cjs'), 'module.exports = class FirstEntity {}')
+    await writeFile(join(directory, 'nested/second.migration.cjs'), 'module.exports = class SecondMigration {}')
+    await writeFile(join(directory, 'unmatched.cjs'), 'throw Error("unmatched module must not load")')
+    const classes = await importClassesFromDirectories({ log() {} }, [
+      join(directory, '**/*.entity.cjs'), join(directory, '**/*.migration.cjs'),
+    ])
+    assert.deepEqual(classes.map(value => value.name).sort(), ['FirstEntity', 'SecondMigration'])
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('Archiver exports nested matching files with exclusion and Unicode names through installed readdir-glob', async () => {
+  const requireBackend = createRequire(new URL('backend/package.json', root))
+  const archiver = requireBackend('archiver')
+  const { unzipSync, strFromU8 } = requireBackend('fflate')
+  const directory = await mkdtemp(join(tmpdir(), 'eg-archive-matching-'))
+  try {
+    await mkdir(join(directory, 'nested'))
+    await mkdir(join(directory, 'excluded'))
+    await writeFile(join(directory, 'root.bpmn'), '<definitions id="root"/>')
+    await writeFile(join(directory, 'nested/工程.bpmn'), '<definitions id="nested"/>')
+    await writeFile(join(directory, 'excluded/private.bpmn'), 'must not be exported')
+    await writeFile(join(directory, 'nested/other.txt'), 'not a model')
+    const archive = archiver('zip', { zlib: { level: 9 } })
+    const chunks = []
+    const ended = new Promise((resolve, reject) => {
+      archive.on('data', chunk => chunks.push(chunk))
+      archive.once('end', resolve)
+      archive.once('error', reject)
+      archive.once('warning', reject)
+    })
+    archive.glob('**/*.bpmn', { cwd: directory, ignore: ['excluded/**'] }, { prefix: 'models' })
+    await archive.finalize()
+    await ended
+    const files = unzipSync(Buffer.concat(chunks))
+    assert.deepEqual(Object.keys(files).sort(), ['models/nested/工程.bpmn', 'models/root.bpmn'])
+    assert.equal(strFromU8(files['models/root.bpmn']), '<definitions id="root"/>')
+    assert.equal(strFromU8(files['models/nested/工程.bpmn']), '<definitions id="nested"/>')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 })
 

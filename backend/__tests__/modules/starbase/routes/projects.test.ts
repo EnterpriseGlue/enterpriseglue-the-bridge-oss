@@ -128,7 +128,10 @@ vi.mock('@enterpriseglue/shared/services/starbase/engine-import-service.js', () 
 describe('starbase projects routes', () => {
   let app: express.Application;
 
-  function mockEngineAccessDataSource(targetRows: Array<Record<string, unknown>> = []) {
+  function mockEngineAccessDataSource(
+    targetRows: Array<Record<string, unknown>> = [],
+    pendingRows: Array<Record<string, unknown>> = [],
+  ) {
     const engineFind = vi.fn((options?: any) => {
       if (options?.where) {
         return Promise.resolve([
@@ -182,7 +185,7 @@ describe('starbase projects routes', () => {
             };
           case 'EngineAccessRequest':
             return {
-              find: vi.fn().mockResolvedValue([]),
+              find: vi.fn().mockResolvedValue(pendingRows),
             };
           default:
             return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn(), save: vi.fn(), delete: vi.fn() };
@@ -715,6 +718,25 @@ describe('starbase projects routes', () => {
       createdAt: 1710000000,
       updatedAt: 1710000200,
     });
+  });
+
+  it('keeps an active manual target usable alongside a pending access request for the same engine', async () => {
+    routeMocks.tenantId = 'tenant-a';
+    mockEngineAccessDataSource([{
+      id: 'target-1', engineId: 'engine-1', status: 'active', source: 'manual', sourceRef: null,
+      allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: false,
+      lastSeenAt: null, createdAt: 1700000000000, updatedAt: 1700000000000,
+    }], [{ id: 'request-1', engineId: 'engine-1', createdAt: 1700000000000 }]);
+
+    const response = await request(app).get(`/starbase-api/projects/${projectId}/engine-access`).expect(200);
+    expect(response.body.accessedEngines[0]).toMatchObject({
+      engineId: 'engine-1', manualDeployAllowed: true,
+      deploymentTarget: { id: 'target-1', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: false },
+    });
+    expect(response.body.pendingRequests).toEqual([{
+      requestId: 'request-1', engineId: 'engine-1', engineName: 'Dev Engine', requestedAt: 1700000000000,
+    }]);
+    expect(routeMocks.evaluateDeploymentEligibilityModes).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a' }));
   });
 
   it('includes deployment eligibility check diagnostics for diagnostic permission holders', async () => {

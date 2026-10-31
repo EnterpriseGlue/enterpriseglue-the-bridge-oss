@@ -77,6 +77,32 @@ describe('useVariableEditor engine boundary', () => {
     expect(result.current.editingVarValue).toBe('new')
   })
 
+  it.each([{ scope: 'tenant-a', nested: [1, true, null] }, ['a', 2], 'plain JSON string', false, 42, null].map(value => ({ value })))(
+    'serializes native JSON for the engine while retaining its parsed value in the UI: %j', async ({ value }) => {
+      const varsQ = { refetch: vi.fn().mockResolvedValue(undefined) }
+      const onVariableSaved = vi.fn()
+      const { result } = renderHook(() => useVariableEditor({ instanceId: 'pi-1', varsQ, engineId: 'engine-1', onVariableSaved }))
+      act(() => result.current.openVariableEditor('details', { value, type: 'Json' }))
+      await act(async () => result.current.submitVariableEdit())
+      expect(modifyProcessInstanceVariables).toHaveBeenCalledWith('pi-1', {
+        modifications: { details: { value: JSON.stringify(value), type: 'Json' } }, engineId: 'engine-1',
+      })
+      expect(onVariableSaved).toHaveBeenCalledWith('details', { value, type: 'Json' })
+      expect(varsQ.refetch).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('rejects malformed JSON before submitting a variable mutation', async () => {
+    const varsQ = { refetch: vi.fn() }
+    const { result } = renderHook(() => useVariableEditor({ instanceId: 'pi-1', varsQ, engineId: 'engine-1' }))
+    act(() => result.current.openVariableEditor('details', { value: {}, type: 'Json' }))
+    act(() => result.current.setEditingVarValue('{invalid-json'))
+    await act(async () => result.current.submitVariableEdit())
+    expect(modifyProcessInstanceVariables).not.toHaveBeenCalled()
+    expect(varsQ.refetch).not.toHaveBeenCalled()
+    expect(result.current.editVarError).toBeTruthy()
+  })
+
   it('exports the variable editor hook', () => {
     expect(useVariableEditor).toBeDefined()
     expect(typeof useVariableEditor).toBe('function')

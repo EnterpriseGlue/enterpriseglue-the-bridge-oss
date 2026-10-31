@@ -1,5 +1,6 @@
 import { Entity, Column, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
+import { bigintNumberTransformer } from '../transformers/bigintNumber.js';
 
 @Entity({ name: 'engine_access_requests', schema: 'main' })
 @Index('idx_engine_access_requests_engine', ['engineId'])
@@ -20,12 +21,12 @@ export class EngineAccessRequest extends AppBaseEntity {
   @Column({ name: 'reviewed_by_id', type: 'text', nullable: true })
   reviewedById!: string | null;
 
-  @Column({ name: 'reviewed_at', type: 'bigint', nullable: true })
+  @Column({ name: 'reviewed_at', type: 'bigint', nullable: true, transformer: bigintNumberTransformer })
   reviewedAt!: number | null;
 
   @Column({ name: 'review_note', type: 'text', nullable: true })
   reviewNote!: string | null;
 
-  @Column({ name: 'created_at', type: 'bigint' })
+  @Column({ name: 'created_at', type: 'bigint', transformer: bigintNumberTransformer })
   createdAt!: number;
 }
