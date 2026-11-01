@@ -184,6 +184,11 @@ describe('VcsCommitService', () => {
     expect(snapshotQb.andWhere).toHaveBeenCalledWith('vc.projectId = :projectId', { projectId: 'project-1' });
   });
 
+  it.each([[], ['one', 'one'], [''], null, 'one'])('rejects malformed explicit commit scope before database access (%j)', async fileIds => {
+    await expect(new VcsCommitService().commit('branch', 'user', 'Scoped save', { fileIds } as any)).rejects.toMatchObject({ statusCode: 400 });
+    expect(getDataSource).not.toHaveBeenCalled();
+  });
+
   it('refuses an unbound snapshot read before opening a database connection', async () => {
     await expect(new VcsCommitService().getCommitSnapshots('commit-1', '')).rejects.toThrow('project is required');
     expect(getDataSource).not.toHaveBeenCalled();

@@ -159,7 +159,7 @@ async function listDeployments(projectId: string, limit: number) {
  * GET /git-api/deployments
  * List deployments for a project (query param style)
  */
-router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   const limit = parseInt(req.query.limit as string) || 50;
 
@@ -178,7 +178,7 @@ router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('proje
  * GET /git-api/projects/:projectId/deployments
  * List deployments for a project (REST style)
  */
-router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const limit = parseInt(req.query.limit as string) || 50;
 
@@ -235,7 +235,7 @@ router.post('/git-api/rollback', apiLimiter, requireAuth, validateBody(RollbackR
  * GET /git-api/commits
  * Get commit history for a project
  */
-router.get('/git-api/commits', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/commits', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   const limit = parseInt(req.query.limit as string) || 100;
 

@@ -761,6 +761,9 @@ async function resolveEngineVisibleCollection(
 }
 
 function routeResolver(action: AuthzActionDefinition, options: RequireActionOptions): string {
+  if (!options.resourceResolver && new Set(action.routes?.map(route => route.resourceResolver)).size > 1) {
+    throw Errors.internal(`Authorization action requires an explicit resource resolver: ${action.actionId}`);
+  }
   const resolverId = options.resourceResolver || action.routes?.[0]?.resourceResolver;
   if (!resolverId) {
     throw Errors.internal(`Authorization action has no resource resolver: ${action.actionId}`);

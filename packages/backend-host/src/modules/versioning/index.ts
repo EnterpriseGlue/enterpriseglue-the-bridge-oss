@@ -105,9 +105,6 @@ router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, vali
     const fileRepo = dataSource.getRepository(File);
     const validatedFileIds = fileIds || null;
 
-    // Get user's draft branch (creates if doesn't exist)
-    const branch = await vcsService.getUserBranch(projectId, userId);
-
     // Get files to commit from main database
     let filesToCommit;
     if (validatedFileIds && validatedFileIds.length > 0) {
@@ -122,9 +119,13 @@ router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, vali
       });
     }
 
+    if (validatedFileIds && filesToCommit.length !== validatedFileIds.length) throw Errors.fileNotFound();
     if (filesToCommit.length === 0) {
       throw Errors.validation('No files to commit');
     }
+
+    // Resolve every requested file before creating or changing a draft branch.
+    const branch = await vcsService.getUserBranch(projectId, userId);
 
     // Save each file to VCS working_files
     for (const file of filesToCommit) {
@@ -169,6 +170,7 @@ router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, vali
       createdAt: commit.createdAt
     });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Failed to commit files', { projectId, userId, error });
     throw Errors.internal('Failed to commit files');
   }
@@ -469,7 +471,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
  * Get VCS status for a project (has uncommitted changes, etc.)
  * GET /vcs-api/projects/:projectId/status
  */
-router.get('/vcs-api/projects/:projectId/status', apiLimiter, requireAuth, requireAction('project.vcs.status.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/vcs-api/projects/:projectId/status', apiLimiter, requireAuth, requireAction('project.vcs.status.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
 
@@ -519,7 +521,7 @@ router.get('/vcs-api/projects/:projectId/status', apiLimiter, requireAuth, requi
  * Get uncommitted file IDs for a project
  * GET /vcs-api/projects/:projectId/uncommitted-files
  */
-router.get('/vcs-api/projects/:projectId/uncommitted-files', apiLimiter, requireAuth, requireAction('project.vcs.status.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/vcs-api/projects/:projectId/uncommitted-files', apiLimiter, requireAuth, requireAction('project.vcs.status.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const baseline = String(req.query?.baseline || 'main').toLowerCase();
@@ -535,7 +537,7 @@ router.get('/vcs-api/projects/:projectId/uncommitted-files', apiLimiter, require
     if (baseline === 'draft') {
       const draftBranch = await vcsService.getUserBranch(projectId, userId);
       const result = await vcsService.getUncommittedIds(projectId, {
-        baselineCommitId: 'headCommitId' in draftBranch ? String(draftBranch.headCommitId) : null,
+        baselineCommitId: draftBranch.headCommitId ? String(draftBranch.headCommitId) : null,
         treatNoBaselineAsAll: false,
       });
       fileIds = result.fileIds;

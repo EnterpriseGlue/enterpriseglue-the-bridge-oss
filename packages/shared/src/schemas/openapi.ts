@@ -8,6 +8,7 @@ import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@aste
 extendZodWithOpenApi(z);
 
 const { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema } = await import('./starbase/commit-snapshot.js');
+const { commitBodySchema } = await import('./starbase/commit.js');
 
 // Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
 const {
@@ -4065,7 +4066,7 @@ registry.registerPath({
   ...authzExtension('project.vcs.commit.create', 'POST', '/vcs-api/projects/{projectId}/commit'),
   request: {
     params: z.object({ projectId: z.string().uuid() }),
-    body: { content: { 'application/json': { schema: z.object({ message: z.string(), fileIds: z.array(z.string()).optional(), hotfixFromCommitId: z.string().optional(), hotfixFromFileVersion: z.number().optional() }) } } },
+    body: { content: { 'application/json': { schema: commitBodySchema } } },
   },
   responses: { 200: { description: 'Commit created', content: { 'application/json': { schema: z.object({ commitId: z.string(), message: z.string(), fileCount: z.number(), createdAt: z.number() }) } } } },
 });

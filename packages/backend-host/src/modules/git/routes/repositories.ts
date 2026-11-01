@@ -31,7 +31,7 @@ async function canViewProjectRepository(req: Request, projectId: string): Promis
  * POST /git-api/repositories/init
  * Initialize a new Git repository for a project
  */
-router.post('/git-api/repositories/init', apiLimiter, requireAuth, validateBody(InitRepositoryRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/repositories/init', apiLimiter, requireAuth, validateBody(InitRepositoryRequestSchema), requireAction('project.git.repositories.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const { projectId, providerId, remoteUrl, namespace } = req.body;
   const userId = req.user!.userId;
 
@@ -44,7 +44,7 @@ router.post('/git-api/repositories/init', apiLimiter, requireAuth, validateBody(
  * POST /git-api/repositories/clone
  * Clone an existing Git repository
  */
-router.post('/git-api/repositories/clone', apiLimiter, requireAuth, validateBody(CloneRepositoryRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/repositories/clone', apiLimiter, requireAuth, validateBody(CloneRepositoryRequestSchema), requireAction('project.git.repositories.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const { projectId, providerId, remoteUrl, namespace } = req.body;
   const userId = req.user!.userId;
 

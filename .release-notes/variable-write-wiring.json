@@ -33,7 +33,8 @@
     "Saved diagram views load the canonical project-bound revision endpoint and select the requested file by stable identity; missing revisions no longer display a sibling file or the editable draft.",
     "Local file versions and Git commit snapshots use separate caches, preventing an equal ID from supplying the wrong preview or restore readiness.",
     "Restoring a file version changes only the selected file; sibling drafts and file-version history remain independent.",
-    "Pending restore stops when its file, version, session or permissions change, and an unverified preceding save cannot permit restore."
+    "Pending restore stops when its file, version, session or permissions change, and an unverified preceding save cannot permit restore.",
+    "Saving or restoring one file preserves sibling saved baselines and unsaved drafts. Create Version refuses obsolete preparation and unverified responses."
   ],
   "upgrade": {
     "required": true,
@@ -70,13 +71,15 @@
     "Lifecycle audits use the existing exact-row append capability inside the transaction; unbound or wrong-row audit inserts remain denied under forced RLS, with no database-policy or grant changes.",
     "Engine callbacks are checked before dispatch and on settlement using their render, mount and browser-session lifetime. Shared refreshes are session/tenant-bound; cancelled callers never replay and server authorization remains authoritative.",
     "The same-origin runtime configuration boundary rejects redirects before contacting their destination; direct same-origin documents retain explicit API-origin selection.",
-    "Commit snapshot reads bind the authorized project in SQL; restore updates require the target row to belong to that project. Historical diagram content stays separate from draft autosave, with no authorization, database policy or grant relaxation."
+    "Commit snapshot reads bind the authorized project in SQL; restore updates require the target row to belong to that project. Historical diagram content stays separate from draft autosave, with no authorization, database policy or grant relaxation.",
+    "Mixed-resolver authorization actions require explicit scope selection; single-project VCS status resolves the requested project. No grant or database policy change."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
     "docs/development/user-directory-contract.md",
     "docs/reference/configuration.md",
-    "docs/examples/vcs-file-restore.json"
+    "docs/examples/vcs-file-restore.json",
+    "docs/development/testing-engine-tenancy-and-access-control.md"
   ],
   "customerDocumentation": {
     "impact": "none",
@@ -106,7 +109,8 @@
     "Owned native HTTP configuration origins prove redirect refusal, required startup failure, optional fallback and explicit cross-origin API selection without following a redirect.",
     "Canonical snapshot adapter and viewer regressions, project-authorized route/restore tests and actual PostgreSQL sibling-project snapshot denial.",
     "Production-built BPMN/DMN viewer and missing-snapshot browser assertions against owned local HTTP responses; the viewer selects the bundled modern WOFF icon face.",
-    "Actual PostgreSQL route, restore, VCS checkpoint and history/backfill integration with sibling-file/project denials; deferred autosave/restore browser component lifetime cases."
+    "Actual PostgreSQL route, restore, VCS checkpoint and history/backfill integration with sibling-file/project denials; deferred autosave/restore browser component lifetime cases.",
+    "Actual PostgreSQL scoped-save/restore dirty-state and identity regressions, explicit authorization resolver contracts and deferred Create Version lifetime/acknowledgement checks."
   ],
   "packages": [
     {

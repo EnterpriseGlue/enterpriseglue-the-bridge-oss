@@ -3353,3 +3353,31 @@ describe('requireAction project resource resolvers', () => {
     expect(anonymousNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
   });
 });
+
+
+describe('multi-resolver authorization binding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getDataSource).mockReset();
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+    vi.mocked(policyService.evaluateGate).mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
+  });
+
+  it('refuses an implicit mixed resolver before database, permission or policy evaluation', async () => {
+    const next = vi.fn();
+    await requireAction('project.vcs.status.read', { resourceIdFrom: 'params' })(
+      { user: { userId: 'user-1' }, params: { projectId: 'project-1' } } as any, {} as any, next,
+    );
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 500, message: expect.stringContaining('explicit resource resolver') }));
+    expect(getDataSource).not.toHaveBeenCalled();
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
+    expect(policyService.evaluateGate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the default available for an action with a single resolver', async () => {
+    const next = vi.fn();
+    await requireAction('platform.tenants.read')({ user: { userId: 'user-1' }, headers: {} } as any, {} as any, next);
+    expect(next).toHaveBeenCalledWith();
+    expect(permissionService.hasPermission).toHaveBeenCalled();
+  });
+});

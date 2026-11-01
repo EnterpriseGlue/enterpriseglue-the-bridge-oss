@@ -196,8 +196,14 @@ ambiguous selected snapshots stop before a file update.
 The update and working-file synchronization are restricted to the selected file
 and authorized project. The checkpoint keeps the existing `source=file-save` marker with an
 explicit file-version scope, which older hosts already recognize. Its message
-identifies the restore. Its branch snapshot still represents the branch;
-file history and legacy history backfill exclude incidental sibling snapshots.
+identifies the restore. File-scoped saves and restore checkpoints copy unselected
+entries from the previous saved tree, including deletion markers. They never
+snapshot sibling working drafts: those drafts remain dirty until explicitly
+saved. An explicit file scope must contain distinct, existing files from the
+authorized project; an empty, missing-member or ambiguous scope is rejected
+before a checkpoint is written. The OpenAPI request uses the same validation
+schema as the route. File history and legacy history backfill exclude incidental
+sibling snapshots.
 The original `/commits/:commitId/restore` endpoint retains whole-project scope.
 These operations do not form an atomic multi-step transaction. A failed or lost
 response may require reconciliation; it is not permission to retry automatically.
@@ -208,3 +214,10 @@ lifetime before restore and completion handling. Switching away and back, closin
 the preview, unmounting or replacing authority stops a pending continuation.
 Already-issued writes may take effect; a late response cannot clear the new
 view's draft state or reload it.
+
+Create Version captures its target, mode, description and authority before
+preparation. It rechecks the mount, view and browser-session lifetime before
+sending a request and handling its result. Cancellation invalidates a pending
+continuation; an already-issued write may still settle. Success requires the
+expected version identifier in the response. A late response cannot close a
+replacement modal or invalidate its queries.

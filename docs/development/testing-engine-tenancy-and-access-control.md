@@ -454,6 +454,13 @@ The transition lane:
    preview/apply in the engine administration UI; and
 7. checks routes, action inventory, canonical schemas, and OpenAPI together.
 
+Actions with routes using different resource resolvers require an explicit
+`resourceResolver` at every `requireAction` call. Missing resolver selection
+fails before resource lookup or authorization evaluation. The route inventory
+test checks literal backend call sites; the middleware also enforces the rule
+for dynamically registered actions. Single-project VCS status routes select
+`project.byId`; batch status routes explicitly select their collection resolver.
+
 The runtime lane:
 
 1. holds `requireAction.ts` and the Mission Control runtime-resource filter to

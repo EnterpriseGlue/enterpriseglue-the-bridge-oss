@@ -17,7 +17,7 @@ async function visibleEngineIds(req: Request): Promise<string[]> {
   return engines.map(({ engine }) => String(engine.id));
 }
 
-r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const rows = await engineDeploymentQueryService.listProjectDeployments(
     String(req.params.projectId),
     await visibleEngineIds(req),
@@ -26,7 +26,7 @@ r.get('/starbase-api/projects/:projectId/engine-deployments', apiLimiter, requir
   res.json(rows);
 }));
 
-r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const rows = await engineDeploymentQueryService.listLatestFileDeployments(
     String(req.params.projectId),
     String(req.params.fileId),
@@ -37,7 +37,7 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments', apiLimiter,
   res.json(rows);
 }));
 
-r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const rows = await engineDeploymentQueryService.listFileDeploymentHistory(
     String(req.params.projectId),
     String(req.params.fileId),
@@ -48,7 +48,7 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/deployments/history', api
   res.json(rows);
 }));
 
-r.get('/starbase-api/projects/:projectId/engine-deployments/latest', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/engine-deployments/latest', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const rows = await engineDeploymentQueryService.listLatestProjectDeploymentArtifacts(
     String(req.params.projectId),
     await visibleEngineIds(req),

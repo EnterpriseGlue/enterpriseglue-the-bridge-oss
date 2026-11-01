@@ -169,6 +169,25 @@ describe('versioning routes', () => {
     expect(response.body.filesRestored).toBe(1);
   });
 
+  it.each(['status', 'uncommitted-files'])('denies the requested project on %s even when a sibling project is visible', async suffix => {
+    const siblingId = '33333333-3333-4333-8333-333333333333';
+    const find = vi.fn().mockResolvedValue([{ id: projectId }, { id: siblingId }]);
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository({ find }) });
+    (permissionService.hasPermission as Mock).mockImplementation(async (_permission, context) => context.resourceId === siblingId);
+    expect((await request(app).get(`/vcs-api/projects/${projectId}/${suffix}`)).status).toBe(403);
+    expect(find).not.toHaveBeenCalled();
+    expect(vcsService.getUncommittedIds).not.toHaveBeenCalled();
+    expect(vcsService.getMainBranch).not.toHaveBeenCalled();
+  });
+
+  it('passes an absent draft head as null instead of the string null', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'draft', headCommitId: null });
+    (vcsService.getUncommittedIds as Mock).mockResolvedValue({ fileIds: [], folderIds: [] });
+    expect((await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`)).status).toBe(200);
+    expect(vcsService.getUncommittedIds).toHaveBeenCalledWith(projectId, { baselineCommitId: null, treatNoBaselineAsAll: false });
+  });
+
   it('scopes file-save commits to the selected file ids for offline-like save flow', async () => {
     const fileFind = vi.fn().mockResolvedValue([
       {

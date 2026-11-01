@@ -132,7 +132,7 @@ const EMPTY_DMN = `<?xml version="1.0" encoding="UTF-8"?>
  * List files by project
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, requireAction('project.files.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
 
   const dataSource = await getDataSource();
