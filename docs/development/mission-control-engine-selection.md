@@ -110,6 +110,12 @@ cannot adopt its result; a stale refresh cannot clear or redirect the newer
 login, and stale callers receive `BrowserSessionChangedError` before replay.
 An aborted caller does not replay, while an uncancelled caller may finish the
 same-session shared refresh. Current-cookie XSRF handling remains unchanged.
+Session bootstrap uses that same local session/tenant binding before accepting
+a user response or starting its next request. Protected session reads use only
+the interceptor's single refresh/replay. Public authentication pages restore an
+expired cookie with one explicit refresh after HTTP 401; HTTP 403, service
+failures and invalid responses do not initiate refresh. A failed replay stops
+bootstrap instead of starting another refresh cycle.
 These are client continuation fences, not server credentials or authorization.
 They cannot undo already-issued requests or HTTP-only cookie response effects.
 Review the current session before resubmitting; stale work is not automatically

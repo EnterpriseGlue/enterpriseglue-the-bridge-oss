@@ -46,6 +46,50 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 test.describe('Identity configuration browser lifecycle', () => {
+  for (const scenario of [
+    { path: '/login', initialStatus: 401, replayStatus: 200, refreshes: 1, meReads: 2, heading: 'Dashboard' },
+    { path: '/admin/users', initialStatus: 401, replayStatus: 200, refreshes: 1, meReads: 2, heading: 'User management' },
+    { path: '/admin/users', initialStatus: 401, replayStatus: 401, refreshes: 1, meReads: 2, heading: null },
+    { path: '/login', initialStatus: 503, replayStatus: 200, refreshes: 0, meReads: 1, heading: null },
+  ]) test(`bounds browser bootstrap ${scenario.path} ${scenario.initialStatus}/${scenario.replayStatus} @identity-lifecycle`, async ({ page }) => {
+    await new MockBrowserIdentityStack().install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+    let meReads = 0, refreshes = 0;
+    const errors: string[] = [], unexpectedResponses: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() !== 'error' && message.type() !== 'warning') return;
+      const location = message.location().url;
+      // Only the deliberately injected session failure may emit a browser
+      // resource diagnostic. All other console and network failures reject.
+      if (location && new URL(location).pathname === '/api/auth/me' && /\b(?:401|503)\b/.test(message.text())) return;
+      errors.push(message.text());
+    });
+    page.on('response', response => {
+      if (response.status() < 400) return;
+      const path = new URL(response.url()).pathname;
+      if (path === '/api/auth/me' && [scenario.initialStatus, scenario.replayStatus].includes(response.status())) return;
+      unexpectedResponses.push(`${response.status()} ${path}`);
+    });
+    await page.route('**/api/auth/me', route => {
+      meReads += 1;
+      const status = meReads === 1 ? scenario.initialStatus : scenario.replayStatus;
+      return status === 200 ? route.fallback() : route.fulfill({
+        status, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic session failure' }),
+      });
+    });
+    await page.route('**/api/auth/refresh', route => {
+      refreshes += 1;
+      return fulfillJson(route, { expiresIn: 3600 });
+    });
+    await page.goto(scenario.path);
+    if (scenario.heading) await expect(page.getByRole('heading', { name: scenario.heading, exact: true })).toBeVisible();
+    else await expect(page.getByRole('button', { name: /^Continue with Browser identity provider/ })).toBeVisible();
+    expect(meReads).toBe(scenario.meReads);
+    expect(refreshes).toBe(scenario.refreshes);
+    expect(unexpectedResponses).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
   test('configures, applies, signs in, and reconciles against the browser-local identity stack @identity-lifecycle', async ({ page }, testInfo) => {
     const appOrigin = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
     const identityStack = new MockBrowserIdentityStack();
@@ -87,7 +131,8 @@ test.describe('Identity configuration browser lifecycle', () => {
     await page.evaluate(() => localStorage.clear());
     await page.goto('/login');
     await page.getByRole('button', { name: /^Continue with Browser identity provider/ }).click();
-    await expect(page).toHaveURL(new RegExp(`${appOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`));
+    await expect(page).toHaveURL(url => url.origin === new URL(appOrigin).origin
+      && ['/', '/t/default', '/t/default/'].includes(url.pathname));
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
     expect(identityStack.events).toEqual(expect.arrayContaining(['provider_listed', 'authorization_started', 'token_issued', 'session_created']));
 

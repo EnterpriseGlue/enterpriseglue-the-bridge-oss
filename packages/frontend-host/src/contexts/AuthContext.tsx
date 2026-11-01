@@ -5,7 +5,8 @@ import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
-import { advanceBrowserSessionRevision } from '../utils/browserSession.js';
+import { advanceBrowserSessionRevision, BrowserSessionChangedError } from '../utils/browserSession.js';
+import { captureRequestSession } from '../utils/httpInterceptor.js';
 import { getPublicAuthRoutePolicy } from '../utils/publicAuthRoute';
 import { permissionSnapshotMatchesSession, permissionSnapshotAuthorityKey } from './authSessionPermissions';
 import {
@@ -185,7 +186,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const isCurrent = () => isCurrentSession(generation) && request === userRequestRef.current;
     const initAuth = async () => {
       let acceptedGeneration: number | null = null;
-      if (getPublicAuthRoutePolicy(window.location.pathname)?.skipSessionBootstrap) {
+      const publicRoute = getPublicAuthRoutePolicy(window.location.pathname);
+      const requestSession = captureRequestSession();
+      const assertRequestSession = () => {
+        if (!requestSession.isCurrent()) throw new BrowserSessionChangedError();
+      };
+      if (publicRoute?.skipSessionBootstrap) {
         if (isCurrent()) clearAuth();
         return;
       }
@@ -193,13 +199,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
         let nextUser: User;
         try {
           nextUser = await authService.getMe();
-        } catch {
+        } catch (error) {
           if (!isCurrent()) return;
+          assertRequestSession();
+          // Protected reads already own one refresh/replay in the HTTP
+          // interceptor. Only public auth pages disable that recovery and
+          // need a bootstrap refresh for an expired (401) cookie session.
+          if (!publicRoute || !(error instanceof ApiError) || error.status !== 401) throw error;
           await authService.refreshToken();
           if (!isCurrent()) return;
+          assertRequestSession();
           nextUser = await authService.getMe();
         }
         if (!isCurrent()) return;
+        assertRequestSession();
         if (nextUser?.isEmailVerified === false) {
           clearAuth();
           return;

@@ -27,7 +27,8 @@
     "Account status changes use audited lifecycle actions; legacy profile/delete paths cannot bypass status, ownership, reason or recovery checks, and LDAP reactivation remains directory-owned.",
     "Shared SaaS profile names stay at their identity/provisioning provider boundary; normalized timestamps and controlled edit fields keep directory presentation consistent.",
     "Process drafts and deployment continuations discard older session and permission state even when the URL, account or engine ID stays the same.",
-    "An older 401 refresh cannot replay a request under a replacement login or clear its local state; private caches are discarded on same-account session replacement and permission changes."
+    "An older 401 refresh cannot replay a request under a replacement login or clear its local state; private caches are discarded on same-account session replacement and permission changes.",
+    "Session startup makes one refresh attempt for an expired session and stops on other failures; a pending login-page bootstrap cannot continue after switching tenants."
   ],
   "upgrade": {
     "required": true,
@@ -89,7 +90,8 @@
     "Admin list/detail navigation, revocation, metadata uncertainty and strict API response-binding tests.",
     "User directory service and current membership presentation on SQL.js and owned PostgreSQL fixtures.",
     "Forced PostgreSQL RLS tests exercise audited deactivation/reactivation/session revocation, guarded compatibility paths and strict profile DTO serialization.",
-    "Deferred session/permission/engine transitions, positive same-authority refresh, StrictMode, shared refresh cancellation and two owned native loopback HTTP transport sequences."
+    "Deferred session/permission/engine transitions, positive same-authority refresh, StrictMode, shared refresh cancellation and owned native loopback HTTP transport sequences.",
+    "Session bootstrap through the actual auth provider, service, API client and HTTP interceptor: one refresh owner, no refresh on non-401 failures, and tenant-switch refusal before the next request."
   ],
   "packages": [
     {

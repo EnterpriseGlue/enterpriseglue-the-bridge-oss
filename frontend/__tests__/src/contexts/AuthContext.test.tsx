@@ -118,33 +118,22 @@ describe('AuthProvider', () => {
   });
 
   it.each(['/signup-history', '/reset-password', '/t/alpha/reset-password'])(
-    'keeps exact public-route boundaries and validates the protected route %s',
+    'leaves refresh ownership with the transport on protected route %s',
     async (path) => {
       const { authService } = await import('@src/services/auth');
       window.history.replaceState({}, '', path);
 
-      const refreshedUser = {
-        id: 'user-after-refresh',
-        email: 'refreshed@example.com',
-        platformRole: 'user' as const,
-        isActive: true,
-        isEmailVerified: true,
-        mustResetPassword: false,
-        createdAt: 123,
-      };
       vi.mocked(authService.getMe)
-        .mockRejectedValueOnce(new Error('Expired access session'))
-        .mockResolvedValueOnce(refreshedUser);
-      vi.mocked(authService.refreshToken).mockResolvedValue({ expiresIn: 3600 });
+        .mockRejectedValueOnce(new ApiError(401, 'Unauthorized', 'Expired access session'));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-      expect(authService.getMe).toHaveBeenCalledTimes(2);
-      expect(authService.refreshToken).toHaveBeenCalledTimes(1);
-      expect(authService.getMyPermissions).toHaveBeenCalledTimes(1);
-      expect(result.current.user).toEqual(refreshedUser);
-      expect(result.current.isAuthenticated).toBe(true);
+      expect(authService.getMe).toHaveBeenCalledTimes(1);
+      expect(authService.refreshToken).not.toHaveBeenCalled();
+      expect(authService.getMyPermissions).not.toHaveBeenCalled();
+      expect(result.current.user).toBeNull();
+      expect(result.current.isAuthenticated).toBe(false);
     },
   );
 

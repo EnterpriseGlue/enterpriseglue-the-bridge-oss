@@ -129,7 +129,8 @@ function requestSessionKey(): string {
     getTenantSlugFromPathname(window.location.pathname)]);
 }
 
-function captureRequestSession(): RequestSession {
+/** Local continuation identity only; never server authentication or authority. */
+export function captureRequestSession(): RequestSession {
   const key = requestSessionKey();
   return { key, isCurrent: () => requestSessionKey() === key };
 }
