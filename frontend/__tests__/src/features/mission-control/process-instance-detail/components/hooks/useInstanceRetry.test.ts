@@ -88,6 +88,26 @@ describe('useInstanceRetry', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
+  it('does not refetch or notify after an in-flight retry route unmounts', async () => {
+    let settle!: () => void;
+    vi.mocked(apiClient.post).mockImplementationOnce(() => new Promise<void>(resolve => { settle = resolve; }));
+    const queries = { refetch: vi.fn() };
+    const { result, unmount } = renderHook(() => useInstanceRetry({
+      instanceId: 'pi-1', engineId: 'engine-1', allRetryItems: [{ id: 'job-1', itemType: 'job' }],
+      retryJobsQ: queries, retryExtTasksQ: queries, incidentsQ: queries, actQ: queries,
+      retryDecision: { allowed: true } as any,
+    }));
+    act(() => result.current.openRetryModal());
+    act(() => result.current.setRetrySelectionMap({ 'job-1': true }));
+    let pending!: Promise<void>;
+    await act(async () => { pending = result.current.submitRetrySelection(); });
+    expect(apiClient.post).toHaveBeenCalledOnce();
+    unmount();
+    await act(async () => { settle(); await pending; });
+    expect(queries.refetch).not.toHaveBeenCalled();
+    expect(hookMocks.showAlert).not.toHaveBeenCalled();
+  });
+
   it('keeps an in-flight retry on its origin engine and ignores it after A to B to A', async () => {
     let resolveRequest: (() => void) | undefined;
     vi.mocked(apiClient.post).mockImplementation(() => new Promise<void>((resolve) => { resolveRequest = resolve; }));

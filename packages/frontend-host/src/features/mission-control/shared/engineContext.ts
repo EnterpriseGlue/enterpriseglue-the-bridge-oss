@@ -46,6 +46,8 @@ export function useGuardedEngineTask(engineId?: string | null) {
   }
   currentEngineIdRef.current = engineId
 
+  React.useEffect(() => () => { engineRevisionRef.current += 1 }, [])
+
   return React.useCallback(async <T>(
     task: (requestEngineId: string) => Promise<T>,
     handlers: GuardedEngineTaskHandlers<T>,

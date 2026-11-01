@@ -2,7 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { useInstanceData } from '@src/features/mission-control/process-instance-detail/components/hooks/useInstanceData';
+import { historicProcessVariables, useInstanceData } from '@src/features/mission-control/process-instance-detail/components/hooks/useInstanceData';
 import {
   fetchProcessDefinitionXml,
   getHistoricalProcessInstance,
@@ -221,6 +221,20 @@ describe('useInstanceData', () => {
       expect(result.current.defName).toBe('Actual process');
       expect(result.current.defVersion).toBe(2);
     });
+  });
+
+  it('retains prototype-like variable names in the completed process snapshot', () => {
+    const entries = ['__proto__', 'constructor', 'toString'].map((name, index) => ({
+      id: `variable-${index}`, name, type: 'Json', value: { index },
+      executionId: 'pi-1', processInstanceId: 'pi-1',
+    }));
+    const result = historicProcessVariables(entries, 'pi-1');
+    expect(Object.keys(result)).toEqual(['__proto__', 'constructor', 'toString']);
+    for (const [index, name] of ['__proto__', 'constructor', 'toString'].entries()) {
+      expect(Object.prototype.hasOwnProperty.call(result, name)).toBe(true);
+      expect(result[name]).toEqual({ type: 'Json', value: { index } });
+    }
+    expect(Object.getPrototypeOf(result)).toBeNull();
   });
 
   it('uses the process-scope historic snapshot after the instance completes', async () => {

@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { camundaGetWithConnection } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import { modifyProcessInstanceVariables } from '../../../packages/frontend-host/src/features/mission-control/process-instance-detail/api/processInstances.js';
+
+// Exercise the real frontend write adapter against the disposable engine. Only
+// the host HTTP hop is replaced; serialization and engine persistence are real.
+const frontendApi = vi.hoisted(() => ({ post: vi.fn() }));
+vi.mock('../../../packages/frontend-host/src/shared/api/client.js', () => ({ apiClient: frontendApi }));
 
 // Real pinned Operaton HTTP transport; audit persistence is outside this fixture.
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
@@ -48,8 +54,25 @@ describe('real Operaton serialized variable values', () => {
       expect(tasks).toHaveLength(1);
       expect(await camundaGetWithConnection(connection, `/task/${tasks[0].id}/variables`)).toMatchObject({ details: { type: 'Json', value: expected } });
       const edited = { ...expected, stage: 'reviewed' };
-      await json(`/process-instance/${instance.id}/variables`, { modifications: { details: { type: 'Json', value: JSON.stringify(edited) } } });
-      expect(await camundaGetWithConnection(connection, `/process-instance/${instance.id}/variables`)).toMatchObject({ details: { type: 'Json', value: edited } });
+      frontendApi.post.mockImplementation(async (path: string, body: { engineId: string; modifications: Record<string, unknown> }) => {
+        expect(path).toBe(`/mission-control-api/process-instances/${instance.id}/variables`);
+        expect(body.engineId).toBe(key);
+        return json(`/process-instance/${instance.id}/variables`, { modifications: body.modifications });
+      });
+      const modifications = {
+        details: { type: 'Json', value: edited },
+        added: { type: 'Json', value: ['bulk', 2, true, null] },
+        jsonString: { type: 'Json', value: 'JSON string' },
+        jsonNull: { type: 'Json', value: null },
+        count: { type: 'Integer', value: 43 },
+      };
+      await modifyProcessInstanceVariables(instance.id, { engineId: key, modifications });
+      expect(frontendApi.post).toHaveBeenCalledOnce();
+      expect(modifications.details.value).toEqual(edited);
+      expect(await camundaGetWithConnection(connection, `/process-instance/${instance.id}/variables`)).toMatchObject({
+        details: { type: 'Json', value: edited }, added: { type: 'Json', value: modifications.added.value },
+        jsonString: { type: 'Json', value: 'JSON string' }, jsonNull: { type: 'Json', value: null }, count: { type: 'Integer', value: 43 },
+      });
       await json(`/task/${tasks[0].id}/complete`, {});
       expect(await json(`/history/process-instance/${instance.id}`)).toMatchObject({ state: 'COMPLETED' });
       const activities = await camundaGetWithConnection<unknown[]>(connection, '/history/activity-instance', {
@@ -59,7 +82,9 @@ describe('real Operaton serialized variable values', () => {
       const historic = await camundaGetWithConnection<Array<{ name: string; type: string; value: unknown }>>(connection,
         '/history/variable-instance', { processInstanceId: instance.id });
       expect(historic.find(variable => variable.name === 'details')).toMatchObject({ type: 'Json', value: edited });
+      expect(historic.find(variable => variable.name === 'added')).toMatchObject({ type: 'Json', value: modifications.added.value });
     } finally {
+      frontendApi.post.mockReset();
       if (deploymentId) {
         const removed = await fetch(`${baseUrl}/deployment/${encodeURIComponent(deploymentId)}?cascade=true`,
           { method: 'DELETE', signal: AbortSignal.timeout(15000) });

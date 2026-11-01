@@ -20,6 +20,8 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
   const editorRevisionRef = useRef(0)
   currentEngineIdRef.current = engineId
 
+  useEffect(() => () => { editorRevisionRef.current += 1 }, [])
+
   const resetVariableEditor = useCallback(() => {
     editorRevisionRef.current += 1
     editingEngineIdRef.current = undefined
@@ -94,7 +96,7 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
         }
       }
       await modifyProcessInstanceVariables(instanceId, {
-        modifications: { [editingVarKey]: { value: editingVarType === 'Json' ? JSON.stringify(parsed) : parsed, type: editingVarType } },
+        modifications: { [editingVarKey]: { value: parsed, type: editingVarType } },
         engineId: requestEngineId,
       })
       if (!isCurrentRequest()) return

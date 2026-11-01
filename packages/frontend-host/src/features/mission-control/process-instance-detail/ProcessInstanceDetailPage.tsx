@@ -84,6 +84,7 @@ export default function ProcessInstanceDetailPage() {
     engineRevisionRef.current += 1
   }
   currentEngineIdRef.current = selectedEngineId
+  React.useEffect(() => () => { engineRevisionRef.current += 1 }, [])
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
@@ -592,7 +593,7 @@ export default function ProcessInstanceDetailPage() {
         throw new Error('Bulk upload JSON must be an object')
       }
 
-      const modifications: Record<string, { value: any; type: string }> = {}
+      const modifications: Record<string, { value: any; type: string }> = Object.create(null)
       for (const [k, v] of Object.entries(parsed)) {
         if (!k) continue
         if (v && typeof v === 'object' && !Array.isArray(v) && 'value' in (v as any) && 'type' in (v as any)) {

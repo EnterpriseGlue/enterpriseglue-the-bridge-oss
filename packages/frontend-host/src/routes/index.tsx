@@ -21,7 +21,7 @@ const EnginesPage = React.lazy(() => import('../features/mission-control/engines
 
 // Mission Control components
 const ProcessesOverviewPage = React.lazy(() => import('../features/mission-control/processes-overview/ProcessesOverviewPage'))
-const ProcessInstanceDetailPage = React.lazy(() => import('../features/mission-control/process-instance-detail/ProcessInstanceDetailPage'))
+const ProcessInstanceDetailPage = React.lazy(() => import('../features/mission-control/process-instance-detail/ProcessInstanceDetailRoute'))
 const Decisions = React.lazy(() => import('../features/mission-control/decisions-overview/components/Decisions'))
 const DecisionHistoryDetail = React.lazy(() => import('../features/mission-control/decision-instance-detail/components/DecisionHistoryDetail'))
 const BatchesPage = React.lazy(() => import('../features/mission-control/batches/BatchesPage'))

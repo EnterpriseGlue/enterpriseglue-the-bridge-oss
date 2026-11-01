@@ -49,6 +49,22 @@ describe('withEngineContext', () => {
 })
 
 describe('useGuardedEngineTask', () => {
+  it.each(['success', 'error'])('suppresses late %s after its route unmounts', async (outcome) => {
+    const response = deferred<string>()
+    const onSuccess = vi.fn(), onError = vi.fn()
+    const { result, unmount } = renderHook(() => useGuardedEngineTask('engine-a'))
+    let pending!: Promise<boolean>
+    await act(async () => { pending = result.current(() => response.promise, { onSuccess, onError }) })
+    unmount()
+    await act(async () => {
+      if (outcome === 'success') response.resolve('settled')
+      else response.reject(new Error('settled error'))
+    })
+    await expect(pending).resolves.toBe(false)
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
   it('suppresses deferred success callbacks after A to B to A while preserving the origin engine', async () => {
     const response = deferred<{ allowed: boolean }>()
     const task = vi.fn(() => response.promise)

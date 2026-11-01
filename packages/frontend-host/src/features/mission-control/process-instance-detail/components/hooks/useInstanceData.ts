@@ -64,11 +64,11 @@ export function historicProcessVariables(
   entries: HistoricVariableInstance[],
   processInstanceId: string,
 ): Variables {
-  const variables: Variables = {}
+  const variables: Variables = Object.create(null)
   const hasExecutionScope = entries.some((entry) => entry.executionId !== undefined && entry.executionId !== null)
 
   for (const entry of entries) {
-    if (!entry?.name || variables[entry.name]) continue
+    if (!entry?.name || Object.prototype.hasOwnProperty.call(variables, entry.name)) continue
     if (hasExecutionScope && String(entry.executionId ?? '') !== processInstanceId) continue
     variables[entry.name] = {
       type: entry.type || 'String',
