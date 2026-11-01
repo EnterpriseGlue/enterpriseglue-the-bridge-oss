@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,12 +8,17 @@ import { apiClient } from '@src/shared/api/client';
 import { ProjectPermission } from '@src/shared/auth/permissions';
 import { AuthContext, type AuthContextValue } from '@src/contexts/AuthContext';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
+import { advanceBrowserSessionRevision } from '@src/utils/browserSession';
+
+const projectId = '11111111-1111-4111-8111-111111111111';
+const secondProjectId = '22222222-2222-4222-8222-222222222222';
 
 vi.mock('@carbon/react', () => ({
-  Modal: ({ open, children, modalHeading }: any) => (open ? (
+  Modal: ({ open, children, modalHeading, onRequestClose }: any) => (open ? (
     <div role="dialog" aria-label={modalHeading}>
       <h1>{modalHeading}</h1>
       {children}
+      <button onClick={onRequestClose}>Close settings</button>
     </div>
   ) : null),
   TextInput: ({ id, labelText, value, onChange, disabled, type = 'text', invalidText }: any) => (
@@ -57,7 +62,8 @@ vi.mock('@carbon/react', () => ({
   ToggletipContent: ({ children }: any) => <div>{children}</div>,
 }));
 
-vi.mock('@src/shared/api/client', () => ({
+vi.mock('@src/shared/api/client', async original => ({
+  ...await original<typeof import('@src/shared/api/client')>(),
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
@@ -81,7 +87,7 @@ const basePermissions: CurrentUserPermissions = {
   tenantId: null,
   platform: [],
   projects: [{
-    resourceId: 'project-1',
+    resourceId: projectId,
     permissions: [
       ProjectPermission.FILES_VIEW,
       ProjectPermission.GIT_CONNECT,
@@ -91,6 +97,8 @@ const basePermissions: CurrentUserPermissions = {
   authorizationVersion: 'test-authz-v1',
   generatedAt: 1,
 };
+const bothProjectPermissions = { ...basePermissions, projects: [...basePermissions.projects,
+  { ...basePermissions.projects[0], resourceId: secondProjectId }] };
 
 function makeAuthContext(permissions: CurrentUserPermissions = basePermissions): AuthContextValue {
   return {
@@ -124,30 +132,37 @@ function makeAuthContext(permissions: CurrentUserPermissions = basePermissions):
 function renderSettings(
   connection: GitConnectionResponse,
   props: Partial<React.ComponentProps<typeof ProjectGitSettings>> = {},
-  permissions: CurrentUserPermissions = basePermissions
+  permissions: CurrentUserPermissions = basePermissions,
+  strict = false
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   (apiClient.get as any).mockImplementation(async (url: string) => {
-    if (url === '/git-api/project-connection') return connection;
+    if (url === '/git-api/project-connection') return connection.connected ? {
+      providerId: 'github', repositoryName: 'orders', namespace: 'acme', defaultBranch: 'main',
+      remoteUrl: 'https://example.invalid/acme/orders', hasToken: true, lastValidatedAt: Date.now(),
+      tokenScopeHint: null, connectedByUserId: 'user-1', lastSyncAt: null, ...connection,
+    } : connection;
     return {};
   });
 
-  return render(
-    <AuthContext.Provider value={makeAuthContext(permissions)}>
+  const tree = (nextProps = props, nextPermissions = permissions) => (
+    <AuthContext.Provider value={makeAuthContext(nextPermissions)}>
       <QueryClientProvider client={queryClient}>
-        <ProjectGitSettings projectId="project-1" open onClose={vi.fn()} {...props} />
+        <ProjectGitSettings projectId={projectId} open onClose={vi.fn()} {...nextProps} />
       </QueryClientProvider>
     </AuthContext.Provider>
   );
+  return { ...render(strict ? <React.StrictMode>{tree()}</React.StrictMode> : tree()), tree, queryClient };
 }
 
 describe('ProjectGitSettings', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
-    (apiClient.post as any).mockResolvedValue({ success: true });
+    (apiClient.post as any).mockResolvedValue({ success: true, repoFullName: 'acme/orders' });
     (apiClient.put as any).mockResolvedValue({ success: true });
     (apiClient.delete as any).mockResolvedValue({ success: true });
   });
@@ -200,7 +215,7 @@ describe('ProjectGitSettings', () => {
       {
         ...basePermissions,
         projects: [{
-          resourceId: 'project-1',
+          resourceId: projectId,
           permissions: [ProjectPermission.FILES_VIEW],
         }],
       }
@@ -220,7 +235,7 @@ describe('ProjectGitSettings', () => {
       {
         ...basePermissions,
         projects: [{
-          resourceId: 'project-1',
+          resourceId: projectId,
           permissions: [ProjectPermission.GIT_CONNECT],
         }],
       }
@@ -230,7 +245,7 @@ describe('ProjectGitSettings', () => {
     expect(screen.getByText(`Missing permission ${ProjectPermission.FILES_VIEW}`)).toBeInTheDocument();
     expect(screen.queryByText('Connected')).not.toBeInTheDocument();
     expect(screen.queryByText(/Connect this project to a Git repository/i)).not.toBeInTheDocument();
-    expect(apiClient.get).not.toHaveBeenCalledWith('/git-api/project-connection', { projectId: 'project-1' });
+    expect(apiClient.get).not.toHaveBeenCalledWith('/git-api/project-connection', { projectId });
   });
 
   it('connects a repository when project git connect permission is available', async () => {
@@ -243,7 +258,7 @@ describe('ProjectGitSettings', () => {
 
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith('/git-api/project-connection', {
-        projectId: 'project-1',
+        projectId,
         providerId: 'github',
         repositoryName: 'orders',
         namespace: 'acme',
@@ -251,5 +266,147 @@ describe('ProjectGitSettings', () => {
         token: 'ghp_token',
       });
     });
+  });
+
+  async function fillConnection() {
+    await userEvent.type(await screen.findByLabelText(/Owner \/ Namespace/i), 'acme');
+    await userEvent.type(screen.getByLabelText(/Repository name/i), 'orders');
+    await userEvent.type(screen.getByLabelText(/Service Token \(PAT\)/i), 'synthetic-service-token');
+  }
+
+  it('does not clear the token or invalidate caches for an unverified connection receipt', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({});
+    const f = renderSettings({ connected: false });
+    const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    await fillConnection();
+    await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    expect(await screen.findByText(/Connection response was not verified/)).toBeVisible();
+    expect(screen.getByLabelText(/Service Token \(PAT\)/i)).toHaveValue('synthetic-service-token');
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('clears private and target form fields when the project changes', async () => {
+    const f = renderSettings({ connected: false }); await fillConnection();
+    f.rerender(f.tree({ projectId: secondProjectId }, bothProjectPermissions));
+    expect(await screen.findByLabelText(/Service Token \(PAT\)/i)).toHaveValue('');
+    expect(screen.getByLabelText(/Repository name/i)).toHaveValue('');
+  });
+
+  it('refuses malformed or unredacted connection status before caching/displaying it', async () => {
+    const f = renderSettings({ connected: true });
+    await screen.findByText('Connected');
+    vi.mocked(apiClient.get).mockResolvedValue({ connected: true, repositoryName: 'unverified-repository', token: 'synthetic-secret' });
+    await act(async () => { f.queryClient.removeQueries({ queryKey: ['git-connection'] }); });
+    f.rerender(f.tree({ projectId: secondProjectId }, bothProjectPermissions));
+    expect(await screen.findByText(/Connection status was not verified/)).toBeVisible();
+    expect(screen.queryByText('unverified-repository')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Test & Connect' })).not.toBeInTheDocument();
+    expect(JSON.stringify(f.queryClient.getQueryCache().findAll({ queryKey: ['git-connection', secondProjectId] }).map(query => query.state.data))).not.toContain('synthetic-secret');
+  });
+
+  it.each([{}, { success: false }, { success: true, repoFullName: 'foreign/repository' }, { success: true, repoFullName: 'acme/orders', token: 'unexpected' }])('refuses a malformed or retargeted connect acknowledgement %j', async receipt => {
+    vi.mocked(apiClient.post).mockResolvedValue(receipt);
+    const f = renderSettings({ connected: false }); const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    await fillConnection(); await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    expect(await screen.findByText(/Connection response was not verified/)).toBeVisible();
+    expect(invalidate).not.toHaveBeenCalled(); expect(apiClient.post).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['token', 'disconnect'])('does not report %s success for an empty receipt', async operation => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(apiClient.put).mockResolvedValue({}); vi.mocked(apiClient.delete).mockResolvedValue({});
+    const f = renderSettings({ connected: true }); const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    await screen.findByText('Connected');
+    if (operation === 'token') {
+      await userEvent.click(screen.getByRole('button', { name: 'Update Token' }));
+      await userEvent.type(screen.getByLabelText('New Token'), 'synthetic-new-token');
+      await userEvent.click(screen.getByRole('button', { name: 'Test & Save' }));
+    } else await userEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    expect(await screen.findByText(/Connection response was not verified/)).toBeVisible();
+    if (operation === 'token') expect(screen.getByLabelText('New Token')).toHaveValue('synthetic-new-token');
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it.each(['project', 'close', 'unmount', 'user', 'permission', 'session'])('suppresses late connect results after %s changes', async change => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const f = renderSettings({ connected: false }); const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    await fillConnection(); await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+    if (change === 'project') {
+      f.rerender(f.tree({ projectId: secondProjectId }, bothProjectPermissions));
+      await fillConnection();
+    } else if (change === 'close') await userEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+    else if (change === 'unmount') f.unmount();
+    else if (change === 'user') f.rerender(f.tree({}, { ...basePermissions, userId: 'user-2' }));
+    else if (change === 'permission') f.rerender(f.tree({ canManageConnection: false }));
+    else advanceBrowserSessionRevision();
+    await act(async () => finish({ success: true, repoFullName: 'acme/orders' }));
+    expect(invalidate).not.toHaveBeenCalled();
+    if (change === 'project') {
+      expect(screen.getByLabelText(/Service Token \(PAT\)/i)).toHaveValue('synthetic-service-token');
+      expect(screen.getByRole('button', { name: 'Test & Connect' })).toBeEnabled();
+    }
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes all connection consumers only after the matching verified receipt', async () => {
+    const f = renderSettings({ connected: false }); const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    await fillConnection(); await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(5));
+    for (const queryKey of [['git-connection', projectId], ['git', 'repository', projectId], ['git', 'repositories'], ['git', 'sync-status', projectId], ['starbase', 'projects']]) expect(invalidate).toHaveBeenCalledWith({ queryKey });
+    expect(screen.getByLabelText(/Service Token \(PAT\)/i)).toHaveValue('');
+    expect(f.queryClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  it('refuses a click from an authority rendered before the browser session changed', async () => {
+    renderSettings({ connected: false }); await fillConnection(); advanceBrowserSessionRevision();
+    await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' })); expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('supports a verified connection under StrictMode without retaining the private request in a mutation cache', async () => {
+    const f = renderSettings({ connected: false }, {}, basePermissions, true);
+    const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries'); await fillConnection();
+    await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(5)); expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(f.queryClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  it.each(['token', 'disconnect'])('accepts a verified %s receipt and sends only its canonical request', async operation => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const f = renderSettings({ connected: true }); const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    await screen.findByText('Connected');
+    if (operation === 'token') {
+      await userEvent.click(screen.getByRole('button', { name: 'Update Token' })); await userEvent.type(screen.getByLabelText('New Token'), 'synthetic-new-token');
+      await userEvent.click(screen.getByRole('button', { name: 'Test & Save' }));
+      expect(apiClient.put).toHaveBeenCalledExactlyOnceWith('/git-api/project-connection/token', { projectId, token: 'synthetic-new-token' });
+    } else {
+      await userEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+      expect(apiClient.delete).toHaveBeenCalledExactlyOnceWith('/git-api/project-connection', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId }) });
+    }
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(5)); expect(f.queryClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  it('does not reuse the previous principal connection status while the new query is pending', async () => {
+    const f = renderSettings({ connected: true }); await screen.findByText('Connected');
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.get).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    f.rerender(f.tree({}, { ...basePermissions, userId: 'user-2' }));
+    expect(screen.queryByText('Connected')).not.toBeInTheDocument(); expect(screen.queryByText('acme/orders')).not.toBeInTheDocument();
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+    await act(async () => finish({ connected: false })); expect(await screen.findByRole('button', { name: 'Test & Connect' })).toBeVisible();
+  });
+
+  it('does not expose the submitted service token in a failure notification', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(new Error('Rejected synthetic-service-token'));
+    renderSettings({ connected: false }); await fillConnection(); await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    expect(await screen.findByText('Rejected [redacted]')).toBeVisible(); expect(screen.queryByText('Rejected synthetic-service-token')).not.toBeInTheDocument();
+  });
+
+  it('refuses duplicate confirmation while a request is pending and freezes its target fields', async () => {
+    let finish!: (value: unknown) => void; vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    renderSettings({ connected: false }); await fillConnection(); await userEvent.dblClick(screen.getByRole('button', { name: 'Test & Connect' }));
+    expect(apiClient.post).toHaveBeenCalledTimes(1); expect(screen.getByLabelText(/Repository name/i)).toBeDisabled(); expect(screen.getByLabelText(/Service Token \(PAT\)/i)).toBeDisabled();
+    await act(async () => finish({ success: true, repoFullName: 'acme/orders' }));
   });
 });

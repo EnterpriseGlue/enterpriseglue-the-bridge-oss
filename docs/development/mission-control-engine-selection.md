@@ -315,3 +315,28 @@ pull permission. Explicit sync restrictions prevent confirmation even while
 membership presentation is loading. UI permission fallbacks cannot override a
 server-supplied restriction; independently permitted pull-only users remain
 supported.
+
+
+## Project Git connection settings
+
+Connection settings read and validate the canonical redacted connection status
+before caching or showing repository controls. The status cache is keyed by
+project and current browser authority. Loading, denied or malformed status does
+not present an unverified connect form.
+
+The form's private token inputs, selected repository and pending results belong
+to one project, open lifetime and authority. Changing that boundary clears the
+form; closing it invalidates pending UI continuations. Browser-session changes
+also prevent dispatch and late settlement before a React rerender is required.
+Only one connection change can be pending, and its target inputs stay disabled.
+Token-bearing requests are kept out of the query mutation cache.
+
+Connect, token replacement and disconnect use the canonical request and receipt
+schemas. Connect additionally checks that the acknowledgement names the requested
+namespace/repository. Only a verified current acknowledgement clears private
+inputs and invalidates connection, repository, sync-status and project consumers.
+An invalid receipt keeps the current form available for review, without reporting
+success. These checks do not cancel an issued request or independently prove
+provider/database effects; reconcile uncertainty before repeating a change.
+Existing server authorization, token validation and database controls remain
+mandatory.

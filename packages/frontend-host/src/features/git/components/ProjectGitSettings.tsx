@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useContext } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import React, { useState, useEffect, useContext, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Modal,
   TextInput,
@@ -19,12 +19,21 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { ProjectPermission } from '../../../shared/auth/permissions'
 import { AuthContext } from '../../../contexts/AuthContext'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
-import type {
-  DisconnectProjectGitConnectionRequest,
-  ProjectGitConnection,
-  ProjectGitConnectionRequest,
-  UpdateProjectGitConnectionTokenRequest,
+import {
+  ProjectGitConnectionSchema,
+  ProjectGitConnectionQuerySchema,
+  ProjectGitConnectionRequestSchema,
+  ProjectGitConnectionReceiptSchema,
+  ProjectGitConnectionOperationReceiptSchema,
+  UpdateProjectGitConnectionTokenRequestSchema,
+  DisconnectProjectGitConnectionRequestSchema,
+  type DisconnectProjectGitConnectionRequest,
+  type ProjectGitConnectionRequest,
+  type UpdateProjectGitConnectionTokenRequest,
 } from '@enterpriseglue/shared/schemas/git/repository.js'
+
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
+import { getBrowserSessionRevision } from '../../../utils/browserSession'
 
 interface ProjectGitSettingsProps {
   projectId: string
@@ -68,13 +77,23 @@ function TokenInfoPanel() {
   )
 }
 
-export function ProjectGitSettings({
+export function ProjectGitSettings(props: ProjectGitSettingsProps) {
+  const auth = useContext(AuthContext)
+  const authority = JSON.stringify([auth?.user?.session?.principal.id || auth?.user?.id || null,
+    auth?.user?.session?.tenant.id || null, auth?.sessionRevision ?? null, permissionSnapshotAuthorityKey(auth?.permissions)])
+  // Private inputs and pending UI belong to one project/open/authority lifetime.
+  return <ProjectGitSettingsForm key={JSON.stringify([props.projectId, props.open, authority,
+    props.canManageConnection, props.manageConnectionUnavailableReason])} {...props} authority={authority} />
+}
+
+function ProjectGitSettingsForm({
   projectId,
   open,
   onClose,
   canManageConnection = true,
   manageConnectionUnavailableReason,
-}: ProjectGitSettingsProps) {
+  authority,
+}: ProjectGitSettingsProps & { authority: string }) {
   const queryClient = useQueryClient()
   const authContext = useContext(AuthContext)
   const projectResource = { type: 'project' as const, id: projectId }
@@ -102,11 +121,27 @@ export function ProjectGitSettings({
   const [updateToken, setUpdateToken] = useState('')
   const [showUpdateToken, setShowUpdateToken] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  type Operation = 'connect' | 'token' | 'disconnect'
+  const [busy, setBusy] = useState<Operation | null>(null)
+  const activeRef = useRef(false), mountedRef = useRef(true), closedRef = useRef(false), lifetimeRef = useRef(0)
+  const renderedSession = useRef(getBrowserSessionRevision()).current
+  const current = (lifetime: number) => mountedRef.current && !closedRef.current && lifetime === lifetimeRef.current && renderedSession === getBrowserSessionRevision()
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; lifetimeRef.current += 1 } }, [])
 
   // Fetch connection status
   const connectionQ = useQuery({
-    queryKey: ['git-connection', projectId],
-    queryFn: () => apiClient.get<ProjectGitConnection>('/git-api/project-connection', { projectId }),
+    queryKey: ['git-connection', projectId, authority],
+    queryFn: async () => {
+      // The query already owns its project/authority cache key. Remounting the
+      // observer must not invalidate an otherwise current read in StrictMode.
+      const query = ProjectGitConnectionQuerySchema.safeParse({ projectId })
+      if (!query.success || renderedSession !== getBrowserSessionRevision()) throw new Error('Connection context changed; reopen settings')
+      const raw = await apiClient.get('/git-api/project-connection', query.data)
+      if (renderedSession !== getBrowserSessionRevision()) throw new Error('Connection context changed; reopen settings')
+      const parsed = ProjectGitConnectionSchema.safeParse(raw)
+      if (!parsed.success) throw new Error('Connection status was not verified')
+      return parsed.data
+    },
     enabled: open && !!projectId && !readConnectionUnavailableReason,
   })
 
@@ -120,101 +155,81 @@ export function ProjectGitSettings({
   const gitConnectionUnavailableReason = cleanManageConnectionUnavailableReason || legacyManageConnectionUnavailableReason
   const canMutateConnection = !gitConnectionUnavailableReason
 
-  // Reset form when opening
-  useEffect(() => {
-    if (open) {
-      setToken('')
-      setUpdateToken('')
-      setShowUpdateToken(false)
-      setError(null)
+  const statusVerified = connectionQ.isSuccess && !!conn && !readConnectionUnavailableReason
+  const isBusy = busy !== null
+  const canConfirm = () => open && current(lifetimeRef.current) && !activeRef.current && statusVerified && canMutateConnection
+
+  async function runOperation(kind: Operation, request: ProjectGitConnectionRequest | UpdateProjectGitConnectionTokenRequest | DisconnectProjectGitConnectionRequest) {
+    if (!canConfirm()) return
+    const lifetime = lifetimeRef.current
+    const plan = (() => {
+      if (kind === 'connect') {
+        const parsed = ProjectGitConnectionRequestSchema.safeParse({ ...request })
+        return parsed.success ? { kind: 'connect' as const, request: parsed.data } : null
+      }
+      if (kind === 'token') {
+        const parsed = UpdateProjectGitConnectionTokenRequestSchema.safeParse({ ...request })
+        return parsed.success ? { kind: 'token' as const, request: parsed.data } : null
+      }
+      const parsed = DisconnectProjectGitConnectionRequestSchema.safeParse({ ...request })
+      return parsed.success ? { kind: 'disconnect' as const, request: parsed.data } : null
+    })()
+    if (!plan) { setError('Connection request was not verified'); return }
+    const captured = plan.request
+    const privateToken = plan.kind === 'disconnect' ? null : plan.request.token
+    activeRef.current = true
+    setBusy(kind); setError(null)
+    try {
+      let raw: unknown
+      if (kind === 'connect') raw = await apiClient.post('/git-api/project-connection', captured)
+      else if (kind === 'token') raw = await apiClient.put('/git-api/project-connection/token', captured)
+      else raw = await apiClient.delete('/git-api/project-connection', {
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(captured),
+      })
+      if (!current(lifetime)) return
+      if (plan.kind === 'connect') {
+        const receipt = ProjectGitConnectionReceiptSchema.safeParse(raw)
+        const expected = plan.request.namespace ? `${plan.request.namespace}/${plan.request.repositoryName}` : plan.request.repositoryName
+        if (!receipt.success || receipt.data.repoFullName !== expected) throw new Error('Connection response was not verified')
+      } else if (!ProjectGitConnectionOperationReceiptSchema.safeParse(raw).success) {
+        throw new Error('Connection response was not verified')
+      }
+      setToken(''); setUpdateToken(''); setShowUpdateToken(false)
+      // Refresh the consumers of this connection, not just the settings query.
+      await Promise.all([
+        ['git-connection', projectId], ['git', 'repository', projectId], ['git', 'repositories'],
+        ['git', 'sync-status', projectId], ['starbase', 'projects'],
+      ].map(queryKey => queryClient.invalidateQueries({ queryKey })))
+    } catch (failure) {
+      if (!current(lifetime)) return
+      const message = parseApiError(failure, 'Git connection change failed').message
+      setError(privateToken ? message.split(privateToken).join('[redacted]') : message)
+    } finally {
+      if (current(lifetime)) { activeRef.current = false; setBusy(null) }
     }
-  }, [open])
-
-  // Connect mutation
-  const connectMutation = useMutation({
-    mutationFn: (data: ProjectGitConnectionRequest) =>
-      apiClient.post('/git-api/project-connection', data),
-    onSuccess: () => {
-      setError(null)
-      setToken('')
-      queryClient.invalidateQueries({ queryKey: ['git-connection', projectId] })
-    },
-    onError: (err: any) => {
-      const parsed = parseApiError(err)
-      setError(parsed.message || 'Failed to connect')
-    },
-  })
-
-  // Update token mutation
-  const updateTokenMutation = useMutation({
-    mutationFn: (data: UpdateProjectGitConnectionTokenRequest) =>
-      apiClient.put('/git-api/project-connection/token', data),
-    onSuccess: () => {
-      setError(null)
-      setUpdateToken('')
-      setShowUpdateToken(false)
-      queryClient.invalidateQueries({ queryKey: ['git-connection', projectId] })
-    },
-    onError: (err: any) => {
-      const parsed = parseApiError(err)
-      setError(parsed.message || 'Failed to update token')
-    },
-  })
-
-  // Disconnect mutation
-  const disconnectMutation = useMutation({
-    mutationFn: () => apiClient.delete('/git-api/project-connection', {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId } satisfies DisconnectProjectGitConnectionRequest),
-    }),
-    onSuccess: () => {
-      setError(null)
-      queryClient.invalidateQueries({ queryKey: ['git-connection', projectId] })
-    },
-    onError: (err: any) => {
-      const parsed = parseApiError(err)
-      setError(parsed.message || 'Failed to disconnect')
-    },
-  })
+  }
 
   const handleConnect = () => {
-    if (gitConnectionUnavailableReason) {
-      setError(gitConnectionUnavailableReason)
-      return
-    }
-    if (!repoName.trim() || !token.trim()) return
-    setError(null)
-    connectMutation.mutate({
-      projectId,
-      providerId,
-      repositoryName: repoName.trim(),
-      namespace: namespace.trim() || undefined,
-      defaultBranch: branch.trim() || 'main',
-      token: token.trim(),
-    })
+    if (!canConfirm() || conn?.connected !== false || !repoName.trim() || !token.trim()) return
+    void runOperation('connect', { projectId, providerId, repositoryName: repoName.trim(),
+      namespace: namespace.trim() || undefined, defaultBranch: branch.trim() || 'main', token: token.trim() })
   }
-
   const handleUpdateToken = () => {
-    if (gitConnectionUnavailableReason) {
-      setError(gitConnectionUnavailableReason)
-      return
-    }
-    if (!updateToken.trim()) return
-    setError(null)
-    updateTokenMutation.mutate({ projectId, token: updateToken.trim() })
+    if (!canConfirm() || conn?.connected !== true || !updateToken.trim()) return
+    void runOperation('token', { projectId, token: updateToken.trim() })
   }
-
   const handleDisconnect = () => {
-    if (gitConnectionUnavailableReason) {
-      setError(gitConnectionUnavailableReason)
-      return
-    }
+    if (!canConfirm() || conn?.connected !== true) return
     if (!confirm('Disconnect this project from Git? The repository will not be deleted.')) return
-    disconnectMutation.mutate()
+    void runOperation('disconnect', { projectId })
+  }
+  const handleClose = () => {
+    closedRef.current = true; lifetimeRef.current += 1
+    setToken(''); setUpdateToken(''); setRepoName(''); setNamespace(''); setBranch('main'); setError(null); setBusy(null)
+    onClose()
   }
 
   const isConnected = conn?.connected
-  const isBusy = connectMutation.isPending || updateTokenMutation.isPending || disconnectMutation.isPending
 
   // Token staleness: warn if lastValidatedAt is missing or older than 7 days
   const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000
@@ -228,13 +243,15 @@ export function ProjectGitSettings({
   return (
     <Modal
       open={open}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       modalHeading="Git Connection"
       passiveModal
       size="md"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-3)' }}>
         {connectionQ.isLoading && <InlineLoading description="Loading connection status..." />}
+        {connectionQ.isError && <InlineNotification kind="error" title="Connection status unavailable"
+          subtitle="Connection status was not verified" hideCloseButton lowContrast />}
 
         {error && (
           <InlineNotification
@@ -278,7 +295,7 @@ export function ProjectGitSettings({
         )}
 
         {/* Connected state */}
-        {!readConnectionUnavailableReason && isConnected && conn && (
+        {statusVerified && isConnected && conn && (
           <>
             <Tile>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
@@ -328,7 +345,7 @@ export function ProjectGitSettings({
                     value={updateToken}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpdateToken(e.target.value)}
                     placeholder="ghp_... or glpat-..."
-                    disabled={!canMutateConnection}
+                    disabled={!canMutateConnection || isBusy || closedRef.current}
                     style={{ flex: 1 }}
                   />
                   <Toggletip align="bottom">
@@ -347,9 +364,9 @@ export function ProjectGitSettings({
                     disabled={!updateToken.trim() || isBusy || !canMutateConnection}
                     title={gitConnectionUnavailableReason ?? undefined}
                   >
-                    {updateTokenMutation.isPending ? 'Validating...' : 'Test & Save'}
+                    {busy === 'token' ? 'Validating...' : 'Test & Save'}
                   </Button>
-                  <Button size="sm" kind="ghost" onClick={() => { setShowUpdateToken(false); setUpdateToken('') }}>
+                  <Button size="sm" kind="ghost" disabled={isBusy} onClick={() => { setShowUpdateToken(false); setUpdateToken('') }}>
                     Cancel
                   </Button>
                 </div>
@@ -382,7 +399,7 @@ export function ProjectGitSettings({
         )}
 
         {/* Not connected state */}
-        {!readConnectionUnavailableReason && !connectionQ.isLoading && !isConnected && (
+        {statusVerified && !isConnected && (
           <>
             <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>
               Connect this project to a Git repository. A service token will be used for all push/pull operations — team members don't need their own GitHub account.
@@ -396,7 +413,7 @@ export function ProjectGitSettings({
               itemToString={(item: typeof PROVIDER_OPTIONS[number] | null) => item?.text || ''}
               selectedItem={PROVIDER_OPTIONS.find(p => p.id === providerId)}
               onChange={({ selectedItem }: any) => setProviderId(selectedItem?.id || 'github')}
-              disabled={!canMutateConnection}
+              disabled={!canMutateConnection || isBusy || closedRef.current}
               size="md"
             />
 
@@ -407,7 +424,7 @@ export function ProjectGitSettings({
                 value={namespace}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNamespace(e.target.value)}
                 placeholder="e.g. my-org"
-                disabled={!canMutateConnection}
+                disabled={!canMutateConnection || isBusy || closedRef.current}
                 style={{ flex: 1 }}
               />
               <TextInput
@@ -416,7 +433,7 @@ export function ProjectGitSettings({
                 value={repoName}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRepoName(e.target.value)}
                 placeholder="e.g. my-project"
-                disabled={!canMutateConnection}
+                disabled={!canMutateConnection || isBusy || closedRef.current}
                 style={{ flex: 1 }}
                 invalid={!repoName.trim() && repoName !== ''}
                 invalidText="Required"
@@ -429,7 +446,7 @@ export function ProjectGitSettings({
               value={branch}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBranch(e.target.value)}
               placeholder="main"
-              disabled={!canMutateConnection}
+              disabled={!canMutateConnection || isBusy || closedRef.current}
             />
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--spacing-3)' }}>
@@ -440,7 +457,7 @@ export function ProjectGitSettings({
                 value={token}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setToken(e.target.value)}
                 placeholder="ghp_... or glpat-..."
-                disabled={!canMutateConnection}
+                disabled={!canMutateConnection || isBusy || closedRef.current}
                 style={{ flex: 1 }}
                 invalid={!token.trim() && token !== ''}
                 invalidText="Required"
@@ -460,7 +477,7 @@ export function ProjectGitSettings({
               disabled={!repoName.trim() || !token.trim() || isBusy || !canMutateConnection}
               title={gitConnectionUnavailableReason ?? undefined}
             >
-              {connectMutation.isPending ? 'Validating & Connecting...' : 'Test & Connect'}
+              {busy === 'connect' ? 'Validating & Connecting...' : 'Test & Connect'}
             </Button>
           </>
         )}

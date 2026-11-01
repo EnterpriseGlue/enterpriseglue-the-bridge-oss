@@ -37,7 +37,8 @@
     "Saving or restoring one file preserves sibling saved baselines and unsaved drafts. Create Version refuses obsolete preparation and unverified responses.",
     "Publish uses the saved draft tree without including unsaved siblings. Dirty status recognizes renames, moves, deletion markers and conflicting snapshots.",
     "Git deployment now sends the reviewed saved revision and keeps its export fixed across provider calls; unverified receipts or requested tags no longer report success.",
-    "Manual and bulk Git sync verify acknowledgements and stop old continuations after cancellation, view/selection changes or session changes. Replacement dialogs retain their own busy/result state."
+    "Manual and bulk Git sync verify acknowledgements and stop old continuations after cancellation, view/selection changes or session changes. Replacement dialogs retain their own busy/result state.",
+    "Project Git connection settings verify redacted status and matching write acknowledgements, reset private inputs on project/user/view changes, and refresh repository/sync consumers only after a verified current response."
   ],
   "upgrade": {
     "required": true,
@@ -81,7 +82,8 @@
     "Publication rejects foreign project/owner/tree references and conflicting identities before changing main. Dirty-status baseline lookup is project-bound. Existing grants, database policies and migration floors are unchanged.",
     "Git and engine delivery share exact source verification. Git export rejects revision drift, foreign/missing versions, ambiguous paths and cyclic folders before resolving a provider. No permission, IAM or database-policy relaxation.",
     "Manual sync repository and personal-credential queries are authority-bound; bulk queues own their confirmed project scope and recheck session/view lifetime before every request. Existing server permissions remain authoritative.",
-    "Manual and bulk sync keep push/pull permissions distinct and honor explicit action restrictions before dispatch, including while membership presentation is pending."
+    "Manual and bulk sync keep push/pull permissions distinct and honor explicit action restrictions before dispatch, including while membership presentation is pending.",
+    "Project connection status caches are authority-bound; token requests stay out of the query mutation cache. Late writes cannot update a replacement dialog, and submitted tokens are redacted from displayed failure messages. Server permissions and token validation are unchanged."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -123,7 +125,8 @@
     "Actual PostgreSQL scoped save to publish to deployment-revision verification, repeated publish/new draft inheritance, metadata/tombstone/duplicate/content-drift negatives and cyclic folder ancestry. Git import/push complete-save callers remain covered locally.",
     "Native PostgreSQL Git service and push adapter with a simulated provider: dispatch-time draft mutation, invalid source/path, legacy checkpoint, lost ACK, empty SHA, tag uncertainty and verified/unknown unchanged remote head. Browser request/receipt and session-lifetime regressions; exact CI lane selection verified locally.",
     "Canonical sync request/receipt and malformed/duplicate queue tests; actual sync dialog and project overview controller regressions for cancel/reopen, user/session changes, per-user credentials, receipt errors and confirmed selection cleanup.",
-    "Push-only denial of pull, permitted pull-only confirmation, explicit restriction with a true legacy fallback, and pending-membership denial regressions."
+    "Push-only denial of pull, permitted pull-only confirmation, explicit restriction with a true legacy fallback, and pending-membership denial regressions.",
+    "Actual project-connection component regressions cover malformed/unredacted status, retargeted/empty receipts, per-user cache separation, close/project/user/permission/session lifetimes, duplicate dispatch, private inputs, canonical update/disconnect requests and StrictMode."
   ],
   "packages": [
     {
