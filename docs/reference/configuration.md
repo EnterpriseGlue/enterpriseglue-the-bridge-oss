@@ -507,6 +507,10 @@ document from `EG_FRONTEND_RUNTIME_API_BASE_URL` and
 allows the same published image digest to be promoted between environments.
 When the runtime API value is empty, the document applies no override and the
 existing `VITE_API_BASE_URL`, then same-origin, precedence remains unchanged.
+Serve the configuration document directly at its configured same-origin URL.
+The loader rejects redirects, including same-origin redirects; optional loading
+retains the build-time configuration on failure, while required loading stops
+startup. The original document may still explicitly select a separate API origin.
 
 Managed deployments may also add `systemFrontendModules` to that runtime
 document. Each entry contains a reverse-DNS `ownerId`, same-origin `entryPath`,

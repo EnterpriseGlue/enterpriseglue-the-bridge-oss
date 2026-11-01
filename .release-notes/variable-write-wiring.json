@@ -28,7 +28,8 @@
     "Shared SaaS profile names stay at their identity/provisioning provider boundary; normalized timestamps and controlled edit fields keep directory presentation consistent.",
     "Process drafts and deployment continuations discard older session and permission state even when the URL, account or engine ID stays the same.",
     "An older 401 refresh cannot replay a request under a replacement login or clear its local state; private caches are discarded on same-account session replacement and permission changes.",
-    "Session startup makes one refresh attempt for an expired session and stops on other failures; a pending login-page bootstrap cannot continue after switching tenants."
+    "Session startup makes one refresh attempt for an expired session and stops on other failures; a pending login-page bootstrap cannot continue after switching tenants.",
+    "Runtime configuration rejects redirects so a same-origin configuration URL cannot delegate API or module settings to another origin."
   ],
   "upgrade": {
     "required": true,
@@ -61,11 +62,13 @@
     "Browser action lifetimes use monotonically increasing revisions; server authentication, authorization and tenant boundaries remain enforced.",
     "Commit/project/snapshot validation completes before any versioned engine deployment effect.",
     "Lifecycle audits use the existing exact-row append capability inside the transaction; unbound or wrong-row audit inserts remain denied under forced RLS, with no database-policy or grant changes.",
-    "Engine callbacks are checked before dispatch and on settlement using their render, mount and browser-session lifetime. Shared refreshes are session/tenant-bound; cancelled callers never replay and server authorization remains authoritative."
+    "Engine callbacks are checked before dispatch and on settlement using their render, mount and browser-session lifetime. Shared refreshes are session/tenant-bound; cancelled callers never replay and server authorization remains authoritative.",
+    "The same-origin runtime configuration boundary rejects redirects before contacting their destination; direct same-origin documents retain explicit API-origin selection."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
-    "docs/development/user-directory-contract.md"
+    "docs/development/user-directory-contract.md",
+    "docs/reference/configuration.md"
   ],
   "customerDocumentation": {
     "impact": "none",
@@ -91,7 +94,8 @@
     "User directory service and current membership presentation on SQL.js and owned PostgreSQL fixtures.",
     "Forced PostgreSQL RLS tests exercise audited deactivation/reactivation/session revocation, guarded compatibility paths and strict profile DTO serialization.",
     "Deferred session/permission/engine transitions, positive same-authority refresh, StrictMode, shared refresh cancellation and owned native loopback HTTP transport sequences.",
-    "Session bootstrap through the actual auth provider, service, API client and HTTP interceptor: one refresh owner, no refresh on non-401 failures, and tenant-switch refusal before the next request."
+    "Session bootstrap through the actual auth provider, service, API client and HTTP interceptor: one refresh owner, no refresh on non-401 failures, and tenant-switch refusal before the next request.",
+    "Owned native HTTP configuration origins prove redirect refusal, required startup failure, optional fallback and explicit cross-origin API selection without following a redirect."
   ],
   "packages": [
     {

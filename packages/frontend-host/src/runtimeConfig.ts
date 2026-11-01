@@ -203,6 +203,9 @@ async function fetchRuntimeConfig(url: string): Promise<RuntimeConfig> {
     // "change the endpoint without rebuilding" quietly breaks behind the cache.
     response = await fetch(url, {
       cache: 'no-store',
+      // The original document owns the API/module configuration boundary.
+      // Following a redirect could delegate that boundary to a foreign host.
+      redirect: 'error',
       headers: { accept: 'application/json' },
     });
   } catch (error) {
