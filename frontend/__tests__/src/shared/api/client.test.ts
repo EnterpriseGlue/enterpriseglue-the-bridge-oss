@@ -86,6 +86,21 @@ describe('apiClient', () => {
       expect(result).toBeUndefined();
     });
 
+    it('settles the empty HTTP 204 stream before acknowledging a completed mutation', async () => {
+      const response = new Response(null, { status: 204 });
+      const consume = vi.spyOn(response, 'text').mockResolvedValue('');
+      vi.mocked(interceptor.interceptedFetch).mockResolvedValue(response);
+      expect(await apiClient.delete('/api/empty')).toBeUndefined();
+      expect(consume).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not acknowledge HTTP 204 when empty-stream settlement fails', async () => {
+      const response = new Response(null, { status: 204 });
+      vi.spyOn(response, 'text').mockRejectedValue(new Error('Empty response stream failed'));
+      vi.mocked(interceptor.interceptedFetch).mockResolvedValue(response);
+      await expect(apiClient.delete('/api/empty')).rejects.toThrow('Empty response stream failed');
+    });
+
     it('throws ApiError on non-ok response', async () => {
       const mockResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
       vi.mocked(interceptor.interceptedFetch).mockResolvedValue(mockResponse);

@@ -6,7 +6,10 @@ import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { Repository } from '../types/git'
-import { toSafePathSegment } from '../../../utils/safeNavigation'
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
+import { getBrowserSessionRevision } from '../../../utils/browserSession'
+import { listPersonalGitCredentials, savePersonalGitCredential } from '../api/personalCredentials'
+import { beginGitOAuth } from '../api/gitOAuthPopup'
 import { sanitizePathParam, safeRelativePath } from '../../../shared/utils/sanitize'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { EnginePermission } from '../../../shared/auth/permissions'
@@ -56,7 +59,9 @@ export function useOnlineProjectWizard({
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const queryClient = useQueryClient()
-  const { hasEnginePermission, permissions, refreshPermissions } = useAuth()
+  const { hasEnginePermission, permissions, refreshPermissions, user, sessionRevision } = useAuth()
+  const credentialOwner = user?.session?.principal.id || user?.id || ''
+  const credentialAuthority = JSON.stringify([credentialOwner, user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)])
   const isExistingProject = !!existingProjectId
   const gitCreateDecision = evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform', id: null })
   const gitInspectDecision = evaluateActionSnapshot(permissions, 'project.create.git.inspect', { type: 'platform', id: null })
@@ -121,6 +126,24 @@ export function useOnlineProjectWizard({
     ? gitInspectDecision.reason || 'Missing permission to inspect remote Git repositories'
     : null
 
+  const credentialScope = JSON.stringify([open, providerId, existingProjectId, credentialAuthority])
+  const credentialScopeRef = React.useRef(credentialScope), credentialLife = React.useRef(0), credentialMounted = React.useRef(true)
+  if (credentialScopeRef.current !== credentialScope) { credentialScopeRef.current = credentialScope; credentialLife.current++ }
+  const credentialSession = React.useRef({ authority: credentialAuthority, revision: getBrowserSessionRevision() })
+  if (credentialSession.current.authority !== credentialAuthority) credentialSession.current = { authority: credentialAuthority, revision: getBrowserSessionRevision() }
+  const authenticationIntent = React.useRef('')
+  authenticationIntent.current = JSON.stringify([authMethod, connectionMode, selectedCredentialId])
+  const credentialActive = React.useRef<number | null>(null), oauthCancel = React.useRef<(() => void) | null>(null)
+  const credentialReadEpoch = React.useRef(0)
+  React.useEffect(() => { credentialMounted.current = true; return () => { credentialMounted.current = false; credentialLife.current++; oauthCancel.current?.() } }, [])
+  React.useEffect(() => () => { oauthCancel.current?.(); oauthCancel.current = null }, [credentialScope])
+  const captureCredentialCheck = () => {
+    const life = credentialLife.current, browser = credentialSession.current.revision, intent = authenticationIntent.current
+    return () => {
+      if (!open || !credentialMounted.current || life !== credentialLife.current || browser !== getBrowserSessionRevision() || intent !== authenticationIntent.current) throw new Error('Git credential context changed')
+    }
+  }
+
   // Reset connection when provider changes
   React.useEffect(() => {
     setConnectionStatus('disconnected')
@@ -135,7 +158,7 @@ export function useOnlineProjectWizard({
     if (!isEditConnectedProject) {
       setNamespace('')
     }
-  }, [providerId, isEditConnectedProject])
+  }, [providerId, isEditConnectedProject, credentialAuthority, open])
 
   // Default connect toggle based on context
   React.useEffect(() => {
@@ -228,10 +251,11 @@ export function useOnlineProjectWizard({
   }, [projectName, existingProjectName, isExistingProject, isEditConnectedProject])
 
   const fetchProviderCredentials = React.useCallback(async () => {
-    if (!providerId) return
-
+    if (!providerId || !credentialOwner) return
+    const scope = credentialScopeRef.current, browser = credentialSession.current.revision, readEpoch = credentialReadEpoch.current
     try {
-      const allCredentials = await fetchList<ProviderCredential>('/git-api/credentials')
+      const allCredentials = await listPersonalGitCredentials(credentialOwner)
+      if (scope !== credentialScopeRef.current || browser !== getBrowserSessionRevision() || !credentialMounted.current || readEpoch !== credentialReadEpoch.current) return
       const providerCreds = allCredentials.filter((c: ProviderCredential) => c.providerId === providerId)
       setExistingCredentials(providerCreds)
 
@@ -245,9 +269,9 @@ export function useOnlineProjectWizard({
         setConnectionMode('new')
       }
     } catch {
-      setConnectionMode('new')
+      if (scope === credentialScopeRef.current && browser === getBrowserSessionRevision() && credentialMounted.current && readEpoch === credentialReadEpoch.current) setConnectionMode('new')
     }
-  }, [providerId])
+  }, [providerId, credentialOwner, credentialAuthority, open])
 
   // Fetch existing credentials for this provider when selected
   React.useEffect(() => {
@@ -256,32 +280,28 @@ export function useOnlineProjectWizard({
     }
   }, [providerId, open, fetchProviderCredentials])
 
-  // Fetch namespaces when credential is selected
+  // A selected credential owns its namespace continuation; an old selection
+  // cannot populate the replacement provider's namespace choices.
   React.useEffect(() => {
-    if (selectedCredentialId && connectionStatus === 'connected') {
-      const fetchNs = async () => {
-        setLoadingNamespaces(true)
-        try {
-          const data = await fetchList<Namespace>(
-            `/git-api/credentials/${selectedCredentialId}/namespaces`
-          )
-          setNamespaces(data)
-          if (data.length > 0 && !namespace) {
-            const userNs = data.find((ns: Namespace) => ns.type === 'user')
-            setNamespace(userNs?.name || data[0].name)
-          }
-        } catch (error) {
-          console.error('Failed to fetch namespaces:', error)
-        } finally {
-          setLoadingNamespaces(false)
-        }
-      }
-      fetchNs()
-    }
-  }, [selectedCredentialId, connectionStatus, namespace])
+    if (!selectedCredentialId || connectionStatus !== 'connected') return
+    let cancelled = false
+    const scope = credentialScopeRef.current, browser = credentialSession.current.revision
+    const current = () => !cancelled && credentialMounted.current && scope === credentialScopeRef.current && browser === getBrowserSessionRevision()
+    setLoadingNamespaces(true)
+    void (async () => {
+      try {
+        const data = await fetchList<Namespace>(`/git-api/credentials/${encodeURIComponent(selectedCredentialId)}/namespaces`)
+        if (!current()) return
+        setNamespaces(data)
+        if (data.length > 0 && !namespace) { const userNs = data.find(ns => ns.type === 'user'); setNamespace(userNs?.name || data[0].name) }
+      } catch { if (current()) setNamespaces([]) }
+      finally { if (current()) setLoadingNamespaces(false) }
+    })()
+    return () => { cancelled = true }
+  }, [selectedCredentialId, connectionStatus, namespace, credentialAuthority, providerId, open])
 
   const providersQuery = useQuery({
-    queryKey: ['git', 'providers'],
+    queryKey: ['git', 'providers', credentialAuthority],
     queryFn: () => gitApi.getProviders(),
     enabled: open,
   })
@@ -362,6 +382,7 @@ export function useOnlineProjectWizard({
   }, [canImportFromEngine, importFromEngine, selectedImportEngineId])
 
   const handleSelectCredential = React.useCallback((credentialId: string) => {
+    credentialReadEpoch.current++
     if (credentialId === 'new') {
       setConnectionMode('new')
       setSelectedCredentialId('')
@@ -380,95 +401,39 @@ export function useOnlineProjectWizard({
     }
   }, [existingCredentials])
 
-  const connectWithPAT = React.useCallback(async () => {
-    if (!token.trim() || !providerId) return
-
-    setConnectionStatus('connecting')
-    setConnectionError(null)
-
+  const acceptCredential = (credential: ProviderCredential) => {
+    setConnectionStatus('connected'); setConnectedUser(credential.name || credential.providerUsername || credential.id)
+    setSelectedCredentialId(credential.id)
+    setExistingCredentials(prev => [...prev.filter(row => row.providerId !== credential.providerId), credential])
+    setConnectionMode('select'); setToken(''); setConnectionName('')
+    queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] })
+  }
+  const connectWithPAT = async () => {
+    if (!token.trim() || !providerId || credentialActive.current === credentialLife.current) return
+    const check = captureCredentialCheck(), life = credentialLife.current
+    const request = { providerId, token: token.trim(), name: connectionName.trim() || undefined }
     try {
-      const credential = await apiClient.post<ProviderCredential>('/git-api/credentials', {
-        providerId,
-        token,
-        name: connectionName.trim() || undefined,
-      })
-      setConnectionStatus('connected')
-      setConnectedUser(credential.name || credential.providerUsername || credential.id)
-      setSelectedCredentialId(credential.id)
-      setExistingCredentials((prev: ProviderCredential[]) => {
-        const exists = prev.some((c: ProviderCredential) => c.id === credential.id)
-        if (exists) return prev
-        return [...prev, credential]
-      })
-      setConnectionMode('select')
-      setToken('')
-      setConnectionName('')
-      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] })
-    } catch (error: unknown) {
-      setConnectionStatus('error')
-      const parsed = parseApiError(error, 'Failed to connect')
-      setConnectionError(parsed.message)
-    }
-  }, [connectionName, providerId, queryClient, token])
-
-  const connectWithOAuth = React.useCallback(async () => {
-    if (!providerId) return
-
-    setConnectionStatus('connecting')
-    setConnectionError(null)
-
+      check(); credentialReadEpoch.current++; credentialActive.current = life; setConnectionStatus('connecting'); setConnectionError(null)
+      const credential = await savePersonalGitCredential(credentialOwner, request, check)
+      check(); acceptCredential(credential)
+    } catch (error) {
+      try { check() } catch { return }
+      setConnectionStatus('error'); setConnectionError(parseApiError(error, 'Failed to connect').message.split(request.token).join('[redacted]'))
+    } finally { if (credentialActive.current === life) credentialActive.current = null }
+  }
+  const connectWithOAuth = async () => {
+    if (!providerId || credentialActive.current === credentialLife.current) return
+    const check = captureCredentialCheck(), life = credentialLife.current
     try {
-      const width = 600
-      const height = 700
-      const left = window.screenX + (window.outerWidth - width) / 2
-      const top = window.screenY + (window.outerHeight - height) / 2
-
-      const safeProviderId = toSafePathSegment(providerId)
-      if (!safeProviderId) {
-        setConnectionStatus('error')
-        setConnectionError('Invalid provider')
-        return
-      }
-
-      const popupUrl = `/git-api/oauth/${encodeURIComponent(safeProviderId)}/authorize/redirect`
-
-      const popup = window.open(
-        popupUrl,
-        'oauth_popup',
-        `width=${width},height=${height},left=${left},top=${top}`
-      )
-
-      if (!popup) {
-        setConnectionStatus('error')
-        setConnectionError('Popup was blocked')
-        return
-      }
-
-      const pollTimer = setInterval(async () => {
-        if (popup?.closed) {
-          clearInterval(pollTimer)
-
-          const successData = sessionStorage.getItem('oauth_success')
-          if (successData) {
-            try {
-              const { providerUsername } = JSON.parse(successData)
-              setConnectionStatus('connected')
-              setConnectedUser(providerUsername || 'Connected')
-              sessionStorage.removeItem('oauth_success')
-            } catch {
-              await fetchProviderCredentials()
-            }
-          } else {
-            await fetchProviderCredentials()
-          }
-        }
-      }, 500)
-    } catch (error: unknown) {
-      setConnectionStatus('error')
-      const parsed = parseApiError(error, 'Failed to start OAuth')
-      setConnectionError(parsed.message)
-    }
-  }, [fetchProviderCredentials, providerId])
+      check(); credentialReadEpoch.current++; credentialActive.current = life; setConnectionStatus('connecting'); setConnectionError(null)
+      const flow = beginGitOAuth(providerId, credentialOwner, check); oauthCancel.current = flow.cancel
+      const credential = await flow.result
+      check(); acceptCredential(credential)
+    } catch {
+      try { check() } catch { return }
+      setConnectionStatus('error'); setConnectionError('Git authorization was not verified')
+    } finally { if (credentialActive.current === life) { credentialActive.current = null; oauthCancel.current = null } }
+  }
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -636,6 +601,7 @@ export function useOnlineProjectWizard({
 
   const handleClose = React.useCallback(() => {
     if (!createMutation.isPending && !initExistingMutation.isPending && !createLocalMutation.isPending && !cloneExistingMutation.isPending && !cloneNewProjectMutation.isPending) {
+      credentialLife.current++; oauthCancel.current?.(); oauthCancel.current = null; setToken(''); setConnectionName(''); setConnectionStatus('disconnected')
       onClose()
     }
   }, [createLocalMutation.isPending, createMutation.isPending, cloneExistingMutation.isPending, cloneNewProjectMutation.isPending, initExistingMutation.isPending, onClose])

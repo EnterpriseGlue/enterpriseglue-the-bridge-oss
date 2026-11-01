@@ -4,76 +4,53 @@
  * Exchanges the authorization code for tokens and closes the popup
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { InlineLoading, InlineNotification } from '@carbon/react';
 import { apiClient } from '../../../shared/api/client';
-import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import { GitCredentialSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
+import { getBrowserSessionRevision } from '../../../utils/browserSession';
+import { GIT_OAUTH_COMPLETED, GIT_OAUTH_FAILED, isGitOAuthState } from '../api/gitOAuthPopup';
 
 export default function OAuthCallback() {
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
   const [error, setError] = useState<string | null>(null);
 
+  const exchange = useRef<Promise<unknown> | null>(null);
+  const input = useRef<{ code: string | null; state: string | null; invalid: boolean } | null>(null);
+  const session = useRef(getBrowserSessionRevision()).current;
+  if (!input.current) {
+    const params = new URLSearchParams(window.location.search);
+    input.current = { code: params.get('code'), state: params.get('state'), invalid: params.has('error') || params.getAll('code').length !== 1 || params.getAll('state').length !== 1 };
+  }
   useEffect(() => {
-    handleCallback();
-  }, []);
-
-  const handleCallback = async () => {
-    try {
-      // Get code and state from URL
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const state = params.get('state');
-      const errorParam = params.get('error');
-      const errorDescription = params.get('error_description');
-
-      // Handle OAuth error
-      if (errorParam) {
-        throw new Error(errorDescription || errorParam || 'OAuth authorization failed');
-      }
-
-      if (!code || !state) {
-        throw new Error('Missing authorization code or state');
-      }
-
-      // Exchange code for tokens
-      const credential = await apiClient.post<{ providerId: string; providerUsername: string }>(
-        '/git-api/oauth/callback',
-        { code, state }
-      );
-
-      // Clean up any legacy values
-      sessionStorage.removeItem('oauth_state');
-      sessionStorage.removeItem('oauth_provider');
-
-      // Store success info for parent window
-      sessionStorage.setItem('oauth_success', JSON.stringify({
-        providerId: credential.providerId,
-        providerUsername: credential.providerUsername,
-      }));
-
-      setStatus('success');
-
-      // Close popup after short delay
-      setTimeout(() => {
-        window.close();
-      }, 1500);
-
-    } catch (err: any) {
-      console.error('OAuth callback error:', err);
-      const parsed = parseApiError(err, 'Authentication failed');
-      setError(parsed.message);
-      setStatus('error');
-
-      // Clean up
-      sessionStorage.removeItem('oauth_state');
-      sessionStorage.removeItem('oauth_provider');
-
-      // Close popup after showing error
-      setTimeout(() => {
-        window.close();
-      }, 3000);
+    let active = true;
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    const current = () => active && session === getBrowserSessionRevision();
+    const captured = input.current!;
+    if (!exchange.current) {
+      // Remove the authorization code/state from the address bar before awaiting.
+      window.history.replaceState(null, '', window.location.pathname);
+      exchange.current = (async () => {
+        if (captured.invalid || !captured.code || captured.code.length > 8192 || !isGitOAuthState(captured.state)) throw new Error('Invalid callback');
+        return apiClient.post('/git-api/oauth/callback', { code: captured.code, state: captured.state });
+      })();
     }
-  };
+    void exchange.current.then(raw => {
+      if (!current()) return;
+      const result = GitCredentialSchema.safeParse(raw);
+      if (!result.success || result.data.authType !== 'oauth') throw new Error('Invalid callback receipt');
+      const opener = window.opener;
+      if (!opener || opener.closed) throw new Error('Original Git connection window is unavailable');
+      opener.postMessage({ type: GIT_OAUTH_COMPLETED, state: captured.state, credential: result.data }, window.location.origin);
+      setStatus('success');
+      closeTimer = setTimeout(() => { if (current()) window.close(); }, 1500);
+    }).catch(() => {
+      if (!current()) return;
+      setError('Git authorization was not verified. Return to the original connection window.'); setStatus('error');
+      if (window.opener && isGitOAuthState(captured.state)) window.opener.postMessage({ type: GIT_OAUTH_FAILED, state: captured.state }, window.location.origin);
+    });
+    return () => { active = false; if (closeTimer) clearTimeout(closeTimer); };
+  }, [session]);
 
   return (
     <div style={{
@@ -104,7 +81,7 @@ export default function OAuthCallback() {
           <InlineNotification
             kind="success"
             title="Connected!"
-            subtitle="You can close this window. Redirecting..."
+            subtitle="You can close this window."
             lowContrast
             hideCloseButton
           />
@@ -127,7 +104,7 @@ export default function OAuthCallback() {
         }}>
           {status === 'processing' && 'Please wait...'}
           {status === 'success' && 'This window will close automatically.'}
-          {status === 'error' && 'This window will close in a few seconds.'}
+          {status === 'error' && 'Close this window after reviewing the error.'}
         </p>
       </div>
     </div>

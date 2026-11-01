@@ -340,3 +340,48 @@ success. These checks do not cancel an issued request or independently prove
 provider/database effects; reconcile uncertainty before repeating a change.
 Existing server authorization, token validation and database controls remain
 mandatory.
+
+
+## Personal Git credential and OAuth continuations
+
+Personal credential lists use the canonical redacted schema and current user
+identity before entering an authority-bound cache. The settings page and project
+wizard share the request/receipt adapter. PAT responses must identify the expected
+owner, provider and credential kind; token replacement also checks the reviewed
+credential ID. Rename addresses the credential ID, while disconnect intentionally
+addresses the provider and requires the existing HTTP 204 contract. Multiple
+canonical credentials for one provider remain readable; the provider-based token
+endpoint cannot safely choose among them, so an ambiguous replacement is blocked
+before transport. Server token validation and authorization remain authoritative.
+
+Credential forms own their private inputs and pending UI by user/session and
+view lifetime. Closing or replacing a dialog suppresses late notifications and
+cache updates. The wizard also owns its provider/credential selection: an older
+list or namespace read cannot replace a newer verified selection. Token-bearing
+requests stay outside the query mutation cache, and displayed errors redact the
+submitted token. Acknowledgements do not establish atomic provider/database
+settlement; cancellation cannot undo an issued request.
+
+Git OAuth opens one owned popup and obtains the authorization URL and state from
+the existing authenticated authorize endpoint. Completion uses exact-origin,
+exact-popup messaging bound to that state. The parent validates the callback's
+redacted receipt and then reads the credential from the authenticated API before
+showing success. A global storage marker or a closed popup cannot acknowledge
+connection. Both the settings page and project wizard consume this same flow.
+The popup listener, close check and ten-minute admission timer are removed on
+settlement, cancellation, session/view changes or unmount; only the owned popup
+is closed.
+
+The callback consumes its code once per mounted flow, including StrictMode effect
+replay, removes code/state from the address bar, validates its response, and sends
+no token or authorization code to the opener. It does not log raw provider errors
+or update storage-based success flags. Existing server-side state verification,
+user matching and token exchange remain mandatory. Actual provider redirects,
+cookie/origin configuration and backend OAuth-state lifetime across replicas
+still require deployment-specific acceptance; local popup fixtures do not prove
+those properties.
+
+The shared browser client settles an HTTP 204 response's empty stream before
+returning its acknowledgement. Stream failure rejects the call; it does not
+become success merely because response headers arrived. This also prevents a
+completed disconnect from leaving an unread browser transport that later aborts.

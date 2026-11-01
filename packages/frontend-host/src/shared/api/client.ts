@@ -27,6 +27,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 
   if (response.status === 204) {
+    // Settle the empty stream before acknowledging the operation. Some browser
+    // transports otherwise leave it pending and later report an aborted load.
+    await response.text();
     return undefined as T;
   }
 

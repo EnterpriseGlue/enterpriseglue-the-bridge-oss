@@ -3,7 +3,7 @@
  * Manage connected Git provider accounts
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Button,
   DataTable,
@@ -27,6 +27,7 @@ import {
   SelectItem,
   RadioButtonGroup,
   RadioButton,
+  InlineNotification,
 } from '@carbon/react';
 import {
   Add,
@@ -35,43 +36,29 @@ import {
   Link as LinkIcon,
   LogoGithub,
 } from '@carbon/icons-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../../shared/api/client';
-import { fetchList } from '../../shared/api/fetchList';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
-import { toSafePathSegment } from '../../utils/safeNavigation';
+import { useAuth } from '../../shared/hooks/useAuth';
+import { permissionSnapshotAuthorityKey } from '../../contexts/authSessionPermissions';
+import { getBrowserSessionRevision } from '../../utils/browserSession';
+import { listPersonalGitCredentials, listGitCredentialProviders, savePersonalGitCredential, renamePersonalGitCredential, disconnectPersonalGitCredential } from '../../features/git/api/personalCredentials';
+import { beginGitOAuth } from '../../features/git/api/gitOAuthPopup';
+import type { GitCredential as Credential } from '@enterpriseglue/shared/schemas/git/repository.js';
 import { useToast } from '../../shared/notifications/ToastProvider';
 
 interface GitConnectionsProps {
   embedded?: boolean;
 }
 
-interface Credential {
-  id: string;
-  userId: string;
-  providerId: string;
-  providerName: string;
-  providerType: string;
-  name?: string;
-  authType: 'pat' | 'oauth';
-  providerUsername?: string;
-  expiresAt?: number;
-  scopes?: string;
-  createdAt: number;
-  updatedAt: number;
+export default function GitConnections(props: GitConnectionsProps) {
+  const auth = useAuth();
+  const userId = auth.user?.session?.principal.id || auth.user?.id || '';
+  const authority = JSON.stringify([userId, auth.user?.session?.tenant.id || null, auth.sessionRevision ?? null, permissionSnapshotAuthorityKey(auth.permissions)]);
+  return <GitConnectionsPanel key={authority} {...props} userId={userId} authority={authority} />;
 }
 
-interface Provider {
-  id: string;
-  name: string;
-  type: string;
-  baseUrl: string;
-  supportsOAuth: boolean;
-  supportsPAT: boolean;
-}
-
-export default function GitConnections({ embedded = false }: GitConnectionsProps) {
+function GitConnectionsPanel({ embedded = false, userId, authority }: GitConnectionsProps & { userId: string; authority: string }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -85,42 +72,77 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
   const [authMethod, setAuthMethod] = useState<'pat' | 'oauth'>('pat');
   const [token, setToken] = useState('');
   const [connectionName, setConnectionName] = useState('');
-  const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   
   // Rename modal state
   const [newName, setNewName] = useState('');
-  const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
 
   // Update token modal state
   const [updateTokenModalOpen, setUpdateTokenModalOpen] = useState(false);
   const [updatedToken, setUpdatedToken] = useState('');
-  const [updatingToken, setUpdatingToken] = useState(false);
   const [updateTokenError, setUpdateTokenError] = useState<string | null>(null);
 
-  // Fetch credentials
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  type Operation = 'connect' | 'rename' | 'token' | 'disconnect';
+  const [busy, setBusy] = useState<Operation | null>(null);
+  const connecting = busy === 'connect', renaming = busy === 'rename', updatingToken = busy === 'token', disconnecting = busy === 'disconnect';
+  const lifetime = useRef(0), active = useRef(false), mounted = useRef(true);
+  const intent = useRef('');
+  intent.current = JSON.stringify([addModalOpen, renameModalOpen, updateTokenModalOpen, deleteModalOpen, selectedProvider, authMethod, selectedCredential?.id]);
+  const renderedSession = useRef(getBrowserSessionRevision()).current;
+  const oauthCancel = useRef<(() => void) | null>(null);
+  const current = (id: number) => mounted.current && id === lifetime.current && renderedSession === getBrowserSessionRevision();
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; lifetime.current++; oauthCancel.current?.(); }; }, []);
+
   const credentialsQuery = useQuery({
-    queryKey: ['git', 'credentials'],
-    queryFn: () => fetchList<Credential>('/git-api/credentials'),
+    queryKey: ['git', 'credentials', authority], queryFn: () => listPersonalGitCredentials(userId), enabled: !!userId,
   });
-
-  // Fetch providers
   const providersQuery = useQuery({
-    queryKey: ['git', 'providers'],
-    queryFn: () => fetchList<Provider>('/git-api/providers'),
+    queryKey: ['git', 'providers', authority], queryFn: listGitCredentialProviders, enabled: !!userId,
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: (providerId: string) =>
-      apiClient.delete(`/git-api/credentials/${providerId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] });
-      setDeleteModalOpen(false);
-      setSelectedCredential(null);
-    },
-  });
+  const resetDialogs = () => {
+    lifetime.current++; active.current = false; oauthCancel.current?.(); oauthCancel.current = null;
+    setBusy(null); setAddModalOpen(false); setDeleteModalOpen(false); setRenameModalOpen(false); setUpdateTokenModalOpen(false);
+    setSelectedCredential(null); setSelectedProvider(''); setAuthMethod('pat'); setToken(''); setUpdatedToken('');
+    setConnectionName(''); setNewName(''); setConnectError(null); setRenameError(null); setUpdateTokenError(null); setDeleteError(null);
+  };
+  const beginDialog = (kind: Operation, credential?: Credential) => {
+    if (!current(lifetime.current) || !userId || !credentialsQuery.isSuccess || (kind === 'connect' && !providersQuery.isSuccess)) return;
+    if (credential && !credentialsQuery.data.some(row => row.id === credential.id && row.providerId === credential.providerId)) return;
+    resetDialogs();
+    if (kind === 'connect') setAddModalOpen(true);
+    else {
+      setSelectedCredential(credential!);
+      if (kind === 'rename') { setNewName(credential!.name || credential!.providerUsername || ''); setRenameModalOpen(true); }
+      else if (kind === 'token') setUpdateTokenModalOpen(true);
+      else setDeleteModalOpen(true);
+    }
+  };
+  const setOperationError = (kind: Operation, message: string | null) => {
+    if (kind === 'connect') setConnectError(message);
+    else if (kind === 'rename') setRenameError(message);
+    else if (kind === 'token') setUpdateTokenError(message);
+    else setDeleteError(message);
+  };
+  const runOwned = async (kind: Operation, perform: (check: () => void) => Promise<unknown>, success: string, privateToken?: string) => {
+    if (!current(lifetime.current) || active.current || !credentialsQuery.isSuccess) return;
+    const id = lifetime.current, capturedIntent = intent.current;
+    const check = () => { if (!current(id) || intent.current !== capturedIntent) throw new Error('Git credential context changed'); };
+    active.current = true; setBusy(kind); setOperationError(kind, null);
+    try {
+      check(); await perform(check); check();
+      await queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] }); check();
+      notify({ kind: 'success', title: success }); resetDialogs();
+    } catch (error) {
+      if (!current(id) || intent.current !== capturedIntent) return;
+      const raw = parseApiError(error, 'Git credential change failed').message;
+      const message = privateToken ? raw.split(privateToken).join('[redacted]') : raw;
+      setOperationError(kind, message);
+      notify({ kind: 'error', title: 'Git credential change failed', subtitle: message });
+    } finally { if (current(id)) { active.current = false; setBusy(null); oauthCancel.current = null; } }
+  };
 
   // Get provider icon
   const getProviderIcon = (type: string) => {
@@ -148,140 +170,39 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
     return expiresAt - Date.now() < sevenDays;
   };
 
-  // Connect with PAT
-  const connectWithPAT = async () => {
-    if (!token.trim() || !selectedProvider) return;
-    
-    setConnecting(true);
-    setConnectError(null);
-    
-    try {
-      await apiClient.post('/git-api/credentials', {
-        providerId: selectedProvider,
-        token,
-        name: connectionName.trim() || undefined,
-      });
-      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] });
-      resetAddModal();
-      notify({ kind: 'success', title: 'Git provider connected' });
-    } catch (error: any) {
-      const parsed = parseApiError(error, 'Failed to connect');
-      setConnectError(parsed.message);
-      notify({ kind: 'error', title: 'Failed to connect', subtitle: parsed.message });
-    } finally {
-      setConnecting(false);
+  const connectWithPAT = () => {
+    if (!addModalOpen || !token.trim() || !selectedProviderData?.supportsPAT || !unconnectedProviders.some(row => row.id === selectedProvider)) return;
+    const request = { providerId: selectedProvider, token: token.trim(), name: connectionName.trim() || undefined };
+    void runOwned('connect', check => savePersonalGitCredential(userId, request, check), 'Git provider connected', request.token);
+  };
+  const handleUpdateToken = () => {
+    if (!updateTokenModalOpen || !selectedCredential || !updatedToken.trim()) return;
+    if (credentialsQuery.data?.filter(row => row.providerId === selectedCredential.providerId).length !== 1) {
+      setUpdateTokenError('Token replacement cannot identify one saved connection for this provider'); return;
     }
+    const request = { providerId: selectedCredential.providerId, token: updatedToken.trim(), name: selectedCredential.name || undefined };
+    const expectedId = selectedCredential.id;
+    void runOwned('token', check => savePersonalGitCredential(userId, request, check, expectedId), 'Token updated successfully', request.token);
   };
-
-  // Update token
-  const handleUpdateToken = async () => {
-    if (!selectedCredential || !updatedToken.trim()) return;
-
-    setUpdatingToken(true);
-    setUpdateTokenError(null);
-
-    try {
-      await apiClient.post('/git-api/credentials', {
-        providerId: selectedCredential.providerId,
-        token: updatedToken.trim(),
-        name: selectedCredential.name || undefined,
-      });
-      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] });
-      setUpdateTokenModalOpen(false);
-      setSelectedCredential(null);
-      setUpdatedToken('');
-      notify({ kind: 'success', title: 'Token updated successfully' });
-    } catch (error: any) {
-      const parsed = parseApiError(error, 'Failed to update token');
-      setUpdateTokenError(parsed.message);
-      notify({ kind: 'error', title: 'Failed to update token', subtitle: parsed.message });
-    } finally {
-      setUpdatingToken(false);
-    }
+  const handleRename = () => {
+    if (!renameModalOpen || !selectedCredential || !newName.trim()) return;
+    const captured = { ...selectedCredential }, name = newName.trim();
+    void runOwned('rename', check => renamePersonalGitCredential(userId, captured, name, check), 'Connection renamed');
   };
-
-  // Rename credential
-  const handleRename = async () => {
-    if (!selectedCredential || !newName.trim()) return;
-    
-    setRenaming(true);
-    setRenameError(null);
-    
-    try {
-      await apiClient.patch(`/git-api/credentials/${selectedCredential.id}`, { name: newName.trim() });
-      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] });
-      setRenameModalOpen(false);
-      setSelectedCredential(null);
-      setNewName('');
-      notify({ kind: 'success', title: 'Connection renamed' });
-    } catch (error: any) {
-      const parsed = parseApiError(error, 'Failed to rename');
-      setRenameError(parsed.message);
-      notify({ kind: 'error', title: 'Failed to rename', subtitle: parsed.message });
-    } finally {
-      setRenaming(false);
-    }
+  const handleDisconnect = () => {
+    if (!deleteModalOpen || !selectedCredential) return;
+    const captured = { ...selectedCredential };
+    void runOwned('disconnect', check => disconnectPersonalGitCredential(userId, captured, check), 'Git provider disconnected');
   };
-
-  // Connect with OAuth
-  const connectWithOAuth = async () => {
-    if (!selectedProvider) return;
-    
-    setConnecting(true);
-    setConnectError(null);
-    
-    try {
-      const width = 600;
-      const height = 700;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-
-      const safeProviderId = toSafePathSegment(selectedProvider);
-      if (!safeProviderId) throw new Error('Invalid provider');
-
-      const popupUrl = `/git-api/oauth/${encodeURIComponent(safeProviderId)}/authorize/redirect`;
-
-      const popup = window.open(
-        popupUrl,
-        'oauth_popup',
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
-
-      if (!popup) throw new Error('Popup was blocked');
-      
-      // Poll for completion
-      const pollTimer = setInterval(() => {
-        if (popup?.closed) {
-          clearInterval(pollTimer);
-          setConnecting(false);
-          queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] });
-          
-          // Check if successful
-          const success = sessionStorage.getItem('oauth_success');
-          if (success) {
-            sessionStorage.removeItem('oauth_success');
-            resetAddModal();
-            notify({ kind: 'success', title: 'Git provider connected' });
-          }
-        }
-      }, 500);
-      
-    } catch (error: any) {
-      const parsed = parseApiError(error, 'Failed to start OAuth');
-      setConnectError(parsed.message);
-      notify({ kind: 'error', title: 'Failed to start OAuth', subtitle: parsed.message });
-      setConnecting(false);
-    }
+  const connectWithOAuth = () => {
+    if (!addModalOpen || !selectedProviderData?.supportsOAuth || !unconnectedProviders.some(row => row.id === selectedProvider)) return;
+    const provider = selectedProvider;
+    void runOwned('connect', check => {
+      const flow = beginGitOAuth(provider, userId, check); oauthCancel.current = flow.cancel;
+      return flow.result;
+    }, 'Git provider connected');
   };
-
-  const resetAddModal = () => {
-    setAddModalOpen(false);
-    setSelectedProvider('');
-    setAuthMethod('pat');
-    setToken('');
-    setConnectionName('');
-    setConnectError(null);
-  };
+  const resetAddModal = resetDialogs;
 
   // Get unconnected providers
   const connectedProviderIds = new Set(credentialsQuery.data?.map(c => c.providerId) || []);
@@ -327,9 +248,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
       <span 
         style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
         onClick={() => {
-          setSelectedCredential(cred);
-          setNewName(cred.name || cred.providerUsername || '');
-          setRenameModalOpen(true);
+          beginDialog('rename', cred);
         }}
         title="Click to rename"
       >
@@ -357,18 +276,13 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
         <OverflowMenuItem
           itemText="Rename"
           onClick={() => {
-            setSelectedCredential(cred);
-            setNewName(cred.name || cred.providerUsername || '');
-            setRenameModalOpen(true);
+            beginDialog('rename', cred);
           }}
         />
         <OverflowMenuItem
           itemText="Update Token"
           onClick={() => {
-            setSelectedCredential(cred);
-            setUpdatedToken('');
-            setUpdateTokenError(null);
-            setUpdateTokenModalOpen(true);
+            beginDialog('token', cred);
           }}
         />
         <OverflowMenuItem
@@ -376,8 +290,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
           hasDivider
           isDelete
           onClick={() => {
-            setSelectedCredential(cred);
-            setDeleteModalOpen(true);
+            beginDialog('disconnect', cred);
           }}
         />
       </OverflowMenu>
@@ -387,7 +300,8 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
 
   const content = (
     <>
-      {credentialsQuery.isLoading ? (
+      {providersQuery.isError && <InlineNotification kind="error" title="Git providers unavailable" subtitle="Git provider list was not verified" lowContrast hideCloseButton />}
+      {!userId || credentialsQuery.isLoading ? (
         <TableContainer>
           <TableToolbar>
             <TableToolbarContent>
@@ -400,8 +314,8 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
               <Button
                 kind="primary"
                 renderIcon={Add}
-                onClick={() => setAddModalOpen(true)}
-                disabled={unconnectedProviders.length === 0}
+                onClick={() => beginDialog('connect')}
+                disabled={!providersQuery.isSuccess || !credentialsQuery.isSuccess || unconnectedProviders.length === 0}
               >
                 Connect Provider
               </Button>
@@ -416,7 +330,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
           />
         </TableContainer>
       ) : credentialsQuery.isError ? (
-        <div />
+        <InlineNotification kind="error" title="Git connections unavailable" subtitle="Git credential list was not verified" lowContrast hideCloseButton />
       ) : (credentialsQuery.data || []).length === 0 ? (
         <div style={{
           padding: 'var(--spacing-7)',
@@ -430,7 +344,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
           <p style={{ color: 'var(--cds-text-secondary)', marginBottom: 'var(--spacing-4)' }}>
             Connect a Git provider to sync your projects with remote repositories.
           </p>
-          <Button kind="secondary" renderIcon={Add} onClick={() => setAddModalOpen(true)}>
+          <Button kind="secondary" renderIcon={Add} onClick={() => beginDialog('connect')} disabled={!credentialsQuery.isSuccess || !providersQuery.isSuccess || unconnectedProviders.length === 0}>
             Connect Provider
           </Button>
         </div>
@@ -450,8 +364,8 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
                     <Button
                       kind="primary"
                       renderIcon={Add}
-                      onClick={() => setAddModalOpen(true)}
-                      disabled={unconnectedProviders.length === 0}
+                      onClick={() => beginDialog('connect')}
+                      disabled={!providersQuery.isSuccess || !credentialsQuery.isSuccess || unconnectedProviders.length === 0}
                     >
                       Connect Provider
                     </Button>
@@ -508,7 +422,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
         primaryButtonDisabled={
           connecting || 
           !selectedProvider || 
-          (authMethod === 'pat' && !token.trim())
+          (authMethod === 'pat' ? !token.trim() || !selectedProviderData?.supportsPAT : !selectedProviderData?.supportsOAuth)
         }
         size="sm"
       >
@@ -519,7 +433,8 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
             value={selectedProvider}
             onChange={(e) => {
               setSelectedProvider(e.target.value);
-              setConnectError(null);
+              setAuthMethod(providersQuery.data?.find(row => row.id === e.target.value)?.supportsPAT ? 'pat' : 'oauth');
+              setToken(''); setConnectError(null);
             }}
             disabled={connecting}
           >
@@ -533,6 +448,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
             <>
               <RadioButtonGroup
                 name="auth-method"
+                disabled={connecting}
                 legendText="Authentication Method"
                 valueSelected={authMethod}
                 onChange={(value) => setAuthMethod(value as 'pat' | 'oauth')}
@@ -593,18 +509,16 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
       {/* Delete Confirmation Modal */}
       <Modal
         open={deleteModalOpen}
-        onRequestClose={() => {
-          setDeleteModalOpen(false);
-          setSelectedCredential(null);
-        }}
+        onRequestClose={resetDialogs}
         modalHeading="Disconnect Provider"
-        primaryButtonText={deleteMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
+        primaryButtonText={disconnecting ? 'Disconnecting...' : 'Disconnect'}
         secondaryButtonText="Cancel"
-        onRequestSubmit={() => selectedCredential && deleteMutation.mutate(selectedCredential.providerId)}
-        primaryButtonDisabled={deleteMutation.isPending}
+        onRequestSubmit={handleDisconnect}
+        primaryButtonDisabled={disconnecting || !selectedCredential}
         danger
         size="sm"
       >
+        {deleteError && <InlineNotification kind="error" title="Disconnect failed" subtitle={deleteError} lowContrast hideCloseButton />}
         <p>
           Are you sure you want to disconnect <strong>{selectedCredential?.providerName}</strong>?
         </p>
@@ -616,12 +530,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
       {/* Update Token Modal */}
       <Modal
         open={updateTokenModalOpen}
-        onRequestClose={() => {
-          setUpdateTokenModalOpen(false);
-          setSelectedCredential(null);
-          setUpdatedToken('');
-          setUpdateTokenError(null);
-        }}
+        onRequestClose={resetDialogs}
         modalHeading="Update Access Token"
         primaryButtonText={updatingToken ? 'Updating...' : 'Update Token'}
         secondaryButtonText="Cancel"
@@ -654,12 +563,7 @@ export default function GitConnections({ embedded = false }: GitConnectionsProps
       {/* Rename Connection Modal */}
       <Modal
         open={renameModalOpen}
-        onRequestClose={() => {
-          setRenameModalOpen(false);
-          setSelectedCredential(null);
-          setNewName('');
-          setRenameError(null);
-        }}
+        onRequestClose={resetDialogs}
         modalHeading="Rename Connection"
         primaryButtonText={renaming ? 'Saving...' : 'Save'}
         secondaryButtonText="Cancel"

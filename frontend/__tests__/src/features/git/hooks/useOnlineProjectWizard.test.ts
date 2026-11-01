@@ -7,6 +7,8 @@ import { canImportFromEngineRow, formatImportPreviewSummary, useOnlineProjectWiz
 import { EnginePermission } from '@src/shared/auth/permissions';
 import { apiClient } from '@src/shared/api/client';
 import { gitApi } from '@src/features/git/api/gitApi';
+import { gitCredentialFixture as credential, gitOAuthStateFixture as oauthState, gitProviderFixture } from '@test/fixtures/gitCredentials';
+import { GIT_OAUTH_COMPLETED } from '@src/features/git/api/gitOAuthPopup';
 
 const authState = vi.hoisted(() => ({
   permissions: {
@@ -21,12 +23,14 @@ const authState = vi.hoisted(() => ({
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({
+    user: { id: 'user-1' },
     permissions: authState.permissions,
     hasEnginePermission: authState.hasEnginePermission,
   }),
 }));
 
-vi.mock('@src/shared/api/client', () => ({
+vi.mock('@src/shared/api/client', async original => ({
+  ...await original<typeof import('@src/shared/api/client')>(),
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
@@ -80,7 +84,7 @@ describe('useOnlineProjectWizard', () => {
     authState.hasEnginePermission.mockImplementation((engineId: string | null | undefined, permission: string) =>
       engineId === 'engine-1' && permission === EnginePermission.DEPLOY_VIEW
     );
-    (gitApi.getProviders as unknown as Mock).mockResolvedValue([{ id: 'github', name: 'GitHub' }]);
+    (gitApi.getProviders as unknown as Mock).mockResolvedValue([gitProviderFixture]);
     (gitApi.listProviderRepos as unknown as Mock).mockResolvedValue([{ name: 'repo', fullName: 'org/repo', url: 'https://github.com/org/repo.git' }]);
     (apiClient.get as unknown as Mock).mockImplementation((url: string) => {
       if (url === '/engines-api/engines') {
@@ -232,4 +236,68 @@ describe('useOnlineProjectWizard', () => {
 
     expect(gitApi.cloneFromGit).not.toHaveBeenCalled();
   });
+  it('binds a verified PAT credential to the selected provider and populates its selected credential id', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(credential);
+    const { result } = renderWizard();
+    act(() => { result.current.setProviderId('github'); });
+    await waitFor(() => expect(result.current.connectionStatus).toBe('disconnected'));
+    act(() => { result.current.setToken('synthetic-token'); result.current.setConnectionName('Work'); });
+    await act(async () => { await result.current.connectWithPAT(); });
+    expect(result.current.connectionStatus).toBe('connected'); expect(result.current.selectedCredentialId).toBe(credential.id);
+    expect(result.current.token).toBe('');
+    expect(apiClient.post).toHaveBeenCalledWith('/git-api/credentials',{providerId:'github',token:'synthetic-token',name:'Work'});
+  });
+  it('does not use an empty or foreign credential receipt as a connected wizard state', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({...credential,userId:'foreign'});
+    const { result } = renderWizard(); act(() => { result.current.setProviderId('github'); });
+    await waitFor(() => expect(result.current.connectionStatus).toBe('disconnected'));
+    act(() => { result.current.setToken('synthetic-token'); });
+    await act(async () => { await result.current.connectWithPAT(); });
+    expect(result.current.connectionStatus).toBe('error'); expect(result.current.selectedCredentialId).toBe('');
+  });
+  it('does not apply a late credential response to a changed provider', async () => {
+    let finish!: (raw: unknown) => void; vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { result } = renderWizard(); act(() => { result.current.setProviderId('github'); });
+    await waitFor(() => expect(result.current.connectionStatus).toBe('disconnected'));
+    act(() => { result.current.setToken('synthetic-token'); });
+    let operation!: Promise<void>; act(() => { operation = result.current.connectWithPAT(); });
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+    act(() => { result.current.setProviderId('gitlab'); });
+    await act(async () => { finish(credential); await operation; });
+    expect(result.current.selectedCredentialId).toBe(''); expect(result.current.connectionStatus).not.toBe('connected');
+  });
+  it('does not let an older credential-list read replace a newly verified PAT selection', async () => {
+    let finishList!: (raw: unknown) => void;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => url === '/git-api/credentials' ? new Promise(resolve => { finishList = resolve; }) : []);
+    vi.mocked(apiClient.post).mockResolvedValue(credential);
+    const { result } = renderWizard(); act(() => { result.current.setProviderId('github'); });
+    await waitFor(() => expect(finishList).toBeDefined());
+    act(() => { result.current.setToken('synthetic-token'); });
+    await act(async () => { await result.current.connectWithPAT(); });
+    await act(async () => { finishList([]); });
+    expect(result.current.connectionStatus).toBe('connected'); expect(result.current.selectedCredentialId).toBe(credential.id); expect(result.current.connectionMode).toBe('select');
+  });
+  it('connects the wizard to the OAuth credential id after owned-popup and authenticated readback verification', async () => {
+    const popup = { closed: false, location: { replace: vi.fn() }, close: vi.fn() } as unknown as Window;
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup);
+    const oauthCredential = { ...credential, authType: 'oauth' };
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/git-api/oauth/github/authorize') return { authUrl: `https://github.com/login/oauth/authorize?state=${oauthState}`, state: oauthState };
+      if (url === '/git-api/credentials/github') return oauthCredential;
+      return [];
+    });
+    const { result } = renderWizard(); act(() => { result.current.setProviderId('github'); });
+    await waitFor(() => expect(result.current.connectionStatus).toBe('disconnected'));
+    act(() => { result.current.setAuthMethod('oauth'); });
+    let operation!: Promise<void>; act(() => { operation = result.current.connectWithOAuth(); });
+    await waitFor(() => expect(popup.location.replace).toHaveBeenCalled());
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: popup,
+        data: { type: GIT_OAUTH_COMPLETED, state: oauthState, credential: oauthCredential } }));
+      await operation;
+    });
+    expect(result.current.selectedCredentialId).toBe(credential.id); expect(result.current.connectionStatus).toBe('connected');
+    expect(popup.close).toHaveBeenCalledTimes(1); open.mockRestore();
+  });
+
 });
