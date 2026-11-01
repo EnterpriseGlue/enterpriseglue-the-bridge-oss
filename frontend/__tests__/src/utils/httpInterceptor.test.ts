@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { interceptedFetch, getAuthHeaders } from '@src/utils/httpInterceptor';
 import { USER_KEY } from '@src/constants/storageKeys';
 import { getTenancyCapabilities } from '@src/services/tenancy';
+import { advanceBrowserSessionRevision, BrowserSessionChangedError } from '@src/utils/browserSession';
 
 vi.mock('@src/services/tenancy', () => ({
   getTenancyCapabilities: vi.fn(() => ({ mode: 'single' })),
@@ -94,6 +95,118 @@ describe('httpInterceptor', () => {
   });
 
   describe('interceptedFetch', () => {
+    it('does not refresh or replay a write after the signed-in user changes before its 401', async () => {
+      localStorage.setItem(USER_KEY, JSON.stringify({ id: 'actor-a' }));
+      let settle!: (response: Response) => void;
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }))
+        .mockResolvedValue(new Response('{}'));
+      const request = interceptedFetch('/api/data', { method: 'POST', body: '{"action":"original"}' });
+      localStorage.setItem(USER_KEY, JSON.stringify({ id: 'actor-b' }));
+      settle(new Response(null, { status: 401 }));
+      await expect(request).rejects.toThrow('session changed');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([200, 401])('does not let late refresh status %s replay or clear a replacement session', async status => {
+      localStorage.setItem(USER_KEY, JSON.stringify({ id: 'actor-a' }));
+      let settle!: (response: Response) => void;
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }))
+        .mockResolvedValue(new Response('{}'));
+      const request = interceptedFetch('/api/data', { method: 'POST' });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const replacement = JSON.stringify({ id: 'actor-b' });
+      localStorage.setItem(USER_KEY, replacement);
+      settle(new Response(null, { status }));
+      await expect(request).rejects.toThrow('session changed');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(localStorage.getItem(USER_KEY)).toBe(replacement);
+      expect(window.location.href).toBe('http://localhost/dashboard');
+    });
+
+    it('does not replay an old tenant request after navigation during refresh', async () => {
+      window.location.pathname = '/t/alpha/dashboard';
+      let settle!: (response: Response) => void;
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }))
+        .mockResolvedValue(new Response('{}'));
+      const request = interceptedFetch('/engines-api/engines', { method: 'POST' });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      window.location.pathname = '/t/beta/dashboard';
+      settle(new Response('{}'));
+      await expect(request).rejects.toThrow('session changed');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not revive an old request after an A to B to A session replacement', async () => {
+      const actor = JSON.stringify({ id: 'actor-a' });
+      localStorage.setItem(USER_KEY, actor);
+      let settle!: (response: Response) => void;
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }))
+        .mockResolvedValue(new Response('{}'));
+      const request = interceptedFetch('/api/data', { method: 'POST' });
+      localStorage.setItem(USER_KEY, JSON.stringify({ id: 'actor-b' })); advanceBrowserSessionRevision();
+      localStorage.setItem(USER_KEY, actor); advanceBrowserSessionRevision();
+      settle(new Response(null, { status: 401 }));
+      await expect(request).rejects.toBeInstanceOf(BrowserSessionChangedError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let a new session adopt a settling refresh and permits its own later refresh', async () => {
+      localStorage.setItem(USER_KEY, 'actor-a');
+      let settle!: (response: Response) => void;
+      const fetchMock = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }))
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response('{}'));
+      const old = interceptedFetch('/api/old').catch(error => error);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      localStorage.setItem(USER_KEY, 'actor-b'); advanceBrowserSessionRevision();
+      await expect(interceptedFetch('/api/new')).rejects.toBeInstanceOf(BrowserSessionChangedError);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      settle(new Response('{}'));
+      expect(await old).toBeInstanceOf(BrowserSessionChangedError);
+      expect((await interceptedFetch('/api/new')).status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+    });
+
+    it('does not start a refresh for an already-aborted request', async () => {
+      const abort = new AbortController();
+      let settle!: (response: Response) => void;
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }));
+      const request = interceptedFetch('/api/data', { signal: abort.signal });
+      abort.abort(); settle(new Response(null, { status: 401 }));
+      await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets an uncancelled caller complete its shared same-session refresh', async () => {
+      let settle!: (response: Response) => void;
+      const counts = new Map<string, number>();
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
+        const path = String(url); counts.set(path, (counts.get(path) || 0) + 1);
+        if (path === '/api/auth/refresh') return new Promise<Response>(resolve => { settle = resolve; });
+        return new Response('{}', { status: counts.get(path) === 1 ? 401 : 200 });
+      });
+      const abort = new AbortController();
+      const cancelled = interceptedFetch('/api/cancelled', { signal: abort.signal }).catch(error => error);
+      const live = interceptedFetch('/api/live');
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      abort.abort(); settle(new Response('{}'));
+      expect(await cancelled).toMatchObject({ name: 'AbortError' });
+      expect((await live).status).toBe(200);
+      expect(counts.get('/api/cancelled')).toBe(1);
+      expect(counts.get('/api/live')).toBe(2);
+      expect(counts.get('/api/auth/refresh')).toBe(1);
+    });
+
     it('uses the canonical tenant API route for identity-provider administration', async () => {
       window.location.pathname = '/t/alpha/admin/settings';
       const response = new Response(JSON.stringify([]), { status: 200 });

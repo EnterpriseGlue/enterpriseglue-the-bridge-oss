@@ -90,6 +90,31 @@ browser identity or replace a newer permission snapshot. The optional
 `sessionRevision` context field exposes the current lifetime to action views;
 server cookies and authorization remain authoritative.
 
+Browser continuations also use a monotonic in-memory session revision. Explicit
+sign-in replacement, logout, cross-tab storage changes, changed permission or
+action-availability snapshots and provider teardown invalidate older work,
+including A-to-B-to-A transitions. Permission observations that change only
+`generatedAt` retain their cache and view state. Private query caches are
+cancelled and cleared when authority changes or becomes unavailable, including
+same-account sign-in replacement.
+
+Process-detail drafts and the save-version/deploy flow bind the session and
+permission snapshot as well as their resource target. Engine-task callbacks
+check their render and effect lifetime before dispatch and again on settlement;
+unmounted callbacks cannot start a new task. Effect replay under React
+StrictMode still permits a current task.
+
+Automatic 401 refresh/replay belongs to the session and tenant that started the
+request. Only matching callers share one pending refresh. A replacement session
+cannot adopt its result; a stale refresh cannot clear or redirect the newer
+login, and stale callers receive `BrowserSessionChangedError` before replay.
+An aborted caller does not replay, while an uncancelled caller may finish the
+same-session shared refresh. Current-cookie XSRF handling remains unchanged.
+These are client continuation fences, not server credentials or authorization.
+They cannot undo already-issued requests or HTTP-only cookie response effects.
+Review the current session before resubmitting; stale work is not automatically
+replayed under a replacement identity.
+
 The save-version/deploy dialog captures project, file selection, engine and
 mode at submission. Project/file/session changes, closing the dialog and
 unmounting invalidate later dispatch and completion handling, including an

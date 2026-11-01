@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../shared/hooks/useAuth';
+import { permissionSnapshotAuthorityKey } from '../../contexts/authSessionPermissions';
 
 /** View identity only; server action decisions remain authoritative. */
 export function useUserDirectoryViewScope(): string {
   const { user, permissions, sessionRevision } = useAuth();
   const location = useLocation();
   return JSON.stringify([location.pathname, user?.id, user?.session?.tenant?.id,
-    sessionRevision, permissions?.authorizationVersion, permissions?.tenantId, permissions?.platform]);
+    sessionRevision, permissionSnapshotAuthorityKey(permissions)]);
 }
 
 /** Discard late UI work without claiming to cancel an already-issued write. */

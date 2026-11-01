@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../shared/hooks/useAuth';
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
 import {
   Modal,
   TextInput,
@@ -112,7 +113,7 @@ function buildDeployDiagnosticDecision(
 
 export default function DeployDialog({ projectId, fileIds, open, onClose, onDeploySuccess }: DeployDialogProps) {
   const deployment = useDeployment(projectId);
-  const { user, sessionRevision } = useAuth();
+  const { user, permissions, sessionRevision } = useAuth();
   const { notify } = useToast();
   const queryClient = useQueryClient();
   const scopedFileIds = (fileIds || []).map(String).filter(Boolean);
@@ -224,7 +225,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   const scope = JSON.stringify([
     open, projectId, scopedFileIds, selectedEngineId, canGitDeploy,
     user?.session?.principal.id || user?.id || null,
-    user?.session?.tenant.id || null, sessionRevision ?? null,
+    user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions),
   ]);
   const scopeRef = useRef(scope);
   const lifetimeRef = useRef(0);

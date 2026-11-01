@@ -1,4 +1,5 @@
 import React from 'react'
+import { getBrowserSessionRevision } from '../../../utils/browserSession.js'
 
 /**
  * Keep an engine-qualified Mission Control URL shareable across navigation.
@@ -33,12 +34,14 @@ export interface GuardedEngineTaskHandlers<T> {
 /**
  * Runs an asynchronous interaction against the engine selected when it starts.
  * A monotonically increasing render revision prevents an A -> B -> A switch
- * from making the older A completion look current again.
+ * from reviving an older callback. Check before dispatch and on settlement;
+ * session replacement and unmount revoke its continuation lifetime as well.
  */
 export function useGuardedEngineTask(engineId?: string | null) {
   const currentEngineIdRef = React.useRef(engineId)
   const lastRenderedEngineIdRef = React.useRef(engineId)
   const engineRevisionRef = React.useRef(0)
+  const lifetimeRef = React.useRef({ active: true })
 
   if (lastRenderedEngineIdRef.current !== engineId) {
     lastRenderedEngineIdRef.current = engineId
@@ -46,7 +49,13 @@ export function useGuardedEngineTask(engineId?: string | null) {
   }
   currentEngineIdRef.current = engineId
 
-  React.useEffect(() => () => { engineRevisionRef.current += 1 }, [])
+  const renderedEngineRevision = engineRevisionRef.current
+  const renderedSessionRevision = getBrowserSessionRevision()
+  React.useEffect(() => {
+    const lifetime = { active: true }
+    lifetimeRef.current = lifetime
+    return () => { lifetime.active = false }
+  }, [])
 
   return React.useCallback(async <T>(
     task: (requestEngineId: string) => Promise<T>,
@@ -54,11 +63,13 @@ export function useGuardedEngineTask(engineId?: string | null) {
   ): Promise<boolean> => {
     const requestEngineId = engineId?.trim()
     if (!requestEngineId) return false
-    const requestEngineRevision = engineRevisionRef.current
+    const lifetime = lifetimeRef.current
     const isCurrent = () => (
-      currentEngineIdRef.current === requestEngineId
-      && engineRevisionRef.current === requestEngineRevision
+      lifetime.active && currentEngineIdRef.current === requestEngineId
+      && engineRevisionRef.current === renderedEngineRevision
+      && getBrowserSessionRevision() === renderedSessionRevision
     )
+    if (!isCurrent()) return false
 
     let value: T
     try {
@@ -71,5 +82,5 @@ export function useGuardedEngineTask(engineId?: string | null) {
     if (!isCurrent()) return false
     handlers.onSuccess(value, requestEngineId)
     return true
-  }, [engineId])
+  }, [engineId, renderedEngineRevision, renderedSessionRevision])
 }

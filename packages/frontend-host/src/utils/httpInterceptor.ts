@@ -14,6 +14,7 @@ import { config } from '../config.js';
 import { apiFetch } from './apiFetch.js';
 import { getTenancyCapabilities } from '../services/tenancy.js';
 import { getPublicAuthRoutePolicy } from './publicAuthRoute.js';
+import { advanceBrowserSessionRevision, getBrowserSessionRevision, BrowserSessionChangedError } from './browserSession.js';
 
 const API_BASE_URL = '/api';
 const DEFAULT_TENANT_SLUG = 'default';
@@ -115,13 +116,32 @@ function getTenantLoginPath(pathname: string): string {
   return tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
 }
 
-// Share one refresh across concurrent 401 responses. Retries reread the rotated cookie.
-let refreshPromise: Promise<boolean> | null = null;
+interface RequestSession {
+  readonly key: string;
+  isCurrent: () => boolean;
+}
+type RefreshOutcome = 'refreshed' | 'unauthorized' | 'unavailable';
+
+function requestSessionKey(): string {
+  let storedUser: string | null = null;
+  try { storedUser = localStorage.getItem(USER_KEY); } catch { /* Session revision still fences unavailable storage. */ }
+  return JSON.stringify([getBrowserSessionRevision(), storedUser, window.location.origin,
+    getTenantSlugFromPathname(window.location.pathname)]);
+}
+
+function captureRequestSession(): RequestSession {
+  const key = requestSessionKey();
+  return { key, isCurrent: () => requestSessionKey() === key };
+}
+
+// Only concurrent requests from the same session may share a refresh result.
+let pendingRefresh: { session: RequestSession; promise: Promise<RefreshOutcome> } | null = null;
 
 /**
  * Clear authentication and redirect to login
  */
 function handleAuthFailure(): void {
+  advanceBrowserSessionRevision();
   // Clear local user data (tokens are in httpOnly cookies, cleared server-side on logout)
   localStorage.removeItem(USER_KEY);
 
@@ -135,7 +155,7 @@ function handleAuthFailure(): void {
 /**
  * Attempt to refresh the access token
  */
-async function refreshAccessToken(): Promise<boolean> {
+async function refreshAccessToken(session: RequestSession): Promise<RefreshOutcome> {
   try {
     const response = await apiFetch(applyApiBaseUrl(`${API_BASE_URL}/auth/refresh`), {
       method: 'POST',
@@ -146,19 +166,18 @@ async function refreshAccessToken(): Promise<boolean> {
       headers: getAuthHeaders(),
     });
 
+    if (!session.isCurrent()) return 'unavailable';
     if (!response.ok) {
       const message = await getErrorMessageFromResponse(response);
+      if (!session.isCurrent()) return 'unavailable';
       console.warn('Token refresh failed:', message);
-      if (response.status === 401 || response.status === 403) {
-        handleAuthFailure();
-      }
-      return false;
+      return response.status === 401 || response.status === 403 ? 'unauthorized' : 'unavailable';
     }
 
-    return true;
+    return 'refreshed';
   } catch (error) {
-    console.error('Token refresh failed:', error);
-    return false;
+    if (session.isCurrent()) console.error('Token refresh failed:', error);
+    return 'unavailable';
   }
 }
 
@@ -170,6 +189,7 @@ export async function interceptedFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
+  const session = captureRequestSession();
   // Add tenant prefix to tenant-scoped URLs
   const prefixedUrl = addTenantPrefix(url);
   const requestUrl = applyApiBaseUrl(prefixedUrl);
@@ -190,12 +210,26 @@ export async function interceptedFetch(
 
   // If we get a 401 and it's not an auth endpoint and not on a public route, try to refresh the token
   if (response.status === 401 && !isAuthEndpoint && !onPublicRoute) {
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken().finally(() => { refreshPromise = null; });
+    const assertCurrent = () => {
+      if (!session.isCurrent()) throw new BrowserSessionChangedError();
+      if (fetchOptions.signal?.aborted) throw fetchOptions.signal.reason ?? new DOMException('Request aborted', 'AbortError');
+    };
+    assertCurrent();
+    // Do not let another session adopt a refresh that is still settling.
+    if (pendingRefresh && pendingRefresh.session.key !== session.key) throw new BrowserSessionChangedError();
+    if (!pendingRefresh) {
+      const owned = { session, promise: Promise.resolve<RefreshOutcome>('unavailable') };
+      owned.promise = refreshAccessToken(session).finally(() => { if (pendingRefresh === owned) pendingRefresh = null; });
+      pendingRefresh = owned;
     }
-    if (await refreshPromise) {
+    const outcome = await pendingRefresh.promise;
+    assertCurrent();
+    if (outcome === 'unauthorized') {
+      handleAuthFailure();
+    } else if (outcome === 'refreshed') {
       const headers = new Headers(getAuthHeaders());
       new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));
+      assertCurrent();
       response = await apiFetch(requestUrl, { ...fetchOptions, headers });
     }
   }

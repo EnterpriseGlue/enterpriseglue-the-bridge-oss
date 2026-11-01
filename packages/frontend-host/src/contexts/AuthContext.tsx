@@ -5,8 +5,9 @@ import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
+import { advanceBrowserSessionRevision } from '../utils/browserSession.js';
 import { getPublicAuthRoutePolicy } from '../utils/publicAuthRoute';
-import { permissionSnapshotMatchesSession } from './authSessionPermissions';
+import { permissionSnapshotMatchesSession, permissionSnapshotAuthorityKey } from './authSessionPermissions';
 import {
   hasAnyEnginePermission as snapshotHasAnyEnginePermission,
   hasAnyPlatformPermission as snapshotHasAnyPlatformPermission,
@@ -72,7 +73,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<CurrentUserPermissions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const sessionScopeRef = useRef<string | null>(null);
+  const permissionAuthorityRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
   const mountedRef = useRef(true);
   const generationRef = useRef(0);
@@ -80,14 +81,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const userRequestRef = useRef(0);
   const [sessionRevision, setSessionRevision] = useState(0);
 
+  const discardCachedAuthority = useCallback(() => {
+    void queryClient.cancelQueries();
+    queryClient.clear();
+  }, [queryClient]);
+
   const invalidateSession = useCallback(() => {
+    advanceBrowserSessionRevision();
     generationRef.current += 1;
     permissionsRequestRef.current += 1;
     userRequestRef.current += 1;
+    permissionAuthorityRef.current = null;
+    discardCachedAuthority();
     if (mountedRef.current) setPermissions(null);
     if (mountedRef.current) setSessionRevision(generationRef.current);
     return generationRef.current;
-  }, []);
+  }, [discardCachedAuthority]);
   const isCurrentSession = useCallback((generation: number) => (
     mountedRef.current && generationRef.current === generation
   ), []);
@@ -97,26 +106,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => {
       mountedRef.current = false;
       generationRef.current += 1;
+      advanceBrowserSessionRevision();
     };
   }, []);
-
-  const clearPreviousSessionRuntimeState = useCallback((nextUser: User | null) => {
-    const nextScope = authenticatedSessionScope(nextUser);
-    if (sessionScopeRef.current === nextScope) return;
-    sessionScopeRef.current = nextScope;
-
-    // Cached responses throughout the application can contain principal- and
-    // tenant-filtered resources or action decisions under many feature-owned
-    // key prefixes. Cancel first so an in-flight response from the old session
-    // cannot repopulate state after the rare authentication-scope transition.
-    void queryClient.cancelQueries();
-    queryClient.clear();
-  }, [queryClient]);
 
   const persistUser = useCallback((nextUser: User | null) => {
     if (authenticatedSessionScope(currentUserRef.current) !== authenticatedSessionScope(nextUser)) invalidateSession();
     currentUserRef.current = nextUser;
-    clearPreviousSessionRuntimeState(nextUser);
     setUser(nextUser);
     setPermissions((currentPermissions) =>
       permissionSnapshotMatchesSession(nextUser, currentPermissions) ? currentPermissions : null,
@@ -129,7 +125,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch {
     }
-  }, [clearPreviousSessionRuntimeState, invalidateSession]);
+  }, [invalidateSession]);
 
   const refreshPermissions = useCallback(async (): Promise<CurrentUserPermissions | null> => {
     const generation = generationRef.current;
@@ -139,13 +135,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const nextPermissions = await authService.getMyPermissions();
       if (!isCurrent()) return null;
       const accepted = permissionSnapshotMatchesSession(currentUserRef.current, nextPermissions) ? nextPermissions : null;
+      const authority = permissionSnapshotAuthorityKey(accepted);
+      if (permissionAuthorityRef.current !== authority) {
+        advanceBrowserSessionRevision();
+        discardCachedAuthority();
+      }
+      permissionAuthorityRef.current = authority;
       setPermissions(accepted);
       return accepted;
     } catch {
-      if (isCurrent()) setPermissions(null);
+      if (isCurrent()) {
+        advanceBrowserSessionRevision();
+        permissionAuthorityRef.current = null;
+        discardCachedAuthority();
+        setPermissions(null);
+      }
       return null;
     }
-  }, [isCurrentSession]);
+  }, [isCurrentSession, discardCachedAuthority]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -153,14 +160,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const nextUser = readStoredUser(event.key === null ? null : event.newValue);
       invalidateSession();
       currentUserRef.current = nextUser;
-      clearPreviousSessionRuntimeState(nextUser);
       setUser(nextUser);
       setPermissions(null);
       setIsLoading(false);
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [clearPreviousSessionRuntimeState, invalidateSession]);
+  }, [invalidateSession]);
 
   /**
    * Load user from localStorage and validate token

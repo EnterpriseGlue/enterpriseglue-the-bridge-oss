@@ -6,6 +6,7 @@ import { AuthProvider } from '@src/contexts/AuthContext';
 import { useAuth } from '@src/shared/hooks/useAuth';
 import { ApiError } from '@src/shared/api/client';
 import { USER_KEY } from '@src/constants/storageKeys';
+import { getBrowserSessionRevision } from '@src/utils/browserSession';
 
 vi.mock('@src/services/auth', () => ({
   authService: {
@@ -301,6 +302,56 @@ describe('authentication response ownership', () => {
     });
     expect(result.current.user).toEqual(b);
     expect(JSON.parse(localStorage.getItem(USER_KEY)!)).toEqual(b);
+  });
+
+  it.each(['replacement', 'authorization', 'unavailable'] as const)('discards cached private data after %s while the account ID stays the same', async change => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.permissions?.userId).toBe(a.id));
+    const key = ['mission-control', 'private-data', 'same-engine'];
+    queryClient.setQueryData(key, { value: 'old-authority' });
+    if (change === 'replacement') act(() => result.current.setAuthenticatedUser({ ...a }));
+    else {
+      if (change === 'unavailable') vi.mocked(authService.getMyPermissions).mockRejectedValueOnce(new Error('Unavailable'));
+      else vi.mocked(authService.getMyPermissions).mockResolvedValueOnce({ ...permissions(a), authorizationVersion: 'revised' });
+      await act(async () => { await result.current.refreshPermissions(); });
+    }
+    expect(queryClient.getQueryData(key)).toBeUndefined();
+  });
+
+  it('keeps cached data through a same-authority permission refresh', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.permissions?.userId).toBe(a.id));
+    const key = ['mission-control', 'private-data', 'same-engine'];
+    queryClient.setQueryData(key, { value: 'current-authority' });
+    vi.mocked(authService.getMyPermissions).mockResolvedValueOnce({ ...permissions(a), generatedAt: 999 });
+    await act(async () => { await result.current.refreshPermissions(); });
+    expect(queryClient.getQueryData(key)).toEqual({ value: 'current-authority' });
+  });
+
+  it('discards cache when action availability changes without a role-version change', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.permissions?.userId).toBe(a.id));
+    queryClient.setQueryData(['private'], 'old availability');
+    vi.mocked(authService.getMyPermissions).mockResolvedValueOnce({ ...permissions(a), platformActionAvailability: { allowedActions: [], restrictions: {} } });
+    await act(async () => { await result.current.refreshPermissions(); });
+    expect(queryClient.getQueryData(['private'])).toBeUndefined();
+  });
+
+  it('advances the transport fence for same-account replacement, storage ABA and provider unmount', async () => {
+    const { result, unmount } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    let revision = getBrowserSessionRevision();
+    act(() => result.current.setAuthenticatedUser({ ...a }));
+    expect(getBrowserSessionRevision()).toBeGreaterThan(revision);
+    revision = getBrowserSessionRevision();
+    act(() => { storage(b); storage(a); });
+    expect(getBrowserSessionRevision()).toBeGreaterThan(revision);
+    revision = getBrowserSessionRevision();
+    unmount();
+    expect(getBrowserSessionRevision()).toBeGreaterThan(revision);
   });
 
   it.each(['success', 'failure'] as const)('keeps new permissions after old permission %s', async outcome => {

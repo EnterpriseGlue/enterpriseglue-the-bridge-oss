@@ -58,6 +58,9 @@ notify through, reload or reuse a confirmation under the replacement view.
 This suppresses stale UI completion; it does not cancel an already-issued
 server write or authorize a retry. The list has stable hook ordering through
 permission revocation and does not fetch rows solely for create permission.
+Directory view identity includes action availability as well as permission and
+session identity. Changed availability discards confirmations even if a role
+version is unchanged; an observation timestamp alone does not discard the view.
 
 Manual user creation requires a complete ownership result. The browser checks
 up to the supported 200 active-directory records. An authoritative record blocks

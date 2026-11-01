@@ -350,8 +350,8 @@ describe('deployment intent lifetime', () => {
     });
     vi.mocked(apiClient.post).mockImplementation(async (url: string) => url.includes('/commit') ? save.promise : engine.promise);
     const onClose = vi.fn(), onSuccess = vi.fn();
-    const tree = (projectId = 'project-A', open = true, ids = fileIds, revision = 1) => (
-      <AuthContext.Provider value={{ ...authContext, sessionRevision: revision }}>
+    const tree = (projectId = 'project-A', open = true, ids = fileIds, revision = 1, permissions = basePermissions) => (
+      <AuthContext.Provider value={{ ...authContext, sessionRevision: revision, permissions }}>
         <QueryClientProvider client={client}><DeployDialog projectId={projectId} fileIds={ids} open={open} onClose={onClose} onDeploySuccess={onSuccess} /></QueryClientProvider>
       </AuthContext.Provider>
     );
@@ -376,11 +376,13 @@ describe('deployment intent lifetime', () => {
     f.view.unmount(); f.client.clear();
   });
 
-  it.each(['project', 'files', 'session', 'close-reopen', 'A-B-A', 'unmount'] as const)('stops before the second write after %s changes', async change => {
+  it.each(['project', 'files', 'session', 'authorization', 'availability', 'close-reopen', 'A-B-A', 'unmount'] as const)('stops before the second write after %s changes', async change => {
     const f = await setup(false, ['file-A']);
     if (change === 'project') f.view.rerender(f.tree('project-B'));
     if (change === 'files') f.view.rerender(f.tree('project-A', true, ['file-B']));
     if (change === 'session') f.view.rerender(f.tree('project-A', true, ['file-A'], 2));
+    if (change === 'authorization') f.view.rerender(f.tree('project-A', true, ['file-A'], 1, { ...basePermissions, authorizationVersion: 'changed' }));
+    if (change === 'availability') f.view.rerender(f.tree('project-A', true, ['file-A'], 1, { ...basePermissions, platformActionAvailability: { allowedActions: [], restrictions: {} } }));
     if (change === 'close-reopen') { f.view.rerender(f.tree('project-A', false)); f.view.rerender(f.tree()); }
     if (change === 'A-B-A') { f.view.rerender(f.tree('project-B')); f.view.rerender(f.tree()); }
     if (change === 'unmount') f.view.unmount();
@@ -413,5 +415,14 @@ describe('deployment intent lifetime', () => {
     if (change) expect(deploymentSpy).not.toHaveBeenCalled();
     else await waitFor(() => expect(deploymentSpy).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-A', engineId: 'engine-1', assertCurrent: expect.any(Function) })));
     expect(engineCalls()).toHaveLength(0); f.view.unmount(); f.client.clear();
+  });
+
+  it('does not start Git publication from a save confirmed under older permissions', async () => {
+    const f = await setup(true);
+    f.view.rerender(f.tree('project-A', true, [], 1, { ...basePermissions, platform: [], authorizationVersion: 'changed' }));
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    expect(deploymentSpy).not.toHaveBeenCalled(); expect(engineCalls()).toHaveLength(0);
+    expect(f.onSuccess).not.toHaveBeenCalled(); expect(f.onClose).not.toHaveBeenCalled();
+    f.view.unmount(); f.client.clear();
   });
 });
