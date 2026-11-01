@@ -10,6 +10,8 @@ import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 import { VcsSyncService } from '@enterpriseglue/shared/services/versioning/VcsSyncService.js';
+import { VcsService } from '@enterpriseglue/shared/services/versioning/VcsService.js';
+import { WorkingFolder } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFolder.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
@@ -18,6 +20,7 @@ import { VcsFileService } from '@enterpriseglue/shared/services/versioning/VcsFi
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import router from '../../../packages/backend-host/src/modules/versioning/index.js';
+import { verifyDeploymentRevision } from '../../../packages/backend-host/src/modules/engines/deployment-revision.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({ requireAuth: (req: any, _res: any, next: any) => {
@@ -27,7 +30,7 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({ apiLimiter:
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({ permissionService: { hasPermission: vi.fn().mockResolvedValue(true) } }));
 vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({ vcsService: {
   ensureInitialized: vi.fn().mockResolvedValue(true), getCommitSnapshots: vi.fn(), getUserBranch: vi.fn(),
-  getMainBranch: vi.fn(), getCommits: vi.fn(), getUncommittedIds: vi.fn(), saveFile: vi.fn(), commit: vi.fn(),
+  getMainBranch: vi.fn(), getCommits: vi.fn(), getUncommittedIds: vi.fn(), saveFile: vi.fn(), commit: vi.fn(), mergeToMain: vi.fn(),
 } }));
 
 const env = (key: string, fallback: string) => process.env[`MIGRATION_TEST_${key}`] || process.env[key] || fallback;
@@ -35,12 +38,13 @@ const database = `file_restore_${randomUUID().replace(/-/g, '')}`;
 const connection = { type: 'postgres' as const, host: env('POSTGRES_HOST', '127.0.0.1'), port: Number(env('POSTGRES_PORT', '5432')),
   username: env('POSTGRES_USER', 'postgres'), password: env('POSTGRES_PASSWORD', 'postgres') };
 const admin = new DataSource({ ...connection, database: env('POSTGRES_DATABASE', 'postgres') });
-const entities = [Project, Branch, WorkingFile, File, Folder, Commit, FileSnapshot, FileCommitVersion];
+const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion];
 const store = new DataSource({ ...connection, database, entities, synchronize: true });
 const projectId = randomUUID(), otherProjectId = randomUUID(), fileId = randomUUID(), siblingId = randomUUID();
 const commitId = randomUUID(), otherCommitId = randomUUID(), branchId = randomUUID();
 const hash = (xml: string) => createHash('sha256').update(xml).digest('hex').slice(0, 16);
 const commitService = new VcsCommitService(); const fileService = new VcsFileService(); const syncService = new VcsSyncService();
+const realVcs = new VcsService();
 let created = false;
 const app = express(); app.use(express.json()); app.use(router); app.use(errorHandler);
 const restore = (body: { fileId?: string } = { fileId }, revision = commitId) => request(app).post(body.fileId
@@ -60,6 +64,7 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     vi.mocked(vcsService.getUncommittedIds).mockImplementation((id, options) => syncService.getUncommittedIds(id, options));
     vi.mocked(vcsService.saveFile).mockImplementation((...args) => fileService.saveFile(...args));
     vi.mocked(vcsService.commit).mockImplementation((...args) => commitService.commit(...args));
+    vi.mocked(vcsService.mergeToMain).mockImplementation((...args) => realVcs.mergeToMain(...args));
   }, 30000);
   beforeEach(async () => {
     for (const entity of [...entities].reverse()) await store.getRepository(entity).clear();
@@ -154,6 +159,200 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     const status = await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);
     expect(status.status).toBe(200);
     expect(status.body.uncommittedFileIds).toEqual([]);
+  });
+
+  async function seedPublishedMain() {
+    const mainId = randomUUID();
+    await store.getRepository(Branch).insert({ id: mainId, projectId, name: 'main', userId: null, headCommitId: null, isDefault: true, createdAt: 1700000000000, updatedAt: 1700000000000 });
+    return mainId;
+  }
+
+  it('publishes the saved scoped tree without publishing unsaved sibling working content', async () => {
+    const mainId = await seedPublishedMain();
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Save A only', fileIds: [fileId] });
+    expect(saved.status).toBe(200);
+    const publish = await request(app).post(`/vcs-api/projects/${projectId}/publish`);
+    expect(publish.status).toBe(200);
+    const snapshots = await store.getRepository(FileSnapshot).find({ where: { commitId: publish.body.mergeCommitId } });
+    expect(snapshots.find(row => row.mainFileId === fileId)).toMatchObject({ content: `draft-${fileId}` });
+    expect(snapshots.find(row => row.mainFileId === siblingId)).toMatchObject({ content: `saved-${siblingId}` });
+    expect(await store.getRepository(WorkingFile).findOneByOrFail({ branchId, mainFileId: siblingId })).toMatchObject({ content: `working-${siblingId}` });
+    expect(await store.getRepository(File).findOneByOrFail({ id: siblingId })).toMatchObject({ xml: `draft-${siblingId}` });
+    expect((await store.getRepository(Branch).findOneByOrFail({ id: mainId })).headCommitId).toBe(publish.body.mergeCommitId);
+    const a = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    const b = await store.getRepository(File).findOneByOrFail({ id: siblingId });
+    const reviewedA = { ...a, sourceXml: a.xml };
+    const unsavedB = { ...b, sourceXml: b.xml };
+    expect((await verifyDeploymentRevision(store, projectId, publish.body.mergeCommitId, [reviewedA])).size).toBe(1);
+    await expect(verifyDeploymentRevision(store, projectId, publish.body.mergeCommitId, [unsavedB])).rejects.toMatchObject({ statusCode: 409 });
+    await expect(verifyDeploymentRevision(store, projectId, publish.body.mergeCommitId, [reviewedA, unsavedB], true)).rejects.toMatchObject({ statusCode: 409 });
+    expect((await verifyDeploymentRevision(store, projectId, publish.body.mergeCommitId,
+      [reviewedA, { ...unsavedB, sourceXml: `saved-${siblingId}` }], true)).size).toBe(2);
+  });
+
+  it.each(['foreign-project', 'foreign-owner'])('rejects a publish with %s before changing the saved main tree', async mismatch => {
+    const mainId = await seedPublishedMain();
+    await expect(realVcs.mergeToMain(branchId, mismatch === 'foreign-project' ? otherProjectId : projectId,
+      mismatch === 'foreign-owner' ? 'another-user' : 'fixture-user')).rejects.toMatchObject({ statusCode: 409 });
+    expect((await store.getRepository(Branch).findOneByOrFail({ id: mainId })).headCommitId).toBeNull();
+    expect(await store.getRepository(WorkingFile).count({ where: { branchId: mainId } })).toBe(0);
+    expect(await store.getRepository(Commit).count()).toBe(2);
+  });
+
+  it('reuses published identities across repeated publication and gives a new draft the saved tree', async () => {
+    const mainId = await seedPublishedMain();
+    const first = await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    const targetIds = (await store.getRepository(WorkingFile).find({ where: { branchId: mainId } })).map(row => row.id).sort();
+    const second = await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    expect(second.mergeCommitId).not.toBe(first.mergeCommitId);
+    expect((await store.getRepository(WorkingFile).find({ where: { branchId: mainId } })).map(row => row.id).sort()).toEqual(targetIds);
+    expect(await store.getRepository(FileSnapshot).count({ where: { commitId: second.mergeCommitId } })).toBe(2);
+    const draft = await realVcs.getUserBranch(projectId, 'second-user');
+    expect(draft.headCommitId).toBe(second.mergeCommitId);
+    const files = await store.getRepository(WorkingFile).find({ where: { branchId: draft.id } });
+    expect(files).toHaveLength(2);
+    expect(files.find(row => row.mainFileId === siblingId)).toMatchObject({ content: `saved-${siblingId}` });
+  });
+
+  it.each(['missing-head', 'foreign-head', 'no-own-commit', 'duplicate-snapshot', 'hash-drift', 'unknown-change-type', 'foreign-file', 'foreign-folder', 'duplicate-target'])('refuses %s before publishing any file', async drift => {
+    const mainId = await seedPublishedMain();
+    if (drift === 'missing-head' || drift === 'foreign-head') await store.getRepository(Branch).update(branchId, { headCommitId: drift === 'missing-head' ? null : otherCommitId });
+    if (drift === 'no-own-commit') await store.getRepository(Commit).update(commitId, { branchId: mainId });
+    const saved = await store.getRepository(FileSnapshot).findOneByOrFail({ commitId, mainFileId: siblingId });
+    if (drift === 'duplicate-snapshot') await store.getRepository(FileSnapshot).insert({ ...saved, id: 'duplicate-snapshot', workingFileId: 'another-working-id' });
+    if (drift === 'hash-drift') await store.getRepository(FileSnapshot).update(saved.id, { contentHash: 'incorrect' });
+    if (drift === 'unknown-change-type') await store.getRepository(FileSnapshot).update(saved.id, { changeType: 'unknown' });
+    if (drift === 'foreign-file') await store.getRepository(File).update(siblingId, { projectId: otherProjectId });
+    if (drift === 'foreign-folder') {
+      const id = randomUUID();
+      await store.getRepository(Folder).insert({ id, projectId: otherProjectId, name: 'Foreign', createdAt: 1700000000000, updatedAt: 1700000000000 });
+      await store.getRepository(FileSnapshot).update(saved.id, { folderId: id });
+    }
+    if (drift === 'duplicate-target') {
+      const source = await store.getRepository(WorkingFile).findOneByOrFail({ branchId, mainFileId: siblingId });
+      await store.getRepository(WorkingFile).insert([{ ...source, id: 'target-one', branchId: mainId }, { ...source, id: 'target-two', branchId: mainId }]);
+    }
+    const before = await store.getRepository(WorkingFile).find({ where: { branchId: mainId } });
+    await expect(realVcs.mergeToMain(branchId, projectId, 'fixture-user')).rejects.toMatchObject({ statusCode: 409 });
+    expect(await store.getRepository(WorkingFile).find({ where: { branchId: mainId } })).toEqual(before);
+    expect((await store.getRepository(Branch).findOneByOrFail({ id: mainId })).headCommitId).toBeNull();
+    expect(await store.getRepository(Commit).count()).toBe(2);
+  });
+
+  it('returns a publish conflict without creating a main checkpoint when no saved draft exists', async () => {
+    const mainId = await seedPublishedMain();
+    await store.getRepository(Branch).update(branchId, { headCommitId: null });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/publish`);
+    expect(response.status).toBe(409);
+    expect((await store.getRepository(Branch).findOneByOrFail({ id: mainId })).headCommitId).toBeNull();
+    expect(await store.getRepository(WorkingFile).count({ where: { branchId: mainId } })).toBe(0);
+  });
+
+  it.each(['sync-pull', 'sync-push'])('publishes the exact complete version saved by %s', async source => {
+    await seedPublishedMain();
+    const saved = await realVcs.commit(branchId, 'fixture-user', 'Git synchronization', { source });
+    const published = await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    const snapshots = store.getRepository(FileSnapshot);
+    for (const id of [fileId, siblingId]) {
+      expect((await snapshots.findOneByOrFail({ commitId: published.mergeCommitId, mainFileId: id })).content)
+        .toBe((await snapshots.findOneByOrFail({ commitId: saved.id, mainFileId: id })).content);
+    }
+  });
+
+  it('publishes an explicitly saved empty tree without adopting the former main files', async () => {
+    const mainId = await seedPublishedMain();
+    await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    await store.getRepository(WorkingFile).delete({ branchId });
+    await realVcs.commit(branchId, 'fixture-user', 'Reviewed empty tree');
+    const published = await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    expect(published.filesChanged).toBe(0);
+    expect(await store.getRepository(WorkingFile).count({ where: { branchId: mainId, isDeleted: false } })).toBe(0);
+    const snapshots = await store.getRepository(FileSnapshot).find({ where: { commitId: published.mergeCommitId } });
+    expect(snapshots).toHaveLength(2); expect(snapshots.every(file => file.changeType === 'deleted')).toBe(true);
+  });
+
+  it('retains saved folder paths and a unique legacy identity without changing folder metadata', async () => {
+    const mainId = await seedPublishedMain(), folderId = randomUUID();
+    await store.getRepository(Folder).insert({ id: folderId, projectId, name: 'Saved folder', createdAt: 1700000000000, updatedAt: 1700000000000 });
+    const saved = await store.getRepository(FileSnapshot).findOneByOrFail({ commitId, mainFileId: siblingId });
+    await store.getRepository(FileSnapshot).update(saved.id, { mainFileId: null, folderId });
+    const source = await store.getRepository(WorkingFile).findOneByOrFail({ branchId, mainFileId: siblingId });
+    await store.getRepository(WorkingFile).insert({ ...source, id: 'published-legacy-file', branchId: mainId, name: saved.name, folderId });
+    const folder = await store.getRepository(Folder).findOneByOrFail({ id: folderId });
+    const published = await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    expect(await store.getRepository(FileSnapshot).findOneByOrFail({ commitId: published.mergeCommitId, mainFileId: siblingId }))
+      .toMatchObject({ folderId, content: saved.content });
+    expect(await store.getRepository(WorkingFile).count({ where: { branchId: mainId, mainFileId: siblingId } })).toBe(1);
+    expect(await store.getRepository(Folder).findOneByOrFail({ id: folderId })).toEqual(folder);
+  });
+
+  it.each(['source', 'main'])('refuses a changed %s head before publishing files', async changed => {
+    const mainId = await seedPublishedMain();
+    const repository = store.getRepository(Branch), original = repository.findOne.bind(repository);
+    let reads = 0;
+    const spy = vi.spyOn(repository, 'findOne').mockImplementation(async options => {
+      if (++reads === (changed === 'source' ? 3 : 4)) await repository.update(changed === 'source' ? branchId : mainId, { headCommitId: otherCommitId });
+      return original(options);
+    });
+    try {
+      await expect(realVcs.mergeToMain(branchId, projectId, 'fixture-user')).rejects.toMatchObject({ statusCode: 409 });
+      expect(await store.getRepository(WorkingFile).count({ where: { branchId: mainId } })).toBe(0);
+      expect(await store.getRepository(Commit).count()).toBe(2);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('publishes saved deletion markers without copying a recreated working draft', async () => {
+    const mainId = await seedPublishedMain();
+    const source = await store.getRepository(WorkingFile).findOneByOrFail({ branchId, mainFileId: siblingId });
+    await store.getRepository(WorkingFile).insert({ ...source, id: 'published-sibling', branchId: mainId });
+    await store.getRepository(FileSnapshot).update({ commitId, mainFileId: siblingId }, { changeType: 'deleted' });
+    const published = await realVcs.mergeToMain(branchId, projectId, 'fixture-user');
+    expect(await store.getRepository(WorkingFile).findOneByOrFail({ id: 'published-sibling' })).toMatchObject({ isDeleted: true });
+    expect(await store.getRepository(FileSnapshot).findOneByOrFail({ commitId: published.mergeCommitId, mainFileId: siblingId })).toMatchObject({ changeType: 'deleted' });
+    expect(await store.getRepository(WorkingFile).findOneByOrFail({ id: source.id })).toMatchObject({ isDeleted: false, content: source.content });
+  });
+
+  it.each(['renamed', 'moved', 'deleted', 'duplicate-identity', 'forged-content'])('keeps a %s saved file dirty despite a matching recorded content hash', async drift => {
+    const saved = await store.getRepository(FileSnapshot).findOneByOrFail({ commitId, mainFileId: siblingId });
+    await store.getRepository(File).update(siblingId, { xml: saved.content! });
+    if (drift === 'renamed') await store.getRepository(File).update(siblingId, { name: 'Unsaved new name' });
+    if (drift === 'moved') await store.getRepository(File).update(siblingId, { folderId: 'unsaved-folder' });
+    if (drift === 'deleted') await store.getRepository(FileSnapshot).update(saved.id, { changeType: 'deleted' });
+    if (drift === 'duplicate-identity') await store.getRepository(FileSnapshot).insert({ ...saved, id: 'duplicate-matching', workingFileId: 'duplicate-working' });
+    if (drift === 'forged-content') await store.getRepository(FileSnapshot).update(saved.id, { content: 'Other bytes, same claimed hash' });
+    const status = await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);
+    expect(status.status).toBe(200);
+    expect(status.body.uncommittedFileIds).toContain(siblingId);
+  });
+
+  it.each(['missing', 'foreign'])('rejects a %s project baseline before reading its snapshots', async kind => {
+    await store.getRepository(Branch).update(branchId, { headCommitId: kind === 'missing' ? randomUUID() : otherCommitId });
+    const repository = store.getRepository(FileSnapshot), spy = vi.spyOn(repository, 'find');
+    try {
+      const status = await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);
+      expect(status.status).toBe(409);
+      expect(spy).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
+
+  it('keeps exact saved and unique legacy empty-file baselines clean', async () => {
+    await store.getRepository(File).update(siblingId, { xml: '' });
+    await store.getRepository(FileSnapshot).update({ commitId, mainFileId: siblingId }, { content: '', contentHash: hash('') });
+    for (const legacy of [false, true]) {
+      if (legacy) await store.getRepository(FileSnapshot).update({ commitId, mainFileId: siblingId }, { mainFileId: null });
+      const status = await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);
+      expect(status.status).toBe(200); expect(status.body.uncommittedFileIds).not.toContain(siblingId);
+    }
+  });
+
+  it('bounds dirty-folder ancestry even when retained folder rows contain a cycle', async () => {
+    const one = randomUUID(), two = randomUUID();
+    for (const [id, parentFolderId] of [[one, two], [two, one]]) await store.getRepository(Folder).insert({ id, projectId, parentFolderId, name: 'Folder', createdAt: 1700000000000, updatedAt: 1700000000000 });
+    await store.getRepository(File).update(siblingId, { folderId: one });
+    const status = await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);
+    expect(status.status).toBe(200); expect(status.body.uncommittedFolderIds.sort()).toEqual([one, two].sort());
+    const withoutBaseline = await syncService.getUncommittedIds(projectId, { baselineCommitId: null });
+    expect(withoutBaseline.folderIds.sort()).toEqual([one, two].sort());
   });
 
   it('pins scope before asynchronous work and hashes the saved tree instead of unsaved siblings', async () => {

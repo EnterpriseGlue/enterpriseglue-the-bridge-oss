@@ -34,7 +34,8 @@
     "Local file versions and Git commit snapshots use separate caches, preventing an equal ID from supplying the wrong preview or restore readiness.",
     "Restoring a file version changes only the selected file; sibling drafts and file-version history remain independent.",
     "Pending restore stops when its file, version, session or permissions change, and an unverified preceding save cannot permit restore.",
-    "Saving or restoring one file preserves sibling saved baselines and unsaved drafts. Create Version refuses obsolete preparation and unverified responses."
+    "Saving or restoring one file preserves sibling saved baselines and unsaved drafts. Create Version refuses obsolete preparation and unverified responses.",
+    "Publish uses the saved draft tree without including unsaved siblings. Dirty status recognizes renames, moves, deletion markers and conflicting snapshots."
   ],
   "upgrade": {
     "required": true,
@@ -52,7 +53,8 @@
       "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards.",
       "Security enforcement: status-changing profile PUT returns 409; compatibility DELETE requires the lifecycle reason body and uses audited deactivation; direct SCIM/LDAP profile overrides are rejected.",
       "The existing commit-files endpoint returns a shared strict snapshot DTO and binds commit reads to the authorized project. Both saved-diagram views use that endpoint; stable file identity takes priority over names.",
-      "File restore uses POST /vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore with the existing restore permission. Older hosts reject that route without whole-project effects; the client has no legacy fallback. Checkpoints keep the existing file-save marker and explicit file-version scope. The original project restore endpoint remains supported. Ambiguous stored snapshots reach validation without timestamp-based selection."
+      "File restore uses POST /vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore with the existing restore permission. Older hosts reject that route without whole-project effects; the client has no legacy fallback. Checkpoints keep the existing file-save marker and explicit file-version scope. The original project restore endpoint remains supported. Ambiguous stored snapshots reach validation without timestamp-based selection.",
+      "Publish and dirty-status endpoints preserve HTTP 409 for unavailable or conflicting saved baselines; publish requires a saved draft owned by the requested project and user."
     ]
   },
   "database": {
@@ -72,7 +74,8 @@
     "Engine callbacks are checked before dispatch and on settlement using their render, mount and browser-session lifetime. Shared refreshes are session/tenant-bound; cancelled callers never replay and server authorization remains authoritative.",
     "The same-origin runtime configuration boundary rejects redirects before contacting their destination; direct same-origin documents retain explicit API-origin selection.",
     "Commit snapshot reads bind the authorized project in SQL; restore updates require the target row to belong to that project. Historical diagram content stays separate from draft autosave, with no authorization, database policy or grant relaxation.",
-    "Mixed-resolver authorization actions require explicit scope selection; single-project VCS status resolves the requested project. No grant or database policy change."
+    "Mixed-resolver authorization actions require explicit scope selection; single-project VCS status resolves the requested project. No grant or database policy change.",
+    "Publication rejects foreign project/owner/tree references and conflicting identities before changing main. Dirty-status baseline lookup is project-bound. Existing grants, database policies and migration floors are unchanged."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -110,7 +113,8 @@
     "Canonical snapshot adapter and viewer regressions, project-authorized route/restore tests and actual PostgreSQL sibling-project snapshot denial.",
     "Production-built BPMN/DMN viewer and missing-snapshot browser assertions against owned local HTTP responses; the viewer selects the bundled modern WOFF icon face.",
     "Actual PostgreSQL route, restore, VCS checkpoint and history/backfill integration with sibling-file/project denials; deferred autosave/restore browser component lifetime cases.",
-    "Actual PostgreSQL scoped-save/restore dirty-state and identity regressions, explicit authorization resolver contracts and deferred Create Version lifetime/acknowledgement checks."
+    "Actual PostgreSQL scoped-save/restore dirty-state and identity regressions, explicit authorization resolver contracts and deferred Create Version lifetime/acknowledgement checks.",
+    "Actual PostgreSQL scoped save to publish to deployment-revision verification, repeated publish/new draft inheritance, metadata/tombstone/duplicate/content-drift negatives and cyclic folder ancestry. Git import/push complete-save callers remain covered locally."
   ],
   "packages": [
     {

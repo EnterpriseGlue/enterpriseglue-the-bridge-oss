@@ -4077,7 +4077,10 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/publish',
   ...authzExtension('project.vcs.publish', 'POST', '/vcs-api/projects/{projectId}/publish'),
   request: { params: z.object({ projectId: z.string().uuid() }) },
-  responses: { 200: { description: 'Draft merged to main', content: { 'application/json': { schema: z.object({ success: z.boolean(), mergeCommitId: z.string(), filesChanged: z.number() }) } } } },
+  responses: {
+    200: { description: 'Saved draft tree published to main', content: { 'application/json': { schema: z.object({ success: z.boolean(), mergeCommitId: z.string(), filesChanged: z.number() }) } } },
+    409: { description: 'No owned saved draft, unavailable or ambiguous tree, or a changed draft/main head' },
+  },
 });
 
 // GET /vcs-api/projects/:projectId/commits
@@ -4104,7 +4107,10 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/uncommitted-files',
   ...authzExtension('project.vcs.status.read', 'GET', '/vcs-api/projects/{projectId}/uncommitted-files'),
   request: { params: z.object({ projectId: z.string().uuid() }), query: z.object({ baseline: z.enum(['main', 'draft']).optional() }) },
-  responses: { 200: { description: 'Uncommitted file IDs', content: { 'application/json': { schema: z.object({ hasUncommittedChanges: z.boolean(), uncommittedFileIds: z.array(z.string()), uncommittedFolderIds: z.array(z.string()) }) } } } },
+  responses: {
+    200: { description: 'Uncommitted file IDs against an unambiguous saved file baseline, including content and metadata', content: { 'application/json': { schema: z.object({ hasUncommittedChanges: z.boolean(), uncommittedFileIds: z.array(z.string()), uncommittedFolderIds: z.array(z.string()) }) } } },
+    409: { description: 'Saved baseline is missing or belongs to another project' },
+  },
 });
 
 // GET /vcs-api/projects/:projectId/commits/:commitId/files

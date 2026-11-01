@@ -13,7 +13,10 @@ import { RemoteSyncState } from '@enterpriseglue/shared/infrastructure/persisten
 import { In, IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
-import { BranchInfo, mapBranch } from './vcs-types.js';
+import { BranchInfo, CommitInfo, hashContent, mapBranch, normalizeFolderId } from './vcs-types.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { File as MainFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { Folder as MainFolder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 
 export class VcsBranchService {
   /**
@@ -213,43 +216,91 @@ export class VcsBranchService {
     const dataSource = await getDataSource();
     const branchRepo = dataSource.getRepository(Branch);
     const fileRepo = dataSource.getRepository(WorkingFile);
+    const source = await branchRepo.findOne({ where: { id: sourceBranchId, projectId, userId, isDefault: false } });
+    if (!source || source.isDefault || !source.headCommitId) {
+      throw Errors.conflict('The owned draft has no saved version to publish');
+    }
+    const head = await dataSource.getRepository(Commit).findOne({
+      where: { id: source.headCommitId, projectId, branchId: sourceBranchId },
+    });
+    if (!head) throw Errors.conflict('The saved draft version is unavailable for this project');
+    const main = await branchRepo.findOne({ where: { projectId, name: 'main', userId: IsNull(), isDefault: true } });
+    if (!main || main.id === source.id) throw Errors.conflict('The published branch is unavailable');
+
+    // Publish the immutable saved tree. Working drafts, including sibling edits
+    // after a file-scoped save, are never publication inputs.
+    const saved = await dataSource.getRepository(FileSnapshot).find({ where: { commitId: head.id } });
+    const targets = await fileRepo.find({ where: { branchId: main.id, projectId } });
+    const key = (file: { mainFileId: string | null; folderId: string | null; name: string; type: string }) =>
+      file.mainFileId ? `id:${file.mainFileId}` : `legacy:${pathKey(file)}`;
+    const pathKey = (file: { folderId: string | null; name: string; type: string }) =>
+      JSON.stringify([normalizeFolderId(file.folderId), file.name, file.type]);
+    if (new Set(saved.map(key)).size !== saved.length
+      || new Set(saved.map(file => file.workingFileId)).size !== saved.length
+      || new Set(targets.map(key)).size !== targets.length) {
+      throw Errors.conflict('The saved or published tree contains ambiguous file identities');
+    }
+    for (const file of saved) {
+      if (!['added', 'modified', 'unchanged', 'deleted'].includes(file.changeType)
+        || file.contentHash !== (file.content === null ? null : hashContent(file.content))) {
+        throw Errors.conflict('The saved file content does not match its recorded hash');
+      }
+    }
+    const stableIds = saved.flatMap(file => file.mainFileId ? [file.mainFileId] : []);
+    if (stableIds.length) {
+      const current = await dataSource.getRepository(MainFile).find({ where: { id: In(stableIds) }, select: ['id', 'projectId'] });
+      if (current.some(file => file.projectId !== projectId)) throw Errors.conflict('The saved tree references another project');
+    }
+    const folderIds = [...new Set(saved.flatMap(file => normalizeFolderId(file.folderId) ? [file.folderId!] : []))];
+    if (folderIds.length) {
+      const folders = await dataSource.getRepository(MainFolder).find({ where: { id: In(folderIds) }, select: ['id', 'projectId'] });
+      if (folders.some(folder => folder.projectId !== projectId)) throw Errors.conflict('The saved tree references another project folder');
+    }
+    const usedTargets = new Set<string>();
+    const byStableId = new Map(targets.filter(file => file.mainFileId).map(file => [file.mainFileId!, file]));
+    const byPath = new Map<string, WorkingFile[]>();
+    for (const target of targets) {
+      const path = pathKey(target);
+      byPath.set(path, [...(byPath.get(path) ?? []), target]);
+    }
     const now = Date.now();
-    
-    // Get source branch
-    const sourceBranch = await branchRepo.findOne({ where: { id: sourceBranchId } });
-    if (!sourceBranch) {
-      throw new Error('Source branch not found');
-    }
-    
-    // Get main branch
-    const mainBranch = await branchRepo.findOne({
-      where: { projectId: sourceBranch.projectId, name: 'main' }
+    const plan = saved.map(file => {
+      const identified = file.mainFileId ? byStableId.get(file.mainFileId) : undefined;
+      const matches = identified ? [identified] : (byPath.get(pathKey(file)) ?? []).filter(target => !file.mainFileId || !target.mainFileId);
+      if (matches.length > 1 || (matches[0] && usedTargets.has(matches[0].id))) {
+        throw Errors.conflict('The published file identity is ambiguous');
+      }
+      const target = matches[0];
+      if (target) usedTargets.add(target.id);
+      return {
+        existingId: target?.id,
+        row: { id: target?.id ?? generateId(), branchId: main.id, projectId,
+          mainFileId: file.mainFileId ?? target?.mainFileId ?? null, folderId: file.folderId,
+          name: file.name, type: file.type, content: file.content, contentHash: file.contentHash,
+          isDeleted: file.changeType === 'deleted', createdAt: target?.createdAt ?? now, updatedAt: now },
+      };
     });
-    
-    if (!mainBranch) {
-      throw new Error('Main branch not found');
+    // A changed head requires a new user decision, not an implicit retry.
+    const [currentSource, currentMain] = await Promise.all([
+      branchRepo.findOne({ where: { id: source.id, projectId, userId, isDefault: false } }),
+      branchRepo.findOne({ where: { id: main.id, projectId, userId: IsNull(), isDefault: true } }),
+    ]);
+    if (!currentSource || currentSource.headCommitId !== head.id || !currentMain || currentMain.headCommitId !== main.headCommitId) {
+      throw Errors.conflict('The draft or published version changed; review before publishing');
     }
-    
-    // Get source files count before merge
-    const sourceFiles = await fileRepo.find({
-      where: { branchId: sourceBranchId, isDeleted: false }
-    });
-    
-    const filesChanged = sourceFiles.length;
-    
-    // Mark all main branch files as deleted
-    await fileRepo.update({ branchId: mainBranch.id }, { isDeleted: true, updatedAt: now });
-    
-    // Copy source files to main
-    await this.copyBranchFiles(sourceBranchId, mainBranch.id);
-    
-    // Create merge commit on main
-    const mergeMessage = `Merge from ${sourceBranch.name}`;
-    const commit = await commitFn(mainBranch.id, userId, mergeMessage);
-    
-    logger.info('Branch merged to main', { sourceBranchId, mainBranchId: mainBranch.id, commitId: commit.id });
-    
-    return { mergeCommitId: commit.id, filesChanged };
+
+    // Reuse stable target rows: repeated publishing must not append duplicate
+    // deleted/active identities. Absent saved files become tombstones.
+    await fileRepo.update({ branchId: main.id, projectId }, { isDeleted: true, updatedAt: now });
+    for (const { existingId, row } of plan) {
+      if (existingId) {
+        const result = await fileRepo.update({ id: existingId, branchId: main.id, projectId }, row);
+        if (result.affected !== 1) throw Errors.conflict('The published file changed during publication');
+      } else await fileRepo.insert(row);
+    }
+    const commit = await commitFn(main.id, userId, `Merge from ${source.name}`);
+    logger.info('Saved branch version published to main', { sourceBranchId, mainBranchId: main.id, sourceCommitId: head.id, commitId: commit.id });
+    return { mergeCommitId: commit.id, filesChanged: saved.filter(file => file.changeType !== 'deleted').length };
   }
 
   /**
@@ -300,8 +351,5 @@ export class VcsBranchService {
     }
   }
 }
-
-// Need to import CommitInfo for mergeToMain signature
-import type { CommitInfo } from './vcs-types.js';
 
 export const vcsBranchService = new VcsBranchService();

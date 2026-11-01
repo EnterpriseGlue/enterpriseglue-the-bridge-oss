@@ -203,6 +203,7 @@ router.post('/vcs-api/projects/:projectId/publish', apiLimiter, requireAuth, req
       filesChanged: result.filesChanged
     });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Failed to publish to main', { projectId, userId, error });
     throw Errors.internal('Failed to publish changes');
   }
@@ -555,6 +556,7 @@ router.get('/vcs-api/projects/:projectId/uncommitted-files', apiLimiter, require
       uncommittedFolderIds: folderIds
     });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Failed to get uncommitted files', { projectId, userId, error });
     throw Errors.internal('Failed to get uncommitted files');
   }

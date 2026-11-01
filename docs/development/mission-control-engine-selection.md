@@ -221,3 +221,33 @@ sending a request and handling its result. Cancellation invalidates a pending
 continuation; an already-issued write may still settle. Success requires the
 expected version identifier in the response. A late response cannot close a
 replacement modal or invalidate its queries.
+
+## Saved-tree publication and dirty status
+
+Publishing a draft uses its saved head snapshots, including file metadata and
+deleted-file markers. It does not use the draft working rows. The service binds
+the draft and saved head to the requested project and owner, rejects missing or
+ambiguous identities and content/hash drift, and checks both branch heads again
+before changing main. Repeated publication reuses main file identities rather
+than appending duplicate active/deleted rows. A new user draft copies the saved
+main tree; publishing leaves existing working drafts and main application files
+unchanged. File folder IDs are retained, and known cross-project file or folder
+references are rejected. This is file-tree publication; folder metadata does not
+have a versioned snapshot representation.
+
+A publish conflict returns HTTP 409. A draft must first have an owned saved
+commit; an inherited main head alone is not a new draft version. Existing Git
+push/import paths already save a complete draft before publishing. Publication
+remains a non-atomic multi-step operation: the final head checks do not establish
+a database lease, and a failed/lost response still requires reconciliation.
+
+Dirty status compares one exact stable identity, or one unique legacy path,
+with saved content, hash, name, type and folder. A deleted or ambiguous baseline
+never makes a current file clean. Missing/foreign project baselines reject before
+snapshot reads. Folder ancestor traversal terminates even when retained folder
+rows contain a cycle. Empty file content can match an exact valid baseline; a
+viewer still requires displayable diagram content.
+
+The deployment revision guard independently compares the published snapshots
+with the captured deployment source. An unsaved sibling cannot claim the
+published commit identifier, including in a whole-project deployment.
