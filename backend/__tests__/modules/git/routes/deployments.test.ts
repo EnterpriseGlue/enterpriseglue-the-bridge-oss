@@ -11,6 +11,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 
 const gitRouteMocks = vi.hoisted(() => ({
   evaluateDeploymentEligibility: vi.fn(),
+  deployProject: vi.fn(),
 }));
 const policyServiceMock = vi.hoisted(() => ({
   evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
@@ -33,7 +34,7 @@ vi.mock('@enterpriseglue/shared/services/git/GitService.js', () => ({
   GitService: class {
     listDeployments = vi.fn().mockResolvedValue([]);
     getCommitHistory = vi.fn().mockResolvedValue([]);
-    deployProject = vi.fn().mockResolvedValue({ deploymentId: 'deployment-1', commitSha: 'abc1234', filesChanged: 1 });
+    deployProject = gitRouteMocks.deployProject;
     rollbackToCommit = vi.fn().mockResolvedValue(undefined);
   },
 }));
@@ -107,6 +108,7 @@ describe('git deployments routes', () => {
     app.use(express.json());
     app.use(deploymentsRouter);
     vi.clearAllMocks();
+    gitRouteMocks.deployProject.mockResolvedValue({ deploymentId: 'deployment-1', commitSha: 'abc1234', filesChanged: 1 });
     deploymentFind = vi.fn().mockResolvedValue([]);
     environmentFindOneBy = vi.fn().mockResolvedValue(null);
     environmentFind = vi.fn().mockResolvedValue([]);
@@ -159,6 +161,20 @@ describe('git deployments routes', () => {
     expect(deploymentsRouter).toBeDefined();
   });
 
+  it('passes the exact saved revision through the guarded Git deployment route', async () => {
+    const projectId = '11111111-1111-4111-8111-111111111111', vcsCommitId = '22222222-2222-4222-8222-222222222222';
+    gitRouteMocks.deployProject.mockResolvedValueOnce({ deploymentId: 'deployment-1', commitSha: 'abcdef1', filesChanged: 1, vcsCommitId });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:deploy');
+    const response = await request(app).post('/git-api/deploy-from-version').send({ projectId, engineId: 'engine-1', message: 'Reviewed version', vcsCommitId });
+    expect(response.status).toBe(201);
+    expect(gitRouteMocks.deployProject).toHaveBeenCalledWith(expect.objectContaining({ projectId, userId: 'user-1', vcsCommitId }));
+  });
+
+  it('rejects a malformed saved Git revision before invoking deployment', async () => {
+    const response = await request(app).post('/git-api/deploy-from-version').send({ projectId: '11111111-1111-4111-8111-111111111111', message: 'Bad revision', vcsCommitId: '' });
+    expect(response.status).toBe(400); expect(gitRouteMocks.deployProject).not.toHaveBeenCalled();
+  });
+
   it('evaluates CI deployment eligibility when an engine target is provided', async () => {
     const projectId = '11111111-1111-4111-8111-111111111111';
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:deploy');
@@ -181,7 +197,7 @@ describe('git deployments routes', () => {
     });
   });
 
-  it('denies Git deployment when the selected engine target is not eligible for CI mode', async () => {
+  it.each(['/git-api/deploy', '/git-api/deploy-from-version'])('denies Git deployment through %s when the engine target is not eligible for CI mode', async route => {
     const projectId = '11111111-1111-4111-8111-111111111111';
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:deploy');
     gitRouteMocks.evaluateDeploymentEligibility.mockResolvedValueOnce({
@@ -202,9 +218,10 @@ describe('git deployments routes', () => {
     });
 
     const response = await request(app)
-      .post('/git-api/deploy')
+      .post(route)
       .send({
         projectId,
+        vcsCommitId: '22222222-2222-4222-8222-222222222222',
         engineId: 'engine-1',
         message: 'Deploy through Git',
       });

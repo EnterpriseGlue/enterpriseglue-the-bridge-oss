@@ -10,6 +10,11 @@ import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 import { VcsSyncService } from '@enterpriseglue/shared/services/versioning/VcsSyncService.js';
+import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
+import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
+import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
+import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
+import { GitAuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitAuditLog.js';
 import { VcsService } from '@enterpriseglue/shared/services/versioning/VcsService.js';
 import { WorkingFolder } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFolder.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
@@ -30,7 +35,7 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({ apiLimiter:
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({ permissionService: { hasPermission: vi.fn().mockResolvedValue(true) } }));
 vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({ vcsService: {
   ensureInitialized: vi.fn().mockResolvedValue(true), getCommitSnapshots: vi.fn(), getUserBranch: vi.fn(),
-  getMainBranch: vi.fn(), getCommits: vi.fn(), getUncommittedIds: vi.fn(), saveFile: vi.fn(), commit: vi.fn(), mergeToMain: vi.fn(),
+  getMainBranch: vi.fn(), getCommits: vi.fn(), getUncommittedIds: vi.fn(), saveFile: vi.fn(), commit: vi.fn(), mergeToMain: vi.fn(), syncFromMainDb: vi.fn(),
 } }));
 
 const env = (key: string, fallback: string) => process.env[`MIGRATION_TEST_${key}`] || process.env[key] || fallback;
@@ -38,7 +43,7 @@ const database = `file_restore_${randomUUID().replace(/-/g, '')}`;
 const connection = { type: 'postgres' as const, host: env('POSTGRES_HOST', '127.0.0.1'), port: Number(env('POSTGRES_PORT', '5432')),
   username: env('POSTGRES_USER', 'postgres'), password: env('POSTGRES_PASSWORD', 'postgres') };
 const admin = new DataSource({ ...connection, database: env('POSTGRES_DATABASE', 'postgres') });
-const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion];
+const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog];
 const store = new DataSource({ ...connection, database, entities, synchronize: true });
 const projectId = randomUUID(), otherProjectId = randomUUID(), fileId = randomUUID(), siblingId = randomUUID();
 const commitId = randomUUID(), otherCommitId = randomUUID(), branchId = randomUUID();
@@ -64,6 +69,7 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     vi.mocked(vcsService.getUncommittedIds).mockImplementation((id, options) => syncService.getUncommittedIds(id, options));
     vi.mocked(vcsService.saveFile).mockImplementation((...args) => fileService.saveFile(...args));
     vi.mocked(vcsService.commit).mockImplementation((...args) => commitService.commit(...args));
+    vi.mocked(vcsService.syncFromMainDb).mockImplementation((...args) => realVcs.syncFromMainDb(...args));
     vi.mocked(vcsService.mergeToMain).mockImplementation((...args) => realVcs.mergeToMain(...args));
   }, 30000);
   beforeEach(async () => {
@@ -353,6 +359,114 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     expect(status.status).toBe(200); expect(status.body.uncommittedFolderIds.sort()).toEqual([one, two].sort());
     const withoutBaseline = await syncService.getUncommittedIds(projectId, { baselineCommitId: null });
     expect(withoutBaseline.folderIds.sort()).toEqual([one, two].sort());
+  });
+
+  async function savedGitFixture(nested = false) {
+    const folderId = nested ? randomUUID() : null;
+    if (folderId) {
+      await store.getRepository(Folder).insert({ id: folderId, projectId, parentFolderId: null, name: 'Reviewed folder', createdAt: 1700000000000, updatedAt: 1700000000000 });
+      await store.getRepository(File).update(siblingId, { folderId });
+    }
+    await store.getRepository(GitRepository).insert({ id: 'git-fixture', projectId, providerId: 'fixture-provider', remoteUrl: 'https://example.invalid/fixture',
+      repositoryName: 'fixture', namespace: null, defaultBranch: 'main', clonePath: 'database://fixture', createdAt: 1700000000000, updatedAt: 1700000000000 });
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Reviewed Git version' });
+    expect(saved.status).toBe(200);
+    const client = { testWriteAccess: vi.fn().mockResolvedValue(undefined), getTree: vi.fn().mockResolvedValue([]),
+      getBranches: vi.fn().mockResolvedValue([{ name: 'main', sha: 'a'.repeat(40) }]),
+      pushFiles: vi.fn().mockResolvedValue({ sha: 'b'.repeat(40), message: 'Fixture commit', author: 'Fixture', date: new Date() }),
+      createTag: vi.fn().mockResolvedValue(undefined) };
+    const provider = vi.spyOn(remoteGitService, 'getClient').mockResolvedValue(client as any);
+    const credential = vi.spyOn(GitService, 'getProjectAccessToken').mockResolvedValue('synthetic-test-token');
+    return { client, provider, credential, folderId, savedId: saved.body.commitId,
+      restore: () => { provider.mockRestore(); credential.mockRestore(); } };
+  }
+
+  it('pushes captured reviewed Git bytes despite a draft edit during the provider preflight', async () => {
+    const f = await savedGitFixture(true);
+    f.client.testWriteAccess.mockImplementation(async () => {
+      await store.getRepository(File).update(siblingId, { xml: 'Later unsaved provider-time edit' });
+      await store.getRepository(Folder).update(f.folderId!, { name: 'Later folder name' });
+    });
+    try {
+      const result = await new GitService().deployProject({ projectId, userId: 'fixture-user', message: 'Reviewed export', vcsCommitId: f.savedId });
+      expect(result.vcsCommitId).toBe(f.savedId); expect(result.commitSha).toBe('b'.repeat(40));
+      expect(f.client.pushFiles).toHaveBeenCalledTimes(1);
+      const payload = f.client.pushFiles.mock.calls[0][0] as any;
+      expect(payload.files.find((file: any) => file.path === 'Reviewed folder/Sibling.bpmn').content).toBe(`draft-${siblingId}`);
+      const deployment = await store.getRepository(GitDeployment).findOneByOrFail({ id: result.deploymentId });
+      expect(JSON.parse(deployment.metadata!).vcsCommitId).toBe(f.savedId);
+      expect(await store.getRepository(Commit).count()).toBe(3);
+      expect((await store.getRepository(File).findOneByOrFail({ id: siblingId })).xml).toBe('Later unsaved provider-time edit');
+    } finally { f.restore(); }
+  });
+
+  it.each(['drift', 'foreign-version', 'missing-version', 'duplicate-path', 'folder-cycle', 'missing-folder', 'path-traversal'])('rejects %s before resolving a Git provider', async failure => {
+    const f = await savedGitFixture();
+    try {
+      if (failure === 'drift') await store.getRepository(File).update(siblingId, { xml: 'Unsaved edit' });
+      if (failure === 'duplicate-path') {
+        await store.getRepository(File).update(siblingId, { name: 'Renamed current file' });
+        await store.getRepository(FileSnapshot).update({ commitId: f.savedId, mainFileId: siblingId }, { name: 'Renamed current file' });
+      }
+      if (failure === 'missing-folder' || failure === 'path-traversal') {
+        const metadata = failure === 'missing-folder' ? { folderId: randomUUID() } : { name: '../outside' };
+        await store.getRepository(File).update(siblingId, metadata);
+        await store.getRepository(FileSnapshot).update({ commitId: f.savedId, mainFileId: siblingId }, metadata);
+      }
+      if (failure === 'folder-cycle') {
+        const id = randomUUID(); await store.getRepository(Folder).insert({ id, projectId, parentFolderId: id, name: 'Cycle', createdAt: 1700000000000, updatedAt: 1700000000000 });
+      }
+      await expect(new GitService().deployProject({ projectId, userId: 'fixture-user', message: 'Must not push',
+        vcsCommitId: failure === 'foreign-version' ? otherCommitId : failure === 'missing-version' ? randomUUID() : f.savedId })).rejects.toMatchObject({ statusCode: 409 });
+      expect(f.provider).not.toHaveBeenCalled(); expect(f.client.pushFiles).not.toHaveBeenCalled();
+      expect(await store.getRepository(GitDeployment).count()).toBe(0);
+    } finally { f.restore(); }
+  });
+
+  it.each(['lost-ack', 'missing-sha', 'tag-failure'])('does not acknowledge or retry a Git deployment after %s', async failure => {
+    const f = await savedGitFixture();
+    try {
+      if (failure === 'lost-ack') f.client.pushFiles.mockRejectedValue(new Error('Synthetic lost acknowledgement'));
+      if (failure === 'missing-sha') f.client.pushFiles.mockResolvedValue({ sha: '' } as any);
+      if (failure === 'tag-failure') f.client.createTag.mockRejectedValue(new Error('Synthetic tag uncertainty'));
+      await expect(new GitService().deployProject({ projectId, userId: 'fixture-user', message: 'Reviewed export', vcsCommitId: f.savedId,
+        createTag: failure === 'tag-failure', tagName: 'reviewed' })).rejects.toBeDefined();
+      expect(f.client.pushFiles).toHaveBeenCalledTimes(1);
+      expect(await store.getRepository(GitDeployment).count()).toBe(0);
+    } finally { f.restore(); }
+  });
+
+  it('refuses a failed legacy checkpoint before contacting the Git provider', async () => {
+    const f = await savedGitFixture();
+    vi.mocked(vcsService.commit).mockRejectedValueOnce(new Error('Synthetic checkpoint failure'));
+    try {
+      await expect(new GitService().deployProject({ projectId, userId: 'fixture-user', message: 'Legacy export' })).rejects.toThrow('checkpoint failure');
+      expect(f.provider).not.toHaveBeenCalled(); expect(await store.getRepository(GitDeployment).count()).toBe(0);
+    } finally { f.restore(); }
+  });
+
+  it.each(['verified', 'unknown'])('accepts an unchanged Git export only with a %s observed remote head', async state => {
+    const f = await savedGitFixture();
+    try {
+      const manifest: Record<string, string> = {};
+      for (const file of await store.getRepository(File).find({ where: { projectId } })) manifest[`${file.name}.bpmn`] = createHash('sha256').update(file.xml).digest('hex');
+      await store.getRepository(GitRepository).update('git-fixture', { lastPushedManifest: JSON.stringify(manifest), lastPushedManifestUpdatedAt: Date.now(), lastCommitSha: 'a'.repeat(40) });
+      if (state === 'unknown') f.client.getBranches.mockRejectedValue(new Error('Synthetic unavailable metadata'));
+      const operation = new GitService().deployProject({ projectId, userId: 'fixture-user', message: 'Unchanged export', vcsCommitId: f.savedId });
+      if (state === 'verified') expect((await operation).commitSha).toBe('a'.repeat(40));
+      else { await expect(operation).rejects.toMatchObject({ statusCode: 409 }); expect(await store.getRepository(GitDeployment).count()).toBe(0); }
+      expect(f.client.pushFiles).not.toHaveBeenCalled();
+    } finally { f.restore(); }
+  });
+
+  it('creates and verifies a full owned checkpoint for legacy Git deployment callers', async () => {
+    const f = await savedGitFixture();
+    try {
+      const result = await new GitService().deployProject({ projectId, userId: 'fixture-user', message: 'Legacy reviewed export' });
+      expect(result.vcsCommitId).not.toBe(f.savedId);
+      expect(await store.getRepository(Commit).findOneByOrFail({ id: result.vcsCommitId! })).toMatchObject({ branchId, projectId, source: 'deploy' });
+      expect(f.client.pushFiles).toHaveBeenCalledTimes(1);
+    } finally { f.restore(); }
   });
 
   it('pins scope before asynchronous work and hashes the saved tree instead of unsaved siblings', async () => {

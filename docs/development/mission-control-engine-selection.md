@@ -251,3 +251,32 @@ viewer still requires displayable diagram content.
 The deployment revision guard independently compares the published snapshots
 with the captured deployment source. An unsaved sibling cannot claim the
 published commit identifier, including in a whole-project deployment.
+
+## Version-bound Git deployment
+
+The deploy dialog forwards the saved version ID to
+`POST /git-api/deploy-from-version`. That route requires both the saved UUID and
+an engine target and applies the existing project permission and CI target
+eligibility checks. It shares the deployment handler with the legacy route.
+An older host returns 404 before a Git push; the client never falls back to
+`/git-api/deploy`. Legacy callers of the old route remain supported: the updated
+server creates a complete owned checkpoint and stops if that checkpoint fails.
+
+Git and engine deployment share the same exact project/revision/file verifier.
+Git capture reads the current BPMN/DMN export once, verifies the complete saved
+diagram set, then owns the captured file content and folder metadata across
+provider awaits. A later draft edit cannot change the outgoing payload. Hashing
+a versioned export does not reuse file timestamps to infer unchanged content.
+Paths reject missing/cyclic folders, traversal components and duplicate exported
+names. Folder names are captured at dispatch; VCS does not store historical folder
+names. Direct unversioned Git synchronization remains its existing current-state
+operation.
+
+A versioned deployment never creates a replacement checkpoint after pushing.
+Its receipt and deployment record retain the reviewed ID. The client validates
+receipt identity, counters, revision and any requested tag before announcing
+success. An unknown unchanged-remote head, missing commit SHA or failed requested
+tag stops acknowledgement. A provider may have acted before a failed response;
+there is no automatic retry or claim of atomic Git/database settlement. Reconcile
+uncertain effects before repeating the operation. Browser-session changes also
+stop the continuation between save and push, before a React rerender is required.

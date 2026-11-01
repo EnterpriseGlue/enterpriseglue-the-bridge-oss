@@ -5,6 +5,7 @@
  * for database-only version control. No physical git folders are created.
  */
 
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
@@ -296,7 +297,12 @@ export class GitService {
     environment?: string;
     createTag?: boolean;
     tagName?: string;
+    vcsCommitId?: string;
   }): Promise<{ deploymentId: string; commitSha: string; tag?: string; filesChanged: number; vcsCommitId?: string }> {
+    options = { ...options };
+    if (options.vcsCommitId !== undefined && (!options.vcsCommitId || options.vcsCommitId.trim() !== options.vcsCommitId)) {
+      throw Errors.validation('A nonempty saved deployment version is required');
+    }
     const startTime = Date.now();
 
     await this.ensureVcsInitialized();
@@ -323,36 +329,15 @@ export class GitService {
     const repoFullName = repo.namespace ? `${repo.namespace}/${repo.repositoryName}` : repo.repositoryName;
     const branch = repo.defaultBranch || 'main';
 
-    // Pre-flight: verify token has write permission (createBlob) before expensive VCS work
-    const preflightStart = Date.now();
-    const client = await remoteGitService.getClient(repo.providerId, accessToken);
-    await client.testWriteAccess(repoFullName);
-    logger.info('Deploy preflight passed', { projectId: options.projectId, ms: Date.now() - preflightStart });
-
-    // Update lastValidatedAt — token is confirmed working
-    await repoRepo.update({ id: repo.id }, { lastValidatedAt: Date.now() });
-
-    // Always create VCS checkpoint before deploy to ensure consistency
-    const vcsStart = Date.now();
-    let vcsCommitId: string | undefined;
-    try {
-      const mainBranch = await vcsService.getMainBranch(options.projectId);
-      if (mainBranch) {
-        // Commit current state to VCS before pushing
-        const vcsCommit = await vcsService.commit(
-          mainBranch.id,
-          options.userId,
-          `Pre-deploy checkpoint: ${options.message}`,
-          { isRemote: false, source: 'deploy' }
-        );
-        vcsCommitId = vcsCommit.id;
-        logger.info('Created VCS checkpoint before deploy', { projectId: options.projectId, vcsCommitId, ms: Date.now() - vcsStart });
-      }
-    } catch (e) {
-      // Log warning but continue - we still want to push
-      logger.warn('Failed to create VCS checkpoint before deploy', { projectId: options.projectId, error: e, ms: Date.now() - vcsStart });
+    // Legacy callers first save a complete owned draft. A failed checkpoint
+    // cannot fall through into an unversioned push.
+    let vcsCommitId = options.vcsCommitId;
+    if (!vcsCommitId) {
+      const draft = await vcsService.getUserBranch(options.projectId, options.userId);
+      await vcsService.syncFromMainDb(options.projectId, options.userId, draft.id);
+      const saved = await vcsService.commit(draft.id, options.userId, `Pre-deploy checkpoint: ${options.message}`, { source: 'deploy' });
+      vcsCommitId = saved.id;
     }
-
     // Push to remote - includes userId so pushToRemote can update VCS after push
     const pushStart = Date.now();
     const pushResult = await remoteGitService.pushToRemote(options.projectId, repo.providerId, accessToken, {
@@ -360,12 +345,14 @@ export class GitService {
       branch,
       message: options.message,
       patterns: ['**/*.bpmn', '**/*.dmn'],
-      userId: options.userId, // Pass userId for VCS commit after push
+      userId: options.userId,
+      vcsCommitId,
     });
 
     logger.info('Push to remote complete', { projectId: options.projectId, ms: Date.now() - pushStart, filesChanged: pushResult.pushedFilesCount + pushResult.deletionsCount });
 
     const commitSha = pushResult.commit?.sha || repo.lastCommitSha || '';
+    if (!commitSha || commitSha.trim() !== commitSha) throw Errors.conflict('Git deployment commit was not verified');
 
     const now = Date.now();
     const deploymentId = generateId();
@@ -379,8 +366,8 @@ export class GitService {
         await client.createTag(repoFullName, tagName, commitSha, options.message);
         createdTag = tagName;
         logger.info('Created Git tag', { projectId: options.projectId, tag: tagName, commitSha });
-      } catch (tagError) {
-        logger.warn('Failed to create Git tag', { projectId: options.projectId, tag: tagName, error: tagError });
+      } catch {
+        throw Errors.conflict('Git push completed but the requested tag was not verified; reconcile before retrying');
       }
     }
 

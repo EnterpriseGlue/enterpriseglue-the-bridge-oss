@@ -1,4 +1,5 @@
 import React from 'react';
+import { advanceBrowserSessionRevision } from '@src/utils/browserSession';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -413,8 +414,16 @@ describe('deployment intent lifetime', () => {
     const f = await setup(true); if (change) f.view.rerender(f.tree('project-B'));
     await act(async () => f.save.resolve({ commitId: 'commit-A' }));
     if (change) expect(deploymentSpy).not.toHaveBeenCalled();
-    else await waitFor(() => expect(deploymentSpy).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-A', engineId: 'engine-1', assertCurrent: expect.any(Function) })));
+    else await waitFor(() => expect(deploymentSpy).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-A', engineId: 'engine-1', vcsCommitId: 'commit-A', assertCurrent: expect.any(Function) })));
     expect(engineCalls()).toHaveLength(0); f.view.unmount(); f.client.clear();
+  });
+
+  it('does not continue Git deployment after a browser session changes before React rerenders', async () => {
+    const f = await setup(true);
+    advanceBrowserSessionRevision();
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    expect(deploymentSpy).not.toHaveBeenCalled(); expect(f.onSuccess).not.toHaveBeenCalled();
+    f.view.unmount(); f.client.clear();
   });
 
   it('does not start Git publication from a save confirmed under older permissions', async () => {

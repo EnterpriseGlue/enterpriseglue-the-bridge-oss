@@ -50,7 +50,10 @@ export const DeployRequestSchema = z.object({
   environment: z.string().optional(),
   createTag: z.boolean().optional().default(false),
   tagName: z.string().optional(),
+  vcsCommitId: z.string().uuid().optional(),
 });
+
+export const VersionedDeployRequestSchema = DeployRequestSchema.extend({ vcsCommitId: z.string().uuid(), engineId: z.string().min(1) });
 
 export const RollbackRequestSchema = z.object({
   projectId: z.string().uuid(),
@@ -58,11 +61,11 @@ export const RollbackRequestSchema = z.object({
 });
 
 export const DeploymentResponseSchema = z.object({
-  deploymentId: z.string(),
-  commitSha: z.string(),
-  tag: z.string().optional(),
-  filesChanged: z.number(),
-  vcsCommitId: z.string().optional(),
+  deploymentId: z.string().min(1).refine(value => value === value.trim()),
+  commitSha: z.string().min(1).refine(value => value === value.trim()),
+  tag: z.string().min(1).refine(value => value === value.trim()).optional(),
+  filesChanged: z.number().int().nonnegative(),
+  vcsCommitId: z.string().min(1).refine(value => value === value.trim()).optional(),
 }).strict();
 
 // Types

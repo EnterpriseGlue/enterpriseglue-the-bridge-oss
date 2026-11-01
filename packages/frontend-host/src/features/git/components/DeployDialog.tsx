@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
+import { getBrowserSessionRevision } from '../../../utils/browserSession';
 import {
   Modal,
   TextInput,
@@ -245,10 +246,11 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   const handleDeploy = async () => {
     if (isPending || !open || !trimmedVersionTitle || !selectedEngineId) return;
     const lifetime = lifetimeRef.current;
+    const browserSession = getBrowserSessionRevision();
     if (activeAttemptRef.current === lifetime) return;
     activeAttemptRef.current = lifetime;
     submittedLifetimeRef.current = lifetime;
-    const isCurrent = () => lifetimeRef.current === lifetime;
+    const isCurrent = () => lifetimeRef.current === lifetime && browserSession === getBrowserSessionRevision();
     const intent: DeploymentIntent = {
       projectId, fileIds: [...scopedFileIds], versionMessage: semanticVersionMessage,
       engineId: selectedEngineId, deploymentName: trimmedVersionTitle,
@@ -267,7 +269,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
       const savedCommitId = versionResult?.commitId;
       if (typeof savedCommitId !== 'string' || !savedCommitId.trim()) throw new Error('Saved version was not verified; deployment stopped');
       if (gitDeploy) {
-        await deployment.mutateAsync({ ...gitParams, assertCurrent: intent.assertCurrent });
+        await deployment.mutateAsync({ ...gitParams, vcsCommitId: savedCommitId, assertCurrent: intent.assertCurrent });
       } else {
         await engineDeployment.mutateAsync({ ...intent, vcsCommitId: savedCommitId });
       }

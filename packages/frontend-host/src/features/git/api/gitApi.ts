@@ -25,6 +25,7 @@ import type {
   RepositoryInfoResponse,
 } from '@enterpriseglue/shared/schemas/git/index.js';
 import { apiClient } from '../../../shared/api/client';
+import { DeploymentResponseSchema } from '@enterpriseglue/shared/schemas/git/deployment.js';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import type { GitProviderRepository } from '@enterpriseglue/shared/schemas/git/repository.js';
 
@@ -143,10 +144,16 @@ class GitApi {
 
   // Deployments
   async deploy(data: DeployRequest): Promise<DeploymentResponse> {
-    return this.fetch<DeploymentResponse>('/deploy', {
+    const requested = { ...data };
+    const parsed = DeploymentResponseSchema.safeParse(await this.fetch<DeploymentResponse>(requested.vcsCommitId !== undefined ? '/deploy-from-version' : '/deploy', {
       method: 'POST',
-      body: JSON.stringify(data),
-    });
+      body: JSON.stringify(requested),
+    }));
+    if (!parsed.success) throw new Error('Git deployment receipt was not verified');
+    const result = parsed.data;
+    if (requested.vcsCommitId && result.vcsCommitId !== requested.vcsCommitId) throw new Error('Git deployment version was not verified');
+    if (requested.createTag && (!result.tag || (requested.tagName && result.tag !== requested.tagName))) throw new Error('Git deployment tag was not verified');
+    return result;
   }
 
   async getDeployments(projectId: string): Promise<Deployment[]> {

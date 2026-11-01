@@ -50,6 +50,7 @@ export const PROJECT_AUTHZ_ACTIONS = [
       ui: [{ surfaceId: 'project.deploy.button', behavior: 'disable' }],
       routes: [
         { method: 'POST', route: '/git-api/deploy', resourceResolver: 'project.byId' },
+        { method: 'POST', route: '/git-api/deploy-from-version', resourceResolver: 'project.byId' },
         {
           method: 'POST',
           route: '/api/projects/:projectId/deployments',
@@ -159,6 +160,12 @@ export const PROJECT_AUTHZ_ACTIONS = [
         {
           method: 'POST',
           route: '/git-api/deploy',
+          resourceResolver: 'projectEngineTarget.fromProjectAndEngine',
+          additionalChecks: ['project.deploy.create', 'engine.deploy.create', 'target.mode.ci'],
+        },
+        {
+          method: 'POST',
+          route: '/git-api/deploy-from-version',
           resourceResolver: 'projectEngineTarget.fromProjectAndEngine',
           additionalChecks: ['project.deploy.create', 'engine.deploy.create', 'target.mode.ci'],
         },

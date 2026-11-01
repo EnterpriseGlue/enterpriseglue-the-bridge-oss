@@ -264,6 +264,7 @@ const {
   GitProviderIdParamsSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
+  VersionedDeployRequestSchema,
   RollbackRequestSchema,
   DeploymentSelectSchema,
   DeploymentResponseSchema,
@@ -2156,6 +2157,18 @@ registry.registerPath({
   responses: {
     201: { description: 'Deployment successful', content: { 'application/json': { schema: DeploymentResponseSchema } } },
     403: { description: 'Forbidden' },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/git-api/deploy-from-version',
+  ...authzExtension('project-engine-target.deploy.use', 'POST', '/git-api/deploy-from-version'),
+  request: { body: { content: { 'application/json': { schema: VersionedDeployRequestSchema } } } },
+  responses: {
+    201: { description: 'Deployment successful', content: { 'application/json': { schema: DeploymentResponseSchema } } },
+    403: { description: 'Forbidden' },
+    409: { description: 'Saved source, remote commit or requested tag could not be verified; reconcile uncertain effects before retrying' },
   },
 });
 
