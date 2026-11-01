@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UserManagement from '@src/pages/admin/UserManagement';
@@ -9,6 +9,10 @@ const auth = vi.hoisted(() => ({ user: { id: 'actor-A' }, sessionRevision: 1,
 const api = vi.hoisted(() => ({ list: vi.fn(), deactivate: vi.fn() }));
 const get = vi.hoisted(() => vi.fn());
 const notify = vi.hoisted(() => vi.fn());
+const updateUser = vi.hoisted(() => vi.fn());
+const tenancy = vi.hoisted(() => ({ mode: 'single' as 'single' | 'pooled' }));
+vi.mock('@src/services/tenancy', () => ({ getTenancyCapabilities: () => tenancy }));
+vi.mock('@src/services/auth', () => ({ authService: { updateUser } }));
 vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => ({ ...auth, hasPlatformPermission: (id: string) => auth.permissions.platform.includes(id) }) }));
 vi.mock('@src/api/platform-admin/userDirectory', () => ({ userDirectoryApi: api }));
 vi.mock('@src/shared/api/client', async original => ({ ...(await original<typeof import('@src/shared/api/client')>()), apiClient: { get } }));
@@ -22,6 +26,7 @@ const tree = () => <MemoryRouter><UserManagement /></MemoryRouter>;
 describe('user management workflow ownership', () => {
   beforeEach(() => {
     vi.resetAllMocks(); auth.user.id = 'actor-A'; auth.sessionRevision = 1;
+    tenancy.mode = 'single';
     auth.permissions.platform = ['platform:users:view']; auth.permissions.authorizationVersion = 'a';
     api.list.mockResolvedValue(page('current'));
     get.mockImplementation(async (url: string) => url.includes('provisioning-directories') ? { items: [], total: 0, limit: 200, offset: 0 } : { ssoRequired: false, emailConfigured: true });
@@ -31,6 +36,24 @@ describe('user management workflow ownership', () => {
     expect(within(screen.getByText('current@fixture.invalid').closest('tr')!).getByText('Platform Admin')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Invite user' })).not.toBeInTheDocument();
     expect(api.deactivate).not.toHaveBeenCalled();
+  });
+  it('edits a local profile without offering status changes or resending its access preset', async () => {
+    const errors = vi.spyOn(console, 'error');
+    try {
+      auth.permissions.platform = ['platform:users:view', 'platform:users:update'];
+      updateUser.mockResolvedValue({});
+      render(tree());
+      const email = await screen.findByText('current@fixture.invalid');
+      fireEvent.click(within(email.closest('tr')!).getByRole('button', { name: 'Options' }));
+      fireEvent.click(await screen.findByText('Edit', { exact: true }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit User: current@fixture.invalid' });
+      expect(within(dialog).queryByLabelText('Status')).not.toBeInTheDocument();
+      fireEvent.change(within(dialog).getByLabelText('First Name'), { target: { value: 'Renamed' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save Changes' }));
+      await waitFor(() => expect(updateUser).toHaveBeenCalledWith('current', { firstName: 'Renamed' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit User: current@fixture.invalid' })).not.toBeInTheDocument());
+      expect(errors).not.toHaveBeenCalled();
+    } finally { errors.mockRestore(); }
   });
   it('handles live permission revocation/restoration without conditional hook order or stale user rows', async () => {
     const view = render(tree()); await screen.findByText('current@fixture.invalid');
@@ -42,6 +65,19 @@ describe('user management workflow ownership', () => {
     auth.permissions.platform = ['platform:users:view']; auth.permissions.authorizationVersion = 'restored';
     view.rerender(tree()); await screen.findByText('current@fixture.invalid');
     expect(api.list).toHaveBeenCalledTimes(2);
+  });
+  it('keeps shared SaaS profile-name fields at the identity-provider boundary', async () => {
+    tenancy.mode = 'pooled';
+    auth.permissions.platform = ['platform:users:view', 'platform:users:update'];
+    render(tree());
+    const email = await screen.findByText('current@fixture.invalid');
+    fireEvent.click(within(email.closest('tr')!).getByRole('button', { name: 'Options' }));
+    fireEvent.click(await screen.findByText('Edit', { exact: true }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit User: current@fixture.invalid' });
+    expect(within(dialog).getByLabelText('First Name')).toBeDisabled();
+    expect(within(dialog).getByLabelText('Last Name')).toBeDisabled();
+    expect(within(dialog).getByText(/Shared SaaS profile fields are managed/)).toBeInTheDocument();
+    expect(updateUser).not.toHaveBeenCalled();
   });
   it('does not load directory rows solely because the actor has create permission', async () => {
     auth.permissions.platform = ['platform:users:create'];

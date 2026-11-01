@@ -24,6 +24,28 @@ still requires its action permission. User creation and profile updates keep
 the existing canonical `role` request field. Profile edits submit only fields
 changed from the opened record, so changing a name does not resend a stale
 access preset or active flag and undo an intervening administrator change.
+Status is read-only in profile editing. Use the reason-requiring lifecycle
+actions in user details. The profile API accepts an unchanged compatibility
+`isActive` echo, discards it before writing, and returns HTTP 409 for a status
+transition. The profile service repeats that restriction and rejects SCIM/LDAP
+profile overrides before writing. The compatibility `DELETE /api/users/{id}`
+requires the same reason body and delegates to the audited deactivation service,
+including self-deactivation and last-recovery-administrator checks. The legacy
+browser helper requires an explicit reason and uses the canonical POST action.
+Both SCIM and LDAP reactivation must be performed in the owning directory.
+Global lifecycle audits use the existing server-created row-specific append
+capability inside the owning transaction. The capability is revoked on
+settlement; runtime RLS still rejects unbound or differently bound audit inserts.
+Profile response timestamps are normalized to numbers at the DTO boundary.
+In pooled mode a tenant-filtered query cannot prove that a global identity has
+no provisioning owner in another tenant. Administrator profile-name editing is
+therefore unavailable in pooled mode; update names through the authenticated
+identity or provisioning provider. Manual access-preset changes remain separate.
+No cross-tenant directory read capability or database-policy exception is added.
+
+For example, submit a profile change as `PUT /api/users/{id}` with
+`{"firstName":"Updated"}`. Submit a deactivation separately as
+`POST /api/users/{id}/deactivate` with `{"reason":"Approved access removal"}`.
 Directory-owned profiles, self-deactivation, last recovery-administrator
 continuity, session revocation and audit-reason checks remain server concerns.
 The frontend guard and its zero-compatibility baseline stay unchanged; screen

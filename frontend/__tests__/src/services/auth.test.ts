@@ -95,10 +95,15 @@ describe('authService', () => {
     expect(result.user.id).toBe('user-1');
   });
 
-  it('deletes user', async () => {
-    (apiClient.delete as any).mockResolvedValue(undefined);
-
-    await authService.deleteUser('user-1');
-    expect(apiClient.delete).toHaveBeenCalledWith('/api/users/user-1');
+  it('deactivates through the audited action with an explicit reason', async () => {
+    (apiClient.post as any).mockResolvedValue(undefined);
+    await authService.deleteUser('user/1', 'Emergency response');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/users/user%2F1/deactivate', { reason: 'Emergency response' });
+    expect(apiClient.delete).not.toHaveBeenCalled();
+  });
+  it('does not dispatch a reasonless legacy deactivation', async () => {
+    await expect(authService.deleteUser('user-1')).rejects.toThrow('reason');
+    expect(apiClient.delete).not.toHaveBeenCalled();
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 });

@@ -67,6 +67,7 @@ test_files=(
 if [[ "$#" -gt 0 ]]; then
   case "$1" in
     --user-directory) test_files=(__tests__/shared/services/platform-admin/userDirectoryService.integration.test.ts) ;;
+    --global-identity) test_files=(test/integration/postgres-global-identity.test.ts) ;;
     --deployment-revision) test_files=(test/integration/postgres-deployment-revision.test.ts) ;;
     --schema-epoch) test_files=(test/integration/postgres-schema-epoch-bridge.test.ts) ;;
     --cloud-passkey) test_files=(test/integration/postgres-cloud-email-passkey.test.ts) ;;

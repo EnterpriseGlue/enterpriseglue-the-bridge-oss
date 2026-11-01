@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { getTenancyCapabilities } from '../../services/tenancy';
 import { useUserDirectoryViewScope, useUserDirectoryLifetime } from './userDirectoryView';
 import { useState, useEffect } from 'react';
 import {
@@ -92,7 +93,6 @@ type UserEditForm = {
   firstName?: string;
   lastName?: string;
   bootstrapAccess?: BootstrapAccessValue;
-  isActive?: boolean;
 }
 
 /** Presentation only; action permission snapshots authorize all operations. */
@@ -112,12 +112,11 @@ export function toCreateUserRequest(form: UserInviteForm, normalizedEmail: strin
 
 export function toUpdateUserRequest(
   form: UserEditForm,
-  original?: Pick<AdminManagedUser, 'firstName' | 'lastName' | 'bootstrapAccess' | 'isActive'>,
+  original?: Pick<AdminManagedUser, 'firstName' | 'lastName' | 'bootstrapAccess'>,
 ): UpdateUserRequest {
   const request: UpdateUserRequest = {};
   if (form.firstName !== undefined && (!original || form.firstName !== (original.firstName || ''))) request.firstName = form.firstName;
   if (form.lastName !== undefined && (!original || form.lastName !== (original.lastName || ''))) request.lastName = form.lastName;
-  if (form.isActive !== undefined && (!original || form.isActive !== original.isActive)) request.isActive = form.isActive;
   if (form.bootstrapAccess !== undefined && (!original || form.bootstrapAccess !== original.bootstrapAccess)) request.role = form.bootstrapAccess;
   return request;
 }
@@ -283,6 +282,7 @@ export default function UserManagement() {
 }
 
 function UserManagementView() {
+  const sharedProfileFields = getTenancyCapabilities().mode === 'pooled';
   const captureView = useUserDirectoryLifetime();
   const latestLoad = useRef(0);
   const { user: currentUser, permissions, hasPlatformPermission } = useAuth();
@@ -605,7 +605,6 @@ function UserManagementView() {
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       bootstrapAccess: getUserBootstrapAccess(user),
-      isActive: user.isActive,
     });
     editModal.openModal(user);
   };
@@ -1076,17 +1075,17 @@ function UserManagementView() {
             id="edit-firstName"
             labelText="First Name"
             placeholder="John"
-            value={editForm.firstName}
+            value={editForm.firstName ?? ''}
             onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-            disabled={editLoading}
+            disabled={editLoading || sharedProfileFields}
           />
           <TextInput
             id="edit-lastName"
             labelText="Last Name"
             placeholder="Doe"
-            value={editForm.lastName}
+            value={editForm.lastName ?? ''}
             onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-            disabled={editLoading}
+            disabled={editLoading || sharedProfileFields}
           />
         </div>
         <Select
@@ -1108,16 +1107,8 @@ function UserManagementView() {
         <div style={{ marginTop: 'var(--spacing-3)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
           {getBootstrapAccessDescription(editForm.bootstrapAccess)}
         </div>
-        <Select
-          id="edit-isActive"
-          labelText="Status"
-          value={editForm.isActive ? 'active' : 'inactive'}
-          onChange={(e) => setEditForm({ ...editForm, isActive: e.target.value === 'active' })}
-          disabled={editLoading || editingUser?.id === currentUser?.id}
-        >
-          <SelectItem value="active" text="Active" />
-          <SelectItem value="inactive" text="Inactive" />
-        </Select>
+        <p className="eg-secondary-text">Change account status using the audited deactivate or reactivate action in user details.</p>
+        {sharedProfileFields && <p className="eg-secondary-text">Shared SaaS profile fields are managed by the authenticated identity or provisioning provider.</p>}
       </FormModal>
 
       {/* Delete Confirmation Modal */}

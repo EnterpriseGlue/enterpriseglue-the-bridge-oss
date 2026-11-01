@@ -23,7 +23,7 @@ export const PlatformUserUpdateRequestSchema = z.object({
   lastName: z.string().trim().max(255).optional(),
   role: z.enum(['admin', 'user']).optional(),
   platformRole: z.enum(['admin', 'user']).optional(),
-  isActive: z.boolean().optional(),
+  isActive: z.boolean().optional().describe('Compatibility echo only. Status transitions require the audited deactivate or reactivate endpoint and an administrator reason.'),
 }).strict().refine((value) => Object.keys(value).length > 0, 'Provide at least one user change');
 
 export const PlatformUserResponseSchema = z.object({

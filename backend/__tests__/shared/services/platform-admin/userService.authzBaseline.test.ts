@@ -23,6 +23,7 @@ import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { ScimUserLink } from '@enterpriseglue/shared/infrastructure/persistence/entities/ScimUserLink.js';
 import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 
 describe('UserService authorization baseline', () => {
@@ -63,15 +64,17 @@ describe('UserService authorization baseline', () => {
         : []),
     };
     const refreshTokenRepo = { update: vi.fn() };
+    const provisioningRepo = { exist: vi.fn().mockResolvedValue(false) };
     const manager = {
       getRepository: vi.fn((entity: unknown) => {
         if (entity === AuthzGroupMembership) return membershipRepo;
         if (entity === RefreshToken) return refreshTokenRepo;
+        if (entity === ScimUserLink) return provisioningRepo;
         return userRepo;
       }),
     };
     dataSource.transaction.mockImplementation(async (callback: (transactionManager: typeof manager) => unknown) => callback(manager));
-    return { manager, userRepo, refreshTokenRepo };
+    return { manager, userRepo, refreshTokenRepo, provisioningRepo };
   }
 
   it('creates a baseline system-group membership for a normal pending local user', async () => {
@@ -150,7 +153,7 @@ describe('UserService authorization baseline', () => {
     );
   });
 
-  it('removes baseline access and revokes refresh tokens when update deactivates a user', async () => {
+  it('rejects lifecycle transitions through the profile service before any write', async () => {
     const { manager, userRepo, refreshTokenRepo } = mockCreateTransaction('user');
     userRepo.findOneBy
       .mockResolvedValueOnce({
@@ -164,14 +167,25 @@ describe('UserService authorization baseline', () => {
         createdAt: 1, updatedAt: 2, lastLoginAt: null, createdByUserId: 'actor-1',
       });
 
-    await userService.updateUser('user-1', { isActive: false });
+    await expect(userService.updateUser('user-1', { isActive: false })).rejects.toMatchObject({ statusCode: 409 });
 
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
-    expect(authzGroupService.removeAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
-    expect(refreshTokenRepo.update).toHaveBeenCalledWith(
-      { userId: 'user-1' },
-      { revokedAt: expect.any(Number) },
-    );
+    expect(authzGroupService.removeAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(refreshTokenRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('does not persist an unchanged compatibility status flag with a profile edit', async () => {
+    const { userRepo } = mockCreateTransaction('user');
+    await userService.updateUser('user-1', { firstName: 'Changed', isActive: true });
+    expect(userRepo.update).toHaveBeenCalledWith({ id: 'user-1' }, { firstName: 'Changed', updatedAt: expect.any(Number) });
+  });
+
+  it('rejects source-owned profile changes before any write', async () => {
+    const { userRepo, provisioningRepo } = mockCreateTransaction('user');
+    provisioningRepo.exist.mockResolvedValue(true);
+    await expect(userService.updateUser('user-1', { firstName: 'Override' })).rejects.toMatchObject({ statusCode: 409 });
+    expect(userRepo.update).not.toHaveBeenCalled();
   });
 
   it('derives displayed platform administration from active canonical memberships', async () => {

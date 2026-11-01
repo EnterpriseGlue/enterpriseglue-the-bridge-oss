@@ -36,8 +36,9 @@ describe('platform user OpenAPI contracts', () => {
     expect(update?.requestBody?.content?.['application/json']?.schema?.properties).toMatchObject({
       firstName: expect.any(Object),
       lastName: expect.any(Object),
-      isActive: { type: 'boolean' },
+      isActive: expect.objectContaining({ type: 'boolean', description: expect.stringContaining('Compatibility echo only') }),
     });
+    expect(paths?.['/api/users/{id}']?.delete?.requestBody?.content?.['application/json']?.schema?.required).toContain('reason');
   });
 
   it('publishes source-aware directory, detail, lifecycle, and authorization contracts', () => {

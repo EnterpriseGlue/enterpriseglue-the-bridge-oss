@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataSource } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
@@ -19,6 +19,10 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 import { DEFAULT_PLATFORM_GROUP_IDS } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { UserDirectoryService } from '@enterpriseglue/shared/services/platform-admin/UserDirectoryService.js';
+import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
+
+let profileDataSource: DataSource;
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: async () => profileDataSource }));
 
 const postgres = process.env.USER_DIRECTORY_DISPOSABLE_POSTGRES === 'true';
 const database = `user_directory_${randomUUID().replace(/-/g, '')}`;
@@ -64,6 +68,7 @@ describe('UserDirectoryService', () => {
       ? new DataSource({ ...connection, database, entities, synchronize: true, dropSchema: true })
       : new DataSource({ type: 'sqljs', entities, synchronize: true, dropSchema: true });
     await dataSource.initialize();
+    profileDataSource = dataSource;
     service = new UserDirectoryService(async () => dataSource);
     await dataSource.getRepository(User).insert([
       {
@@ -204,6 +209,25 @@ describe('UserDirectoryService', () => {
     await expect(service.deactivate({ userId: 'user-recovery', actorId: 'security-operator', tenantId: null, reason: 'Unsafe test' }))
       .rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('last active local recovery administrator') });
   });
+  it('rejects local reactivation of LDAP-owned users without changing status or session version', async () => {
+    await dataSource.getRepository(User).update('user-scim', { authProvider: 'ldap', isActive: false });
+    await dataSource.getRepository(ScimUserLink).delete({ userId: 'user-scim' });
+    await expect(service.reactivate({ userId: 'user-scim', actorId: 'user-recovery', tenantId: null, reason: 'Local override' }))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(await dataSource.getRepository(User).findOneByOrFail({ id: 'user-scim' })).toMatchObject({ isActive: false, authSessionVersion: 0 });
+  });
+
+  it('rejects lifecycle and directory overrides through the real profile service', async () => {
+    await expect(userService.updateUser('user-recovery', { isActive: false })).rejects.toMatchObject({ statusCode: 409 });
+    await expect(userService.updateUser('user-scim', { firstName: 'Override' })).rejects.toMatchObject({ statusCode: 409 });
+    await dataSource.getRepository(ScimUserLink).delete({ userId: 'user-scim' });
+    await dataSource.getRepository(User).update('user-scim', { authProvider: 'ldap' });
+    await expect(userService.updateUser('user-scim', { firstName: 'Override' })).rejects.toMatchObject({ statusCode: 409 });
+    expect(await dataSource.getRepository(User).findOneByOrFail({ id: 'user-recovery' })).toMatchObject({ isActive: true, authSessionVersion: 0 });
+    expect(await dataSource.getRepository(User).findOneByOrFail({ id: 'user-scim' })).toMatchObject({ firstName: 'Alice', authSessionVersion: 0 });
+    expect(await dataSource.getRepository(AuditLog).count()).toBe(0);
+  });
+
   it('derives presentation presets from current administrator membership, not the legacy stored role', async () => {
     await dataSource.getRepository(User).update('user-scim', { platformRole: 'admin' });
     expect((await service.identityContext('user-scim', null)).user.bootstrapAccess).toBe('user');

@@ -23,21 +23,25 @@
     "Changing users, sessions or permissions discards old directory loads and lifecycle confirmations.",
     "Inherited access is shown inactive after membership expiry or group archival; incomplete ownership metadata does not enable manual user creation.",
     "Locked directory accounts expose the permission-gated unlock action without requiring legacy counters.",
-    "Profile edits no longer resend unchanged account access or active status and overwrite intervening lifecycle changes."
+    "Profile edits no longer resend unchanged account access or active status and overwrite intervening lifecycle changes.",
+    "Account status changes use audited lifecycle actions; legacy profile/delete paths cannot bypass status, ownership, reason or recovery checks, and LDAP reactivation remains directory-owned.",
+    "Shared SaaS profile names stay at their identity/provisioning provider boundary; normalized timestamps and controlled edit fields keep directory presentation consistent."
   ],
   "upgrade": {
     "required": true,
     "instructions": [
-      "Upgrade the qualified shared/frontend/backend host composition together; no database schema or historical data repair is required."
+      "Upgrade the qualified shared/frontend/backend host composition together; no database schema or historical data repair is required.",
+      "Clients that change account status through profile PUT must use the deactivate/reactivate endpoints with an administrator reason. Compatibility DELETE requests also require a reason body; unchanged isActive profile echoes remain accepted and are never persisted."
     ]
   },
   "configuration": [],
   "api": {
-    "compatibility": "additive",
+    "compatibility": "deprecated",
     "changes": [
       "The frontend write adapter accepts parsed native JSON values and serializes them once for the engine. The external HTTP API and scalar/Java Object contracts are unchanged.",
       "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link.",
-      "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards."
+      "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards.",
+      "Security enforcement: status-changing profile PUT returns 409; compatibility DELETE requires the lifecycle reason body and uses audited deactivation; direct SCIM/LDAP profile overrides are rejected."
     ]
   },
   "database": {
@@ -52,7 +56,8 @@
     "Process-local action state is remounted on instance navigation instead of being retargeted to another process.",
     "Unmounted action callbacks cannot refetch or notify through a later tenant/process route; already issued operations retain their original target.",
     "Browser action lifetimes use monotonically increasing revisions; server authentication, authorization and tenant boundaries remain enforced.",
-    "Commit/project/snapshot validation completes before any versioned engine deployment effect."
+    "Commit/project/snapshot validation completes before any versioned engine deployment effect.",
+    "Lifecycle audits use the existing exact-row append capability inside the transaction; unbound or wrong-row audit inserts remain denied under forced RLS, with no database-policy or grant changes."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -65,7 +70,8 @@
     "reason": "Repairs the existing variable controls without adding a new configuration or administrator procedure."
   },
   "knownLimitations": [
-    "Local request-shape and engine fixture checks do not establish live SaaS tenant isolation or staging installation."
+    "Local request-shape and engine fixture checks do not establish live SaaS tenant isolation or staging installation.",
+    "In pooled SaaS, administrator profile-name editing is unavailable because a tenant-filtered query cannot establish global provisioning ownership. Update names at the authenticated identity or provisioning provider."
   ],
   "rollback": [
     "Restore the previous qualified frontend and backend hosts; the previous variable, session and deployment wiring defects may recur."
@@ -78,7 +84,8 @@
     "Authentication, two-stage deployment, numeric parser and variable adapter regression tests.",
     "Actual PostgreSQL deployment revision lookup and drift/foreign-project rejection.",
     "Admin list/detail navigation, revocation, metadata uncertainty and strict API response-binding tests.",
-    "User directory service and current membership presentation on SQL.js and owned PostgreSQL fixtures."
+    "User directory service and current membership presentation on SQL.js and owned PostgreSQL fixtures.",
+    "Forced PostgreSQL RLS tests exercise audited deactivation/reactivation/session revocation, guarded compatibility paths and strict profile DTO serialization."
   ],
   "packages": [
     {

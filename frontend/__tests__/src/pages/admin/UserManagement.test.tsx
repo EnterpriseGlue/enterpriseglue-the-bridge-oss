@@ -72,10 +72,9 @@ describe('UserManagement', () => {
       sendEmail: true,
       role: 'admin',
     })
-    expect(toUpdateUserRequest({ firstName: 'Admin', bootstrapAccess: 'user', isActive: true })).toEqual({
+    expect(toUpdateUserRequest({ firstName: 'Admin', bootstrapAccess: 'user' })).toEqual({
       firstName: 'Admin',
       lastName: undefined,
-      isActive: true,
       role: 'user',
     })
   })
@@ -230,9 +229,11 @@ describe('UserManagement', () => {
   });
   it('does not resend unchanged account access or active status during a profile edit', () => {
     const original = makeUser({ bootstrapAccess: 'admin', isActive: true });
-    expect(toUpdateUserRequest({ firstName: 'Renamed', lastName: 'User', bootstrapAccess: 'admin', isActive: true }, original))
+    expect(toUpdateUserRequest({ firstName: 'Renamed', lastName: 'User', bootstrapAccess: 'admin' }, original))
       .toEqual({ firstName: 'Renamed' });
-    expect(toUpdateUserRequest({ bootstrapAccess: 'user', isActive: false }, original)).toEqual({ role: 'user', isActive: false });
-    expect(toUpdateUserRequest({ firstName: 'Test', lastName: 'User', bootstrapAccess: 'admin', isActive: true }, original)).toEqual({});
+    expect(toUpdateUserRequest({ bootstrapAccess: 'user' }, original)).toEqual({ role: 'user' });
+    expect(toUpdateUserRequest({ firstName: 'Test', lastName: 'User', bootstrapAccess: 'admin' }, original)).toEqual({});
+    const legacy = { firstName: 'Renamed', isActive: false };
+    expect(toUpdateUserRequest(legacy, original)).toEqual({ firstName: 'Renamed' });
   });
 });
