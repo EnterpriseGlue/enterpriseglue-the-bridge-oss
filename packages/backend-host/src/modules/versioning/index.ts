@@ -23,9 +23,14 @@ import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persist
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { In, IsNull, Brackets } from 'typeorm';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
-import { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
+import { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { selectCommitFileSnapshot, FILE_SCOPED_COMMIT_SOURCES, isFileScopedCommitSource } from '@enterpriseglue/shared/utils/commit-snapshot.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { lockFolderProject } from '@enterpriseglue/shared/services/starbase/folder-tree.js';
+import { hashContent } from '@enterpriseglue/shared/services/versioning/vcs-types.js';
+import { extractBpmnProcessId, extractDmnDecisionId } from '@enterpriseglue/shared/utils/starbase-xml.js';
+import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services/engines/deployment-utils.js';
+import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 
 // Type for branch row
 interface BranchRow {
@@ -616,95 +621,71 @@ const restoreFromCommit = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     const dataSource = await getDataSource();
-    const fileRepo = dataSource.getRepository(File);
-    
-    // Get file snapshots from the commit
     const requestedFileId = req.params.fileId ? String(req.params.fileId) : undefined;
-    let snapshots = await vcsService.getCommitSnapshots(commitId, projectId);
-    if (requestedFileId) {
-      const target = await fileRepo.findOne({
-        where: { id: requestedFileId, projectId },
-        select: ['id', 'name', 'type', 'folderId'],
+    // Branch initialization is separate from the atomic content/checkpoint
+    // transaction; no global data-source writes occur while its row locks hold.
+    const branch = await vcsService.getUserBranch(projectId, userId);
+    const result = await dataSource.transaction(async manager => {
+      await lockFolderProject(manager, projectId);
+      const ownedBranch = await manager.getRepository(Branch).findOne({
+        where: { id: branch.id, projectId, userId, isDefault: false },
       });
-      if (!target) throw Errors.fileNotFound();
-      const selected = selectCommitFileSnapshot(snapshots, target);
-      if (!selected) throw Errors.conflict('This checkpoint does not contain an unambiguous saved version of the selected file');
-      // Legacy snapshots may have no mainFileId; bind the resolved match to the
-      // requested file instead of performing another name-based lookup.
-      snapshots = [{ ...selected, mainFileId: requestedFileId }];
-    }
-    
-    if (snapshots.length === 0) {
-      throw Errors.fileNotFound();
-    }
+      if (!ownedBranch) throw Errors.conflict('The owned restore draft is unavailable');
+      const fileRepo = manager.getRepository(File);
+      const currentFiles = await fileRepo.find({ where: { projectId } });
+      let snapshots = await vcsService.getCommitSnapshots(commitId, projectId, manager);
+      if (requestedFileId) {
+        const target = currentFiles.find(file => file.id === requestedFileId);
+        if (!target) throw Errors.fileNotFound();
+        const selected = selectCommitFileSnapshot(snapshots, target);
+        if (!selected) throw Errors.conflict('This checkpoint does not contain an unambiguous saved version of the selected file');
+        snapshots = [selected];
+      } else snapshots = snapshots.filter(snapshot => snapshot.changeType !== 'deleted');
+      if (!snapshots.length) throw Errors.conflict('This checkpoint contains no restorable file contents');
 
-    const snapshotIdentities = snapshots.map(snapshot => snapshot.mainFileId
-      ? `id:${snapshot.mainFileId}` : JSON.stringify([snapshot.folderId || null, snapshot.name, snapshot.type]));
-    if (new Set(snapshotIdentities).size !== snapshotIdentities.length) {
-      throw Errors.conflict('This checkpoint contains ambiguous file snapshots');
-    }
-
-    // Update each file in the main files table with the snapshot content
-    for (const snapshot of snapshots) {
-      let targetFileId: string | null = snapshot.mainFileId ? String(snapshot.mainFileId) : null;
-
-      if (!targetFileId) {
-        const existingFile = await fileRepo.findOne({
-          where: {
-            projectId,
-            name: snapshot.name,
-            type: snapshot.type,
-            folderId: snapshot.folderId === null ? IsNull() : snapshot.folderId,
-          },
-          select: ['id'],
-        });
-        targetFileId = existingFile?.id ? String(existingFile.id) : null;
-      }
-
-      if (targetFileId && snapshot.content) {
-        const updated = await fileRepo.update({ id: targetFileId, projectId }, {
-          xml: snapshot.content,
-          updatedAt: Date.now()
+      const retained = await manager.getRepository(FileSnapshot).find({ where: { commitId, id: In(snapshots.map(snapshot => snapshot.id)) } });
+      const targets = new Set<string>();
+      // Resolve and verify the entire plan before changing any file. Current
+      // names/folders and later-added files remain the content-restore contract.
+      const plan = snapshots.map(snapshot => {
+        const raw = retained.find(row => row.id === snapshot.id);
+        if (!raw || !['added', 'modified', 'unchanged'].includes(snapshot.changeType)
+          || !snapshot.content || raw.contentHash !== hashContent(snapshot.content)
+          || raw.content !== snapshot.content || raw.name !== snapshot.name || raw.type !== snapshot.type
+          || (raw.mainFileId || null) !== snapshot.mainFileId || (raw.folderId ?? null) !== snapshot.folderId
+          || raw.changeType !== snapshot.changeType) {
+          throw Errors.conflict('Saved restore contents could not be verified');
+        }
+        const candidates = snapshot.mainFileId ? currentFiles.filter(file => file.id === snapshot.mainFileId)
+          : currentFiles.filter(file => file.name === snapshot.name && file.type === snapshot.type
+            && (file.folderId || null) === (snapshot.folderId || null));
+        if (!candidates.length) throw Errors.fileNotFound();
+        if (candidates.length !== 1 || candidates[0].type !== snapshot.type || targets.has(candidates[0].id)) {
+          throw Errors.conflict('Saved restore targets are ambiguous or incompatible');
+        }
+        const target = candidates[0]; targets.add(target.id);
+        const xml = target.type === 'bpmn' ? sanitizeBpmnXml(snapshot.content)
+          : target.type === 'dmn' ? sanitizeDmnXml(snapshot.content) : snapshot.content;
+        return { target, xml, bpmnProcessId: target.type === 'bpmn' ? extractBpmnProcessId(xml) : null,
+          dmnDecisionId: target.type === 'dmn' ? extractDmnDecisionId(xml) : null };
+      });
+      for (const entry of plan) {
+        const updated = await fileRepo.update({ id: entry.target.id, projectId }, {
+          xml: entry.xml, bpmnProcessId: entry.bpmnProcessId, dmnDecisionId: entry.dmnDecisionId,
+          updatedBy: userId, updatedAt: unixTimestamp(),
         });
         if (updated.affected !== 1) throw Errors.fileNotFound();
       }
-    }
-
-    // Create a new checkpoint with the restore
-    const branch = await vcsService.getUserBranch(projectId, userId);
-    
-    // Get current files to commit
-    const currentFiles = await fileRepo.find({
-      where: { projectId, ...(requestedFileId ? { id: requestedFileId } : {}) }
+      if (requestedFileId) {
+        const { target, xml } = plan[0];
+        await vcsService.saveFile(branch.id, projectId, null, target.name, target.type, xml, target.folderId, target.id, manager);
+      } else await vcsService.syncFromMainDb(projectId, userId, branch.id, manager);
+      const checkpoint = await vcsService.commit(branch.id, userId, `Restored from checkpoint ${commitId.substring(0, 8)}`,
+        { source: requestedFileId ? 'file-save' : 'restore', ...(requestedFileId ? { fileIds: [requestedFileId] } : {}) }, manager);
+      return { filesRestored: plan.length, newCommitId: checkpoint.id };
     });
-
-    for (const file of currentFiles) {
-      await vcsService.saveFile(
-        branch.id,
-        projectId,
-        null,
-        file.name,
-        file.type,
-        file.xml,
-        file.folderId,
-        file.id
-      );
-    }
-
-    const restoreCommit = await vcsService.commit(
-      branch.id,
-      userId,
-      `Restored from checkpoint ${commitId.substring(0, 8)}`,
-      { source: requestedFileId ? 'file-save' : 'restore', ...(requestedFileId ? { fileIds: [requestedFileId] } : {}) }
-    );
-
-    logger.info('Files restored from commit', { projectId, commitId, userId, filesRestored: snapshots.length });
-
-    res.json({
-      success: true,
-      filesRestored: snapshots.length,
-      newCommitId: restoreCommit.id
-    });
+    logger.info('Files restored from commit', { projectId, commitId, userId, filesRestored: result.filesRestored });
+    res.json({ success: true, ...result });
   } catch (error) {
     if (error instanceof AppError) throw error;
     logger.error('Failed to restore from commit', { projectId, commitId, userId, error });
@@ -713,6 +694,7 @@ const restoreFromCommit = asyncHandler(async (req: Request, res: Response) => {
 });
 
 router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter, requireAuth,
+  validateParams(ProjectCommitRestoreParamsSchema), validateBody(CommitFileRestoreBodySchema),
   requireAction('project.vcs.commit.restore', { resourceIdFrom: 'params' }), restoreFromCommit);
 router.post('/vcs-api/projects/:projectId/commits/:commitId/files/:fileId/restore', apiLimiter, requireAuth,
   validateParams(CommitFileRestoreParamsSchema), validateBody(CommitFileRestoreBodySchema),

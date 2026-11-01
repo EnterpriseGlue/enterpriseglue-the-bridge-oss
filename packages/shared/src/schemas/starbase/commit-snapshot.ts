@@ -22,4 +22,6 @@ export const CommitFileRestoreParamsSchema = z.object({
   fileId: z.string().uuid(),
 }).strict();
 
+export const ProjectCommitRestoreParamsSchema = CommitFileRestoreParamsSchema.omit({ fileId: true });
+
 export const CommitFileRestoreBodySchema = z.object({}).strict().default({});

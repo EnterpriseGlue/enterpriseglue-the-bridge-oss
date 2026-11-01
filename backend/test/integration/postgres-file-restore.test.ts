@@ -68,7 +68,7 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     const schema = new DataSource({ ...connection, database });
     try { await schema.initialize(); await schema.query('CREATE SCHEMA main'); } finally { if (schema.isInitialized) await schema.destroy(); }
     await store.initialize(); vi.mocked(getDataSource).mockResolvedValue(store);
-    vi.mocked(vcsService.getCommitSnapshots).mockImplementation((id, project) => commitService.getCommitSnapshots(id, project));
+    vi.mocked(vcsService.getCommitSnapshots).mockImplementation((id, project, manager) => commitService.getCommitSnapshots(id, project, manager));
     vi.mocked(vcsService.getUserBranch).mockImplementation(async () => store.getRepository(Branch).findOneByOrFail({ id: branchId }));
     vi.mocked(vcsService.getMainBranch).mockImplementation(async () => store.getRepository(Branch).findOneByOrFail({ id: branchId }));
     vi.mocked(vcsService.getCommits).mockImplementation((id, limit) => commitService.getCommits(id, limit));
@@ -741,6 +741,118 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     await store.getRepository(Commit).update(commitId, { branchId: 'same-project-main-branch' });
     const saved = await commitService.commit(branchId, 'fixture-user', 'Fork save', { fileIds: [fileId] });
     expect(await store.getRepository(Commit).findOneByOrFail({ id: saved.id })).toMatchObject({ parentCommitId: commitId, projectId });
+  });
+
+  it('rejects a later missing restore target without changing an earlier file', async () => {
+    const before = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    await store.getRepository(FileSnapshot).update(`snapshot-${siblingId}`, { mainFileId: randomUUID() });
+    const response = await restore({}); expect(response.status).toBe(404);
+    expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(before);
+    expect(await store.getRepository(Commit).count()).toBe(2);
+  });
+
+  it.each(['bpmn', 'dmn'])('refreshes derived %s identity when restoring saved XML', async type => {
+    const xml = type === 'bpmn' ? '<definitions><process id="RestoredProcess"/></definitions>' : '<definitions><decision id="RestoredDecision"/></definitions>';
+    await store.getRepository(File).update(fileId, { type, bpmnProcessId: 'StaleProcess', dmnDecisionId: 'StaleDecision' });
+    await store.getRepository(FileSnapshot).update(`snapshot-${fileId}`, { type, content: xml, contentHash: hash(xml) });
+    const response = await restore(); expect(response.status).toBe(200);
+    const file = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    expect(file).toMatchObject({ bpmnProcessId: type === 'bpmn' ? 'RestoredProcess' : null, dmnDecisionId: type === 'dmn' ? 'RestoredDecision' : null });
+    expect((await verifyDeploymentRevision(store, projectId, response.body.newCommitId, [{ ...file, sourceXml: file.xml }])).size).toBe(1);
+  });
+
+  it.each(['checkpoint', 'file-version'])('rolls back content, draft and branch state after %s persistence failure', async stage => {
+    const files = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    const working = await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } });
+    const branch = await store.getRepository(Branch).findOneByOrFail({ id: branchId });
+    const table = stage === 'checkpoint' ? 'file_snapshots' : 'file_commit_versions';
+    const predicate = stage === 'checkpoint' ? "content NOT LIKE 'saved-%'" : 'version_number < 0';
+    await store.query(`ALTER TABLE main.${table} ADD CONSTRAINT fixture_reject_restore CHECK (${predicate}) NOT VALID`);
+    try {
+      const response = await restore({}); expect(response.status).toBe(500);
+      expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(files);
+      expect(await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } })).toEqual(working);
+      expect(await store.getRepository(Branch).findOneByOrFail({ id: branchId })).toEqual(branch);
+      expect(await store.getRepository(Commit).count()).toBe(2); expect(await store.getRepository(FileCommitVersion).count()).toBe(0);
+    } finally { await store.query(`ALTER TABLE main.${table} DROP CONSTRAINT fixture_reject_restore`); }
+  });
+
+  it('skips tombstones during project content restore and reports only restored live targets', async () => {
+    await store.getRepository(FileSnapshot).update(`snapshot-${siblingId}`, { changeType: 'deleted' });
+    const response = await restore({}); expect(response.status).toBe(200); expect(response.body.filesRestored).toBe(1);
+    expect(await store.getRepository(File).findOneByOrFail({ id: siblingId })).toMatchObject({ xml: `draft-${siblingId}` });
+  });
+
+  it.each(['hash-drift', 'unknown-state', 'wrong-format', 'empty', 'duplicate-target'])('rejects %s in a project restore before changing any target', async failure => {
+    const before = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    const repo = store.getRepository(FileSnapshot);
+    if (failure === 'hash-drift') await repo.update(`snapshot-${siblingId}`, { content: 'forged-content' });
+    if (failure === 'unknown-state') await repo.update(`snapshot-${siblingId}`, { changeType: 'unknown' });
+    if (failure === 'wrong-format') await repo.update(`snapshot-${siblingId}`, { type: 'dmn' });
+    if (failure === 'empty') await repo.update(`snapshot-${siblingId}`, { content: '', contentHash: hash('') });
+    if (failure === 'duplicate-target') {
+      const source = await repo.findOneByOrFail({ id: `snapshot-${fileId}` });
+      await repo.insert({ ...source, id: 'legacy-alias', workingFileId: 'legacy-alias-working', mainFileId: null, name: 'Renamed current file' });
+    }
+    expect((await restore({})).status).toBe(409);
+    expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(before);
+    expect(await store.getRepository(Commit).count()).toBe(2); expect(await store.getRepository(FileCommitVersion).count()).toBe(0);
+  });
+
+  it('keeps current names, locations and later-added files while restoring project contents', async () => {
+    const folder = randomUUID(), extra = randomUUID();
+    await store.getRepository(Folder).insert({ id: folder, projectId, name: 'Current location', createdAt: 1, updatedAt: 1 });
+    await store.getRepository(File).update(fileId, { folderId: folder, name: 'Current stable name' });
+    await store.getRepository(File).insert({ id: extra, projectId, name: 'Later addition', type: 'bpmn', folderId: null, xml: '<added/>', createdAt: 1, updatedAt: 1 });
+    const response = await restore({}); expect(response.status).toBe(200); expect(response.body.filesRestored).toBe(2);
+    expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toMatchObject({ name: 'Current stable name', folderId: folder, xml: `saved-${fileId}` });
+    expect(await store.getRepository(File).findOneByOrFail({ id: extra })).toMatchObject({ xml: '<added/>' });
+    const files = await store.getRepository(File).find({ where: { projectId } });
+    expect((await verifyDeploymentRevision(store, projectId, response.body.newCommitId, files.map(file => ({ ...file, sourceXml: file.xml })), true)).size).toBe(3);
+  });
+
+  it('refuses a replaced draft owner before restoring file contents', async () => {
+    await store.getRepository(Branch).update(branchId, { userId: 'different-user' });
+    const before = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    expect((await restore({})).status).toBe(409);
+    expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(before);
+  });
+
+  it('rejects an attempted file-scope body on the project restore route', async () => {
+    const before = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commits/${commitId}/restore`).send({ fileIds: [fileId] });
+    expect(response.status).toBe(400); expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(before);
+  });
+
+  it('rolls back a restore when another writer claims its file-version number', async () => {
+    const files = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    const working = await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } });
+    const branch = await store.getRepository(Branch).findOneByOrFail({ id: branchId });
+    const transaction = store.transaction.bind(store); let raced = false;
+    const wrap = vi.spyOn(store, 'transaction').mockImplementation(((run: any) => transaction(async manager => {
+      const repo = manager.getRepository(FileCommitVersion), builder = repo.createQueryBuilder.bind(repo);
+      vi.spyOn(repo, 'createQueryBuilder').mockImplementation(((...args: any[]) => {
+        const qb = (builder as any)(...args), read = qb.getRawMany.bind(qb);
+        qb.getRawMany = async () => {
+          const rows = await read();
+          if (!raced) {
+            raced = true;
+            await store.getRepository(FileCommitVersion).insert({ projectId, fileId, commitId, versionNumber: 1, createdAt: 1 });
+          }
+          return rows;
+        };
+        return qb;
+      }) as any);
+      return run(manager);
+    })) as any);
+    try {
+      expect((await restore()).status).toBe(500); expect(raced).toBe(true);
+      expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(files);
+      expect(await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } })).toEqual(working);
+      expect(await store.getRepository(Branch).findOneByOrFail({ id: branchId })).toEqual(branch);
+      expect(await store.getRepository(Commit).count()).toBe(2);
+      expect(await store.getRepository(FileCommitVersion).find()).toMatchObject([{ fileId, commitId, versionNumber: 1 }]);
+    } finally { wrap.mockRestore(); }
   });
 
   it('restores only the selected file and keeps sibling draft, working content and file history independent', async () => {

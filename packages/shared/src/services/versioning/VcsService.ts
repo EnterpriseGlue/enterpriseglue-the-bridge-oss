@@ -8,6 +8,7 @@
  * - VcsSyncService: Remote sync and uncommitted changes
  */
 
+import type { EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
@@ -81,9 +82,10 @@ export class VcsService {
     type: string,
     content: string,
     folderId?: string | null,
-    mainFileId?: string | null
+    mainFileId?: string | null,
+    manager?: EntityManager
   ): Promise<WorkingFileInfo> {
-    return vcsFileService.saveFile(branchId, projectId, fileId, name, type, content, folderId, mainFileId);
+    return vcsFileService.saveFile(branchId, projectId, fileId, name, type, content, folderId, mainFileId, manager);
   }
 
   async getFiles(branchId: string, folderId?: string | null): Promise<WorkingFileInfo[]> {
@@ -98,20 +100,20 @@ export class VcsService {
     return vcsFileService.deleteFile(fileId);
   }
 
-  async syncFromMainDb(projectId: string, userId: string, branchId: string): Promise<void> {
-    return vcsFileService.syncFromMainDb(projectId, userId, branchId);
+  async syncFromMainDb(projectId: string, userId: string, branchId: string, manager?: EntityManager): Promise<void> {
+    return vcsFileService.syncFromMainDb(projectId, userId, branchId, manager);
   }
 
   // Commit operations - delegate to VcsCommitService
-  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string; hotfixFromCommitId?: string; hotfixFromFileVersion?: number; fileIds?: string[] }): Promise<CommitInfo> {
-    return vcsCommitService.commit(branchId, userId, message, options);
+  async commit(branchId: string, userId: string, message: string, options?: { isRemote?: boolean; source?: string; hotfixFromCommitId?: string; hotfixFromFileVersion?: number; fileIds?: string[] }, manager?: EntityManager): Promise<CommitInfo> {
+    return vcsCommitService.commit(branchId, userId, message, options, manager);
   }
 
   async getCommits(branchId: string, limit: number = 50): Promise<CommitInfo[]> {
     return vcsCommitService.getCommits(branchId, limit);
   }
 
-  async getCommitSnapshots(commitId: string, projectId: string): Promise<{
+  async getCommitSnapshots(commitId: string, projectId: string, manager?: EntityManager): Promise<{
     id: string;
     mainFileId: string | null;
     folderId: string | null;
@@ -120,7 +122,7 @@ export class VcsService {
     content: string | null;
     changeType: string;
   }[]> {
-    return vcsCommitService.getCommitSnapshots(commitId, projectId);
+    return vcsCommitService.getCommitSnapshots(commitId, projectId, manager);
   }
 
   async commitHasFile(commitId: string, fileId: string): Promise<boolean> {

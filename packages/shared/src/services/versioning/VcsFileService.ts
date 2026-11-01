@@ -2,6 +2,7 @@
  * VCS File Service - File operations
  */
 
+import type { EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFile.js';
 import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Branch.js';
@@ -23,9 +24,10 @@ export class VcsFileService {
     type: string,
     content: string,
     folderId?: string | null,
-    mainFileId?: string | null
+    mainFileId?: string | null,
+    manager?: EntityManager
   ): Promise<WorkingFileInfo> {
-    const dataSource = await getDataSource();
+    const dataSource = manager ?? await getDataSource();
     const fileRepo = dataSource.getRepository(WorkingFile);
     const now = Date.now();
     const contentHash = hashContent(content);
@@ -88,8 +90,9 @@ export class VcsFileService {
     }
 
     if (fileId) {
-      await fileRepo.update({ id: fileId }, {
+      await fileRepo.update({ id: fileId, branchId, projectId }, {
         mainFileId: normalizedMainFileId,
+        isDeleted: false,
         name,
         type,
         content,
@@ -98,7 +101,7 @@ export class VcsFileService {
         updatedAt: now,
       });
 
-      const updated = await fileRepo.findOne({ where: { id: fileId } });
+      const updated = await fileRepo.findOne({ where: { id: fileId, branchId, projectId } });
       return mapWorkingFile(updated!);
     } else {
       const newFileId = generateId();
@@ -168,9 +171,9 @@ export class VcsFileService {
   /**
    * Sync files from main database to VCS draft branch
    */
-  async syncFromMainDb(projectId: string, userId: string, branchId: string): Promise<void> {
+  async syncFromMainDb(projectId: string, userId: string, branchId: string, manager?: EntityManager): Promise<void> {
     const syncStart = Date.now();
-    const dataSource = await getDataSource();
+    const dataSource = manager ?? await getDataSource();
     const mainFileRepo = dataSource.getRepository(MainFile);
     const workingFileRepo = dataSource.getRepository(WorkingFile);
     const branch = await dataSource.getRepository(Branch).findOne({ where: { id: branchId, projectId } });

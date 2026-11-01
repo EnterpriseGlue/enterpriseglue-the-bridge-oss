@@ -2,6 +2,7 @@
  * VCS Commit Service - Commit operations
  */
 
+import type { EntityManager } from 'typeorm';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Branch.js';
@@ -45,7 +46,7 @@ export class VcsCommitService {
   /**
    * Create a commit from current working files
    */
-  async commit(branchId: string, userId: string, message: string, options?: VcsCommitOptions): Promise<CommitInfo> {
+  async commit(branchId: string, userId: string, message: string, options?: VcsCommitOptions, manager?: EntityManager): Promise<CommitInfo> {
     // Copy scope before the first await. Empty or partial scope must never
     // silently become a project-wide save.
     const captured = { ...options };
@@ -59,7 +60,7 @@ export class VcsCommitService {
     if (scopedIds && captured.source && !isFileScopedCommitSource(captured.source)) {
       throw Errors.validation('File-scoped commits require the file-save source');
     }
-    const dataSource = await getDataSource();
+    const dataSource = manager ?? await getDataSource();
     const branchRepo = dataSource.getRepository(Branch);
     const commitRepo = dataSource.getRepository(Commit);
     const fileRepo = dataSource.getRepository(WorkingFile);
@@ -148,7 +149,7 @@ export class VcsCommitService {
     if (planned.length) await snapshotRepo.insert(planned.map(snapshot => ({ ...snapshot, id: generateId(), commitId })));
     await branchRepo.update({ id: branchId }, { headCommitId: commitId, updatedAt: now });
     logger.info('Commit created', { commitId, branchId, userId, message });
-    await this.updateFileCommitVersionsOnCommit(branch.projectId, commitId, message, now, scopedIds);
+    await this.updateFileCommitVersionsOnCommit(branch.projectId, commitId, message, now, scopedIds, manager);
     return mapCommit(commit);
   }
 
@@ -171,7 +172,7 @@ export class VcsCommitService {
   /**
    * Get file snapshots for a specific commit
    */
-  async getCommitSnapshots(commitId: string, projectId: string): Promise<{
+  async getCommitSnapshots(commitId: string, projectId: string, manager?: EntityManager): Promise<{
     id: string;
     mainFileId: string | null;
     folderId: string | null;
@@ -181,7 +182,7 @@ export class VcsCommitService {
     changeType: string;
   }[]> {
     if (!projectId) throw new Error('A project is required to read commit snapshots');
-    const dataSource = await getDataSource();
+    const dataSource = manager ?? await getDataSource();
     const snapshotRepo = dataSource.getRepository(FileSnapshot);
     
     const snapshots = await snapshotRepo.createQueryBuilder('fs')
@@ -464,7 +465,8 @@ export class VcsCommitService {
     commitId: string,
     message: string,
     createdAt: number,
-    explicitFileIds?: string[] | null
+    explicitFileIds?: string[] | null,
+    manager?: EntityManager
   ): Promise<void> {
     const msgLower = (message || '').toLowerCase();
     if (
@@ -476,7 +478,7 @@ export class VcsCommitService {
     }
 
     try {
-      const dataSource = await getDataSource();
+      const dataSource = manager ?? await getDataSource();
       const snapshotRepo = dataSource.getRepository(FileSnapshot);
       const mainFileRepo = dataSource.getRepository(MainFile);
       const versionRepo = dataSource.getRepository(FileCommitVersion);
@@ -519,11 +521,11 @@ export class VcsCommitService {
         });
 
         if (insertValues.length > 0) {
-          await versionRepo.createQueryBuilder()
+          const insert = versionRepo.createQueryBuilder()
             .insert()
-            .values(insertValues)
-            .orIgnore()
-            .execute();
+            .values(insertValues);
+          if (!manager) insert.orIgnore();
+          await insert.execute();
         }
 
         logger.debug('Updated file_commit_versions on explicit file-scoped commit', { projectId, commitId, affectedFiles: scopedFileIds.length });
@@ -579,7 +581,7 @@ export class VcsCommitService {
         const nextVersionNumber = maxVersion + 1;
         maxVersionsByFileId.set(fileId, nextVersionNumber);
 
-        await versionRepo.createQueryBuilder()
+        const insert = versionRepo.createQueryBuilder()
           .insert()
           .values({
             projectId,
@@ -587,14 +589,15 @@ export class VcsCommitService {
             commitId,
             versionNumber: nextVersionNumber,
             createdAt,
-          })
-          .orIgnore()
-          .execute();
+          });
+        if (!manager) insert.orIgnore();
+        await insert.execute();
       }
 
       logger.debug('Updated file_commit_versions on commit', { projectId, commitId, affectedFiles: affectedSnapshots.length });
     } catch (error) {
       logger.warn('Failed to update file_commit_versions on commit', { projectId, commitId, error });
+      if (manager) throw error;
     }
   }
 }

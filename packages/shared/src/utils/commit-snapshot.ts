@@ -13,7 +13,7 @@ export function selectCommitFileSnapshot(
     && (file.folderId || null) === (target.folderId || null));
   if (candidates.length !== 1) return null;
   const file = candidates[0];
-  return file.type === target.type && file.changeType !== 'deleted' && file.content ? file : null;
+  return file.type === target.type && ['added', 'modified', 'unchanged'].includes(file.changeType) && file.content ? file : null;
 }
 
 export const FILE_SCOPED_COMMIT_SOURCES = ['file-save'] as const;

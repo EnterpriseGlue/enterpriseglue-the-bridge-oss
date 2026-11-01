@@ -35,7 +35,7 @@ describe('project commit snapshots', () => {
     expect(selectCommitFileSnapshot([legacy, { ...legacy, id: 'duplicate' }], target)).toBeNull();
     expect(selectCommitFileSnapshot([legacy], { ...target, folderId: 'other-folder' })).toBeNull();
   });
-  it.each([{ changeType: 'deleted' }, { type: 'dmn' }, { content: null }, { content: '' }])('does not replace an unusable stable identity with a legacy candidate %j', overrides => {
+  it.each([{ changeType: 'deleted' }, { changeType: 'unknown' }, { type: 'dmn' }, { content: null }, { content: '' }])('does not replace an unusable stable identity with a legacy candidate %j', overrides => {
     expect(selectCommitFileSnapshot([snapshot(overrides), snapshot({ id: 'legacy', mainFileId: null, name: target.name })], target)).toBeNull();
   });
   it('refuses ambiguous stable identity and missing target identity', () => {

@@ -7,7 +7,7 @@ import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@aste
 // before any schema is created so that .openapi() is available on instances.
 extendZodWithOpenApi(z);
 
-const { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema } = await import('./starbase/commit-snapshot.js');
+const { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema } = await import('./starbase/commit-snapshot.js');
 const { commitBodySchema } = await import('./starbase/commit.js');
 
 // Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
@@ -4142,7 +4142,7 @@ registry.registerPath({
   method: 'post',
   path: '/vcs-api/projects/{projectId}/commits/{commitId}/restore',
   ...authzExtension('project.vcs.commit.restore', 'POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore'),
-  request: { params: z.object({ projectId: z.string().uuid(), commitId: z.string() }) },
+  request: { params: ProjectCommitRestoreParamsSchema, body: { required: false, content: { 'application/json': { schema: CommitFileRestoreBodySchema } } } },
   responses: { 200: { description: 'Files restored from commit', content: { 'application/json': { schema: z.object({ success: z.boolean(), filesRestored: z.number(), newCommitId: z.string() }) } } } },
 });
 

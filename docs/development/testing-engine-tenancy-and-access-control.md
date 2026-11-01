@@ -974,3 +974,26 @@ reviewed files; an empty-project Git push remains refused. No remote repository
 wipe capability, schema migration, database policy or permission is introduced.
 Checkpoint reconciliation and save are separate database steps; after a failure,
 read the branch and version state before considering another save.
+
+### Atomic saved-content restoration
+
+Project and selected-file restore routes share a closed optional empty request
+body; file scope is explicit in the selected-file URL. Restores verify active
+snapshot contents against their retained hashes and resolve every current target
+in the authorized project before writing. Missing, incompatible, aliased or
+ambiguous targets stop the operation. Tombstones are skipped in project content
+restore and cannot satisfy a selected-file restore.
+
+Content restoration preserves current names and folder locations, retains files
+added after the saved version, and does not recreate removed files. BPMN process
+and DMN decision IDs are derived again from the restored XML using the ordinary
+sanitization path. The restored contents, owned draft rows, new checkpoint, branch
+head and file-version records share one TypeORM transaction. Failure at any of
+those persistence stages rolls them back together. Branch initialization may
+precede this transaction; it does not change file contents.
+
+The transaction manager is an internal server dependency passed through the VCS
+facade, never a request parameter. Transactional file-version bookkeeping errors
+propagate rather than becoming successful restore receipts. Existing callers
+that do not supply a transaction retain their established behavior. A lost commit
+acknowledgement still requires independent state reconciliation before retry.

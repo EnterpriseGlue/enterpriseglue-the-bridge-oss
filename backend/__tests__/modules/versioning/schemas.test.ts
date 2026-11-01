@@ -20,3 +20,13 @@ describe('versioning schemas index', () => {
     expect(schema.properties.fileIds.items.format).toBe('uuid');
   });
 });
+
+
+it('documents the same closed optional body for project and selected-file content restores', () => {
+  const paths = generateOpenApi().paths;
+  for (const path of ['/vcs-api/projects/{projectId}/commits/{commitId}/restore', '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore']) {
+    const operation = paths[path].post;
+    expect(operation.requestBody.required).toBe(false);
+    expect(operation.requestBody.content['application/json'].schema).toMatchObject({ type: 'object', additionalProperties: false });
+  }
+});
