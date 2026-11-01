@@ -1,4 +1,12 @@
 import type { Page, Route } from '@playwright/test';
+import {
+  UserDirectoryListResponseSchema,
+  UserEffectiveAccessResponseSchema,
+  UserIdentityContextSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
+import { TenancyCapabilitiesSchema } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
+import { PublicPlatformBrandingSchema } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import { SsoConnectionViewSchema } from '@enterpriseglue/shared/schemas/platform-admin/sso-connection.js';
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   status,
@@ -24,7 +32,7 @@ export class MockBrowserIdentityStack {
     loginDomainsJson: JSON.stringify(['example.test']),
     protocol: 'oidc' as const,
     isEnabled: true,
-    authenticationMode: 'direct' as const,
+    authenticationMode: 'direct' as 'direct' | 'claims_only',
     directoryTenantId: null,
     configurationJson: JSON.stringify({
       issuerUrl: 'https://identity-browser-mock.test',
@@ -65,6 +73,27 @@ export class MockBrowserIdentityStack {
       const path = url.pathname
         .replace(/^\/api\/t\/[^/]+\/auth/, '/api/auth')
         .replace(/^\/t\/[^/]+(?=\/(?:api|engines-api|mission-control-api))/, '');
+
+      if (path === '/api/plugins/v1/frontend') return json(route, {
+        apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 0, plugins: [], issues: [],
+      });
+      if (path === '/api/tenancy/capabilities') return json(route, TenancyCapabilitiesSchema.parse({
+        mode: 'single', rootTenantAliasesEnabled: true, tenantScopedLoginRequired: false,
+        databaseIsolation: 'application', customDomainsEnabled: false, signedPlacementAssertionsEnabled: false,
+      }));
+      if (path === '/api/admin/setup-status') return json(route, {
+        isConfigured: true, checks: { hasDefaultTenant: true, hasAdminUser: true, hasEmailConfig: true }, requiredActions: [],
+      });
+      if (path === '/api/notifications' && request.method() === 'GET') return json(route, []);
+      if (path === '/api/auth/branding') return json(route, PublicPlatformBrandingSchema.parse({
+        logoUrl: null, loginLogoUrl: null, loginTitleVerticalOffset: 0, loginTitleColor: null,
+        logoTitle: null, logoScale: 1, titleFontUrl: null, titleFontWeight: '400', titleFontSize: 20,
+        titleVerticalOffset: 0, menuAccentColor: null, faviconUrl: null,
+      }));
+      if (path === '/api/identity/sso-connection' && request.method() === 'GET') return json(route, SsoConnectionViewSchema.parse({
+        connection: { mode: 'direct' }, profiles: [], requiredProxyProfileKey: null, version: 'browser-connection-v1',
+        ownership: { ownershipMode: 'manual', sourceRef: null, driftStatus: null }, lastTest: null,
+      }));
 
       if (path === '/api/auth/login-methods') {
         this.events.push('provider_listed');
@@ -141,28 +170,30 @@ export class MockBrowserIdentityStack {
       const directoryUsers = [
         {
           id: 'browser-directory-user', email: 'ada.lovelace@example.test', firstName: 'Ada', lastName: 'Lovelace', displayName: 'Ada Lovelace',
-          status: 'active', platformRole: 'user', authenticationSources: ['oidc'], provisioningSource: 'scim',
+          status: 'active', platformRole: 'user', bootstrapAccess: 'user', authenticationSources: ['oidc'], provisioningSource: 'scim',
           provisioningDirectoryKey: 'entra-workforce', lastSignInAt: Date.UTC(2026, 7, 14, 8, 30),
           lastProvisionedAt: Date.UTC(2026, 7, 14, 8, 15), provisioningHealth: 'healthy',
         },
         {
           id: 'browser-jit-user', email: 'grace.hopper@example.test', firstName: 'Grace', lastName: 'Hopper', displayName: 'Grace Hopper',
-          status: 'active', platformRole: 'admin', authenticationSources: ['saml'], provisioningSource: 'jit',
+          status: 'active', platformRole: 'admin', bootstrapAccess: 'admin', authenticationSources: ['saml'], provisioningSource: 'jit',
           provisioningDirectoryKey: null, lastSignInAt: Date.UTC(2026, 7, 13, 16, 45), lastProvisionedAt: null, provisioningHealth: 'not_applicable',
         },
         {
           id: 'browser-admin-user', email: 'browser.admin@example.test', firstName: 'Browser', lastName: 'Admin', displayName: 'Browser Admin',
-          status: 'active', platformRole: 'admin', authenticationSources: ['local', 'recovery'], provisioningSource: 'none',
+          status: 'active', platformRole: 'admin', bootstrapAccess: 'admin', authenticationSources: ['local', 'recovery'], provisioningSource: 'none',
           provisioningDirectoryKey: null, lastSignInAt: Date.UTC(2026, 7, 14, 9, 0), lastProvisionedAt: null, provisioningHealth: 'not_applicable',
         },
         {
           id: 'browser-suspended-user', email: 'former.employee@example.test', firstName: 'Former', lastName: 'Employee', displayName: 'Former Employee',
-          status: 'deactivated', platformRole: 'user', authenticationSources: ['none'], provisioningSource: 'scim',
+          status: 'deactivated', platformRole: 'user', bootstrapAccess: 'user', authenticationSources: ['none'], provisioningSource: 'scim',
           provisioningDirectoryKey: 'entra-workforce', lastSignInAt: null, lastProvisionedAt: Date.UTC(2026, 7, 12, 12, 0), provisioningHealth: 'warning',
         },
       ];
-      if (path === '/api/users/directory') return json(route, { items: directoryUsers, total: directoryUsers.length, limit: 200, offset: 0 });
-      if (path === '/api/users/browser-directory-user/identity-context') return json(route, {
+      // Parse fixture responses with the shipped contract so a stale browser
+      // fixture cannot hide a broken producer/consumer integration.
+      if (path === '/api/users/directory') return json(route, UserDirectoryListResponseSchema.parse({ items: directoryUsers, total: directoryUsers.length, limit: 200, offset: 0 }));
+      if (path === '/api/users/browser-directory-user/identity-context') return json(route, UserIdentityContextSchema.parse({
         user: directoryUsers[0],
         linkedIdentities: [
           { id: 'linked-idp-1', sourceType: 'identity_provider', sourceKey: 'identity.oidc.browser-mock', sourceName: 'Microsoft Entra ID', externalSubject: 'entra:ada-lovelace', status: 'active', linkedAt: Date.UTC(2026, 6, 1), lastSeenAt: Date.UTC(2026, 7, 14, 8, 30) },
@@ -176,15 +207,15 @@ export class MockBrowserIdentityStack {
           { field: 'active', owner: 'directory', sourceKey: 'entra-workforce' },
         ],
         recoveryAdministrator: false,
-      });
-      if (path === '/api/users/browser-directory-user/effective-access') return json(route, {
-        userId: 'browser-directory-user', platformRole: 'user', evaluatedAt: Date.UTC(2026, 7, 14, 9, 5),
+      }));
+      if (path === '/api/users/browser-directory-user/effective-access') return json(route, UserEffectiveAccessResponseSchema.parse({
+        userId: 'browser-directory-user', platformRole: 'user', bootstrapAccess: 'user', evaluatedAt: Date.UTC(2026, 7, 14, 9, 5),
         lineage: [
           { sourceType: 'directory_mapping', sourceId: 'map-finance', sourceName: 'Entra Finance operators', assignmentType: 'group', assignmentId: 'group-finance', assignmentName: 'Finance operators', active: true },
           { sourceType: 'directory_mapping', sourceId: 'map-process-viewer', sourceName: 'Entra workforce role mapping', assignmentType: 'role', assignmentId: 'role-process-viewer', assignmentName: 'Process viewer', active: true },
           { sourceType: 'configuration', sourceId: 'config:baseline', sourceName: 'Platform baseline', assignmentType: 'platform_role', assignmentId: 'user', assignmentName: 'Standard user', active: true },
         ],
-      });
+      }));
       if (path === '/api/users/browser-directory-user/sessions') return json(route, {
         userId: 'browser-directory-user', sessions: [
           { id: 'session-browser-1', createdAt: Date.UTC(2026, 7, 14, 8, 30), lastUsedAt: Date.UTC(2026, 7, 14, 9, 2), expiresAt: Date.UTC(2026, 7, 21, 8, 30), revokedAt: null, authenticationSource: 'oidc', ipAddress: '192.0.2.44', userAgent: 'Chrome on managed macOS' },
