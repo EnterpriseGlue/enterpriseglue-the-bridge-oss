@@ -3,7 +3,7 @@
  * Handles push/pull operations with remote Git repository
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   RadioButtonGroup,
@@ -20,6 +20,9 @@ import {
 } from '@carbon/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { syncProject } from '../api/syncProject';
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
+import { getBrowserSessionRevision } from '../../../utils/browserSession';
 import { apiClient } from '../../../shared/api/client';
 import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -41,6 +44,7 @@ type SyncDirection = 'push' | 'pull';
 
 interface RepoInfo {
   id: string;
+  projectId: string;
   providerId: string;
   remoteUrl: string;
   repositoryName: string;
@@ -59,7 +63,10 @@ export default function SyncModal({
   const queryClient = useQueryClient();
   const nav = useNavigate();
   const location = useLocation();
-  const { permissions, hasProjectPermission } = useAuth();
+  const { permissions, hasProjectPermission, user, sessionRevision } = useAuth();
+  const authority = JSON.stringify([user?.session?.principal.id || user?.id || null, user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)]);
+  const authoritySession = useRef({ authority, revision: getBrowserSessionRevision() });
+  if (authoritySession.current.authority !== authority) authoritySession.current = { authority, revision: getBrowserSessionRevision() };
   const pathname = location?.pathname ?? '';
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
@@ -92,24 +99,24 @@ export default function SyncModal({
       setCommitMessage('');
       setError(null);
     }
-  }, [open, pushEnabled, pullEnabled]);
+  }, [open, projectId, authority, pushEnabled, pullEnabled]);
 
   // Fetch repository info
   const repoQuery = useQuery({
-    queryKey: ['git', 'repository', projectId],
+    queryKey: ['git', 'repository', projectId, authority],
     queryFn: async () => {
       const repos = await fetchList<RepoInfo>('/git-api/repositories', { projectId });
-      return repos.find((r: RepoInfo) => r) || null;
+      return repos.find((r: RepoInfo) => r.projectId === projectId) || null;
     },
     enabled: open,
   });
 
   const providerIdForTokenCheck = repoQuery.data?.providerId;
   const credentialValidQuery = useQuery({
-    queryKey: ['git', 'credentials', 'valid', providerIdForTokenCheck],
+    queryKey: ['git', 'credentials', 'valid', providerIdForTokenCheck, authority],
     queryFn: async () => {
       return apiClient.get<{ valid: boolean }>(
-        `/git-api/credentials/${providerIdForTokenCheck}/validate`
+        `/git-api/credentials/${encodeURIComponent(providerIdForTokenCheck || '')}/validate`
       ).catch(() => ({ valid: false }));
     },
     enabled: open && !sharingEnabled && !!providerIdForTokenCheck,
@@ -124,60 +131,59 @@ export default function SyncModal({
     enabled: open && !!repoQuery.data && canReadSyncStatus,
   });
 
-  // Sync mutation
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      if (syncUnavailableReason) {
-        throw new Error(syncUnavailableReason);
-      }
-      const request: GitSyncRequest = {
-        projectId,
-        direction,
-        message: commitMessage.trim(),
-      };
-      return apiClient.post('/git-api/sync', request);
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['git', 'deployments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'deployments', 'recent'] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'repository', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'sync-status', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] });
-      onSuccess?.();
-      onClose();
-    },
-    onError: (err: Error) => {
-      const parsed = parseApiError(err, 'Sync failed');
-      setError(parsed.message);
-    },
-  });
-
-  const handleSync = () => {
-    setError(null);
-    if (syncUnavailableReason) {
-      setError(syncUnavailableReason);
-      return;
-    }
-    syncMutation.mutate();
-  };
-
   const repo = repoQuery.data;
-  const status = statusQuery.data;
-  const isLoading = syncMutation.isPending;
   const noRepo = !repoQuery.isLoading && !repo;
-
   const requiresPersonalToken = !sharingEnabled;
-  const personalTokenValid = !requiresPersonalToken || (credentialValidQuery.data?.valid ?? false);
-  const tokenCheckLoading = requiresPersonalToken && credentialValidQuery.isLoading;
+  const personalTokenValid = !requiresPersonalToken || credentialValidQuery.data?.valid === true;
+  const tokenCheckLoading = requiresPersonalToken && (credentialValidQuery.isLoading || credentialValidQuery.isFetching);
   const requiredSyncPermission = direction === 'pull' ? ProjectPermission.GIT_PULL : ProjectPermission.GIT_PUSH;
-  const canRunSyncAction = syncRunDecision.allowed || hasProjectPermission(projectId, requiredSyncPermission);
-  const syncUnavailableReason = canRunSyncAction
-    ? null
-    : syncRunDecision.reason || `Missing permission ${requiredSyncPermission}`;
-
-  const canSubmit = !isLoading && !noRepo && commitMessage.trim().length > 0 && personalTokenValid && !tokenCheckLoading && !syncUnavailableReason;
+  const availability = permissions?.projects?.find(project => project.resourceId === projectId)?.actionAvailability;
+  const explicitlyRestricted = availability ? Boolean(availability.restrictions['project.git.sync.run']) && !availability.allowedActions.includes('project.git.sync.run') : false;
+  const hasDirectionPermission = hasProjectPermission(projectId, requiredSyncPermission);
+  // The registry's sync action uses push as its primary permission. An allowed
+  // push action is never evidence for the additional pull permission.
+  const canRunSyncAction = !explicitlyRestricted && (direction === 'push' ? syncRunDecision.allowed || hasDirectionPermission : hasDirectionPermission);
+  const syncUnavailableReason = canRunSyncAction ? null : explicitlyRestricted ? syncRunDecision.reason : `Missing permission ${requiredSyncPermission}`;
+  const scope = JSON.stringify([open, projectId, authority, direction, commitMessage, repo?.id, repo?.providerId,
+    personalTokenValid, pushEnabled, pullEnabled, syncUnavailableReason]);
+  const scopeRef = useRef(scope), lifetimeRef = useRef(0), activeRef = useRef<number | null>(null), submittedRef = useRef<number | null>(null);
+  if (scopeRef.current !== scope) { scopeRef.current = scope; lifetimeRef.current += 1; }
+  const mountedRef = useRef(true);
+  const renderedSession = authoritySession.current.revision;
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; lifetimeRef.current += 1; }; }, []);
+  type Intent = GitSyncRequest & { isCurrent: () => boolean; assertCurrent: () => void };
+  const syncMutation = useMutation({
+    mutationFn: (intent: Intent) => syncProject({ projectId: intent.projectId, direction: intent.direction, message: intent.message }, intent.assertCurrent),
+    onSuccess: (_data, intent) => {
+      if (!intent.isCurrent()) return;
+      queryClient.invalidateQueries({ queryKey: ['git', 'deployments', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'deployments', 'recent'] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'repository', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'sync-status', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', intent.projectId] });
+      onSuccess?.();
+      if (intent.isCurrent()) onClose();
+    },
+    onError: (failure, intent) => {
+      if (intent.isCurrent()) setError(parseApiError(failure, 'Sync failed').message);
+    },
+    onSettled: (_data, _error, intent) => { if (intent.isCurrent()) activeRef.current = null; },
+  });
+  const isLoading = submittedRef.current === lifetimeRef.current && syncMutation.isPending;
+  const currentError = submittedRef.current === lifetimeRef.current ? error : null;
+  const directionEnabled = direction === 'push' ? pushEnabled : pullEnabled;
+  const canSubmit = open && !isLoading && !noRepo && commitMessage.trim().length > 0 && personalTokenValid && !tokenCheckLoading && directionEnabled && !syncUnavailableReason;
+  const handleSync = () => {
+    if (!mountedRef.current || scope !== scopeRef.current || !canSubmit || activeRef.current === lifetimeRef.current || renderedSession !== getBrowserSessionRevision()) return;
+    const lifetime = lifetimeRef.current, session = renderedSession;
+    const isCurrent = () => mountedRef.current && lifetime === lifetimeRef.current && session === getBrowserSessionRevision();
+    const intent: Intent = { projectId, direction, message: commitMessage.trim(), isCurrent,
+      assertCurrent: () => { if (!isCurrent()) throw new Error('Sync context changed; review the target again'); } };
+    activeRef.current = lifetime; submittedRef.current = lifetime;
+    setError(null); syncMutation.reset(); syncMutation.mutate(intent);
+  };
+  const handleClose = () => { lifetimeRef.current += 1; setError(null); setCommitMessage(''); onClose(); };
 
   const formatLastSync = (timestamp: number | null) => {
     if (!timestamp) return 'Never';
@@ -197,7 +203,7 @@ export default function SyncModal({
   return (
     <Modal
       open={open}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       modalHeading={`Sync: ${projectName}`}
       primaryButtonText={isLoading ? 'Syncing...' : 'Sync Now'}
       secondaryButtonText="Cancel"
@@ -269,9 +275,10 @@ export default function SyncModal({
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
             rows={2}
+            disabled={isLoading}
             maxCount={200}
             enableCounter
-            invalid={commitMessage.length === 0 && error !== null}
+            invalid={commitMessage.length === 0 && currentError !== null}
             invalidText="Version message is required"
           />
 
@@ -281,6 +288,7 @@ export default function SyncModal({
               Sync Direction
             </div>
             <RadioButtonGroup
+              disabled={isLoading}
               name="sync-direction"
               valueSelected={direction}
               onChange={(value) => setDirection(value as SyncDirection)}
@@ -328,11 +336,11 @@ export default function SyncModal({
           )}
 
           {/* Error */}
-          {error && (
+          {currentError && (
             <InlineNotification
               kind="error"
               title="Sync Failed"
-              subtitle={error}
+              subtitle={currentError}
               lowContrast
               hideCloseButton
             />

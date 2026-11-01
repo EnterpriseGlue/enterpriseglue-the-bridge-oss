@@ -280,3 +280,38 @@ tag stops acknowledgement. A provider may have acted before a failed response;
 there is no automatic retry or claim of atomic Git/database settlement. Reconcile
 uncertain effects before repeating the operation. Browser-session changes also
 stop the continuation between save and push, before a React rerender is required.
+
+## Manual and bulk Git sync continuations
+
+The project sync dialog and project-list batch use the same request/receipt
+adapter. It owns the project, direction and description before transport and
+requires the canonical successful receipt, consistent effect counts/direction,
+and a nonempty commit SHA for a pushed change. A resolved response containing
+an error or missing receipt fields is not reported as success. A valid unchanged
+acknowledgement remains supported.
+
+The dialog binds pending work to its mount, open lifetime, selected project,
+repository, current authority and browser session. Personal credential validation
+and repository queries include authority in their keys; a previous user's result
+cannot enable a new user's action. Closing or replacing the view suppresses late
+callbacks and cache updates. Inputs are disabled for the owned pending attempt.
+
+The project-list batch snapshots its selected projects and request fields before
+the first call, rejects malformed/duplicate connected selections before any call,
+and checks its lifetime/session before each project and on settlement. Closing,
+reopening, changing selection/direction or changing authority stops the old queue.
+A replacement view does not inherit the old attempt's busy state or result. Each
+owned failed project is reported once, disconnected projects are skipped, and
+only verified acknowledgements clear the confirmed selection. No failed project
+is retried automatically.
+
+These are continuation and acknowledgement checks. Already-issued HTTP requests
+may act after cancellation; an uncertain response requires reconciliation. The
+server remains authoritative for permissions, credentials and provider effects.
+The existing local sync-status read is not a remote-provider verification gate.
+
+Sync permission checks remain directional: an allowed push action does not grant
+pull permission. Explicit sync restrictions prevent confirmation even while
+membership presentation is loading. UI permission fallbacks cannot override a
+server-supplied restriction; independently permitted pull-only users remain
+supported.

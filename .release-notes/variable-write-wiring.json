@@ -36,7 +36,8 @@
     "Pending restore stops when its file, version, session or permissions change, and an unverified preceding save cannot permit restore.",
     "Saving or restoring one file preserves sibling saved baselines and unsaved drafts. Create Version refuses obsolete preparation and unverified responses.",
     "Publish uses the saved draft tree without including unsaved siblings. Dirty status recognizes renames, moves, deletion markers and conflicting snapshots.",
-    "Git deployment now sends the reviewed saved revision and keeps its export fixed across provider calls; unverified receipts or requested tags no longer report success."
+    "Git deployment now sends the reviewed saved revision and keeps its export fixed across provider calls; unverified receipts or requested tags no longer report success.",
+    "Manual and bulk Git sync verify acknowledgements and stop old continuations after cancellation, view/selection changes or session changes. Replacement dialogs retain their own busy/result state."
   ],
   "upgrade": {
     "required": true,
@@ -78,7 +79,9 @@
     "Commit snapshot reads bind the authorized project in SQL; restore updates require the target row to belong to that project. Historical diagram content stays separate from draft autosave, with no authorization, database policy or grant relaxation.",
     "Mixed-resolver authorization actions require explicit scope selection; single-project VCS status resolves the requested project. No grant or database policy change.",
     "Publication rejects foreign project/owner/tree references and conflicting identities before changing main. Dirty-status baseline lookup is project-bound. Existing grants, database policies and migration floors are unchanged.",
-    "Git and engine delivery share exact source verification. Git export rejects revision drift, foreign/missing versions, ambiguous paths and cyclic folders before resolving a provider. No permission, IAM or database-policy relaxation."
+    "Git and engine delivery share exact source verification. Git export rejects revision drift, foreign/missing versions, ambiguous paths and cyclic folders before resolving a provider. No permission, IAM or database-policy relaxation.",
+    "Manual sync repository and personal-credential queries are authority-bound; bulk queues own their confirmed project scope and recheck session/view lifetime before every request. Existing server permissions remain authoritative.",
+    "Manual and bulk sync keep push/pull permissions distinct and honor explicit action restrictions before dispatch, including while membership presentation is pending."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -118,7 +121,9 @@
     "Actual PostgreSQL route, restore, VCS checkpoint and history/backfill integration with sibling-file/project denials; deferred autosave/restore browser component lifetime cases.",
     "Actual PostgreSQL scoped-save/restore dirty-state and identity regressions, explicit authorization resolver contracts and deferred Create Version lifetime/acknowledgement checks.",
     "Actual PostgreSQL scoped save to publish to deployment-revision verification, repeated publish/new draft inheritance, metadata/tombstone/duplicate/content-drift negatives and cyclic folder ancestry. Git import/push complete-save callers remain covered locally.",
-    "Native PostgreSQL Git service and push adapter with a simulated provider: dispatch-time draft mutation, invalid source/path, legacy checkpoint, lost ACK, empty SHA, tag uncertainty and verified/unknown unchanged remote head. Browser request/receipt and session-lifetime regressions; exact CI lane selection verified locally."
+    "Native PostgreSQL Git service and push adapter with a simulated provider: dispatch-time draft mutation, invalid source/path, legacy checkpoint, lost ACK, empty SHA, tag uncertainty and verified/unknown unchanged remote head. Browser request/receipt and session-lifetime regressions; exact CI lane selection verified locally.",
+    "Canonical sync request/receipt and malformed/duplicate queue tests; actual sync dialog and project overview controller regressions for cancel/reopen, user/session changes, per-user credentials, receipt errors and confirmed selection cleanup.",
+    "Push-only denial of pull, permitted pull-only confirmation, explicit restriction with a true legacy fallback, and pending-membership denial regressions."
   ],
   "packages": [
     {
