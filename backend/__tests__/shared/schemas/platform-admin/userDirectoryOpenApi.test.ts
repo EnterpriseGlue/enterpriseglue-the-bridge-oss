@@ -54,7 +54,7 @@ describe('platform user OpenAPI contracts', () => {
     const directorySchema = directory?.responses?.['200']?.content?.['application/json']?.schema;
     expect(directorySchema?.required).toEqual(expect.arrayContaining(['items', 'total', 'limit', 'offset']));
     expect(directorySchema?.properties?.items?.items?.required).toEqual(expect.arrayContaining([
-      'status', 'authenticationSources', 'provisioningSource', 'platformRole',
+      'status', 'authenticationSources', 'provisioningSource', 'platformRole', 'bootstrapAccess',
       'lastSignInAt', 'lastProvisionedAt', 'provisioningHealth',
     ]));
     expect(directory?.parameters).toEqual(expect.arrayContaining([
@@ -66,7 +66,7 @@ describe('platform user OpenAPI contracts', () => {
     expect(identity?.responses?.['200']?.content?.['application/json']?.schema?.required)
       .toEqual(expect.arrayContaining(['user', 'linkedIdentities', 'fieldOwnership', 'recoveryAdministrator']));
     expect(access?.responses?.['200']?.content?.['application/json']?.schema?.required)
-      .toEqual(expect.arrayContaining(['userId', 'platformRole', 'lineage', 'evaluatedAt']));
+      .toEqual(expect.arrayContaining(['userId', 'platformRole', 'bootstrapAccess', 'lineage', 'evaluatedAt']));
 
     const sessionItem = sessions?.responses?.['200']?.content?.['application/json']?.schema?.properties?.sessions?.items;
     expect(sessionItem?.required).toEqual(expect.arrayContaining(['id', 'expiresAt', 'authenticationSource']));

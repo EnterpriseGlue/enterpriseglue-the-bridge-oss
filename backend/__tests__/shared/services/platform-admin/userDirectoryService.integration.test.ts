@@ -1,6 +1,7 @@
 import 'reflect-metadata';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
@@ -12,8 +13,20 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { ScimUserLink } from '@enterpriseglue/shared/infrastructure/persistence/entities/ScimUserLink.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import {
+  UserDirectoryListResponseSchema, UserIdentityContextSchema, UserEffectiveAccessResponseSchema,
+  UserSessionsResponseSchema, UserAuditResponseSchema, UserLifecycleMutationResponseSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 import { DEFAULT_PLATFORM_GROUP_IDS } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { UserDirectoryService } from '@enterpriseglue/shared/services/platform-admin/UserDirectoryService.js';
+
+const postgres = process.env.USER_DIRECTORY_DISPOSABLE_POSTGRES === 'true';
+const database = `user_directory_${randomUUID().replace(/-/g, '')}`;
+const env = (key: string, fallback: string) => process.env[`MIGRATION_TEST_${key}`] || fallback;
+const connection = { type: 'postgres' as const, host: env('POSTGRES_HOST', '127.0.0.1'), port: Number(env('POSTGRES_PORT', '5432')),
+  username: env('POSTGRES_USER', 'postgres'), password: env('POSTGRES_PASSWORD', 'postgres') };
+const admin = new DataSource({ ...connection, database: env('POSTGRES_DATABASE', 'postgres') });
+let databaseCreated = false;
 
 const entities = [
   AuditLog, AuthzGroup, AuthzGroupMembership, ExternalIdentity, IdentityProvider,
@@ -34,8 +47,22 @@ describe('UserDirectoryService', () => {
   let dataSource: DataSource;
   let service: UserDirectoryService;
 
+  beforeAll(async () => {
+    if (!postgres) return;
+    await admin.initialize(); await admin.query(`CREATE DATABASE "${database}"`); databaseCreated = true;
+    const schema = new DataSource({ ...connection, database });
+    try { await schema.initialize(); await schema.query('CREATE SCHEMA main'); }
+    finally { if (schema.isInitialized) await schema.destroy(); }
+  });
+  afterAll(async () => {
+    if (!admin.isInitialized) return;
+    try { if (databaseCreated) await admin.query(`DROP DATABASE "${database}"`); }
+    finally { await admin.destroy(); }
+  });
   beforeEach(async () => {
-    dataSource = new DataSource({ type: 'sqljs', entities, synchronize: true, dropSchema: true });
+    dataSource = postgres
+      ? new DataSource({ ...connection, database, entities, synchronize: true, dropSchema: true })
+      : new DataSource({ type: 'sqljs', entities, synchronize: true, dropSchema: true });
     await dataSource.initialize();
     service = new UserDirectoryService(async () => dataSource);
     await dataSource.getRepository(User).insert([
@@ -116,6 +143,7 @@ describe('UserDirectoryService', () => {
 
   it('lists and explains provisioned users without conflating provisioning and authentication', async () => {
     const page = await service.list({ tenantId: null, provisioningSource: 'scim', limit: 50, offset: 0 });
+    expect(UserDirectoryListResponseSchema.parse(page)).toEqual(page);
     expect(page).toMatchObject({ total: 1, limit: 50, offset: 0 });
     expect(page.items[0]).toMatchObject({
       id: 'user-scim', authenticationSources: ['none'], provisioningSource: 'scim',
@@ -123,6 +151,7 @@ describe('UserDirectoryService', () => {
     });
 
     const identity = await service.identityContext('user-scim', null);
+    expect(UserIdentityContextSchema.parse(identity)).toEqual(identity);
     expect(identity).toMatchObject({
       user: { provisioningSource: 'scim' }, recoveryAdministrator: false,
       linkedIdentities: [expect.objectContaining({ sourceType: 'provisioning_directory', sourceKey: 'directory.entra', externalSubject: 'entra-object-1' })],
@@ -134,17 +163,19 @@ describe('UserDirectoryService', () => {
     ]));
 
     const recovery = await service.identityContext('user-recovery', null);
-    expect(recovery).toMatchObject({ recoveryAdministrator: true, user: { authenticationSources: ['local', 'recovery'] } });
+    expect(recovery).toMatchObject({ recoveryAdministrator: true, user: { authenticationSources: ['local', 'recovery'], bootstrapAccess: 'admin' } });
   });
 
   it('returns source lineage and redacted session inventory', async () => {
     const access = await service.effectiveAccess('user-scim', null);
+    expect(UserEffectiveAccessResponseSchema.parse(access)).toEqual(access);
     expect(access.lineage).toEqual(expect.arrayContaining([
       expect.objectContaining({ assignmentType: 'group', assignmentName: 'Engineering', sourceType: 'directory_mapping' }),
       expect.objectContaining({ assignmentType: 'role', assignmentName: 'Engine reader on engine engine-1', sourceType: 'configuration' }),
     ]));
 
     const sessions = await service.sessions('user-scim');
+    expect(UserSessionsResponseSchema.parse(sessions)).toEqual(sessions);
     expect(sessions.sessions).toEqual([
       expect.objectContaining({ id: 'session-1', authenticationSource: 'none', ipAddress: '192.0.2.10' }),
     ]);
@@ -153,15 +184,17 @@ describe('UserDirectoryService', () => {
 
   it('deactivates immediately, preserves non-baseline access, records audit, and defers SCIM reactivation to the directory', async () => {
     const result = await service.deactivate({ userId: 'user-scim', actorId: 'user-recovery', tenantId: null, reason: 'Emergency access containment' });
+    expect(UserLifecycleMutationResponseSchema.parse(result)).toEqual(result);
     expect(result).toMatchObject({ status: 'deactivated', authSessionVersion: 1 });
     expect(await dataSource.getRepository(User).findOneByOrFail({ id: 'user-scim' })).toMatchObject({ isActive: false, authSessionVersion: 1 });
-    expect(await dataSource.getRepository(RefreshToken).findOneByOrFail({ id: 'session-1' })).toMatchObject({ revokedAt: expect.any(Number) });
+    expect(String((await dataSource.getRepository(RefreshToken).findOneByOrFail({ id: 'session-1' })).revokedAt)).toBe(String(result.changedAt));
     expect(await dataSource.getRepository(AuthzGroupMembership).findOneBy({ id: 'membership-baseline' })).toBeNull();
     expect(await dataSource.getRepository(AuthzGroupMembership).findOneBy({ id: 'membership-directory' })).not.toBeNull();
     await expect(service.reactivate({ userId: 'user-scim', actorId: 'user-recovery', tenantId: null, reason: 'Attempted local override' }))
       .rejects.toMatchObject({ statusCode: 409 });
 
     const audit = await service.audit('user-scim', 50);
+    expect(UserAuditResponseSchema.parse(audit)).toEqual(audit);
     expect(audit.events).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: 'identity.user.deactivate', actorId: 'user-recovery', reason: 'Emergency access containment', sourceType: 'scim' }),
     ]));
@@ -170,5 +203,22 @@ describe('UserDirectoryService', () => {
   it('protects the final active local recovery administrator', async () => {
     await expect(service.deactivate({ userId: 'user-recovery', actorId: 'security-operator', tenantId: null, reason: 'Unsafe test' }))
       .rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('last active local recovery administrator') });
+  });
+  it('derives presentation presets from current administrator membership, not the legacy stored role', async () => {
+    await dataSource.getRepository(User).update('user-scim', { platformRole: 'admin' });
+    expect((await service.identityContext('user-scim', null)).user.bootstrapAccess).toBe('user');
+    expect((await service.effectiveAccess('user-scim', null)).bootstrapAccess).toBe('user');
+    expect((await service.identityContext('user-recovery', null)).user.bootstrapAccess).toBe('admin');
+    expect((await service.effectiveAccess('user-recovery', null)).bootstrapAccess).toBe('admin');
+  });
+  it('marks inherited role lineage inactive when its group membership expires or the group is archived', async () => {
+    const role = () => service.effectiveAccess('user-scim', null).then(result => result.lineage.find(row => row.assignmentId === 'assignment-1'));
+    expect(await role()).toMatchObject({ active: true });
+    await dataSource.getRepository(AuthzGroupMembership).update('membership-directory', { expiresAt: Date.now() - 1 });
+    expect(await role()).toMatchObject({ active: false });
+    await dataSource.getRepository(AuthzGroupMembership).update('membership-directory', { expiresAt: null });
+    expect(await role()).toMatchObject({ active: true });
+    await dataSource.getRepository(AuthzGroup).update('group-engineering', { isArchived: true });
+    expect(await role()).toMatchObject({ active: false });
   });
 });

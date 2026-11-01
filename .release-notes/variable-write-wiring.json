@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "id": "variable-write-wiring",
   "type": "fix",
-  "scope": "mission-control",
+  "scope": "workflows",
   "breaking": false,
   "audiences": [
     "users",
     "operators",
     "developers"
   ],
-  "summary": "Bind session and deployment actions to their original context, verify deployed revision lineage, and preserve typed variable values through the required engine qualification path.",
+  "summary": "Bind browser actions to their original context, verify deployment and variable transport, and use explicit directory presentation contracts with permission-based administration.",
   "userImpact": [
     "Adding and uploading native JSON variables uses the same serialized engine contract as editing existing variables.",
     "Process navigation discards action drafts belonging to the previous instance, including when both instances use the same engine.",
@@ -18,20 +18,26 @@
     "Late authentication responses cannot restore an older browser session or replace newer permissions.",
     "Save-and-deploy cannot continue against a replacement project, file selection or session.",
     "Unsafe or out-of-range numeric variable writes are rejected instead of rounding or becoming null.",
-    "Versioned engine deployments reject content or snapshot drift before contacting the engine."
+    "Versioned engine deployments reject content or snapshot drift before contacting the engine.",
+    "User administration reads an explicit account access preset without using compatibility role fields for authorization.",
+    "Changing users, sessions or permissions discards old directory loads and lifecycle confirmations.",
+    "Inherited access is shown inactive after membership expiry or group archival; incomplete ownership metadata does not enable manual user creation.",
+    "Locked directory accounts expose the permission-gated unlock action without requiring legacy counters.",
+    "Profile edits no longer resend unchanged account access or active status and overwrite intervening lifecycle changes."
   ],
   "upgrade": {
     "required": true,
     "instructions": [
-      "Upgrade the qualified frontend and backend host composition; existing variables and receipts need no data repair."
+      "Upgrade the qualified shared/frontend/backend host composition together; no database schema or historical data repair is required."
     ]
   },
   "configuration": [],
   "api": {
-    "compatibility": "none",
+    "compatibility": "additive",
     "changes": [
       "The frontend write adapter accepts parsed native JSON values and serializes them once for the engine. The external HTTP API and scalar/Java Object contracts are unchanged.",
-      "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link."
+      "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link.",
+      "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards."
     ]
   },
   "database": {
@@ -49,7 +55,8 @@
     "Commit/project/snapshot validation completes before any versioned engine deployment effect."
   ],
   "documentation": [
-    "docs/development/mission-control-engine-selection.md"
+    "docs/development/mission-control-engine-selection.md",
+    "docs/development/user-directory-contract.md"
   ],
   "customerDocumentation": {
     "impact": "none",
@@ -69,7 +76,9 @@
     "Frontend host typecheck and packed entrypoint verification; release workflow, classifier, aggregate, package-version and documentation contracts.",
     "Full protected exact-candidate, browser and live two-tenant acceptance remain separate requirements.",
     "Authentication, two-stage deployment, numeric parser and variable adapter regression tests.",
-    "Actual PostgreSQL deployment revision lookup and drift/foreign-project rejection."
+    "Actual PostgreSQL deployment revision lookup and drift/foreign-project rejection.",
+    "Admin list/detail navigation, revocation, metadata uncertainty and strict API response-binding tests.",
+    "User directory service and current membership presentation on SQL.js and owned PostgreSQL fixtures."
   ],
   "packages": [
     {
@@ -82,6 +91,12 @@
       "name": "@enterpriseglue/backend-host",
       "previousVersion": "0.23.7",
       "newVersion": "0.23.8",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.6",
+      "newVersion": "0.28.7",
       "impact": "patch"
     }
   ]

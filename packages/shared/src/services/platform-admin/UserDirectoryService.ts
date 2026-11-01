@@ -154,6 +154,7 @@ export class UserDirectoryService {
       displayName,
       status: userStatus(user),
       platformRole: context.platformAdministrators.has(user.id) ? 'admin' : 'user',
+      bootstrapAccess: context.platformAdministrators.has(user.id) ? 'admin' : 'user',
       authenticationSources,
       provisioningSource,
       provisioningDirectoryKey: directory?.key || null,
@@ -292,6 +293,10 @@ export class UserDirectoryService {
     const groupsById = new Map(groups.map((group) => [group.id, group]));
     const rolesById = new Map(roles.map((role) => [role.id, role]));
     const now = Date.now();
+    const activeGroupIds = new Set(memberships.filter(membership => {
+      const group = groupsById.get(membership.groupId);
+      return group && !group.isArchived && (membership.expiresAt == null || Number(membership.expiresAt) > now);
+    }).map(membership => membership.groupId));
     const lineage: UserEffectiveAccessResponse['lineage'] = [{
       sourceType: 'manual', sourceId: null, sourceName: 'Platform user compatibility access',
       assignmentType: 'platform_role', assignmentId: `platform-role:${user.id}`,
@@ -313,10 +318,11 @@ export class UserDirectoryService {
       lineage.push({
         sourceType: accessSource(assignment.source), sourceId: assignment.sourceRef, sourceName: assignment.sourceRef,
         assignmentType: 'role', assignmentId: assignment.id, assignmentName: `${role.name} on ${scope}`,
-        active: !role.isArchived && (assignment.expiresAt == null || Number(assignment.expiresAt) > now),
+        active: !role.isArchived && (assignment.expiresAt == null || Number(assignment.expiresAt) > now)
+          && (assignment.principalType !== 'group' || activeGroupIds.has(assignment.principalId || '')),
       });
     }
-    return { userId, platformRole: administrators.has(user.id) ? 'admin' : 'user', lineage, evaluatedAt: now };
+    return { userId, platformRole: administrators.has(user.id) ? 'admin' : 'user', bootstrapAccess: administrators.has(user.id) ? 'admin' : 'user', lineage, evaluatedAt: now };
   }
 
   async sessions(userId: string): Promise<UserSessionsResponse> {

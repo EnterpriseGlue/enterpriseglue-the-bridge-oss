@@ -39,6 +39,7 @@ process.exit(process.env.FIXTURE_SCENARIO === 'timeout' || count < 3 ? 1 : 0);
   executable('sleep', 'process.exit(0);');
   executable('corepack', `
 if (!/^[a-f0-9]{64}$/.test(process.env.MIGRATION_TEST_POSTGRES_CONTAINER || '')) process.exit(98);
+if (process.env.USER_DIRECTORY_DISPOSABLE_POSTGRES !== 'true') process.exit(97);
 require('node:fs').appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify(['tests', ...process.argv.slice(2)]) + '\\n');
 process.exit(process.env.FIXTURE_SCENARIO === 'test-failure' ? 17 : 0);
 `);
@@ -62,6 +63,7 @@ test('ignores temporary socket readiness and waits for the real TCP server', (t)
   assert.ok(tests.includes('test/integration/nativeTenantRls.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-context-boundary.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-deployment-revision.test.ts'));
+  assert.ok(tests.includes('__tests__/shared/services/platform-admin/userDirectoryService.integration.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-global-identity.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-shared-inventory-readiness.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-schema-epoch-bridge.test.ts'));

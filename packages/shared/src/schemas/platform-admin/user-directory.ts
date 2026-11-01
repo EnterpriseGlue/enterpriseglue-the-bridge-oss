@@ -5,6 +5,9 @@ export const UserAuthenticationSourceSchema = z.enum(['none', 'local', 'oidc', '
 export const UserProvisioningSourceSchema = z.enum(['none', 'jit', 'scim', 'ldap']);
 export const UserFieldOwnershipSchema = z.enum(['application', 'directory']);
 
+/** Informational account preset; action decisions and scoped RBAC remain authoritative. */
+export const UserBootstrapAccessSchema = z.enum(['admin', 'user']);
+
 /** Backward-compatible `/api/users` contracts shared by routes and OpenAPI. */
 export const PlatformUserCreateRequestSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(320),
@@ -70,6 +73,7 @@ export const UserDirectorySummarySchema = z.object({
   displayName: z.string().max(512),
   status: UserDirectoryStatusSchema,
   platformRole: z.string().min(1).max(128),
+  bootstrapAccess: UserBootstrapAccessSchema.describe('Account access preset for presentation and editing; not an authorization decision.'),
   authenticationSources: z.array(UserAuthenticationSourceSchema).min(1),
   provisioningSource: UserProvisioningSourceSchema,
   provisioningDirectoryKey: z.string().max(128).nullable(),
@@ -122,6 +126,7 @@ export const UserAccessLineageSchema = z.object({
 export const UserEffectiveAccessResponseSchema = z.object({
   userId: z.string().min(1),
   platformRole: z.string().min(1).max(128),
+  bootstrapAccess: UserBootstrapAccessSchema.describe('Account access preset for presentation and editing; not an authorization decision.'),
   lineage: z.array(UserAccessLineageSchema),
   evaluatedAt: z.number().int().nonnegative(),
 }).strict();
@@ -182,3 +187,5 @@ export type UserLifecycleMutationResponse = z.infer<typeof UserLifecycleMutation
 export type PlatformUserCreateRequest = z.infer<typeof PlatformUserCreateRequestSchema>;
 export type PlatformUserUpdateRequest = z.infer<typeof PlatformUserUpdateRequestSchema>;
 export type PlatformUserResponse = z.infer<typeof PlatformUserResponseSchema>;
+
+export type UserBootstrapAccess = z.infer<typeof UserBootstrapAccessSchema>;

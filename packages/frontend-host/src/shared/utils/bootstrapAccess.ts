@@ -1,5 +1,6 @@
 export type BootstrapAccessTagType = 'purple' | 'gray';
-export type BootstrapAccessValue = 'admin' | 'user';
+import type { UserBootstrapAccess } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
+export type BootstrapAccessValue = UserBootstrapAccess;
 
 const ACCESS_TAG_TYPES: Record<BootstrapAccessValue, BootstrapAccessTagType> = {
   admin: 'purple',
