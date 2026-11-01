@@ -8,7 +8,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
 import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
+import { getBrowserSessionRevision } from '../../../utils/browserSession';
 import { getProjectCommitSnapshots, selectCommitFileSnapshot } from '../api/commitSnapshots';
+import { FILE_SCOPED_COMMIT_SOURCES } from '@enterpriseglue/shared/utils/commit-snapshot.js';
 import type { CommitFileSnapshot as FileSnapshot } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateStarbaseMissionControlBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz';
@@ -43,6 +46,15 @@ interface GitVersionsPanelProps {
   restoreVersionUnavailableReason?: string | null;
 }
 
+interface RestoreIntent {
+  projectId: string;
+  fileId: string;
+  commitId: string;
+  saveMode: 'git' | 'local';
+  assertCurrent: () => void;
+  isCurrent: () => boolean;
+}
+
 interface VcsCommit {
   id: string;
   branchId: string;
@@ -70,7 +82,7 @@ interface LocalVersionDetail extends LocalVersion {
   xml: string;
 }
 
-const MANUAL_SOURCES = new Set(['manual', 'restore', 'file-save']);
+const MANUAL_SOURCES = new Set<string>(['manual', 'restore', ...FILE_SCOPED_COMMIT_SOURCES]);
 const AUTO_SAVE_BEFORE_RESTORE_MESSAGE = 'Auto-saved before restore';
 
 function isManualCommit(commit: VcsCommit): boolean {
@@ -302,7 +314,7 @@ export default function GitVersionsPanel({
 }: GitVersionsPanelProps) {
   const queryClient = useQueryClient();
   const { tenantNavigate } = useTenantNavigate();
-  const { hasEnginePermission, hasProjectPermission, permissions } = useAuth();
+  const { hasEnginePermission, hasProjectPermission, permissions, user, sessionRevision } = useAuth();
   const [selectedCommit, setSelectedCommit] = useState<VcsCommit | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deploymentPendingDelete, setDeploymentPendingDelete] = useState<DeploymentBadge | null>(null);
@@ -444,19 +456,23 @@ export default function GitVersionsPanel({
   });
 
   // Restore mutation
-  const autoSaveBeforeRestore = React.useCallback(async () => {
+  const autoSaveBeforeRestore = React.useCallback(async (assertCurrent: () => void) => {
+    assertCurrent();
     if (!hasUnsavedVersion) return;
     if (!beforeVersionSave) {
       throw new Error('Unable to preserve unsaved changes before restore');
     }
 
     await beforeVersionSave();
+    assertCurrent();
 
     if (saveMode === 'local') {
       if (!fileId) throw new Error('Missing fileId for local pre-restore save');
-      await apiClient.post(`/starbase-api/files/${fileId}/versions`, {
+      const saved = await apiClient.post<{ id?: string }>(`/starbase-api/files/${encodeURIComponent(fileId)}/versions`, {
         message: AUTO_SAVE_BEFORE_RESTORE_MESSAGE,
       });
+      assertCurrent();
+      if (typeof saved?.id !== 'string' || !saved.id.trim()) throw new Error('Saved version was not verified; restore stopped');
       queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
       queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
     } else {
@@ -468,7 +484,9 @@ export default function GitVersionsPanel({
       if (fileId) {
         body.fileIds = [fileId];
       }
-      await apiClient.post(`/vcs-api/projects/${projectId}/commit`, body);
+      const saved = await apiClient.post<{ commitId?: string }>(`/vcs-api/projects/${encodeURIComponent(projectId)}/commit`, body);
+      assertCurrent();
+      if (typeof saved?.commitId !== 'string' || !saved.commitId.trim()) throw new Error('Saved version was not verified; restore stopped');
       queryClient.setQueryData(
         ['uncommitted-files', projectId, 'draft'],
         (prev: any) => {
@@ -486,6 +504,7 @@ export default function GitVersionsPanel({
       queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] });
     }
 
+    assertCurrent();
     onVersionSaveSuccess?.();
   }, [beforeVersionSave, fileId, hasUnsavedVersion, onVersionSaveSuccess, projectId, queryClient, saveMode, vcsCommitCreateUnavailableReason]);
 
@@ -496,20 +515,38 @@ export default function GitVersionsPanel({
     ? baseRestoreUnavailableReason
     : baseRestoreUnavailableReason || vcsCommitRestoreUnavailableReason;
 
+  const restoreAuthority = JSON.stringify([projectId, fileId, saveMode, restoreUnavailableReason,
+    vcsCommitCreateUnavailableReason, user?.session?.principal.id || user?.id || null,
+    user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)]);
+  const restoreScope = JSON.stringify([restoreAuthority, previewOpen, selectedCommit?.id]);
+  const restoreScopeRef = React.useRef(restoreScope);
+  const restoreLifetimeRef = React.useRef(0);
+  const submittedRestoreRef = React.useRef<number | null>(null);
+  if (restoreScopeRef.current !== restoreScope) {
+    restoreScopeRef.current = restoreScope;
+    restoreLifetimeRef.current += 1;
+  }
+  React.useEffect(() => () => { restoreLifetimeRef.current += 1; }, []);
+  React.useEffect(() => { setPreviewOpen(false); setSelectedCommit(null); }, [restoreAuthority]);
+
   const restoreMutation = useMutation({
-    mutationFn: async (commitId: string) => {
+    mutationFn: async (intent: RestoreIntent) => {
+      intent.assertCurrent();
       if (restoreUnavailableReason) {
         throw new Error(restoreUnavailableReason);
       }
 
-      await autoSaveBeforeRestore();
-      if (saveMode === 'local') {
-        if (!fileId) throw new Error('Missing fileId for local restore');
-        return apiClient.post(`/starbase-api/files/${fileId}/versions/${commitId}/restore`);
+      if (!fileId) throw new Error('Missing fileId for file restore');
+      await autoSaveBeforeRestore(intent.assertCurrent);
+      intent.assertCurrent();
+      if (intent.saveMode === 'local') {
+        return apiClient.post(`/starbase-api/files/${encodeURIComponent(intent.fileId)}/versions/${encodeURIComponent(intent.commitId)}/restore`);
       }
-      return apiClient.post(`/vcs-api/projects/${projectId}/commits/${commitId}/restore`);
+      return apiClient.post(`/vcs-api/projects/${encodeURIComponent(intent.projectId)}/commits/${encodeURIComponent(intent.commitId)}/files/${encodeURIComponent(intent.fileId)}/restore`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, intent) => {
+      if (!intent.isCurrent()) return;
+      const { fileId, projectId, saveMode } = intent;
       if (saveMode === 'local') {
         if (fileId) {
           queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
@@ -578,10 +615,14 @@ export default function GitVersionsPanel({
   };
 
   const handleRestore = () => {
-    if (restoreUnavailableReason) return;
-    if (selectedCommit) {
-      restoreMutation.mutate(selectedCommit.id);
-    }
+    if (restoreUnavailableReason || !fileId || !selectedCommit || restoreMutation.isPending) return;
+    const lifetime = restoreLifetimeRef.current;
+    const session = getBrowserSessionRevision();
+    const isCurrent = () => lifetime === restoreLifetimeRef.current && session === getBrowserSessionRevision();
+    submittedRestoreRef.current = lifetime;
+    restoreMutation.mutate({ projectId, fileId, commitId: selectedCommit.id, saveMode, isCurrent,
+      assertCurrent: () => { if (!isCurrent()) throw new Error('Restore context changed; review the selected version again'); },
+    });
   };
 
   const deploymentsForFile = React.useMemo(() => {
@@ -1107,7 +1148,7 @@ export default function GitVersionsPanel({
             />
           )}
 
-          {restoreMutation.isError && (
+          {restoreMutation.isError && submittedRestoreRef.current === restoreLifetimeRef.current && (
             <InlineNotification
               kind="error"
               title="Restore failed"

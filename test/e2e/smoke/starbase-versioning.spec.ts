@@ -90,6 +90,7 @@ type VersioningStubState = {
   createdFileBodies: Array<Record<string, unknown>>;
   localSaveBodies: Array<Record<string, unknown>>;
   gitCommitBodies: Array<Record<string, unknown>>;
+  gitRestoreFileIds: string[];
   getLocalRestoreVersionIds: () => string[];
   getGitRestoreCommitIds: () => string[];
   getLocalVersionMessages: (fileId: string) => string[];
@@ -121,6 +122,7 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
   const gitCommitBodies: Array<Record<string, unknown>> = [];
   const localRestoreVersionIds: string[] = [];
   const gitRestoreCommitIds: string[] = [];
+  const gitRestoreFileIds: string[] = [];
   let offlineUncommittedCalls = 0;
   let localVersionsReadCalls = 0;
   let gitCommitsReadCalls = 0;
@@ -612,6 +614,8 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
     await fulfillJson(route, {
       files: xml ? [{
         id: primaryFileId,
+        mainFileId: primaryFileId,
+        folderId: null,
         name: primaryFileName,
         type: 'bpmn',
         content: xml,
@@ -620,10 +624,13 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
     });
   });
 
-  await page.route(`**/vcs-api/projects/${projectId}/commits/*/restore`, async (route) => {
+  await page.route(`**/vcs-api/projects/${projectId}/commits/*/files/*/restore`, async (route) => {
     const requestUrl = new URL(route.request().url());
     const parts = requestUrl.pathname.split('/');
-    const commitId = parts[parts.length - 1] === 'restore' ? parts[parts.length - 2] || '' : '';
+    const commitId = parts[parts.length - 4] || '';
+    const restoredFileId = parts[parts.length - 2] || '';
+    gitRestoreFileIds.push(restoredFileId);
+    expect(restoredFileId).toBe(primaryFileId);
     gitRestoreCommitIds.push(commitId);
     const xml = gitCommitXmlById.get(commitId);
     const file = fileById.get(primaryFileId);
@@ -641,7 +648,7 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
       message: `Restored from checkpoint ${commitId.substring(0, 8)}`,
       hash: `hash-restore-${gitRestoreCommitIds.length}`,
       createdAt: 1700000004000 + gitRestoreCommitIds.length,
-      source: 'restore',
+      source: 'file-save',
       isRemote: false,
       fileVersionNumber: nextVersionNumber,
     }, xml || BPMN_XML);
@@ -659,6 +666,7 @@ async function stubEditorVersioning(page: Page, mode: 'offline' | 'git'): Promis
     gitCommitBodies,
     getLocalRestoreVersionIds: () => [...localRestoreVersionIds],
     getGitRestoreCommitIds: () => [...gitRestoreCommitIds],
+    gitRestoreFileIds,
     getLocalVersionMessages: (requestedFileId: string) => (localVersionsByFileId.get(requestedFileId) || []).map((entry) => entry.message),
     getGitCommitMessages: (requestedFileId: string) => (gitCommitsByFileId.get(requestedFileId) || []).map((entry) => entry.message),
     getOfflineUncommittedCalls: () => offlineUncommittedCalls,
@@ -956,6 +964,7 @@ test.describe('Smoke: Starbase versioning split', () => {
 
     await expect.poll(() => state.gitCommitBodies).toEqual([{ message: 'Auto-saved before restore', fileIds: [primaryFileId] }]);
     await expect.poll(() => state.getGitRestoreCommitIds()).toEqual(['commit-legacy']);
+    expect(state.gitRestoreFileIds).toEqual([primaryFileId]);
     await expect.poll(() => state.getGitCommitMessages(primaryFileId)).toContain('Auto-saved before restore');
     await expect.poll(() => state.getGitCommitMessages(primaryFileId).some((message) => /Restored from checkpoint commit-l/i.test(message))).toBe(true);
 

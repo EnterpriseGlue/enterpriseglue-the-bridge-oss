@@ -31,7 +31,9 @@
     "Session startup makes one refresh attempt for an expired session and stops on other failures; a pending login-page bootstrap cannot continue after switching tenants.",
     "Runtime configuration rejects redirects so a same-origin configuration URL cannot delegate API or module settings to another origin.",
     "Saved diagram views load the canonical project-bound revision endpoint and select the requested file by stable identity; missing revisions no longer display a sibling file or the editable draft.",
-    "Local file versions and Git commit snapshots use separate caches, preventing an equal ID from supplying the wrong preview or restore readiness."
+    "Local file versions and Git commit snapshots use separate caches, preventing an equal ID from supplying the wrong preview or restore readiness.",
+    "Restoring a file version changes only the selected file; sibling drafts and file-version history remain independent.",
+    "Pending restore stops when its file, version, session or permissions change, and an unverified preceding save cannot permit restore."
   ],
   "upgrade": {
     "required": true,
@@ -48,7 +50,8 @@
       "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link.",
       "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards.",
       "Security enforcement: status-changing profile PUT returns 409; compatibility DELETE requires the lifecycle reason body and uses audited deactivation; direct SCIM/LDAP profile overrides are rejected.",
-      "The existing commit-files endpoint returns a shared strict snapshot DTO and binds commit reads to the authorized project. Both saved-diagram views use that endpoint; stable file identity takes priority over names."
+      "The existing commit-files endpoint returns a shared strict snapshot DTO and binds commit reads to the authorized project. Both saved-diagram views use that endpoint; stable file identity takes priority over names.",
+      "File restore uses POST /vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore with the existing restore permission. Older hosts reject that route without whole-project effects; the client has no legacy fallback. Checkpoints keep the existing file-save marker and explicit file-version scope. The original project restore endpoint remains supported. Ambiguous stored snapshots reach validation without timestamp-based selection."
     ]
   },
   "database": {
@@ -72,7 +75,8 @@
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
     "docs/development/user-directory-contract.md",
-    "docs/reference/configuration.md"
+    "docs/reference/configuration.md",
+    "docs/examples/vcs-file-restore.json"
   ],
   "customerDocumentation": {
     "impact": "none",
@@ -101,7 +105,8 @@
     "Session bootstrap through the actual auth provider, service, API client and HTTP interceptor: one refresh owner, no refresh on non-401 failures, and tenant-switch refusal before the next request.",
     "Owned native HTTP configuration origins prove redirect refusal, required startup failure, optional fallback and explicit cross-origin API selection without following a redirect.",
     "Canonical snapshot adapter and viewer regressions, project-authorized route/restore tests and actual PostgreSQL sibling-project snapshot denial.",
-    "Production-built BPMN/DMN viewer and missing-snapshot browser assertions against owned local HTTP responses; the viewer selects the bundled modern WOFF icon face."
+    "Production-built BPMN/DMN viewer and missing-snapshot browser assertions against owned local HTTP responses; the viewer selects the bundled modern WOFF icon face.",
+    "Actual PostgreSQL route, restore, VCS checkpoint and history/backfill integration with sibling-file/project denials; deferred autosave/restore browser component lifetime cases."
   ],
   "packages": [
     {

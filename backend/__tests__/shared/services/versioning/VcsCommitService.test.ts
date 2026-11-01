@@ -46,9 +46,9 @@ describe('VcsCommitService', () => {
     expect(mainFileRepo.findOne).not.toHaveBeenCalled();
   });
 
-  it('does not leak file-save commits to unrelated files via snapshot fallback', async () => {
+  it.each(['file-save'])('does not leak %s commits to unrelated files via snapshot fallback', async source => {
     const commitRepo = {
-      findOne: vi.fn().mockResolvedValue({ source: 'file-save' }),
+      findOne: vi.fn().mockResolvedValue({ source }),
     };
     const versionRepo = {
       findOne: vi.fn().mockResolvedValue(null),

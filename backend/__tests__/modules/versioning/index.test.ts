@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
@@ -121,6 +123,50 @@ describe('versioning routes', () => {
     expect(update).toHaveBeenCalledWith({ id: fileId, projectId }, expect.objectContaining({ xml: snapshot.content }));
     if (affected === 1) expect(response.status).toBe(200);
     else { expect(response.status).toBeGreaterThanOrEqual(400); expect(vcsService.commit).not.toHaveBeenCalled(); }
+  });
+
+  it('validates the documented file-scoped request and keeps no-body project restore compatible', () => {
+    const example = JSON.parse(readFileSync(new URL('../../../../docs/examples/vcs-file-restore.json', import.meta.url), 'utf8'));
+    expect(CommitFileRestoreParamsSchema.parse(example.params)).toEqual(example.params);
+    expect(CommitFileRestoreBodySchema.parse(example.body)).toEqual({});
+    expect(CommitFileRestoreBodySchema.parse(undefined)).toEqual({});
+  });
+
+  it.each([{ fileId: 'not-a-uuid' }, { fileId, fileIds: [fileId] }, { command: 'restore' }])('rejects malformed or widened restore scope before reading snapshots (%j)', async body => {
+    expect((await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/${fileId}/restore`).send(body)).status).toBe(400);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('retains the existing restore permission on the distinct file restore route', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (permissionService.hasPermission as Mock).mockResolvedValue(false);
+    expect((await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/${fileId}/restore`)).status).toBe(403);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed file identity before querying snapshots', async () => {
+    expect((await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/not-a-uuid/restore`)).status).toBe(400);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('restores and checkpoints only the file selected by the version panel', async () => {
+    const siblingId = '33333333-3333-4333-8333-333333333333';
+    const ownFile = { id: fileId, projectId, name: 'Invoice renamed', type: 'bpmn', folderId: null, xml: '<draft/>' };
+    const sibling = { ...ownFile, id: siblingId, name: 'Sibling', xml: '<sibling-draft/>' };
+    const update = vi.fn().mockResolvedValue({ affected: 1 });
+    const find = vi.fn().mockImplementation(({ where }) => Promise.resolve(where.id ? [ownFile] : [ownFile, sibling]));
+    (getDataSource as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Project ? projectRepository() : { update, find, findOne: vi.fn().mockResolvedValue(ownFile) } });
+    (vcsService.getCommitSnapshots as Mock).mockResolvedValue([snapshot, { ...snapshot, id: 'sibling-snapshot', mainFileId: siblingId, name: 'Sibling', content: '<sibling-saved/>' }]);
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'branch-1' });
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'restored' });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/${fileId}/restore`);
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({ id: fileId, projectId }, expect.objectContaining({ xml: snapshot.content }));
+    expect(find).toHaveBeenCalledWith({ where: { projectId, id: fileId } });
+    expect(vcsService.saveFile).toHaveBeenCalledTimes(1);
+    expect(vcsService.commit).toHaveBeenCalledWith('branch-1', 'user-1', expect.any(String), { source: 'file-save', fileIds: [fileId] });
+    expect(response.body.filesRestored).toBe(1);
   });
 
   it('scopes file-save commits to the selected file ids for offline-like save flow', async () => {

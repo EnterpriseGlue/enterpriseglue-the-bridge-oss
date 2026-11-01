@@ -9,6 +9,7 @@ import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { File as MainFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { FILE_SCOPED_COMMIT_SOURCES, isFileScopedCommitSource } from '../../utils/commit-snapshot.js';
 import { Brackets, In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -221,11 +222,9 @@ export class VcsCommitService {
     if (!projectId) throw new Error('A project is required to read commit snapshots');
     const dataSource = await getDataSource();
     const snapshotRepo = dataSource.getRepository(FileSnapshot);
-    const fileRepo = dataSource.getRepository(WorkingFile);
     
     const snapshots = await snapshotRepo.createQueryBuilder('fs')
       .innerJoin(Commit, 'vc', 'fs.commitId = vc.id')
-      .leftJoin(WorkingFile, 'wf', 'fs.workingFileId = wf.id')
       .where('fs.commitId = :commitId', { commitId })
       .andWhere('vc.projectId = :projectId', { projectId })
       .select([
@@ -235,49 +234,13 @@ export class VcsCommitService {
         'fs.type AS type',
         'fs.content AS content',
         'fs.changeType AS "changeType"',
-        'fs.folderId AS "folderId"',
-        'wf.updatedAt AS "workingUpdatedAt"'
+        'fs.folderId AS "folderId"'
       ])
       .getRawMany();
 
-    const bestByKey = new Map<string, (typeof snapshots)[number]>();
-
-    const score = (s: (typeof snapshots)[number]) => {
-      let v = 0;
-      if (s.content) v += 10;
-      if (s.changeType !== 'unchanged') v += 5;
-      if (s.changeType === 'deleted') v -= 20;
-      return v;
-    };
-
-    for (const s of snapshots) {
-      const key = s.mainFileId
-        ? `main:${String(s.mainFileId)}`
-        : buildSnapshotKey(s.folderId ?? null, s.name, s.type);
-      const current = bestByKey.get(key);
-      if (!current) {
-        bestByKey.set(key, s);
-        continue;
-      }
-
-      const sScore = score(s);
-      const currentScore = score(current);
-
-      if (sScore > currentScore) {
-        bestByKey.set(key, s);
-        continue;
-      }
-
-      if (sScore === currentScore) {
-        const sUpdatedAt = s.workingUpdatedAt ?? 0;
-        const currentUpdatedAt = current.workingUpdatedAt ?? 0;
-        if (sUpdatedAt > currentUpdatedAt) {
-          bestByKey.set(key, s);
-        }
-      }
-    }
-
-    return [...bestByKey.values()].map(s => ({
+    // Preserve duplicate identities so readers and restores can reject ambiguity.
+    // Current working-file timestamps must not choose a historical snapshot.
+    return snapshots.map(s => ({
       id: s.id,
       mainFileId: s.mainFileId ? String(s.mainFileId) : null,
       folderId: s.folderId ?? null,
@@ -310,7 +273,7 @@ export class VcsCommitService {
       where: { id: commitId },
       select: ['source']
     });
-    if (commitRow?.source === 'file-save') {
+    if (isFileScopedCommitSource(commitRow?.source)) {
       logger.debug('commitHasFile skipped snapshot fallback for file-scoped save', { commitId, fileId });
       return false;
     }
@@ -393,7 +356,7 @@ export class VcsCommitService {
     const qb = commitRepo.createQueryBuilder('c')
       .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
       .where('c.projectId = :projectId', { projectId })
-      .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
+      .andWhere('(c.source IS NULL OR c.source NOT IN (:...fileScopedSources))', { fileScopedSources: [...FILE_SCOPED_COMMIT_SOURCES] })
       .andWhere(new Brackets((where) => {
         where.where('fs.mainFileId = :fileId', { fileId });
         where.orWhere(new Brackets((legacy) => {

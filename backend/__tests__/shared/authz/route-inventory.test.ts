@@ -988,7 +988,10 @@ describe('authorization route inventory validation', () => {
         risk: 'high',
         category: 'Project Versions',
         surfaceId: 'project.vcs.commit.restore',
-        routes: [['POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore', 'project.byId']],
+        routes: [
+          ['POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore', 'project.byId'],
+          ['POST', '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore', 'project.byId'],
+        ],
       },
     ];
 

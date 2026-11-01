@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GitVersionsPanel, { canViewDeploymentHistoryForEngine } from '@src/features/git/components/GitVersionsPanel';
-import { apiClient } from '@src/shared/api/client';
+import { apiClient, ApiError } from '@src/shared/api/client';
+import { advanceBrowserSessionRevision } from '@src/utils/browserSession';
 import { EnginePermission } from '@src/shared/auth/permissions';
 
 const authMocks = vi.hoisted(() => ({
@@ -59,9 +60,10 @@ vi.mock('@src/features/starbase/components/DMNDrdMini', () => ({
 }));
 
 vi.mock('@carbon/react', () => ({
-  Modal: ({ open, children, primaryButtonText, primaryButtonDisabled, onRequestSubmit }: any) => (open ? (
+  Modal: ({ open, children, primaryButtonText, primaryButtonDisabled, onRequestSubmit, onRequestClose }: any) => (open ? (
     <div>
       {children}
+      <button type="button" onClick={onRequestClose}>Close version</button>
       {primaryButtonText ? (
         <button type="button" disabled={Boolean(primaryButtonDisabled)} onClick={onRequestSubmit}>
           {primaryButtonText}
@@ -93,7 +95,8 @@ vi.mock('@carbon/react', () => ({
   Dropdown: () => <div />,
 }));
 
-vi.mock('@src/shared/api/client', () => ({
+vi.mock('@src/shared/api/client', async importOriginal => ({
+  ...await importOriginal<typeof import('@src/shared/api/client')>(),
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
@@ -510,6 +513,111 @@ describe('GitVersionsPanel', () => {
     expect(screen.getByRole('button', { name: 'Restore this version' })).toBeDisabled();
     await act(async () => { finish({ id: 'same-id', fileId: 'file-1', xml: 'CORRECT_LOCAL_CONTENT' }); });
     expect(await screen.findByText('CORRECT_LOCAL_CONTENT')).toBeVisible();
+  });
+
+  function restoreFixture(beforeVersionSave: () => Promise<void>, onVersionSaveSuccess = vi.fn(), saveMode: 'git' | 'local' = 'git') {
+    const originalGet = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(url => saveMode === 'local' && url === '/starbase-api/files/file-1/versions'
+      ? Promise.resolve([{ id: 'current', message: 'Current', createdAt: 2000 }, { id: 'manual-legacy', message: 'Legacy version', createdAt: 1000 }])
+      : saveMode === 'local' && url === '/starbase-api/files/file-1/versions/manual-legacy'
+        ? Promise.resolve({ id: 'manual-legacy', fileId: 'file-1', xml: '<saved/>' })
+      : url === '/vcs-api/projects/project-1/commits/manual-legacy/files'
+      ? Promise.resolve({ files: [{ id: 'snapshot', mainFileId: 'file-1', folderId: null, name: 'Invoice', type: 'bpmn', content: '<saved/>', changeType: 'modified' }] })
+      : originalGet(url));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const panel = (projectId = 'project-1', fileId = 'file-1') => <QueryClientProvider client={client}><GitVersionsPanel projectId={projectId} fileId={fileId} fileName="Invoice" fileType="bpmn" saveMode={saveMode} hasUnsavedVersion beforeVersionSave={beforeVersionSave} onVersionSaveSuccess={onVersionSaveSuccess} /></QueryClientProvider>;
+    const view = render(panel());
+    return { ...view, client, panel, onVersionSaveSuccess };
+  }
+
+  async function startRestore() {
+    await userEvent.click(await screen.findByText(/Legacy version/));
+    const button = await screen.findByRole('button', { name: 'Restore this version' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+  }
+
+  it('sends the selected file ID only after the preceding save receipt is verified', async () => {
+    let finish!: () => void;
+    const beforeSave = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/commit') ? Promise.resolve({ commitId: 'checkpoint' }) : new Promise(() => {}));
+    restoreFixture(beforeSave);
+    await startRestore();
+    expect(apiClient.post).not.toHaveBeenCalled();
+    await act(async () => { finish(); });
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/vcs-api/projects/project-1/commits/manual-legacy/files/file-1/restore'));
+    expect(vi.mocked(apiClient.post).mock.calls[0]).toEqual(['/vcs-api/projects/project-1/commit', { message: 'Auto-saved before restore', fileIds: ['file-1'] }]);
+  });
+
+  it('keeps local autosave and restore bound to the same file and verified local version receipt', async () => {
+    vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/versions') ? Promise.resolve({ id: 'verified-local-checkpoint' }) : new Promise(() => {}));
+    restoreFixture(vi.fn().mockResolvedValue(undefined), vi.fn(), 'local');
+    await startRestore();
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/starbase-api/files/file-1/versions/manual-legacy/restore'));
+    expect(vi.mocked(apiClient.post).mock.calls[0]).toEqual(['/starbase-api/files/file-1/versions', { message: 'Auto-saved before restore' }]);
+  });
+
+  it.each(['project', 'file', 'session', 'permission', 'close', 'unmount'])('stops restore after pending autosave when the %s context changes', async change => {
+    let finish!: () => void;
+    const beforeSave = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const fixture = restoreFixture(beforeSave);
+    await startRestore();
+    await waitFor(() => expect(beforeSave).toHaveBeenCalledTimes(1));
+    if (change === 'project') { fixture.rerender(fixture.panel('project-2')); fixture.rerender(fixture.panel()); }
+    if (change === 'file') fixture.rerender(fixture.panel('project-1', 'file-2'));
+    if (change === 'session') advanceBrowserSessionRevision();
+    if (change === 'permission') { setAuthPermissions({ projects: [] }); fixture.rerender(fixture.panel()); }
+    if (change === 'close') await userEvent.click(screen.getByRole('button', { name: 'Close version' }));
+    if (change === 'unmount') fixture.unmount();
+    await act(async () => { finish(); });
+    expect(apiClient.post).not.toHaveBeenCalled();
+    expect(fixture.onVersionSaveSuccess).not.toHaveBeenCalled();
+  });
+
+  it('stops between checkpoint and restore when the session changes during checkpoint persistence', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const fixture = restoreFixture(vi.fn().mockResolvedValue(undefined));
+    await startRestore();
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+    advanceBrowserSessionRevision();
+    await act(async () => { finish({ commitId: 'retained-checkpoint' }); });
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    expect(fixture.onVersionSaveSuccess).not.toHaveBeenCalled();
+  });
+
+  it.each(['git', 'local'] as const)('does not restore after an unverified %s autosave acknowledgement', async saveMode => {
+    restoreFixture(vi.fn().mockResolvedValue(undefined), vi.fn(), saveMode);
+    await startRestore();
+    expect(await screen.findByText(/Saved version was not verified; restore stopped/)).toBeVisible();
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fall back to whole-project restore when an older host rejects file restore', async () => {
+    vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/commit')
+      ? Promise.resolve({ commitId: 'retained-checkpoint' })
+      : Promise.reject(new ApiError(404, 'Not Found', 'File restore is unavailable on this host')));
+    restoreFixture(vi.fn().mockResolvedValue(undefined));
+    await startRestore();
+    expect(await screen.findByText(/File restore is unavailable on this host/)).toBeVisible();
+    expect(vi.mocked(apiClient.post).mock.calls).toEqual([
+      ['/vcs-api/projects/project-1/commit', { message: 'Auto-saved before restore', fileIds: ['file-1'] }],
+      ['/vcs-api/projects/project-1/commits/manual-legacy/files/file-1/restore'],
+    ]);
+  });
+
+  it('does not apply completion callbacks or clear drafts after the submitted view is replaced', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/commit') ? Promise.resolve({ commitId: 'checkpoint' }) : new Promise(resolve => { finish = resolve; }));
+    const fixture = restoreFixture(vi.fn().mockResolvedValue(undefined));
+    sessionStorage.setItem('starbase:lastEditedAt:file-1', 'retained');
+    await startRestore();
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    const invalidations = vi.spyOn(fixture.client, 'invalidateQueries'); invalidations.mockClear();
+    fixture.rerender(fixture.panel('project-2'));
+    await act(async () => { finish({ success: true, filesRestored: 1, newCommitId: 'restored' }); });
+    expect(invalidations).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('starbase:lastEditedAt:file-1')).toBe('retained');
   });
 
   it('requires a scoped deployment history permission or action', () => {

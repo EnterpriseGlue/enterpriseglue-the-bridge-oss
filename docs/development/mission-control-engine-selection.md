@@ -180,3 +180,31 @@ The PostgreSQL deployment-revision lane also checks snapshot reads with actual
 TypeORM queries: own-project reads succeed and sibling-project commit IDs return
 no snapshots. Local component, transport and database tests remain distinct from
 the authenticated editor journey and live tenant-isolation acceptance.
+
+## File-scoped checkpoint restore
+
+The file version panel uses
+`POST /vcs-api/projects/:projectId/commits/:commitId/files/:fileId/restore`.
+An older host has no such route and returns 404 without running whole-project
+restore. The client does not fall back to the project restore endpoint. The strict request contract is illustrated in
+[`vcs-file-restore.json`](../examples/vcs-file-restore.json). Snapshot selection
+uses the same shared stable-ID/unique-legacy matcher as preview. Reads retain
+duplicate identities so ambiguity reaches the matcher instead of being resolved
+by current working-file timestamps. Missing, deleted, empty, wrong-format and
+ambiguous selected snapshots stop before a file update.
+
+The update and working-file synchronization are restricted to the selected file
+and authorized project. The checkpoint keeps the existing `source=file-save` marker with an
+explicit file-version scope, which older hosts already recognize. Its message
+identifies the restore. Its branch snapshot still represents the branch;
+file history and legacy history backfill exclude incidental sibling snapshots.
+The original `/commits/:commitId/restore` endpoint retains whole-project scope.
+These operations do not form an atomic multi-step transaction. A failed or lost
+response may require reconciliation; it is not permission to retry automatically.
+
+Browser restore captures project, file, revision, save mode and session/permission
+lifetime. It verifies the preceding save acknowledgement, then rechecks that
+lifetime before restore and completion handling. Switching away and back, closing
+the preview, unmounting or replacing authority stops a pending continuation.
+Already-issued writes may take effect; a late response cannot clear the new
+view's draft state or reload it.

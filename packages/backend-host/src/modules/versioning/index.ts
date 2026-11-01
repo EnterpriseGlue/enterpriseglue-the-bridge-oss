@@ -11,7 +11,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, Errors, AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { projectIdParamSchema, commitBodySchema } from '@enterpriseglue/shared/schemas/common.js';
@@ -23,7 +23,8 @@ import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persist
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { In, IsNull, Brackets } from 'typeorm';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
-import { CommitFileSnapshotsResponseSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
+import { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
+import { selectCommitFileSnapshot, FILE_SCOPED_COMMIT_SOURCES, isFileScopedCommitSource } from '@enterpriseglue/shared/utils/commit-snapshot.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 // Type for branch row
@@ -333,7 +334,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
           if (versionMap.has(commitId)) {
             return true;
           }
-          if (String(c.source ?? 'manual') === 'file-save') {
+          if (isFileScopedCommitSource(c.source)) {
             return false;
           }
           return affectedCommitIds.has(commitId);
@@ -350,7 +351,7 @@ router.get('/vcs-api/projects/:projectId/commits', apiLimiter, requireAuth, requ
                 .select(['c.id', 'c.createdAt', 'c.message'])
                 .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
                 .where('c.projectId = :projectId', { projectId })
-                .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
+                .andWhere('(c.source IS NULL OR c.source NOT IN (:...fileScopedSources))', { fileScopedSources: [...FILE_SCOPED_COMMIT_SOURCES] })
                 .andWhere(new Brackets((where) => {
                   where.where('fs.mainFileId = :fileId', { fileId });
                   where.orWhere(new Brackets((legacy) => {
@@ -583,7 +584,7 @@ router.get('/vcs-api/projects/:projectId/commits/:commitId/files', apiLimiter, r
  * Restore files from a specific commit
  * POST /vcs-api/projects/:projectId/commits/:commitId/restore
  */
-router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter, requireAuth, requireAction('project.vcs.commit.restore', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+const restoreFromCommit = asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const commitId = String(req.params.commitId);
   const userId = req.user!.userId;
@@ -597,10 +598,29 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
     const fileRepo = dataSource.getRepository(File);
     
     // Get file snapshots from the commit
-    const snapshots = await vcsService.getCommitSnapshots(commitId, projectId);
+    const requestedFileId = req.params.fileId ? String(req.params.fileId) : undefined;
+    let snapshots = await vcsService.getCommitSnapshots(commitId, projectId);
+    if (requestedFileId) {
+      const target = await fileRepo.findOne({
+        where: { id: requestedFileId, projectId },
+        select: ['id', 'name', 'type', 'folderId'],
+      });
+      if (!target) throw Errors.fileNotFound();
+      const selected = selectCommitFileSnapshot(snapshots, target);
+      if (!selected) throw Errors.conflict('This checkpoint does not contain an unambiguous saved version of the selected file');
+      // Legacy snapshots may have no mainFileId; bind the resolved match to the
+      // requested file instead of performing another name-based lookup.
+      snapshots = [{ ...selected, mainFileId: requestedFileId }];
+    }
     
     if (snapshots.length === 0) {
       throw Errors.fileNotFound();
+    }
+
+    const snapshotIdentities = snapshots.map(snapshot => snapshot.mainFileId
+      ? `id:${snapshot.mainFileId}` : JSON.stringify([snapshot.folderId || null, snapshot.name, snapshot.type]));
+    if (new Set(snapshotIdentities).size !== snapshotIdentities.length) {
+      throw Errors.conflict('This checkpoint contains ambiguous file snapshots');
     }
 
     // Update each file in the main files table with the snapshot content
@@ -634,7 +654,7 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
     
     // Get current files to commit
     const currentFiles = await fileRepo.find({
-      where: { projectId }
+      where: { projectId, ...(requestedFileId ? { id: requestedFileId } : {}) }
     });
 
     for (const file of currentFiles) {
@@ -654,7 +674,7 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
       branch.id,
       userId,
       `Restored from checkpoint ${commitId.substring(0, 8)}`,
-      { source: 'restore' }
+      { source: requestedFileId ? 'file-save' : 'restore', ...(requestedFileId ? { fileIds: [requestedFileId] } : {}) }
     );
 
     logger.info('Files restored from commit', { projectId, commitId, userId, filesRestored: snapshots.length });
@@ -665,9 +685,16 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
       newCommitId: restoreCommit.id
     });
   } catch (error) {
+    if (error instanceof AppError) throw error;
     logger.error('Failed to restore from commit', { projectId, commitId, userId, error });
     throw Errors.internal('Failed to restore files');
   }
-}));
+});
+
+router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter, requireAuth,
+  requireAction('project.vcs.commit.restore', { resourceIdFrom: 'params' }), restoreFromCommit);
+router.post('/vcs-api/projects/:projectId/commits/:commitId/files/:fileId/restore', apiLimiter, requireAuth,
+  validateParams(CommitFileRestoreParamsSchema), validateBody(CommitFileRestoreBodySchema),
+  requireAction('project.vcs.commit.restore', { resourceIdFrom: 'params' }), restoreFromCommit);
 
 export default router;

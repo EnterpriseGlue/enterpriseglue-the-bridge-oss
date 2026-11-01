@@ -674,7 +674,10 @@ export const PROJECT_AUTHZ_ACTIONS = [
       category: 'Project Versions',
       description: 'Restore project files from a VCS checkpoint and create a restore checkpoint.',
       ui: [{ surfaceId: 'project.vcs.commit.restore', behavior: 'disable' }],
-      routes: [{ method: 'POST', route: '/vcs-api/projects/{projectId}/commits/{commitId}/restore', resourceResolver: 'project.byId' }],
+      routes: [
+        { method: 'POST', route: '/vcs-api/projects/{projectId}/commits/{commitId}/restore', resourceResolver: 'project.byId' },
+        { method: 'POST', route: '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore', resourceResolver: 'project.byId' },
+      ],
     },
   {
       actionId: 'project.import.preview',
