@@ -38,6 +38,8 @@ import { ProjectAccessError, isProjectAccessError } from '../components/ProjectA
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { useToast } from '../../../shared/notifications/ToastProvider'
+import { useDeployedSnapshotRestore } from '../hooks/useDeployedSnapshotRestore'
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
@@ -46,10 +48,6 @@ import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redir
 import { LoadingState } from '../../shared/components/LoadingState'
 import type { LockHolder, LockResponse } from '../../git/types/git'
 import type { LatestProjectDeploymentArtifact as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js'
-import type {
-  RestoreFileFromCommitRequest,
-  RestoreFileFromCommitResponse,
-} from '@enterpriseglue/shared/schemas/starbase/file.js'
 
 type FolderBreadcrumb = {
   id: string
@@ -118,7 +116,7 @@ export default function Editor() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as { state?: any; search: string }
   const { notify } = useToast()
-  const { user, hasProjectPermission, isLoading: authIsLoading, permissions } = useAuth()
+  const { user, hasProjectPermission, isLoading: authIsLoading, permissions, sessionRevision } = useAuth()
   const queryClient = useQueryClient()
   const currentUserId = String(user?.id || '')
   const phase2Params = React.useMemo(() => new URLSearchParams(location.search || ''), [location.search])
@@ -2226,40 +2224,28 @@ export default function Editor() {
     setLastEditedAt(null)
   }, [])
 
-  const restoreFromDeploymentMutation = useMutation({
-    mutationFn: async () => {
-      if (hotfixRestoreUnavailableReason) {
-        throw new Error(hotfixRestoreUnavailableReason)
-      }
-      ensureCollaborationWriteAllowed()
-      if (!fileId) throw new Error('Missing fileId')
-
-      const payload: RestoreFileFromCommitRequest = {}
-      if (phase2CommitId) payload.commitId = phase2CommitId
-      if (typeof phase2FileVersion === 'number') payload.fileVersionNumber = phase2FileVersion
-
-      return apiClient.post<RestoreFileFromCommitResponse>(
-        `/starbase-api/files/${encodeURIComponent(sanitizePathParam(String(fileId)))}/restore-from-commit`,
-        payload,
-      )
+  const restoreFromDeploymentMutation = useDeployedSnapshotRestore({
+    fileId,
+    request: { ...(phase2CommitId ? { commitId: phase2CommitId } : {}),
+      ...(typeof phase2FileVersion === 'number' ? { fileVersionNumber: phase2FileVersion } : {}) },
+    authority: JSON.stringify([user?.session?.principal.id || user?.id, user?.session?.tenant.id, sessionRevision,
+      permissionSnapshotAuthorityKey(permissions), collaborationReadOnly, hotfixRestoreUnavailableReason, safeEditorTenantPath, editorMode, phase2Dismissed, location.search]),
+    allowed: phase2CanRestore && !hotfixRestoreUnavailableReason && !collaborationReadOnly,
+    assertWritable: ensureCollaborationWriteAllowed,
+    onVerified: () => {
+      if (!fileId) return;
+      try { localStorage.removeItem(`xml-history-${fileId}`) } catch {}
+      try { sessionStorage.setItem(`hotfix-context-${fileId}`, JSON.stringify({ fromCommitId: phase2CommitId, fromFileVersion: phase2FileVersion })) } catch {}
+      setLocalDirty(false);
+      notify({ kind: 'success', title: 'Hotfix mode started',
+        subtitle: 'Your draft now contains the deployed version. Edit and save a new version when ready.' });
+      replaceAndReloadToInternalPath(safeEditorTenantPath, toTenantPath('/starbase'));
     },
-    onSuccess: () => {
-      if (fileId) {
-        localStorage.removeItem(`xml-history-${fileId}`)
-      }
-      const isHotfix = fileId && sessionStorage.getItem(`hotfix-context-${fileId}`)
-      notify({
-        kind: 'success',
-        title: isHotfix ? 'Hotfix mode started' : 'Deployed snapshot restored',
-        subtitle: isHotfix ? 'Your draft now contains the deployed version. Edit and save a new version when ready.' : 'Now editing the deployed baseline in your draft.',
-      })
-      replaceAndReloadToInternalPath(safeEditorTenantPath, toTenantPath('/starbase'))
+    onError: error => {
+      const parsed = parseApiError(error, 'Failed to restore deployed snapshot');
+      notify({ kind: 'error', title: 'Restore failed', subtitle: parsed.message });
     },
-    onError: (error) => {
-      const parsed = parseApiError(error, 'Failed to restore deployed snapshot')
-      notify({ kind: 'error', title: 'Restore failed', subtitle: parsed.message })
-    },
-  })
+  });
 
   const handleKeepCurrentDraft = React.useCallback(() => {
     setPhase2Dismissed(true)
@@ -2283,10 +2269,7 @@ export default function Editor() {
       return
     }
     // Proceed with hotfix restore
-    if (!phase2CanRestore || restoreFromDeploymentMutation.isPending) return
-    // Store hotfix context in sessionStorage so it survives page reload
-    const ctx = { fromCommitId: phase2CommitId, fromFileVersion: phase2FileVersion }
-    try { sessionStorage.setItem(`hotfix-context-${fileId}`, JSON.stringify(ctx)) } catch {}
+    if (!phase2CanRestore || restoreFromDeploymentMutation.isPending || restoreFromDeploymentMutation.isBlocked) return
     restoreFromDeploymentMutation.mutate()
   }, [hotfixRestoreUnavailableReason, localDirty, fileIsUncommitted, phase2CanRestore, restoreFromDeploymentMutation, phase2CommitId, phase2FileVersion, fileId])
 
@@ -2471,7 +2454,7 @@ export default function Editor() {
             <Button
               kind="primary"
               size="sm"
-              disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending || Boolean(hotfixRestoreUnavailableReason)}
+              disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending || restoreFromDeploymentMutation.isBlocked || Boolean(hotfixRestoreUnavailableReason)}
               title={hotfixRestoreUnavailableReason ?? undefined}
               onClick={handleStartHotfix}
             >
@@ -3290,7 +3273,7 @@ export default function Editor() {
           </Button>
           <Button
             kind="primary"
-            disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending || Boolean(hotfixRestoreUnavailableReason)}
+            disabled={!phase2CanRestore || restoreFromDeploymentMutation.isPending || restoreFromDeploymentMutation.isBlocked || Boolean(hotfixRestoreUnavailableReason)}
             title={hotfixRestoreUnavailableReason ?? undefined}
             onClick={handleStartHotfix}
           >
@@ -3319,10 +3302,7 @@ export default function Editor() {
               if (hotfixRestoreUnavailableReason) return
               setShowSaveFirstPrompt(false)
               // Discard unsaved changes and proceed with hotfix
-              setLocalDirty(false)
-              if (!phase2CanRestore || restoreFromDeploymentMutation.isPending) return
-              const ctx = { fromCommitId: phase2CommitId, fromFileVersion: phase2FileVersion }
-              try { sessionStorage.setItem(`hotfix-context-${fileId}`, JSON.stringify(ctx)) } catch {}
+              if (!phase2CanRestore || restoreFromDeploymentMutation.isPending || restoreFromDeploymentMutation.isBlocked) return
               restoreFromDeploymentMutation.mutate()
             }}
           >

@@ -997,3 +997,20 @@ facade, never a request parameter. Transactional file-version bookkeeping errors
 propagate rather than becoming successful restore receipts. Existing callers
 that do not supply a transaction retain their established behavior. A lost commit
 acknowledgement still requires independent state reconciliation before retry.
+
+Local file-history restore uses the same project-row fence and commits the file
+update and its new restore-history entry together. It derives diagram identities
+again and returns a closed receipt bound to the requested file and version.
+Deployed-snapshot restore validates stable or unambiguous legacy identity, raw
+content hash and project/type before copying content into the draft. When both
+commit and semantic file-version selectors are supplied, their retained mapping
+must agree. This endpoint does not launch a background VCS update: an explicit
+Save reconciles the draft and creates its checkpoint.
+
+History and deployed-restore clients validate their response before clearing
+private drafts, recording hotfix context or reloading. History refreshes must also
+succeed. Continuations are bound to the initiating file, selection, permission
+snapshot and browser session; replaced or closed views settle silently. An
+unverified response or failed refresh blocks another submission in that view
+until the caller reloads and reconciles the result. These UI fences do not grant
+server authority or make an uncertain write safe to retry.

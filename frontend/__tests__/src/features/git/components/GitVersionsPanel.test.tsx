@@ -606,6 +606,34 @@ describe('GitVersionsPanel', () => {
     ]);
   });
 
+  it.each(['git', 'local'] as const)('retains private drafts and blocks replay after an unverified %s restore response', async mode => {
+    vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/commit') ? Promise.resolve({ commitId: 'checkpoint' })
+      : url.endsWith('/versions') ? Promise.resolve({ id: 'local-checkpoint' }) : Promise.resolve({}));
+    restoreFixture(vi.fn().mockResolvedValue(undefined), vi.fn(), mode);
+    localStorage.setItem('xml-history-file-1', 'retained-private-draft');
+    sessionStorage.setItem('starbase:lastEditedAt:file-1', 'retained-private-time');
+    await startRestore();
+    expect(await screen.findByText(/Restore response was not verified/)).toBeVisible();
+    expect(localStorage.getItem('xml-history-file-1')).toBe('retained-private-draft');
+    expect(sessionStorage.getItem('starbase:lastEditedAt:file-1')).toBe('retained-private-time');
+    expect(screen.getByRole('button', { name: 'Restore this version' })).toBeDisabled();
+    expect(apiClient.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains drafts if verified restore acknowledgement is followed by a failed refresh', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/commit') ? Promise.resolve({ commitId: 'checkpoint' }) : new Promise(resolve => { finish = resolve; }));
+    const fixture = restoreFixture(vi.fn().mockResolvedValue(undefined));
+    localStorage.setItem('xml-history-file-1', 'retained-private-draft');
+    await startRestore(); await waitFor(() => expect(finish).toBeTypeOf('function'));
+    const refresh = vi.spyOn(fixture.client, 'invalidateQueries').mockRejectedValueOnce(new Error('Refresh unavailable'));
+    await act(async () => finish({ success: true, filesRestored: 1, newCommitId: 'restored' }));
+    expect(await screen.findByText(/Refresh unavailable/)).toBeVisible();
+    expect(localStorage.getItem('xml-history-file-1')).toBe('retained-private-draft');
+    expect(screen.getByRole('button', { name: 'Restore this version' })).toBeDisabled();
+    expect(refresh).toHaveBeenCalledWith(expect.any(Object), { throwOnError: true });
+  });
+
   it('does not apply completion callbacks or clear drafts after the submitted view is replaced', async () => {
     let finish!: (value: unknown) => void;
     vi.mocked(apiClient.post).mockImplementation(url => url.endsWith('/commit') ? Promise.resolve({ commitId: 'checkpoint' }) : new Promise(resolve => { finish = resolve; }));

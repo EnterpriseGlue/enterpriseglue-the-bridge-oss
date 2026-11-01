@@ -23,7 +23,7 @@ import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persist
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { In, IsNull, Brackets } from 'typeorm';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
-import { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
+import { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema, CommitFileRestoreResponseSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { selectCommitFileSnapshot, FILE_SCOPED_COMMIT_SOURCES, isFileScopedCommitSource } from '@enterpriseglue/shared/utils/commit-snapshot.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { lockFolderProject } from '@enterpriseglue/shared/services/starbase/folder-tree.js';
@@ -682,10 +682,10 @@ const restoreFromCommit = asyncHandler(async (req: Request, res: Response) => {
       } else await vcsService.syncFromMainDb(projectId, userId, branch.id, manager);
       const checkpoint = await vcsService.commit(branch.id, userId, `Restored from checkpoint ${commitId.substring(0, 8)}`,
         { source: requestedFileId ? 'file-save' : 'restore', ...(requestedFileId ? { fileIds: [requestedFileId] } : {}) }, manager);
-      return { filesRestored: plan.length, newCommitId: checkpoint.id };
+      return CommitFileRestoreResponseSchema.parse({ success: true, filesRestored: plan.length, newCommitId: checkpoint.id });
     });
     logger.info('Files restored from commit', { projectId, commitId, userId, filesRestored: result.filesRestored });
-    res.json({ success: true, ...result });
+    res.json(result);
   } catch (error) {
     if (error instanceof AppError) throw error;
     logger.error('Failed to restore from commit', { projectId, commitId, userId, error });

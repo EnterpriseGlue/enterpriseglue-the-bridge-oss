@@ -25,3 +25,9 @@ export const CommitFileRestoreParamsSchema = z.object({
 export const ProjectCommitRestoreParamsSchema = CommitFileRestoreParamsSchema.omit({ fileId: true });
 
 export const CommitFileRestoreBodySchema = z.object({}).strict().default({});
+
+export const CommitFileRestoreResponseSchema = z.object({
+  success: z.literal(true),
+  filesRestored: z.number().int().positive().safe(),
+  newCommitId: z.string().min(1).refine(value => value === value.trim(), { message: 'Noncanonical checkpoint identity' }),
+}).strict();

@@ -15,6 +15,8 @@ import { FILE_SCOPED_COMMIT_SOURCES } from '@enterpriseglue/shared/utils/commit-
 import type { CommitFileSnapshot as FileSnapshot } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateStarbaseMissionControlBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz';
+import { LocalVersionRestoreResponseSchema } from '@enterpriseglue/shared/schemas/starbase/version.js';
+import { CommitFileRestoreResponseSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice';
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate';
@@ -539,38 +541,32 @@ export default function GitVersionsPanel({
       if (!fileId) throw new Error('Missing fileId for file restore');
       await autoSaveBeforeRestore(intent.assertCurrent);
       intent.assertCurrent();
-      if (intent.saveMode === 'local') {
-        return apiClient.post(`/starbase-api/files/${encodeURIComponent(intent.fileId)}/versions/${encodeURIComponent(intent.commitId)}/restore`);
+      const local = intent.saveMode === 'local';
+      const raw = await apiClient.post(local
+        ? `/starbase-api/files/${encodeURIComponent(intent.fileId)}/versions/${encodeURIComponent(intent.commitId)}/restore`
+        : `/vcs-api/projects/${encodeURIComponent(intent.projectId)}/commits/${encodeURIComponent(intent.commitId)}/files/${encodeURIComponent(intent.fileId)}/restore`);
+      intent.assertCurrent();
+      if (local) {
+        const receipt = LocalVersionRestoreResponseSchema.safeParse(raw);
+        if (!receipt.success || receipt.data.fileId !== intent.fileId || receipt.data.versionId !== intent.commitId) throw new Error('Restore response was not verified; refresh before retrying.');
+      } else {
+        const receipt = CommitFileRestoreResponseSchema.safeParse(raw);
+        if (!receipt.success || receipt.data.filesRestored !== 1) throw new Error('Restore response was not verified; refresh before retrying.');
       }
-      return apiClient.post(`/vcs-api/projects/${encodeURIComponent(intent.projectId)}/commits/${encodeURIComponent(intent.commitId)}/files/${encodeURIComponent(intent.fileId)}/restore`);
+      return raw;
     },
-    onSuccess: (_data, intent) => {
+    onSuccess: async (_data, intent) => {
       if (!intent.isCurrent()) return;
       const { fileId, projectId, saveMode } = intent;
-      if (saveMode === 'local') {
-        if (fileId) {
-          queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
-          queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
-          try {
-            sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`);
-          } catch {}
-        }
-      } else {
-        queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
-        if (fileId) {
-          try {
-            sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`);
-          } catch {}
-        }
+      const keys = saveMode === 'local' ? [['versions', fileId], ['versions-panel', 'local', projectId, fileId]] : [['vcs', 'commits', projectId]];
+      for (const queryKey of [...keys, ['file', fileId]]) {
+        intent.assertCurrent();
+        await queryClient.invalidateQueries({ queryKey }, { throwOnError: true });
       }
-      queryClient.invalidateQueries({ queryKey: ['file'] });
-      setPreviewOpen(false);
-      setSelectedCommit(null);
-      // Clear local XML history so restored content takes effect
-      if (fileId) {
-        localStorage.removeItem(`xml-history-${fileId}`);
-      }
-      // Reload to show restored content
+      intent.assertCurrent();
+      try { sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`); } catch {}
+      try { localStorage.removeItem(`xml-history-${fileId}`); } catch {}
+      setPreviewOpen(false); setSelectedCommit(null);
       window.location.reload();
     },
   });
@@ -615,7 +611,7 @@ export default function GitVersionsPanel({
   };
 
   const handleRestore = () => {
-    if (restoreUnavailableReason || !fileId || !selectedCommit || restoreMutation.isPending) return;
+    if (restoreUnavailableReason || !fileId || !selectedCommit || restoreMutation.isPending || submittedRestoreRef.current === restoreLifetimeRef.current) return;
     const lifetime = restoreLifetimeRef.current;
     const session = getBrowserSessionRevision();
     const isCurrent = () => lifetime === restoreLifetimeRef.current && session === getBrowserSessionRevision();
@@ -1129,7 +1125,7 @@ export default function GitVersionsPanel({
         secondaryButtonText="Close"
         onRequestSubmit={handleRestore}
         onRequestClose={handleClosePreview}
-        primaryButtonDisabled={restoreMutation.isPending || !previewXml || Boolean(restoreUnavailableReason)}
+        primaryButtonDisabled={restoreMutation.isPending || submittedRestoreRef.current === restoreLifetimeRef.current || !previewXml || Boolean(restoreUnavailableReason)}
       >
         <div style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
           {/* Loading state */}

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
@@ -54,7 +55,7 @@ describe('starbase files routes - restore from commit', () => {
   let projectFindOne: ReturnType<typeof vi.fn>;
   let commitFindOne: ReturnType<typeof vi.fn>;
   let fileVersionFindOne: ReturnType<typeof vi.fn>;
-  let snapshotsGetMany: ReturnType<typeof vi.fn>;
+  let snapshotsGetMany: Mock<(options: unknown) => Promise<any[]>>;
 
   beforeEach(() => {
     app = express();
@@ -69,16 +70,9 @@ describe('starbase files routes - restore from commit', () => {
     projectFindOne = vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-default' });
     commitFindOne = vi.fn();
     fileVersionFindOne = vi.fn();
-    snapshotsGetMany = vi.fn();
+    snapshotsGetMany = vi.fn<(options: unknown) => Promise<any[]>>();
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:versions:restore');
-
-    const snapshotQb = {
-      where: vi.fn().mockReturnThis(),
-      andWhere: vi.fn().mockReturnThis(),
-      getMany: snapshotsGetMany,
-    };
-
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    const manager = { connection: { options: { type: 'sqljs' } },
       getRepository: (entity: unknown) => {
         if (entity === File) {
           return { findOne: fileFindOne, update: fileUpdate };
@@ -90,14 +84,15 @@ describe('starbase files routes - restore from commit', () => {
           return { findOne: commitFindOne };
         }
         if (entity === FileSnapshot) {
-          return { createQueryBuilder: vi.fn().mockReturnValue(snapshotQb) };
+          return { find: async (options: any) => (await snapshotsGetMany(options)).map((row: any) => ({ id: 'snapshot-1', mainFileId: '11111111-1111-4111-8111-111111111111', name: 'Invoice', type: 'bpmn', folderId: null, contentHash: createHash('sha256').update(row.content || '').digest('hex').slice(0, 16), ...row })) };
         }
         if (entity === FileCommitVersion) {
           return { findOne: fileVersionFindOne };
         }
         return {};
       },
-    });
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ ...manager, transaction: vi.fn(async (run: any) => run(manager)) });
   });
 
   it('restores file snapshot by semantic file version number', async () => {

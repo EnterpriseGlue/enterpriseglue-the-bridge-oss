@@ -7,7 +7,7 @@ import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@aste
 // before any schema is created so that .openapi() is available on instances.
 extendZodWithOpenApi(z);
 
-const { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema } = await import('./starbase/commit-snapshot.js');
+const { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema, CommitFileRestoreResponseSchema } = await import('./starbase/commit-snapshot.js');
 const { commitBodySchema } = await import('./starbase/commit.js');
 
 // Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
@@ -29,6 +29,8 @@ const {
   RestoreFileFromCommitRequestSchema,
   RestoreFileFromCommitResponseSchema,
   VersionSchema,
+  LocalVersionRestoreBodySchema,
+  LocalVersionRestoreResponseSchema,
   CompareVersionsResponse,
   CommentSchema,
   FolderSchema,
@@ -897,11 +899,11 @@ registry.registerPath({
   method: 'post',
   path: '/starbase-api/files/{fileId}/versions/{versionId}/restore',
   ...authzExtension('project.versions.restore', 'POST', '/starbase-api/files/{fileId}/versions/{versionId}/restore'),
-  request: { params: z.object({ fileId: z.string(), versionId: z.string() }) },
+  request: { params: z.object({ fileId: z.string().uuid(), versionId: z.string().uuid() }), body: { required: false, content: { 'application/json': { schema: LocalVersionRestoreBodySchema } } } },
   responses: {
     200: {
       description: 'File restored from version',
-      content: { 'application/json': { schema: z.object({ restored: z.boolean(), fileId: z.string(), versionId: z.string(), updatedAt: z.number() }) } },
+      content: { 'application/json': { schema: LocalVersionRestoreResponseSchema } },
     },
     404: { description: 'Not found' },
   },
@@ -4143,7 +4145,7 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/commits/{commitId}/restore',
   ...authzExtension('project.vcs.commit.restore', 'POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore'),
   request: { params: ProjectCommitRestoreParamsSchema, body: { required: false, content: { 'application/json': { schema: CommitFileRestoreBodySchema } } } },
-  responses: { 200: { description: 'Files restored from commit', content: { 'application/json': { schema: z.object({ success: z.boolean(), filesRestored: z.number(), newCommitId: z.string() }) } } } },
+  responses: { 200: { description: 'Files restored from commit', content: { 'application/json': { schema: CommitFileRestoreResponseSchema } } } },
 });
 
 // A separate endpoint makes file scope fail closed against older hosts.
@@ -4152,7 +4154,7 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore',
   ...authzExtension('project.vcs.commit.restore', 'POST', '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore'),
   request: { params: CommitFileRestoreParamsSchema, body: { required: false, content: { 'application/json': { schema: CommitFileRestoreBodySchema } } } },
-  responses: { 200: { description: 'Selected file restored from commit', content: { 'application/json': { schema: z.object({ success: z.boolean(), filesRestored: z.literal(1), newCommitId: z.string() }) } } } },
+  responses: { 200: { description: 'Selected file restored from commit', content: { 'application/json': { schema: CommitFileRestoreResponseSchema.extend({ filesRestored: z.literal(1) }) } } } },
 });
 
 // -----------------------------

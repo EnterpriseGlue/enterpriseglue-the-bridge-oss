@@ -1,4 +1,5 @@
 import { zipSync } from 'fflate';
+import versionsRouter from '../../../packages/backend-host/src/modules/starbase/routes/versions.js';
 import foldersRouter from '../../../packages/backend-host/src/modules/starbase/routes/folders.js';
 import { ProjectArchiveImportResponseSchema } from '@enterpriseglue/shared/schemas/starbase/folder.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -28,7 +29,7 @@ import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
 import { VcsCommitService } from '@enterpriseglue/shared/services/versioning/VcsCommitService.js';
 import { VcsFileService } from '@enterpriseglue/shared/services/versioning/VcsFileService.js';
-import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
+import { vcsService, syncFileUpdate } from '@enterpriseglue/shared/services/versioning/index.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import router from '../../../packages/backend-host/src/modules/versioning/index.js';
 import { verifyDeploymentRevision } from '../../../packages/backend-host/src/modules/engines/deployment-revision.js';
@@ -42,7 +43,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({ vcsService: {
   ensureInitialized: vi.fn().mockResolvedValue(true), getCommitSnapshots: vi.fn(), getUserBranch: vi.fn(),
   getMainBranch: vi.fn(), getCommits: vi.fn(), getUncommittedIds: vi.fn(), saveFile: vi.fn(), commit: vi.fn(), mergeToMain: vi.fn(), syncFromMainDb: vi.fn(),
-} }));
+}, syncFileUpdate: vi.fn().mockResolvedValue(undefined), syncFileDelete: vi.fn().mockResolvedValue(undefined) }));
 
 const env = (key: string, fallback: string) => process.env[`MIGRATION_TEST_${key}`] || process.env[key] || fallback;
 const database = `file_restore_${randomUUID().replace(/-/g, '')}`;
@@ -57,7 +58,7 @@ const hash = (xml: string) => createHash('sha256').update(xml).digest('hex').sli
 const commitService = new VcsCommitService(); const fileService = new VcsFileService(); const syncService = new VcsSyncService();
 const realVcs = new VcsService();
 let created = false;
-const app = express(); app.use(express.json()); app.use(router); app.use(filesRouter); app.use(foldersRouter); app.use(errorHandler);
+const app = express(); app.use(express.json()); app.use(router); app.use(filesRouter); app.use(foldersRouter); app.use(versionsRouter); app.use(errorHandler);
 const restore = (body: { fileId?: string } = { fileId }, revision = commitId) => request(app).post(body.fileId
   ? `/vcs-api/projects/${projectId}/commits/${revision}/files/${body.fileId}/restore`
   : `/vcs-api/projects/${projectId}/commits/${revision}/restore`);
@@ -853,6 +854,87 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
       expect(await store.getRepository(Commit).count()).toBe(2);
       expect(await store.getRepository(FileCommitVersion).find()).toMatchObject([{ fileId, commitId, versionNumber: 1 }]);
     } finally { wrap.mockRestore(); }
+  });
+
+  it('rolls back a local restore when its restore-history row fails', async () => {
+    const version = randomUUID();
+    await store.getRepository(Version).insert({ id: version, fileId, message: 'Retained local', xml: '<restored/>', createdAt: 1 });
+    const before = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    await store.query("ALTER TABLE main.versions ADD CONSTRAINT fixture_reject_local_restore CHECK (message NOT LIKE 'Restored from%') NOT VALID");
+    try {
+      const response = await request(app).post(`/starbase-api/files/${fileId}/versions/${version}/restore`); expect(response.status).toBe(500);
+      expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toEqual(before); expect(await store.getRepository(Version).count()).toBe(1);
+    } finally { await store.query('ALTER TABLE main.versions DROP CONSTRAINT fixture_reject_local_restore'); }
+  });
+
+  it.each(['bpmn', 'dmn'])('keeps local restored XML and derived %s identity consistent', async type => {
+    const version = randomUUID(), xml = type === 'bpmn' ? '<definitions><process id="LocalProcess"/></definitions>' : '<definitions><decision id="LocalDecision"/></definitions>';
+    await store.getRepository(File).update(fileId, { type, bpmnProcessId: 'stale-process', dmnDecisionId: 'stale-decision' });
+    await store.getRepository(Version).insert({ id: version, fileId, message: 'Local source', xml, createdAt: 1 });
+    const response = await request(app).post(`/starbase-api/files/${fileId}/versions/${version}/restore`); expect(response.status).toBe(200);
+    expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toMatchObject({ bpmnProcessId: type === 'bpmn' ? 'LocalProcess' : null, dmnDecisionId: type === 'dmn' ? 'LocalDecision' : null });
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Save local restored source', fileIds: [fileId] });
+    expect(saved.status).toBe(200);
+    const current = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    expect((await verifyDeploymentRevision(store, projectId, saved.body.commitId, [{ ...current, sourceXml: current.xml }])).size).toBe(1);
+  });
+
+  it.each(['hash', 'type', 'stable-tombstone'])('refuses an invalid %s deployed snapshot before changing the file', async drift => {
+    if (drift === 'hash') await store.getRepository(FileSnapshot).update(`snapshot-${fileId}`, { content: 'forged-content' });
+    if (drift === 'type') await store.getRepository(FileSnapshot).update(`snapshot-${fileId}`, { type: 'dmn' });
+    if (drift === 'stable-tombstone') {
+      const source = await store.getRepository(FileSnapshot).findOneByOrFail({ id: `snapshot-${fileId}` });
+      await store.getRepository(FileSnapshot).update(source.id, { changeType: 'deleted' });
+      await store.getRepository(FileSnapshot).insert({ ...source, id: 'legacy-alternative', workingFileId: 'legacy-alternative', mainFileId: null, name: 'Renamed current file' });
+    }
+    const before = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    const response = await request(app).post(`/starbase-api/files/${fileId}/restore-from-commit`).send({ commitId }); expect(response.status).toBe(409);
+    expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toEqual(before);
+  });
+
+  it('rejects conflicting deployed commit and semantic-version selectors', async () => {
+    await store.getRepository(FileCommitVersion).insert({ projectId, fileId, commitId, versionNumber: 2, createdAt: 1 });
+    const before = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    const response = await request(app).post(`/starbase-api/files/${fileId}/restore-from-commit`).send({ commitId, fileVersionNumber: 7 });
+    expect(response.status).toBe(409); expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toEqual(before);
+  });
+
+  it.each(['commit-unmapped', 'commit', 'version', 'both'])('copies one verified deployed source into the draft with %s selectors', async selector => {
+    if (selector !== 'commit-unmapped') await store.getRepository(FileCommitVersion).insert({ projectId, fileId, commitId, versionNumber: 3, createdAt: 1 });
+    const body = selector === 'version' ? { fileVersionNumber: 3 } : selector === 'both' ? { commitId, fileVersionNumber: 3 } : { commitId };
+    const working = await store.getRepository(WorkingFile).findOneByOrFail({ mainFileId: fileId });
+    const syncCalls = vi.mocked(syncFileUpdate).mock.calls.length;
+    const response = await request(app).post(`/starbase-api/files/${fileId}/restore-from-commit`).send(body);
+    expect(response.status).toBe(200); expect(response.body).toMatchObject({ restored: true, fileId, commitId, fileVersionNumber: selector === 'commit-unmapped' ? null : 3 });
+    expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toMatchObject({ xml: `saved-${fileId}` });
+    expect(await store.getRepository(WorkingFile).findOneByOrFail({ mainFileId: fileId })).toEqual(working);
+    expect(await store.getRepository(Commit).count()).toBe(2); expect(vi.mocked(syncFileUpdate).mock.calls.length).toBe(syncCalls);
+  });
+
+  it('does not adopt a semantic file-version record owned by another project', async () => {
+    await store.getRepository(FileCommitVersion).insert({ projectId: otherProjectId, fileId, commitId, versionNumber: 4, createdAt: 1 });
+    const before = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    expect((await request(app).post(`/starbase-api/files/${fileId}/restore-from-commit`).send({ fileVersionNumber: 4 })).status).toBe(409);
+    expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toEqual(before);
+  });
+
+  it.each(['duplicate', 'unknown', 'empty', 'foreign-commit'])('rejects %s deployed source identities without a draft write', async invalid => {
+    const snapshots = store.getRepository(FileSnapshot);
+    if (invalid === 'duplicate') { const source = await snapshots.findOneByOrFail({ id: `snapshot-${fileId}` }); await snapshots.insert({ ...source, id: 'duplicate-deployed', workingFileId: 'duplicate-deployed-working' }); }
+    if (invalid === 'unknown') await snapshots.update(`snapshot-${fileId}`, { changeType: 'unknown' });
+    if (invalid === 'empty') await snapshots.update(`snapshot-${fileId}`, { content: '', contentHash: hash('') });
+    const before = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    const response = await request(app).post(`/starbase-api/files/${fileId}/restore-from-commit`).send({ commitId: invalid === 'foreign-commit' ? otherCommitId : commitId });
+    expect(response.status).toBe(invalid === 'foreign-commit' ? 404 : 409); expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toEqual(before);
+  });
+
+  it.each(['foreign-version', 'empty', 'body-scope'])('rejects %s local restore without changing contents or history', async invalid => {
+    const version = randomUUID();
+    await store.getRepository(Version).insert({ id: version, fileId: invalid === 'foreign-version' ? siblingId : fileId, message: 'Retained', xml: invalid === 'empty' ? '' : '<saved/>', createdAt: 1 });
+    const before = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    const response = await request(app).post(`/starbase-api/files/${fileId}/versions/${version}/restore`).send(invalid === 'body-scope' ? { fileId: siblingId } : {});
+    expect(response.status).toBe(invalid === 'foreign-version' ? 404 : invalid === 'empty' ? 409 : 400);
+    expect(await store.getRepository(File).findOneByOrFail({ id: fileId })).toEqual(before); expect(await store.getRepository(Version).count()).toBe(1);
   });
 
   it('restores only the selected file and keeps sibling draft, working content and file history independent', async () => {
