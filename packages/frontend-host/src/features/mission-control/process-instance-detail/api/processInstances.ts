@@ -1,6 +1,7 @@
-import { apiClient } from '../../../../shared/api/client'
-import { fetchList } from '../../../../shared/api/fetchList';
-export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
+import { validateNumericVariableValue } from '../components/variableValues.js'
+import { apiClient } from '../../../../shared/api/client.js'
+import { fetchList } from '../../../../shared/api/fetchList.js';
+export { fetchProcessDefinitionXml } from '../../shared/api/definitions.js'
 import type {
   ActivityInstance,
   ProcessInstanceVariablesModifyRequest,
@@ -16,7 +17,7 @@ import type {
   Incident,
   Job,
   ExternalTask,
-} from '../components/types'
+} from '../components/types.js'
 
 // Types
 export type ProcessInstanceDetail = SharedProcessInstanceDetail
@@ -45,8 +46,12 @@ export async function modifyProcessInstanceVariables(instanceId: string, body: P
     if (name === '__proto__') throw new Error("Variable name '__proto__' is not supported")
     if (input && typeof input === 'object' && !Array.isArray(input)) {
       const variable = input as Record<string, unknown>
+      validateNumericVariableValue(variable.value, String(variable.type))
       if (variable.type === 'Json' && Object.prototype.hasOwnProperty.call(variable, 'value')) {
-        const value = JSON.stringify(variable.value)
+        const value = JSON.stringify(variable.value, (_key, item) => {
+          if (typeof item === 'number' && !Number.isFinite(item)) throw new Error('JSON variable numbers must be finite')
+          return item
+        })
         if (value === undefined) throw new Error('JSON variable value is required')
         return [name, { ...variable, value }]
       }

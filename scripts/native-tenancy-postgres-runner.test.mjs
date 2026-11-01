@@ -61,6 +61,7 @@ test('ignores temporary socket readiness and waits for the real TCP server', (t)
   const tests = calls.find(([command]) => command === 'tests');
   assert.ok(tests.includes('test/integration/nativeTenantRls.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-context-boundary.test.ts'));
+  assert.ok(tests.includes('test/integration/postgres-deployment-revision.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-global-identity.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-shared-inventory-readiness.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-schema-epoch-bridge.test.ts'));

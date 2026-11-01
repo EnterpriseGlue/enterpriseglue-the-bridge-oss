@@ -11,7 +11,7 @@
 import { USER_KEY } from '../constants/storageKeys.js';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils.js';
 import { config } from '../config.js';
-import { apiFetch } from './apiFetch';
+import { apiFetch } from './apiFetch.js';
 import { getTenancyCapabilities } from '../services/tenancy.js';
 import { getPublicAuthRoutePolicy } from './publicAuthRoute.js';
 

@@ -373,4 +373,12 @@ describe('processInstances API', () => {
       expect(result).toHaveLength(2);
     });
   });
+  it.each([[Infinity, 'Double'], [-Infinity, 'Double'], [NaN, 'Double'], [9007199254740992, 'Long'], [1.5, 'Integer'], [2147483648, 'Integer']])('blocks unsafe numeric bulk input %s %s before HTTP', async (value, type) => {
+    await expect(modifyProcessInstanceVariables('pi-1', { engineId: 'e1', modifications: { n: { value, type } } })).rejects.toThrow();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+  it.each([Infinity, { nested: [1, Infinity] }])('rejects non-finite native JSON numbers before HTTP', async value => {
+    await expect(modifyProcessInstanceVariables('pi-1', { engineId: 'e1', modifications: { n: { value, type: 'Json' } } })).rejects.toThrow('JSON variable numbers must be finite');
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
 });

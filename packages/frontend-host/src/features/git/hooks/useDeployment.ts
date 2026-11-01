@@ -16,13 +16,18 @@ export function useDeployment(projectId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (params: Omit<DeployRequest, 'projectId'>) =>
-      gitApi.deploy({ ...params, projectId }),
-    onSuccess: () => {
+    mutationFn: (params: Omit<DeployRequest, 'projectId'> & { projectId?: string; assertCurrent?: () => void }) => {
+      const { assertCurrent, ...request } = params;
+      assertCurrent?.();
+      return gitApi.deploy({ ...request, projectId: request.projectId ?? projectId });
+    },
+    onSuccess: (_data, params) => {
+      try { params.assertCurrent?.(); } catch { return; }
+      const targetProjectId = params.projectId ?? projectId;
       // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['git', 'deployments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'commits', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'repository', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'deployments', targetProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'commits', targetProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'repository', targetProjectId] });
       queryClient.invalidateQueries({ queryKey: ['git', 'deployments', 'recent'] });
     },
   });

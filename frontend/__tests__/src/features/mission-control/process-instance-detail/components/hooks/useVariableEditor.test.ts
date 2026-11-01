@@ -107,4 +107,14 @@ describe('useVariableEditor engine boundary', () => {
     expect(useVariableEditor).toBeDefined()
     expect(typeof useVariableEditor).toBe('function')
   })
+  it.each([['9007199254740993', 'Long'], ['1e999', 'Double'], ['1.5', 'Integer']])('blocks unsafe %s %s without an API write', async (raw, type) => {
+    const varsQ = { refetch: vi.fn() };
+    const { result } = renderHook(() => useVariableEditor({ instanceId: 'pi-1', varsQ, engineId: 'engine-1' }));
+    act(() => result.current.openVariableEditor('number', { value: 1, type }));
+    act(() => result.current.setEditingVarValue(raw));
+    await act(async () => result.current.submitVariableEdit());
+    expect(modifyProcessInstanceVariables).not.toHaveBeenCalled();
+    expect(varsQ.refetch).not.toHaveBeenCalled();
+    expect(result.current.editVarError).toBeTruthy();
+  });
 })

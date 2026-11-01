@@ -1,3 +1,4 @@
+import { parseTypedVariableValue, parseBulkVariableInput } from './components/variableValues'
 import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
@@ -490,29 +491,6 @@ export default function ProcessInstanceDetailPage() {
     previousInteractionEngineIdRef.current = selectedEngineId
   }, [selectedEngineId, setSelectedActivityId])
 
-  const parseTypedValue = React.useCallback((raw: string, type: string) => {
-    if (type === 'String') return raw
-    if (raw.trim() === '') return null
-    if (type === 'Boolean') {
-      if (/^(true|false)$/i.test(raw.trim())) return raw.trim().toLowerCase() === 'true'
-      throw new Error('Boolean values must be true or false')
-    }
-    if (type === 'Integer' || type === 'Long') {
-      const num = Number(raw)
-      if (Number.isNaN(num)) throw new Error('Value must be a number')
-      return type === 'Integer' ? Math.trunc(num) : num
-    }
-    if (type === 'Double') {
-      const num = Number(raw)
-      if (Number.isNaN(num)) throw new Error('Value must be a number')
-      return num
-    }
-    if (type === 'Object' || type === 'Json') {
-      return JSON.parse(raw || '{}')
-    }
-    return raw
-  }, [])
-
   const openAddVariableModal = React.useCallback(() => {
     if (!selectedEngineId) return
     setAddVariableName('')
@@ -552,7 +530,7 @@ export default function ProcessInstanceDetailPage() {
     setAddVariableBusy(true)
     setAddVariableError(null)
     try {
-      const parsed = parseTypedValue(addVariableValue, addVariableType)
+      const parsed = parseTypedVariableValue(addVariableValue, addVariableType)
       await modifyProcessInstanceVariables(instanceId, {
         modifications: { [key]: { value: parsed, type: addVariableType } },
         engineId: requestEngineId,
@@ -570,7 +548,7 @@ export default function ProcessInstanceDetailPage() {
     } finally {
       if (isCurrentRequest()) setAddVariableBusy(false)
     }
-  }, [instanceId, addVariableEngineId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, parseTypedValue, selectedEngineId, varsQ])
+  }, [instanceId, addVariableEngineId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, selectedEngineId, varsQ])
 
   const submitBulkUpload = React.useCallback(async () => {
     if (!instanceId) return
@@ -588,7 +566,7 @@ export default function ProcessInstanceDetailPage() {
     setBulkUploadBusy(true)
     setBulkUploadError(null)
     try {
-      const parsed = JSON.parse(bulkUploadValue || '{}')
+      const parsed = parseBulkVariableInput(bulkUploadValue)
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('Bulk upload JSON must be an object')
       }

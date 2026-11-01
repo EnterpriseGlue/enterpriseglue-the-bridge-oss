@@ -31,8 +31,15 @@ JSON representation before response presentation and permission-based redaction.
 The shared frontend variable-write adapter serializes native JSON exactly once
 for edits, creation and bulk uploads. Its callers pass parsed JSON values,
 including JSON strings, numbers, booleans and null; UI state keeps those parsed
-values after a successful save. Scalar types and serialized Java `Object`
-payloads pass through unchanged. This internal adapter does not change the
+values after a successful save. Numeric writes reject non-finite values, fractional
+integers, integers outside the signed 32-bit range, and `Long` values outside
+JavaScript's exact integer range (±9007199254740991). Integer editors accept
+whole decimal text. Add and edit use the same parser; typed bulk integers are
+checked against their original JSON number text before it can be rounded.
+Browsers without JSON source-text reviver support must provide typed bulk
+integers as strings so they can be validated exactly. Nullable values remain
+supported. Native JSON also rejects non-finite numbers before serialization can
+turn them into null. Serialized Java `Object` payloads pass through unchanged. This internal adapter does not change the
 engine-compatible external HTTP API.
 Variable maps retain supported names such as `constructor` and `toString` as
 own fields, including bulk writes and completed-history snapshots. The write
@@ -72,3 +79,43 @@ requires successful responses for the accessible-engine inventory, historic
 instance, variables, activity history, and process-definition XML. Keep this
 fresh-session condition when adding or refactoring Mission Control routes so a
 passing test cannot depend on visiting another page first.
+
+## Authentication and deployment response lifetime
+
+`AuthProvider` invalidates asynchronous authentication work when a session is
+replaced or cleared, including storage events and logout. User and permission
+refreshes only apply their latest result for the current session. Late success,
+unauthorized, unverified-user and failure responses cannot restore the earlier
+browser identity or replace a newer permission snapshot. The optional
+`sessionRevision` context field exposes the current lifetime to action views;
+server cookies and authorization remain authoritative.
+
+The save-version/deploy dialog captures project, file selection, engine and
+mode at submission. Project/file/session changes, closing the dialog and
+unmounting invalidate later dispatch and completion handling, including an
+A-to-B-to-A change. Mutation variables carry the original target, and a save
+receipt must identify a commit before the second stage starts. Already-issued
+requests may still take effect; stale completion suppression is not cancellation
+or authorization to retry a deployment.
+
+For engine proxy deployments, `options.vcsCommitId` is checked before any engine
+call. The commit must belong to the authorized project. Every selected file
+must have one non-deleted snapshot with the exact file ID, name, type, folder,
+source content and valid existing VCS hash. Whole-project deployment also requires
+the complete saved BPMN/DMN file set, so deleting a file after saving cannot
+silently deploy a smaller project. Explicit file subsets remain supported. Content drift or an absent,
+foreign-project, corrupt or ambiguous snapshot returns HTTP 409 before engine
+side effects. Save and review a new version before submitting again. Successful
+receipts link only this verified revision; a legacy request without a revision
+retains captured file/content lineage with no inferred VCS commit ID. No database
+schema change or historical receipt rewrite is required.
+
+The focused PostgreSQL revision test uses its own disposable database:
+
+```bash
+bash scripts/run-native-tenancy-postgres-rls.sh --deployment-revision
+```
+
+It is also included in the default PostgreSQL regression lane. The test verifies
+actual TypeORM reads and rejection of drift and sibling-project revisions; it
+does not establish live tenant routing, runtime-role/RLS or engine acceptance.

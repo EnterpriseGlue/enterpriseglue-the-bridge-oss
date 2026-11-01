@@ -17,7 +17,7 @@ import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence
 import { In } from 'typeorm'
 import { FormData } from 'undici'
 import { fetchBpmnEngineEndpoint } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
-import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
+import { verifyDeploymentRevision } from '../deployment-revision.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js'
@@ -177,7 +177,7 @@ function deploymentActorId(req: Request): string {
  * Resolve files from request resources
  * ✨ Migrated to TypeORM
  */
-async function resolveFilesFromRequest(req: Request): Promise<DeploymentFileResource[]> {
+async function resolveFilesFromRequest(req: Request): Promise<Array<DeploymentFileResource & { sourceXml: string }>> {
   const body = (req.body || {}) as DeployRequestBody
   const { resources } = body
   const dataSource = await getDataSource()
@@ -193,6 +193,7 @@ async function resolveFilesFromRequest(req: Request): Promise<DeploymentFileReso
       folderId: row.folderId ? String(row.folderId) : null,
       name: String(row.name),
       type: ty as 'bpmn'|'dmn',
+      sourceXml: String(row.xml || ''),
       xml: ty === 'dmn' ? sanitizeDmnXml(String(row.xml || '')) : sanitizeBpmnXml(String(row.xml || '')),
       updatedAt: row.updatedAt !== null && typeof row.updatedAt !== 'undefined' ? Number(row.updatedAt) : null,
     }
@@ -454,6 +455,12 @@ async function createEngineDeployment(req: Request, res: Response) {
     }
     const resolveStart = Date.now()
     const files = await resolveFilesFromRequest(req)
+    const opts = Object(req.body?.options || {})
+    const projectId = String(req.body?.projectId || '')
+    const lastCommitByFileId = typeof opts.vcsCommitId === 'string'
+      ? await verifyDeploymentRevision(await getDataSource(), projectId, opts.vcsCommitId, files,
+        !req.body?.resources?.fileIds?.length && !req.body?.resources?.folderId && Boolean(req.body?.resources?.projectId))
+      : new Map<string, { id: string; message: string }>()
     logger.info('Engine deploy: files resolved', { count: files.length, ms: Date.now() - resolveStart })
 
     for (const f of files) {
@@ -478,13 +485,11 @@ async function createEngineDeployment(req: Request, res: Response) {
         })
       }
     }
-    const opts = Object(req.body?.options || {})
     const duplicate = opts.enableDuplicateFiltering !== false
     const changedOnly = opts.deployChangedOnly !== false // default true
 
     const deployContext = (req as { deployContext?: { projectId?: string; engineName?: string; environmentTag?: string } }).deployContext
     const body = req.body as DeployRequestBody
-    const projectId = String(body?.projectId || '')
     const actualEngineId = String(body?.engineId || engine.id)
 
     const form = new FormData()
@@ -612,35 +617,9 @@ async function createEngineDeployment(req: Request, res: Response) {
         gitCommitMessage = rawGitCommitMessage
       }
 
-      // If vcsCommitId was provided (e.g. from save-version-before-deploy),
-      // use it directly for all files. This is more reliable than
-      // getLastCommitForFile which skips unchanged snapshots.
-      const explicitVcsCommitId = typeof opts.vcsCommitId === 'string' ? opts.vcsCommitId : null
-
-      const lastCommitByFileId = new Map<string, { id: string; message: string }>()
-      try {
-        const fileIds = files.map(f => f?.id ? String((f as any).id) : '').filter(Boolean)
-        if (explicitVcsCommitId) {
-          // Use the explicit commit for every file
-          for (const fid of fileIds) {
-            lastCommitByFileId.set(fid, { id: explicitVcsCommitId, message: '' })
-          }
-        } else {
-          const results = await Promise.all(
-            fileIds.map(async (fid) => {
-              const last = await vcsService.getLastCommitForFile(projectId, fid)
-              return { fid, last }
-            })
-          )
-          for (const { fid, last } of results) {
-            if (last && last.id) {
-              lastCommitByFileId.set(fid, { id: String(last.id), message: String(last.message || '') })
-            }
-          }
-        }
-      } catch {
-        // Best-effort; VCS tables may not be configured
-      }
+      // Only revision links verified before dispatch may be recorded. Requests
+      // without an explicit revision retain file/content lineage, never infer a
+      // last commit whose content may differ from the captured engine payload.
 
       await engineDeploymentRepo.insert({
         id: deploymentRowId,
@@ -756,7 +735,7 @@ async function createEngineDeployment(req: Request, res: Response) {
     logger.info('Engine deploy: complete', { engineId: engine.id, resources: used.size, totalMs: Date.now() - deployTotalStart })
     res.status(201).json({ engineId: engine.id, engineBaseUrl: engine.baseUrl, raw: data })
   } catch (e: any) {
-    res.status(e?.status || 500).json({ message: e?.message || 'Deployment failed' })
+    res.status(e?.status || e?.statusCode || 500).json({ message: e?.message || 'Deployment failed' })
   }
 }
 

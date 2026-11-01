@@ -3,7 +3,7 @@
  * Now with automatic token refresh on 401 errors
  */
 
-import { interceptedFetch, getAuthHeaders } from '../../utils/httpInterceptor';
+import { interceptedFetch, getAuthHeaders } from '../../utils/httpInterceptor.js';
 
 export class ApiError extends Error {
   constructor(

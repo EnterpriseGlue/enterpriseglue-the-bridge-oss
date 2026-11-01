@@ -55,6 +55,7 @@ cd "$root_dir"
 test_files=(
   test/integration/nativeTenantRls.test.ts
   test/integration/postgres-context-boundary.test.ts
+  test/integration/postgres-deployment-revision.test.ts
   test/integration/postgres-global-identity.test.ts
   test/integration/postgres-shared-inventory-readiness.test.ts
   test/integration/postgres-schema-epoch-bridge.test.ts
@@ -64,6 +65,7 @@ test_files=(
 )
 if [[ "$#" -gt 0 ]]; then
   case "$1" in
+    --deployment-revision) test_files=(test/integration/postgres-deployment-revision.test.ts) ;;
     --schema-epoch) test_files=(test/integration/postgres-schema-epoch-bridge.test.ts) ;;
     --cloud-passkey) test_files=(test/integration/postgres-cloud-email-passkey.test.ts) ;;
     --documentation) test_files=(test/integration/postgres-cloud-email-passkey.test.ts test/integration/postgres-documentation-session.test.ts) ;;

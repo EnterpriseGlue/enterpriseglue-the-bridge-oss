@@ -4,6 +4,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@src/contexts/AuthContext';
 import { useAuth } from '@src/shared/hooks/useAuth';
+import { ApiError } from '@src/shared/api/client';
 import { USER_KEY } from '@src/constants/storageKeys';
 
 vi.mock('@src/services/auth', () => ({
@@ -259,5 +260,120 @@ describe('AuthProvider', () => {
       expect(result.current.isAuthenticated).toBe(true);
       expect(result.current.user?.email).toBe('synced@example.com');
     });
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+describe('authentication response ownership', () => {
+  const a = { id: 'a', email: 'a@fixture.invalid', session: { principal: { type: 'user', id: 'a' }, tenant: { id: 'tenant-a' } } } as any;
+  const b = { id: 'b', email: 'b@fixture.invalid', session: { principal: { type: 'user', id: 'b' }, tenant: { id: 'tenant-b' } } } as any;
+  const permissions = (user: any) => ({ userId: user.id, tenantId: user.session.tenant.id, platform: [], projects: [], engines: [], authorizationVersion: 'fixture', generatedAt: 123 });
+  beforeEach(async () => {
+    const { authService } = await import('@src/services/auth');
+    window.history.replaceState({}, '', '/'); localStorage.clear(); vi.resetAllMocks();
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(authService.getMe).mockResolvedValue(a);
+    vi.mocked(authService.getMyPermissions).mockResolvedValue(permissions(a));
+    vi.mocked(authService.logout).mockResolvedValue({ message: 'Logged out', federatedLogoutUrl: null });
+  });
+  const storage = (user: any) => {
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user)); else localStorage.removeItem(USER_KEY);
+    window.dispatchEvent(new StorageEvent('storage', { key: USER_KEY, newValue: user ? JSON.stringify(user) : null }));
+  };
+
+  it.each(['success', 'unauthorized', 'unverified'] as const)('ignores stale getMe %s after a storage switch', async outcome => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const old = deferred<any>(); vi.mocked(authService.getMe).mockReturnValueOnce(old.promise);
+    let pending!: Promise<void>; act(() => { pending = result.current.refreshUser(); });
+    act(() => storage(b));
+    await act(async () => {
+      if (outcome === 'unauthorized') old.reject(new ApiError(401, 'Unauthorized', 'expired'));
+      else old.resolve(outcome === 'unverified' ? { ...a, isEmailVerified: false } : a);
+      await pending;
+    });
+    expect(result.current.user).toEqual(b);
+    expect(JSON.parse(localStorage.getItem(USER_KEY)!)).toEqual(b);
+  });
+
+  it.each(['success', 'failure'] as const)('keeps new permissions after old permission %s', async outcome => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const old = deferred<any>();
+    vi.mocked(authService.getMyPermissions).mockReturnValueOnce(old.promise).mockResolvedValue(permissions(b));
+    let pending!: Promise<unknown>; act(() => { pending = result.current.refreshPermissions(); });
+    act(() => result.current.setAuthenticatedUser(b));
+    await waitFor(() => expect(result.current.permissions?.userId).toBe('b'));
+    await act(async () => { if (outcome === 'failure') old.reject(new Error('old')); else old.resolve(permissions(a)); await pending; });
+    expect(result.current.permissions).toEqual(permissions(b));
+  });
+
+  it('rejects an old A completion after A to B to A', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const old = deferred<any>(); vi.mocked(authService.getMe).mockReturnValueOnce(old.promise);
+    let pending!: Promise<void>; act(() => { pending = result.current.refreshUser(); });
+    const revision = result.current.sessionRevision!;
+    act(() => result.current.setAuthenticatedUser(b));
+    act(() => result.current.setAuthenticatedUser({ ...a, firstName: 'new A' }));
+    await act(async () => { old.resolve({ ...a, firstName: 'old A' }); await pending; });
+    expect(result.current.user?.firstName).toBe('new A');
+    expect(result.current.sessionRevision).toBeGreaterThan(revision);
+  });
+
+  it('only accepts the latest same-session permission request', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const old = deferred<any>(); vi.mocked(authService.getMyPermissions).mockReturnValueOnce(old.promise);
+    let pending!: Promise<unknown>; act(() => { pending = result.current.refreshPermissions(); });
+    const newer = { ...permissions(a), generatedAt: 999 };
+    vi.mocked(authService.getMyPermissions).mockResolvedValueOnce(newer);
+    await act(async () => { await result.current.refreshPermissions(); old.resolve(permissions(a)); await pending; });
+    expect(result.current.permissions).toEqual(newer);
+  });
+
+  it('does not resurrect a session after logout starts', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const old = deferred<any>(), logout = deferred<any>();
+    vi.mocked(authService.getMe).mockReturnValueOnce(old.promise); vi.mocked(authService.logout).mockReturnValueOnce(logout.promise);
+    let pending!: Promise<void>, leaving!: Promise<void>;
+    act(() => { pending = result.current.refreshUser(); leaving = result.current.logout(); });
+    expect(result.current.user).toBeNull();
+    act(() => result.current.setAuthenticatedUser(b));
+    await act(async () => { old.resolve(a); logout.resolve({ message: 'done' }); await Promise.all([pending, leaving]); });
+    expect(result.current.user).toEqual(b);
+  });
+
+  it('ignores an initial bootstrap failure after a new session arrives', async () => {
+    const { authService } = await import('@src/services/auth');
+    const old = deferred<any>(); vi.mocked(authService.getMe).mockReturnValueOnce(old.promise);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    act(() => storage(b));
+    await act(async () => old.reject(new Error('old bootstrap')));
+    expect(result.current.user).toEqual(b);
+    expect(authService.refreshToken).not.toHaveBeenCalled();
+  });
+
+  it('ignores an old login response after another sign-in', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const old = deferred<any>(); vi.mocked(authService.login).mockReturnValueOnce(old.promise);
+    let pending!: Promise<unknown>; act(() => { pending = result.current.login({ email: a.email, password: 'fixture' }).catch(error => error); });
+    act(() => result.current.setAuthenticatedUser(b));
+    await act(async () => { old.resolve({ user: a }); expect(await pending).toBeInstanceOf(Error); });
+    expect(result.current.user).toEqual(b);
   });
 });

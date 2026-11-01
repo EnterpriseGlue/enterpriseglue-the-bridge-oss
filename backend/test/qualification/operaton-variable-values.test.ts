@@ -1,3 +1,4 @@
+/// <reference path="../../../packages/frontend-host/src/vite-env.d.ts" />
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { camundaGetWithConnection } from '@enterpriseglue/shared/services/bpmn-engine-client.js';

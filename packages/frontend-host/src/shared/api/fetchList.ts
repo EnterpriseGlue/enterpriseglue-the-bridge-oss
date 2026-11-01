@@ -1,5 +1,5 @@
-import { apiClient } from './client';
-import { expectArray } from './expectArray';
+import { apiClient } from './client.js';
+import { expectArray } from './expectArray.js';
 
 /**
  * GET a list endpoint, validating at the API boundary that the response is an

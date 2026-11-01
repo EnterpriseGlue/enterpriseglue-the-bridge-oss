@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
+import { createHash } from 'node:crypto';
 import express from 'express';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -95,6 +96,8 @@ describe('engines deployments routes', () => {
   let deploymentArtifactRows: any[];
   let deploymentHistoryRows: any[];
   let mockEngine: any;
+  let revisionCommits: any[];
+  let revisionSnapshots: any[];
 
   beforeEach(async () => {
     app = express();
@@ -141,6 +144,8 @@ describe('engines deployments routes', () => {
       checks: [],
       reasons: [],
     });
+    revisionCommits = [];
+    revisionSnapshots = [];
     engineDeploymentInserts = [];
     artifactInserts = [];
     deploymentArtifactRows = [];
@@ -188,6 +193,10 @@ describe('engines deployments routes', () => {
             findOne: vi.fn().mockResolvedValue(null),
           };
         }
+        if (entityName === 'Commit') return {
+          findOne: vi.fn().mockImplementation(({ where }) => Promise.resolve(revisionCommits.find(c => c.id === where.id && c.projectId === where.projectId) || null)),
+        };
+        if (entityName === 'FileSnapshot') return { find: vi.fn().mockImplementation(() => Promise.resolve(revisionSnapshots)) };
         if (entityName === 'GitDeployment') {
           return {
             findOne: vi.fn().mockResolvedValue(null),
@@ -652,5 +661,56 @@ describe('engines deployments routes', () => {
       });
 
     expect(response.status).toBe(409);
+  });
+
+  function validRevision() {
+    const content = '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn"></bpmn:definitions>';
+    revisionCommits = [{ id: 'commit-1', projectId: 'project-1', message: 'Reviewed version' }];
+    revisionSnapshots = [{ id: 'snap-1', commitId: 'commit-1', mainFileId: 'file-1', folderId: null, name: 'process.bpmn', type: 'bpmn',
+      content, contentHash: createHash('sha256').update(content).digest('hex').slice(0, 16), changeType: 'unchanged' }];
+  }
+
+  it('verifies unchanged snapshots before sending and records their exact revision', async () => {
+    validRevision();
+    const { fetch } = await import('undici');
+    const response = await request(app).post('/engines-api/engines/e1/deployments').send({ resources: { projectId: 'project-1' }, options: { vcsCommitId: 'commit-1' } });
+    expect(response.status).toBe(201);
+    expect(fetch).toHaveBeenCalled();
+    expect(artifactInserts[0]).toMatchObject({ fileId: 'file-1', fileGitCommitId: 'commit-1', fileGitCommitMessage: 'Reviewed version' });
+  });
+
+  it.each(['missing-commit', 'foreign-project', 'missing-file', 'deleted-file', 'duplicate-file', 'changed-content', 'bad-hash', 'renamed', 'moved', 'wrong-type', 'wrong-commit'])('rejects %s before any engine effect or receipt', async drift => {
+    validRevision();
+    if (drift === 'missing-commit') revisionCommits = [];
+    if (drift === 'foreign-project') revisionCommits[0].projectId = 'sibling-project';
+    if (drift === 'missing-file') revisionSnapshots = [];
+    if (drift === 'deleted-file') revisionSnapshots[0].changeType = 'deleted';
+    if (drift === 'duplicate-file') revisionSnapshots.push({ ...revisionSnapshots[0], id: 'duplicate' });
+    if (drift === 'changed-content') { revisionSnapshots[0].content = '<different/>'; revisionSnapshots[0].contentHash = createHash('sha256').update('<different/>').digest('hex').slice(0, 16); }
+    if (drift === 'bad-hash') revisionSnapshots[0].contentHash = 'forged';
+    if (drift === 'renamed') revisionSnapshots[0].name = 'another.bpmn';
+    if (drift === 'moved') revisionSnapshots[0].folderId = 'elsewhere';
+    if (drift === 'wrong-type') revisionSnapshots[0].type = 'dmn';
+    if (drift === 'wrong-commit') revisionSnapshots[0].commitId = 'another-commit';
+    const { fetch } = await import('undici');
+    const response = await request(app).post('/engines-api/engines/e1/deployments').send({ resources: { projectId: 'project-1' }, options: { vcsCommitId: 'commit-1' } });
+    expect(response.status).toBe(409);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(engineDeploymentInserts).toEqual([]); expect(artifactInserts).toEqual([]);
+  });
+
+  it('keeps legacy unversioned deployments without inventing a commit binding', async () => {
+    const response = await request(app).post('/engines-api/engines/e1/deployments').send({ resources: { projectId: 'project-1' } });
+    expect(response.status).toBe(201);
+    expect(artifactInserts[0].fileGitCommitId).toBeNull();
+  });
+  it('rejects a file removed since the saved whole-project version, while explicit subsets remain valid', async () => {
+    validRevision();
+    revisionSnapshots.push({ ...revisionSnapshots[0], id: 'second-snapshot', mainFileId: 'removed-file' });
+    const { fetch } = await import('undici');
+    const changed = await request(app).post('/engines-api/engines/e1/deployments').send({ resources: { projectId: 'project-1' }, options: { vcsCommitId: 'commit-1' } });
+    expect(changed.status).toBe(409); expect(fetch).not.toHaveBeenCalled();
+    const subset = await request(app).post('/engines-api/engines/e1/deployments').send({ resources: { fileIds: ['file-1'] }, options: { vcsCommitId: 'commit-1' } });
+    expect(subset.status).toBe(201);
   });
 });

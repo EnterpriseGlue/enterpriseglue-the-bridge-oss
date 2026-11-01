@@ -9,24 +9,29 @@
     "operators",
     "developers"
   ],
-  "summary": "Use one native JSON write adapter for variable editing, creation and bulk upload, and require the real-engine round trip in release qualification.",
+  "summary": "Bind session and deployment actions to their original context, verify deployed revision lineage, and preserve typed variable values through the required engine qualification path.",
   "userImpact": [
     "Adding and uploading native JSON variables uses the same serialized engine contract as editing existing variables.",
     "Process navigation discards action drafts belonging to the previous instance, including when both instances use the same engine.",
     "Bulk variable writes and completed-history snapshots retain prototype-like variable names as ordinary own fields.",
-    "Reserved variable names are rejected before a bulk write can silently omit them."
+    "Reserved variable names are rejected before a bulk write can silently omit them.",
+    "Late authentication responses cannot restore an older browser session or replace newer permissions.",
+    "Save-and-deploy cannot continue against a replacement project, file selection or session.",
+    "Unsafe or out-of-range numeric variable writes are rejected instead of rounding or becoming null.",
+    "Versioned engine deployments reject content or snapshot drift before contacting the engine."
   ],
   "upgrade": {
     "required": true,
     "instructions": [
-      "Upgrade the qualified frontend host composition; existing variables need no data repair."
+      "Upgrade the qualified frontend and backend host composition; existing variables and receipts need no data repair."
     ]
   },
   "configuration": [],
   "api": {
     "compatibility": "none",
     "changes": [
-      "The frontend write adapter accepts parsed native JSON values and serializes them once for the engine. The external HTTP API and scalar/Java Object contracts are unchanged."
+      "The frontend write adapter accepts parsed native JSON values and serializes them once for the engine. The external HTTP API and scalar/Java Object contracts are unchanged.",
+      "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link."
     ]
   },
   "database": {
@@ -39,7 +44,9 @@
   "security": [
     "Engine selection, variable-value authorization, tenant routing and stale-response guards remain enforced.",
     "Process-local action state is remounted on instance navigation instead of being retargeted to another process.",
-    "Unmounted action callbacks cannot refetch or notify through a later tenant/process route; already issued operations retain their original target."
+    "Unmounted action callbacks cannot refetch or notify through a later tenant/process route; already issued operations retain their original target.",
+    "Browser action lifetimes use monotonically increasing revisions; server authentication, authorization and tenant boundaries remain enforced.",
+    "Commit/project/snapshot validation completes before any versioned engine deployment effect."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md"
@@ -54,19 +61,27 @@
     "Local request-shape and engine fixture checks do not establish live SaaS tenant isolation or staging installation."
   ],
   "rollback": [
-    "Restore the previous qualified frontend host; the previous JSON add/upload failure may recur."
+    "Restore the previous qualified frontend and backend hosts; the previous variable, session and deployment wiring defects may recur."
   ],
   "validation": [
     "Focused frontend adapter, route, editor, retry, modification and history regressions.",
     "Real pinned Operaton round trip using the actual frontend writer and shared runtime/task/history reader.",
     "Frontend host typecheck and packed entrypoint verification; release workflow, classifier, aggregate, package-version and documentation contracts.",
-    "Full protected exact-candidate, browser and live two-tenant acceptance remain separate requirements."
+    "Full protected exact-candidate, browser and live two-tenant acceptance remain separate requirements.",
+    "Authentication, two-stage deployment, numeric parser and variable adapter regression tests.",
+    "Actual PostgreSQL deployment revision lookup and drift/foreign-project rejection."
   ],
   "packages": [
     {
       "name": "@enterpriseglue/frontend-host",
       "previousVersion": "0.20.9",
       "newVersion": "0.20.10",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.7",
+      "newVersion": "0.23.8",
       "impact": "patch"
     }
   ]
