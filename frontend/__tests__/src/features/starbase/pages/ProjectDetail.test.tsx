@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -11,7 +11,7 @@ let projectFileName = 'Alpha.bpmn'
 let projectMemberRoles: Array<'owner' | 'delegate' | 'developer' | 'editor' | 'viewer'> = ['owner']
 
 const authMocks = vi.hoisted(() => ({
-  projectId: 'project-1',
+  projectId: 'project-1', userId: 'user-1', sessionRevision: 1, notify: vi.fn(),
   hasPlatformPermission: vi.fn(),
   hasProjectPermission: vi.fn(),
 }))
@@ -36,7 +36,8 @@ vi.mock('@src/shared/hooks/useTenantNavigate', () => ({
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { id: 'user-1' },
+    user: { id: authMocks.userId },
+    sessionRevision: authMocks.sessionRevision,
     hasPlatformPermission: authMocks.hasPlatformPermission,
     hasProjectPermission: authMocks.hasProjectPermission,
   }),
@@ -44,7 +45,7 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
 
 vi.mock('@src/shared/notifications/ToastProvider', () => ({
   useToast: () => ({
-    notify: vi.fn(),
+    notify: authMocks.notify,
   }),
 }))
 
@@ -73,9 +74,11 @@ vi.mock('@src/features/starbase/pages/components/ProjectContentsTable', () => ({
     onDownloadFile,
     setBatchDeleteIds,
     setBatchCancelSelection,
-    uploadInputRef, onUploadChange, onUploadClick, getToolbarActionUnavailableReason,
+    uploadInputRef, onUploadChange, onUploadClick, onCreateFolder, getToolbarActionUnavailableReason,
   }: any) => (
     <div>
+      <button onClick={onCreateFolder}>Create folder fixture</button>
+      <button onClick={() => onDeleteItem({ id: '22222222-2222-4222-8222-222222222222', name: 'Owned folder', type: 'folder' })}>Delete folder fixture</button>
       <input aria-label="Fixture upload" type="file" ref={uploadInputRef} onChange={onUploadChange} />
       <button onClick={onUploadClick} disabled={Boolean(getToolbarActionUnavailableReason?.('upload'))}>Pick upload</button>
       <div>{items[0]?.name}</div>
@@ -156,13 +159,14 @@ function renderWithProviders() {
     },
   })
 
-  return render(
+  const tree = () => (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/starbase/project/project-1']}>
         <ProjectDetail />
       </MemoryRouter>
     </QueryClientProvider>
   )
+  return { ...render(tree()), tree, queryClient };
 }
 
 describe('ProjectDetail', () => {
@@ -175,6 +179,44 @@ describe('ProjectDetail', () => {
     const file = new File([''], 'Imported.bpmn'); Object.defineProperty(file, 'text', { value: async () => '<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p"/></definitions>' });
     await userEvent.upload(screen.getByLabelText('Fixture upload'), file);
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(`/starbase-api/projects/${authMocks.projectId}/files`, expect.objectContaining({ name: 'Imported.bpmn', type: 'bpmn', folderId: null })));
+  });
+
+  const createdFolder = { id: '22222222-2222-4222-8222-222222222222', name: 'Reviewed folder', parentFolderId: null, createdAt: 1, updatedAt: 1 };
+  const prepareFolder = async () => {
+    authMocks.projectId = '11111111-1111-4111-8111-111111111111'; authMocks.hasProjectPermission.mockReturnValue(true);
+    const f = renderWithProviders(); await screen.findByText('Alpha.bpmn');
+    await userEvent.click(screen.getByRole('button', { name: 'Create folder fixture' }));
+    await userEvent.type(screen.getByLabelText('Folder name'), 'Reviewed folder'); return f;
+  };
+
+  it('creates a folder only after a verified receipt and refresh', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(createdFolder); await prepareFolder();
+    await userEvent.click(screen.getByRole('button', { name: /^Create$/ }));
+    await waitFor(() => expect(authMocks.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Folder created' })));
+    expect(apiClient.post).toHaveBeenCalledWith('/starbase-api/projects/11111111-1111-4111-8111-111111111111/folders', { name: 'Reviewed folder', parentFolderId: null });
+  });
+
+  it('does not acknowledge or replay an empty folder creation response', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({}); await prepareFolder();
+    await userEvent.click(screen.getByRole('button', { name: /^Create$/ }));
+    await waitFor(() => expect(authMocks.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Folder creation was not verified' })));
+    expect(screen.getByRole('button', { name: /^Create$/ })).toBeDisabled(); expect(apiClient.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses a late creation after a same-user session replacement', async () => {
+    let finish!: (value: unknown) => void; vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const f = await prepareFolder(); await userEvent.click(screen.getByRole('button', { name: /^Create$/ }));
+    authMocks.sessionRevision++; f.rerender(f.tree()); await act(async () => finish(createdFolder));
+    expect(authMocks.notify).not.toHaveBeenCalled(); expect(screen.getByLabelText('Folder name').closest('.cds--modal')).not.toHaveClass('is-visible');
+  });
+
+  it('requires a verified deletion preview instead of falling back to blind confirmation', async () => {
+    authMocks.projectId = '11111111-1111-4111-8111-111111111111'; authMocks.hasProjectPermission.mockReturnValue(true);
+    const get = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: any, ...args: any[]) => url.endsWith('/delete-preview') ? {} : get(url, ...args));
+    renderWithProviders(); await screen.findByText('Alpha.bpmn'); await userEvent.click(screen.getByRole('button', { name: 'Delete folder fixture' }));
+    await waitFor(() => expect(authMocks.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Folder deletion preview unavailable' })));
+    expect(screen.queryByText(/You're about to delete the folder/)).not.toBeInTheDocument(); expect(apiClient.delete).not.toHaveBeenCalled();
   });
 
   it('formats project role assignment source lineage', () => {
@@ -210,7 +252,7 @@ describe('ProjectDetail', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    authMocks.projectId = 'project-1'
+    authMocks.projectId = 'project-1'; authMocks.userId = 'user-1'; authMocks.sessionRevision = 1;
     projectFileName = 'Alpha.bpmn'
     projectMemberRoles = ['owner']
     authMocks.hasPlatformPermission.mockReturnValue(false)

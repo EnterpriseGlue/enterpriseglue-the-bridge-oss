@@ -32,7 +32,9 @@ import ConfirmDeleteModal from '../../shared/components/ConfirmDeleteModal'
 import { useModal } from '../../../shared/hooks/useModal'
 import { ErrorState } from '../../shared/components'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
+import { useProjectActionFence } from '../hooks/useProjectActionFence'
 import { useProjectUpload } from '../hooks/useProjectUpload'
+import { UpdateFileMetadataResponseSchema } from '@enterpriseglue/shared/schemas/starbase/file.js'
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { useInlineRename } from '../hooks/useInlineRename'
 import DeployDialog from '../../git/components/DeployDialog'
@@ -259,9 +261,10 @@ export default function ProjectDetail() {
   const [batchCancelSelection, setBatchCancelSelection] = React.useState<null | (() => void)>(null)
   const [batchMoveIds, setBatchMoveIds] = React.useState<string[] | null>(null)
 
-  const [busy, setBusy] = React.useState(false)
+  const [legacyBusy, setBusy] = React.useState(false)
   const [newFolderName, setNewFolderName] = React.useState('')
   const folderId = searchParams.get('folder') || null
+  const viewAuthority = JSON.stringify([projectId, folderId, user?.session?.principal.id || user?.id, user?.session?.tenant.id, sessionRevision, permissionSnapshotAuthorityKey(permissions)])
   const [newFileName, setNewFileName] = React.useState('')
   const [moveTarget, setMoveTarget] = React.useState<string | 'ROOT'>('ROOT')
   const [allFolders, setAllFolders] = React.useState<FolderSummary[] | null>(null)
@@ -457,33 +460,24 @@ export default function ProjectDetail() {
   const showSyncButton = anySyncEnabled && hasGitConnection
 
   const handleBatchDelete = async () => {
-    if (!canDeleteFiles) return
-    if (!batchDeleteIds || batchDeleteIds.length === 0) return
+    if (!projectId || !batchDeleteIds?.length) return;
+    const selected = batchDeleteIds.map(id => items.find(item => item.id === id));
+    if (new Set(batchDeleteIds).size !== batchDeleteIds.length || selected.some(item => !item)) return;
+    const operation = folderFence.begin(allowFolderAction('project.files.delete', canDeleteFiles));
+    if (!operation) return;
     try {
-      setBusy(true)
-      for (const id of batchDeleteIds) {
-        const it = items.find((x) => x.id === id)
-        if (!it) continue
-        if (it.type === 'folder') {
-          await foldersApi.delete(id)
-        } else {
-          await filesApi.delete(id)
-        }
+      for (const item of selected) {
+        operation.check();
+        if (item!.type === 'folder') await foldersApi.delete(item!.id, operation.check);
+        else { const raw = await filesApi.delete(item!.id); operation.check(); if (raw !== undefined) throw new Error('File deletion was not verified'); }
       }
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
-      showToast({
-        kind: 'success',
-        title: batchDeleteIds.length === 1 ? 'Item deleted' : 'Items deleted',
-      })
-      batchCancelSelection?.()
-      setBatchDeleteIds(null)
-      setBatchCancelSelection(null)
-    } catch (e: any) {
-      const parsed = parseApiError(e, 'Failed to delete selected items')
-      showToast({ kind: 'error', title: 'Failed to delete selected items', subtitle: parsed.message })
-    } finally {
-      setBusy(false)
-    }
+      operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId] }, { throwOnError: true }); operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }, { throwOnError: true }); operation.check();
+      showToast({ kind: 'success', title: selected.length === 1 ? 'Item deleted' : 'Items deleted' });
+      batchCancelSelection?.(); setBatchDeleteIds(null); setBatchCancelSelection(null);
+    } catch { try { operation.check(); operation.markUncertain(); showToast({ kind: 'error', title: 'Deletion was not verified', subtitle: 'Some selected items may have been deleted. Refresh project contents before retrying.' }); } catch {} }
+    finally { operation.finish(); }
   }
 
   async function submitUpdateDeployPermission(member: ProjectMember, allowed: boolean) {
@@ -535,6 +529,23 @@ export default function ProjectDetail() {
   }, [contentsQ.data, query])
 
   const { editingId, draftName, setDraftName, inputRef, startEditing, handleKeyDown, handleBlur } = useInlineRename({
+    scopeKey: viewAuthority,
+    onError: () => showToast({ kind: 'error', title: 'Rename was not verified', subtitle: 'Refresh project contents before retrying.' }),
+    write: async (id, name, check) => {
+      const operation = folderFence.begin(allowFolderAction('project.files.update', canEditFiles));
+      if (!operation) throw new Error('Rename context is unavailable');
+      try {
+        check(); operation.check();
+        const item = items.find(row => row.id === id);
+        if (!item) throw new Error('Rename target is unavailable');
+        if (item.type === 'folder') await foldersApi.update(id, { name }, () => { check(); operation.check(); });
+        else {
+          const raw = await filesApi.updateMetadata(id, { name }); check(); operation.check();
+          const receipt = UpdateFileMetadataResponseSchema.strict().safeParse(raw);
+          if (!receipt.success || receipt.data.id !== id || receipt.data.name !== name) throw new Error('Rename receipt was not verified');
+        }
+      } catch (error) { operation.markUncertain(); throw error; } finally { operation.finish(); }
+    },
     getEndpoint: (id: string) => {
       const item = items.find(i => i.id === id)
       const isFolder = item?.type === 'folder'
@@ -738,13 +749,21 @@ export default function ProjectDetail() {
   ), [hasProjectAction, hasProjectPermission, projectActionAvailability, projectId])
 
   const canViewFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_VIEW)
-  const canCreateFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_CREATE)
+  const canCreateFiles = permissions ? evaluateActionSnapshot(permissions, 'project.files.create', { type: 'project', id: projectId || null }).allowed : hasProjectPermissionForCurrentUser(ProjectPermission.FILES_CREATE)
   const uploadDecision = evaluateActionSnapshot(permissions, 'project.files.create', { type: 'project', id: projectId || null })
   const upload = useProjectUpload({ projectId, folderId, queryClient, showToast,
     allowed: permissions ? uploadDecision.allowed : canCreateFiles,
     authority: JSON.stringify([user?.session?.principal.id || user?.id, user?.session?.tenant.id, sessionRevision, permissionSnapshotAuthorityKey(permissions)]) })
-  const canEditFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_EDIT)
-  const canDeleteFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_DELETE)
+  const canEditFiles = permissions ? evaluateActionSnapshot(permissions, 'project.files.update', { type: 'project', id: projectId || null }).allowed : hasProjectPermissionForCurrentUser(ProjectPermission.FILES_EDIT)
+  const folderFence = useProjectActionFence(JSON.stringify([viewAuthority, newFolderModal.isOpen, newFolderName, deleteFolderModal.isOpen, deleteFolderModal.data?.id, moveModal.isOpen, moveModal.data, moveTarget, allFolders, batchDeleteIds]))
+  const busy = legacyBusy || folderFence.pending
+  React.useEffect(() => {
+    newFolderModal.closeModal(); deleteFolderModal.closeModal(); moveModal.closeModal();
+    setNewFolderName(''); setAllFolders(null); setMoveTarget('ROOT'); setBatchDeleteIds(null); setBatchCancelSelection(null);
+  }, [viewAuthority])
+  const allowFolderAction = (action: string, fallback: boolean) => permissions ? evaluateActionSnapshot(permissions, action, { type: 'project', id: projectId || null }).allowed : fallback
+
+  const canDeleteFiles = permissions ? evaluateActionSnapshot(permissions, 'project.files.delete', { type: 'project', id: projectId || null }).allowed : hasProjectPermissionForCurrentUser(ProjectPermission.FILES_DELETE)
   const canViewMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_VIEW) ||
     hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
   const canManageMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
@@ -817,16 +836,16 @@ export default function ProjectDetail() {
     switch (action) {
       case 'rename':
       case 'move':
-        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_EDIT)
+        return canEditFiles ? null : 'Missing permission to edit project files'
       case 'download':
       case 'downloadPdf':
         return getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
       case 'delete':
-        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_DELETE)
+        return canDeleteFiles ? null : 'Missing permission to delete project files'
       default:
         return null
     }
-  }, [getProjectPermissionUnavailableReason])
+  }, [getProjectPermissionUnavailableReason, canEditFiles, canDeleteFiles])
 
   const syncPermissions = React.useMemo(() => [
     ...((platformSettings?.syncPushEnabled ?? true) ? [ProjectPermission.GIT_PUSH] : []),
@@ -853,11 +872,11 @@ export default function ProjectDetail() {
       case 'upload':
         return upload.unavailableReason || getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
       case 'create':
-        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
+        return canCreateFiles ? null : 'Missing permission to create project files'
       default:
         return null
     }
-  }, [canViewDeploymentOptions, canViewMembers, getProjectPermissionUnavailableReason, upload.unavailableReason])
+  }, [canViewDeploymentOptions, canViewMembers, canCreateFiles, getProjectPermissionUnavailableReason, upload.unavailableReason])
 
   const getProjectDetailToolbarActionDiagnosticDecision = React.useCallback((
     action: ProjectDetailToolbarAction,
@@ -1135,9 +1154,9 @@ export default function ProjectDetail() {
       case 'download':
         return getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
       case 'delete':
-        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_DELETE)
+        return canDeleteFiles ? null : 'Missing permission to delete project files'
       case 'move':
-        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_EDIT)
+        return canEditFiles ? null : 'Missing permission to edit project files'
       case 'sync':
         return syncUnavailableReason
       case 'deploy':
@@ -1432,20 +1451,16 @@ export default function ProjectDetail() {
   }
 
   async function submitDeleteFolder(folder: FolderSummary) {
-    if (!canDeleteFiles) return
-    if (!projectId) return
+    if (!projectId || deleteFolderModal.data?.id !== folder.id || !deleteFolderModal.data.preview) return;
+    const operation = folderFence.begin(allowFolderAction('project.files.delete', canDeleteFiles));
+    if (!operation) return;
     try {
-      setBusy(true)
-      await foldersApi.delete(folder.id)
-      deleteFolderModal.closeModal()
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
-      showToast({ kind: 'success', title: 'Folder deleted' })
-    } catch (e: any) {
-      const parsed = parseApiError(e, 'Failed to delete folder')
-      showToast({ kind: 'error', title: 'Failed to delete folder', subtitle: parsed.message })
-    } finally {
-      setBusy(false)
-    }
+      await foldersApi.delete(folder.id, operation.check); operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId] }, { throwOnError: true }); operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }, { throwOnError: true }); operation.check();
+      deleteFolderModal.closeModal(); showToast({ kind: 'success', title: 'Folder deleted' });
+    } catch { try { operation.check(); operation.markUncertain(); showToast({ kind: 'error', title: 'Folder deletion was not verified', subtitle: 'Refresh project contents before retrying.' }); } catch {} }
+    finally { operation.finish(); }
   }
 
   async function submitMoveFile(file: FileItem, targetId: string | null) {
@@ -1491,22 +1506,15 @@ export default function ProjectDetail() {
   }
 
   async function submitMoveFolder(folder: FolderSummary, targetId: string | null) {
-    if (!canEditFiles) return
-    if (!projectId) return
+    if (!projectId) return;
+    const operation = folderFence.begin(allowFolderAction('project.files.update', canEditFiles));
+    if (!operation) return;
     try {
-      setBusy(true)
-      await foldersApi.update(folder.id, { parentFolderId: targetId })
-      moveModal.closeModal()
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folder.id] })
-      showToast({ kind: 'success', title: 'Folder moved' })
-    } catch (e: any) {
-      const parsed = parseApiError(e, 'Failed to move folder')
-      showToast({ kind: 'error', title: 'Failed to move folder', subtitle: parsed.message })
-    } finally {
-      setBusy(false)
-    }
+      await foldersApi.update(folder.id, { parentFolderId: targetId }, operation.check); operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId] }, { throwOnError: true }); operation.check();
+      moveModal.closeModal(); showToast({ kind: 'success', title: 'Folder moved' });
+    } catch { try { operation.check(); operation.markUncertain(); showToast({ kind: 'error', title: 'Folder move was not verified', subtitle: 'Refresh project contents before retrying.' }); } catch {} }
+    finally { operation.finish(); }
   }
 
   async function submitCreateFile() {
@@ -1538,29 +1546,18 @@ export default function ProjectDetail() {
   }
 
   async function submitCreateFolder() {
-    if (!canCreateFiles) return
-    if (!projectId) return
-    const name = newFolderName.trim()
-    if (!name) return
+    const name = newFolderName.trim();
+    if (!projectId || !newFolderModal.isOpen || !name) return;
+    const operation = folderFence.begin(allowFolderAction('project.files.create', canCreateFiles));
+    if (!operation) return;
     try {
-      setBusy(true)
-      const created = await foldersApi.create(projectId, {
-        name,
-        parentFolderId: folderId ?? null,
-      })
-      newFolderModal.closeModal()
-      setNewFolderName('')
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
-      showToast({ kind: 'success', title: 'Folder created' })
-      if (created?.id) {
-        tenantNavigate(`/starbase/project/${projectId}?folder=${created.id}`)
-      }
-    } catch (e: any) {
-      const parsed = parseApiError(e, 'Failed to create folder')
-      showToast({ kind: 'error', title: 'Failed to create folder', subtitle: parsed.message })
-    } finally {
-      setBusy(false)
-    }
+      const created = await foldersApi.create(projectId, { name, parentFolderId: folderId ?? null }, operation.check); operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['contents', projectId] }, { throwOnError: true }); operation.check();
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }, { throwOnError: true }); operation.check();
+      newFolderModal.closeModal(); setNewFolderName(''); showToast({ kind: 'success', title: 'Folder created' });
+      tenantNavigate(`/starbase/project/${encodeURIComponent(projectId)}?folder=${encodeURIComponent(created.id)}`);
+    } catch { try { operation.check(); operation.markUncertain(); showToast({ kind: 'error', title: 'Folder creation was not verified', subtitle: 'Refresh project contents before retrying.' }); } catch {} }
+    finally { operation.finish(); }
   }
   return (
     <div style={{
@@ -1767,13 +1764,10 @@ export default function ProjectDetail() {
                 if (!canDeleteFiles) return
                 if (file.type === 'folder') {
                   if (!file.id) return
-                  foldersApi.getDeletePreview(file.id)
-                    .then((preview: any) => {
-                      deleteFolderModal.openModal({ id: file.id, name: file.name, preview })
-                    })
-                    .catch(() => {
-                      deleteFolderModal.openModal({ id: file.id, name: file.name })
-                    })
+                  const check = folderFence.capture();
+                  foldersApi.getDeletePreview(file.id, check)
+                    .then(preview => { check(); deleteFolderModal.openModal({ id: file.id, name: file.name, preview }); })
+                    .catch(() => { try { check(); showToast({ kind: 'error', title: 'Folder deletion preview unavailable', subtitle: 'Refresh project contents before deleting this folder.' }); } catch {} });
                 } else {
                   deleteFileModal.openModal(file)
                 }
@@ -1846,6 +1840,7 @@ export default function ProjectDetail() {
           <ModalBody>
             <TextInput
               id="create-folder-name"
+              disabled={busy}
               labelText="Folder name"
               placeholder="Enter folder name"
               value={newFolderName}
@@ -1862,7 +1857,7 @@ export default function ProjectDetail() {
             <Button kind="secondary" onClick={() => newFolderModal.closeModal()} disabled={busy}>
               Cancel
             </Button>
-            <Button kind="primary" onClick={submitCreateFolder} disabled={busy || !newFolderName.trim()}>
+            <Button kind="primary" onClick={submitCreateFolder} disabled={busy || folderFence.blocked || !newFolderName.trim()}>
               Create
             </Button>
           </ModalFooter>
@@ -1963,7 +1958,7 @@ export default function ProjectDetail() {
               <TreePicker
                 allFolders={allFolders}
                 value={moveTarget}
-                onChange={setMoveTarget}
+                onChange={value => { if (!busy) setMoveTarget(value) }}
                 disabledSet={moveDisabledSet}
                 projectName={projectName}
               />
@@ -2000,7 +1995,7 @@ export default function ProjectDetail() {
                   return submitMoveFile(selectedFile, targetId)
                 }
               }}
-              disabled={busy || !moveModal.data}
+              disabled={busy || folderFence.blocked || !moveModal.data || !allFolders}
             >
               {busy ? 'Moving...' : 'Move'}
             </Button>

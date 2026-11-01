@@ -72,8 +72,8 @@ describe('CascadeDeleteService', () => {
   });
 
   it('gets folder deletion stats', async () => {
-    const folderRepo = { find: vi.fn().mockResolvedValue([]) };
-    const fileRepo = { find: vi.fn().mockResolvedValue([{ id: 'f1' }]) };
+    const folderRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'folder-1', projectId: 'project-1' }) };
+    const fileRepo = { find: vi.fn().mockResolvedValue([{ id: 'f1', projectId: 'project-1' }]) };
     const versionRepo = { count: vi.fn().mockResolvedValue(2) };
     const commentRepo = { count: vi.fn().mockResolvedValue(0) };
 

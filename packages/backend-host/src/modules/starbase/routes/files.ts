@@ -13,6 +13,7 @@ import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
+import { lockFolderProject } from '@enterpriseglue/shared/services/starbase/folder-tree.js';
 import { Brackets, IsNull } from 'typeorm';
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
@@ -193,6 +194,7 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
   const bpmnProcessId = fileType === 'bpmn' ? extractBpmnProcessId(xml) : null;
   const dmnDecisionId = fileType === 'dmn' ? extractDmnDecisionId(xml) : null;
   await dataSource.transaction(async manager => {
+    await lockFolderProject(manager, projectId);
     const fileRepo = manager.getRepository(File);
     const versionRepo = manager.getRepository(Version);
     if (folderId) {
@@ -603,26 +605,24 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
 
-  const projectResult = await fileRepo.findOne({
-    where: { id: fileId },
-    select: ['projectId', 'name', 'type', 'folderId', 'xml']
+  const ownerLookup = await fileRepo.findOne({ where: { id: fileId }, select: ['projectId'] });
+  if (!ownerLookup) throw Errors.notFound('File');
+  const { projectResult, nextFolderId } = await dataSource.transaction(async manager => {
+    await lockFolderProject(manager, ownerLookup.projectId);
+    const repo = manager.getRepository(File);
+    const projectResult = await repo.findOne({ where: { id: fileId, projectId: ownerLookup.projectId }, select: ['projectId', 'name', 'type', 'folderId', 'xml'] });
+    if (!projectResult) throw Errors.notFound('File');
+    if (folderId) {
+      const folder = await manager.getRepository(Folder).findOne({ where: { id: String(folderId), projectId: projectResult.projectId }, select: ['id', 'projectId'] });
+      if (!folder || folder.projectId !== projectResult.projectId) throw Errors.notFound('Folder');
+    }
+    const updates: { name?: string; folderId?: string | null; updatedAt: number } = { updatedAt: now };
+    if (newName !== undefined) updates.name = newName;
+    if (folderId !== undefined) updates.folderId = folderId === null ? null : String(folderId);
+    const nextFolderId = folderId !== undefined ? (folderId === null ? null : String(folderId)) : (projectResult.folderId ?? null);
+    await repo.update({ id: fileId, projectId: projectResult.projectId }, updates);
+    return { projectResult, nextFolderId };
   });
-  if (!projectResult) {
-    throw Errors.notFound('File');
-  }
-
-  if (folderId) {
-    const folder = await dataSource.getRepository(Folder).findOne({ where: { id: String(folderId), projectId: projectResult.projectId }, select: ['id', 'projectId'] });
-    if (!folder || folder.projectId !== projectResult.projectId) throw Errors.notFound('Folder');
-  }
-
-  // Build dynamic UPDATE
-  const updates: any = { updatedAt: now };
-  if (newName !== undefined) updates.name = newName;
-  if (folderId !== undefined) updates.folderId = folderId === null ? null : String(folderId);
-  const nextFolderId = folderId !== undefined ? (folderId === null ? null : String(folderId)) : (projectResult.folderId ?? null);
-
-  await fileRepo.update({ id: fileId }, updates);
 
   syncFileUpdate(
     projectResult.projectId,

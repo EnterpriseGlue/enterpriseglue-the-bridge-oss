@@ -131,14 +131,32 @@ describe('starbase folders routes', () => {
       }),
     };
 
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    const source = {
+      connection: { options: { type: 'sqljs' } },
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: projectFindOne };
         if (entity === Folder) return folderRepo;
         if (entity === File) return { find: fileFind, findOne: fileFindOne };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn(), save: vi.fn(), delete: vi.fn() };
       },
-    });
+      transaction: vi.fn(),
+    };
+    source.transaction.mockImplementation(async (work: any) => work(source));
+    vi.mocked(getDataSource).mockResolvedValue(source as any);
+  });
+
+  it('rejects a foreign parent before creating or moving a folder', async () => {
+    const foreign = '22222222-2222-4222-8222-222222222222';
+    folderFindOne.mockImplementation(async ({ where }: any) => where.id === folderId ? { id: folderId, projectId, name: 'Owned', parentFolderId: null } : null);
+    const created = await request(app).post(`/starbase-api/projects/${projectId}/folders`).send({ name: 'Foreign', parentFolderId: foreign });
+    const moved = await request(app).patch(`/starbase-api/folders/${folderId}`).send({ parentFolderId: foreign });
+    expect(created.status).toBe(404); expect(moved.status).toBe(404); expect(folderInsert).not.toHaveBeenCalled(); expect(folderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not expose a sibling project breadcrumb through the project contents query', async () => {
+    folderFindOne.mockImplementation(async ({ where }: any) => where.projectId ? null : { id: folderId, projectId: 'foreign', name: 'Private', parentFolderId: null });
+    const response = await request(app).get(`/starbase-api/projects/${projectId}/contents?folderId=${folderId}`);
+    expect(response.status).toBe(404); expect(JSON.stringify(response.body)).not.toContain('Private');
   });
 
   it('lists flat project folders through project.files.read', async () => {
@@ -232,7 +250,7 @@ describe('starbase folders routes', () => {
       resourceId: projectId,
     }));
     expect(folderUpdate).toHaveBeenCalledWith(
-      { id: folderId },
+      { id: folderId, projectId },
       expect.objectContaining({ name: 'Renamed Folder' })
     );
   });

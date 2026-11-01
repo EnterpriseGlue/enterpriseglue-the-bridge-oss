@@ -90,6 +90,7 @@ describe('starbase files routes - mutations', () => {
       ].includes(permission)
     );
     const source = {
+      connection: { options: { type: 'sqljs' } },
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: projectFindOne };
         if (entity === File) return { find: fileFind, findOne: fileFindOne, insert: fileInsert };

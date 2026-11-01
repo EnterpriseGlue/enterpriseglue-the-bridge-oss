@@ -11,6 +11,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Branch.js';
 import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFile.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { Comment } from '@enterpriseglue/shared/infrastructure/persistence/entities/Comment.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
 import filesRouter from '../../../packages/backend-host/src/modules/starbase/routes/files.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
@@ -48,7 +49,7 @@ const database = `file_restore_${randomUUID().replace(/-/g, '')}`;
 const connection = { type: 'postgres' as const, host: env('POSTGRES_HOST', '127.0.0.1'), port: Number(env('POSTGRES_PORT', '5432')),
   username: env('POSTGRES_USER', 'postgres'), password: env('POSTGRES_PASSWORD', 'postgres') };
 const admin = new DataSource({ ...connection, database: env('POSTGRES_DATABASE', 'postgres') });
-const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog, Version];
+const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog, Version, Comment];
 const store = new DataSource({ ...connection, database, entities, synchronize: true });
 const projectId = randomUUID(), otherProjectId = randomUUID(), fileId = randomUUID(), siblingId = randomUUID();
 const commitId = randomUUID(), otherCommitId = randomUUID(), branchId = randomUUID();
@@ -95,6 +96,80 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     if (store.isInitialized) await store.destroy();
     if (admin.isInitialized) { try { if (created) await admin.query(`DROP DATABASE "${database}"`); } finally { await admin.destroy(); } }
   });
+  it('serializes opposite folder moves so concurrent requests cannot create a cycle', async () => {
+    const first = randomUUID(), second = randomUUID();
+    await store.getRepository(Folder).insert([{ id: first, projectId, name: 'First', createdAt: 1, updatedAt: 1 }, { id: second, projectId, name: 'Second', createdAt: 1, updatedAt: 1 }]);
+    const responses = await Promise.all([
+      request(app).patch(`/starbase-api/folders/${first}`).send({ parentFolderId: second }),
+      request(app).patch(`/starbase-api/folders/${second}`).send({ parentFolderId: first }),
+    ]);
+    expect(responses.map(response => response.status).sort()).toEqual([200, 400]);
+    const rows = await store.getRepository(Folder).find({ where: { projectId } });
+    expect(rows.filter(row => row.parentFolderId)).toHaveLength(1);
+  });
+
+  it('creates and renames folders without committing an unrelated working draft', async () => {
+    const calls = vi.mocked(vcsService.getUserBranch).mock.calls.length;
+    const before = await store.getRepository(WorkingFile).findOneByOrFail({ mainFileId: siblingId });
+    const response = await request(app).post(`/starbase-api/projects/${projectId}/folders`).send({ name: '  Owned folder  ' });
+    expect(response.status).toBe(201); expect(response.body.name).toBe('Owned folder');
+    const renamed = await request(app).patch(`/starbase-api/folders/${response.body.id}`).send({ name: 'Renamed folder' });
+    expect(renamed.status).toBe(200);
+    expect(vi.mocked(vcsService.getUserBranch).mock.calls.length).toBe(calls);
+    expect(await store.getRepository(Commit).count()).toBe(2);
+    expect(await store.getRepository(WorkingFile).findOneByOrFail({ mainFileId: siblingId })).toEqual(before);
+  });
+
+  it('excludes corrupt foreign children/files from preview, export, and atomic folder deletion', async () => {
+    const root = randomUUID(), child = randomUUID(), foreign = randomUUID(), ownFile = randomUUID(), foreignFile = randomUUID();
+    await store.getRepository(Folder).insert([
+      { id: root, projectId, name: 'Owned root', createdAt: 1, updatedAt: 1 },
+      { id: child, projectId, parentFolderId: root, name: 'Owned child', createdAt: 1, updatedAt: 1 },
+      { id: foreign, projectId: otherProjectId, parentFolderId: root, name: 'Private foreign folder', createdAt: 1, updatedAt: 1 },
+    ]);
+    for (const [id, project, folder, content] of [[ownFile, projectId, child, '<owned/>'], [foreignFile, otherProjectId, root, '<private-foreign/>']]) {
+      await store.getRepository(File).insert({ id, projectId: project, folderId: folder, name: id === ownFile ? 'Owned' : 'Private', type: 'bpmn', xml: content, createdAt: 1, updatedAt: 1 });
+      await store.getRepository(Version).insert({ id: randomUUID(), fileId: id, message: 'Fixture version', xml: content, createdAt: 1 });
+      await store.getRepository(Comment).insert({ id: randomUUID(), fileId: id, author: 'fixture', message: content, createdAt: 1 });
+    }
+    const preview = await request(app).get(`/starbase-api/folders/${root}/delete-preview`);
+    expect(preview.status).toBe(200); expect(preview.body).toMatchObject({ folderCount: 2, fileCount: 1 }); expect(JSON.stringify(preview.body)).not.toContain('Private');
+    const exported = await request(app).get(`/starbase-api/folders/${root}/download`).buffer(true).parse((response, callback) => {
+      const chunks: Buffer[] = []; response.on('data', chunk => chunks.push(Buffer.from(chunk))); response.on('end', () => callback(null, Buffer.concat(chunks)));
+    });
+    expect(exported.status).toBe(200);
+    const { unzipSync } = await import('fflate');
+    const exportedText = Object.values(unzipSync(exported.body)).map(bytes => Buffer.from(bytes).toString()).join(' ');
+    expect(exportedText).toContain('<owned/>'); expect(exportedText).not.toContain('private-foreign'); expect(exportedText).not.toContain('Private foreign');
+    const calls = vi.mocked(vcsService.getUserBranch).mock.calls.length;
+    const deleted = await request(app).delete(`/starbase-api/folders/${root}`); expect(deleted.status).toBe(204);
+    expect(await store.getRepository(Folder).findOneBy({ id: root })).toBeNull(); expect(await store.getRepository(File).findOneBy({ id: ownFile })).toBeNull();
+    expect(await store.getRepository(Folder).findOneBy({ id: foreign })).not.toBeNull(); expect(await store.getRepository(File).findOneBy({ id: foreignFile })).not.toBeNull();
+    expect(await store.getRepository(Version).count({ where: { fileId: foreignFile } })).toBe(1); expect(await store.getRepository(Comment).count({ where: { fileId: foreignFile } })).toBe(1);
+    expect(vi.mocked(vcsService.getUserBranch).mock.calls.length).toBe(calls);
+  });
+
+  it('rolls back complete folder deletion if a child row cannot be removed', async () => {
+    const root = randomUUID(), childFile = randomUUID();
+    await store.getRepository(Folder).insert({ id: root, projectId, name: 'Guarded root', createdAt: 1, updatedAt: 1 });
+    await store.getRepository(File).insert({ id: childFile, projectId, folderId: root, name: 'Guarded', type: 'bpmn', xml: '<guarded/>', createdAt: 1, updatedAt: 1 });
+    await store.getRepository(Version).insert({ id: randomUUID(), fileId: childFile, message: 'Fixture version', xml: '<guarded/>', createdAt: 1 });
+    await store.query(`CREATE TABLE main.fixture_delete_guard (file_id text REFERENCES main.files(id))`);
+    try {
+      await store.query('INSERT INTO main.fixture_delete_guard VALUES ($1)', [childFile]);
+      const response = await request(app).delete(`/starbase-api/folders/${root}`); expect(response.status).toBe(500);
+      expect(await store.getRepository(File).findOneBy({ id: childFile })).not.toBeNull(); expect(await store.getRepository(Folder).findOneBy({ id: root })).not.toBeNull(); expect(await store.getRepository(Version).count({ where: { fileId: childFile } })).toBe(1);
+    } finally { await store.query('DROP TABLE main.fixture_delete_guard'); }
+  });
+
+  it.each(['contents', 'preview', 'download', 'delete'])('rejects cyclic folder %s without hanging or writing/streaming', async kind => {
+    const root = randomUUID(), child = randomUUID();
+    await store.getRepository(Folder).insert([{ id: root, projectId, name: 'Cycle root', parentFolderId: child, createdAt: 1, updatedAt: 1 }, { id: child, projectId, name: 'Cycle child', parentFolderId: root, createdAt: 1, updatedAt: 1 }]);
+    const response = kind === 'delete' ? await request(app).delete(`/starbase-api/folders/${root}`)
+      : await request(app).get(kind === 'contents' ? `/starbase-api/projects/${projectId}/contents?folderId=${root}` : `/starbase-api/folders/${root}/${kind === 'preview' ? 'delete-preview' : 'download'}`);
+    expect(response.status).toBe(400); expect(response.headers['content-type']).not.toContain('application/zip'); expect(await store.getRepository(Folder).count()).toBe(2);
+  });
+
   it('creates an imported file and exact initial version in one PostgreSQL transaction', async () => {
     const folder = randomUUID();
     await store.getRepository(Folder).insert({ id: folder, projectId, name: 'Owned folder', createdAt: 1, updatedAt: 1 });

@@ -34,6 +34,7 @@ const {
   FolderSchema,
   FolderSchemaRaw,
   FolderSummarySchema,
+  FolderListResponseSchema,
   ProjectArchiveImportResponseSchema,
   CreateFolderRequest,
   CreateFolderResponseSchema,
@@ -3780,7 +3781,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/folders',
   ...authzExtension('project.files.read', 'GET', '/starbase-api/projects/{projectId}/folders'),
   request: { params: z.object({ projectId: z.string() }) },
-  responses: { 200: { description: 'List all folders in project', content: { 'application/json': { schema: z.array(FolderSummarySchema) } } } },
+  responses: { 200: { description: 'List all folders in project', content: { 'application/json': { schema: FolderListResponseSchema } } } },
 });
 
 // POST /starbase-api/projects/:projectId/folders (create folder)

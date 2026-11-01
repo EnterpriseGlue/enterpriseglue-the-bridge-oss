@@ -437,6 +437,7 @@ export default function ProjectOverview() {
   }
 
   const { editingId, draftName, setDraftName, inputRef, startEditing, handleKeyDown, handleBlur } = useInlineRename({
+    scopeKey: authority,
     type: 'project',
     queryKey: ['starbase', 'projects']
   })

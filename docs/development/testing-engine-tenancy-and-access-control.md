@@ -930,3 +930,24 @@ is selected in the browser. Their exact metadata receipt is shared by the route,
 OpenAPI and browser. Counts acknowledge the import request; independent contents
 and version checks remain the verification of resulting state. An imported file
 must still pass ordinary source-bound save and deployment verification.
+
+### Project folder mutations and traversal
+
+Folder creation, rename and move validate the destination and its complete
+ancestry in the authorized project. Preview, archive paths and cascade deletion
+traverse only that project's rows and reject cycles. Ordinary folder-edge writers,
+file insertion/moves and archive import acquire the project row inside their
+transaction before checking the tree; folder deletion collects and removes its
+subtree under the same fence. PostgreSQL concurrency and rollback tests exercise
+this behavior. Cross-database acceptance remains a separate release gate.
+
+Folder operations leave version saving explicit. They do not launch a background
+commit of unrelated project drafts. The move picker consumes the validated
+complete folder list and stays disabled when that list cannot be verified.
+Browser mutations validate canonical receipts and own their dialog, project and
+authenticated-session continuations. An uncertain write stops further dispatch
+in that reviewed view; a closed or replaced view suppresses late success without
+undoing an issued request. Deletion requires a verified informational preview,
+but that preview is not an atomic retained deletion plan. A no-content response
+acknowledges the request; independently reading resulting state is still needed.
+No migration, RLS policy, server permission or privilege is relaxed.

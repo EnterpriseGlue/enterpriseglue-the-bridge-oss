@@ -30,6 +30,25 @@ describe('useInlineRename', () => {
       React.createElement(QueryClientProvider, { client: queryClient }, children);
   };
 
+  it('suppresses old rename settlement after the same mounted view changes scope', async () => {
+    let finish!: (value: unknown) => void; vi.mocked(apiClient.patch).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const f = renderHook(({ scopeKey }) => useInlineRename({ type: 'folder', queryKey: ['folders'], scopeKey }), { initialProps: { scopeKey: 'A' }, wrapper: createWrapper() });
+    act(() => f.result.current.startEditing('folder-A', 'A'));
+    let pending!: Promise<void>; act(() => { pending = f.result.current.saveRename('folder-A', 'Renamed'); });
+    f.rerender({ scopeKey: 'B' }); act(() => f.result.current.startEditing('folder-B', 'B'));
+    await act(async () => { finish({}); await pending; });
+    expect(f.result.current.editingId).toBe('folder-B'); expect(f.result.current.draftName).toBe('B'); expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch twice for Enter followed by blur while rename is pending', async () => {
+    let finish!: (value: unknown) => void; vi.mocked(apiClient.patch).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const f = renderHook(() => useInlineRename({ type: 'folder', queryKey: ['folders'] }), { wrapper: createWrapper() });
+    act(() => f.result.current.startEditing('folder-A', 'A'));
+    let pending!: Promise<void>; act(() => { pending = f.result.current.saveRename('folder-A', 'Renamed'); f.result.current.handleBlur('folder-A'); });
+    expect(apiClient.patch).toHaveBeenCalledTimes(1); await act(async () => { finish({}); await pending; });
+  });
+
   describe('initialization', () => {
     it('initializes with default state', () => {
       const { result } = renderHook(
@@ -227,7 +246,7 @@ describe('useInlineRename', () => {
       });
 
       await waitFor(() => {
-        expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] });
+        expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] }, { throwOnError: true });
       });
     });
 
