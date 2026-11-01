@@ -7,6 +7,8 @@ import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@aste
 // before any schema is created so that .openapi() is available on instances.
 extendZodWithOpenApi(z);
 
+const { CommitFileSnapshotsResponseSchema } = await import('./starbase/commit-snapshot.js');
+
 // Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
 const {
   ProjectSchema,
@@ -4110,7 +4112,7 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/commits/{commitId}/files',
   ...authzExtension('project.vcs.commits.read', 'GET', '/vcs-api/projects/{projectId}/commits/{commitId}/files'),
   request: { params: z.object({ projectId: z.string().uuid(), commitId: z.string() }) },
-  responses: { 200: { description: 'File snapshots for commit', content: { 'application/json': { schema: z.object({ files: z.array(z.unknown()) }) } } } },
+  responses: { 200: { description: 'File snapshots for commit', content: { 'application/json': { schema: CommitFileSnapshotsResponseSchema } } } },
 });
 
 // POST /vcs-api/projects/:projectId/commits/:commitId/restore

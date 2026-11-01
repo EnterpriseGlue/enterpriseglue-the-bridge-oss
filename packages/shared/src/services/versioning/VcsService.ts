@@ -111,7 +111,7 @@ export class VcsService {
     return vcsCommitService.getCommits(branchId, limit);
   }
 
-  async getCommitSnapshots(commitId: string): Promise<{
+  async getCommitSnapshots(commitId: string, projectId: string): Promise<{
     id: string;
     mainFileId: string | null;
     folderId: string | null;
@@ -120,7 +120,7 @@ export class VcsService {
     content: string | null;
     changeType: string;
   }[]> {
-    return vcsCommitService.getCommitSnapshots(commitId);
+    return vcsCommitService.getCommitSnapshots(commitId, projectId);
   }
 
   async commitHasFile(commitId: string, fileId: string): Promise<boolean> {

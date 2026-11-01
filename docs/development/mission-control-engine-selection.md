@@ -150,3 +150,33 @@ bash scripts/run-native-tenancy-postgres-rls.sh --deployment-revision
 It is also included in the default PostgreSQL regression lane. The test verifies
 actual TypeORM reads and rejection of drift and sibling-project revisions; it
 does not establish live tenant routing, runtime-role/RLS or engine acceptance.
+
+## Saved diagram revision reads
+
+The editor's deployed-version view and Git version preview use
+`GET /vcs-api/projects/:projectId/commits/:commitId/files`. The shared response
+schema includes stable `mainFileId`, folder, name, format, change type and content.
+The service joins the commit to the requested project in SQL after the route's
+existing project authorization. Restore reads use the same project binding, and
+updates require the target file to belong to that project and affect one row
+before recording a checkpoint. Restore remains a multi-file operation; these
+checks do not make it an atomic transaction.
+
+Local file-version preview caches include the project, file and version identity
+and use a separate namespace from Git commit snapshots. Equal version/commit IDs
+cannot supply one another's preview or restore readiness.
+
+Browser snapshot selection prefers the exact stable file ID, including after a
+rename. Only older rows without a stable ID may use a unique exact name, format
+and folder match. Missing, deleted, ambiguous or empty snapshots never fall back
+to another file in the commit. The deployed-version view uses dedicated BPMN/DMN
+viewers, separate from the editable draft and autosave. The DMN viewer uses the
+bundled WOFF icon font under a distinct family so modern browsers do not attempt
+the vendor stylesheet's legacy EOT fallback. A missing commit identity
+or unavailable snapshot produces an explicit unavailable state; a version number
+alone does not infer a commit or display the current draft as deployed content.
+
+The PostgreSQL deployment-revision lane also checks snapshot reads with actual
+TypeORM queries: own-project reads succeed and sibling-project commit IDs return
+no snapshots. Local component, transport and database tests remain distinct from
+the authenticated editor journey and live tenant-isolation acceptance.

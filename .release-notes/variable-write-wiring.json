@@ -29,7 +29,9 @@
     "Process drafts and deployment continuations discard older session and permission state even when the URL, account or engine ID stays the same.",
     "An older 401 refresh cannot replay a request under a replacement login or clear its local state; private caches are discarded on same-account session replacement and permission changes.",
     "Session startup makes one refresh attempt for an expired session and stops on other failures; a pending login-page bootstrap cannot continue after switching tenants.",
-    "Runtime configuration rejects redirects so a same-origin configuration URL cannot delegate API or module settings to another origin."
+    "Runtime configuration rejects redirects so a same-origin configuration URL cannot delegate API or module settings to another origin.",
+    "Saved diagram views load the canonical project-bound revision endpoint and select the requested file by stable identity; missing revisions no longer display a sibling file or the editable draft.",
+    "Local file versions and Git commit snapshots use separate caches, preventing an equal ID from supplying the wrong preview or restore readiness."
   ],
   "upgrade": {
     "required": true,
@@ -45,7 +47,8 @@
       "The frontend write adapter accepts parsed native JSON values and serializes them once for the engine. The external HTTP API and scalar/Java Object contracts are unchanged.",
       "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link.",
       "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards.",
-      "Security enforcement: status-changing profile PUT returns 409; compatibility DELETE requires the lifecycle reason body and uses audited deactivation; direct SCIM/LDAP profile overrides are rejected."
+      "Security enforcement: status-changing profile PUT returns 409; compatibility DELETE requires the lifecycle reason body and uses audited deactivation; direct SCIM/LDAP profile overrides are rejected.",
+      "The existing commit-files endpoint returns a shared strict snapshot DTO and binds commit reads to the authorized project. Both saved-diagram views use that endpoint; stable file identity takes priority over names."
     ]
   },
   "database": {
@@ -63,7 +66,8 @@
     "Commit/project/snapshot validation completes before any versioned engine deployment effect.",
     "Lifecycle audits use the existing exact-row append capability inside the transaction; unbound or wrong-row audit inserts remain denied under forced RLS, with no database-policy or grant changes.",
     "Engine callbacks are checked before dispatch and on settlement using their render, mount and browser-session lifetime. Shared refreshes are session/tenant-bound; cancelled callers never replay and server authorization remains authoritative.",
-    "The same-origin runtime configuration boundary rejects redirects before contacting their destination; direct same-origin documents retain explicit API-origin selection."
+    "The same-origin runtime configuration boundary rejects redirects before contacting their destination; direct same-origin documents retain explicit API-origin selection.",
+    "Commit snapshot reads bind the authorized project in SQL; restore updates require the target row to belong to that project. Historical diagram content stays separate from draft autosave, with no authorization, database policy or grant relaxation."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -95,7 +99,9 @@
     "Forced PostgreSQL RLS tests exercise audited deactivation/reactivation/session revocation, guarded compatibility paths and strict profile DTO serialization.",
     "Deferred session/permission/engine transitions, positive same-authority refresh, StrictMode, shared refresh cancellation and owned native loopback HTTP transport sequences.",
     "Session bootstrap through the actual auth provider, service, API client and HTTP interceptor: one refresh owner, no refresh on non-401 failures, and tenant-switch refusal before the next request.",
-    "Owned native HTTP configuration origins prove redirect refusal, required startup failure, optional fallback and explicit cross-origin API selection without following a redirect."
+    "Owned native HTTP configuration origins prove redirect refusal, required startup failure, optional fallback and explicit cross-origin API selection without following a redirect.",
+    "Canonical snapshot adapter and viewer regressions, project-authorized route/restore tests and actual PostgreSQL sibling-project snapshot denial.",
+    "Production-built BPMN/DMN viewer and missing-snapshot browser assertions against owned local HTTP responses; the viewer selects the bundled modern WOFF icon face."
   ],
   "packages": [
     {

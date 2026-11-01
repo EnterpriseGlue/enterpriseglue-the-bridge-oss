@@ -37,6 +37,8 @@ describe('PostgreSQL deployment revision binding', () => {
     }
     await store.getRepository(FileSnapshot).insert({ id: 'snapshot-A', commitId: 'commit-A', workingFileId: 'working-A', mainFileId: file.id,
       folderId: null, name: file.name, type: file.type, content: file.sourceXml, contentHash: sourceHash(file.sourceXml), changeType: 'unchanged' });
+    await store.getRepository(FileSnapshot).insert({ id: 'snapshot-B', commitId: 'commit-B', workingFileId: 'working-B', mainFileId: 'file-B',
+      folderId: null, name: file.name, type: file.type, content: '<definitions>private project B</definitions>', contentHash: 'fixture', changeType: 'modified' });
   }, 30000);
   afterAll(async () => {
     if (store.isInitialized) await store.destroy();
@@ -44,6 +46,14 @@ describe('PostgreSQL deployment revision binding', () => {
   });
   it('resolves actual TypeORM commit/snapshot rows, including unchanged content', async () => {
     expect(await verifyDeploymentRevision(store, 'project-A', 'commit-A', [file])).toEqual(new Map([[file.id, { id: 'commit-A', message: 'Reviewed A' }]]));
+  });
+  it('binds commit snapshot reads to the authorized project in the actual SQL query', async () => {
+    const service = new VcsCommitService();
+    await expect(service.getCommitSnapshots('commit-A', 'project-A')).resolves.toMatchObject([{ id: 'snapshot-A' }]);
+    await expect(service.getCommitSnapshots('commit-B', 'project-A')).resolves.toEqual([]);
+    await expect(service.getCommitSnapshots('commit-A', 'project-B')).resolves.toEqual([]);
+    await expect(service.getCommitSnapshots('commit-B', 'project-B')).resolves.toMatchObject([{ id: 'snapshot-B' }]);
+    await expect(service.getCommitSnapshots('missing', 'project-A')).resolves.toEqual([]);
   });
   it.each(['missing', 'commit-B'])('rejects an absent or sibling project revision %s', async id => {
     await expect(verifyDeploymentRevision(store, 'project-A', id, [file])).rejects.toMatchObject({ statusCode: 409 });

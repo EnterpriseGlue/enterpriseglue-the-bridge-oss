@@ -3,6 +3,7 @@ import { CamundaPlatformModeler as DmnModeler } from 'camunda-dmn-js'
 import { Button } from '@carbon/react'
 import { FitToScreen, Add, Subtract } from '@carbon/icons-react'
 import 'camunda-dmn-js/dist/assets/camunda-platform-modeler.css'
+import '../styles/dmn-viewer-font.css'
 
 type DMNDrdMiniProps = {
   xml: string

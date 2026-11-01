@@ -209,7 +209,7 @@ export class VcsCommitService {
   /**
    * Get file snapshots for a specific commit
    */
-  async getCommitSnapshots(commitId: string): Promise<{
+  async getCommitSnapshots(commitId: string, projectId: string): Promise<{
     id: string;
     mainFileId: string | null;
     folderId: string | null;
@@ -218,13 +218,16 @@ export class VcsCommitService {
     content: string | null;
     changeType: string;
   }[]> {
+    if (!projectId) throw new Error('A project is required to read commit snapshots');
     const dataSource = await getDataSource();
     const snapshotRepo = dataSource.getRepository(FileSnapshot);
     const fileRepo = dataSource.getRepository(WorkingFile);
     
     const snapshots = await snapshotRepo.createQueryBuilder('fs')
+      .innerJoin(Commit, 'vc', 'fs.commitId = vc.id')
       .leftJoin(WorkingFile, 'wf', 'fs.workingFileId = wf.id')
       .where('fs.commitId = :commitId', { commitId })
+      .andWhere('vc.projectId = :projectId', { projectId })
       .select([
         'fs.id AS id',
         'fs.mainFileId AS "mainFileId"',

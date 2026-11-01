@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,7 +51,7 @@ vi.mock('@src/features/shared/components/LoadingState', () => ({
 }));
 
 vi.mock('@src/features/shared/components/Viewer', () => ({
-  default: () => <div>Viewer</div>,
+  default: ({ xml }: { xml: string }) => <div>Viewer<pre>{xml}</pre></div>,
 }));
 
 vi.mock('@src/features/starbase/components/DMNDrdMini', () => ({
@@ -486,6 +486,32 @@ describe('GitVersionsPanel', () => {
     expect(screen.getByText(/Mission Control unavailable Missing engine runtime read permission\./i)).toBeInTheDocument();
   });
 
+  it('does not display a cached Git snapshot as a local file version with the same ID', async () => {
+    const originalGet = vi.mocked(apiClient.get).getMockImplementation()!;
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiClient.get).mockImplementation(url => {
+      if (url === '/starbase-api/files/file-1/versions') return Promise.resolve([
+        { id: 'newer', message: 'Current local', createdAt: 2000 },
+        { id: 'same-id', message: 'Older local', createdAt: 1000 },
+      ]);
+      if (url === '/starbase-api/files/file-1/versions/same-id') return new Promise(resolve => { finish = resolve; });
+      return originalGet(url);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['vcs', 'commit-files', 'project-1', 'same-id'], { files: [{
+      id: 'git-snapshot', mainFileId: 'file-1', folderId: null, name: 'Invoice', type: 'bpmn',
+      content: 'WRONG_GIT_CONTENT', changeType: 'modified',
+    }] });
+    render(<QueryClientProvider client={client}><GitVersionsPanel projectId="project-1" fileId="file-1" fileName="Invoice" fileType="bpmn" saveMode="local" /></QueryClientProvider>);
+    await userEvent.click(await screen.findByText(/Older local/));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(screen.queryByText('WRONG_GIT_CONTENT')).not.toBeInTheDocument();
+    expect(screen.getByText('Loading version...')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Restore this version' })).toBeDisabled();
+    await act(async () => { finish({ id: 'same-id', fileId: 'file-1', xml: 'CORRECT_LOCAL_CONTENT' }); });
+    expect(await screen.findByText('CORRECT_LOCAL_CONTENT')).toBeVisible();
+  });
+
   it('requires a scoped deployment history permission or action', () => {
     const noScopedPermission = vi.fn().mockReturnValue(false);
 
@@ -536,6 +562,8 @@ describe('GitVersionsPanel', () => {
           files: [
             {
               id: 'file-1',
+              mainFileId: 'file-1',
+              folderId: null,
               name: 'Invoice',
               type: 'bpmn',
               content: '<definitions />',

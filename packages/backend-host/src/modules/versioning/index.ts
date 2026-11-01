@@ -23,6 +23,7 @@ import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persist
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { In, IsNull, Brackets } from 'typeorm';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
+import { CommitFileSnapshotsResponseSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 
 // Type for branch row
@@ -570,8 +571,8 @@ router.get('/vcs-api/projects/:projectId/commits/:commitId/files', apiLimiter, r
   }
 
   try {
-    const snapshots = await vcsService.getCommitSnapshots(commitId);
-    res.json({ files: snapshots });
+    const snapshots = await vcsService.getCommitSnapshots(commitId, projectId);
+    res.json(CommitFileSnapshotsResponseSchema.parse({ files: snapshots }));
   } catch (error) {
     logger.error('Failed to get commit files', { projectId, commitId, userId, error });
     throw Errors.internal('Failed to get commit files');
@@ -596,7 +597,7 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
     const fileRepo = dataSource.getRepository(File);
     
     // Get file snapshots from the commit
-    const snapshots = await vcsService.getCommitSnapshots(commitId);
+    const snapshots = await vcsService.getCommitSnapshots(commitId, projectId);
     
     if (snapshots.length === 0) {
       throw Errors.fileNotFound();
@@ -620,10 +621,11 @@ router.post('/vcs-api/projects/:projectId/commits/:commitId/restore', apiLimiter
       }
 
       if (targetFileId && snapshot.content) {
-        await fileRepo.update({ id: targetFileId }, {
+        const updated = await fileRepo.update({ id: targetFileId, projectId }, {
           xml: snapshot.content,
           updatedAt: Date.now()
         });
+        if (updated.affected !== 1) throw Errors.fileNotFound();
       }
     }
 

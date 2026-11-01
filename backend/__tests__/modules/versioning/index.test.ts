@@ -92,6 +92,37 @@ describe('versioning routes', () => {
     };
   }
 
+  const snapshot = { id: 'snapshot-1', mainFileId: fileId, folderId: null, name: 'Invoice', type: 'bpmn', content: '<definitions/>', changeType: 'modified' };
+
+  it('binds the canonical snapshot read to the route-authorized project and typed response', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (vcsService.getCommitSnapshots as Mock).mockResolvedValue([snapshot]);
+    const response = await request(app).get(`/vcs-api/projects/${projectId}/commits/commit-1/files`);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ files: [snapshot] });
+    expect(vcsService.getCommitSnapshots).toHaveBeenCalledWith('commit-1', projectId);
+  });
+
+  it('denies snapshot reads without the existing project permission', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (permissionService.hasPermission as Mock).mockResolvedValue(false);
+    expect((await request(app).get(`/vcs-api/projects/${projectId}/commits/commit-1/files`)).status).toBe(403);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 0])('keeps restore updates within the authorized project and requires one affected row (%s)', async affected => {
+    const update = vi.fn().mockResolvedValue({ affected });
+    (getDataSource as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Project ? projectRepository() : { update, find: vi.fn().mockResolvedValue([]) } });
+    (vcsService.getCommitSnapshots as Mock).mockResolvedValue([snapshot]);
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'branch-1' });
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'restored' });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/restore`);
+    expect(vcsService.getCommitSnapshots).toHaveBeenCalledWith('commit-1', projectId);
+    expect(update).toHaveBeenCalledWith({ id: fileId, projectId }, expect.objectContaining({ xml: snapshot.content }));
+    if (affected === 1) expect(response.status).toBe(200);
+    else { expect(response.status).toBeGreaterThanOrEqual(400); expect(vcsService.commit).not.toHaveBeenCalled(); }
+  });
+
   it('scopes file-save commits to the selected file ids for offline-like save flow', async () => {
     const fileFind = vi.fn().mockResolvedValue([
       {

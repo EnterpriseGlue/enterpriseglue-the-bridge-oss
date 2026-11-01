@@ -30,6 +30,7 @@ const DMNEvaluatePanel = React.lazy(() => import('../components/DMNEvaluatePanel
 // Properties panel is provided by camunda-bpmn-js and mounted by Canvas
 import DeployButton from '../../git/components/DeployButton'
 import GitVersionsPanel from '../../git/components/GitVersionsPanel'
+import CommitSnapshotViewer from '../../git/components/CommitSnapshotViewer'
 import { gitApi } from '../../git/api/gitApi'
 import { projectsApi } from '../../../api/starbase/projects'
 import { useGitRepository } from '../../git/hooks/useGitRepository'
@@ -159,7 +160,6 @@ export default function Editor() {
   const [showSaveFirstPrompt, setShowSaveFirstPrompt] = React.useState(false)
   const editorModeRef = React.useRef(editorMode)
   React.useEffect(() => { editorModeRef.current = editorMode }, [editorMode])
-  const viewModeImportedRef = React.useRef(false)
 
   const cleanEditorPath = React.useMemo(
     () => (fileId ? `/starbase/editor/${encodeURIComponent(sanitizePathParam(String(fileId)))}` : '/starbase'),
@@ -472,7 +472,6 @@ export default function Editor() {
     setEditorMode('normal')
     setHotfixContext(null)
     setShowSaveFirstPrompt(false)
-    viewModeImportedRef.current = false
     focusElementAttemptedRef.current = null
     blockingTakeoverPromptFileRef.current = null
   }, [fileId, clearPendingAutosave, clearSaveFeedbackTimer])
@@ -1720,43 +1719,6 @@ export default function Editor() {
     }
   })
 
-  // Snapshot query for view mode — fetch XML for the target deployed version
-  const viewSnapshotQ = useQuery({
-    queryKey: ['vcs', 'snapshots', fileQ.data?.projectId, phase2CommitId],
-    queryFn: () => apiClient.get<{ files: Array<{ name: string; type: string; content: string | null; changeType: string }> }>(
-      `/vcs-api/projects/${encodeURIComponent(fileQ.data!.projectId)}/commits/${encodeURIComponent(phase2CommitId!)}/snapshots`
-    ),
-    enabled: !!fileQ.data?.projectId && !!phase2CommitId && editorMode === 'view',
-    staleTime: Infinity,
-  })
-
-  // Import snapshot XML into modeler when entering view mode
-  React.useEffect(() => {
-    if (editorMode !== 'view' || !modelerReady || !modelerRef.current || viewModeImportedRef.current) return
-    const files = viewSnapshotQ.data?.files
-    if (!files || files.length === 0) return
-
-    const fileName = fileQ.data?.name
-    const fileType = fileQ.data?.type
-
-    // Find the right file snapshot (same logic as GitVersionsPanel)
-    let match = files.find((f) => f.name === fileName && f.type === fileType && f.content)
-    if (!match) match = files.find((f) => f.name === fileName && f.content)
-    if (!match) match = files.find((f) => f.type === fileType && f.content)
-    if (!match) match = files.find((f) => f.content != null)
-
-    if (match?.content) {
-      viewModeImportedRef.current = true
-      isRestoringRef.current = true
-      modelerRef.current.importXML(match.content).then(() => {
-        isRestoringRef.current = false
-        try { fitViewport(modelerRef.current) } catch {}
-      }).catch(() => {
-        isRestoringRef.current = false
-      })
-    }
-  }, [editorMode, modelerReady, viewSnapshotQ.data, fileQ.data?.name, fileQ.data?.type])
-
   // Extract decision key from DMN XML
   React.useEffect(() => {
     if (fileQ.data?.type === 'dmn' && fileQ.data.xml) {
@@ -2307,8 +2269,9 @@ export default function Editor() {
   const handleEnterViewMode = React.useCallback(() => {
     // Kill any pending autosave timer so it doesn't save snapshot XML to the server
     clearPendingAutosave()
+    modelerRef.current = null
+    setModelerReady(false)
     setPhase2Dismissed(true)
-    viewModeImportedRef.current = false
     setEditorMode('view')
   }, [clearPendingAutosave])
 
@@ -2338,17 +2301,9 @@ export default function Editor() {
   }, [fileId, queryClient, safeEditorTenantPath, toTenantPath])
 
   const handleBackToDraft = React.useCallback(() => {
-    viewModeImportedRef.current = false
     setEditorMode('normal')
-    // Reimport the file's current XML
-    if (modelerRef.current && fileQ.data?.xml) {
-      isRestoringRef.current = true
-      modelerRef.current.importXML(fileQ.data.xml).then(() => {
-        isRestoringRef.current = false
-        try { fitViewport(modelerRef.current) } catch {}
-      }).catch(() => { isRestoringRef.current = false })
-    }
-  }, [fileQ.data?.xml])
+    // The draft modeler remounts with the current file XML.
+  }, [])
 
   const handleDeploySuccess = React.useCallback(() => {
     ignoreDirtyUntilRef.current = Date.now() + 500
@@ -2603,7 +2558,7 @@ export default function Editor() {
                 pointerEvents: 'auto',
               }}
             >
-              <CanvasToolbar modeler={modelerRef.current} />
+              {editorMode !== 'view' && <CanvasToolbar modeler={modelerRef.current} />}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
@@ -2751,7 +2706,9 @@ export default function Editor() {
 
       {/* Editor body (edge-to-edge under header) */}
       <div style={{ position: 'relative', flex: 1, background: 'var(--color-bg-primary)', overflow: 'hidden' }}>
-        {f.type === 'bpmn' ? (
+        {editorMode === 'view' ? (
+          <CommitSnapshotViewer projectId={f.projectId} commitId={phase2CommitId} file={f} />
+        ) : f.type === 'bpmn' ? (
           <Canvas
             key={f.id}
             xml={f.xml}
@@ -2995,6 +2952,7 @@ export default function Editor() {
                   fileId={fileId}
                   fileName={f.name}
                   fileType={f.type as 'bpmn' | 'dmn'}
+                  fileFolderId={f.folderId}
                   hasUnsavedVersion={hasUnsavedVersion}
                   lastEditedAt={lastEditedAt}
                   saveMode={hasGitRepository ? 'git' : 'local'}

@@ -8,6 +8,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
 import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
+import { getProjectCommitSnapshots, selectCommitFileSnapshot } from '../api/commitSnapshots';
+import type { CommitFileSnapshot as FileSnapshot } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateStarbaseMissionControlBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
@@ -31,6 +33,7 @@ interface GitVersionsPanelProps {
   fileId?: string;
   fileName?: string;
   fileType?: 'bpmn' | 'dmn';
+  fileFolderId?: string | null;
   hasUnsavedVersion?: boolean;
   lastEditedAt?: number | null;
   saveMode?: 'git' | 'local';
@@ -90,14 +93,6 @@ function getSourceLabel(source: string | undefined): string | null {
     case 'restore': return 'Restore';
     default: return null;
   }
-}
-
-interface FileSnapshot {
-  id: string;
-  name: string;
-  type: string;
-  content: string | null;
-  changeType: string;
 }
 
 type EngineWithAccess = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>;
@@ -296,6 +291,7 @@ export default function GitVersionsPanel({
   fileId,
   fileName,
   fileType = 'bpmn',
+  fileFolderId = null,
   hasUnsavedVersion,
   lastEditedAt,
   saveMode = 'git',
@@ -309,7 +305,6 @@ export default function GitVersionsPanel({
   const { hasEnginePermission, hasProjectPermission, permissions } = useAuth();
   const [selectedCommit, setSelectedCommit] = useState<VcsCommit | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewXml, setPreviewXml] = useState<string | null>(null);
   const [deploymentPendingDelete, setDeploymentPendingDelete] = useState<DeploymentBadge | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const [showSystemVersions, setShowSystemVersions] = useState(false);
@@ -419,18 +414,23 @@ export default function GitVersionsPanel({
 
   // Fetch file snapshots for selected commit
   const snapshotsQuery = useQuery({
-    queryKey: ['vcs', 'commit-files', projectId, selectedCommit?.id],
+    queryKey: saveMode === 'local'
+      ? ['starbase', 'version-file', projectId, fileId, selectedCommit?.id]
+      : ['vcs', 'commit-files', projectId, selectedCommit?.id],
     queryFn: async () => {
       if (saveMode === 'local') {
         if (!fileId || !selectedCommit?.id) {
           return { files: [] as FileSnapshot[] };
         }
         const version = await apiClient.get<LocalVersionDetail>(
-          `/starbase-api/files/${fileId}/versions/${selectedCommit.id}`
+          `/starbase-api/files/${encodeURIComponent(fileId)}/versions/${encodeURIComponent(selectedCommit.id)}`
         );
+        if (version.fileId !== fileId) throw new Error('Saved version does not match the requested file');
         return {
           files: [{
             id: version.id,
+            mainFileId: fileId,
+            folderId: fileFolderId,
             name: fileName || 'Version',
             type: fileType,
             content: version.xml,
@@ -438,9 +438,7 @@ export default function GitVersionsPanel({
           }],
         };
       }
-      return apiClient.get<{ files: FileSnapshot[] }>(
-        `/vcs-api/projects/${projectId}/commits/${selectedCommit!.id}/files`
-      );
+      return getProjectCommitSnapshots(projectId, selectedCommit!.id);
     },
     enabled: !!selectedCommit && previewOpen && (saveMode === 'local' ? !!fileId : !!projectId && canReadVcsCommits),
   });
@@ -567,7 +565,6 @@ export default function GitVersionsPanel({
 
   const openCommitPreview = React.useCallback((commit: VcsCommit) => {
     setSelectedCommit(commit);
-    setPreviewXml(null); // Reset preview XML
     setPreviewOpen(true);
   }, []);
 
@@ -578,7 +575,6 @@ export default function GitVersionsPanel({
   const handleClosePreview = () => {
     setPreviewOpen(false);
     setSelectedCommit(null);
-    setPreviewXml(null);
   };
 
   const handleRestore = () => {
@@ -679,62 +675,9 @@ export default function GitVersionsPanel({
     return map;
   }, [deploymentsForFile, fileType, activeEnvironment, environmentColorByName, getDeploymentDeleteDecision, hasEngineAccess]);
 
-  // Extract XML from snapshots when loaded
-  React.useEffect(() => {
-    if (snapshotsQuery.data?.files) {
-      const files = snapshotsQuery.data.files;
-
-      const score = (s: FileSnapshot) => {
-        let v = 0;
-        if (s.content) v += 10;
-        if (s.changeType !== 'unchanged') v += 5;
-        if (s.changeType === 'deleted') v -= 20;
-        return v;
-      };
-
-      const pickBest = (candidates: FileSnapshot[]) => {
-        let best: FileSnapshot | undefined;
-        for (const c of candidates) {
-          if (!best || score(c) > score(best)) best = c;
-        }
-        return best;
-      };
-
-      // Prefer the most recent snapshot for this exact file (name + type)
-      let file: FileSnapshot | undefined;
-
-      if (fileName) {
-        const exactMatches = files.filter((f) => f.name === fileName && f.type === fileType);
-        if (exactMatches.length > 0) {
-          file = pickBest(exactMatches);
-        } else {
-          const nameMatches = files.filter((f) => f.name === fileName);
-          if (nameMatches.length > 0) {
-            file = pickBest(nameMatches);
-          }
-        }
-      }
-
-      // Fallbacks: latest by type, then any file with content
-      if (!file) {
-        const typeMatches = files.filter((f) => f.type === fileType);
-        if (typeMatches.length > 0) {
-          file = pickBest(typeMatches);
-        }
-      }
-
-      if (!file) {
-        const anyWithContent = files.filter((f) => f.content);
-        if (anyWithContent.length > 0) {
-          file = pickBest(anyWithContent);
-        }
-      }
-
-      if (file?.content) {
-        setPreviewXml(file.content);
-      }
-    }
-  }, [snapshotsQuery.data, fileName, fileType]);
+  const previewXml = previewOpen && selectedCommit ? selectCommitFileSnapshot(snapshotsQuery.data?.files || [], {
+    id: fileId, name: fileName, type: fileType, folderId: fileFolderId,
+  })?.content ?? null : null;
 
   const handleJumpToCommit = React.useCallback((commit: VcsCommit, event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
