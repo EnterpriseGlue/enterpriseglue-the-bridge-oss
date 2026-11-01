@@ -257,6 +257,30 @@ describe('apiClient', () => {
     });
   });
 
+  describe('deleteNoContent', () => {
+    it.each([200, 201, 202])('rejects an unexpected HTTP %s success without reading its body', async status => {
+      const response = new Response('private-upstream-detail', { status }); const read = vi.spyOn(response, 'text');
+      vi.mocked(interceptor.interceptedFetch).mockResolvedValueOnce(response);
+      await expect(apiClient.deleteNoContent('/api/deletion', { credentials: 'include' })).rejects.toMatchObject({ status: 502, message: 'Deletion response was not verified; refresh before retrying.' });
+      expect(read).not.toHaveBeenCalled(); expect(interceptor.interceptedFetch).toHaveBeenCalledOnce();
+    });
+    it('settles HTTP 204 before acknowledging the exact DELETE', async () => {
+      const response = new Response(null, { status: 204 }); const read = vi.spyOn(response, 'text');
+      vi.mocked(interceptor.interceptedFetch).mockResolvedValueOnce(response);
+      await expect(apiClient.deleteNoContent('/api/deletion', { credentials: 'include' })).resolves.toBeUndefined();
+      expect(read).toHaveBeenCalledOnce(); expect(interceptor.interceptedFetch).toHaveBeenCalledExactlyOnceWith('/api/deletion', expect.objectContaining({ method: 'DELETE', credentials: 'include' }));
+    });
+    it('does not acknowledge a failed HTTP 204 stream', async () => {
+      const response = new Response(null, { status: 204 }); vi.spyOn(response, 'text').mockRejectedValueOnce(new Error('Stream failed'));
+      vi.mocked(interceptor.interceptedFetch).mockResolvedValueOnce(response);
+      await expect(apiClient.deleteNoContent('/api/deletion')).rejects.toThrow('Stream failed'); expect(interceptor.interceptedFetch).toHaveBeenCalledOnce();
+    });
+    it('preserves explicit HTTP denial without another DELETE', async () => {
+      vi.mocked(interceptor.interceptedFetch).mockResolvedValueOnce(new Response('Denied', { status: 403 }));
+      await expect(apiClient.deleteNoContent('/api/deletion')).rejects.toMatchObject({ status: 403 }); expect(interceptor.interceptedFetch).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('getBlob', () => {
     it('gets blob responses', async () => {
       const blob = new Blob(['content'], { type: 'application/pdf' });

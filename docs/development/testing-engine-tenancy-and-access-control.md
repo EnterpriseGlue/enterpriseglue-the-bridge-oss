@@ -1014,3 +1014,25 @@ snapshot and browser session; replaced or closed views settle silently. An
 unverified response or failed refresh blocks another submission in that view
 until the caller reloads and reconciles the result. These UI fences do not grant
 server authority or make an uncertain write safe to retry.
+
+### Engine deployment deletion from file history
+
+The history panel deletes the entire selected engine deployment, including its
+definitions and resources; its scope can include files other than the displayed
+file. Saved Starbase versions remain intact. The panel always sends
+`cascade=false`, so running instances are not cascade-deleted and the engine can
+refuse an in-use deployment. The existing engine deployment-delete action
+authorizes the request independently of the project history permission.
+
+Confirmation and refresh belong to the original engine/deployment, file,
+principal, tenant and permission snapshot. Replaced views cannot receive late
+completion callbacks. Each target can be submitted once in that view; a lost
+acknowledgement or failed refresh requires reconciliation rather than another
+DELETE. Both the engine adapter and the browser require HTTP 204 and a settled
+empty response stream. Other success statuses are unverified and do not become
+deletion acknowledgements. Historical deployment lineage is retained.
+
+The legacy and canonical error-handler import paths share one `AppError` class.
+Typed engine failures therefore retain their sanitized HTTP status across the
+service/route boundary instead of becoming generic errors due to class-identity
+drift. This does not change authorization, tenant policies or migration floors.

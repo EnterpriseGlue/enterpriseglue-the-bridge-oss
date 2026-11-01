@@ -296,4 +296,17 @@ export const apiClient = {
     });
     return handleResponse<T>(response);
   },
+
+  /** A mutation whose contract acknowledges completion only with HTTP 204. */
+  async deleteNoContent(url: string, options?: RequestInit): Promise<void> {
+    const response = await interceptedFetch(url, {
+      ...options, method: 'DELETE', headers: mergeHeaders(options?.headers),
+    });
+    if (!response.ok) return handleResponse<void>(response);
+    if (response.status !== 204) {
+      try { await response.body?.cancel(); } catch {}
+      throw new ApiError(502, 'Unverified deletion', 'Deletion response was not verified; refresh before retrying.');
+    }
+    await response.text();
+  },
 };

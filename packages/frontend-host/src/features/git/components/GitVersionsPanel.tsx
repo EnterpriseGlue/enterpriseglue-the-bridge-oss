@@ -9,6 +9,7 @@ import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Tog
 import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
+import { useProjectActionFence } from '../../starbase/hooks/useProjectActionFence';
 import { getBrowserSessionRevision } from '../../../utils/browserSession';
 import { getProjectCommitSnapshots, selectCommitFileSnapshot } from '../api/commitSnapshots';
 import { FILE_SCOPED_COMMIT_SOURCES } from '@enterpriseglue/shared/utils/commit-snapshot.js';
@@ -571,30 +572,44 @@ export default function GitVersionsPanel({
     },
   });
 
+  const deletionAuthority = JSON.stringify([projectId, fileId, saveMode,
+    user?.session?.principal.id || user?.id || null, user?.session?.tenant.id || null,
+    sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)]);
+  const submittedDeletions = React.useRef({ authority: deletionAuthority, targets: new Set<string>() });
+  if (submittedDeletions.current.authority !== deletionAuthority) submittedDeletions.current = { authority: deletionAuthority, targets: new Set() };
+  const [deletionError, setDeletionError] = useState<string | null>(null);
+  const deletionDecision = evaluateActionSnapshot(permissions, 'engine.deployments.delete', { type: 'engine', id: deploymentPendingDelete?.engineId || null });
+  const deletionFence = useProjectActionFence(JSON.stringify([deletionAuthority, deploymentPendingDelete?.engineId, deploymentPendingDelete?.engineDeploymentId]));
+  React.useEffect(() => { setDeploymentPendingDelete(null); setDeletionError(null); }, [deletionAuthority]);
+  const deletionKey = (engineId?: string | null, deploymentId?: string | null) => JSON.stringify([engineId, deploymentId]);
   const deleteDeploymentMutation = useMutation({
-    mutationFn: async (deployment: DeploymentBadge) => {
-      if (!deployment.engineDeploymentId || !deployment.engineId) {
-        throw new Error('Deployment delete unavailable for this record');
-      }
-      if (!deployment.deleteDecision.allowed) {
-        throw new Error(deployment.deleteDecision.reason || 'Deployment delete unavailable');
-      }
-      const params = new URLSearchParams({
-        engineId: deployment.engineId,
-        cascade: 'false',
-      });
-      return apiClient.delete(
-        `/starbase-api/deployments/${encodeURIComponent(deployment.engineDeploymentId)}?${params.toString()}`,
-        { credentials: 'include' }
-      );
-    },
-    onSuccess: () => {
-      setDeploymentPendingDelete(null);
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, 'latest'] });
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, fileId, 'history'] });
+    mutationFn: async (intent: { engineId: string; deploymentId: string; projectId: string;
+      operation: NonNullable<ReturnType<typeof deletionFence.begin>> }) => {
+      const { operation } = intent;
+      try {
+        operation.check();
+        const params = new URLSearchParams({ engineId: intent.engineId, cascade: 'false' });
+        await apiClient.deleteNoContent(`/starbase-api/deployments/${encodeURIComponent(intent.deploymentId)}?${params.toString()}`, { credentials: 'include' });
+        operation.check();
+        await queryClient.invalidateQueries({ queryKey: ['engine-deployments', intent.projectId] }, { throwOnError: true });
+        operation.check();
+        setDeploymentPendingDelete(null);
+      } catch (error) {
+        try {
+          operation.check(); operation.markUncertain();
+          setDeletionError(parseApiError(error, 'Delete failed').message);
+        } catch {}
+      } finally { operation.finish(); }
     },
   });
+  const handleDeleteDeployment = () => {
+    const engineId = deploymentPendingDelete?.engineId, deploymentId = deploymentPendingDelete?.engineDeploymentId;
+    if (!engineId || !deploymentId || submittedDeletions.current.targets.has(deletionKey(engineId, deploymentId))) return;
+    const operation = deletionFence.begin(saveMode === 'git' && hasEngineAccess && canReadProjectDeployments && deletionDecision.allowed);
+    if (!operation) return;
+    submittedDeletions.current.targets.add(deletionKey(engineId, deploymentId)); setDeletionError(null);
+    deleteDeploymentMutation.mutate({ engineId, deploymentId, projectId, operation });
+  };
 
   const openCommitPreview = React.useCallback((commit: VcsCommit) => {
     setSelectedCommit(commit);
@@ -1007,11 +1022,13 @@ export default function GitVersionsPanel({
                         const badgeStyle = { ...getEnvironmentBadgeStyle(deployment.color), cursor: 'pointer' } as React.CSSProperties;
                         const title = deployment.target ? 'Open in Mission Control' : 'Jump to Starbase version';
                         const canDeleteDeployment = Boolean(deployment.engineId && deployment.engineDeploymentId);
-                        const deleteDisabled = deleteDeploymentMutation.isPending ||
+                        const submitted = submittedDeletions.current.targets.has(deletionKey(deployment.engineId, deployment.engineDeploymentId));
+                        const deleteDisabled = deletionFence.pending || submitted ||
                           !canDeleteDeployment ||
                           !deployment.deleteDecision.allowed;
                         const deleteTitle = !canDeleteDeployment
                           ? 'Deployment delete unavailable for this record'
+                          : submitted ? 'Deletion already submitted; reload and reconcile before retrying.'
                           : deployment.deleteDecision.allowed
                             ? `Delete deployment ${deployment.label} ${deployment.versionLabel}`
                             : deployment.deleteDecision.reason || 'Deployment delete unavailable';
@@ -1039,7 +1056,7 @@ export default function GitVersionsPanel({
                                   event.preventDefault();
                                   event.stopPropagation();
                                   if (deleteDisabled) return;
-                                  setDeploymentPendingDelete(deployment);
+                                  setDeletionError(null); setDeploymentPendingDelete(deployment);
                                 }}
                                 style={{
                                   width: 18,
@@ -1217,41 +1234,35 @@ export default function GitVersionsPanel({
       <Modal
         open={Boolean(deploymentPendingDelete)}
         danger
-        modalHeading="Delete deployment record"
+        modalHeading="Delete engine deployment"
         modalLabel={deploymentPendingDelete ? `${deploymentPendingDelete.label} ${deploymentPendingDelete.versionLabel}` : ''}
-        primaryButtonText={deleteDeploymentMutation.isPending ? 'Deleting...' : 'Delete deployment'}
+        primaryButtonText={deletionFence.pending ? 'Deleting...' : 'Delete deployment'}
         secondaryButtonText="Cancel"
-        onRequestSubmit={() => {
-          if (deploymentPendingDelete) {
-            deleteDeploymentMutation.mutate(deploymentPendingDelete);
-          }
-        }}
+        onRequestSubmit={handleDeleteDeployment}
         onRequestClose={() => {
-          if (!deleteDeploymentMutation.isPending) {
-            setDeploymentPendingDelete(null);
-          }
+          if (!deletionFence.pending) { setDeploymentPendingDelete(null); setDeletionError(null); }
         }}
-        primaryButtonDisabled={deleteDeploymentMutation.isPending || !deploymentPendingDelete?.deleteDecision.allowed}
+        primaryButtonDisabled={deletionFence.pending || deletionFence.blocked || !deletionDecision.allowed || submittedDeletions.current.targets.has(deletionKey(deploymentPendingDelete?.engineId, deploymentPendingDelete?.engineDeploymentId))}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
-          {deleteDeploymentMutation.isError && (
+          {deletionError && (
             <InlineNotification
               kind="error"
               title="Delete failed"
-              subtitle={parseApiError(deleteDeploymentMutation.error, 'Delete failed').message}
+              subtitle={deletionError}
               lowContrast
               hideCloseButton
             />
           )}
-          {deploymentPendingDelete?.deleteDecision.allowed ? (
+          {deletionDecision.allowed ? (
             <p style={{ margin: 0 }}>
-              This removes the deployment record from the selected engine. It does not delete the Starbase version.
+              This deletes the entire deployment from the selected engine, including its process and decision definitions and resources. It does not cascade-delete running instances; the engine can refuse deletion while the deployment is in use. Saved Starbase versions are preserved.
             </p>
           ) : (
             <InlineNotification
               kind="warning"
               title="Delete unavailable"
-              subtitle={deploymentPendingDelete?.deleteDecision.reason || 'Missing deployment delete permission'}
+              subtitle={deletionDecision.reason || 'Missing deployment delete permission'}
               lowContrast
               hideCloseButton
             />

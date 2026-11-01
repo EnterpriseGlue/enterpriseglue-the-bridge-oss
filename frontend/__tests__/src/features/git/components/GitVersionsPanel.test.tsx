@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,8 @@ import { EnginePermission } from '@src/shared/auth/permissions';
 const authMocks = vi.hoisted(() => ({
   hasEnginePermission: vi.fn(),
   hasProjectPermission: vi.fn(),
+  user: { id: 'user-1' },
+  sessionRevision: 0,
   permissions: {
     userId: 'user-1',
     platform: [],
@@ -34,6 +36,7 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
     hasEnginePermission: authMocks.hasEnginePermission,
     hasProjectPermission: authMocks.hasProjectPermission,
     permissions: authMocks.permissions,
+    user: authMocks.user, sessionRevision: authMocks.sessionRevision,
   }),
 }));
 
@@ -101,6 +104,7 @@ vi.mock('@src/shared/api/client', async importOriginal => ({
     get: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
+    deleteNoContent: vi.fn(),
   },
 }));
 
@@ -128,6 +132,7 @@ describe('GitVersionsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setAuthPermissions();
+    authMocks.user = { id: 'user-1' }; authMocks.sessionRevision = 0;
     authMocks.hasEnginePermission.mockReturnValue(false);
     authMocks.hasProjectPermission.mockReturnValue(true);
     (apiClient.get as any).mockImplementation(async (url: string) => {
@@ -197,6 +202,7 @@ describe('GitVersionsPanel', () => {
     });
     (apiClient.post as any).mockResolvedValue({});
     (apiClient.delete as any).mockResolvedValue(undefined);
+    (apiClient.deleteNoContent as any).mockResolvedValue(undefined);
   });
 
   function renderPanel() {
@@ -352,7 +358,7 @@ describe('GitVersionsPanel', () => {
     expect(deleteButton).toHaveAttribute('title', 'Missing permission engine:deploy');
   });
 
-  it('deletes deployment records through the engine-scoped delete action', async () => {
+  it('deletes engine deployments through the engine-scoped delete action', async () => {
     const user = userEvent.setup();
     setAuthPermissions({
       engines: [
@@ -408,11 +414,64 @@ describe('GitVersionsPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Delete deployment' }));
 
     await waitFor(() => {
-      expect(apiClient.delete).toHaveBeenCalledWith(
+      expect(apiClient.deleteNoContent).toHaveBeenCalledWith(
         '/starbase-api/deployments/deployment-1?engineId=engine-1&cascade=false',
         { credentials: 'include' }
       );
     });
+  });
+
+  function deletionFixture() {
+    setAuthPermissions({ engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.DEPLOY] }] });
+    authMocks.hasEnginePermission.mockImplementation((id: string, permission: string) => id === 'engine-1' && permission === EnginePermission.DEPLOY_VIEW);
+    const original = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string, ...args: any[]) => {
+      if (url === '/engines-api/engines') return [{ id: 'engine-1', name: 'Dev Engine', myRole: null }] as any;
+      if (url.includes('/deployments/history')) return [{ engineId: 'engine-1', engineDeploymentId: 'deployment-1', fileId: 'file-1', fileGitCommitId: 'manual-current', environmentTag: 'Dev', deployedAt: 1700000000500, artifacts: [{ kind: 'process', key: 'invoice', version: 3 }] }] as any;
+      return original(url, ...args);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const panel = (projectId = 'project-1', fileId = 'file-1') => <QueryClientProvider client={client}><GitVersionsPanel projectId={projectId} fileId={fileId} fileType="bpmn" /></QueryClientProvider>;
+    return { ...render(panel()), client, panel };
+  }
+  async function openDeletion() { await userEvent.click(await screen.findByRole('button', { name: /Delete deployment Dev v3/ })); }
+  const submitDeletion = () => screen.getByRole('button', { name: /^Delete deployment$/ });
+
+  it('describes the entire engine deployment and preserves Starbase versions', async () => {
+    deletionFixture(); await openDeletion();
+    expect(screen.getByText(/entire deployment/i)).toBeVisible();
+    expect(screen.getByText(/running instances/i)).toBeVisible();
+  });
+  it('refuses a confirmation retained across permission revocation', async () => {
+    const f = deletionFixture(); await openDeletion(); setAuthPermissions({ engines: [] }); f.rerender(f.panel());
+    const submit = screen.queryByRole('button', { name: /^Delete deployment$/ });
+    if (submit) fireEvent.click(submit);
+    expect(apiClient.delete).not.toHaveBeenCalled(); expect(apiClient.deleteNoContent).not.toHaveBeenCalled();
+  });
+  it.each(['file', 'project', 'actor', 'permission', 'browser', 'unmount'])('drops a late deletion completion after %s replacement', async change => {
+    let finish!: () => void; const pending = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    vi.mocked(apiClient.delete).mockImplementation(pending); vi.mocked(apiClient.deleteNoContent).mockImplementation(pending);
+    const f = deletionFixture(); await openDeletion(); fireEvent.click(submitDeletion()); await waitFor(() => expect(pending).toHaveBeenCalledOnce());
+    const refresh = vi.spyOn(f.client, 'invalidateQueries');
+    if (change === 'file') f.rerender(f.panel('project-1', 'file-2'));
+    if (change === 'project') { f.rerender(f.panel('project-2')); f.rerender(f.panel()); }
+    if (change === 'actor') { authMocks.user = { id: 'user-2' }; authMocks.sessionRevision++; f.rerender(f.panel()); }
+    if (change === 'permission') { setAuthPermissions({ engines: [] }); f.rerender(f.panel()); }
+    if (change === 'browser') advanceBrowserSessionRevision();
+    if (change === 'unmount') f.unmount();
+    await act(async () => finish()); expect(refresh).not.toHaveBeenCalled(); expect(pending).toHaveBeenCalledOnce();
+  });
+  it('blocks duplicate confirmation and replay after an uncertain deletion', async () => {
+    let fail!: (error: Error) => void; const pending = vi.fn(() => new Promise<void>((_, reject) => { fail = reject; }));
+    vi.mocked(apiClient.delete).mockImplementation(pending); vi.mocked(apiClient.deleteNoContent).mockImplementation(pending);
+    deletionFixture(); await openDeletion(); const submit = submitDeletion(); act(() => { fireEvent.click(submit); fireEvent.click(submit); });
+    await waitFor(() => expect(pending).toHaveBeenCalledOnce()); await act(async () => fail(new Error('Lost acknowledgement')));
+    expect(await screen.findByText(/Lost acknowledgement/)).toBeVisible(); expect(submitDeletion()).toBeDisabled();
+  });
+  it('keeps failed refresh visible after a deletion acknowledgement', async () => {
+    const f = deletionFixture(); await openDeletion(); const refresh = vi.spyOn(f.client, 'invalidateQueries').mockRejectedValueOnce(new Error('Refresh unavailable'));
+    fireEvent.click(submitDeletion()); expect(await screen.findByText(/Refresh unavailable/)).toBeVisible();
+    expect(submitDeletion()).toBeDisabled(); expect(refresh).toHaveBeenCalledWith({ queryKey: ['engine-deployments', 'project-1'] }, { throwOnError: true });
   });
 
   it('surfaces Mission Control bridge denials for deployment badges', async () => {

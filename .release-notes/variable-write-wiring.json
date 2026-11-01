@@ -45,7 +45,8 @@
     "Folder creation, rename, move and deletion verify their project tree and responses, keep version saving explicit, and suppress stale dialog/session continuations.",
     "Deleted files remain visibly pending until a complete project version records their removal; publishing that version preserves deletion instead of retaining removed content.",
     "Saved-content restores validate every target before writing, refresh diagram identities and commit file contents plus their new version atomically. Current file names, locations and later additions are preserved.",
-    "Local history restore commits file content and its restore-history entry together. Deployed restore verifies the selected snapshot and version mapping, copies only the draft and leaves checkpoint creation to explicit Save. Both clients require verified responses in the original session before clearing private drafts or recording hotfix context."
+    "Local history restore commits file content and its restore-history entry together. Deployed restore verifies the selected snapshot and version mapping, copies only the draft and leaves checkpoint creation to explicit Save. Both clients require verified responses in the original session before clearing private drafts or recording hotfix context.",
+    "Engine deployment deletion describes its full resource scope, preserves saved Starbase versions and keeps cascading off. Confirmations and refreshes are session-bound, duplicate submissions are blocked, and only a settled HTTP 204 acknowledges deletion. Legacy error imports now share the canonical application error class."
   ],
   "upgrade": {
     "required": true,
