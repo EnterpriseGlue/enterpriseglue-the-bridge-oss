@@ -907,3 +907,26 @@ credentials cannot silently select a different connection. Private token values
 are not copied into project-creation requests or mutation caches. Server action
 permissions, credential validation, endpoint policy and database isolation remain
 authoritative.
+
+### Existing-project file and archive imports
+
+The project contents upload action owns the file-picker, file-read and receipt
+continuation for the original project, folder, authenticated session and action
+availability. A view or authority change suppresses remaining dispatch and UI
+callbacks; it does not cancel an already issued server operation. Duplicate
+selection is blocked while pending. Malformed receipts or failed post-write
+refreshes require reconciliation before another upload in that view.
+
+Diagram uploads parse XML and check the definitions namespace, extension/type
+agreement and unsupported Zeebe extensions before sending the canonical create
+request. This browser validation is feedback, not a server security boundary or
+proof of engine execution. File creation checks destination-folder ownership and
+inserts the file and initial version in one transaction. Metadata moves reject
+foreign-project folders; file breadcrumb reads bind every ancestor to the file's
+project and reject cycles. No migration, RLS policy or privilege change is needed.
+
+ZIP imports preserve their existing project-root destination, even when a folder
+is selected in the browser. Their exact metadata receipt is shared by the route,
+OpenAPI and browser. Counts acknowledge the import request; independent contents
+and version checks remain the verification of resulting state. An imported file
+must still pass ordinary source-bound save and deployment verification.

@@ -55,7 +55,7 @@ const restoreFromCommitBodySchema = RestoreFileFromCommitRequestSchema;
 /**
  * Get folder breadcrumb trail
  */
-async function getFolderBreadcrumb(folderId: string | null): Promise<Array<{ id: string; name: string }>> {
+async function getFolderBreadcrumb(folderId: string | null, projectId: string): Promise<Array<{ id: string; name: string }>> {
   if (!folderId) return [];
   
   const bc: Array<{ id: string; name: string }> = [];
@@ -63,13 +63,16 @@ async function getFolderBreadcrumb(folderId: string | null): Promise<Array<{ id:
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
   
+  const visited = new Set<string>();
   while (current) {
+    if (visited.has(current)) throw Errors.validation('Folder ancestry is invalid');
+    visited.add(current);
     const row = await folderRepo.findOne({
-      where: { id: current },
-      select: ['id', 'name', 'parentFolderId']
+      where: { id: current, projectId },
+      select: ['id', 'projectId', 'name', 'parentFolderId']
     });
     
-    if (!row) break;
+    if (!row || row.projectId !== projectId) throw Errors.notFound('Folder');
     bc.unshift({ id: row.id, name: row.name });
     current = row.parentFolderId || null;
   }
@@ -187,51 +190,58 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
   const xml = fileType === 'dmn' ? sanitizeDmnXml(xml0) : sanitizeBpmnXml(xml0)
 
   const dataSource = await getDataSource();
-  const fileRepo = dataSource.getRepository(File);
-  const versionRepo = dataSource.getRepository(Version);
-  
-  // Prevent duplicate names per project/folder/type
-  const dupCheck = await fileRepo.find({
-    where: {
-      projectId,
-      folderId: folderId ? folderId : IsNull(),
-      name: fileName,
-      type: fileType
-    },
-    select: ['id']
-  });
-  if (dupCheck.length > 0) {
-    throw Errors.conflict('A file with this name already exists in this folder.');
-  }
-  
   const bpmnProcessId = fileType === 'bpmn' ? extractBpmnProcessId(xml) : null;
   const dmnDecisionId = fileType === 'dmn' ? extractDmnDecisionId(xml) : null;
+  await dataSource.transaction(async manager => {
+    const fileRepo = manager.getRepository(File);
+    const versionRepo = manager.getRepository(Version);
+    if (folderId) {
+      const folder = await manager.getRepository(Folder).findOne({ where: { id: folderId, projectId }, select: ['id', 'projectId'] });
+      if (!folder || folder.projectId !== projectId) throw Errors.notFound('Folder');
+    }
 
-  await fileRepo.insert({
-    id: fileId,
-    projectId,
-    folderId: folderId ?? null,
-    name: fileName,
-    type: fileType,
-    xml,
-    bpmnProcessId,
-    dmnDecisionId,
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: now,
-    updatedAt: now
+    // Prevent duplicate names per project/folder/type
+    const dupCheck = await fileRepo.find({
+      where: {
+        projectId,
+        folderId: folderId ? folderId : IsNull(),
+        name: fileName,
+        type: fileType
+      },
+      select: ['id']
+    });
+    if (dupCheck.length > 0) {
+      throw Errors.conflict('A file with this name already exists in this folder.');
+    }
+
+
+    await fileRepo.insert({
+      id: fileId,
+      projectId,
+      folderId: folderId ?? null,
+      name: fileName,
+      type: fileType,
+      xml,
+      bpmnProcessId,
+      dmnDecisionId,
+      createdBy: userId,
+      updatedBy: userId,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // Initial version v1
+    await versionRepo.insert({
+      id: generateId(),
+      fileId,
+      author: 'system',
+      message: 'Initial import',
+      xml,
+      createdAt: now
+    });
+
   });
-  
-  // Initial version v1
-  await versionRepo.insert({
-    id: generateId(),
-    fileId,
-    author: 'system',
-    message: 'Initial import',
-    xml,
-    createdAt: now
-  });
-  
+
   res.status(201).json({
     id: fileId,
     name: fileName,
@@ -269,7 +279,7 @@ r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, requireAction('pro
   const projectName = projectResult ? projectResult.name : 'Project';
   
   // Get folder breadcrumb
-  const folderBreadcrumb = await getFolderBreadcrumb(found.folderId);
+  const folderBreadcrumb = await getFolderBreadcrumb(found.folderId, found.projectId);
   const ty = String(found.type || '').toLowerCase();
   const xml = ty === 'dmn'
     ? sanitizeDmnXml(String(found.xml || ''))
@@ -599,6 +609,11 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
   });
   if (!projectResult) {
     throw Errors.notFound('File');
+  }
+
+  if (folderId) {
+    const folder = await dataSource.getRepository(Folder).findOne({ where: { id: String(folderId), projectId: projectResult.projectId }, select: ['id', 'projectId'] });
+    if (!folder || folder.projectId !== projectResult.projectId) throw Errors.notFound('Folder');
   }
 
   // Build dynamic UPDATE

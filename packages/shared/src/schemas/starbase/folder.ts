@@ -88,3 +88,12 @@ export type FolderSummary = z.infer<typeof FolderSummarySchema>
 export type ProjectContents = z.infer<typeof ProjectContentsSchema>
 export type UpdateFolder = z.infer<typeof UpdateFolderRequest>
 export type UpdateFolderResponse = z.infer<typeof UpdateFolderResponseSchema>
+
+// Exact metadata receipt for an archive import at the project root.
+export const ProjectArchiveImportResponseSchema = z.object({
+  foldersCreated: z.number().int().nonnegative().safe(),
+  filesCreated: z.number().int().nonnegative().safe(),
+  linksRewritten: z.number().int().nonnegative().safe(),
+  warnings: z.array(z.string()),
+}).strict();
+export type ProjectArchiveImportResponse = z.infer<typeof ProjectArchiveImportResponseSchema>;

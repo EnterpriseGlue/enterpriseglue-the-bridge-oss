@@ -20,7 +20,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
 import { projectIdParamSchema, folderIdParamSchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
-import { CreateFolderRequest, FolderSummarySchema, UpdateFolderRequest } from '@enterpriseglue/shared/schemas/starbase/folder.js'
+import { CreateFolderRequest, FolderSummarySchema, UpdateFolderRequest, ProjectArchiveImportResponseSchema } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 import { buildStarbaseFileName, sanitizeFileNameSegment } from '@enterpriseglue/shared/utils/starbase-filenames.js'
 import { z } from 'zod'
 
@@ -700,12 +700,12 @@ r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, 
 
   const dataSource = await getDataSource()
   const result = await dataSource.transaction(async (manager) => {
-    return applyProjectArchiveToProject({
+    return ProjectArchiveImportResponseSchema.parse(await applyProjectArchiveToProject({
       manager,
       projectId,
       userId,
       zipBuffer,
-    })
+    }))
   })
 
   res.status(201).json(result)

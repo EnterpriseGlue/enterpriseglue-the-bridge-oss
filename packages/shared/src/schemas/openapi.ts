@@ -34,6 +34,7 @@ const {
   FolderSchema,
   FolderSchemaRaw,
   FolderSummarySchema,
+  ProjectArchiveImportResponseSchema,
   CreateFolderRequest,
   CreateFolderResponseSchema,
   UpdateFolderRequest,
@@ -3850,8 +3851,8 @@ registry.registerPath({
   },
   responses: {
     201: {
-      description: 'Project archive imported',
-      content: { 'application/json': { schema: z.unknown() } },
+      description: 'Project archive imported at the project root',
+      content: { 'application/json': { schema: ProjectArchiveImportResponseSchema } },
     },
   },
 });

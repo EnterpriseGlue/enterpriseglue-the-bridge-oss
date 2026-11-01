@@ -1,3 +1,6 @@
+import { zipSync } from 'fflate';
+import foldersRouter from '../../../packages/backend-host/src/modules/starbase/routes/folders.js';
+import { ProjectArchiveImportResponseSchema } from '@enterpriseglue/shared/schemas/starbase/folder.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataSource } from 'typeorm';
@@ -8,6 +11,8 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Branch.js';
 import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFile.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
+import filesRouter from '../../../packages/backend-host/src/modules/starbase/routes/files.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 import { VcsSyncService } from '@enterpriseglue/shared/services/versioning/VcsSyncService.js';
 import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
@@ -31,7 +36,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.f
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({ requireAuth: (req: any, _res: any, next: any) => {
   req.user = { userId: 'fixture-user' }; req.tenant = { tenantId: 'fixture-tenant' }; next();
 } }));
-vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({ apiLimiter: (_req: any, _res: any, next: any) => next() }));
+vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({ apiLimiter: (_req: any, _res: any, next: any) => next(), fileOperationsLimiter: (_req: any, _res: any, next: any) => next() }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({ permissionService: { hasPermission: vi.fn().mockResolvedValue(true) } }));
 vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({ vcsService: {
   ensureInitialized: vi.fn().mockResolvedValue(true), getCommitSnapshots: vi.fn(), getUserBranch: vi.fn(),
@@ -43,7 +48,7 @@ const database = `file_restore_${randomUUID().replace(/-/g, '')}`;
 const connection = { type: 'postgres' as const, host: env('POSTGRES_HOST', '127.0.0.1'), port: Number(env('POSTGRES_PORT', '5432')),
   username: env('POSTGRES_USER', 'postgres'), password: env('POSTGRES_PASSWORD', 'postgres') };
 const admin = new DataSource({ ...connection, database: env('POSTGRES_DATABASE', 'postgres') });
-const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog];
+const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog, Version];
 const store = new DataSource({ ...connection, database, entities, synchronize: true });
 const projectId = randomUUID(), otherProjectId = randomUUID(), fileId = randomUUID(), siblingId = randomUUID();
 const commitId = randomUUID(), otherCommitId = randomUUID(), branchId = randomUUID();
@@ -51,7 +56,7 @@ const hash = (xml: string) => createHash('sha256').update(xml).digest('hex').sli
 const commitService = new VcsCommitService(); const fileService = new VcsFileService(); const syncService = new VcsSyncService();
 const realVcs = new VcsService();
 let created = false;
-const app = express(); app.use(express.json()); app.use(router); app.use(errorHandler);
+const app = express(); app.use(express.json()); app.use(router); app.use(filesRouter); app.use(foldersRouter); app.use(errorHandler);
 const restore = (body: { fileId?: string } = { fileId }, revision = commitId) => request(app).post(body.fileId
   ? `/vcs-api/projects/${projectId}/commits/${revision}/files/${body.fileId}/restore`
   : `/vcs-api/projects/${projectId}/commits/${revision}/restore`);
@@ -90,6 +95,63 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     if (store.isInitialized) await store.destroy();
     if (admin.isInitialized) { try { if (created) await admin.query(`DROP DATABASE "${database}"`); } finally { await admin.destroy(); } }
   });
+  it('creates an imported file and exact initial version in one PostgreSQL transaction', async () => {
+    const folder = randomUUID();
+    await store.getRepository(Folder).insert({ id: folder, projectId, name: 'Owned folder', createdAt: 1, updatedAt: 1 });
+    const xml = '<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="Imported"/></definitions>';
+    const response = await request(app).post(`/starbase-api/projects/${projectId}/files`).send({ name: 'Imported', type: 'bpmn', xml, folderId: folder });
+    expect(response.status).toBe(201);
+    const saved = await store.getRepository(File).findOneByOrFail({ id: response.body.id });
+    expect(saved).toMatchObject({ projectId, folderId: folder, name: 'Imported', bpmnProcessId: 'Imported' });
+    expect(await store.getRepository(Version).find({ where: { fileId: saved.id } })).toMatchObject([{ xml: saved.xml, message: 'Initial import' }]);
+    const checkpoint = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Save imported source', fileIds: [saved.id] });
+    expect(checkpoint.status).toBe(200);
+    expect(await verifyDeploymentRevision(store, projectId, checkpoint.body.commitId, [{ id: saved.id, projectId, name: saved.name, type: saved.type, folderId: saved.folderId, sourceXml: saved.xml }])).toEqual(new Map([[saved.id, { id: checkpoint.body.commitId, message: 'Save imported source' }]]));
+  });
+
+  it.each([false, true])('binds project archive receipt to committed rows and rolls back all rows on version rejection=%s', async reject => {
+    const archive = Buffer.from(zipSync({ 'nested/Archive.bpmn': Buffer.from('<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="Archive"/></definitions>') }));
+    if (reject) await store.query(`ALTER TABLE main.versions ADD CONSTRAINT fixture_reject_archive CHECK (message <> 'Initial import from project archive')`);
+    try {
+      const response = await request(app).post(`/starbase-api/projects/${projectId}/import-zip`).set('Content-Type', 'application/zip').send(archive);
+      expect(response.status).toBe(reject ? 500 : 201);
+      expect(await store.getRepository(Folder).count()).toBe(reject ? 0 : 1);
+      expect(await store.getRepository(File).count()).toBe(reject ? 2 : 3);
+      expect(await store.getRepository(Version).count()).toBe(reject ? 0 : 1);
+      if (!reject) expect(ProjectArchiveImportResponseSchema.parse(response.body)).toMatchObject({ foldersCreated: 1, filesCreated: 1, linksRewritten: 0 });
+    } finally { if (reject) await store.query('ALTER TABLE main.versions DROP CONSTRAINT fixture_reject_archive'); }
+  });
+
+  it('rolls back the file when PostgreSQL rejects its initial version', async () => {
+    await store.query(`ALTER TABLE main.versions ADD CONSTRAINT fixture_reject_import CHECK (message <> 'Initial import')`);
+    try {
+      const response = await request(app).post(`/starbase-api/projects/${projectId}/files`).send({ name: 'Must roll back', type: 'bpmn' });
+      expect(response.status).toBe(500);
+      expect(await store.getRepository(File).count({ where: { name: 'Must roll back' } })).toBe(0);
+      expect(await store.getRepository(Version).count()).toBe(0);
+    } finally { await store.query('ALTER TABLE main.versions DROP CONSTRAINT fixture_reject_import'); }
+  });
+
+  it.each(['missing', 'foreign'])('refuses a %s folder for import and metadata move before any write', async kind => {
+    const folder = randomUUID();
+    if (kind === 'foreign') await store.getRepository(Folder).insert({ id: folder, projectId: otherProjectId, name: 'Private sibling folder', createdAt: 1, updatedAt: 1 });
+    const response = await request(app).post(`/starbase-api/projects/${projectId}/files`).send({ name: 'Wrong destination', type: 'bpmn', folderId: folder });
+    expect(response.status).toBe(404);
+    const move = await request(app).patch(`/starbase-api/files/${fileId}`).send({ folderId: folder });
+    expect(move.status).toBe(404);
+    expect(await store.getRepository(File).count()).toBe(2);
+    expect((await store.getRepository(File).findOneByOrFail({ id: fileId })).folderId).toBeNull();
+    expect(await store.getRepository(Version).count()).toBe(0);
+  });
+
+  it.each(['foreign', 'cycle'])('does not expose or traverse a %s folder ancestry from corrupt historical metadata', async kind => {
+    const folder = randomUUID();
+    await store.getRepository(Folder).insert({ id: folder, projectId: kind === 'foreign' ? otherProjectId : projectId, parentFolderId: kind === 'cycle' ? folder : null, name: 'Private sibling folder', createdAt: 1, updatedAt: 1 });
+    await store.getRepository(File).update(fileId, { folderId: folder });
+    const response = await request(app).get(`/starbase-api/files/${fileId}`);
+    expect(response.status).toBe(kind === 'foreign' ? 404 : 400); expect(JSON.stringify(response.body)).not.toContain('Private sibling folder');
+  });
+
   it.each(['save', 'restore'])('keeps an unselected sibling dirty after file-scoped %s', async action => {
     await store.getRepository(WorkingFile).update({ mainFileId: siblingId }, { content: `draft-${siblingId}`, contentHash: hash(`draft-${siblingId}`) });
     const status = () => request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);

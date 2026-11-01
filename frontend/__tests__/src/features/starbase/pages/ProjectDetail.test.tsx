@@ -11,6 +11,7 @@ let projectFileName = 'Alpha.bpmn'
 let projectMemberRoles: Array<'owner' | 'delegate' | 'developer' | 'editor' | 'viewer'> = ['owner']
 
 const authMocks = vi.hoisted(() => ({
+  projectId: 'project-1',
   hasPlatformPermission: vi.fn(),
   hasProjectPermission: vi.fn(),
 }))
@@ -19,7 +20,7 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return {
     ...actual,
-    useParams: () => ({ projectId: 'project-1' }),
+    useParams: () => ({ projectId: authMocks.projectId }),
     useLocation: () => ({ state: { name: 'Alpha Project' } }),
     useSearchParams: () => [new URLSearchParams(), vi.fn()],
   }
@@ -72,8 +73,11 @@ vi.mock('@src/features/starbase/pages/components/ProjectContentsTable', () => ({
     onDownloadFile,
     setBatchDeleteIds,
     setBatchCancelSelection,
+    uploadInputRef, onUploadChange, onUploadClick, getToolbarActionUnavailableReason,
   }: any) => (
     <div>
+      <input aria-label="Fixture upload" type="file" ref={uploadInputRef} onChange={onUploadChange} />
+      <button onClick={onUploadClick} disabled={Boolean(getToolbarActionUnavailableReason?.('upload'))}>Pick upload</button>
       <div>{items[0]?.name}</div>
       {canDeleteFiles && (
         <button type="button" onClick={() => onDeleteItem(items[0])}>
@@ -162,6 +166,17 @@ function renderWithProviders() {
 }
 
 describe('ProjectDetail', () => {
+  it('wires the real upload controller from project contents to a canonical file creation request', async () => {
+    authMocks.projectId = '11111111-1111-4111-8111-111111111111';
+    authMocks.hasProjectPermission.mockReturnValue(true);
+    vi.mocked(apiClient.post).mockResolvedValue({ id: '22222222-2222-4222-8222-222222222222', name: 'Imported.bpmn', type: 'bpmn', bpmnProcessId: 'p', dmnDecisionId: null, createdAt: 1, updatedAt: 1 });
+    renderWithProviders(); await screen.findByText('Alpha.bpmn');
+    await userEvent.click(screen.getByRole('button', { name: 'Pick upload' }));
+    const file = new File([''], 'Imported.bpmn'); Object.defineProperty(file, 'text', { value: async () => '<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p"/></definitions>' });
+    await userEvent.upload(screen.getByLabelText('Fixture upload'), file);
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(`/starbase-api/projects/${authMocks.projectId}/files`, expect.objectContaining({ name: 'Imported.bpmn', type: 'bpmn', folderId: null })));
+  });
+
   it('formats project role assignment source lineage', () => {
     expect(formatProjectRoleAssignmentSourceLineage({
       source: 'sso',
@@ -195,6 +210,7 @@ describe('ProjectDetail', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    authMocks.projectId = 'project-1'
     projectFileName = 'Alpha.bpmn'
     projectMemberRoles = ['owner']
     authMocks.hasPlatformPermission.mockReturnValue(false)
@@ -203,6 +219,7 @@ describe('ProjectDetail', () => {
     ))
 
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      url = url.replace(authMocks.projectId, 'project-1')
       if (url === '/starbase-api/projects') {
         return [
           {

@@ -32,7 +32,8 @@ import ConfirmDeleteModal from '../../shared/components/ConfirmDeleteModal'
 import { useModal } from '../../../shared/hooks/useModal'
 import { ErrorState } from '../../shared/components'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
-import { validateAndUploadFile } from '../utils/uploadValidation'
+import { useProjectUpload } from '../hooks/useProjectUpload'
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { useInlineRename } from '../hooks/useInlineRename'
 import DeployDialog from '../../git/components/DeployDialog'
 import SyncModal from '../../git/components/SyncModal'
@@ -242,7 +243,7 @@ export default function ProjectDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = React.useState('')
   const queryClient = useQueryClient()
-  const { user, hasPlatformPermission, hasProjectPermission, permissions } = useAuth()
+  const { user, hasPlatformPermission, hasProjectPermission, permissions, sessionRevision } = useAuth()
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null)
   // Modal hooks
   const deleteFileModal = useModal<FileItem>()
@@ -665,58 +666,6 @@ export default function ProjectDetail() {
     }
   }
 
-  async function uploadProjectZip(file: File) {
-    if (!canCreateFiles) return
-    if (!projectId) return
-    const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
-    if (!isZip) {
-      showToast({ kind: 'error', title: 'Upload failed', subtitle: 'Only .zip project archives are supported.' })
-      return
-    }
-
-    try {
-      const buffer = await file.arrayBuffer()
-      await apiClient.postRaw<{ foldersCreated: number; filesCreated: number; linksRewritten: number; warnings?: string[] }>(
-        `/starbase-api/projects/${encodeURIComponent(projectId)}/import-zip`,
-        buffer,
-        {
-          headers: {
-            'Content-Type': 'application/zip',
-          },
-        }
-      )
-
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId] })
-      await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
-      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
-      showToast({ kind: 'success', title: 'Project zip uploaded', subtitle: file.name })
-    } catch (e: any) {
-      const parsed = parseApiError(e, 'Upload failed')
-      showToast({ kind: 'error', title: 'Upload failed', subtitle: parsed.message })
-    }
-  }
-
-  async function handleUploadSelection(file: File) {
-    if (!canCreateFiles) return
-
-    const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
-
-    if (isZip) {
-      await uploadProjectZip(file)
-      return
-    }
-
-    if (!projectId) return
-
-    await validateAndUploadFile({
-      file,
-      projectId,
-      folderId,
-      queryClient,
-      showToast,
-    })
-  }
-
   async function downloadSelection(selectedItems: FileItem[], cancelSelection: () => void) {
     if (!canViewFiles) return
     if (!projectId || selectedItems.length === 0) return
@@ -790,6 +739,10 @@ export default function ProjectDetail() {
 
   const canViewFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_VIEW)
   const canCreateFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_CREATE)
+  const uploadDecision = evaluateActionSnapshot(permissions, 'project.files.create', { type: 'project', id: projectId || null })
+  const upload = useProjectUpload({ projectId, folderId, queryClient, showToast,
+    allowed: permissions ? uploadDecision.allowed : canCreateFiles,
+    authority: JSON.stringify([user?.session?.principal.id || user?.id, user?.session?.tenant.id, sessionRevision, permissionSnapshotAuthorityKey(permissions)]) })
   const canEditFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_EDIT)
   const canDeleteFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_DELETE)
   const canViewMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_VIEW) ||
@@ -898,12 +851,13 @@ export default function ProjectDetail() {
           ? null
           : getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
       case 'upload':
+        return upload.unavailableReason || getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
       case 'create':
         return getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
       default:
         return null
     }
-  }, [canViewDeploymentOptions, canViewMembers, getProjectPermissionUnavailableReason])
+  }, [canViewDeploymentOptions, canViewMembers, getProjectPermissionUnavailableReason, upload.unavailableReason])
 
   const getProjectDetailToolbarActionDiagnosticDecision = React.useCallback((
     action: ProjectDetailToolbarAction,
@@ -1771,13 +1725,7 @@ export default function ProjectDetail() {
                 setPreviewBusy(false)
               }}
               uploadInputRef={uploadInputRef}
-              onUploadChange={async (e) => {
-                const file = e.target.files && e.target.files[0]
-                if (file) {
-                  await handleUploadSelection(file)
-                }
-                if (uploadInputRef.current) uploadInputRef.current.value = ''
-              }}
+              onUploadChange={upload.onChange}
               onOpenMembers={() => {
                 if (canViewMembers) openProjectMembers()
               }}
@@ -1785,7 +1733,7 @@ export default function ProjectDetail() {
                 if (canViewDeploymentOptions) setEngineAccessOpen(true)
               }}
               onUploadClick={() => {
-                if (canCreateFiles) uploadInputRef.current?.click()
+                upload.openPicker(uploadInputRef.current)
               }}
               onCreateFile={(type) => {
                 if (!canCreateFiles) return
