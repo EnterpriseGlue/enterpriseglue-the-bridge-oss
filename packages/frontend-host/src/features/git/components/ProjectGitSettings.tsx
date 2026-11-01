@@ -34,6 +34,7 @@ import {
 
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { getBrowserSessionRevision } from '../../../utils/browserSession'
+import { listGitCredentialProviders } from '../api/personalCredentials'
 
 interface ProjectGitSettingsProps {
   projectId: string
@@ -42,13 +43,6 @@ interface ProjectGitSettingsProps {
   canManageConnection?: boolean
   manageConnectionUnavailableReason?: string | null
 }
-
-const PROVIDER_OPTIONS = [
-  { id: 'github', text: 'GitHub' },
-  { id: 'gitlab', text: 'GitLab' },
-  { id: 'bitbucket', text: 'Bitbucket' },
-  { id: 'azure-devops', text: 'Azure DevOps' },
-]
 
 function TokenInfoPanel() {
   return (
@@ -113,7 +107,7 @@ function ProjectGitSettingsForm({
     : null
 
   // Form state
-  const [providerId, setProviderId] = useState('github')
+  const [providerId, setProviderId] = useState('')
   const [repoName, setRepoName] = useState('')
   const [namespace, setNamespace] = useState('')
   const [branch, setBranch] = useState('main')
@@ -144,6 +138,12 @@ function ProjectGitSettingsForm({
     },
     enabled: open && !!projectId && !readConnectionUnavailableReason,
   })
+
+  const providersQ = useQuery({ queryKey: ['git', 'providers', authority], queryFn: listGitCredentialProviders,
+    enabled: open && !readConnectionUnavailableReason })
+  const providerOptions = (providersQ.data || []).filter(row => row.supportsPAT).map(row => ({ id: row.id, text: row.name }))
+  const selectedProvider = providerOptions.find(row => row.id === providerId)
+  useEffect(() => { if (open && !providerId && providersQ.data?.length) setProviderId(providersQ.data.find(row => row.supportsPAT)?.id || '') }, [open, providerId, providersQ.data])
 
   const conn = connectionQ.data
   const cleanManageConnectionUnavailableReason = hasPermissionSnapshot && !manageConnectionDecision.allowed
@@ -210,7 +210,7 @@ function ProjectGitSettingsForm({
   }
 
   const handleConnect = () => {
-    if (!canConfirm() || conn?.connected !== false || !repoName.trim() || !token.trim()) return
+    if (!canConfirm() || conn?.connected !== false || !providersQ.isSuccess || !selectedProvider || !repoName.trim() || !token.trim()) return
     void runOperation('connect', { projectId, providerId, repositoryName: repoName.trim(),
       namespace: namespace.trim() || undefined, defaultBranch: branch.trim() || 'main', token: token.trim() })
   }
@@ -249,6 +249,8 @@ function ProjectGitSettingsForm({
       size="md"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-3)' }}>
+        {providersQ.isError && <InlineNotification kind="error" title="Git providers unavailable" subtitle="Git provider list was not verified" hideCloseButton lowContrast />}
+        {providersQ.isLoading && !isConnected && <InlineLoading description="Loading Git providers..." />}
         {connectionQ.isLoading && <InlineLoading description="Loading connection status..." />}
         {connectionQ.isError && <InlineNotification kind="error" title="Connection status unavailable"
           subtitle="Connection status was not verified" hideCloseButton lowContrast />}
@@ -302,7 +304,7 @@ function ProjectGitSettingsForm({
                 <ConnectionSignal size={20} style={{ color: tokenStatusColor }} />
                 <span style={{ fontSize: '16px', fontWeight: 600 }}>Connected</span>
                 <Tag type="green" size="sm">
-                  {PROVIDER_OPTIONS.find(p => p.id === conn.providerId)?.text || conn.providerId}
+                  {providersQ.data?.find(p => p.id === conn.providerId)?.name || conn.providerId}
                 </Tag>
               </div>
 
@@ -399,7 +401,7 @@ function ProjectGitSettingsForm({
         )}
 
         {/* Not connected state */}
-        {statusVerified && !isConnected && (
+        {statusVerified && !isConnected && providersQ.isSuccess && (
           <>
             <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', margin: 0 }}>
               Connect this project to a Git repository. A service token will be used for all push/pull operations — team members don't need their own GitHub account.
@@ -409,10 +411,10 @@ function ProjectGitSettingsForm({
               id="git-provider"
               titleText="Provider"
               label="Select provider"
-              items={PROVIDER_OPTIONS}
-              itemToString={(item: typeof PROVIDER_OPTIONS[number] | null) => item?.text || ''}
-              selectedItem={PROVIDER_OPTIONS.find(p => p.id === providerId)}
-              onChange={({ selectedItem }: any) => setProviderId(selectedItem?.id || 'github')}
+              items={providerOptions}
+              itemToString={(item: typeof providerOptions[number] | null) => item?.text || ''}
+              selectedItem={selectedProvider}
+              onChange={({ selectedItem }: any) => setProviderId(selectedItem?.id || '')}
               disabled={!canMutateConnection || isBusy || closedRef.current}
               size="md"
             />
@@ -474,7 +476,7 @@ function ProjectGitSettingsForm({
 
             <Button
               onClick={handleConnect}
-              disabled={!repoName.trim() || !token.trim() || isBusy || !canMutateConnection}
+              disabled={!repoName.trim() || !token.trim() || isBusy || !canMutateConnection || !selectedProvider || !providersQ.isSuccess}
               title={gitConnectionUnavailableReason ?? undefined}
             >
               {busy === 'connect' ? 'Validating & Connecting...' : 'Test & Connect'}

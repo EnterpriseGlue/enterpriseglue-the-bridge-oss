@@ -9,6 +9,7 @@ import { ProjectPermission } from '@src/shared/auth/permissions';
 import { AuthContext, type AuthContextValue } from '@src/contexts/AuthContext';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
 import { advanceBrowserSessionRevision } from '@src/utils/browserSession';
+import { gitProviderFixture } from '@test/fixtures/gitCredentials';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
 const secondProjectId = '22222222-2222-4222-8222-222222222222';
@@ -133,7 +134,8 @@ function renderSettings(
   connection: GitConnectionResponse,
   props: Partial<React.ComponentProps<typeof ProjectGitSettings>> = {},
   permissions: CurrentUserPermissions = basePermissions,
-  strict = false
+  strict = false,
+  providers = [gitProviderFixture]
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -145,6 +147,7 @@ function renderSettings(
       remoteUrl: 'https://example.invalid/acme/orders', hasToken: true, lastValidatedAt: Date.now(),
       tokenScopeHint: null, connectedByUserId: 'user-1', lastSyncAt: null, ...connection,
     } : connection;
+    if (url === '/git-api/providers') return providers;
     return {};
   });
 
@@ -165,6 +168,16 @@ describe('ProjectGitSettings', () => {
     (apiClient.post as any).mockResolvedValue({ success: true, repoFullName: 'acme/orders' });
     (apiClient.put as any).mockResolvedValue({ success: true });
     (apiClient.delete as any).mockResolvedValue({ success: true });
+  });
+
+  it('connects using the actual provider record id instead of the provider type name', async () => {
+    const providerId = '33333333-3333-4333-8333-333333333333';
+    renderSettings({ connected: false }, {}, basePermissions, false, [{ ...gitProviderFixture, id: providerId }]);
+    await userEvent.type(await screen.findByLabelText(/Owner \/ Namespace/i), 'acme');
+    await userEvent.type(screen.getByLabelText(/Repository name/i), 'orders');
+    await userEvent.type(screen.getByLabelText(/Service Token \(PAT\)/i), 'synthetic-token');
+    await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/git-api/project-connection', expect.objectContaining({ providerId })));
   });
 
   it('keeps disconnected Git settings read-only without project git connect permission', async () => {
@@ -390,10 +403,10 @@ describe('ProjectGitSettings', () => {
   it('does not reuse the previous principal connection status while the new query is pending', async () => {
     const f = renderSettings({ connected: true }); await screen.findByText('Connected');
     let finish!: (value: unknown) => void;
-    vi.mocked(apiClient.get).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    vi.mocked(apiClient.get).mockImplementation((url) => url === '/git-api/providers' ? Promise.resolve([gitProviderFixture]) : new Promise(resolve => { finish = resolve; }));
     f.rerender(f.tree({}, { ...basePermissions, userId: 'user-2' }));
     expect(screen.queryByText('Connected')).not.toBeInTheDocument(); expect(screen.queryByText('acme/orders')).not.toBeInTheDocument();
-    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.calls.filter(([url]) => url.startsWith('/git-api/project-connection'))).toHaveLength(2));
     await act(async () => finish({ connected: false })); expect(await screen.findByRole('button', { name: 'Test & Connect' })).toBeVisible();
   });
 

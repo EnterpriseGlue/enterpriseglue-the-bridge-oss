@@ -885,3 +885,25 @@ unlinked test does not close a functional requirement.
 
 The latest complete evidence summary is
 [Engine Tenancy Functional Test Report](./engine-tenancy-functional-test-report.md).
+
+### Project creation and existing-project Git connections
+
+The create-project wizard validates local, online-repository and clone requests
+and their canonical receipts before acknowledging success or navigating. Engine
+import previews are metadata-only and must match the selected engine and their
+file counts; the server still authorizes and prepares the actual import. Creation
+owns the submitted form and authenticated session. Closing or replacing that form
+suppresses late UI continuations without cancelling or undoing an issued write.
+An uncertain receipt or failed access refresh requires reconciliation before retry.
+A successful access refresh may add the created project's permissions, but must
+still match the original authenticated session.
+
+Existing projects use the project service-token connection settings. They do not
+use the legacy metadata-only repository init/clone endpoints as proof of remote
+repository creation or content import. Provider choices come from validated
+provider records, including their seeded UUIDs, rather than provider type names.
+New-project creation uses the single saved provider credential; ambiguous saved
+credentials cannot silently select a different connection. Private token values
+are not copied into project-creation requests or mutation caches. Server action
+permissions, credential validation, endpoint policy and database isolation remain
+authoritative.

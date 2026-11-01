@@ -39,7 +39,8 @@
     "Git deployment now sends the reviewed saved revision and keeps its export fixed across provider calls; unverified receipts or requested tags no longer report success.",
     "Manual and bulk Git sync verify acknowledgements and stop old continuations after cancellation, view/selection changes or session changes. Replacement dialogs retain their own busy/result state.",
     "Project Git connection settings verify redacted status and matching write acknowledgements, reset private inputs on project/user/view changes, and refresh repository/sync consumers only after a verified current response.",
-    "Personal Git settings and the project wizard validate credential responses, preserve current selection across deferred reads, and verify OAuth completion through the owned popup plus authenticated credential readback."
+    "Personal Git settings and the project wizard validate credential responses, preserve current selection across deferred reads, and verify OAuth completion through the owned popup plus authenticated credential readback.",
+    "Project creation verifies responses and current form/session before navigating; existing-project Git connection uses the supported service-token flow and actual provider record IDs."
   ],
   "upgrade": {
     "required": true,
@@ -85,7 +86,8 @@
     "Manual sync repository and personal-credential queries are authority-bound; bulk queues own their confirmed project scope and recheck session/view lifetime before every request. Existing server permissions remain authoritative.",
     "Manual and bulk sync keep push/pull permissions distinct and honor explicit action restrictions before dispatch, including while membership presentation is pending.",
     "Project connection status caches are authority-bound; token requests stay out of the query mutation cache. Late writes cannot update a replacement dialog, and submitted tokens are redacted from displayed failure messages. Server permissions and token validation are unchanged.",
-    "Personal credential lists and UI continuations are bound to the current owner/session. OAuth completion matches origin, popup and server state; storage flags cannot acknowledge connection. Tokens stay out of mutation caches, code/state are removed from callback URLs, and no server authorization or token-validation guard is relaxed."
+    "Personal credential lists and UI continuations are bound to the current owner/session. OAuth completion matches origin, popup and server state; storage flags cannot acknowledge connection. Tokens stay out of mutation caches, code/state are removed from callback URLs, and no server authorization or token-validation guard is relaxed.",
+    "Engine import previews are engine-bound metadata; creation refuses ambiguous saved provider credentials and does not replay uncertain writes. No server authorization, endpoint policy or isolation guard is relaxed."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -98,7 +100,7 @@
     "impact": "none",
     "owner": "EnterpriseGlue",
     "pages": [],
-    "reason": "Repairs the existing variable controls without adding a new configuration or administrator procedure."
+    "reason": "Repairs existing workflow, Git and administration controls without adding a new configuration or administrator procedure."
   },
   "knownLimitations": [
     "Local request-shape and engine fixture checks do not establish live SaaS tenant isolation or staging installation.",
@@ -130,7 +132,8 @@
     "Push-only denial of pull, permitted pull-only confirmation, explicit restriction with a true legacy fallback, and pending-membership denial regressions.",
     "Actual project-connection component regressions cover malformed/unredacted status, retargeted/empty receipts, per-user cache separation, close/project/user/permission/session lifetimes, duplicate dispatch, private inputs, canonical update/disconnect requests and StrictMode.",
     "Canonical credential CRUD and owner/provider/kind/id negatives, settings cancel/user/session cases, wizard stale-list/provider cases, popup source/origin/state/readback/cancellation bounds, StrictMode callback-once and redaction checks; native browser popup flow uses simulated provider/API responses.",
-    "Shared HTTP 204 stream-settlement success/failure tests and real browser no-content disconnect coverage; frontend API-origin/XSRF/session wire contracts remain enforced."
+    "Shared HTTP 204 stream-settlement success/failure tests and real browser no-content disconnect coverage; frontend API-origin/XSRF/session wire contracts remain enforced.",
+    "Local/online/clone creation receipt and lifetime regressions, own permission-refresh success, engine-preview binding and actual seeded-provider-ID connection coverage."
   ],
   "packages": [
     {
