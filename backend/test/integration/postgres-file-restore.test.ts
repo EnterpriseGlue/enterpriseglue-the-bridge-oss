@@ -96,6 +96,117 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     if (store.isInitialized) await store.destroy();
     if (admin.isInitialized) { try { if (created) await admin.query(`DROP DATABASE "${database}"`); } finally { await admin.destroy(); } }
   });
+  async function savedDeletedFolder(removeAll = false) {
+    const root = randomUUID();
+    await store.getRepository(Folder).insert({ id: root, projectId, name: 'Removed folder', createdAt: 1, updatedAt: 1 });
+    await store.getRepository(File).update(siblingId, { folderId: root });
+    if (removeAll) await store.getRepository(File).update(fileId, { folderId: root });
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Before folder deletion' });
+    expect(saved.status).toBe(200);
+    const deleted = await request(app).delete(`/starbase-api/folders/${root}`);
+    expect(deleted.status).toBe(204);
+    return { root, savedId: saved.body.commitId };
+  }
+
+  it('reports a removed saved file as dirty even when every surviving file is unchanged', async () => {
+    await savedDeletedFolder();
+    const status = await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`);
+    expect(status.status).toBe(200); expect(status.body.uncommittedFileIds).toEqual([siblingId]);
+  });
+
+  it('saves folder deletions as tombstones, publishes them and exports only the surviving reviewed source', async () => {
+    await seedPublishedMain(); await savedDeletedFolder();
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Review folder deletion' });
+    expect(saved.status).toBe(200); expect(saved.body.fileCount).toBe(1);
+    expect(await store.getRepository(FileSnapshot).findOneByOrFail({ commitId: saved.body.commitId, mainFileId: siblingId })).toMatchObject({ changeType: 'deleted' });
+    const published = await request(app).post(`/vcs-api/projects/${projectId}/publish`); expect(published.status).toBe(200);
+    const publishedRows = await store.getRepository(FileSnapshot).find({ where: { commitId: published.body.mergeCommitId } });
+    expect(publishedRows.find(row => row.mainFileId === siblingId)).toMatchObject({ changeType: 'deleted' });
+    expect(await store.getRepository(File).findOneBy({ id: siblingId })).toBeNull();
+    const surviving = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    expect((await verifyDeploymentRevision(store, projectId, published.body.mergeCommitId, [{ ...surviving, sourceXml: surviving.xml }], true)).size).toBe(1);
+    expect(await syncService.getUncommittedIds(projectId, { baselineCommitId: published.body.mergeCommitId })).toEqual({ fileIds: [], folderIds: [] });
+    await store.getRepository(GitRepository).insert({ id: 'deletion-git-fixture', projectId, providerId: 'fixture-provider', remoteUrl: 'https://example.invalid/fixture', repositoryName: 'fixture', namespace: null, defaultBranch: 'main', clonePath: 'database://fixture', createdAt: 1, updatedAt: 1 });
+    const client = { testWriteAccess: vi.fn(), getTree: vi.fn().mockResolvedValue([{ path: 'Removed folder/Sibling.bpmn', type: 'blob', sha: 'a'.repeat(40) }]), pushFiles: vi.fn().mockResolvedValue({ sha: 'b'.repeat(40) }) };
+    const provider = vi.spyOn(remoteGitService, 'getClient').mockResolvedValue(client as any);
+    try {
+      const result = await remoteGitService.pushToRemote(projectId, 'fixture-provider', 'synthetic-test-token', { repo: 'fixture', vcsCommitId: published.body.mergeCommitId });
+      expect(result).toMatchObject({ pushedFilesCount: 1, deletionsCount: 1 });
+      expect(client.pushFiles).toHaveBeenCalledOnce();
+      const payload = client.pushFiles.mock.calls[0][0] as any;
+      expect(payload.deletions).toEqual(['Removed folder/Sibling.bpmn']);
+      expect(payload.files).toMatchObject([{ path: 'Renamed current file.bpmn', content: surviving.xml }]);
+    } finally { provider.mockRestore(); }
+  });
+
+  it('does not absorb a deleted sibling in a file-scoped save', async () => {
+    const { savedId } = await savedDeletedFolder();
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Save surviving file only', fileIds: [fileId] });
+    expect(saved.status).toBe(200);
+    const before = await store.getRepository(FileSnapshot).findOneByOrFail({ commitId: savedId, mainFileId: siblingId });
+    expect(await store.getRepository(FileSnapshot).findOneByOrFail({ commitId: saved.body.commitId, mainFileId: siblingId })).toMatchObject({ changeType: 'unchanged', content: before.content });
+    expect((await syncService.getUncommittedIds(projectId, { baselineCommitId: saved.body.commitId })).fileIds).toEqual([siblingId]);
+    const surviving = await store.getRepository(File).findOneByOrFail({ id: fileId });
+    await expect(verifyDeploymentRevision(store, projectId, saved.body.commitId, [{ ...surviving, sourceXml: surviving.xml }], true)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('saves a reviewed deletion-only project without permitting an empty Git push', async () => {
+    await seedPublishedMain(); await savedDeletedFolder(true);
+    const saved = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Review all removals' });
+    expect(saved.status).toBe(200); expect(saved.body.fileCount).toBe(0);
+    const rows = await store.getRepository(FileSnapshot).find({ where: { commitId: saved.body.commitId } });
+    expect(rows).toHaveLength(2); expect(rows.every(row => row.changeType === 'deleted')).toBe(true);
+    const published = await request(app).post(`/vcs-api/projects/${projectId}/publish`); expect(published.status).toBe(200);
+    expect((await store.getRepository(FileSnapshot).find({ where: { commitId: published.body.mergeCommitId } })).every(row => row.changeType === 'deleted')).toBe(true);
+    expect(await syncService.getUncommittedIds(projectId, { baselineCommitId: published.body.mergeCommitId })).toEqual({ fileIds: [], folderIds: [] });
+    const provider = vi.spyOn(remoteGitService, 'getClient');
+    try { await expect(remoteGitService.pushToRemote(projectId, 'fixture', 'synthetic-test-token', { repo: 'fixture', vcsCommitId: published.body.mergeCommitId })).rejects.toMatchObject({ statusCode: 400 }); expect(provider).not.toHaveBeenCalled(); }
+    finally { provider.mockRestore(); }
+  });
+
+  it.each(['foreign-project', 'foreign-owner'])('refuses full reconciliation of a %s branch before changing drafts', async mismatch => {
+    const before = await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } });
+    await expect(realVcs.syncFromMainDb(mismatch === 'foreign-project' ? otherProjectId : projectId,
+      mismatch === 'foreign-owner' ? 'another-user' : 'fixture-user', branchId)).rejects.toMatchObject({ statusCode: 409 });
+    expect(await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } })).toEqual(before);
+  });
+
+  it('does not touch a corrupt foreign-project working row attached to the same branch', async () => {
+    const original = await store.getRepository(WorkingFile).findOneByOrFail({ mainFileId: siblingId });
+    await store.getRepository(WorkingFile).insert({ ...original, id: 'foreign-working-row', projectId: otherProjectId, mainFileId: 'foreign-source', content: '<private/>', contentHash: hash('<private/>') });
+    const before = await store.getRepository(WorkingFile).findOneByOrFail({ id: 'foreign-working-row' });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Save owned project only' });
+    expect(response.status).toBe(200); expect(await store.getRepository(WorkingFile).findOneByOrFail({ id: before.id })).toEqual(before);
+    expect(await store.getRepository(FileSnapshot).count({ where: { commitId: response.body.commitId, mainFileId: 'foreign-source' } })).toBe(0);
+  });
+
+  it('refuses an ambiguous full-save plan before earlier draft updates or a new commit', async () => {
+    const source = await store.getRepository(WorkingFile).findOneByOrFail({ mainFileId: siblingId });
+    await store.getRepository(WorkingFile).insert({ ...source, id: 'legacy-duplicate', mainFileId: null });
+    const before = await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Ambiguous plan' });
+    expect(response.status).toBe(409); expect(await store.getRepository(Commit).count()).toBe(2);
+    expect(await store.getRepository(WorkingFile).find({ order: { id: 'ASC' } })).toEqual(before);
+  });
+
+  it('retains a dirty status marker for a removed legacy snapshot without inventing a current file', async () => {
+    const { savedId } = await savedDeletedFolder();
+    const row = await store.getRepository(FileSnapshot).findOneByOrFail({ commitId: savedId, mainFileId: siblingId });
+    await store.getRepository(FileSnapshot).update(row.id, { mainFileId: null });
+    expect((await syncService.getUncommittedIds(projectId, { baselineCommitId: savedId })).fileIds).toEqual([row.workingFileId]);
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Invalid scoped deletion marker', fileIds: [siblingId] });
+    expect(response.status).toBe(404); expect(await store.getRepository(Commit).count()).toBe(3);
+  });
+
+  it('refuses a blank new project without creating a draft or commit', async () => {
+    await store.getRepository(File).delete({ projectId });
+    await store.getRepository(Branch).update(branchId, { headCommitId: null });
+    const calls = vi.mocked(vcsService.getUserBranch).mock.calls.length;
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Empty new project' });
+    expect(response.status).toBe(400); expect(vi.mocked(vcsService.getUserBranch).mock.calls.length).toBe(calls);
+    expect(await store.getRepository(Commit).count()).toBe(2);
+  });
+
   it('serializes opposite folder moves so concurrent requests cannot create a cycle', async () => {
     const first = randomUUID(), second = randomUUID();
     await store.getRepository(Folder).insert([{ id: first, projectId, name: 'First', createdAt: 1, updatedAt: 1 }, { id: second, projectId, name: 'Second', createdAt: 1, updatedAt: 1 }]);

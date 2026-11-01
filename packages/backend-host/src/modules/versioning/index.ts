@@ -121,14 +121,31 @@ router.post('/vcs-api/projects/:projectId/commit', apiLimiter, requireAuth, vali
 
     if (validatedFileIds && filesToCommit.length !== validatedFileIds.length) throw Errors.fileNotFound();
     if (filesToCommit.length === 0) {
-      throw Errors.validation('No files to commit');
+      // An empty new project is not a version. A retained owned baseline can,
+      // however, have files whose removals the user is explicitly saving.
+      // Read existing branches only: a refused empty save must not initialize
+      // a new draft as a side effect.
+      const retained = await dataSource.getRepository(Branch).findOne({ where: [
+        { projectId, userId, isDefault: false },
+        { projectId, name: `draft/${userId}`, userId: IsNull(), isDefault: false },
+      ] });
+      const head = retained?.headCommitId ? await dataSource.getRepository(Commit).findOne({
+        where: { id: retained.headCommitId, projectId }, select: ['id'],
+      }) : null;
+      const previous = head ? await dataSource.getRepository(FileSnapshot).find({ where: { commitId: head.id } }) : [];
+      if (!previous.some(file => ['added', 'modified', 'unchanged'].includes(file.changeType))) {
+        throw Errors.validation('No files or saved removals to commit');
+      }
     }
 
     // Resolve every requested file before creating or changing a draft branch.
     const branch = await vcsService.getUserBranch(projectId, userId);
 
-    // Save each file to VCS working_files
-    for (const file of filesToCommit) {
+    // Full saves reconcile the entire project, including removed rows. Scoped
+    // saves keep unselected snapshots intact, including unreviewed removals.
+    if (!validatedFileIds) {
+      await vcsService.syncFromMainDb(projectId, userId, branch.id);
+    } else for (const file of filesToCommit) {
       await vcsService.saveFile(
         branch.id,
         projectId,

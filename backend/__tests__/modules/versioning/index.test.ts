@@ -6,6 +6,8 @@ import express from 'express';
 import versioningRouter from '../../../../packages/backend-host/src/modules/versioning/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Branch } from '@enterpriseglue/shared/db/entities/Branch.js';
+import { Commit } from '@enterpriseglue/shared/db/entities/Commit.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
@@ -164,6 +166,7 @@ describe('versioning routes', () => {
     expect(update).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith({ id: fileId, projectId }, expect.objectContaining({ xml: snapshot.content }));
     expect(find).toHaveBeenCalledWith({ where: { projectId, id: fileId } });
+    expect(vcsService.syncFromMainDb).not.toHaveBeenCalled();
     expect(vcsService.saveFile).toHaveBeenCalledTimes(1);
     expect(vcsService.commit).toHaveBeenCalledWith('branch-1', 'user-1', expect.any(String), { source: 'file-save', fileIds: [fileId] });
     expect(response.body.filesRestored).toBe(1);
@@ -186,6 +189,35 @@ describe('versioning routes', () => {
     (vcsService.getUncommittedIds as Mock).mockResolvedValue({ fileIds: [], folderIds: [] });
     expect((await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`)).status).toBe(200);
     expect(vcsService.getUncommittedIds).toHaveBeenCalledWith(projectId, { baselineCommitId: null, treatNoBaselineAsAll: false });
+  });
+
+  it.each([false, true])('reconciles complete saves before committing and stops on sync failure=%s', async fail => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Project ? projectRepository() : { find: vi.fn().mockResolvedValue([{ id: fileId }]) } });
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'draft-branch-1' });
+    (vcsService.syncFromMainDb as Mock).mockImplementation(async () => { if (fail) throw new Error('Synthetic reconciliation failure'); });
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'commit-1', message: 'Whole version', createdAt: 1 });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Whole version' });
+    expect(vcsService.syncFromMainDb).toHaveBeenCalledExactlyOnceWith(projectId, 'user-1', 'draft-branch-1');
+    expect(vcsService.saveFile).not.toHaveBeenCalled();
+    if (fail) { expect(response.status).toBe(500); expect(vcsService.commit).not.toHaveBeenCalled(); }
+    else { expect(response.status).toBe(200); expect(vi.mocked(vcsService.syncFromMainDb).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(vcsService.commit).mock.invocationCallOrder[0]); }
+  });
+
+  it.each([false, true])('accepts an empty project only with a retained saved removal=%s', async retained => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === Project) return projectRepository();
+      if (entity === Branch) return { findOne: vi.fn().mockResolvedValue(retained ? { id: 'draft-branch-1', headCommitId: 'prior' } : null) };
+      if (entity === Commit) return { findOne: vi.fn().mockResolvedValue({ id: 'prior' }) };
+      if (entity === FileSnapshot) return { find: vi.fn().mockResolvedValue([{ changeType: 'added' }]) };
+      return { find: vi.fn().mockResolvedValue([]) };
+    } });
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'draft-branch-1' });
+    (vcsService.syncFromMainDb as Mock).mockResolvedValue(undefined);
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'commit-1', message: 'Review removals', createdAt: 1 });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Review removals' });
+    expect(response.status).toBe(retained ? 200 : 400);
+    if (retained) expect(response.body.fileCount).toBe(0);
+    else { expect(vcsService.getUserBranch).not.toHaveBeenCalled(); expect(vcsService.syncFromMainDb).not.toHaveBeenCalled(); expect(vcsService.commit).not.toHaveBeenCalled(); }
   });
 
   it('scopes file-save commits to the selected file ids for offline-like save flow', async () => {
@@ -229,6 +261,7 @@ describe('versioning routes', () => {
     expect(fileFind).toHaveBeenCalledWith({
       where: { projectId, id: expect.any(Object) },
     });
+    expect(vcsService.syncFromMainDb).not.toHaveBeenCalled();
     expect(vcsService.saveFile).toHaveBeenCalledTimes(1);
     expect(vcsService.saveFile).toHaveBeenCalledWith(
       'draft-branch-1',

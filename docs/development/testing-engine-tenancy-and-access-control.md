@@ -951,3 +951,26 @@ undoing an issued request. Deletion requires a verified informational preview,
 but that preview is not an atomic retained deletion plan. A no-content response
 acknowledges the request; independently reading resulting state is still needed.
 No migration, RLS policy, server permission or privilege is relaxed.
+
+### Saving and publishing file removals
+
+A removed file remains dirty until a complete project save records its deletion.
+Uncommitted-status IDs include stable deleted-file IDs or retained legacy working
+IDs as status markers; they are not permission to read or save a missing file.
+File-scoped saves still require current project files and preserve the saved
+state of unselected siblings, including their pending removals.
+
+Complete saves reconcile only the requested project and its owned draft branch
+before checkpointing. Reconciliation detects duplicate stable/legacy identities
+before issuing writes, records removals as tombstones, and preserves the current
+file's exact nullable folder metadata. An empty new project cannot create a
+version or initialize a draft through a refused save. A project with a retained
+active baseline can explicitly save a deletion-only version. Publication retains
+those tombstones, so removed files are not reintroduced into the published tree.
+
+The ordinary deployment-source checks still require an exact saved revision.
+The Git exporter can delete a removed diagram path while exporting surviving
+reviewed files; an empty-project Git push remains refused. No remote repository
+wipe capability, schema migration, database policy or permission is introduced.
+Checkpoint reconciliation and save are separate database steps; after a failure,
+read the branch and version state before considering another save.

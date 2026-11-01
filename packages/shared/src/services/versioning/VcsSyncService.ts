@@ -196,8 +196,10 @@ export class VcsSyncService {
       map.set(key, [...(map.get(key) ?? []), snapshot]);
     }
 
-    const uncommittedFileIds: string[] = [];
+    const uncommittedFileIds = new Set<string>();
     const uncommittedFolderIdsSet = new Set<string>();
+    const currentIds = new Set(currentFiles.map(file => file.id));
+    const currentPaths = new Set(currentFiles.map(pathKey));
     
     for (const file of currentFiles) {
       const candidates = byMainId.get(file.id) ?? byLegacyPath.get(pathKey(file));
@@ -207,7 +209,7 @@ export class VcsSyncService {
         && normalizeFolderId(saved.folderId) === normalizeFolderId(file.folderId)
         && saved.content === file.xml && saved.contentHash === hashContent(file.xml);
       if (!clean) {
-        uncommittedFileIds.push(file.id);
+        uncommittedFileIds.add(file.id);
         
         if ((file as any).folderId) {
           let currentFolderId: string | null = (file as any).folderId;
@@ -218,8 +220,22 @@ export class VcsSyncService {
         }
       }
     }
-    
-    return { fileIds: uncommittedFileIds, folderIds: Array.from(uncommittedFolderIdsSet) };
+
+    // A saved file can be dirty because it no longer exists. Do not mistake an
+    // empty current query for a clean project or widen a file-scoped save to
+    // acknowledge its missing siblings. Legacy IDs are status markers only;
+    // the ordinary scoped-save route still requires a current project file.
+    for (const saved of lastCommitSnapshots) {
+      if (saved.changeType === 'deleted') continue;
+      const exists = saved.mainFileId ? currentIds.has(saved.mainFileId) : currentPaths.has(pathKey(saved));
+      if (exists) continue;
+      uncommittedFileIds.add(saved.mainFileId || saved.workingFileId);
+      for (const id of this.getAncestorFolderIds(saved.folderId ? [saved.folderId] : [], folderParentMap)) {
+        uncommittedFolderIdsSet.add(id);
+      }
+    }
+
+    return { fileIds: Array.from(uncommittedFileIds), folderIds: Array.from(uncommittedFolderIdsSet) };
   }
 
   /**

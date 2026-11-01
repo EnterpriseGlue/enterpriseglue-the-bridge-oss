@@ -42,7 +42,8 @@
     "Personal Git settings and the project wizard validate credential responses, preserve current selection across deferred reads, and verify OAuth completion through the owned popup plus authenticated credential readback.",
     "Project creation verifies responses and current form/session before navigating; existing-project Git connection uses the supported service-token flow and actual provider record IDs.",
     "Existing-project uploads retain their original view/session, validate diagram and archive receipts and explain that ZIP archives import at the project root. File and initial-version creation now succeeds or rolls back together.",
-    "Folder creation, rename, move and deletion verify their project tree and responses, keep version saving explicit, and suppress stale dialog/session continuations."
+    "Folder creation, rename, move and deletion verify their project tree and responses, keep version saving explicit, and suppress stale dialog/session continuations.",
+    "Deleted files remain visibly pending until a complete project version records their removal; publishing that version preserves deletion instead of retaining removed content."
   ],
   "upgrade": {
     "required": true,
@@ -91,7 +92,8 @@
     "Personal credential lists and UI continuations are bound to the current owner/session. OAuth completion matches origin, popup and server state; storage flags cannot acknowledge connection. Tokens stay out of mutation caches, code/state are removed from callback URLs, and no server authorization or token-validation guard is relaxed.",
     "Engine import previews are engine-bound metadata; creation refuses ambiguous saved provider credentials and does not replay uncertain writes. No server authorization, endpoint policy or isolation guard is relaxed.",
     "File import and metadata move destinations must belong to the authorized project; breadcrumb ancestry is project-bound and cycle-checked. Browser XML checks do not replace server authorization, endpoint policy or database isolation.",
-    "Folder ancestry, recursive preview/archive/deletion and file destinations are project-bound and cycle-checked. Ordinary tree writers share a transactional project-row fence; no authorization, RLS policy, migration or privilege change."
+    "Folder ancestry, recursive preview/archive/deletion and file destinations are project-bound and cycle-checked. Ordinary tree writers share a transactional project-row fence; no authorization, RLS policy, migration or privilege change.",
+    "Complete version saves bind reconciliation to the project and owned draft, reject ambiguous file identities before writes, and preserve strict deployment-source checks and empty-project Git-push refusal. File-scoped saves do not acknowledge missing siblings."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -139,7 +141,8 @@
     "Shared HTTP 204 stream-settlement success/failure tests and real browser no-content disconnect coverage; frontend API-origin/XSRF/session wire contracts remain enforced.",
     "Local/online/clone creation receipt and lifetime regressions, own permission-refresh success, engine-preview binding and actual seeded-provider-ID connection coverage.",
     "Deferred picker/read/write lifecycle and exact upload receipts, XML namespace/type negatives, archive OpenAPI parity and PostgreSQL import-to-checkpoint/deployment-source verification, version-failure rollback and foreign-folder denial.",
-    "Folder API/tree contracts, actual picker and modal lifetimes, concurrent native PostgreSQL moves, scoped recursive ZIP/deletion and cascade rollback regressions; local browser fixtures remain separate from live SaaS isolation acceptance."
+    "Folder API/tree contracts, actual picker and modal lifetimes, concurrent native PostgreSQL moves, scoped recursive ZIP/deletion and cascade rollback regressions; local browser fixtures remain separate from live SaaS isolation acceptance.",
+    "Native PostgreSQL delete-to-save-to-publish-to-export checks, deletion-only and legacy status cases, scoped-save separation, foreign branch/row and ambiguous-plan refusal; exact root-folder metadata regression."
   ],
   "packages": [
     {
