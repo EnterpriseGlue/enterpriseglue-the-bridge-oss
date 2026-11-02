@@ -4,6 +4,7 @@ import {
   getProcessDefinitionStatistics,
   listProcessDefinitions,
   startProcessInstance,
+  startProcessInstanceById,
 } from '../../../../../packages/backend-host/src/modules/mission-control/processes/service.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
@@ -63,6 +64,12 @@ describe('processes service', () => {
       '/process-definition/key/invoice/tenant-id/runtime%2Fa/start',
       { businessKey: 'order-1' },
     );
+  });
+
+  it('uses an encoded immutable definition ID without a key/latest lookup or tenant override', async () => {
+    await startProcessInstanceById('engine-1', 'invoice:3/a', { variables: { amount: { value: 100 } } });
+    expect(camundaPost).toHaveBeenCalledExactlyOnceWith('engine-1', '/process-definition/invoice%3A3%2Fa/start', { variables: { amount: { value: 100 } } });
+    expect(camundaGet).not.toHaveBeenCalled();
   });
 
   it('retains the standard start endpoint for dedicated and no-tenant definitions', async () => {

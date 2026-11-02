@@ -151,6 +151,8 @@ const {
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceStartResponseSchema,
+  ProcessInstanceStartRequestSchema,
+  ProcessInstanceStartByDefinitionResponseSchema,
   ProcessEditTargetSchema,
   DecisionEditTargetSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
@@ -3964,6 +3966,15 @@ registry.registerPath({
 
 // POST /mission-control-api/process-definitions/key/{key}/start
 registry.register('ProcessInstanceStartResponse', ProcessInstanceStartResponseSchema)
+registry.register('ProcessInstanceStartRequest', ProcessInstanceStartRequestSchema)
+registry.register('ProcessInstanceStartByDefinitionResponse', ProcessInstanceStartByDefinitionResponseSchema)
+registry.registerPath({
+  method: 'post',
+  path: '/mission-control-api/process-definitions/{id}/start',
+  ...authzExtension('engine.runtime.process-definitions.start', 'POST', '/mission-control-api/process-definitions/{id}/start'),
+  request: { params: z.object({ id: z.string().min(1) }), body: { content: { 'application/json': { schema: ProcessInstanceStartRequestSchema } } } },
+  responses: { 200: { description: 'Exact definition started; reconcile before retry after an uncertain outcome', content: { 'application/json': { schema: ProcessInstanceStartByDefinitionResponseSchema } } } },
+});
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-definitions/key/{key}/start',

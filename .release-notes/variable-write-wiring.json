@@ -51,7 +51,8 @@
     "All four Mission Control Edit links bind the selected deployed version and copied edit target to the originating session and route. Obsolete callbacks cannot open a changed file or baseline, and duplicate clicks share one access check.",
     "The Editor rejects ambiguous deployed-source links, preserves exact integer versions, requires every supplied baseline selector to agree, and scopes preview and confirmation state to the original handoff. Read-only preview requires a commit reference; file-version-only links retain the guarded hotfix path with clear preview availability.",
     "Opening Mission Control from the Editor preserves the selected engine and one unambiguous deployed definition. Fresh matching metadata and the composite access check are required before navigation; stale results, failed refreshes and denied access cannot redirect the handoff. The action rows wrap to keep the runtime link visible on narrow screens.",
-    "Incoming Mission Control process and decision links preserve the requested version over saved filters. Unavailable or invalid links show a clear action instead of silently selecting the latest version."
+    "Incoming Mission Control process and decision links preserve the requested version over saved filters. Unavailable or invalid links show a clear action instead of silently selecting the latest version.",
+    "Starting a process uses the exact displayed version. Select one version first; changed permissions or session context discard old start dialogs, and uncertain outcomes cannot be resubmitted automatically."
   ],
   "upgrade": {
     "required": true,
@@ -71,7 +72,8 @@
       "The existing commit-files endpoint returns a shared strict snapshot DTO and binds commit reads to the authorized project. Both saved-diagram views use that endpoint; stable file identity takes priority over names.",
       "File restore uses POST /vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore with the existing restore permission. Older hosts reject that route without whole-project effects; the client has no legacy fallback. Checkpoints keep the existing file-save marker and explicit file-version scope. The original project restore endpoint remains supported. Ambiguous stored snapshots reach validation without timestamp-based selection.",
       "Publish and dirty-status endpoints preserve HTTP 409 for unavailable or conflicting saved baselines; publish requires a saved draft owned by the requested project and user.",
-      "POST /git-api/deploy-from-version requires a saved version UUID and engine target, preserving existing project/CI-target guards. Older hosts reject the new path without fallback. The legacy deploy endpoint remains supported with a verified complete checkpoint."
+      "POST /git-api/deploy-from-version requires a saved version UUID and engine target, preserving existing project/CI-target guards. Older hosts reject the new path without fallback. The legacy deploy endpoint remains supported with a verified complete checkpoint.",
+      "POST /mission-control-api/process-definitions/{id}/start starts an immutable selected definition behind the existing start action/runtime guard and returns its exact definitionId. The key-based compatibility route retains latest-version behavior; the versioned UI has no fallback."
     ]
   },
   "database": {
@@ -153,7 +155,8 @@
     "Folder API/tree contracts, actual picker and modal lifetimes, concurrent native PostgreSQL moves, scoped recursive ZIP/deletion and cascade rollback regressions; local browser fixtures remain separate from live SaaS isolation acceptance.",
     "Native PostgreSQL delete-to-save-to-publish-to-export checks, deletion-only and legacy status cases, scoped-save separation, foreign branch/row and ambiguous-plan refusal; exact root-folder metadata regression.",
     "Native PostgreSQL multi-file and checkpoint/file-version failure rollback, snapshot tampering/alias/type/state negatives, tombstone filtering, derived BPMN/DMN identity and exact post-restore deployment-source verification; request/OpenAPI and shared selector parity.",
-    "Incoming process and decision links over persisted filters resolve key/version/node atomically; unavailable and invalid links pause resource reads until explicitly cleared. Exact process XML/count/instance and decision XML/history selectors remain engine-bound."
+    "Incoming process and decision links over persisted filters resolve key/version/node atomically; unavailable and invalid links pause resource reads until explicitly cleared. Exact process XML/count/instance and decision XML/history selectors remain engine-bound.",
+    "Exact-definition start request/receipt and action/OpenAPI parity; actual restricted PostgreSQL router isolation, real pinned Operaton older-version execution and browser start-dialog lifetime/duplicate cases."
   ],
   "packages": [
     {

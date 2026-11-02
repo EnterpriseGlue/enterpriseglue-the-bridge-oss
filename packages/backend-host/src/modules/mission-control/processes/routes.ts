@@ -3,13 +3,14 @@ import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
-import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
+import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import {
   listProcessDefinitions,
   getProcessDefinition,
   getProcessDefinitionXml,
   getProcessDefinitionStatistics,
   startProcessInstance,
+  startProcessInstanceById,
 } from './service.js'
 import {
   filterRuntimeItemsByResourceKey,
@@ -23,6 +24,8 @@ import {
   ProcessDefinitionSchema,
   ProcessDefXmlSchema,
   ProcessInstanceStartResponseSchema,
+  ProcessInstanceStartRequestSchema,
+  ProcessInstanceStartByDefinitionResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { ProcessEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
@@ -148,7 +151,20 @@ r.get('/mission-control-api/process-definitions/key/:key/statistics', requireAut
   res.json(ActivityCountByActivityIdSchema.parse(data))
 }))
 
-// Start process instance
+// Start the immutable selected definition. The existing definition-ID guard
+// resolves its runtime-resource/tenant scope before the engine mutation.
+r.post('/mission-control-api/process-definitions/:id/start', requireAuth, validateBody(ProcessInstanceStartRequestSchema), requireProcessDefinitionAction('engine.runtime.process-definitions.start', 'body'), asyncHandler(async (req: Request, res: Response) => {
+  const definitionId = String(req.params.id)
+  if (definitionId !== definitionId.trim()) throw Errors.validation('Invalid definition id')
+  const { variables, businessKey } = req.body
+  const result = ProcessInstanceStartByDefinitionResponseSchema.safeParse(await startProcessInstanceById((req as any).engineId, definitionId, {
+    ...(variables === undefined ? {} : { variables }), ...(businessKey === undefined ? {} : { businessKey }),
+  }))
+  if (!result.success || result.data.definitionId !== definitionId) throw Errors.internal('Started process definition could not be verified')
+  res.json(result.data)
+}))
+
+// Compatibility API: explicitly start the latest version by key.
 r.post('/mission-control-api/process-definitions/key/:key/start', requireAuth, requireProcessDefinitionKeyAction('engine.runtime.process-definitions.start', 'body'), asyncHandler(async (req: Request, res: Response) => {
   const { variables, businessKey } = req.body || {}
   const engineId = (req as any).engineId as string

@@ -37,11 +37,12 @@ import { evaluateActionSnapshot, summarizeBulkActionUnavailableReasons, WhyUnava
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
-import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessInstanceIncident } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 import { withEngineContext } from '../shared/engineContext'
 import { hasRuntimeDefinitionLink, useRuntimeDefinitionLink } from '../shared/useRuntimeDefinitionLink'
 import { RuntimeDefinitionLinkNotice } from '../shared/components/RuntimeDefinitionLinkNotice'
+import { useStartProcess } from './hooks/useStartProcess'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -336,12 +337,7 @@ export default function ProcessesOverviewPage() {
   const [retryModalInstanceId, setRetryModalInstanceId] = React.useState<string | null>(null)
   const [retryModalEngineId, setRetryModalEngineId] = React.useState<string | null>(null)
   const [retryModalEngineRevision, setRetryModalEngineRevision] = React.useState<number | null>(null)
-  const [startProcessOpen, setStartProcessOpen] = React.useState(false)
-  const [startProcessEngineId, setStartProcessEngineId] = React.useState<string | null>(null)
-  const [startBusinessKey, setStartBusinessKey] = React.useState('')
-  const [startVariablesJson, setStartVariablesJson] = React.useState('')
-  const [startBusy, setStartBusy] = React.useState(false)
-  const [startError, setStartError] = React.useState<string | null>(null)
+
   const [saveFilterOpen, setSaveFilterOpen] = React.useState(false)
   const [saveFilterEngineId, setSaveFilterEngineId] = React.useState<string | null>(null)
   const [saveFilterName, setSaveFilterName] = React.useState('')
@@ -364,11 +360,6 @@ export default function ProcessesOverviewPage() {
     setRetryModalInstanceId(null)
     setRetryModalEngineId(null)
     setRetryModalEngineRevision(null)
-    setStartProcessOpen(false)
-    setStartProcessEngineId(null)
-    setStartBusinessKey('')
-    setStartVariablesJson('')
-    setStartError(null)
     setSaveFilterOpen(false)
     setSaveFilterEngineId(null)
     setSaveFilterName('')
@@ -955,9 +946,16 @@ export default function ProcessesOverviewPage() {
   const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
   const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
   const migrateTitle = migrateEligibility.summary || 'Migrate'
-  const startTitle = startProcessDecision.allowed
-    ? 'Start process instance'
-    : startProcessDecision.reason || 'Action unavailable'
+  const startProcess = useStartProcess({ engineId: selectedEngineId, target: !definitionLinkPending && selectedProcess?.key && selectedVersion && defIdForVersion
+    ? { id: defIdForVersion, key: selectedProcess.key, version: selectedVersion } : null, allowed: startProcessDecision.allowed,
+    onStarted: async (receipt, check) => {
+      const result = await instQ.refetch()
+      check()
+      showAlert(result.isError ? `Process instance ${receipt.id} started; refresh the instance list.` : `Process instance started ${receipt.id}`, result.isError ? 'warning' : 'info')
+    } })
+  const startTitle = !startProcessDecision.allowed ? startProcessDecision.reason || 'Action unavailable'
+    : startProcess.blocked ? 'Check the previous start outcome before trying again.'
+    : !startProcess.available ? 'Select a single process version to start.' : `Start process instance (v${selectedVersion})`
   const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
   const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
   const bulkMigrateDiagnosticDecision = migrateEligibility.firstDeniedDecision
@@ -1022,66 +1020,6 @@ export default function ProcessesOverviewPage() {
     }
   }
 
-  const closeStartProcessModal = React.useCallback(() => {
-    if (startBusy) return
-    setStartProcessOpen(false)
-    setStartProcessEngineId(null)
-    setStartError(null)
-  }, [startBusy])
-
-  const handleStartProcess = React.useCallback(async () => {
-    if (!selectedProcess?.key) return
-    if (!selectedEngineId || startProcessEngineId !== selectedEngineId) {
-      setStartError('Select an engine')
-      return
-    }
-    const requestEngineId = startProcessEngineId
-    const requestEngineRevision = engineRevisionRef.current
-    const isCurrentRequest = () => (
-      currentEngineIdRef.current === requestEngineId
-      && engineRevisionRef.current === requestEngineRevision
-    )
-
-    let variables: unknown
-    const trimmedVariables = startVariablesJson.trim()
-    if (trimmedVariables) {
-      try {
-        variables = JSON.parse(trimmedVariables)
-      } catch {
-        setStartError('Variables must be valid JSON')
-        return
-      }
-    }
-
-    setStartBusy(true)
-    setStartError(null)
-    try {
-      const payload: Record<string, unknown> = { engineId: requestEngineId }
-      const businessKey = startBusinessKey.trim()
-      if (businessKey) payload.businessKey = businessKey
-      if (variables !== undefined) payload.variables = variables
-      const started = await apiClient.post<ProcessInstanceStartResponse>(
-        `/mission-control-api/process-definitions/key/${encodeURIComponent(selectedProcess.key)}/start`,
-        payload,
-        { credentials: 'include' }
-      )
-      if (!isCurrentRequest()) return
-      setStartProcessOpen(false)
-      setStartProcessEngineId(null)
-      setStartBusinessKey('')
-      setStartVariablesJson('')
-      await instQ.refetch()
-      if (!isCurrentRequest()) return
-      const startedId = started?.id ? ` ${started.id}` : ''
-      showAlert(`Process instance started${startedId}`, 'info')
-    } catch (error) {
-      if (isCurrentRequest()) {
-        setStartError(getUiErrorMessage(error, 'Failed to start process instance'))
-      }
-    } finally {
-      if (isCurrentRequest()) setStartBusy(false)
-    }
-  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startProcessEngineId, startVariablesJson])
 
   const onRowClick = (rowId: string) => {
     if (selectedEngineId) detailsModal.openModal({
@@ -1169,12 +1107,8 @@ export default function ProcessesOverviewPage() {
                 kind="primary"
                 size="sm"
                 renderIcon={Play}
-                onClick={() => {
-                  setStartError(null)
-                  setStartProcessEngineId(selectedEngineId ?? null)
-                  setStartProcessOpen(true)
-                }}
-                disabled={!selectedProcess?.key || !startProcessDecision.allowed}
+                onClick={startProcess.open}
+                disabled={!startProcess.available || startProcess.pending || startProcess.blocked}
                 title={startTitle}
               >
                 Start
@@ -1700,38 +1634,39 @@ export default function ProcessesOverviewPage() {
       </Modal>
 
       <Modal
-        open={startProcessOpen}
-        modalHeading={`Start ${selectedProcess?.label || selectedProcess?.key || 'process'}`}
-        primaryButtonText={startBusy ? 'Starting...' : 'Start process'}
+        open={startProcess.isOpen}
+        modalHeading={`Start ${selectedProcess?.label || selectedProcess?.key || 'process'} (v${selectedVersion})`}
+        primaryButtonText={startProcess.pending ? 'Starting...' : 'Start process'}
         secondaryButtonText="Cancel"
-        primaryButtonDisabled={startBusy || !selectedProcess?.key}
-        onRequestClose={closeStartProcessModal}
-        onRequestSubmit={handleStartProcess}
+        primaryButtonDisabled={startProcess.pending || startProcess.blocked || !startProcess.available}
+        onRequestClose={startProcess.close}
+        onRequestSubmit={startProcess.submit}
         size="sm"
       >
         <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
-          {startError ? (
+          {startProcess.error ? (
             <InlineNotification
               lowContrast
               kind="error"
-              title="Failed to start process"
-              subtitle={startError}
+              title={startProcess.blocked ? 'Process start needs review' : 'Cannot start process'}
+              subtitle={startProcess.error}
+              hideCloseButton
             />
           ) : null}
           <TextInput
             id="start-process-business-key"
             labelText="Business key"
-            value={startBusinessKey}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setStartBusinessKey(event.target.value)}
-            disabled={startBusy}
+            value={startProcess.businessKey}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => startProcess.setBusinessKey(event.target.value)}
+            disabled={startProcess.pending || startProcess.blocked}
             placeholder="Optional business key"
           />
           <TextArea
             id="start-process-variables"
             labelText="Variables JSON"
-            value={startVariablesJson}
-            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setStartVariablesJson(event.target.value)}
-            disabled={startBusy}
+            value={startProcess.variablesJson}
+            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => startProcess.setVariablesJson(event.target.value)}
+            disabled={startProcess.pending || startProcess.blocked}
             placeholder={'{\n  "customerId": { "value": "C-100", "type": "String" }\n}'}
             rows={6}
           />

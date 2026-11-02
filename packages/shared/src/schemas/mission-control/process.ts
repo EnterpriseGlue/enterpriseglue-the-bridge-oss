@@ -23,6 +23,31 @@ export const ProcessInstanceStartResponseSchema = z.object({
   id: z.string(),
 }).passthrough();
 
+export const ProcessInstanceStartRequestSchema = z.object({
+  engineId: z.string().min(1).refine(value => value === value.trim()),
+  businessKey: z.string().optional(),
+  variables: z.preprocess((input, context) => {
+    // Record parsers can omit this reserved own key before key refinements run.
+    if (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, '__proto__')) {
+      context.addIssue({ code: 'custom', message: 'Unsupported variable name' });
+      return z.NEVER;
+    }
+    return input;
+  }, z.record(z.string(), z.unknown())).optional(),
+}).strict().superRefine((request, context) => {
+  try {
+    JSON.stringify(request, (_key, value) => {
+      if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('Nonfinite JSON');
+      return value;
+    });
+  } catch { context.addIssue({ code: 'custom', message: 'Process start input must contain finite JSON values' }); }
+});
+
+export const ProcessInstanceStartByDefinitionResponseSchema = ProcessInstanceStartResponseSchema.extend({
+  id: z.string().min(1).refine(value => value === value.trim()),
+  definitionId: z.string().min(1),
+});
+
 // Process instance schemas (API-only, no DB persistence)
 export const RuntimeRowActionDecisionSchema = z.object({
   allowed: z.boolean(),
@@ -245,6 +270,8 @@ export const ProcessInstanceCollectionQueryParamsSchema = z.object({
 export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
 export type ProcessDefXml = z.infer<typeof ProcessDefXmlSchema>;
 export type ProcessInstanceStartResponse = z.infer<typeof ProcessInstanceStartResponseSchema>;
+export type ProcessInstanceStartRequest = z.infer<typeof ProcessInstanceStartRequestSchema>;
+export type ProcessInstanceStartByDefinitionResponse = z.infer<typeof ProcessInstanceStartByDefinitionResponseSchema>;
 export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
 export type ProcessInstanceDetail = z.infer<typeof ProcessInstanceDetailSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;

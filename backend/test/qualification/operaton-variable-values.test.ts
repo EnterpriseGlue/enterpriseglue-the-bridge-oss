@@ -3,17 +3,70 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { camundaGetWithConnection } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import { modifyProcessInstanceVariables } from '../../../packages/frontend-host/src/features/mission-control/process-instance-detail/api/processInstances.js';
+import { startProcessDefinition } from '../../../packages/frontend-host/src/features/mission-control/processes-overview/api/startProcess.js';
+import { startProcessInstanceById } from '../../../packages/backend-host/src/modules/mission-control/processes/service.js';
 
 // Exercise the real frontend write adapter against the disposable engine. Only
 // the host HTTP hop is replaced; serialization and engine persistence are real.
 const frontendApi = vi.hoisted(() => ({ post: vi.fn() }));
+const startConnection = vi.hoisted(() => ({ value: null as { id: string; baseUrl: string; authType: string } | null }));
 vi.mock('../../../packages/frontend-host/src/shared/api/client.js', () => ({ apiClient: frontendApi }));
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', async original => {
+  const actual = await original<typeof import('@enterpriseglue/shared/services/bpmn-engine-client.js')>();
+  return { ...actual, camundaPost: (engineId: string, path: string, body: unknown) => {
+    if (!startConnection.value || engineId !== startConnection.value.id) throw Error('Unexpected fixture engine');
+    return actual.camundaPostWithConnection(startConnection.value, path, body);
+  } };
+});
 
 // Real pinned Operaton HTTP transport; audit persistence is outside this fixture.
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }));
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: () => { throw Error('Unexpected fixture database access'); } }));
 
 describe('real Operaton serialized variable values', () => {
+  it('starts an exact older definition through the frontend and backend service without selecting latest', async () => {
+    const baseUrl = process.env.OPERATON_VARIABLE_FIXTURE_URL;
+    if (!baseUrl) throw Error('A disposable OPERATON_VARIABLE_FIXTURE_URL is required');
+    const url = new URL(baseUrl);
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.pathname !== '/engine-rest'
+      || url.username || url.password || url.search || url.hash) throw Error('The fixture must be a loopback Operaton endpoint');
+    const key = `exact_start_${randomUUID().replace(/-/g, '')}`, deployments: string[] = [], ids: string[] = [];
+    startConnection.value = { id: key, baseUrl, authType: 'none' };
+    try {
+      for (const version of [1, 2]) {
+        const form = new FormData(); form.set('deployment-name', `${key}-${version}`);
+        form.set('process.bpmn', new Blob([`<?xml version="1.0" encoding="UTF-8"?>
+          <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" targetNamespace="fixture">
+            <bpmn:process id="${key}" isExecutable="true" camunda:historyTimeToLive="1">
+              <bpmn:startEvent id="start"/><bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review${version}"/>
+              <bpmn:userTask id="review${version}" name="Review version ${version}"/>
+            </bpmn:process>
+          </bpmn:definitions>`], { type: 'application/xml' }), 'process.bpmn');
+        const response = await fetch(`${baseUrl}/deployment/create`, { method: 'POST', body: form, signal: AbortSignal.timeout(15000) });
+        expect(response.status).toBe(200);
+        const deployed = await response.json() as any; deployments.push(deployed.id);
+        const definitions = Object.values(deployed.deployedProcessDefinitions) as Array<{ id: string; version: number }>;
+        expect(definitions).toHaveLength(1); expect(definitions[0].version).toBe(version); ids.push(definitions[0].id);
+      }
+      frontendApi.post.mockReset(); frontendApi.post.mockImplementation(async (path, body) => {
+        expect(path).toBe(`/mission-control-api/process-definitions/${encodeURIComponent(ids[0])}/start`);
+        const { engineId, ...payload } = body;
+        return startProcessInstanceById(engineId, ids[0], payload);
+      });
+      const receipt = await startProcessDefinition(ids[0], { engineId: key, businessKey: 'exact-version', variables: { amount: { type: 'Integer', value: 42 } } });
+      expect(receipt.definitionId).toBe(ids[0]); expect(receipt.definitionId).not.toBe(ids[1]);
+      expect(await camundaGetWithConnection(startConnection.value, '/task', { processInstanceId: receipt.id })).toMatchObject([{ taskDefinitionKey: 'review1' }]);
+      expect(await camundaGetWithConnection(startConnection.value, `/process-instance/${receipt.id}/variables`)).toMatchObject({ amount: { value: 42 } });
+      expect(frontendApi.post).toHaveBeenCalledOnce();
+    } finally {
+      frontendApi.post.mockReset(); startConnection.value = null;
+      for (const id of deployments.reverse()) {
+        const response = await fetch(`${baseUrl}/deployment/${encodeURIComponent(id)}?cascade=true`, { method: 'DELETE', signal: AbortSignal.timeout(15000) });
+        expect(response.status).toBe(204);
+      }
+    }
+  }, 60000);
+
   it('preserves JSON and scalar values through runtime, task and completed history reads', async () => {
     const baseUrl = process.env.OPERATON_VARIABLE_FIXTURE_URL;
     if (!baseUrl) throw Error('A disposable OPERATON_VARIABLE_FIXTURE_URL is required');

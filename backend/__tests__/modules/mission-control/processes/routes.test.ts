@@ -16,6 +16,7 @@ import {
   getProcessDefinition,
   getProcessDefinitionStatistics,
   startProcessInstance,
+  startProcessInstanceById,
 } from '../../../../../packages/backend-host/src/modules/mission-control/processes/service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -81,6 +82,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/proces
   getProcessDefinitionXml: vi.fn().mockResolvedValue({ id: 'pd1', bpmn20Xml: '<bpmn/>' }),
   getProcessDefinitionStatistics: vi.fn().mockResolvedValue({}),
   startProcessInstance: vi.fn().mockResolvedValue({ id: 'pi1' }),
+  startProcessInstanceById: vi.fn().mockResolvedValue({ id: 'pi-exact', definitionId: 'pd1' }),
 }));
 
 describe('mission-control processes routes', () => {
@@ -263,6 +265,37 @@ describe('mission-control processes routes', () => {
       businessKey: 'case-1',
       variables: { amount: { value: 100 } },
     });
+  });
+
+  it('starts the exact definition through the existing process-start action', async () => {
+    const response = await request(app).post('/mission-control-api/process-definitions/pd1/start')
+      .send({ engineId: 'engine-1', businessKey: 'case-1', variables: { amount: { value: 100 } } });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: 'pi-exact', definitionId: 'pd1' });
+    expect(startProcessInstanceById).toHaveBeenCalledWith('engine-1', 'pd1', { businessKey: 'case-1', variables: { amount: { value: 100 } } });
+    expect(startProcessInstance).not.toHaveBeenCalled();
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:start', expect.objectContaining({ resourceType: 'engine', resourceId: 'engine-1' }));
+  });
+
+  it('denies an exact start without the process-start permission before mutation', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(false);
+    const response = await request(app).post('/mission-control-api/process-definitions/pd1/start').send({ engineId: 'engine-1' });
+    expect(response.status).toBe(403);
+    expect(startProcessInstanceById).not.toHaveBeenCalled();
+  });
+
+  it.each([{ variables: [] }, { variables: null }, { engineId: ' engine-1' }, { runtimeTenantId: 'foreign' }, { processDefinitionId: 'foreign' }])('rejects malformed or retargeting exact start input %j', async extra => {
+    const response = await request(app).post('/mission-control-api/process-definitions/pd1/start').send({ engineId: 'engine-1', ...extra });
+    expect(response.status).toBe(400);
+    expect(startProcessInstanceById).not.toHaveBeenCalled();
+  });
+
+  it('does not acknowledge a start receipt for another definition', async () => {
+    vi.mocked(startProcessInstanceById).mockResolvedValueOnce({ id: 'other-instance', definitionId: 'other-definition' });
+    const response = await request(app).post('/mission-control-api/process-definitions/pd1/start').send({ engineId: 'engine-1' });
+    expect(response.status).toBe(500);
+    expect(startProcessInstanceById).toHaveBeenCalledOnce();
+    expect(startProcessInstance).not.toHaveBeenCalled();
   });
 
   it('denies process definition reads when instance view permission is missing', async () => {
