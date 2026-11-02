@@ -271,14 +271,16 @@ function getDeploymentVersion(row: LatestDeploymentByFile, fileType: 'bpmn' | 'd
 function getMissionControlTarget(row: LatestDeploymentByFile, fileType: 'bpmn' | 'dmn'): MissionControlTarget | null {
   const desiredKind = fileType === 'dmn' ? 'decision' : 'process';
   const artifacts = Array.isArray(row.artifacts) ? row.artifacts : [];
-  const matches = artifacts
-    .filter((artifact) => String(artifact?.kind || '') === desiredKind && String(artifact?.key || ''))
-    .sort((a, b) => Number(b?.version || 0) - Number(a?.version || 0));
+  const matches = artifacts.filter(artifact => artifact?.kind === desiredKind);
+  // A file can contain multiple runtime definitions. Do not guess which one the user meant.
+  if (matches.length !== 1) return null;
   const best = matches[0];
-  const key = String(best?.key || '');
-  const version = Number(best?.version);
-  const engineId = String(row.engineId || '');
-  if (!engineId || !key || !Number.isFinite(version)) return null;
+  const key = best.key;
+  const version = best.version;
+  const engineId = row.engineId;
+  if (typeof engineId !== 'string' || !engineId || engineId !== engineId.trim()
+    || typeof key !== 'string' || !key || key !== key.trim()
+    || !Number.isSafeInteger(version) || version <= 0) return null;
   return {
     engineId,
     path: fileType === 'dmn' ? '/mission-control/decisions' : '/mission-control/processes',
@@ -316,7 +318,7 @@ export default function GitVersionsPanel({
   restoreVersionUnavailableReason,
 }: GitVersionsPanelProps) {
   const queryClient = useQueryClient();
-  const { tenantNavigate } = useTenantNavigate();
+  const { tenantNavigate, tenantSlug, effectivePathname } = useTenantNavigate();
   const { hasEnginePermission, hasProjectPermission, permissions, user, sessionRevision } = useAuth();
   const [selectedCommit, setSelectedCommit] = useState<VcsCommit | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -326,6 +328,7 @@ export default function GitVersionsPanel({
   const [environmentFilter, setEnvironmentFilter] = useState<{ id: string; label: string } | null>({ id: 'all', label: 'All environments' });
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [bridgeDecision, setBridgeDecision] = useState<BridgeDecisionResponse | null>(null);
+  const bridgeRequest = React.useRef(0);
   const projectResource = React.useMemo(() => ({ type: 'project' as const, id: projectId }), [projectId]);
   const localVersionsReadDecision = evaluateActionSnapshot(permissions, 'project.versions.read', projectResource);
   const localVersionsRestoreDecision = evaluateActionSnapshot(permissions, 'project.versions.restore', projectResource);
@@ -572,15 +575,15 @@ export default function GitVersionsPanel({
     },
   });
 
-  const deletionAuthority = JSON.stringify([projectId, fileId, saveMode,
+  const historyAuthority = JSON.stringify([projectId, fileId, saveMode,
     user?.session?.principal.id || user?.id || null, user?.session?.tenant.id || null,
     sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)]);
-  const submittedDeletions = React.useRef({ authority: deletionAuthority, targets: new Set<string>() });
-  if (submittedDeletions.current.authority !== deletionAuthority) submittedDeletions.current = { authority: deletionAuthority, targets: new Set() };
+  const submittedDeletions = React.useRef({ authority: historyAuthority, targets: new Set<string>() });
+  if (submittedDeletions.current.authority !== historyAuthority) submittedDeletions.current = { authority: historyAuthority, targets: new Set() };
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const deletionDecision = evaluateActionSnapshot(permissions, 'engine.deployments.delete', { type: 'engine', id: deploymentPendingDelete?.engineId || null });
-  const deletionFence = useProjectActionFence(JSON.stringify([deletionAuthority, deploymentPendingDelete?.engineId, deploymentPendingDelete?.engineDeploymentId]));
-  React.useEffect(() => { setDeploymentPendingDelete(null); setDeletionError(null); }, [deletionAuthority]);
+  const deletionFence = useProjectActionFence(JSON.stringify([historyAuthority, deploymentPendingDelete?.engineId, deploymentPendingDelete?.engineDeploymentId]));
+  React.useEffect(() => { setDeploymentPendingDelete(null); setDeletionError(null); }, [historyAuthority]);
   const deletionKey = (engineId?: string | null, deploymentId?: string | null) => JSON.stringify([engineId, deploymentId]);
   const deleteDeploymentMutation = useMutation({
     mutationFn: async (intent: { engineId: string; deploymentId: string; projectId: string;
@@ -612,6 +615,7 @@ export default function GitVersionsPanel({
   };
 
   const openCommitPreview = React.useCallback((commit: VcsCommit) => {
+    bridgeRequest.current += 1;
     setSelectedCommit(commit);
     setPreviewOpen(true);
   }, []);
@@ -737,45 +741,41 @@ export default function GitVersionsPanel({
     openCommitPreview(commit);
   }, [openCommitPreview]);
 
-  const handleOpenMissionControl = React.useCallback(async (target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
+  const bridgeAuthority = JSON.stringify([historyAuthority, tenantSlug, effectivePathname, previewOpen,
+    selectedCommit?.id, hasEngineAccess, canReadVcsCommits, canReadProjectDeployments]);
+  const bridgeFence = useProjectActionFence(bridgeAuthority);
+  React.useEffect(() => { setBridgeError(null); setBridgeDecision(null); }, [bridgeAuthority]);
+  const handleOpenMissionControl = async (target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
     if (!target) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setBridgeError(null);
-    setBridgeDecision(null);
+    event.preventDefault(); event.stopPropagation();
+    const intent = { ...target };
+    const checkView = bridgeFence.capture(), request = ++bridgeRequest.current;
+    const checkCurrent = () => { checkView(); if (request !== bridgeRequest.current) throw new Error('Bridge selection changed'); };
     try {
-      const bridgeDecision = await evaluateStarbaseMissionControlBridge({
-        projectId,
-        fileId,
-        engineId: target.engineId,
-        definitionKey: target.keyParam === 'process' ? target.key : undefined,
-        decisionDefinitionKey: target.keyParam === 'decision' ? target.key : undefined,
-        kind: target.keyParam === 'decision' || fileType === 'dmn' ? 'decision' : 'process',
+      checkCurrent(); setBridgeError(null); setBridgeDecision(null);
+      const decision = await evaluateStarbaseMissionControlBridge({
+        projectId, fileId, engineId: intent.engineId,
+        definitionKey: intent.keyParam === 'process' ? intent.key : undefined,
+        decisionDefinitionKey: intent.keyParam === 'decision' ? intent.key : undefined,
+        kind: intent.keyParam === 'decision' ? 'decision' : 'process',
       });
-      if (!bridgeDecision.allowed) {
-        setBridgeDecision(bridgeDecision);
-        return;
-      }
+      checkCurrent();
+      if (!decision.allowed) { setBridgeDecision(decision); return; }
+      const params = new URLSearchParams({ engineId: intent.engineId, [intent.keyParam]: intent.key, version: String(intent.version) });
+      tenantNavigate(`${intent.path}?${params.toString()}`);
     } catch (error) {
-      setBridgeError(parseApiError(error, 'Unable to evaluate Mission Control access').message);
-      return;
+      try { checkCurrent(); setBridgeError(parseApiError(error, 'Unable to evaluate Mission Control access').message); } catch {}
     }
-    const params = new URLSearchParams({
-      engineId: target.engineId,
-      [target.keyParam]: target.key,
-      version: String(target.version),
-    });
-    tenantNavigate(`${target.path}?${params.toString()}`);
-  }, [fileId, fileType, projectId, tenantNavigate]);
+  };
 
-  const handleDeploymentClick = React.useCallback((commit: VcsCommit, target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleDeploymentClick = (commit: VcsCommit, target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
     if (target) {
       void handleOpenMissionControl(target, event);
       return;
     }
     setBridgeError(null);
     handleJumpToCommit(commit, event);
-  }, [handleOpenMissionControl, handleJumpToCommit]);
+  };
 
   const showDeploymentUi = saveMode === 'git' && hasEngineAccess && canReadProjectDeployments;
 

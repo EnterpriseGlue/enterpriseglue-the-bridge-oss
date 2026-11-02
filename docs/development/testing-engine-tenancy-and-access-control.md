@@ -1036,3 +1036,23 @@ The legacy and canonical error-handler import paths share one `AppError` class.
 Typed engine failures therefore retain their sanitized HTTP status across the
 service/route boundary instead of becoming generic errors due to class-identity
 drift. This does not change authorization, tenant policies or migration floors.
+
+### Runtime navigation from saved history
+
+Saved-history runtime links require one unambiguous artifact of the displayed
+file type, a canonical key and engine identity, and a positive safe integer
+version. Multiple matching definitions open the saved-file preview rather than
+selecting a runtime definition by version rank.
+
+Both bridge API clients parse the canonical decision response and bind returned
+project, file, engine and target identities to the submitted selectors. Allowed
+responses also require complete identities, no missing actions and matching
+definition/kind lineage. Structured denials retain their reason when early
+resolution cannot supply every identity. Browser response checks do not replace
+the bridge service's authorization or the destination API's guards.
+
+The history panel owns the latest bridge selection and its original file,
+tenant URL, principal/session, permission snapshot and preview lifetime. Late
+allowances, denials and errors cannot navigate or update a replaced view. Query
+parameters are constructed from the captured artifact, without retargeting an
+earlier decision to the current selection.

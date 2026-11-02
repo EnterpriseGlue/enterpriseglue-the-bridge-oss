@@ -40,12 +40,14 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
   }),
 }));
 
+const navigation = vi.hoisted(() => ({ go: vi.fn(), tenantSlug: 'tenant-a', effectivePathname: '/starbase/editor/file-1' }));
+
 vi.mock('@src/shared/hooks/useTenantNavigate', () => ({
   useTenantNavigate: () => ({
-    tenantNavigate: vi.fn(),
+    tenantNavigate: navigation.go,
     toTenantPath: (path: string) => path,
-    tenantSlug: 'default',
-    effectivePathname: '/',
+    tenantSlug: navigation.tenantSlug,
+    effectivePathname: navigation.effectivePathname,
     navigate: vi.fn(),
   }),
 }));
@@ -133,6 +135,7 @@ describe('GitVersionsPanel', () => {
     vi.clearAllMocks();
     setAuthPermissions();
     authMocks.user = { id: 'user-1' }; authMocks.sessionRevision = 0;
+    navigation.tenantSlug = 'tenant-a'; navigation.effectivePathname = '/starbase/editor/file-1';
     authMocks.hasEnginePermission.mockReturnValue(false);
     authMocks.hasProjectPermission.mockReturnValue(true);
     (apiClient.get as any).mockImplementation(async (url: string) => {
@@ -472,6 +475,55 @@ describe('GitVersionsPanel', () => {
     const f = deletionFixture(); await openDeletion(); const refresh = vi.spyOn(f.client, 'invalidateQueries').mockRejectedValueOnce(new Error('Refresh unavailable'));
     fireEvent.click(submitDeletion()); expect(await screen.findByText(/Refresh unavailable/)).toBeVisible();
     expect(submitDeletion()).toBeDisabled(); expect(refresh).toHaveBeenCalledWith({ queryKey: ['engine-deployments', 'project-1'] }, { throwOnError: true });
+  });
+
+  const bridgeAllowance = (engineId = 'engine-1') => ({ allowed: true, reasonCode: 'allowed', reason: 'Allowed', missingActions: [], projectId: 'project-1', fileId: 'file-1', engineId, targetId: 'target-1', lineage: { kind: 'process', definitionKey: 'invoice' } });
+  it.each(['file', 'project', 'actor', 'permission', 'tenant-path', 'browser', 'unmount'])('ignores bridge navigation after %s replacement', async change => {
+    let finish!: (value: unknown) => void; vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const f = deletionFixture(); await userEvent.click(await screen.findByRole('button', { name: /^Dev v3$/ })); await waitFor(() => expect(apiClient.post).toHaveBeenCalledOnce());
+    if (change === 'file') f.rerender(f.panel('project-1', 'file-2'));
+    if (change === 'project') { f.rerender(f.panel('project-2')); f.rerender(f.panel()); }
+    if (change === 'actor') { authMocks.user = { id: 'user-2' }; authMocks.sessionRevision++; f.rerender(f.panel()); }
+    if (change === 'permission') { setAuthPermissions({ projects: [], engines: [] }); authMocks.hasProjectPermission.mockReturnValue(false); f.rerender(f.panel()); }
+    if (change === 'tenant-path') { navigation.tenantSlug = 'tenant-b'; f.rerender(f.panel()); }
+    if (change === 'browser') advanceBrowserSessionRevision();
+    if (change === 'unmount') f.unmount();
+    await act(async () => finish(bridgeAllowance())); expect(navigation.go).not.toHaveBeenCalled();
+  });
+  it('keeps only the latest runtime badge decision when responses arrive out of order', async () => {
+    const f = deletionFixture(); const original = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string, ...args: any[]) => url.includes('/deployments/history') ? [
+      { engineId: 'engine-1', engineDeploymentId: 'deployment-1', fileId: 'file-1', fileGitCommitId: 'manual-current', environmentTag: 'Dev', artifacts: [{ kind: 'process', key: 'invoice', version: 3 }] },
+      { engineId: 'engine-2', engineDeploymentId: 'deployment-2', fileId: 'file-1', fileGitCommitId: 'manual-current', environmentTag: 'Stage', artifacts: [{ kind: 'process', key: 'invoice', version: 4 }] },
+    ] as any : original(url, ...args));
+    await act(async () => { await f.client.invalidateQueries({ queryKey: ['engine-deployments', 'project-1'] }); });
+    const finish: Array<(value: unknown) => void> = []; vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => finish.push(resolve)));
+    await userEvent.click(await screen.findByRole('button', { name: /^Dev v3$/ })); await userEvent.click(await screen.findByRole('button', { name: /^Stage v4$/ }));
+    expect(finish).toHaveLength(2); await act(async () => finish[0](bridgeAllowance())); expect(navigation.go).not.toHaveBeenCalled(); await act(async () => finish[1](bridgeAllowance('engine-2')));
+    expect(navigation.go).toHaveBeenCalledExactlyOnceWith('/mission-control/processes?engineId=engine-2&process=invoice&version=4');
+  });
+  it('drops a late denial after replacement without showing it in the new view', async () => {
+    let finish!: (value: unknown) => void; vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const f = deletionFixture(); await userEvent.click(await screen.findByRole('button', { name: /^Dev v3$/ })); f.rerender(f.panel('project-1', 'file-2'));
+    await act(async () => finish({ ...bridgeAllowance(), allowed: false, reasonCode: 'denied', reason: 'Old file denied', missingActions: ['engine.runtime.process-definitions.read'] }));
+    expect(screen.queryByText(/Old file denied/)).not.toBeInTheDocument(); expect(navigation.go).not.toHaveBeenCalled();
+  });
+  it('navigates only after an exact structured bridge allowance', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce(bridgeAllowance()); deletionFixture(); await userEvent.click(await screen.findByRole('button', { name: /^Dev v3$/ }));
+    await waitFor(() => expect(navigation.go).toHaveBeenCalledExactlyOnceWith('/mission-control/processes?engineId=engine-1&process=invoice&version=3'));
+  });
+  it.each([0, -1, 1.5, Infinity])('does not navigate to an invalid artifact version %s', async version => {
+    const original = vi.mocked(apiClient.get).getMockImplementation()!; deletionFixture(); const configured = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string, ...args: any[]) => url.includes('/deployments/history') ? [{ engineId: 'engine-1', engineDeploymentId: 'deployment-1', fileId: 'file-1', fileGitCommitId: 'manual-current', environmentTag: 'Dev', artifacts: [{ kind: 'process', key: 'invoice', version }] }] as any : configured(url, ...args));
+    vi.mocked(apiClient.post).mockResolvedValue(bridgeAllowance());
+    const badge = await screen.findByRole('button', { name: /^Dev v/ }); await userEvent.click(badge); expect(apiClient.post).not.toHaveBeenCalled(); expect(navigation.go).not.toHaveBeenCalled();
+    vi.mocked(apiClient.get).mockImplementation(original);
+  });
+  it('opens the saved file instead of guessing between different runtime artifacts', async () => {
+    deletionFixture(); const original = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string, ...args: any[]) => url.includes('/deployments/history') ? [{ engineId: 'engine-1', engineDeploymentId: 'deployment-1', fileId: 'file-1', fileGitCommitId: 'manual-current', environmentTag: 'Dev', artifacts: [{ kind: 'process', key: 'invoice', version: 3 }, { kind: 'process', key: 'sibling', version: 9 }] }] as any : original(url, ...args));
+    vi.mocked(apiClient.post).mockResolvedValue(bridgeAllowance()); await userEvent.click(await screen.findByRole('button', { name: /^Dev v9$/ }));
+    expect(apiClient.post).not.toHaveBeenCalled(); expect(navigation.go).not.toHaveBeenCalled(); expect(screen.getByRole('button', { name: 'Restore this version' })).toBeVisible();
   });
 
   it('surfaces Mission Control bridge denials for deployment badges', async () => {
