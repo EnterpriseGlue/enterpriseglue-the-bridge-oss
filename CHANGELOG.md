@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.5...v0.35.6) (2026-11-02)
+
+### Changes
+
+- **tenancy:** Preserve global platform group authority during native tenant ownership upgrades and keep single-tenant setup links routable.
+
+Full upgrade, compatibility and verification details: [v0.35.6 release notes](docs/releases/v0.35.6.md).
+
 ## [0.35.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.4...v0.35.5) (2026-11-02)
 
 ### Changes
