@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.6...v0.35.7) (2026-11-02)
+
+### Changes
+
+- **mission-control:** Preserves not-found responses for missing historic process instances after tenant and runtime authorization.
+- **deployment:** Remove unused Git filesystem storage from Docker and OpenShift deployment templates to reflect database-backed application persistence.
+
+Full upgrade, compatibility and verification details: [v0.35.7 release notes](docs/releases/v0.35.7.md).
+
 ## [0.35.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.5...v0.35.6) (2026-11-02)
 
 ### Changes
