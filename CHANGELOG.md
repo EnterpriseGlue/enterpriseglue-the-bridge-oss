@@ -6,15 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.6...v0.35.7) (2026-11-02)
 
+### Changes
 
-### Bug Fixes
+- **mission-control:** Preserves not-found responses for missing historic process instances after tenant and runtime authorization.
+- **deployment:** Remove unused Git filesystem storage from Docker and OpenShift deployment templates to reflect database-backed application persistence.
 
-* **deployment:** scope release verification claims ([af4170d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/af4170d2d6f3430e9c34b04dded3a7623215898a))
-* **deployment:** scope release verification claims ([77ebe0b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/77ebe0b58674d13a8e9584a41dad4005dd749c53))
-* **deploy:** remove legacy Git filesystem storage ([2f714f9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2f714f9683d95fbe345786dd04b5b58098bd7c14))
-* **deploy:** remove legacy Git filesystem storage ([8aee265](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8aee265c7717f9962e69fdf659b42a227e18681b))
-* **mission-control:** preserve historic process lookup errors ([c36963e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c36963ed804ccb6b3d62b03555d31dae7219571c))
-* **mission-control:** preserve historic process lookup errors ([55b342d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/55b342d56b36a25104413bc26e6e7cad0878f50a))
+Full upgrade, compatibility and verification details: [v0.35.7 release notes](docs/releases/v0.35.7.md).
 
 ## [0.35.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.5...v0.35.6) (2026-11-02)
 
