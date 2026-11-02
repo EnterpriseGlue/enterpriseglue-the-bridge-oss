@@ -122,7 +122,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
   const splitPane = await vi.importActual<typeof import('@src/features/mission-control/shared/hooks/useSplitPaneState')>('@src/features/mission-control/shared/hooks/useSplitPaneState');
   return {
     useProcessesData: () => ({
-      defsQ: { data: [{ id: 'def-1', key: 'order-process', name: 'Order Process', version: 1 }] },
+      defsQ: { data: [{ id: 'def-1', key: 'order-process', name: 'Order Process', version: 1 }], isSuccess: true, isFetching: false, isError: false },
       defItems: [{ id: 'order-process', label: 'Order Process', key: 'order-process', version: 1 }],
       versions: [1],
       currentKey: 'order-process',
@@ -398,7 +398,7 @@ describe('ProcessesOverviewPage selection', () => {
         name: 'Operations incidents',
         engineId: 'engine-1',
         defKeys: ['order-process'],
-        version: null,
+        version: '1',
         active: true,
         incidents: true,
         completed: false,

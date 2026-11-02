@@ -40,6 +40,8 @@ import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 import { withEngineContext } from '../shared/engineContext'
+import { hasRuntimeDefinitionLink, useRuntimeDefinitionLink } from '../shared/useRuntimeDefinitionLink'
+import { RuntimeDefinitionLinkNotice } from '../shared/components/RuntimeDefinitionLinkNotice'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -219,6 +221,7 @@ export default function ProcessesOverviewPage() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
+  const definitionLinkPending = hasRuntimeDefinitionLink(searchParams.toString())
   const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
   const selectedEngineId = useSelectedEngine()
@@ -299,10 +302,11 @@ export default function ProcessesOverviewPage() {
 
   // Local UI state
   const currentEngineIdRef = React.useRef(selectedEngineId)
-  const lastRenderedEngineIdRef = React.useRef(selectedEngineId)
+  const interactionScope = JSON.stringify([selectedEngineId, definitionLinkPending ? searchParams.toString() : null])
+  const lastRenderedEngineIdRef = React.useRef(interactionScope)
   const engineRevisionRef = React.useRef(0)
-  if (lastRenderedEngineIdRef.current !== selectedEngineId) {
-    lastRenderedEngineIdRef.current = selectedEngineId
+  if (lastRenderedEngineIdRef.current !== interactionScope) {
+    lastRenderedEngineIdRef.current = interactionScope
     engineRevisionRef.current += 1
   }
   currentEngineIdRef.current = selectedEngineId
@@ -310,7 +314,7 @@ export default function ProcessesOverviewPage() {
     engineId: string | null
     selectedMap: Record<string, boolean>
   }>({ engineId: selectedEngineId ?? null, selectedMap: {} })
-  const selectedMap = engineSelection.engineId === (selectedEngineId ?? null)
+  const selectedMap = !definitionLinkPending && engineSelection.engineId === (selectedEngineId ?? null)
     ? engineSelection.selectedMap
     : {}
   const setSelectedMap = React.useCallback<React.Dispatch<React.SetStateAction<Record<string, boolean>>>>((update) => {
@@ -353,9 +357,9 @@ export default function ProcessesOverviewPage() {
   const bulkDeleteModal = useModal()
   const detailsModal = useModal<{ instanceId: string; engineId: string; engineRevision: number }>()
 
-  const previousInteractionEngineIdRef = React.useRef(selectedEngineId)
+  const previousInteractionEngineIdRef = React.useRef(interactionScope)
   React.useEffect(() => {
-    if (previousInteractionEngineIdRef.current === selectedEngineId) return
+    if (previousInteractionEngineIdRef.current === interactionScope) return
     setEngineSelection({ engineId: selectedEngineId ?? null, selectedMap: {} })
     setRetryModalInstanceId(null)
     setRetryModalEngineId(null)
@@ -376,7 +380,7 @@ export default function ProcessesOverviewPage() {
     bulkSuspendModal.closeModal()
     bulkActivateModal.closeModal()
     bulkDeleteModal.closeModal()
-    previousInteractionEngineIdRef.current = selectedEngineId
+    previousInteractionEngineIdRef.current = interactionScope
   }, [
     bulkActivateModal.closeModal,
     bulkDeleteModal.closeModal,
@@ -384,6 +388,7 @@ export default function ProcessesOverviewPage() {
     bulkSuspendModal.closeModal,
     detailsModal.closeModal,
     selectedEngineId,
+    interactionScope,
     terminateModal.closeModal,
   ])
 
@@ -411,6 +416,7 @@ export default function ProcessesOverviewPage() {
     // Navigation snapshots intentionally omit that lineage.
     processDefinitionsEnabled: true,
     processInstancesEnabled: true,
+    definitionLinkPending,
   })
 
   const modalData = useProcessesModalData({
@@ -597,51 +603,29 @@ export default function ProcessesOverviewPage() {
     deleteFilterMutation.mutate(selectedSavedFilter.id)
   }, [deleteFilterMutation, notifyDeniedAction, savedFiltersManageDecision, selectedSavedFilter])
 
-  // If we were navigated here from a call activity link pill, auto-select the process from the URL
-  React.useEffect(() => {
-    const processKey = searchParams.get('process')
-    if (!processKey || defItems.length === 0) return
-    const matching = defItems.find((d) => d.key === processKey)
-    if (matching) {
-      setSelectedProcess(matching as any)
-      // Clear the URL parameter after applying
-      searchParams.delete('process')
-      setSearchParams(searchParams, { replace: true })
-    }
-  }, [searchParams, defItems, setSelectedProcess, setSearchParams])
-
-  React.useEffect(() => {
-    const rawVersion = searchParams.get('version')
-    if (!rawVersion) return
-
-    const parsedVersion = Number(rawVersion)
-    if (!Number.isFinite(parsedVersion)) {
-      searchParams.delete('version')
-      setSearchParams(searchParams, { replace: true })
-      return
-    }
-
-    if (versions.length === 0) return
-
-    if (versions.includes(parsedVersion) && selectedVersion !== parsedVersion) {
-      setSelectedVersion(parsedVersion)
-    }
-
-    searchParams.delete('version')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, versions, selectedVersion, setSelectedVersion, setSearchParams])
+  const applyDefinitionLink = React.useCallback((selection: import('../shared/useRuntimeDefinitionLink').LinkedDefinition) => {
+    useProcessesFilterStore.setState({ selectedProcess: { id: selection.key, key: selection.key, label: selection.label, version: selection.version },
+      selectedVersion: selection.version, flowNode: selection.node })
+  }, [])
+  const clearDefinitionLink = React.useCallback(() => {
+    useProcessesFilterStore.setState({ selectedProcess: null, selectedVersion: null, flowNode: '' })
+  }, [])
+  const definitionLink = useRuntimeDefinitionLink({ kind: 'process', engineId: selectedEngineId, definitions: defsQ.data,
+    ready: defsQ.isSuccess && !defsQ.isFetching, failed: defsQ.isError, apply: applyDefinitionLink, clearSelection: clearDefinitionLink })
 
   // If we were navigated here from a link pill, auto-select the node (activity id)
   React.useEffect(() => {
+    if (definitionLinkPending) return
     const nodeId = searchParams.get('node')
     if (!nodeId) return
 
     setFlowNode(nodeId)
 
     // Clear the URL parameter after applying
-    searchParams.delete('node')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, setFlowNode, setSearchParams])
+    const next = new URLSearchParams(searchParams)
+    next.delete('node')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setFlowNode, setSearchParams, definitionLinkPending])
 
   const fromInstanceId = location?.state?.fromInstanceId as string | undefined || searchParams.get('fromInstance') || undefined
 
@@ -655,7 +639,7 @@ export default function ProcessesOverviewPage() {
     }),
     // The endpoint resolves the selected process definition before checking
     // access. Do not gate it with the runtime-resource-free UI snapshot.
-    enabled: !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
+    enabled: !definitionLinkPending && !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -1126,6 +1110,8 @@ export default function ProcessesOverviewPage() {
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
   }
+
+  if (definitionLink.active) return <RuntimeDefinitionLinkNotice error={definitionLink.error} onClear={definitionLink.clear} />
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="processes">

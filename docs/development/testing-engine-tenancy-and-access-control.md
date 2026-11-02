@@ -1109,3 +1109,9 @@ the engine selection itself. Composite and destination APIs remain authoritative
 for access; client metadata validation does not confer runtime permission.
 Both Editor action rows wrap so the runtime link remains visible at narrow
 viewports; browser checks must verify the button's viewport boundaries.
+
+### Incoming runtime definition links
+
+Mission Control resolves an incoming process or decision key and optional positive integer version against the selected engine's completed definition query before enabling definition-specific reads. Apply the key, exact version and optional process node together over persisted filters. A key-only link chooses the unique latest version. Missing, invalid, duplicate or ambiguous selectors retain the link and show an explicit clear action; they must not substitute another definition or version. Consuming selectors preserves the engine, source-instance and unrelated query parameters. Client selection does not replace server authorization.
+
+Regression coverage must open links over a different persisted key/version, delay definition loading, reject unavailable and fractional versions, and verify the exact definition IDs used for diagrams, history, activity counts and edit-target lookup. Process count previews wait for the resolved ID when a version is selected. Replaced route/session/engine contexts cannot apply old continuations. Normal process filters retain the all-versions option.

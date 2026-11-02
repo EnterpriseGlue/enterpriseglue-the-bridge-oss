@@ -58,6 +58,7 @@ interface UseProcessesDataProps {
   advancedOpen: boolean
   processDefinitionsEnabled?: boolean
   processInstancesEnabled?: boolean
+  definitionLinkPending?: boolean
 }
 
 export function useProcessesData({
@@ -81,6 +82,7 @@ export function useProcessesData({
   advancedOpen,
   processDefinitionsEnabled = true,
   processInstancesEnabled = true,
+  definitionLinkPending = false,
 }: UseProcessesDataProps) {
   // Get selected engine from global store
   const selectedEngineId = useSelectedEngine()
@@ -120,6 +122,7 @@ export function useProcessesData({
 
   // Auto-select latest version only when process changes (not on initial load with persisted state)
   useEffect(() => {
+    if (definitionLinkPending) { prevKeyRef.current = null; return }
     // Skip if definitions haven't loaded yet - don't reset persisted state
     if (!defsQ.data) return
 
@@ -141,42 +144,43 @@ export function useProcessesData({
       setSelectedVersion(versions[0])
     }
     // Note: selectedVersion === null means "All versions" - don't override it
-  }, [defsQ.data, versions, currentKey, selectedVersion, setSelectedVersion])
+  }, [defsQ.data, versions, currentKey, selectedVersion, setSelectedVersion, definitionLinkPending])
 
   // Resolve definition ID for selected version
+  const exactDefinitions = (defsQ.data || []).filter(x => x.key === currentKey && x.version === selectedVersion)
+  const expectedDefinitionId = exactDefinitions.length === 1 ? exactDefinitions[0].id : null
   const defIdQ = useQuery({
-    queryKey: ['mission-control', 'definition-id', selectedEngineId, currentKey, selectedVersion],
+    queryKey: ['mission-control', 'definition-id', selectedEngineId, currentKey, selectedVersion, expectedDefinitionId],
     queryFn: async () => {
       if (!currentKey || !selectedVersion) return null
-      const match = (defsQ.data || []).find(x => x.key === currentKey && x.version === selectedVersion)
-      if (match?.id) return match.id
+      if (expectedDefinitionId) return expectedDefinitionId
       console.warn(`Process definition not found for key=${currentKey}, version=${selectedVersion}`)
       return null
     },
-    enabled: processDefinitionsEnabled && !!currentKey && !!defsQ.data,
+    enabled: processDefinitionsEnabled && !definitionLinkPending && !!currentKey && !!defsQ.data,
   })
 
-  const defIdForVersion = defIdQ.data || null
+  const defIdForVersion = !definitionLinkPending && defIdQ.data === expectedDefinitionId ? defIdQ.data || null : null
 
   // Fetch BPMN XML for diagram
   const xmlQ = useQuery({
     queryKey: ['mission-control', 'def-xml', defIdForVersion, selectedEngineId],
     queryFn: () => fetchProcessDefinitionXml(defIdForVersion!, selectedEngineId),
-    enabled: processDefinitionsEnabled && !!defIdForVersion && !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !definitionLinkPending && !!defIdForVersion && !!selectedEngineId,
   })
 
   // Fetch activity counts for badges (legacy - active only)
   const countsQ = useQuery({
     queryKey: ['mission-control', 'def-counts', defIdForVersion, selectedEngineId],
     queryFn: () => getActiveActivityCounts(defIdForVersion!, selectedEngineId),
-    enabled: processDefinitionsEnabled && !!defIdForVersion && !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !definitionLinkPending && !!defIdForVersion && !!selectedEngineId,
   })
 
   // Fetch activity counts by state for badges
   const countsByStateQ = useQuery({
     queryKey: ['mission-control', 'def-counts-by-state', defIdForVersion, selectedEngineId],
     queryFn: () => fetchActivityCountsByState(defIdForVersion!, selectedEngineId),
-    enabled: processDefinitionsEnabled && !!defIdForVersion && !!selectedEngineId,
+    enabled: processDefinitionsEnabled && !definitionLinkPending && !!defIdForVersion && !!selectedEngineId,
   })
 
   // Build preview count body for advanced filters
@@ -208,7 +212,7 @@ export function useProcessesData({
   const previewCountQ = useQuery({
     queryKey: ['mission-control', 'proc', 'preview-count', selectedEngineId, defIdForVersion, currentKey, active, suspended, incidents, varName, varType, varOp, varValue],
     queryFn: () => fetchPreviewCount(previewBody),
-    enabled: processInstancesEnabled && advancedOpen && !!selectedEngineId && (!!defIdForVersion || !!currentKey),
+    enabled: processInstancesEnabled && !definitionLinkPending && advancedOpen && !!selectedEngineId && (selectedVersion ? !!defIdForVersion : !!currentKey),
   })
 
   // Fetch process instances based on filters (filtered by engine)
@@ -233,7 +237,7 @@ export function useProcessesData({
         includeActionDecisions: true,
       })
     },
-    enabled: processInstancesEnabled && !!selectedEngineId && (!selectedVersion || !!defIdForVersion),
+    enabled: processInstancesEnabled && !definitionLinkPending && !!selectedEngineId && (!selectedVersion || !!defIdForVersion),
   })
 
 

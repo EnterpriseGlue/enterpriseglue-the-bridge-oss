@@ -27,6 +27,8 @@ import { LoadingState } from '../../../shared/components/LoadingState'
 import type { DecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 import { withEngineContext } from '../../shared/engineContext'
+import { hasRuntimeDefinitionLink, useRuntimeDefinitionLink } from '../../shared/useRuntimeDefinitionLink'
+import { RuntimeDefinitionLinkNotice } from '../../shared/components/RuntimeDefinitionLinkNotice'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -39,6 +41,7 @@ export default function Decisions() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
+  const definitionLinkPending = hasRuntimeDefinitionLink(searchParams.toString())
   const fromInstanceId = location?.state?.fromInstanceId as string | undefined || searchParams.get('fromInstance') || undefined
 
   const isValidTime = (value: string) => {
@@ -124,33 +127,21 @@ export default function Decisions() {
     return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [defsQ.data])
 
-  // Handle URL query parameter for decision key
-  React.useEffect(() => {
-    const decisionKey = searchParams.get('decision')
-    const nodeId = searchParams.get('node')
-    if (decisionKey && defItems.length > 0) {
-      const matchingDef = defItems.find(d => d.key === decisionKey)
-      if (matchingDef) {
-        setSelectedDefinition(matchingDef)
-        // Clear the URL parameter after applying
-        searchParams.delete('decision')
-        // node is used for deep-linking (optional) - clear it to keep URL clean
-        if (nodeId) searchParams.delete('node')
-        setSearchParams(searchParams, { replace: true })
-      }
-    }
-  }, [searchParams, defItems, setSelectedDefinition, setSearchParams])
+  const applyDefinitionLink = React.useCallback((selection: import('../../shared/useRuntimeDefinitionLink').LinkedDefinition) => {
+    useDecisionsFilterStore.setState({ selectedDefinition: { id: selection.id, key: selection.key, label: selection.label, version: selection.version },
+      selectedVersion: selection.version })
+  }, [])
+  const clearDefinitionLink = React.useCallback(() => {
+    useDecisionsFilterStore.setState({ selectedDefinition: null, selectedVersion: null })
+  }, [])
+  const definitionLink = useRuntimeDefinitionLink({ kind: 'decision', engineId: selectedEngineId, definitions: defsQ.data,
+    ready: defsQ.isSuccess && !defsQ.isFetching, failed: defsQ.isError, apply: applyDefinitionLink, clearSelection: clearDefinitionLink })
 
-  // If `node` is present without `decision`, clear it (prevents stale URLs)
   React.useEffect(() => {
-    const nodeId = searchParams.get('node')
-    if (!nodeId) return
-    const decisionKey = searchParams.get('decision')
-    if (decisionKey) return
-
-    searchParams.delete('node')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, setSearchParams])
+    if (definitionLinkPending || !searchParams.has('node')) return
+    const next = new URLSearchParams(searchParams); next.delete('node')
+    setSearchParams(next, { replace: true })
+  }, [definitionLinkPending, searchParams, setSearchParams])
 
   const currentKey = selectedDefinition?.key || ''
 
@@ -161,32 +152,12 @@ export default function Decisions() {
   }, [defsQ.data, currentKey])
 
   React.useEffect(() => {
-    const rawVersion = searchParams.get('version')
-    if (!rawVersion) return
-
-    const parsedVersion = Number(rawVersion)
-    if (!Number.isFinite(parsedVersion)) {
-      searchParams.delete('version')
-      setSearchParams(searchParams, { replace: true })
-      return
-    }
-
-    if (versions.length === 0) return
-
-    if (versions.includes(parsedVersion) && selectedVersion !== parsedVersion) {
-      setSelectedVersion(parsedVersion)
-    }
-
-    searchParams.delete('version')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, versions, selectedVersion, setSelectedVersion, setSearchParams])
-
-  React.useEffect(() => {
+    if (definitionLinkPending) return
     if (versions.length > 0 && (selectedVersion === null || !versions.includes(selectedVersion))) {
       setSelectedVersion(versions[0])
     }
     if (versions.length === 0) setSelectedVersion(null)
-  }, [versions])
+  }, [versions, definitionLinkPending])
 
 
   const currentDef: DecisionDef | null = React.useMemo(() => {
@@ -205,7 +176,7 @@ export default function Decisions() {
       if (!currentDef) return ''
       return fetchDecisionDefinitionDmnXml(currentDef.id, selectedEngineId)
     },
-    enabled: !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
+    enabled: !definitionLinkPending && !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   // Derived boolean flags from selectedStates
@@ -234,7 +205,7 @@ export default function Decisions() {
       })
       return listDecisionHistory(params)
     },
-    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
+    enabled: !definitionLinkPending && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
 
@@ -257,7 +228,7 @@ export default function Decisions() {
     // The API resolves the selected definition and makes the authoritative
     // runtime-resource decision. The browser snapshot intentionally excludes
     // runtime-resource keys, so it cannot safely gate this request.
-    enabled: !!selectedEngineId && decisionsReadDecision.allowed && !!currentKey && selectedVersion !== null,
+    enabled: !definitionLinkPending && !!selectedEngineId && decisionsReadDecision.allowed && !!currentKey && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -318,6 +289,8 @@ export default function Decisions() {
       </div>
     )
   }
+
+  if (definitionLink.active) return <RuntimeDefinitionLinkNotice error={definitionLink.error} onClear={definitionLink.clear} />
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="page">
