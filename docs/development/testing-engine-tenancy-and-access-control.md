@@ -1071,3 +1071,22 @@ one bridge evaluation. A current denial remains visible, while stale denials and
 failures cannot update the replacement selection. These controls preserve the
 server-owned runtime-resource edit-target and composite bridge checks; they do
 not infer fine-grained runtime grants from the browser permission snapshot.
+
+The Editor validates Mission Control source parameters independently. Exactly
+one process or decision key, an engine and a canonical positive integer engine
+version are required; repeated selectors, fractional/coerced versions and
+noncanonical identities cannot start preview or hotfix actions. An ordinary
+Editor URL does not become a deployed-source restore merely by adding commit
+or file-version parameters. When both saved selectors are supplied, both must
+match before the current draft can be treated as the exact baseline.
+
+Preview requires an exact commit reference and uses only the existing saved
+snapshot read path. A file-version-only source can use the server's guarded
+hotfix resolver, but its preview action is unavailable with an explicit reason;
+the client does not guess a commit from ranked or truncated history. Snapshot
+labels describe the requested source, not a verified runtime correlation.
+Dismissal, read-only view and save-first confirmation belong to the original
+file, source URL, route, session and permission lifetime. Replacing that context,
+including switching away and back, revokes retained actions and dialog state.
+Existing server authorization, collaboration ownership and restore-receipt
+verification remain mandatory.
