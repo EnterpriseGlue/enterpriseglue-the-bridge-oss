@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.5...v0.35.6) (2026-11-02)
+
+
+### Bug Fixes
+
+* **tenancy:** preserve platform administrator ownership ([c52106e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c52106eb89c54d2d25e5fc0f09373bd94288a606))
+* **tenancy:** preserve platform administrator ownership ([f5512bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f5512bc263a831e4c17f34bcd7d4c4a16d159bfd))
+
 ## [0.35.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.4...v0.35.5) (2026-11-02)
 
 ### Changes
