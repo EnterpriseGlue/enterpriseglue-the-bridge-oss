@@ -44,7 +44,6 @@ services:
     volumes:
       - .:/repo
       - workspace_node_modules:/repo/node_modules
-      - git_repos:/repo/backend/data/repos
     healthcheck:
       test: ["CMD-SHELL", "node -e \"const p=process.env.API_PORT||'8787';require('http').get('http://127.0.0.1:'+p+'/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));\""]
       interval: 10s
@@ -77,7 +76,6 @@ services:
 volumes:
   postgres_data:
   workspace_node_modules:
-  git_repos:
 
 networks:
   enterpriseglue-network:

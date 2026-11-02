@@ -209,9 +209,11 @@ Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 ## Git & Encryption
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
-| GIT_REPOS_PATH | Yes | ./data/repos | Server-side git storage |
 | GIT_DEFAULT_BRANCH | Yes | main | Default git branch |
 | ENCRYPTION_KEY | Yes | dev value | 64-char hex key |
+
+Git repository metadata and version history are database-backed; remote
+synchronization does not require a local repository directory.
 
 | Documentation gateway variable | Required | Default | Contract |
 |---|---|---|---|

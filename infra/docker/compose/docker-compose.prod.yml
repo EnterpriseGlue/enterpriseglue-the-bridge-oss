@@ -27,8 +27,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - git_repos:/app/data/repos
     expose:
       - "${API_PORT:-8787}"
     healthcheck:
@@ -60,7 +58,6 @@ services:
 
 volumes:
   postgres_data:
-  git_repos:
 
 networks:
   enterpriseglue-network:

@@ -251,7 +251,6 @@ test('Linux development startup preserves bind-mount and named-volume ownership'
   assert.match(devCompose, /user: "\$\{EG_DEV_UID:-1000\}:\$\{EG_DEV_GID:-1000\}"/);
   assert.match(devCompose, /HOME: \$\{EG_DEV_HOME:-\/home\/node\}/);
   assert.match(devBackendDockerfile, /chown -R "\$\{DEV_UID\}:\$\{DEV_GID\}" \/repo\/node_modules/);
-  assert.match(devBackendDockerfile, /chown -R "\$\{DEV_UID\}:\$\{DEV_GID\}" \/repo\/backend\/data\/repos/);
 });
 
 test('Trivy wrapper changes select image smoke and security qualification', () => {

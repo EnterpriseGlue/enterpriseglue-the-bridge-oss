@@ -45,11 +45,6 @@ RUN node -e "const fs=require('fs');const crypto=require('crypto');const a=fs.re
 
 COPY --chown=node:node backend backend
 
-# A fresh named git-repository volume copies this directory's ownership from
-# the image, while the source tree itself is bind-mounted from the host.
-RUN mkdir -p /repo/backend/data/repos \
-    && chown -R "${DEV_UID}:${DEV_GID}" /repo/backend/data/repos
-
 WORKDIR /repo/backend
 
 EXPOSE 8787

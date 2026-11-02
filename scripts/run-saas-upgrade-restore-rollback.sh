@@ -151,7 +151,6 @@ start_baseline() {
     -e ADMIN_EMAIL=recovery-admin@example.test \
     -e ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
     -e ADMIN_EMAIL_VERIFICATION_EXEMPT=true \
-    -e GIT_REPOS_PATH=/tmp/enterpriseglue-recovery-repos \
     -e EG_TENANCY_MODE=pooled \
     -e EG_TENANT_RLS_ENFORCED=true \
     -e EG_TENANT_PLACEMENT_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
@@ -208,7 +207,6 @@ run_migrations_from() {
     ADMIN_EMAIL=recovery-admin@example.test \
     ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
     FRONTEND_URL=http://frontend.invalid \
-    GIT_REPOS_PATH="$temp_dir/repos" \
     EG_TENANCY_MODE=pooled \
     EG_TENANT_RLS_ENFORCED=true \
     EG_TENANT_PLACEMENT_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
@@ -243,7 +241,6 @@ run_predecessor_migrations() {
     -e ADMIN_EMAIL=recovery-admin@example.test \
     -e ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
     -e FRONTEND_URL=http://frontend.invalid \
-    -e GIT_REPOS_PATH=/tmp/enterpriseglue-recovery-repos \
     -e EG_TENANCY_MODE=pooled \
     -e EG_TENANT_RLS_ENFORCED=true \
     -e EG_TENANT_PLACEMENT_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
@@ -318,7 +315,6 @@ run_bridge_owner_migration() {
     -e ADMIN_EMAIL=recovery-admin@example.test \
     -e ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
     -e FRONTEND_URL=http://frontend.invalid \
-    -e GIT_REPOS_PATH=/tmp/enterpriseglue-recovery-repos \
     -e EG_TENANCY_MODE=pooled \
     -e EG_TENANT_RLS_ENFORCED=true \
     -e EG_TENANT_PLACEMENT_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
@@ -362,7 +358,6 @@ run_current_owner_migration() {
     ADMIN_EMAIL=recovery-admin@example.test \
     ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
     FRONTEND_URL=http://frontend.invalid \
-    GIT_REPOS_PATH="$temp_dir/repos" \
     EG_TENANCY_MODE=pooled \
     EG_TENANT_RLS_ENFORCED=true \
     EG_TENANT_PLACEMENT_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
@@ -405,7 +400,6 @@ run_predecessor_overlap() {
     -e ADMIN_EMAIL=recovery-admin@example.test \
     -e ADMIN_PASSWORD=Disposable-Recovery-Admin-Password-2026 \
     -e ADMIN_EMAIL_VERIFICATION_EXEMPT=true \
-    -e GIT_REPOS_PATH=/tmp/enterpriseglue-recovery-repos \
     -e EG_TENANCY_MODE=pooled \
     -e EG_TENANT_RLS_ENFORCED=true \
     -e EG_DATABASE_STARTUP_MODE=verify \

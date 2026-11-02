@@ -214,7 +214,6 @@ const values = {
   ADMIN_PASSWORD: adminPassword,
   ADMIN_EMAIL_VERIFICATION_EXEMPT: 'true',
   ENCRYPTION_KEY: randomHex(32),
-  GIT_REPOS_PATH: './data/repos',
   GIT_DEFAULT_BRANCH: 'main',
   API_BASE_URL: '',
   KEYCLOAK_HOST_PORT: keycloakPort,

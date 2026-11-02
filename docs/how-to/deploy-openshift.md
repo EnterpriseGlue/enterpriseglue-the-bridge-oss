@@ -6,6 +6,13 @@ Audience: Developers and architects.
 
 The backend deployment projects optional configuration and secret volumes. The deployment script creates a bundle ConfigMap from `EG_CONFIG_BUNDLE_FILE`, verifies and annotates its SHA-256 to trigger rollout, and waits for the bootstrap readiness gate. The complete contract is documented in [Deploy Authorization Configuration](./deploy-authorization-config.md).
 
+Core application data is persisted in the configured database, including
+uploaded branding assets, models and version history. The backend does not
+require an application-data PVC. Git synchronization uses remote provider APIs.
+Updated overlays no longer provision or mount the unused Git repository claim;
+existing claims are not automatically deleted. Optional plugins and deployment
+tooling can have separate storage requirements.
+
 ## Layout
 - Kustomize base: `infra/kubernetes/openshift/kustomize/base/`
 - Kustomize overlays:
