@@ -52,6 +52,7 @@ if [[ "$ready" != true ]]; then
 fi
 
 cd "$root_dir"
+test_config=vitest.config.ts
 test_files=(
   test/integration/nativeTenantRls.test.ts
   test/integration/postgres-context-boundary.test.ts
@@ -69,7 +70,7 @@ if [[ "$#" -gt 0 ]]; then
   case "$1" in
     --user-directory) test_files=(__tests__/shared/services/platform-admin/userDirectoryService.integration.test.ts) ;;
     --global-identity) test_files=(test/integration/postgres-global-identity.test.ts) ;;
-    --deployment-revision) test_files=(test/integration/postgres-deployment-revision.test.ts test/integration/postgres-file-restore.test.ts) ;;
+    --deployment-revision) test_files=(test/integration/postgres-deployment-revision.test.ts test/integration/postgres-file-restore.test.ts); test_config=vitest.integration.config.ts ;;
     --runtime-inventory) test_files=(test/integration/nativeTenantRls.test.ts test/integration/postgres-context-boundary.test.ts test/integration/postgres-shared-inventory-readiness.test.ts) ;;
     --schema-epoch) test_files=(test/integration/postgres-schema-epoch-bridge.test.ts) ;;
     --cloud-passkey) test_files=(test/integration/postgres-cloud-email-passkey.test.ts) ;;
@@ -93,7 +94,7 @@ MIGRATION_TEST_POSTGRES_PASSWORD=postgres \
 MIGRATION_TEST_POSTGRES_DATABASE=postgres \
   corepack pnpm --dir backend exec vitest run \
     "${test_files[@]}" \
-    --config vitest.config.ts \
+    --config "$test_config" \
     --reporter=dot \
     --maxWorkers=1 \
     --no-file-parallelism

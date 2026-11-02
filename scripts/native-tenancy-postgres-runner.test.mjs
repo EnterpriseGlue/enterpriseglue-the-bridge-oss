@@ -98,4 +98,5 @@ test('targeted deployment revision lane includes the real file restore integrati
   assert.ok(tests.includes('test/integration/postgres-deployment-revision.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-file-restore.test.ts'));
   assert.ok(!tests.includes('test/integration/nativeTenantRls.test.ts'));
+  assert.equal(tests[tests.indexOf('--config') + 1], 'vitest.integration.config.ts');
 });

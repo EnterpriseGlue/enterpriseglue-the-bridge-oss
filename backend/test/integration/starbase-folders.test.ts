@@ -66,7 +66,7 @@ describe('Starbase folders', () => {
       .set('Authorization', `Bearer ${authToken}`)
       .send({ name: `${prefix}-dup-folder` });
 
-    expect(dupResponse.status).toBe(400);
+    expect(dupResponse.status).toBe(409);
   });
 
   it('renames a folder', async () => {

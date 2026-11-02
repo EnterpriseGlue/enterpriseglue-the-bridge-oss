@@ -1,17 +1,20 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 
 const migrationTestEnv = (name: string, fallback: string): string =>
   process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
 
-// This suite drops and recreates schemas. Point MIGRATION_TEST_POSTGRES_* at a
-// disposable database when running it outside the isolated CI test service.
+// Destructive schema cases own a separate database, so file execution order
+// cannot erase the shared integration lane's application tables.
+const adminDatabase = migrationTestEnv('POSTGRES_DATABASE', 'postgres');
+const fixtureDatabase = `schema_migration_${randomUUID().replace(/-/g, '')}`;
 const baseEnv = {
   DATABASE_TYPE: 'postgres',
   POSTGRES_HOST: migrationTestEnv('POSTGRES_HOST', 'localhost'),
   POSTGRES_PORT: migrationTestEnv('POSTGRES_PORT', '5432'),
   POSTGRES_USER: migrationTestEnv('POSTGRES_USER', 'postgres'),
   POSTGRES_PASSWORD: migrationTestEnv('POSTGRES_PASSWORD', 'postgres'),
-  POSTGRES_DATABASE: migrationTestEnv('POSTGRES_DATABASE', 'postgres'),
+  POSTGRES_DATABASE: fixtureDatabase,
   POSTGRES_SSL: 'false',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
 };
@@ -31,6 +34,13 @@ async function createPool() {
     database: process.env.POSTGRES_DATABASE,
     ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
   });
+}
+
+async function createAdminPool() {
+  const pgModule = await import('pg');
+  const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
+  return new Pool({ host: baseEnv.POSTGRES_HOST, port: Number(baseEnv.POSTGRES_PORT),
+    user: baseEnv.POSTGRES_USER, password: baseEnv.POSTGRES_PASSWORD, database: adminDatabase });
 }
 
 function applyBaseEnv(schema: string) {
@@ -69,6 +79,13 @@ describe('Postgres schema auto-migration', () => {
   const mixedTargetSchema = `schema_mixed_${Date.now()}`;
   const versioningDriftSchema = `schema_versioning_drift_${Date.now()}`;
   const seedPrefix = `schema_migrate_${Math.random().toString(36).slice(2, 8)}`;
+  let created = false;
+
+  beforeAll(async () => {
+    const admin = await createAdminPool();
+    try { await admin.query(`CREATE DATABASE ${quoteIdentifier(fixtureDatabase)}`); created = true; }
+    finally { await admin.end(); }
+  });
 
   beforeEach(async () => {
     applyBaseEnv('main');
@@ -77,17 +94,16 @@ describe('Postgres schema auto-migration', () => {
   });
 
   afterAll(async () => {
-    await cleanupSchemas(targetSchema, mixedTargetSchema, versioningDriftSchema);
-
-    // Restore main schema so other integration tests still find main.users
-    applyBaseEnv('main');
-    vi.resetModules();
-    const { runMigrations } = await import('@enterpriseglue/shared/db/run-migrations.js');
     const { closeDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
     try {
-      await runMigrations();
-    } finally {
       await closeDataSource();
+    } finally {
+      if (created) {
+        const admin = await createAdminPool();
+        try { await admin.query(`DROP DATABASE ${quoteIdentifier(fixtureDatabase)} WITH (FORCE)`); }
+        finally { await admin.end(); }
+      }
+      process.env.POSTGRES_DATABASE = adminDatabase;
     }
   });
 

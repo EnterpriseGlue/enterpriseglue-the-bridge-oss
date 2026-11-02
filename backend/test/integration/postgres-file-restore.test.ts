@@ -13,6 +13,7 @@ import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFile.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { Comment } from '@enterpriseglue/shared/infrastructure/persistence/entities/Comment.js';
+import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
 import filesRouter from '../../../packages/backend-host/src/modules/starbase/routes/files.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
@@ -40,6 +41,9 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({ requireAuth: (req:
 } }));
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({ apiLimiter: (_req: any, _res: any, next: any) => next(), fileOperationsLimiter: (_req: any, _res: any, next: any) => next() }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({ permissionService: { hasPermission: vi.fn().mockResolvedValue(true) } }));
+// This database fixture exercises the real policy gate under both local and CI
+// configurations; the unit setup's policy facade must not hide missing metadata.
+vi.unmock('@enterpriseglue/shared/services/platform-admin/PolicyService.js');
 vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({ vcsService: {
   ensureInitialized: vi.fn().mockResolvedValue(true), getCommitSnapshots: vi.fn(), getUserBranch: vi.fn(),
   getMainBranch: vi.fn(), getCommits: vi.fn(), getUncommittedIds: vi.fn(), saveFile: vi.fn(), commit: vi.fn(), mergeToMain: vi.fn(), syncFromMainDb: vi.fn(),
@@ -50,7 +54,7 @@ const database = `file_restore_${randomUUID().replace(/-/g, '')}`;
 const connection = { type: 'postgres' as const, host: env('POSTGRES_HOST', '127.0.0.1'), port: Number(env('POSTGRES_PORT', '5432')),
   username: env('POSTGRES_USER', 'postgres'), password: env('POSTGRES_PASSWORD', 'postgres') };
 const admin = new DataSource({ ...connection, database: env('POSTGRES_DATABASE', 'postgres') });
-const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog, Version, Comment];
+const entities = [Project, Branch, WorkingFile, WorkingFolder, File, Folder, Commit, FileSnapshot, FileCommitVersion, GitRepository, GitDeployment, GitAuditLog, Version, Comment, AuthzPolicy];
 const store = new DataSource({ ...connection, database, entities, synchronize: true });
 const projectId = randomUUID(), otherProjectId = randomUUID(), fileId = randomUUID(), siblingId = randomUUID();
 const commitId = randomUUID(), otherCommitId = randomUUID(), branchId = randomUUID();
@@ -108,6 +112,16 @@ describe('PostgreSQL file-scoped checkpoint restore', () => {
     expect(deleted.status).toBe(204);
     return { root, savedId: saved.body.commitId };
   }
+
+  it('enforces a persisted tenant deny policy before restoring any contents or history', async () => {
+    await store.getRepository(AuthzPolicy).insert({ id: 'restore-deny-policy', tenantId: 'fixture-tenant', name: 'Deny project writes',
+      effect: 'deny', priority: 10, resourceType: 'project', action: null, conditions: '{}', isActive: true, createdAt: 1, updatedAt: 1 });
+    const beforeFiles = await store.getRepository(File).find({ order: { id: 'ASC' } });
+    const beforeVersions = await store.getRepository(FileCommitVersion).count();
+    expect((await restore()).status).toBe(403);
+    expect(await store.getRepository(File).find({ order: { id: 'ASC' } })).toEqual(beforeFiles);
+    expect(await store.getRepository(FileCommitVersion).count()).toBe(beforeVersions);
+  });
 
   it('reports a removed saved file as dirty even when every surviving file is unchanged', async () => {
     await savedDeletedFolder();
