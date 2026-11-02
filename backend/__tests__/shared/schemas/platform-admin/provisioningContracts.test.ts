@@ -62,7 +62,7 @@ describe('authoritative identity provisioning contracts', () => {
   it('exposes bounded source-aware user directory records', () => {
     const user = {
       id: 'user-1', email: 'alice@example.com', firstName: 'Alice', lastName: 'Example', displayName: 'Alice Example',
-      status: 'active', platformRole: 'user', authenticationSources: ['oidc'] as const, provisioningSource: 'scim' as const,
+      status: 'active', platformRole: 'user', bootstrapAccess: 'user', authenticationSources: ['oidc'] as const, provisioningSource: 'scim' as const,
       provisioningDirectoryKey: 'entra-workforce', lastSignInAt: 1, lastProvisionedAt: 2, provisioningHealth: 'healthy' as const,
     };
     expect(UserDirectoryListResponseSchema.parse({ items: [user], total: 1, limit: 50, offset: 0 }).items[0]?.provisioningSource).toBe('scim');
