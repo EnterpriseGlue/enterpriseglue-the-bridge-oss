@@ -1580,6 +1580,22 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it.each(['process', 'decision'])('retains the Editor runtime %s definition selectors in the canonical decision', async kind => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+    const source = await getDataSource();
+    vi.mocked(getDataSource).mockResolvedValue({ ...source, getRepository: (entity: any) => entity.name === 'File'
+      ? { findOne: vi.fn().mockResolvedValue({ id: 'file-1', projectId: 'project-1', name: kind === 'decision' ? 'invoice.dmn' : 'invoice.bpmn', type: kind === 'decision' ? 'dmn' : 'bpmn' }) }
+      : source.getRepository(entity) } as any);
+    const selectors = { kind, definitionId: 'invoice:3:def', definitionKey: 'invoice',
+      ...(kind === 'decision' ? { decisionDefinitionId: 'invoice:3:def', decisionDefinitionKey: 'invoice' } : {}) };
+    const response = await request(app).post('/api/starbase/bridge/mission-control/evaluate')
+      .send({ engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', ...selectors });
+    expect(response.status).toBe(200);
+    expect(BridgeDecisionResponseSchema.parse(response.body)).toMatchObject({ allowed: true, reasonCode: 'allowed',
+      missingActions: [], engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', targetId: 'target-1',
+      lineage: { ...selectors, fileType: kind === 'decision' ? 'dmn' : 'bpmn' } });
+  });
+
   it('denies Starbase to Mission Control bridge access when engine runtime permission is missing', async () => {
     vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
       permission !== 'engine:instance:view'

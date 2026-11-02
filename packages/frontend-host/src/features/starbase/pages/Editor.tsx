@@ -36,10 +36,11 @@ import { projectsApi } from '../../../api/starbase/projects'
 import { useGitRepository } from '../../git/hooks/useGitRepository'
 import { ProjectAccessError, isProjectAccessError } from '../components/ProjectAccessError'
 import { useSelectedEngine } from '../../../components/EngineSelector'
-import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { useDeployedSnapshotRestore } from '../hooks/useDeployedSnapshotRestore'
 import { useMissionControlEditorHandoff } from '../hooks/useMissionControlEditorHandoff'
+import { useEditorMissionControlBridge } from '../hooks/useEditorMissionControlBridge'
+import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { matchesDeployedEditorBaseline } from '../utils/missionControlEditorSelection'
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { useAuth } from '../../../shared/hooks/useAuth'
@@ -100,14 +101,6 @@ function formatUsedInParentProcessesLabel(count: number): string {
 type FileCommitRef = {
   id: string
   fileVersionNumber?: number | null
-}
-
-type MissionControlTarget = {
-  engineId: string
-  path: '/mission-control/processes' | '/mission-control/decisions'
-  keyParam: 'process' | 'decision'
-  key: string
-  version: number
 }
 
 type CollaborationLock = LockResponse
@@ -1550,7 +1543,6 @@ export default function Editor() {
 
   // DMN evaluate mutation
   const selectedEngineId = useSelectedEngine()
-  const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
   const decisionEvaluateDecision = evaluateActionSnapshot(
     permissions,
     'engine.runtime.decisions.evaluate',
@@ -1590,68 +1582,10 @@ export default function Editor() {
     retry: false,
   })
 
-  const buildMissionControlTarget = React.useCallback(
-    (file: FileDetail | null | undefined, rows: LatestDeploymentByFile[] | undefined, engineIdOverride?: string | null) => {
-      if (!file) return null
-
-      const list = Array.isArray(rows) ? rows : []
-      const forFile = list.filter((r) => String(r?.fileId || '') === String(file.id))
-      if (forFile.length === 0) return null
-
-      const selectedEngineMatch = engineIdOverride
-        ? forFile.find((r) => String(r?.engineId || '') === String(engineIdOverride))
-        : null
-      const row = selectedEngineMatch || forFile[0]
-      const engineId = String(row?.engineId || '')
-      if (!engineId) return null
-
-      const artifacts = Array.isArray(row?.artifacts) ? row.artifacts : []
-
-      if (file.type === 'bpmn') {
-        const processArtifacts = artifacts
-          .filter((a) => String(a?.kind || '') === 'process' && String(a?.key || ''))
-          .sort((a, b) => Number(b?.version || 0) - Number(a?.version || 0))
-        const best = processArtifacts[0]
-        const version = Number(best?.version)
-        const key = String(best?.key || '')
-        if (!key || !Number.isFinite(version)) return null
-
-        return {
-          engineId,
-          path: '/mission-control/processes',
-          keyParam: 'process',
-          key,
-          version,
-        } as MissionControlTarget
-      }
-
-      if (file.type === 'dmn') {
-        const decisionArtifacts = artifacts
-          .filter((a) => String(a?.kind || '') === 'decision' && String(a?.key || ''))
-          .sort((a, b) => Number(b?.version || 0) - Number(a?.version || 0))
-        const best = decisionArtifacts[0]
-        const version = Number(best?.version)
-        const key = String(best?.key || '')
-        if (!key || !Number.isFinite(version)) return null
-
-        return {
-          engineId,
-          path: '/mission-control/decisions',
-          keyParam: 'decision',
-          key,
-          version,
-        } as MissionControlTarget
-      }
-
-      return null
-    },
-    []
-  )
-
-  const missionControlTarget = React.useMemo<MissionControlTarget | null>(
-    () => buildMissionControlTarget(fileQ.data, engineDeploymentsLatestQ.data, selectedEngineId),
-    [fileQ.data, engineDeploymentsLatestQ.data, selectedEngineId, buildMissionControlTarget]
-  )
+  const runtimeBridge = useEditorMissionControlBridge({ file: fileQ.data, engineId: selectedEngineId,
+    rows: engineDeploymentsLatestQ.data, isFetching: engineDeploymentsLatestQ.isFetching,
+    canReadDeployments: canReadProjectDeployments, viewKey: editorMode,
+    refetch: () => engineDeploymentsLatestQ.refetch({ throwOnError: true, cancelRefetch: false }) })
 
   const missionControlEngine = React.useMemo(() => {
     if (!phase2EngineId || !fileQ.data) return null
@@ -1677,32 +1611,6 @@ export default function Editor() {
     return ''
   }, [phase2FileVersion, phase2CommitId])
 
-
-  const handleGoToMissionControl = React.useCallback(async () => {
-    const file = fileQ.data
-    if (!file) return
-
-    let latestRows = engineDeploymentsLatestQ.data
-    try {
-      const refetchResult = await engineDeploymentsLatestQ.refetch()
-      if (Array.isArray(refetchResult.data)) {
-        latestRows = refetchResult.data
-      }
-    } catch {
-      // Ignore refetch errors; fall back to cached data
-    }
-
-    const target = buildMissionControlTarget(file, latestRows, selectedEngineId)
-    if (!target) return
-
-    setSelectedEngineId(target.engineId)
-    const params = new URLSearchParams({
-      engineId: target.engineId,
-      [target.keyParam]: target.key,
-      version: String(target.version),
-    })
-    tenantNavigate(`${target.path}?${params.toString()}`)
-  }, [fileQ.data, engineDeploymentsLatestQ.data, engineDeploymentsLatestQ.refetch, selectedEngineId, buildMissionControlTarget, setSelectedEngineId, tenantNavigate])
 
   const evaluateMutation = useMutation({
     mutationFn: async (variables: Record<string, { value: any; type: string }>) => {
@@ -2425,6 +2333,8 @@ export default function Editor() {
         </BreadcrumbBar>
       </div>
 
+      <BridgeAccessNotice title="Mission Control unavailable" decision={runtimeBridge.decision} error={runtimeBridge.error} />
+
       {/* View mode banner */}
       {editorMode === 'view' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-2) var(--spacing-4)', background: '#d0e2ff', borderBottom: '1px solid #a6c8ff' }}>
@@ -2498,7 +2408,7 @@ export default function Editor() {
 
       {/* Secondary header */}
       {f.type === 'bpmn' ? (
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-2) var(--spacing-4)' }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 'var(--spacing-2)', padding: 'var(--spacing-2) var(--spacing-4)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-4)' }}>
             <Tabs selectedIndex={tabIndex} onChange={handleEditorModeTabChange}>
               <TabList aria-label="Editor modes">
@@ -2526,7 +2436,7 @@ export default function Editor() {
               {editorMode !== 'view' && <CanvasToolbar modeler={modelerRef.current} />}
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap', maxWidth: '100%', marginLeft: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', marginRight: 'var(--spacing-2)' }}>
               <span
                 style={{
@@ -2554,8 +2464,9 @@ export default function Editor() {
             {canDeployCurrentFile && (
               <DeployButton projectId={f.projectId} fileIds={[f.id]} size="sm" kind="ghost" onDeploySuccess={handleDeploySuccess} />
             )}
-            {missionControlTarget && (
-              <Button kind="ghost" size="sm" renderIcon={Launch} onClick={handleGoToMissionControl}>
+            {canReadProjectDeployments && (
+              <Button kind="ghost" size="sm" renderIcon={Launch} onClick={runtimeBridge.open}
+                disabled={!runtimeBridge.available || runtimeBridge.isPending} title={runtimeBridge.unavailableReason || 'Open the deployed definition in Mission Control'}>
                 Mission Control
               </Button>
             )}
@@ -2595,11 +2506,11 @@ export default function Editor() {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--spacing-2) var(--spacing-4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 'var(--spacing-2)', padding: 'var(--spacing-2) var(--spacing-4)' }}>
           <Button kind="ghost" size="sm" onClick={() => setDmnEvaluateOpen(!dmnEvaluateOpen)}>
             {dmnEvaluateOpen ? 'Hide' : 'Show'} Evaluate Panel
           </Button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap', maxWidth: '100%', marginLeft: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', marginRight: 'var(--spacing-2)' }}>
               <span
                 style={{
@@ -2627,8 +2538,9 @@ export default function Editor() {
             {canDeployCurrentFile && (
               <DeployButton projectId={f.projectId} fileIds={[f.id]} size="sm" kind="ghost" onDeploySuccess={handleDeploySuccess} />
             )}
-            {missionControlTarget && (
-              <Button kind="ghost" size="sm" renderIcon={Launch} onClick={handleGoToMissionControl}>
+            {canReadProjectDeployments && (
+              <Button kind="ghost" size="sm" renderIcon={Launch} onClick={runtimeBridge.open}
+                disabled={!runtimeBridge.available || runtimeBridge.isPending} title={runtimeBridge.unavailableReason || 'Open the deployed definition in Mission Control'}>
                 Mission Control
               </Button>
             )}

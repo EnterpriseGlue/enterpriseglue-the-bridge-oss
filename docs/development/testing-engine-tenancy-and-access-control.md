@@ -1090,3 +1090,22 @@ file, source URL, route, session and permission lifetime. Replacing that context
 including switching away and back, revokes retained actions and dialog state.
 Existing server authorization, collaboration ownership and restore-receipt
 verification remain mandatory.
+
+The Editor's Mission Control action uses the same single-definition artifact
+selection as saved history. It requires a deployment for the explicitly selected
+engine and file, with one valid definition of the file's runtime kind. Multiple
+matching deployments or definitions, invalid versions and absent selected-engine
+lineage leave the action unavailable; the client never falls back to another
+engine or chooses a definition by its version rank.
+
+Before opening the runtime view, one refresh must retain the captured deployment
+metadata, followed by the existing composite bridge decision for the exact
+project, file, engine, definition ID and key. A failed refresh cannot adopt cached
+metadata. A changed deployment requires a fresh user selection. The continuation
+is bound to the file, selected engine, route, view, tenant, actor, session and
+permission lifetime; duplicate clicks issue one evaluation, and stale results
+cannot navigate or replace current notices. This read-only path does not change
+the engine selection itself. Composite and destination APIs remain authoritative
+for access; client metadata validation does not confer runtime permission.
+Both Editor action rows wrap so the runtime link remains visible at narrow
+viewports; browser checks must verify the button's viewport boundaries.

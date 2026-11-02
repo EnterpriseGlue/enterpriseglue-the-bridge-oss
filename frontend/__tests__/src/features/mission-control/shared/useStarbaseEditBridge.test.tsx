@@ -8,7 +8,7 @@ import { advanceBrowserSessionRevision } from '@src/utils/browserSession';
 const navigation = vi.hoisted(() => ({ go: vi.fn(), slug: 'tenant-a', pathname: '/mission-control/processes', search: '?process=invoice&version=3' }));
 vi.mock('@src/shared/hooks/useTenantNavigate', () => ({ useTenantNavigate: () => ({ tenantNavigate: navigation.go, tenantSlug: navigation.slug, effectivePathname: navigation.pathname }) }));
 vi.mock('react-router-dom', () => ({ useLocation: () => ({ pathname: navigation.pathname, search: navigation.search }) }));
-vi.mock('@src/shared/api/client', () => ({ apiClient: { post: vi.fn() } }));
+vi.mock('@src/shared/api/client', async importOriginal => ({ ...await importOriginal<typeof import('@src/shared/api/client')>(), apiClient: { post: vi.fn() } }));
 let auth: any;
 const processTarget = () => ({ canShowEditButton: true, canEdit: true, engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', processKey: 'invoice', processVersion: 3, engineDeploymentId: 'deployment-3', commitId: 'commit-3', fileVersionNumber: 2, mappingSource: 'git-commit' });
 function allowance(body: any) { return { allowed: true, reasonCode: 'allowed', reason: 'Allowed', missingActions: [], engineId: body.engineId, projectId: body.projectId, fileId: body.fileId, targetId: 'target-1', lineage: { kind: body.kind, definitionId: body.definitionId, definitionKey: body.definitionKey, decisionDefinitionId: body.decisionDefinitionId, decisionDefinitionKey: body.decisionDefinitionKey } }; }
@@ -74,5 +74,10 @@ describe('source-bound Starbase edit handoff', () => {
   it('shows a current denial while keeping navigation stopped', async () => {
     vi.mocked(apiClient.post).mockImplementation(async (_url, body) => ({ ...allowance(body), allowed: false, reasonCode: 'denied', reason: 'Missing project edit', missingActions: ['project.files.update'] }));
     const f = fixture(); await act(async () => f.result.current.open()); expect(f.result.current.decision?.reason).toBe('Missing project edit'); expect(navigation.go).not.toHaveBeenCalled();
+  });
+  it('shows a current bridge error using the real client error contract', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(new Error('Access unavailable'));
+    const f = fixture(); await act(async () => f.result.current.open());
+    expect(f.result.current.error).toBe('Access unavailable'); expect(navigation.go).not.toHaveBeenCalled();
   });
 });

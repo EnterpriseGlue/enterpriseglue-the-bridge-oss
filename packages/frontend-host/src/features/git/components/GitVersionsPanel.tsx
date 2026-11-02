@@ -29,6 +29,7 @@ import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-ac
 import type { FileDeploymentSummary as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 import { getAccessibleEngines, getEngineEnvironmentTags } from '../../mission-control/engines/api/engines';
+import { getMissionControlTarget, type MissionControlTarget } from '../utils/missionControlTarget';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -125,14 +126,6 @@ interface DeploymentBadge {
   engineId: string;
   engineDeploymentId: string;
   deleteDecision: UiAuthzDecision;
-}
-
-type MissionControlTarget = {
-  engineId: string;
-  path: '/mission-control/processes' | '/mission-control/decisions';
-  keyParam: 'process' | 'decision';
-  key: string;
-  version: number;
 }
 
 function formatTime(timestamp: number): string {
@@ -266,28 +259,6 @@ function getDeploymentVersion(row: LatestDeploymentByFile, fileType: 'bpmn' | 'd
     .filter((version) => Number.isFinite(version));
   if (versions.length === 0) return null;
   return Math.max(...versions);
-}
-
-function getMissionControlTarget(row: LatestDeploymentByFile, fileType: 'bpmn' | 'dmn'): MissionControlTarget | null {
-  const desiredKind = fileType === 'dmn' ? 'decision' : 'process';
-  const artifacts = Array.isArray(row.artifacts) ? row.artifacts : [];
-  const matches = artifacts.filter(artifact => artifact?.kind === desiredKind);
-  // A file can contain multiple runtime definitions. Do not guess which one the user meant.
-  if (matches.length !== 1) return null;
-  const best = matches[0];
-  const key = best.key;
-  const version = best.version;
-  const engineId = row.engineId;
-  if (typeof engineId !== 'string' || !engineId || engineId !== engineId.trim()
-    || typeof key !== 'string' || !key || key !== key.trim()
-    || !Number.isSafeInteger(version) || version <= 0) return null;
-  return {
-    engineId,
-    path: fileType === 'dmn' ? '/mission-control/decisions' : '/mission-control/processes',
-    keyParam: fileType === 'dmn' ? 'decision' : 'process',
-    key,
-    version,
-  };
 }
 
 function normalizeTimestamp(value: number): number {

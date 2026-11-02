@@ -49,7 +49,8 @@
     "Engine deployment deletion describes its full resource scope, preserves saved Starbase versions and keeps cascading off. Confirmations and refreshes are session-bound, duplicate submissions are blocked, and only a settled HTTP 204 acknowledges deletion. Legacy error imports now share the canonical application error class.",
     "Runtime links from saved history retain their original file, tenant, session and artifact selection. Bridge responses are validated before navigation; ambiguous or invalid runtime artifacts open the saved-file preview instead of selecting a definition by version rank.",
     "All four Mission Control Edit links bind the selected deployed version and copied edit target to the originating session and route. Obsolete callbacks cannot open a changed file or baseline, and duplicate clicks share one access check.",
-    "The Editor rejects ambiguous deployed-source links, preserves exact integer versions, requires every supplied baseline selector to agree, and scopes preview and confirmation state to the original handoff. Read-only preview requires a commit reference; file-version-only links retain the guarded hotfix path with clear preview availability."
+    "The Editor rejects ambiguous deployed-source links, preserves exact integer versions, requires every supplied baseline selector to agree, and scopes preview and confirmation state to the original handoff. Read-only preview requires a commit reference; file-version-only links retain the guarded hotfix path with clear preview availability.",
+    "Opening Mission Control from the Editor preserves the selected engine and one unambiguous deployed definition. Fresh matching metadata and the composite access check are required before navigation; stale results, failed refreshes and denied access cannot redirect the handoff. The action rows wrap to keep the runtime link visible on narrow screens."
   ],
   "upgrade": {
     "required": true,
