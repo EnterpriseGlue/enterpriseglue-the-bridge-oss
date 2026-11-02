@@ -13,6 +13,7 @@ export const MigrationPlanSchema = z.object({
   sourceProcessDefinitionId: z.string(),
   targetProcessDefinitionId: z.string(),
   instructions: z.array(MigrationInstructionSchema).default([]),
+  variables: VariablesSchema.optional(),
   updateEventTriggers: z.boolean().optional(),
 });
 
@@ -110,6 +111,10 @@ export const MigrationValidationInstructionReportSchema = z.object({
 
 export const MigrationValidationResultSchema = z.object({
   instructionReports: z.array(MigrationValidationInstructionReportSchema).default([]),
+  variableReports: z.record(z.string(), z.object({
+    failures: z.array(z.string()).optional(),
+    warnings: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
 }).passthrough();
 
 // Migration plans retain engine-compatible shapes. These aggregate responses,

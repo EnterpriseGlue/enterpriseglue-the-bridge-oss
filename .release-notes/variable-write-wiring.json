@@ -52,7 +52,9 @@
     "The Editor rejects ambiguous deployed-source links, preserves exact integer versions, requires every supplied baseline selector to agree, and scopes preview and confirmation state to the original handoff. Read-only preview requires a commit reference; file-version-only links retain the guarded hotfix path with clear preview availability.",
     "Opening Mission Control from the Editor preserves the selected engine and one unambiguous deployed definition. Fresh matching metadata and the composite access check are required before navigation; stale results, failed refreshes and denied access cannot redirect the handoff. The action rows wrap to keep the runtime link visible on narrow screens.",
     "Incoming Mission Control process and decision links preserve the requested version over saved filters. Unavailable or invalid links show a clear action instead of silently selecting the latest version.",
-    "Starting a process uses the exact displayed version. Select one version first; changed permissions or session context discard old start dialogs, and uncertain outcomes cannot be resubmitted automatically."
+    "Starting a process uses the exact displayed version. Select one version first; changed permissions or session context discard old start dialogs, and uncertain outcomes cannot be resubmitted automatically.",
+    "Migration uses canonical target arrays and retains the selected source version as engine inventory loads. Changing the plan, variables, selection, execution options or session requires a new review; private navigation selections are scoped to the current user and tenant.",
+    "Migration variables are global, typed and serialized for the engine, validated with the plan and applied inside its migrationPlan. Variable failures block review; execution acknowledgements and duplicate submissions are checked for both modes."
   ],
   "upgrade": {
     "required": true,
@@ -73,7 +75,8 @@
       "File restore uses POST /vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore with the existing restore permission. Older hosts reject that route without whole-project effects; the client has no legacy fallback. Checkpoints keep the existing file-save marker and explicit file-version scope. The original project restore endpoint remains supported. Ambiguous stored snapshots reach validation without timestamp-based selection.",
       "Publish and dirty-status endpoints preserve HTTP 409 for unavailable or conflicting saved baselines; publish requires a saved draft owned by the requested project and user.",
       "POST /git-api/deploy-from-version requires a saved version UUID and engine target, preserving existing project/CI-target guards. Older hosts reject the new path without fallback. The legacy deploy endpoint remains supported with a verified complete checkpoint.",
-      "POST /mission-control-api/process-definitions/{id}/start starts an immutable selected definition behind the existing start action/runtime guard and returns its exact definitionId. The key-based compatibility route retains latest-version behavior; the versioned UI has no fallback."
+      "POST /mission-control-api/process-definitions/{id}/start starts an immutable selected definition behind the existing start action/runtime guard and returns its exact definitionId. The key-based compatibility route retains latest-version behavior; the versioned UI has no fallback.",
+      "Migration execution retains the public envelope; the backend puts its variables inside the engine migrationPlan. The canonical shared plan supports optional variables and variableReports uses the engine variable-name map with string diagnostics."
     ]
   },
   "database": {
@@ -104,7 +107,8 @@
     "File import and metadata move destinations must belong to the authorized project; breadcrumb ancestry is project-bound and cycle-checked. Browser XML checks do not replace server authorization, endpoint policy or database isolation.",
     "Folder ancestry, recursive preview/archive/deletion and file destinations are project-bound and cycle-checked. Ordinary tree writers share a transactional project-row fence; no authorization, RLS policy, migration or privilege change.",
     "Complete version saves bind reconciliation to the project and owned draft, reject ambiguous file identities before writes, and preserve strict deployment-source checks and empty-project Git-push refusal. File-scoped saves do not acknowledge missing siblings.",
-    "Restore preflight binds retained snapshot hashes, active states, current project/type and distinct targets; owned transaction managers are server-only dependencies. Closed restore bodies prevent implicit scope changes, and authorization, RLS and migration floors are unchanged."
+    "Restore preflight binds retained snapshot hashes, active states, current project/type and distinct targets; owned transaction managers are server-only dependencies. Closed restore bodies prevent implicit scope changes, and authorization, RLS and migration floors are unchanged.",
+    "Migration review owns a detached exact payload and selected instance list. Context-mismatched handoffs cannot broaden into source-wide execution; stale generations and validations cannot authorize a changed draft. Unknown acknowledgements block automatic retries and fallback to another mode."
   ],
   "documentation": [
     "docs/development/mission-control-engine-selection.md",
@@ -156,7 +160,9 @@
     "Native PostgreSQL delete-to-save-to-publish-to-export checks, deletion-only and legacy status cases, scoped-save separation, foreign branch/row and ambiguous-plan refusal; exact root-folder metadata regression.",
     "Native PostgreSQL multi-file and checkpoint/file-version failure rollback, snapshot tampering/alias/type/state negatives, tombstone filtering, derived BPMN/DMN identity and exact post-restore deployment-source verification; request/OpenAPI and shared selector parity.",
     "Incoming process and decision links over persisted filters resolve key/version/node atomically; unavailable and invalid links pause resource reads until explicitly cleared. Exact process XML/count/instance and decision XML/history selectors remain engine-bound.",
-    "Exact-definition start request/receipt and action/OpenAPI parity; actual restricted PostgreSQL router isolation, real pinned Operaton older-version execution and browser start-dialog lifetime/duplicate cases."
+    "Exact-definition start request/receipt and action/OpenAPI parity; actual restricted PostgreSQL router isolation, real pinned Operaton older-version execution and browser start-dialog lifetime/duplicate cases.",
+    "Migration wiring regressions cover canonical instructions, selected-version handoff, typed variables, variable reports, context and in-flight races, duplicate dispatch and unverified responses. Use the real pinned Operaton and actual-page browser lanes for engine payload and UI boundaries.",
+    "Release preflight distinguishes Mission Control process-instance migration code from database migration directories; real and unknown migration directories still require migration and rollback notes."
   ],
   "packages": [
     {

@@ -33,6 +33,7 @@ export function toEnginePlan(body: any) {
       targetProcessDefinitionId: body.targetProcessDefinitionId,
       instructions,
       updateEventTriggers: !!body.updateEventTriggers,
+      ...(body.variables == null ? {} : { variables: structuredClone(body.variables) }),
     }
   }
   const src = body?.sourceDefinitionId
@@ -134,9 +135,12 @@ export async function executeMigrationAsync(engineId: string, body: MigrationExe
   }
   if (typeof skipCustomListeners === 'boolean') engineReq.skipCustomListeners = skipCustomListeners
   if (typeof skipIoMappings === 'boolean') engineReq.skipIoMappings = skipIoMappings
-  if (variables && typeof variables === 'object') engineReq.variables = variables
+  if (variables && typeof variables === 'object') engineReq.migrationPlan.variables = variables
   const engineDto: any = await postMigrationExecuteAsync<any>(engineId, engineReq)
-  const { id } = await insertLocalBatch('MIGRATE_INSTANCES', engineDto?.id, body, engineDto, engineId)
+  if (typeof engineDto?.id !== 'string' || !engineDto.id || engineDto.id !== engineDto.id.trim()) {
+    throw new Error('Migration batch acknowledgement could not be verified')
+  }
+  const { id } = await insertLocalBatch('MIGRATE_INSTANCES', engineDto.id, body, engineDto, engineId)
   return { id, camundaBatchId: engineDto?.id, type: 'MIGRATE_INSTANCES' }
 }
 
@@ -152,7 +156,7 @@ export async function executeMigrationDirect(engineId: string, body: MigrationEx
   }
   if (typeof skipCustomListeners === 'boolean') engineReq.skipCustomListeners = skipCustomListeners
   if (typeof skipIoMappings === 'boolean') engineReq.skipIoMappings = skipIoMappings
-  if (variables && typeof variables === 'object') engineReq.variables = variables
+  if (variables && typeof variables === 'object') engineReq.migrationPlan.variables = variables
   await postMigrationExecute<any>(engineId, engineReq)
 }
 

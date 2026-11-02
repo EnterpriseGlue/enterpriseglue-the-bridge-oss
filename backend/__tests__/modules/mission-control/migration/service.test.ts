@@ -19,6 +19,14 @@ describe('migration service', () => {
       expect(result.instructions).toHaveLength(1);
     });
 
+    it('retains detached migration-plan variables for engine validation', () => {
+      const input={sourceProcessDefinitionId:'src',targetProcessDefinitionId:'tgt',instructions:[],variables:{details:{type:'Json',value:'{"stage":"reviewed"}'}}};
+      const result=toEnginePlan(input);
+      expect(result.variables).toEqual(input.variables);
+      input.variables.details.value='changed';
+      expect(result.variables.details.value).toBe('{"stage":"reviewed"}');
+    });
+
     it('converts body with sourceDefinitionId', () => {
       const body = {
         sourceDefinitionId: 'src-1',

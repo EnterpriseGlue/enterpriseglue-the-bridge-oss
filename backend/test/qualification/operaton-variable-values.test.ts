@@ -5,6 +5,9 @@ import { camundaGetWithConnection } from '@enterpriseglue/shared/services/bpmn-e
 import { modifyProcessInstanceVariables } from '../../../packages/frontend-host/src/features/mission-control/process-instance-detail/api/processInstances.js';
 import { startProcessDefinition } from '../../../packages/frontend-host/src/features/mission-control/processes-overview/api/startProcess.js';
 import { startProcessInstanceById } from '../../../packages/backend-host/src/modules/mission-control/processes/service.js';
+import { generateMigrationPlan, validateMigrationPlan, executeMigration } from '../../../packages/frontend-host/src/features/mission-control/migration-wizard/api/migration.js';
+import { mappedPlan, migrationVariables } from '../../../packages/frontend-host/src/features/mission-control/migration-wizard/utils/migrationPayload.js';
+import * as migrationService from '../../../packages/backend-host/src/modules/mission-control/migration/service.js';
 
 // Exercise the real frontend write adapter against the disposable engine. Only
 // the host HTTP hop is replaced; serialization and engine persistence are real.
@@ -13,10 +16,12 @@ const startConnection = vi.hoisted(() => ({ value: null as { id: string; baseUrl
 vi.mock('../../../packages/frontend-host/src/shared/api/client.js', () => ({ apiClient: frontendApi }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', async original => {
   const actual = await original<typeof import('@enterpriseglue/shared/services/bpmn-engine-client.js')>();
-  return { ...actual, camundaPost: (engineId: string, path: string, body: unknown) => {
+  const post = (engineId: string, path: string, body: unknown) => {
     if (!startConnection.value || engineId !== startConnection.value.id) throw Error('Unexpected fixture engine');
     return actual.camundaPostWithConnection(startConnection.value, path, body);
-  } };
+  };
+  return { ...actual, camundaPost: post, postMigrationGenerate: (id:string,body:unknown)=>post(id,'/migration/generate',body),
+    postMigrationValidate:(id:string,body:unknown)=>post(id,'/migration/validate',body),postMigrationExecute:(id:string,body:unknown)=>post(id,'/migration/execute',body) };
 });
 
 // Real pinned Operaton HTTP transport; audit persistence is outside this fixture.
@@ -24,6 +29,40 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: () => { throw Error('Unexpected fixture database access'); } }));
 
 describe('real Operaton serialized variable values', () => {
+  it('runs the canonical reviewed migration plan and JSON variables through real engine execution',async()=>{
+    const baseUrl=process.env.OPERATON_VARIABLE_FIXTURE_URL;
+    if(!baseUrl||!/^http:\/\/127\.0\.0\.1:\d+\/engine-rest$/.test(baseUrl))throw Error('A disposable loopback Operaton endpoint is required');
+    const key=`migration_wire_${randomUUID().replace(/-/g,'')}`,deployments:string[]=[],ids:string[]=[];
+    startConnection.value={id:key,baseUrl,authType:'none'};
+    try{
+      for(const version of [1,2]){
+        const form=new FormData();form.set('deployment-name',`${key}-${version}`);
+        form.set('process.bpmn',new Blob([`<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" targetNamespace="fixture"><bpmn:process id="${key}" name="Version ${version}" isExecutable="true" camunda:historyTimeToLive="1"><bpmn:startEvent id="start"/><bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/><bpmn:userTask id="review" name="Review version ${version}"/></bpmn:process></bpmn:definitions>`],{type:'application/xml'}),'process.bpmn');
+        const response=await fetch(`${baseUrl}/deployment/create`,{method:'POST',body:form,signal:AbortSignal.timeout(15000)});expect(response.status).toBe(200);
+        const deployed=await response.json() as any;deployments.push(deployed.id);ids.push((Object.values(deployed.deployedProcessDefinitions) as any[])[0].id);
+      }
+      const instance=await startProcessInstanceById(key,ids[0],{});
+      frontendApi.post.mockImplementation(async(path:string,body:any)=>{
+        const {engineId,...payload}=body;expect(engineId).toBe(key);
+        if(path.endsWith('/generate'))return migrationService.generateMigrationPlan(engineId,payload);
+        if(path.endsWith('/plan/validate'))return migrationService.validateMigrationPlan(engineId,payload);
+        if(path.endsWith('/execute-direct')){await migrationService.executeMigrationDirect(engineId,payload);return {ok:true};}
+        throw Error('Unexpected migration fixture hop');
+      });
+      const plan=mappedPlan(await generateMigrationPlan(ids[0],ids[1],key,false),{},{},{})!;
+      expect(plan.instructions.some(i=>i.sourceActivityIds.includes('review')&&i.targetActivityIds.includes('review'))).toBe(true);
+      const variables=migrationVariables([{name:'details',type:'JSON',value:'{"stage":"migrated","values":[1,true,null]}',scope:'GLOBAL'}]);
+      const validation=await validateMigrationPlan(plan,[instance.id],key,variables);
+      expect([...validation.instructionReports,...Object.values(validation.variableReports||{})].every(r=>!r.failures?.length)).toBe(true);
+      expect(await executeMigration({engineId:key,migrationPlan:plan,processInstanceIds:[instance.id],variables,auditReason:'Owned migration wiring fixture'})).toEqual({ok:true});
+      expect(await camundaGetWithConnection(startConnection.value,`/process-instance/${instance.id}`)).toMatchObject({definitionId:ids[1]});
+      expect(await camundaGetWithConnection(startConnection.value,`/process-instance/${instance.id}/variables`)).toMatchObject({details:{type:'Json',value:{stage:'migrated',values:[1,true,null]}}});
+    }finally{
+      frontendApi.post.mockReset();startConnection.value=null;
+      for(const id of deployments.reverse()){const response=await fetch(`${baseUrl}/deployment/${encodeURIComponent(id)}?cascade=true`,{method:'DELETE',signal:AbortSignal.timeout(15000)});expect(response.status).toBe(204);}
+    }
+  },60000);
+
   it('starts an exact older definition through the frontend and backend service without selecting latest', async () => {
     const baseUrl = process.env.OPERATON_VARIABLE_FIXTURE_URL;
     if (!baseUrl) throw Error('A disposable OPERATON_VARIABLE_FIXTURE_URL is required');

@@ -91,7 +91,7 @@ describe('ApplyMigrationModal', () => {
     expect(onExecuteDirect).not.toHaveBeenCalled();
   });
 
-  it('executes available modes', () => {
+  it.each(['batch','direct'])('executes the selected available %s mode once', mode => {
     const onExecuteBatch = vi.fn();
     const onExecuteDirect = vi.fn();
 
@@ -105,10 +105,9 @@ describe('ApplyMigrationModal', () => {
 
     fireEvent.change(screen.getByLabelText('Audit reason'), { target: { value: 'Migrate hotfixed process instances' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Create migration batch/i }));
-    expect(onExecuteBatch).toHaveBeenCalledWith('Migrate hotfixed process instances');
-
-    fireEvent.click(screen.getByRole('button', { name: /Run directly/i }));
-    expect(onExecuteDirect).toHaveBeenCalledWith('Migrate hotfixed process instances');
+    const button=screen.getByRole('button',{name:mode==='batch'?/Create migration batch/i:/Run directly/i});
+    fireEvent.click(button);fireEvent.click(button);
+    expect(mode==='batch'?onExecuteBatch:onExecuteDirect).toHaveBeenCalledExactlyOnceWith('Migrate hotfixed process instances');
+    expect(mode==='batch'?onExecuteDirect:onExecuteBatch).not.toHaveBeenCalled();
   });
 });
