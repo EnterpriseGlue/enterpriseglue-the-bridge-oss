@@ -6,45 +6,13 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.4...v0.35.5) (2026-11-02)
 
+### Changes
 
-### Bug Fixes
+- **deployments:** Restore project deployment options and native JSON variable editing, and update filesystem matching dependencies to their patched releases.
+- **release-authorization:** Complete frozen release publication with source-bound image-workflow handoffs, authenticated package observations and retained security evidence without scanner caches.
+- **workflows:** Bind browser actions to their original context, verify deployment and variable transport, and use explicit directory presentation contracts with permission-based administration.
 
-* **admin:** bind directory views to canonical access contracts ([e5ecf2e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e5ecf2efc7e7a6f5a6daf72ebc1d3be709eabae2))
-* **admin:** enforce audited lifecycle and profile ownership boundaries ([c3b3317](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c3b331705e52e29e800a5155fb63114a721b768a))
-* **auth:** bound bootstrap refresh to its original session ([af07bae](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/af07bae167104c8e81b38d8ee1abab1f3f538747))
-* **auth:** fence browser continuations across session changes ([67023d4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/67023d46b661002bd4e3156d846f28d42f4a2466))
-* authorize and bind editor runtime navigation ([7d8a3e8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7d8a3e8040f1dcc99c34db1b1ec92cf4abdbec94))
-* bind deployment deletion to current authority and exact acknowledgements ([002acf1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/002acf198cf4aff57951ef8a50302a284b1b673d))
-* bind editor handoffs to deployed selection and session ([8a0ef81](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8a0ef810d0b82e95db62a870403bd0d4369467dd))
-* bind migration reviews to canonical owned payloads ([6ad38ff](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6ad38ff8da23769a3db5ccb1a8fdb5faaa622349))
-* bind process starts to exact definitions and current session ([7624f63](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7624f638b5ca8cb3d0478dbb7872163134101daf))
-* bind project creation and Git connections to reviewed context ([0183b68](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0183b688af006cdbc82baa6b69d72d76b9705137))
-* bind project imports to context and atomic version creation ([34fa11e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/34fa11e13694ec7f316c79a3aa2a33a87e3f3216))
-* bind runtime bridge navigation to its source selection ([bfeaf30](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bfeaf305f7073afb88e7372eb8be1baa12a58a96))
-* bind single-file restore persistence and UI acknowledgements ([ca33b29](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ca33b29201585d0cce7f3790bc912ea184dcc583))
-* **bootstrap:** make strict Git provider seed timestamps deterministic ([ea0c6f1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ea0c6f1ccb9b2bca73c91292e1a3d138454c5313))
-* complete tenant-bound deployment and runtime workflows ([bff2dd0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bff2dd0ca0e48f026b642e16786b3502773fcfdf))
-* complete variable write and process action wiring ([9079cd8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9079cd8d7f5c727d28297c155a2568db17b7543f))
-* **config:** reject runtime configuration redirects ([071bc46](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/071bc46db06cbc5dbbf58857f2f3077176cf0d43))
-* **git:** bind deployment exports to reviewed saved revisions ([347ff21](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/347ff2142a16c20b8822b3bc28a589f9ed438bce))
-* **git:** bind project connection settings to current context ([84be0b1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/84be0b19502c774c7dbe83632c59ce0733899cd9))
-* **git:** fence manual sync acknowledgements and bulk queues ([fb19fe6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fb19fe67b11b96f24d1e8f5fc67c5172b162bd36))
-* **git:** verify personal credentials and owned OAuth completion ([b1d1ad5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b1d1ad51c45571d747f9d414ce1045e223fe2919))
-* **release:** recover authenticated unsigned publication identity ([e98da17](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e98da172cf2e80794df1fbfaa521a797909a75bb))
-* **release:** recover authenticated unsigned publication identity ([015557e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/015557ef5828ddc1840d9c8da6476a5f8ff7f27d))
-* resolve runtime definition links atomically ([9f8ed88](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9f8ed8835269c782461c9b7e2dcf6eda0f99eec5))
-* restore deployment options and JSON variable editing ([7b97e66](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7b97e6658b4a2522d2e2fef2b07cbe660e59a296))
-* restore deployment options, JSON variables and secure matching ([fe1440b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fe1440b198484e046c26e1fa91723ddd5049bcab))
-* **security:** qualify patched glob and minimatch runtime dependencies ([654448b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/654448b3cb2a5cb0883f28c21b637c0e156523d6))
-* **starbase:** bind folder actions and traversal to projects ([4a67576](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4a67576c70d84bfbb760377097ef9ce36ca05f56))
-* validate and scope deployed editor handoffs ([afce147](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/afce147a2c10d19d9a90e70740c6e5a17541b4b1))
-* **vcs:** preserve scoped saves and explicit authorization bindings ([b56a9de](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b56a9deeb5a9453a295f6e3ca882f90847739040))
-* **vcs:** publish saved trees and verify dirty baselines ([7fc5a76](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7fc5a76db1a8cb8f84392139e62dc23f84c931cb))
-* **versioning:** bind saved diagram reads to project and file ([05b1963](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/05b19639ff3b5049316607cec65aaf881cf7587b))
-* **versioning:** checkpoint removed project files explicitly ([ae9f242](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ae9f2429ead72fbba0881898ceed5f792d70b7d2))
-* **versioning:** restore contents and checkpoints atomically ([f2698b1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f2698b1477b33582275e37141a5d76826a3df559))
-* **versioning:** scope restore effects and guard stale continuations ([4364c4b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4364c4b6c843e871806d2d45b8ae7364c9912b12))
-* **workflows:** bind session actions and deployment revisions ([b7d09ea](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b7d09ea69ded8901ba44d2d3e4955a3d4819441a))
+Full upgrade, compatibility and verification details: [v0.35.5 release notes](docs/releases/v0.35.5.md).
 
 ## [0.35.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.3...v0.35.4) (2026-10-30)
 
