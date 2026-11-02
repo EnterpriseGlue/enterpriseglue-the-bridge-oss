@@ -194,9 +194,16 @@ still require the bundle's explicit archive acknowledgements.
 
 ## Volumes
 Docker creates persistent volumes for:
+
 - `postgres_data` (database)
 - `workspace_node_modules` (dev only)
-- `git_repos` (server-side git repositories)
+
+Core application data, including uploaded logos, favicons, fonts, BPMN/DMN
+models and version history, is stored in the database. Git synchronization
+uses remote provider APIs and does not require a local repository volume.
+Optional plugins and deployment tooling can have separate storage requirements.
+
+Upgrading the Compose templates does not delete existing unused Git volumes.
 
 ## Notes
 - Dev compose exposes PostgreSQL on `POSTGRES_HOST_PORT`; production does not expose the DB port by default.

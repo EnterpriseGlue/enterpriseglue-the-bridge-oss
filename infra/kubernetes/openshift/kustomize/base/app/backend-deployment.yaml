@@ -51,9 +51,6 @@ spec:
             capabilities:
               drop:
                 - ALL
-          volumeMounts:
-            - name: git-repos
-              mountPath: /app/data/repos
           readinessProbe:
             httpGet:
               path: /ready
@@ -70,7 +67,3 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 3
             failureThreshold: 5
-      volumes:
-        - name: git-repos
-          persistentVolumeClaim:
-            claimName: backend-git-repos

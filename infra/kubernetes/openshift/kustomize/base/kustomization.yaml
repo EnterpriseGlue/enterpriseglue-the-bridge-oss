@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - config/configmap.yaml
-  - storage/backend-pvc.yaml
   - app/backend-deployment.yaml
   - app/backend-service.yaml
   - app/frontend-deployment.yaml

@@ -946,7 +946,6 @@ jobs:
             echo "ADMIN_EMAIL=admin@enterpriseglue.ai"
             echo "ADMIN_PASSWORD=change_me_change_me"
             echo "ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-            echo "GIT_REPOS_PATH=./data/repos"
             echo "GIT_DEFAULT_BRANCH=main"
             echo "API_BASE_URL="
           } > .env.images.ci
@@ -1033,7 +1032,6 @@ jobs:
             echo "ADMIN_EMAIL=admin@enterpriseglue.ai"
             echo "ADMIN_PASSWORD=change_me_change_me"
             echo "ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-            echo "GIT_REPOS_PATH=./data/repos"
             echo "GIT_DEFAULT_BRANCH=main"
             echo "API_BASE_URL="
           } > .env.images.exposed.ci

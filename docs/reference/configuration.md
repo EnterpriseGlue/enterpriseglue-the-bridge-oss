@@ -268,9 +268,11 @@ contract, write-only tenant administration routes, SSO purpose mapping,
 rotation, outage, recovery, and rollback behavior.
 
 ### Git & Encryption
-- `GIT_REPOS_PATH`
 - `GIT_DEFAULT_BRANCH`
 - `ENCRYPTION_KEY`
+
+Git repository metadata and version history are stored in the database.
+Synchronization uses remote provider APIs; no local Git storage path is required.
 
 ### Runtime Inventory Reconciliation
 

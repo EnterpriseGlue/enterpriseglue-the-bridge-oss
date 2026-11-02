@@ -1,0 +1,52 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "remove-legacy-git-storage",
+  "type": "fix",
+  "scope": "deployment",
+  "breaking": false,
+  "audiences": ["operators", "developers"],
+  "summary": "Remove unused Git filesystem storage from Docker and OpenShift deployment templates to reflect database-backed application persistence.",
+  "userImpact": [
+    "Core application data, including uploaded branding assets, models and version history, continues to persist in the database."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "Updated templates no longer mount or provision the unused Git repository volume or backend PVC. Existing volumes and claims are not automatically deleted.",
+      "Existing GIT_REPOS_PATH values may be removed from local environment files; the current Git service does not read this setting."
+    ]
+  },
+  "configuration": [
+    "Remove git_repos volume declarations and mounts from development, production, self-hosted and identity-rehearsal Compose configurations.",
+    "Remove the backend-git-repos PVC, its mount and the unused GIT_REPOS_PATH setting from OpenShift templates, environment examples, CI setup and verification runners."
+  ],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": ["No database schema or application data changes are required."]
+  },
+  "security": [],
+  "documentation": [
+    "Deployment and configuration references describe database-backed application persistence without a Git filesystem storage requirement."
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "deployment-maintainers",
+    "pages": ["deploy-docker", "deploy-openshift", "configuration"]
+  },
+  "knownLimitations": [
+    "Optional plugins and deployment tooling can have independent storage requirements."
+  ],
+  "rollback": [
+    "Restore the previous deployment templates and environment examples; no database rollback is needed."
+  ],
+  "validation": [
+    "Compose rendering passed all five compose-render CI steps and the identity-rehearsal, pooled-tenancy and self-hosted configuration-bundle combinations.",
+    "OpenShift base and dev, staging and production overlays render without a backend application-data PVC; staging and production retain their configuration and secret projections.",
+    "CI contracts (218 tests), CI change detection (120 tests), focused deployment contracts (54 tests), shell syntax, configuration deployment, documentation boundary, package-version discipline and release-note preflight passed locally with Node.js 24.10.0 and pnpm 11.0.8.",
+    "No application source or database schema changed. Container startup, image smoke and external OpenShift rollout qualification were not run locally."
+  ],
+  "packages": []
+}

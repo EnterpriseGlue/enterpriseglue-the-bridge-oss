@@ -75,7 +75,6 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FRONTEND_URL: ${FRONTEND_URL}
-      GIT_REPOS_PATH: /tmp/enterpriseglue-predecessor-repos
     depends_on:
       db:
         condition: service_healthy
@@ -125,7 +124,6 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FRONTEND_URL: ${FRONTEND_URL}
-      GIT_REPOS_PATH: /tmp/enterpriseglue-bridge-repos
     depends_on:
       schema-predecessor:
         condition: service_completed_successfully
@@ -167,7 +165,6 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FRONTEND_URL: ${FRONTEND_URL}
-      GIT_REPOS_PATH: /tmp/enterpriseglue-owner-repos
     volumes:
       - .:/repo:ro
     depends_on:
@@ -208,7 +205,6 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FRONTEND_URL: ${FRONTEND_URL}
-      GIT_REPOS_PATH: /tmp/enterpriseglue-runtime-verify-repos
     volumes:
       - .:/repo:ro
     depends_on:
@@ -229,7 +225,6 @@ services:
       POSTGRES_PASSWORD: ${POOLED_TENANCY_POSTGRES_APP_PASSWORD}
       POSTGRES_DATABASE: ${POOLED_TENANCY_POSTGRES_APP_DATABASE}
       EG_DATABASE_STARTUP_MODE: verify
-      GIT_REPOS_PATH: /tmp/enterpriseglue-repos
       EG_TENANCY_MODE: pooled
       EG_TENANT_RLS_ENFORCED: "true"
       EG_TENANT_PLACEMENT_KEY: ${EG_TENANT_PLACEMENT_KEY}
