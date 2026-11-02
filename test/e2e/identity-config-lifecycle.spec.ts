@@ -72,7 +72,9 @@ test.describe('Identity configuration browser lifecycle', () => {
     });
     await page.route('**/api/auth/me', route => {
       meReads += 1;
-      const status = meReads === 1 ? scenario.initialStatus : scenario.replayStatus;
+      // A session changes only after refresh, not after an abandoned read.
+      // Development StrictMode remounts bootstrap before its first read settles.
+      const status = refreshes === 0 ? scenario.initialStatus : scenario.replayStatus;
       return status === 200 ? route.fallback() : route.fulfill({
         status, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic session failure' }),
       });
@@ -84,7 +86,11 @@ test.describe('Identity configuration browser lifecycle', () => {
     await page.goto(scenario.path);
     if (scenario.heading) await expect(page.getByRole('heading', { name: scenario.heading, exact: true })).toBeVisible();
     else await expect(page.getByRole('button', { name: /^Continue with Browser identity provider/ })).toBeVisible();
-    expect(meReads).toBe(scenario.meReads);
+    const developmentClients = await page.locator('script[src="/@vite/client"]').count();
+    expect(developmentClients).toBeLessThanOrEqual(1);
+    // The development remount adds exactly one superseded read. It must never
+    // own another refresh; production keeps the original single-mount budget.
+    expect(meReads).toBe(scenario.meReads + developmentClients);
     expect(refreshes).toBe(scenario.refreshes);
     expect(unexpectedResponses).toEqual([]);
     expect(errors).toEqual([]);
