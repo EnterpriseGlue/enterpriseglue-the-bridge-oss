@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
  * lease never changes roles, credentials, RLS flags or application privileges. */
 export async function withPostgresMigrationContext<T>(
   source: DataSource, mode: 'apply' | 'verify', work: () => Promise<T>,
+  scope?: { tables: ReadonlySet<string> },
 ): Promise<T> {
   if (source.options.type !== 'postgres' || mode !== 'apply' || config.tenancyMode === 'single') return work();
   const schema = source.options.schema || 'public';
@@ -45,6 +46,7 @@ export async function withPostgresMigrationContext<T>(
       // do not weaken tenant policies or rewrite historical migrations.
       for (const metadata of source.entityMetadatas) {
         if (!POSTGRES_TENANT_RLS_TABLES.has(metadata.tableName) || !metadata.columns.some(column => column.databaseName === 'tenant_id')) continue;
+        if (scope && !scope.tables.has(metadata.tableName)) continue;
         if ((metadata.schema || schema) !== schema) throw new Error('Migration relation is outside the verified owner schema');
         const relations: Array<{oid:number}> = await transport.query(`SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE n.nspname=$1 AND c.relname=$2 AND c.relkind IN ('r','p') AND c.relrowsecurity AND c.relforcerowsecurity`, [schema,metadata.tableName]);

@@ -534,7 +534,16 @@ test('the identity browser lifecycle runner accepts the generated local TLS CA',
   assert.match(identityBrowserRunner, /test\/e2e\/identity-config-lifecycle\.spec\.ts/);
   assert.match(identityBrowserRunner, /test\/e2e\/login-experience-gallery\.spec\.ts/);
   assert.match(identityBrowserRunner, /test\/e2e\/access-control-layout\.spec\.ts/);
+  assert.match(identityBrowserRunner, /test\/e2e\/platform-admin-setup-routing\.spec\.ts/);
   assert.match(identityBrowserRunner, /corepack pnpm exec playwright test "\$\{browser_e2e_files\[@\]\}"/);
+});
+
+test('platform setup routing regressions are selected by the protected browser CI lane', () => {
+  const setupRoutingSpec = readFileSync(new URL('../test/e2e/platform-admin-setup-routing.spec.ts', import.meta.url), 'utf8');
+  assert.match(setupRoutingSpec, /test\.describe\('single-tenant platform setup routing @access-control-layout'/);
+  for (const workflow of [ciWorkflow, ciCoreWorkflow]) {
+    assert.match(workflow, /--grep '@access-control-layout\|@headless-admin'/);
+  }
 });
 
 test('the live local SAML rehearsal is opt-in and guarded to local browser targets', () => {

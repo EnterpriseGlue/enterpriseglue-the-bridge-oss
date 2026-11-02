@@ -1,4 +1,7 @@
 import { AddSsoConnections1700000000134 } from '@enterpriseglue/shared/db/migrations/1700000000134-add-sso-connections.js';
+import { RestorePlatformGroupOwnership1700000000135 } from '@enterpriseglue/shared/db/migrations/1700000000135-restore-platform-group-ownership.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -652,11 +655,52 @@ async function qualifyNativeSaasTenancyBaseline(queryRunner, dataSource, expecte
   assert.equal(provider.tenantId, 'tenant-default');
   assert.equal(group.tenantId, 'tenant-default');
   assert.equal(mapping.tenantId, 'tenant-default');
+  await qualifyPlatformGroupOwnership(queryRunner, dataSource);
   assert.equal(
     fingerprint(await logicalSchema(queryRunner, dataSource)),
     expectedFingerprint,
     `${database}: v0.16.2 native SaaS tenancy upgrade schema differs from clean install`,
   );
+}
+
+async function qualifyPlatformGroupOwnership(queryRunner, dataSource) {
+  const now = Date.now();
+  const groupId = 'system.group.platform_administrators';
+  const groupRepo = dataSource.getRepository(AuthzGroup);
+  const membershipRepo = dataSource.getRepository(AuthzGroupMembership);
+  const userId = `${runId}-platform-admin`;
+  const membershipId = `${runId}-platform-membership`;
+  await groupRepo.insert(entityRowWithDefaults(dataSource, AuthzGroup, {
+    id: groupId, tenantId: null, key: 'platform-administrators', groupKeyIdentity: 'platform:platform-administrators',
+    name: 'Platform Administrators', source: 'system', sourceRef: 'default-platform-groups', isSystem: true,
+    createdAt: now, updatedAt: now,
+  }));
+  await membershipRepo.insert(entityRowWithDefaults(dataSource, AuthzGroupMembership, {
+    id: membershipId, tenantId: null, groupId, userId, source: 'manual', sourceRef: 'manual-platform-administrator', expiresAt: null,
+    createdAt: now, updatedAt: now,
+  }));
+  try {
+    await new BackfillNativeTenantOwnership1700000000125().up(queryRunner);
+    assert.equal((await groupRepo.findOneByOrFail({ id: groupId })).tenantId, null);
+    assert.equal((await membershipRepo.findOneByOrFail({ id: membershipId })).tenantId, null);
+    await groupRepo.update({ id: groupId }, { tenantId: 'tenant-default' });
+    await membershipRepo.update({ id: membershipId }, { tenantId: 'tenant-default' });
+    assert.equal((await getActivePlatformAdministratorUserIds([userId], dataSource)).size, 0);
+    const repair = new RestorePlatformGroupOwnership1700000000135();
+    await repair.up(queryRunner);
+    await repair.up(queryRunner);
+    assert.equal((await getActivePlatformAdministratorUserIds([userId], dataSource)).has(userId), true);
+    assert.equal((await groupRepo.findOneByOrFail({ id: ids.migrationGroup })).tenantId, 'tenant-default');
+    await membershipRepo.update({ id: membershipId }, { expiresAt: 1 });
+    await repair.up(queryRunner);
+    assert.equal((await getActivePlatformAdministratorUserIds([userId], dataSource)).size, 0);
+    await membershipRepo.delete({ id: membershipId });
+    await repair.up(queryRunner);
+    assert.equal(await membershipRepo.countBy({ id: membershipId }), 0);
+  } finally {
+    await membershipRepo.delete({ id: membershipId });
+    await groupRepo.delete({ id: groupId });
+  }
 }
 
 async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerprint) {

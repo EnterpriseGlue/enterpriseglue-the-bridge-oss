@@ -388,16 +388,17 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         </ProtectedRoute>
       )
     },
-    // TenantManagement is EE-only (multi-tenant mode)
-    // Uses ExtensionPage - shows fallback in OSS, actual page in EE
-    ...(multiTenantEnabled ? [{
+    // Keep legacy setup links valid in single-tenant deployments too.
+    {
       path: `${pathPrefix}admin/tenants`, 
       element: (
         <ProtectedRoute requireAdmin requiredPlatformPermissions={[PlatformPermission.SETTINGS_MANAGE]}>
-          <ExtensionPage name="tenant-management-page" />
+          {multiTenantEnabled
+            ? <ExtensionPage name="tenant-management-page" />
+            : <Navigate to={isRootLevel ? '/admin/settings' : '../admin/settings'} replace />}
         </ProtectedRoute>
       )
-    }] : []),
+    },
     ...((!multiTenantEnabled || !isRootLevel) ? [{
       path: `${pathPrefix}admin/audit-logs`,
       element: (

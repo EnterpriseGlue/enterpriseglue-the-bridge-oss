@@ -4,6 +4,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProtectedRoute } from '@src/shared/components/ProtectedRoute';
 
+const tenancy = vi.hoisted(() => ({ pooled: false }));
+vi.mock('@src/enterprise/extensionRegistry', () => ({ isMultiTenantEnabled: () => tenancy.pooled }));
+
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
@@ -45,6 +48,7 @@ const mockUseAuth = async (state: {
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tenancy.pooled = false;
   });
 
   it('shows loading state while auth bootstrap is still running', async () => {
@@ -182,7 +186,7 @@ describe('ProtectedRoute', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Navigate:/admin/tenants')).toBeInTheDocument();
+      expect(screen.getByText('Navigate:/admin/settings')).toBeInTheDocument();
     });
   });
 
@@ -210,7 +214,7 @@ describe('ProtectedRoute', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Navigate:/admin/tenants')).toBeInTheDocument();
+      expect(screen.getByText('Navigate:/admin/settings')).toBeInTheDocument();
     });
   });
 
@@ -236,5 +240,25 @@ describe('ProtectedRoute', () => {
     );
 
     expect(screen.getByText('Admin')).toBeInTheDocument();
+  });
+
+  it.each([
+    [false, '/t/default/projects', '/t/default/admin/settings'],
+    [true, '/t/alpha/projects', '/admin/tenants'],
+  ])('uses the setup destination for pooled=%s without losing tenant context', async (pooled, path, target) => {
+    tenancy.pooled = pooled;
+    await mockUseAuth({ user: { id: 'admin' }, isAuthenticated: true, permissions: { platform: ['platform:settings:manage'] } });
+    const { apiClient } = await import('@src/shared/api/client');
+    vi.mocked(apiClient.get).mockResolvedValue({ isConfigured: false });
+    render(<MemoryRouter initialEntries={[path]}><ProtectedRoute><div>Content</div></ProtectedRoute></MemoryRouter>);
+    expect(await screen.findByText(`Navigate:${target}`)).toBeInTheDocument();
+  });
+
+  it('allows single-tenant settings to finish setup without a redirect loop', async () => {
+    await mockUseAuth({ user: { id: 'admin' }, isAuthenticated: true, permissions: { platform: ['platform:settings:manage'] } });
+    render(<MemoryRouter initialEntries={['/t/default/admin/settings']}><ProtectedRoute requireAdmin><div>Settings</div></ProtectedRoute></MemoryRouter>);
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+    const { apiClient } = await import('@src/shared/api/client');
+    expect(apiClient.get).not.toHaveBeenCalled();
   });
 });

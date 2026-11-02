@@ -39,6 +39,11 @@ const SsoDatabaseEpochSchema = MigrationInventorySchema.extend({
   postgresPolicyProfile: z.literal('explicit-context/v1'),
 }).strict();
 
+const PlatformGroupDatabaseEpochSchema = MigrationInventorySchema.extend({
+  id: z.literal('platform-group-ownership'),
+  postgresPolicyProfile: z.literal('explicit-context/v1'),
+}).strict();
+
 const PlannedMigrationSchema = z.object({
   name: z.literal('AddCloudEmailPasskeys1700000000133'),
   timestamp: z.literal(1700000000133),
@@ -46,7 +51,7 @@ const PlannedMigrationSchema = z.object({
 
 const ImplementationInventorySchema = z.object({
   algorithm: z.literal('sha256-source-v1'),
-  purpose: z.literal('owner-transition-1700000000131-to-1700000000134-sso-connections/v1'),
+  purpose: z.literal('owner-transition-1700000000131-to-1700000000135-platform-groups/v1'),
   count: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
@@ -57,8 +62,8 @@ const ReleaseEffectInventorySchema = z.object({
 }).strict();
 
 const SchemaEpochManifestSchema = z.object({
-  schemaVersion: z.literal('enterpriseglue-schema-epoch/v4'),
-  id: z.literal('postgres-tenant-sso-connections-v4'),
+  schemaVersion: z.literal('enterpriseglue-schema-epoch/v5'),
+  id: z.literal('postgres-platform-group-ownership-v5'),
   target: z.object({
     databaseType: z.literal('postgres'),
     tenancyMode: z.literal('pooled'),
@@ -87,7 +92,7 @@ const SchemaEpochManifestSchema = z.object({
   executableMigrationInventory: MigrationInventorySchema,
   executableImplementationInventory: ImplementationInventorySchema,
   releaseEffectInventory: ReleaseEffectInventorySchema,
-  acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema, FutureDatabaseEpochSchema, SsoDatabaseEpochSchema]),
+  acceptedDatabaseEpochs: z.tuple([DatabaseEpochSchema, DatabaseEpochSchema, FutureDatabaseEpochSchema, SsoDatabaseEpochSchema, PlatformGroupDatabaseEpochSchema]),
   plannedMigration: PlannedMigrationSchema,
 }).strict();
 
@@ -143,7 +148,7 @@ function assertInventory(
 
 export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
   const manifest = SchemaEpochManifestSchema.parse(value);
-  const [pre, post, future, sso] = manifest.acceptedDatabaseEpochs;
+  const [pre, post, future, sso, platformGroups] = manifest.acceptedDatabaseEpochs;
   if (
     pre.id !== 'pre-enforcement'
     || pre.postgresPolicyProfile !== 'dual-context-compatibility/v1'
@@ -151,9 +156,9 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || post.postgresPolicyProfile !== 'explicit-context/v1'
     || future.id !== 'cloud-email-passkeys'
     || future.postgresPolicyProfile !== 'explicit-context/v1'
-    || manifest.executableMigrationInventory.through !== sso.through
-    || manifest.executableMigrationInventory.count !== sso.count
-    || manifest.executableMigrationInventory.sha256 !== sso.sha256
+    || manifest.executableMigrationInventory.through !== platformGroups.through
+    || manifest.executableMigrationInventory.count !== platformGroups.count
+    || manifest.executableMigrationInventory.sha256 !== platformGroups.sha256
     || manifest.roles.ownerMigration.through !== manifest.executableMigrationInventory.through
     || manifest.roles.ownerMigration.from.through !== pre.through
     || manifest.roles.ownerMigration.from.count !== pre.count
@@ -164,8 +169,8 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || manifest.roles.ownerMigration.intermediate.sha256 !== post.sha256
     || manifest.roles.ownerMigration.intermediate.postgresPolicyProfile !== post.postgresPolicyProfile
     || manifest.roles.ownerMigration.intermediate.timestamp !== post.through
-    || manifest.roles.ownerMigration.from.through + 3 !== manifest.executableMigrationInventory.through
-    || manifest.roles.ownerMigration.from.count + 3 !== manifest.executableMigrationInventory.count
+    || manifest.roles.ownerMigration.from.through + 4 !== manifest.executableMigrationInventory.through
+    || manifest.roles.ownerMigration.from.count + 4 !== manifest.executableMigrationInventory.count
     || manifest.upgradeContract.minimumDatabaseEpoch.through !== manifest.roles.ownerMigration.from.through
     || manifest.upgradeContract.minimumDatabaseEpoch.count !== manifest.roles.ownerMigration.from.count
     || manifest.upgradeContract.minimumDatabaseEpoch.sha256 !== manifest.roles.ownerMigration.from.sha256
@@ -177,8 +182,10 @@ export function parseSchemaEpochManifest(value: unknown): SchemaEpochManifest {
     || manifest.plannedMigration.timestamp !== future.through
     || sso.through !== future.through + 1
     || sso.count !== future.count + 1
+    || platformGroups.through !== sso.through + 1
+    || platformGroups.count !== sso.count + 1
   ) {
-    throw new Error('Schema-epoch manifest does not describe the bounded SSO connection owner transition');
+    throw new Error('Schema-epoch manifest does not describe the bounded platform group ownership owner transition');
   }
   return manifest;
 }
@@ -219,7 +226,7 @@ export function assertSchemaEpochInvocation(
  * Bind this process to the manifest's bounded executable migration inventory.
  *
  * The application and separately credentialed owner job use the same signed
- * bytes. The owner may apply only 0132, 0133 and 0134 in order, verifying the
+ * bytes. The owner may apply only 0132, 0133, 0134 and 0135 in order, verifying the
  * explicit-context policy after 0132; application startup is verify-only.
  */
 export function bindDataSourceToSchemaEpoch(

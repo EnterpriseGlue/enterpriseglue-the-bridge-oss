@@ -568,9 +568,9 @@ async function verifySchemaEpochPolicy(
   }
 }
 
-/** Execute the signed 0131 -> 0132 -> 0133 -> 0134 SSO connection transition without the
- * generic migration policy lease or any bootstrap/repair/baseline path. Each
- * stage's exact ledger and policy are verified before the next stage can run. */
+/** Execute the signed 0131 through 0135 transition without bootstrap or baseline
+ * paths. Only the 0135 data repair leases owner access to the two group tables;
+ * every stage's exact ledger and policy are verified before the next stage. */
 async function runBoundedSchemaEpochOwnerMigration(
   dataSource: DataSource,
   manifest: ReturnType<typeof loadBundledSchemaEpochManifest>,
@@ -624,7 +624,14 @@ async function runBoundedSchemaEpochOwnerMigration(
     dataSource.migrations.splice(0,dataSource.migrations.length,...executableMigrations.filter(migration=>Number(migration.name!.slice(-13))<=target.through));
     try {
       if(!await dataSource.showMigrations())throw new Error(`Signed owner transition expected migration ${target.through}`);
-      await dataSource.runMigrations({transaction:'all'});
+      const migrate = () => dataSource.runMigrations({transaction:'all'});
+      if (target.id === 'platform-group-ownership') {
+        await withPostgresMigrationContext(dataSource, 'apply', migrate, {
+          tables: new Set(['authz_groups', 'authz_group_memberships']),
+        });
+      } else {
+        await migrate();
+      }
     }finally{dataSource.migrations.splice(0,dataSource.migrations.length,...executableMigrations);}
     const stage=dataSource.createQueryRunner();
     try {
@@ -638,8 +645,8 @@ async function runBoundedSchemaEpochOwnerMigration(
   const verifiedRunner = dataSource.createQueryRunner();
   try {
     const accepted = await verifyExecutedSchemaEpoch(dataSource, verifiedRunner, manifest);
-    if (accepted.id !== 'tenant-sso-connections') {
-      throw new Error('Signed owner transition did not reach the exact 0134 SSO connection ledger');
+    if (accepted.id !== 'platform-group-ownership') {
+      throw new Error('Signed owner transition did not reach the exact 0135 platform group ownership ledger');
     }
     const cohortMetadata = dataSource.getMetadata('ReleaseEffectCohort');
     await assertReleaseEffectCohortTableShape(

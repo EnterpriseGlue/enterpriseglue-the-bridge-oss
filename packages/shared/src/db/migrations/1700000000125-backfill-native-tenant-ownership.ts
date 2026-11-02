@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import { LEGACY_PLATFORM_GROUP_IDS } from './support/platform-group-ownership.js';
 
 const TENANT_OWNED_TABLES = new Set([
   'audit_logs', 'authz_audit_log', 'authz_groups', 'authz_group_memberships', 'authz_policies',
@@ -23,9 +24,18 @@ export class BackfillNativeTenantOwnership1700000000125 implements MigrationInte
       if (!TENANT_OWNED_TABLES.has(metadata.tableName)) continue;
       const tenantColumn = metadata.columns.find((column) => column.databaseName === 'tenant_id');
       if (!tenantColumn || !await queryRunner.hasTable(metadata.tablePath)) continue;
+      const column = (name: string) => queryRunner.connection.driver.escape(name);
+      const platformGroups = LEGACY_PLATFORM_GROUP_IDS.map((id) => `'${id}'`).join(', ');
+      // A platform group and its memberships remain global even when the same
+      // user also owns tenant-scoped resources. Tenant ownership is not a role.
+      const platformExclusion = metadata.tableName === 'authz_groups'
+        ? ` AND ${column('id')} NOT IN (${platformGroups})`
+        : metadata.tableName === 'authz_group_memberships'
+          ? ` AND ${column('group_id')} NOT IN (${platformGroups})`
+          : '';
       await queryRunner.query(
         `UPDATE ${tableRef(queryRunner, metadata.tablePath)} SET ${queryRunner.connection.driver.escape('tenant_id')} = 'tenant-default' ` +
-        `WHERE ${queryRunner.connection.driver.escape('tenant_id')} IS NULL`,
+        `WHERE ${queryRunner.connection.driver.escape('tenant_id')} IS NULL${platformExclusion}`,
       );
     }
   }

@@ -1,4 +1,7 @@
 import { ssoConnectionService } from '@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js';
+import { BackfillNativeTenantOwnership1700000000125 } from '@enterpriseglue/shared/db/migrations/1700000000125-backfill-native-tenant-ownership.js';
+import { RestorePlatformGroupOwnership1700000000135 } from '@enterpriseglue/shared/db/migrations/1700000000135-restore-platform-group-ownership.js';
+import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { PlatformUserResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -123,6 +126,42 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const callback=await browser.get('/api/auth/identity/callback').query({state,code:'verified-code'});
     return {browser,callback};
   }
+  it('preserves and repairs global administrator authority under forced RLS without promoting tenant administrators', async () => {
+    const administrator = await userService.createPendingUser({ email: 'ownership-admin@example.test', platformRole: 'admin', createdByUserId: 'fixture-operator' });
+    const member = await userService.createPendingUser({ email: 'ownership-member@example.test', createdByUserId: 'fixture-operator' });
+    const tenant = await tenantService.create({ name: 'Ownership tenant', slug: 'ownership-tenant', ownerUserId: member.id });
+    try {
+      const check = (userId: string) => runWithTenantDatabaseContext({ tenantId: tenant.id, tenantSlug: tenant.slug }, () =>
+        permissionService.hasPermission('platform:tenants:view', { userId, tenantId: tenant.id, resourceType: 'platform' }));
+      expect(await check(administrator.id)).toBe(true);
+      expect(await check(member.id)).toBe(false);
+      await withPostgresMigrationContext(owner, 'apply', async () => {
+        const runner = owner.createQueryRunner();
+        try {
+          // Limit the historical replay to this test's authorization tables.
+          await new BackfillNativeTenantOwnership1700000000125().up({
+            connection: { driver: owner.driver, entityMetadatas: owner.entityMetadatas.filter(metadata => ['authz_groups', 'authz_group_memberships'].includes(metadata.tableName)) },
+            hasTable: runner.hasTable.bind(runner), query: runner.query.bind(runner),
+          } as any);
+          expect((await getActivePlatformAdministratorUserIds([administrator.id], owner)).has(administrator.id)).toBe(true);
+          await runner.manager.getRepository(AuthzGroupMembership).update({ userId: administrator.id, groupId: PLATFORM_ADMINISTRATORS_GROUP_ID }, { tenantId: 'tenant-default' });
+          expect(await getActivePlatformAdministratorUserIds([administrator.id], owner)).toEqual(new Set());
+          await new RestorePlatformGroupOwnership1700000000135().up(runner);
+        } finally { await runner.release(); }
+      }, { tables: new Set(['authz_groups', 'authz_group_memberships']) });
+      expect((await getActivePlatformAdministratorUserIds([administrator.id], runtime)).has(administrator.id)).toBe(true);
+      expect(await check(administrator.id)).toBe(true);
+      expect(await check(member.id)).toBe(false);
+      await userService.updateUser(administrator.id, { platformRole: 'user' });
+      expect(await check(administrator.id)).toBe(false);
+    } finally {
+      await admin.query(`DELETE FROM ${schema}.authz_group_memberships WHERE user_id IN ($1,$2)`, [administrator.id, member.id]);
+      await admin.query(`DELETE FROM ${schema}.role_assignments WHERE principal_id IN ($1,$2)`, [administrator.id, member.id]);
+      await admin.query(`DELETE FROM ${schema}.tenants WHERE id=$1`, [tenant.id]);
+      await admin.query(`DELETE FROM ${schema}.users WHERE id IN ($1,$2)`, [administrator.id, member.id]);
+    }
+  });
+
   it('reads scoped SSO policy through forced RLS and protects active tenant proxy routes',async()=>{
     const tenant=await tenantService.create({name:'SSO policy fixture',slug:'sso-policy-fixture'});
     const profile={key:'rls.proxy',displayName:'RLS proxy',host:'proxy.example.net',port:8090,enabled:true,scopeKeys:[tenant.id],requiredScopeKeys:[],allowedIdentityProviderHosts:['login.microsoftonline.com'],allowPrivateProxy:false};
