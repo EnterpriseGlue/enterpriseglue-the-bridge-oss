@@ -46,7 +46,7 @@
     "Compose rendering passed all five compose-render CI steps and the identity-rehearsal, pooled-tenancy and self-hosted configuration-bundle combinations.",
     "OpenShift base and dev, staging and production overlays render without a backend application-data PVC; staging and production retain their configuration and secret projections.",
     "CI contracts (218 tests), CI change detection (120 tests), focused deployment contracts (54 tests), shell syntax, configuration deployment, documentation boundary, package-version discipline and release-note preflight passed locally with Node.js 24.10.0 and pnpm 11.0.8.",
-    "No application source or database schema changed. Container startup, image smoke and external OpenShift rollout qualification were not run locally."
+    "The deployment cleanup changes no application source or database schema. Its container startup, image smoke and external OpenShift rollout qualification were not run locally."
   ],
   "packages": []
 }
