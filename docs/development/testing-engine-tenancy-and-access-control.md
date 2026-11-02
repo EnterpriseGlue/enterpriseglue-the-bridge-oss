@@ -1132,3 +1132,12 @@ A clean validation belongs to one detached plan, exact instance selection, varia
 Navigation selection storage is scoped to the authenticated user and tenant. Ignore the former global cache; never turn an invalid or different-engine handoff into an empty source-wide selection. Keep variable values and audit reasons out of session storage and query-cache keys.
 
 Migration variables use global process scope. JSON is serialized once as engine `Json`; unsupported local scope and invalid numeric values are refused. The backend places variables inside the engine `migrationPlan` for direct and batch execution. Validate those same variables with the plan, consume `variableReports` as a name-keyed map, and surface its failures before execution. No entity, SQL migration, database privilege or tenant-policy changes are required.
+
+## Historic process lookup errors
+
+Exercise missing historic process IDs through both engine-wide and resource-aware
+authorization. Only a typed engine GET 404 becomes a generic HTTP 404. The engine
+tenant check and runtime-resource permission lookup must still run; a foreign
+engine must be rejected before instance transport. Upstream 401/403, throttling,
+transport and availability errors must retain their failure classification. Test
+that unknown errors expose no engine URL, credentials or upstream response body.

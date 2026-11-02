@@ -1,0 +1,82 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "process-history-not-found",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Preserves not-found responses for missing historic process instances after tenant and runtime authorization.",
+  "userImpact": [
+    "Looking up a process ID that does not exist on the selected engine returns a generic not-found response instead of an internal error."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Historic process-instance detail returns HTTP 404 for a typed engine GET 404; other typed failures retain their existing status and safe diagnostics.",
+      "OpenAPI documents the engine selector, typed error envelopes and both tenant-prefixed and verified-host compatibility paths for historic process-instance detail."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema or persisted-data changes."
+    ]
+  },
+  "security": [
+    "Authentication, engine tenancy, runtime-resource permissions and private engine transport remain mandatory.",
+    "Unknown errors and upstream response bodies are not disclosed; upstream authorization or availability failures are not classified as not found."
+  ],
+  "documentation": [
+    "docs/development/testing-engine-tenancy-and-access-control.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "Engineering",
+    "pages": [],
+    "reason": "Technical HTTP error classification; no changed administrator setup or user workflow."
+  },
+  "knownLimitations": [
+    "A published image remains immutable; deployments require a newly qualified forward release."
+  ],
+  "rollback": [
+    "Revert the application image; there are no data changes to undo."
+  ],
+  "validation": [
+    "Route tests cover engine-wide and resource-aware missing instances, foreign-engine rejection, typed upstream authorization/availability failures, lookalike errors and safe unknown-error responses.",
+    "PostgreSQL integration uses real application authentication, an owned bounded HTTP engine peer, exact endpoint policy and an actual engine HTTP 404.",
+    "Source-to-generated OpenAPI regression checks discover the historic detail registration and both router mounts, and verify required selectors, success and error schemas.",
+    "Protected candidate, current exact-image security, database portability and live post-upgrade denial checks remain required."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.9",
+      "newVersion": "0.23.10",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.11",
+      "newVersion": "0.20.12",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.8",
+      "newVersion": "0.28.9",
+      "impact": "patch"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, type RequestHandler } from 'express'
 import { z } from 'zod'
 import {
   listProcessDefinitions,
@@ -25,11 +25,12 @@ import {
   listFailedExternalTasks,
   retryProcessInstanceFailures,
 } from './mission-control-service.js'
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
+import { AppError, asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
+import { BpmnEngineOperationError } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { presentHistoricVariables, presentRuntimeVariables, presentVariableHistory, preventVariableResponseCaching, requireVariableValueFilterAccess } from './variable-visibility.js'
 import {
   filterRuntimeItemsByProcessDefinitionKeys,
@@ -80,11 +81,24 @@ const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinit
   engineIdFrom: 'any',
 })
 
-const requireHistoricProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
-  resourceKind: 'process_definition',
-  definitionPath: 'history/process-instance',
-  resourceKeyFields: ['processDefinitionKey', 'definitionKey'],
-})
+// Resolve a missing ID within the selected, authorized engine as not found.
+// Do not reclassify upstream authentication, transport, or malformed-response errors.
+function historicProcessLookupError(error: unknown): unknown {
+  return error instanceof BpmnEngineOperationError
+    && error.details?.engineStatus === 404
+    && error.details?.operationClass === 'engine.read'
+    ? Errors.notFound('Process instance')
+    : error
+}
+
+const requireHistoricProcessInstanceAction = (actionId: string): RequestHandler => {
+  const guard = requireRuntimeDefinitionAction(actionId, {
+    resourceKind: 'process_definition',
+    definitionPath: 'history/process-instance',
+    resourceKeyFields: ['processDefinitionKey', 'definitionKey'],
+  })
+  return (req, res, next) => guard(req, res, (error) => next(historicProcessLookupError(error)))
+}
 
 // Apply auth middleware only to /mission-control-api routes (not globally).
 // Engine authorization is route-specific so scoped RBAC grants can stay granular.
@@ -319,8 +333,10 @@ r.get('/mission-control-api/history/process-instances/:id', requireHistoricProce
     const data = await getHistoricProcessInstanceById(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
     res.json(ProcessInstanceDetailSchema.parse(redacted))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load historic process instance')
+  } catch (error) {
+    const normalized = historicProcessLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load historic process instance')
   }
 }))
 

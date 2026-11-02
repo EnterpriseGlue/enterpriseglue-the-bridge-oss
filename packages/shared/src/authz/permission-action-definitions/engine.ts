@@ -1750,6 +1750,15 @@ export const ENGINE_AUTHZ_ACTIONS = [
             'response payload is passed through the PII redaction service',
           ],
         },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/history/process-instances/{id}',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engineId is resolved from query string by action middleware',
+            'response payload is passed through the PII redaction service',
+          ],
+        },
       ],
     },
   {

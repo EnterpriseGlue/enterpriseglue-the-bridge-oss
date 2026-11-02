@@ -1212,20 +1212,49 @@ registry.registerPath({
   },
 });
 
-// GET /mission-control-api/history/process-instances/{id} (get historic instance)
-registry.registerPath({
-  method: 'get',
-  path: '/mission-control-api/history/process-instances/{id}',
-  ...authzExtension('engine.runtime.history.process-instances.read', 'GET', '/mission-control-api/history/process-instances/{id}'),
-  request: { params: z.object({ id: z.string() }) },
-  responses: {
-    200: {
-      description: 'Historic process instance details',
-      content: { 'application/json': { schema: MissionControlProcessInstanceDetailSchema } },
-    },
-    404: { description: 'Not found' },
-  },
+// The same handler is mounted at the explicit tenant path and the root-shaped
+// compatibility path. In pooled mode the latter requires a verified tenant host.
+const HistoricProcessErrorSchema = z.object({
+  error: z.string(),
+  code: z.string(),
+  field: z.string().optional(),
+  details: z.unknown().optional(),
 });
+const historicProcessErrorResponse = (description: string, code?: string) => ({
+  description,
+  content: { 'application/json': { schema: code
+    ? HistoricProcessErrorSchema.extend({ code: z.literal(code) })
+    : HistoricProcessErrorSchema } },
+});
+for (const tenantScoped of [false, true]) {
+  registry.registerPath({
+    method: 'get',
+    path: `${tenantScoped ? '/t/{tenantSlug}' : ''}/mission-control-api/history/process-instances/{id}`,
+    description: tenantScoped
+      ? 'Read a historic process within the selected tenant and authorized engine.'
+      : 'Compatibility path; pooled deployments require a verified tenant hostname.',
+    security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+    ...authzExtension('engine.runtime.history.process-instances.read', 'GET', `${tenantScoped ? '/t/{tenantSlug}' : ''}/mission-control-api/history/process-instances/{id}`),
+    request: {
+      params: tenantScoped
+        ? z.object({ tenantSlug: TenantSlugSchema, id: z.string().min(1) })
+        : z.object({ id: z.string().min(1) }),
+      query: z.object({ engineId: z.string().min(1) }),
+    },
+    responses: {
+      200: {
+        description: 'Historic process instance details, including engine-native extension fields',
+        content: { 'application/json': { schema: MissionControlProcessInstanceDetailSchema } },
+      },
+      400: historicProcessErrorResponse('Missing or invalid engine selector or tenant context'),
+      401: historicProcessErrorResponse('Authentication required or invalid credentials'),
+      403: historicProcessErrorResponse('Tenant, engine or runtime-resource access denied', 'FORBIDDEN'),
+      404: historicProcessErrorResponse('Tenant, engine or process not found; missing process IDs return a generic message', 'NOT_FOUND'),
+      500: historicProcessErrorResponse('Internal failure; unknown historic lookup errors are sanitized'),
+      502: historicProcessErrorResponse('Typed engine operation, transport or malformed-response failure'),
+    },
+  });
+}
 
 // GET /mission-control-api/history/variable-instances (historic variables)
 registry.registerPath({
