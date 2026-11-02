@@ -16,7 +16,10 @@ case "$browser_e2e_grep" in
     )
     ;;
   '@access-control-layout')
-    browser_e2e_files=(test/e2e/access-control-layout.spec.ts)
+    browser_e2e_files=(
+      test/e2e/access-control-layout.spec.ts
+      test/e2e/platform-admin-setup-routing.spec.ts
+    )
     ;;
   '@headless-admin')
     browser_e2e_files=()

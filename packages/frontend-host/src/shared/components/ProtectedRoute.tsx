@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { InlineLoading } from '@carbon/react';
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../../shared/api/client';
+import { isMultiTenantEnabled } from '../../enterprise/extensionRegistry';
 import {
   hasAdminRouteAccess,
   hasPlatformPermission,
@@ -39,21 +40,23 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   const homePath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
 
   // Setup-exempt paths (accessible even when setup needed)
+  const multiTenantEnabled = isMultiTenantEnabled();
   const setupExemptPaths = ['/admin/tenants', '/admin/email', '/logout', '/profile'];
   const isExemptPath = setupExemptPaths.some(p => effectivePathname.includes(p));
+  const isSetupPath = !multiTenantEnabled && effectivePathname === '/admin/settings';
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !platformSettingsAllowed || skipSetupCheck || isExemptPath) {
+    if (isLoading || !isAuthenticated || !platformSettingsAllowed || skipSetupCheck || isExemptPath || isSetupPath) {
       setSetupChecked(true);
+      setNeedsSetup(false);
       return;
     }
 
+    setSetupChecked(false);
     const checkSetup = async () => {
       try {
         const data = await apiClient.get<{ isConfigured?: boolean }>('/api/admin/setup-status');
-        if (!data?.isConfigured) {
-          setNeedsSetup(true);
-        }
+        setNeedsSetup(!data?.isConfigured);
       } catch {
         // Ignore errors, assume configured
       } finally {
@@ -62,7 +65,7 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
     };
 
     checkSetup();
-  }, [isLoading, isAuthenticated, platformSettingsAllowed, skipSetupCheck, isExemptPath]);
+  }, [isLoading, isAuthenticated, platformSettingsAllowed, skipSetupCheck, isExemptPath, isSetupPath]);
 
   if (isLoading) {
     return (
@@ -92,8 +95,8 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   }
 
   // Admin needs to complete setup - redirect to tenant management
-  if (needsSetup && !isExemptPath) {
-    const setupPath = tenantSlug ? `${tenantPrefix}/admin/tenants` : '/admin/tenants';
+  if (needsSetup && !isExemptPath && !isSetupPath) {
+    const setupPath = multiTenantEnabled ? '/admin/tenants' : `${tenantPrefix}/admin/settings`;
     return <Navigate to={setupPath} replace state={{ setupRequired: true }} />;
   }
 

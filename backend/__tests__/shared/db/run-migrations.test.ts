@@ -249,7 +249,9 @@ describe('runMigrations bootstrap behavior', () => {
         const last = dataSource.migrations[dataSource.migrations.length - 1]?.name;
         expect(last).toBe(dataSource.runMigrations.mock.calls.length === 1
           ? 'EnforceExplicitPostgresContext1700000000132'
-          : dataSource.runMigrations.mock.calls.length===2?'AddCloudEmailPasskeys1700000000133':'AddSsoConnections1700000000134');
+          : dataSource.runMigrations.mock.calls.length === 2 ? 'AddCloudEmailPasskeys1700000000133'
+          : dataSource.runMigrations.mock.calls.length === 3 ? 'AddSsoConnections1700000000134'
+          : 'RestorePlatformGroupOwnership1700000000135');
       }),
       transaction: vi.fn(),
     };
@@ -266,13 +268,14 @@ describe('runMigrations bootstrap behavior', () => {
         sha256: 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d',
         postgresPolicyProfile: 'explicit-context/v1',
       })
-      .mockResolvedValue({ ...loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[3] });
+      .mockResolvedValueOnce({ ...loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[3] })
+      .mockResolvedValue({ ...loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[4] });
 
     try {
       await runSchemaEpochOwnerMigrations();
-      expect(dataSource.runMigrations).toHaveBeenCalledTimes(3);
+      expect(dataSource.runMigrations).toHaveBeenCalledTimes(4);
       expect(verifyOwnerMigrationStartingEpoch).toHaveBeenCalledOnce();
-      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddSsoConnections1700000000134');
+      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('RestorePlatformGroupOwnership1700000000135');
       expect(dataSource.migrations.some((migration: { name?: string }) =>
         migration.name === 'EnforceExplicitPostgresContext1700000000132')).toBe(true);
       expect(dataSource.synchronize).not.toHaveBeenCalled();
@@ -281,7 +284,9 @@ describe('runMigrations bootstrap behavior', () => {
       expect(policyRunner.createIndex).not.toHaveBeenCalled();
       expect(rbacSeed).not.toHaveBeenCalled();
       expect(dataSource.transaction).not.toHaveBeenCalled();
-      expect(withPostgresMigrationContext).not.toHaveBeenCalled();
+      expect(withPostgresMigrationContext).toHaveBeenCalledExactlyOnceWith(dataSource, 'apply', expect.any(Function), {
+        tables: new Set(['authz_groups', 'authz_group_memberships']),
+      });
       expect(grantSchemaEpochReleaseEffectCohortRuntimePrivileges).toHaveBeenCalledExactlyOnceWith(
         dataSource,
         policyRunner,
@@ -370,11 +375,12 @@ describe('runMigrations bootstrap behavior', () => {
       id: 'cloud-email-passkeys', through: 1700000000133, count: 135,
       sha256: 'fda1b411123ad655519308b8842178ce96d4e997bb8a7bd5f52648cf16875e9d',
       postgresPolicyProfile: 'explicit-context/v1',
-    }).mockResolvedValue(loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[3]);
+    }).mockResolvedValueOnce(loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[3])
+      .mockResolvedValue(loadBundledSchemaEpochManifest().acceptedDatabaseEpochs[4]);
     try {
       await runSchemaEpochOwnerMigrations();
-      expect(dataSource.runMigrations).toHaveBeenCalledTimes(2);
-      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('AddSsoConnections1700000000134');
+      expect(dataSource.runMigrations).toHaveBeenCalledTimes(3);
+      expect(dataSource.migrations[dataSource.migrations.length - 1]?.name).toBe('RestorePlatformGroupOwnership1700000000135');
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(1, runner, 'explicit-context/v1');
       expect(verifyPostgresTenantRlsForPolicyProfile).toHaveBeenNthCalledWith(2, runner, 'explicit-context/v1');
       expect(dataSource.synchronize).not.toHaveBeenCalled();

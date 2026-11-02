@@ -22,6 +22,8 @@ export const executableImplementationFiles = Object.freeze([
   'packages/shared/src/db/migrations/1700000000132-enforce-explicit-postgres-context.ts',
   'packages/shared/src/db/migrations/1700000000133-add-cloud-email-passkeys.ts',
   'packages/shared/src/db/migrations/1700000000134-add-sso-connections.ts',
+  'packages/shared/src/db/migrations/1700000000135-restore-platform-group-ownership.ts',
+  'packages/shared/src/db/migrations/support/platform-group-ownership.ts',
   'packages/shared/src/infrastructure/persistence/entities/PlatformSettings.ts',
   'packages/shared/src/infrastructure/persistence/entities/TenantLoginPolicy.ts',
   'packages/shared/src/db/migrations/plugin-migration-schema.ts',
@@ -49,7 +51,7 @@ export function implementationInventoryFromSources(sources) {
     .sort((left, right) => left.path.localeCompare(right.path))
   return {
     algorithm: 'sha256-source-v1',
-    purpose: 'owner-transition-1700000000131-to-1700000000134-sso-connections/v1',
+    purpose: 'owner-transition-1700000000131-to-1700000000135-platform-groups/v1',
     count: entries.length,
     sha256: sha256(JSON.stringify(entries)),
   }

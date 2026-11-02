@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "enterpriseglue-schema-epoch/v4",
-  "id": "postgres-tenant-sso-connections-v4",
+  "schemaVersion": "enterpriseglue-schema-epoch/v5",
+  "id": "postgres-platform-group-ownership-v5",
   "target": {
     "databaseType": "postgres",
     "tenancyMode": "pooled"
@@ -28,7 +28,7 @@
         "name": "EnforceExplicitPostgresContext1700000000132",
         "timestamp": 1700000000132
       },
-      "through": 1700000000134,
+      "through": 1700000000135,
       "runtimeGrant": "configured-role-release-effect-cohorts-and-cloud-passkeys/v1"
     }
   },
@@ -44,15 +44,15 @@
     "emptyMigrationLedger": "requires-separate-signed-recovery"
   },
   "executableMigrationInventory": {
-    "through": 1700000000134,
-    "count": 136,
-    "sha256": "3ff5b5798ef9942c4d30998c5496b7c03e5c55fbe3a201228a7681bcce1c18d5"
+    "through": 1700000000135,
+    "count": 137,
+    "sha256": "db7b67dfb5c2a27c0cc13ab4b1b55691ded3a7db8ff1d0101d7340b585bca61c"
   },
   "executableImplementationInventory": {
     "algorithm": "sha256-source-v1",
-    "purpose": "owner-transition-1700000000131-to-1700000000134-sso-connections/v1",
-    "count": 25,
-    "sha256": "2e9bd8a155a6e9628f0f1809cff0e832e43628ea46e9ca80bce0a015dee62565"
+    "purpose": "owner-transition-1700000000131-to-1700000000135-platform-groups/v1",
+    "count": 27,
+    "sha256": "a8c56a9d1d4b8fade74eb6e598d0b925bdd4c59c8c0954b2e4704a3cea502eab"
   },
   "releaseEffectInventory": {
     "version": "release-effect-inventory.enterpriseglue.io/v1",
@@ -85,6 +85,13 @@
       "through": 1700000000134,
       "count": 136,
       "sha256": "3ff5b5798ef9942c4d30998c5496b7c03e5c55fbe3a201228a7681bcce1c18d5",
+      "postgresPolicyProfile": "explicit-context/v1"
+    },
+    {
+      "id": "platform-group-ownership",
+      "through": 1700000000135,
+      "count": 137,
+      "sha256": "db7b67dfb5c2a27c0cc13ab4b1b55691ded3a7db8ff1d0101d7340b585bca61c",
       "postgresPolicyProfile": "explicit-context/v1"
     }
   ],

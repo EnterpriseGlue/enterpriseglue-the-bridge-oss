@@ -35,20 +35,20 @@ function registeredMigrations() {
     });
 }
 
-describe('immutable SSO connection schema-epoch transition', () => {
-  it('binds the exact 0131 -> 0132 -> 0133 -> 0134 owner inventory', () => {
+describe('immutable platform group ownership schema-epoch transition', () => {
+  it('binds the exact 0131 -> 0132 -> 0133 -> 0134 -> 0135 owner inventory', () => {
     const manifest = loadBundledSchemaEpochManifest();
     const migrations = registeredMigrations();
     const dataSource = { migrations } as any;
 
-    expect(manifest.executableMigrationInventory.through).toBe(1700000000134);
+    expect(manifest.executableMigrationInventory.through).toBe(1700000000135);
     expect(manifest.upgradeContract.minimumDatabaseEpoch).toEqual(manifest.roles.ownerMigration.from);
     expect(manifest.upgradeContract.freshDatabase).toBe('requires-separate-signed-bootstrap');
     expect(manifest.upgradeContract.emptyMigrationLedger).toBe('requires-separate-signed-recovery');
     expect(manifest.executableImplementationInventory).toMatchObject({
       algorithm: 'sha256-source-v1',
-      purpose: 'owner-transition-1700000000131-to-1700000000134-sso-connections/v1',
-      count: 25,
+      purpose: 'owner-transition-1700000000131-to-1700000000135-platform-groups/v1',
+      count: 27,
     });
     expect(manifest.releaseEffectInventory).toEqual({
       version: RELEASE_EFFECT_INVENTORY_VERSION,
@@ -62,6 +62,7 @@ describe('immutable SSO connection schema-epoch transition', () => {
       1700000000132,
       1700000000133,
       1700000000134,
+      1700000000135,
     ]);
     expect(manifest.plannedMigration).toEqual({
       name: 'AddCloudEmailPasskeys1700000000133',
@@ -76,12 +77,13 @@ describe('immutable SSO connection schema-epoch transition', () => {
       'explicit-context/v1',
       'explicit-context/v1',
       'explicit-context/v1',
+      'explicit-context/v1',
     ]);
     bindDataSourceToSchemaEpoch(dataSource, manifest);
 
     const executable = canonicalMigrationInventory(dataSource.migrations);
-    expect(executable).toHaveLength(136);
-    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000134);
+    expect(executable).toHaveLength(137);
+    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000135);
     expect(migrationInventorySha256(executable)).toBe(manifest.executableMigrationInventory.sha256);
   });
 
@@ -133,12 +135,12 @@ describe('immutable SSO connection schema-epoch transition', () => {
     );
   });
 
-  it('allows the owner to execute the exact 0132 and 0133 migrations and nothing later', () => {
+  it('allows the owner to execute the exact 0132 through 0135 migrations and nothing later', () => {
     const manifest = loadBundledSchemaEpochManifest();
     const dataSource = { migrations: registeredMigrations() } as any;
     bindDataSourceToSchemaEpoch(dataSource, manifest);
     const executable = canonicalMigrationInventory(dataSource.migrations);
-    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000134);
+    expect(executable[executable.length - 1]?.timestamp).toBe(1700000000135);
   });
 
   it('accepts only the exact pre-, post-, and future compatibility ledgers', () => {
@@ -149,7 +151,7 @@ describe('immutable SSO connection schema-epoch transition', () => {
       all.filter((migration) => migration.timestamp <= 1700000000131),
     )).toMatchObject({ id: 'pre-enforcement' });
     expect(resolveAcceptedDatabaseEpoch(manifest, all.filter((migration) => migration.timestamp <= 1700000000132))).toMatchObject({ id: 'post-enforcement' });
-    expect(resolveAcceptedDatabaseEpoch(manifest, all)).toMatchObject({ id: 'tenant-sso-connections' });
+    expect(resolveAcceptedDatabaseEpoch(manifest, all)).toMatchObject({ id: 'platform-group-ownership' });
     expect(() => resolveAcceptedDatabaseEpoch(manifest, all.slice(1))).toThrow(/not accepted/);
   });
 
@@ -164,7 +166,7 @@ describe('immutable SSO connection schema-epoch transition', () => {
       manifest,
       all.filter((migration) => migration.timestamp <= 1700000000132),
     )).toBe('post-enforcement');
-    expect(resolveOwnerMigrationStartingEpoch(manifest, all)).toBe('tenant-sso-connections');
+    expect(resolveOwnerMigrationStartingEpoch(manifest, all)).toBe('platform-group-ownership');
     expect(() => resolveOwnerMigrationStartingEpoch(manifest, [])).toThrow(
       /starting epoch is not accepted/,
     );
@@ -179,7 +181,7 @@ describe('immutable SSO connection schema-epoch transition', () => {
       'utf8',
     ));
     manifest.acceptedDatabaseEpochs[1].through = 1700000000133;
-    expect(() => parseSchemaEpochManifest(manifest)).toThrow(/bounded SSO connection owner transition/);
+    expect(() => parseSchemaEpochManifest(manifest)).toThrow(/bounded platform group ownership owner transition/);
     manifest.acceptedDatabaseEpochs[1].through = 1700000000132;
     manifest.acceptedDatabaseEpochs[2].sha256 = '0'.repeat(64);
     expect(() => parseSchemaEpochManifest(manifest)).toThrow();
