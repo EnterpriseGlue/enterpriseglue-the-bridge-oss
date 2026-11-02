@@ -1056,3 +1056,18 @@ tenant URL, principal/session, permission snapshot and preview lifetime. Late
 allowances, denials and errors cannot navigate or update a replaced view. Query
 parameters are constructed from the captured artifact, without retargeting an
 earlier decision to the current selection.
+
+Mission Control's process overview/detail and decision overview/detail Edit
+links share the reverse handoff. The selected edit-target response must match
+the current engine, definition key, kind and version. Its project/file identities
+and optional commit/file-version selectors are validated and copied before the
+bridge request. Invalid, refreshing or noneditable metadata cannot dispatch.
+Version changes (including switching away and back), instance/route changes,
+permission/session replacement and target updates revoke older callbacks.
+
+Navigation retains only the verified source selectors; absent commit or semantic
+file-version values remain absent. Concurrent clicks in the same selection issue
+one bridge evaluation. A current denial remains visible, while stale denials and
+failures cannot update the replacement selection. These controls preserve the
+server-owned runtime-resource edit-target and composite bridge checks; they do
+not infer fine-grained runtime grants from the browser permission snapshot.

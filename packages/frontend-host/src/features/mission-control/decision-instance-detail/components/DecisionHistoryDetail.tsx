@@ -25,8 +25,7 @@ import { PageLoader } from '../../../../shared/components/PageLoader'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { apiClient } from '../../../../shared/api/client'
 import { fetchList } from '../../../../shared/api/fetchList';
-import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
-import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
+import { useStarbaseEditBridge } from '../../shared/useStarbaseEditBridge'
 import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
 import { useActionDecision } from '../../../../shared/auth/guards'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
@@ -36,7 +35,7 @@ import { LoadingState } from '../../../shared/components/LoadingState'
 import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 import type { HistoricDecisionIo, HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
-import { useGuardedEngineTask, withEngineContext } from '../../shared/engineContext'
+import { withEngineContext } from '../../shared/engineContext'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -68,13 +67,7 @@ export default function DecisionHistoryDetail() {
     [selectedEngineId],
   )
   const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
-  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
-  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
-  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
-  React.useEffect(() => {
-    setBridgeError(null)
-    setBridgeDecision(null)
-  }, [selectedEngineId])
+
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
@@ -241,43 +234,9 @@ export default function DecisionHistoryDetail() {
     decisionEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(async () => {
-    if (!decisionEditTarget?.fileId || decisionVersion === null || !decisionKey) return
-    setBridgeError(null)
-    setBridgeDecision(null)
-    await runForCurrentEngine(
-      (requestEngineId) => evaluateMissionControlStarbaseBridge({
-        engineId: requestEngineId,
-        projectId: decisionEditTarget.projectId,
-        fileId: decisionEditTarget.fileId,
-        definitionId: decision?.decisionDefinitionId || undefined,
-        definitionKey: decisionKey,
-        decisionDefinitionId: decision?.decisionDefinitionId || undefined,
-        decisionDefinitionKey: decisionKey,
-        kind: 'decision',
-      }),
-      {
-        onSuccess: (bridgeDecision, requestEngineId) => {
-          if (!bridgeDecision.allowed) {
-            setBridgeDecision(bridgeDecision)
-            return
-          }
-          const params = new URLSearchParams({
-            source: 'mission-control',
-            engineId: requestEngineId,
-            decision: decisionKey,
-            version: String(decisionVersion),
-            deploymentId: String(decisionEditTarget.engineDeploymentId || ''),
-            mappingSource: String(decisionEditTarget.mappingSource || ''),
-          })
-          if (decisionEditTarget.commitId) params.set('commitId', String(decisionEditTarget.commitId))
-          if (typeof decisionEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(decisionEditTarget.fileVersionNumber))
-          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-        },
-        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
-      },
-    )
-  }, [decisionEditTarget, decisionVersion, decisionKey, decision?.decisionDefinitionId, runForCurrentEngine, tenantNavigate])
+  const starbaseBridge = useStarbaseEditBridge({ engineId: selectedEngineId, kind: 'decision',
+    definitionKey: decisionKey, definitionId: decision?.decisionDefinitionId, version: decisionVersion,
+    editTarget: decisionEditTarget, isFetching: decisionEditTargetQ.isFetching, viewKey: id || undefined });
 
   // Check if initial data is loading
   const isInitialLoading = histQ.isLoading || xmlQ.isLoading
@@ -306,9 +265,9 @@ export default function DecisionHistoryDetail() {
             kind="ghost"
             size="sm"
             renderIcon={Launch}
-            onClick={handleEditInStarbase}
-            disabled={!decisionEditTarget?.canEdit || decisionEditTargetQ.isFetching}
-            title={decisionEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+            onClick={starbaseBridge.open}
+            disabled={!starbaseBridge.available || starbaseBridge.isPending}
+            title={starbaseBridge.unavailableReason || 'Edit deployed version in Starbase'}
           >
             Edit
           </Button>
@@ -371,7 +330,7 @@ export default function DecisionHistoryDetail() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
-      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={starbaseBridge.decision} error={starbaseBridge.error} />
       
       {/* SplitPane wrapper to fill remaining height */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

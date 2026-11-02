@@ -27,7 +27,7 @@ import { useElementLinkPillOverlay } from './components/hooks/useElementLinkPill
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
-import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { useStarbaseEditBridge } from '../shared/useStarbaseEditBridge'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { getProcessInstanceVariableHistory, modifyProcessInstanceVariables } from './api/processInstances'
 import type { DecisionIo, HistoricDecisionInstanceLite, VariableHistoryTarget } from './components/types'
@@ -39,7 +39,7 @@ import { ApplyModificationsModal } from './components/modals/ApplyModificationsM
 import { useActionDecision } from '../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
-import { useGuardedEngineTask, withEngineContext } from '../shared/engineContext'
+import { withEngineContext } from '../shared/engineContext'
 import {
   SPLIT_PANE_STORAGE_KEY,
   SPLIT_PANE_VERTICAL_STORAGE_KEY,
@@ -86,13 +86,7 @@ export default function ProcessInstanceDetailPage() {
   }
   currentEngineIdRef.current = selectedEngineId
   React.useEffect(() => () => { engineRevisionRef.current += 1 }, [])
-  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
-  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
-  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
-  React.useEffect(() => {
-    setBridgeError(null)
-    setBridgeDecision(null)
-  }, [selectedEngineId])
+
 
 
   // Early return if no instanceId
@@ -880,41 +874,9 @@ export default function ProcessInstanceDetailPage() {
     processEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(async () => {
-    if (!processEditTarget?.fileId || processVersion === null || !defKey) return
-    setBridgeError(null)
-    setBridgeDecision(null)
-    await runForCurrentEngine(
-      (requestEngineId) => evaluateMissionControlStarbaseBridge({
-        engineId: requestEngineId,
-        projectId: processEditTarget.projectId,
-        fileId: processEditTarget.fileId,
-        definitionId: defId || undefined,
-        definitionKey: defKey,
-        kind: 'process',
-      }),
-      {
-        onSuccess: (bridgeDecision, requestEngineId) => {
-          if (!bridgeDecision.allowed) {
-            setBridgeDecision(bridgeDecision)
-            return
-          }
-          const params = new URLSearchParams({
-            source: 'mission-control',
-            engineId: requestEngineId,
-            process: defKey,
-            version: String(processVersion),
-            deploymentId: String(processEditTarget.engineDeploymentId || ''),
-            mappingSource: String(processEditTarget.mappingSource || ''),
-          })
-          if (processEditTarget.commitId) params.set('commitId', String(processEditTarget.commitId))
-          if (typeof processEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(processEditTarget.fileVersionNumber))
-          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-        },
-        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
-      },
-    )
-  }, [processEditTarget, processVersion, defKey, defId, runForCurrentEngine, tenantNavigate])
+  const starbaseBridge = useStarbaseEditBridge({ engineId: selectedEngineId, kind: 'process',
+    definitionKey: defKey, definitionId: defId, version: processVersion,
+    editTarget: processEditTarget, isFetching: processEditTargetQ.isFetching, viewKey: instanceId || undefined });
 
   // Handle navigation to linked resources
   const handleElementNavigate = React.useCallback((linkInfo: ElementLinkInfo) => {
@@ -1050,9 +1012,9 @@ export default function ProcessInstanceDetailPage() {
             kind="ghost"
             size="sm"
             renderIcon={Launch}
-            onClick={handleEditInStarbase}
-            disabled={!processEditTarget?.canEdit || processEditTargetQ.isFetching}
-            title={processEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+            onClick={starbaseBridge.open}
+            disabled={!starbaseBridge.available || starbaseBridge.isPending}
+            title={starbaseBridge.unavailableReason || 'Edit deployed version in Starbase'}
           >
             Edit
           </Button>
@@ -1096,7 +1058,7 @@ export default function ProcessInstanceDetailPage() {
           {instanceId}
         </BreadcrumbItem>
       </BreadcrumbBar>
-      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={starbaseBridge.decision} error={starbaseBridge.error} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

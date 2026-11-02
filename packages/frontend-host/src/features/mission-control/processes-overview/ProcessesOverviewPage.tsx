@@ -29,7 +29,7 @@ import { EngineAccessError, isEngineAccessError } from '../shared/components/Eng
 import { RuntimeCollectionEmptyState } from '../shared/components/RuntimeCollectionEmptyState'
 import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
-import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { useStarbaseEditBridge } from '../shared/useStarbaseEditBridge'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { LoadingState } from '../../shared/components/LoadingState'
@@ -39,7 +39,7 @@ import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
-import { useGuardedEngineTask, withEngineContext } from '../shared/engineContext'
+import { withEngineContext } from '../shared/engineContext'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -221,14 +221,8 @@ export default function ProcessesOverviewPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
-  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
-  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const selectedEngineId = useSelectedEngine()
-  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
-  React.useEffect(() => {
-    setBridgeError(null)
-    setBridgeDecision(null)
-  }, [selectedEngineId])
+
   const withSelectedEngine = React.useCallback(
     (path: string) => withEngineContext(path, selectedEngineId),
     [selectedEngineId],
@@ -674,40 +668,9 @@ export default function ProcessesOverviewPage() {
     processEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(async () => {
-    if (!processEditTarget?.fileId || selectedVersion === null || !selectedProcess?.key) return
-    setBridgeError(null)
-    setBridgeDecision(null)
-    await runForCurrentEngine(
-      (requestEngineId) => evaluateMissionControlStarbaseBridge({
-        engineId: requestEngineId,
-        projectId: processEditTarget.projectId,
-        fileId: processEditTarget.fileId,
-        definitionKey: selectedProcess.key,
-        kind: 'process',
-      }),
-      {
-        onSuccess: (bridgeDecision, requestEngineId) => {
-          if (!bridgeDecision.allowed) {
-            setBridgeDecision(bridgeDecision)
-            return
-          }
-          const params = new URLSearchParams({
-            source: 'mission-control',
-            engineId: requestEngineId,
-            process: selectedProcess.key,
-            version: String(selectedVersion),
-            deploymentId: String(processEditTarget.engineDeploymentId || ''),
-            mappingSource: String(processEditTarget.mappingSource || ''),
-          })
-          if (processEditTarget.commitId) params.set('commitId', String(processEditTarget.commitId))
-          if (typeof processEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(processEditTarget.fileVersionNumber))
-          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-        },
-        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
-      },
-    )
-  }, [processEditTarget, selectedVersion, selectedProcess?.key, runForCurrentEngine, tenantNavigate])
+  const starbaseBridge = useStarbaseEditBridge({ engineId: selectedEngineId, kind: 'process',
+    definitionKey: selectedProcess?.key, definitionId: defIdForVersion, version: selectedVersion,
+    editTarget: processEditTarget, isFetching: processEditTargetQ.isFetching, viewKey: selectedProcess?.key || undefined });
 
   // Viewer API for managing BPMN diagram
   const [viewerApi, setViewerApi] = React.useState<any>(null)
@@ -1236,9 +1199,9 @@ export default function ProcessesOverviewPage() {
                 kind="ghost"
                 size="sm"
                 renderIcon={Launch}
-                onClick={handleEditInStarbase}
-                disabled={!processEditTarget?.canEdit || processEditTargetQ.isFetching}
-                title={processEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+                onClick={starbaseBridge.open}
+                disabled={!starbaseBridge.available || starbaseBridge.isPending}
+                title={starbaseBridge.unavailableReason || 'Edit deployed version in Starbase'}
               >
                 Edit
               </Button>
@@ -1279,7 +1242,7 @@ export default function ProcessesOverviewPage() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
-      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={starbaseBridge.decision} error={starbaseBridge.error} />
       {defsQ.error && !engineAccessError && (
         <InlineNotification
           kind="error"
