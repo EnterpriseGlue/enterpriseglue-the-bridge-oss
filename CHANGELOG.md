@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.5...v0.35.6) (2026-11-02)
 
+### Changes
 
-### Bug Fixes
+- **tenancy:** Preserve global platform group authority during native tenant ownership upgrades and keep single-tenant setup links routable.
 
-* **tenancy:** preserve platform administrator ownership ([c52106e](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c52106eb89c54d2d25e5fc0f09373bd94288a606))
-* **tenancy:** preserve platform administrator ownership ([f5512bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f5512bc263a831e4c17f34bcd7d4c4a16d159bfd))
+Full upgrade, compatibility and verification details: [v0.35.6 release notes](docs/releases/v0.35.6.md).
 
 ## [0.35.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.4...v0.35.5) (2026-11-02)
 
