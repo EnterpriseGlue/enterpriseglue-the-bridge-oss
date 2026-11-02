@@ -94,12 +94,25 @@ describe('uploadValidation', () => {
       vi.clearAllMocks();
     });
 
+    it('does not acknowledge an empty creation response', async () => {
+      const file = { name: 'test.bpmn', text: vi.fn().mockResolvedValue('<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p"/></definitions>') } as any;
+      vi.mocked(apiClient.post).mockResolvedValue({});
+      await validateAndUploadFile({ file, projectId: '11111111-1111-4111-8111-111111111111', folderId: null, queryClient: mockQueryClient as any, showToast: mockShowToast });
+      expect(mockShowToast).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'success' }));
+    });
+
+    it('rejects malformed XML even when root opening and closing tags exist', async () => {
+      const file = { name: 'test.bpmn', text: vi.fn().mockResolvedValue('<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process></definitions>') } as any;
+      await validateAndUploadFile({ file, projectId: '11111111-1111-4111-8111-111111111111', folderId: null, queryClient: mockQueryClient as any, showToast: mockShowToast });
+      expect(apiClient.post).not.toHaveBeenCalled();
+    });
+
     it('rejects non-BPMN/DMN files', async () => {
       const file = new File(['content'], 'test.txt', { type: 'text/plain' });
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -121,7 +134,7 @@ describe('uploadValidation', () => {
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -142,7 +155,7 @@ describe('uploadValidation', () => {
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -164,7 +177,7 @@ describe('uploadValidation', () => {
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -186,7 +199,7 @@ describe('uploadValidation', () => {
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -205,28 +218,28 @@ describe('uploadValidation', () => {
         name: 'test.bpmn',
         text: vi.fn().mockResolvedValue(xmlContent),
       } as any;
-      vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+      vi.mocked(apiClient.post).mockResolvedValue({ id: '33333333-3333-4333-8333-333333333333', name: file.name, type: file.name.endsWith('.dmn') ? 'dmn' : 'bpmn', bpmnProcessId: null, dmnDecisionId: null, createdAt: 1, updatedAt: 1 });
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
-        folderId: 'folder-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
+        folderId: '22222222-2222-4222-8222-222222222222',
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
       });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/starbase-api/projects/proj-1/files',
+        '/starbase-api/projects/11111111-1111-4111-8111-111111111111/files',
         {
           type: 'bpmn',
           name: 'test.bpmn',
-          folderId: 'folder-1',
+          folderId: '22222222-2222-4222-8222-222222222222',
           xml: xmlContent,
         }
       );
       expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ['contents', 'proj-1', 'folder-1'],
-      });
+        queryKey: ['contents', '11111111-1111-4111-8111-111111111111'],
+      }, { throwOnError: true });
       expect(mockShowToast).toHaveBeenCalledWith({
         kind: 'success',
         title: 'File uploaded',
@@ -240,18 +253,18 @@ describe('uploadValidation', () => {
         name: 'test.dmn',
         text: vi.fn().mockResolvedValue(xmlContent),
       } as any;
-      vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+      vi.mocked(apiClient.post).mockResolvedValue({ id: '33333333-3333-4333-8333-333333333333', name: file.name, type: file.name.endsWith('.dmn') ? 'dmn' : 'bpmn', bpmnProcessId: null, dmnDecisionId: null, createdAt: 1, updatedAt: 1 });
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
       });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/starbase-api/projects/proj-1/files',
+        '/starbase-api/projects/11111111-1111-4111-8111-111111111111/files',
         {
           type: 'dmn',
           name: 'test.dmn',
@@ -271,7 +284,7 @@ describe('uploadValidation', () => {
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -294,7 +307,7 @@ describe('uploadValidation', () => {
 
       await validateAndUploadFile({
         file,
-        projectId: 'proj-1',
+        projectId: '11111111-1111-4111-8111-111111111111',
         folderId: null,
         queryClient: mockQueryClient as any,
         showToast: mockShowToast,
@@ -303,7 +316,7 @@ describe('uploadValidation', () => {
       expect(mockShowToast).toHaveBeenCalledWith({
         kind: 'error',
         title: 'Upload failed',
-        subtitle: 'Could not upload file. Please try again.',
+        subtitle: 'Upload result was not verified. Refresh project contents before retrying.',
       });
     });
 

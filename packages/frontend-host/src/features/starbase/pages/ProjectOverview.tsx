@@ -12,6 +12,9 @@ import { useModal } from '../../../shared/hooks/useModal'
 import { NoDataState, ErrorState } from '../../shared/components'
 import { useInlineRename } from '../hooks/useInlineRename'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { syncProjectBatch } from '../../git/api/syncProject'
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
+import { getBrowserSessionRevision } from '../../../utils/browserSession'
 import { gitApi } from '../../git/api/gitApi'
 import { projectsApi } from '../../../api/starbase/projects'
 import { StarbaseTableShell } from '../components/StarbaseTableShell'
@@ -201,7 +204,11 @@ export default function ProjectOverview() {
   const nav = useNavigate()
   const location = useLocation()
   const { pathname } = location
-  const { hasPlatformPermission, hasProjectPermission, permissions } = useAuth()
+  const { hasPlatformPermission, hasProjectPermission, permissions, user, sessionRevision } = useAuth()
+  const authority = JSON.stringify([user?.session?.principal.id || user?.id || null, user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)])
+
+  const authoritySession = React.useRef({ authority, revision: getBrowserSessionRevision() })
+  if (authoritySession.current.authority !== authority) authoritySession.current = { authority, revision: getBrowserSessionRevision() }
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -267,7 +274,7 @@ export default function ProjectOverview() {
   const hasGitProviders = (providersQuery.data?.length ?? 0) > 0
 
   const credentialsQuery = useQuery({
-    queryKey: ['git', 'credentials'],
+    queryKey: ['git', 'credentials', authority],
     queryFn: async () => {
       const data = await fetchList<any>('/git-api/credentials').catch(() => [])
       return Array.isArray(data) ? data : []
@@ -337,77 +344,65 @@ export default function ProjectOverview() {
     (q.data || []).filter((project) => bulkSyncIds.includes(project.id))
   ), [bulkSyncIds, q.data])
 
-  const closeBulkSync = () => {
+  const bulkScope = JSON.stringify([isBulkSyncOpen, bulkSyncIds, bulkDirection, bulkMessage, authority, canBulkSync, pushEnabled, pullEnabled,
+    bulkSyncProjects.map(project => [project.id, project.gitUrl, hasProjectPermission(project.id, bulkDirection === 'pull' ? ProjectPermission.GIT_PULL : ProjectPermission.GIT_PUSH)])])
+  const bulkScopeRef = React.useRef(bulkScope), bulkLifetimeRef = React.useRef(0), bulkActiveRef = React.useRef<number | null>(null), bulkSubmittedRef = React.useRef<number | null>(null)
+  if (bulkScopeRef.current !== bulkScope) { bulkScopeRef.current = bulkScope; bulkLifetimeRef.current += 1 }
+  const bulkMountedRef = React.useRef(true)
+  const bulkRenderedSession = authoritySession.current.revision
+  React.useEffect(() => { bulkMountedRef.current = true; return () => { bulkMountedRef.current = false; bulkLifetimeRef.current += 1 } }, [])
+
+  const ownsBulkAttempt = bulkSubmittedRef.current === bulkLifetimeRef.current
+
+  const closeBulkSync = React.useCallback(() => {
+    bulkLifetimeRef.current += 1
     setIsBulkSyncOpen(false)
     setBulkBusy(false)
     setBulkError(null)
     setBulkResult(null)
     setBulkSyncIds([])
     setBulkCancelSelection(null)
-  }
+    setBulkMessage('')
+  }, [])
+  const previousAuthorityRef = React.useRef(authority)
+  React.useEffect(() => {
+    if (previousAuthorityRef.current !== authority) { previousAuthorityRef.current = authority; closeBulkSync() }
+  }, [authority, closeBulkSync])
 
   const runBulkSync = async () => {
-    if (!canBulkSync) {
-      setBulkError('Git credentials required. Connect your Git credentials to sync.')
-      return
-    }
-
-    if (bulkSyncUnavailableReason) {
-      setBulkError(bulkSyncUnavailableReason)
-      return
-    }
-
-    const commitMessage = bulkMessage.trim()
-    if (!commitMessage) {
-      setBulkError('Commit message is required')
-      return
-    }
-
-    setBulkBusy(true)
-    setBulkError(null)
-    setBulkResult(null)
-
-    const selected = (q.data || []).filter((p) => bulkSyncIds.includes(p.id))
-    const connected = selected.filter((p) => !!p.gitUrl)
-    const skipped: BulkSyncResult['skipped'] = []
-    const succeeded: BulkSyncResult['succeeded'] = []
-    const failed: BulkSyncResult['failed'] = []
-
-    for (const p of selected) {
-      if (!p.gitUrl) {
-        skipped.push({ id: p.id, name: p.name, reason: 'Not connected to Git' })
-        continue
+    if (!bulkMountedRef.current || bulkScope !== bulkScopeRef.current || !isBulkSyncOpen || (ownsBulkAttempt && bulkBusy) || bulkActiveRef.current === bulkLifetimeRef.current || bulkRenderedSession !== getBrowserSessionRevision()) return
+    bulkSubmittedRef.current = bulkLifetimeRef.current
+    if (!canBulkSync || credentialsCheckLoading) { setBulkError('Git credentials required. Connect your Git credentials to sync.'); return }
+    if (bulkSyncUnavailableReason) { setBulkError(bulkSyncUnavailableReason); return }
+    const message = bulkMessage.trim()
+    if (!message) { setBulkError('Commit message is required'); return }
+    const selected = (q.data || []).filter(project => bulkSyncIds.includes(project.id))
+    if (!selected.length || (bulkDirection === 'push' ? !pushEnabled : !pullEnabled)) return
+    const lifetime = bulkLifetimeRef.current, session = bulkRenderedSession
+    const isCurrent = () => bulkMountedRef.current && lifetime === bulkLifetimeRef.current && session === getBrowserSessionRevision()
+    const check = () => { if (!isCurrent()) throw new Error('Sync context changed; review the target again') }
+    bulkActiveRef.current = lifetime
+    setBulkBusy(true); setBulkError(null); setBulkResult(null)
+    try {
+      const result = await syncProjectBatch(selected, { direction: bulkDirection, message }, check)
+      check(); setBulkResult(result)
+      if (selected.some(project => !!project.gitUrl)) {
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
+          qc.invalidateQueries({ queryKey: ['vcs', 'uncommitted-status'] }),
+          qc.invalidateQueries({ queryKey: ['git'] }),
+        ])
+        check()
       }
-
-      try {
-        await apiClient.post('/git-api/sync', {
-          projectId: p.id,
-          direction: bulkDirection,
-          message: commitMessage,
-        })
-
-        succeeded.push({ id: p.id, name: p.name })
-      } catch (e: any) {
-        const parsed = parseApiError(e, 'Sync failed')
-        failed.push({ id: p.id, name: p.name, error: parsed.message })
+      if (!result.failed.length && !result.skipped.length) {
+        bulkCancelSelection?.()
+        check(); closeBulkSync()
       }
+    } catch (failure) {
+      if (isCurrent()) setBulkError(parseApiError(failure, 'Sync failed').message)
+    } finally {
+      if (isCurrent()) { setBulkBusy(false); bulkActiveRef.current = null }
     }
-
-    const result: BulkSyncResult = { succeeded, skipped, failed }
-    setBulkResult(result)
-
-    if (connected.length > 0) {
-      await qc.invalidateQueries({ queryKey: ['starbase', 'projects'] })
-      await qc.invalidateQueries({ queryKey: ['vcs', 'uncommitted-status'] })
-      await qc.invalidateQueries({ queryKey: ['git'] })
-    }
-
-    if (failed.length === 0 && skipped.length === 0) {
-      bulkCancelSelection?.()
-      closeBulkSync()
-    }
-
-    setBulkBusy(false)
   }
 
   const handleBatchDelete = async () => {
@@ -442,6 +437,7 @@ export default function ProjectOverview() {
   }
 
   const { editingId, draftName, setDraftName, inputRef, startEditing, handleKeyDown, handleBlur } = useInlineRename({
+    scopeKey: authority,
     type: 'project',
     queryKey: ['starbase', 'projects']
   })
@@ -511,13 +507,15 @@ export default function ProjectOverview() {
     project: Project,
     actionId: string,
     permission: string
-  ) => (
-    evaluateActionSnapshot(
-      permissions,
-      actionId,
-      { type: 'project', id: project.id }
-    ).allowed || hasProjectPermissionForProject(project, permission)
-  ), [hasProjectPermissionForProject, permissions])
+  ) => {
+    const decision = evaluateActionSnapshot(permissions, actionId, { type: 'project', id: project.id })
+    if (actionId === 'project.git.sync.run') {
+      const availability = permissions?.projects?.find(entry => entry.resourceId === project.id)?.actionAvailability
+      if (availability?.restrictions[actionId] && !availability.allowedActions.includes(actionId)) return false
+      if (permission === ProjectPermission.GIT_PULL) return hasProjectPermissionForProject(project, permission)
+    }
+    return decision.allowed || hasProjectPermissionForProject(project, permission)
+  }, [hasProjectPermissionForProject, permissions])
 
   const getProjectBulkActionUnavailableReason = React.useCallback((projects: Project[], action: ProjectOverviewBulkAction): string | null => {
     const permissionIds = getProjectOverviewBulkActionPermissions(action, pushEnabled, pullEnabled)
@@ -553,6 +551,10 @@ export default function ProjectOverview() {
     if (!anySyncEnabled) return 'Sync is disabled by platform settings'
     if (bulkDirection === 'push' && !pushEnabled) return 'Git push is disabled by platform settings'
     if (bulkDirection === 'pull' && !pullEnabled) return 'Git pull is disabled by platform settings'
+    const required = getProjectSyncPermissionForDirection(bulkDirection)
+    // Membership presentation may still be loading; it cannot override a known
+    // action restriction or missing directional permission at dispatch.
+    if (bulkSyncProjects.some(project => !hasProjectActionOrPermission(project, 'project.git.sync.run', required))) return `Missing permission ${required} or sync is restricted for a selected project`
 
     const permissionId = getProjectSyncPermissionForDirection(bulkDirection)
     return getBulkPermissionReason(
@@ -638,9 +640,9 @@ export default function ProjectOverview() {
     <>
       <ProjectOverviewBulkSyncModal
         open={isBulkSyncOpen}
-        bulkBusy={bulkBusy}
-        bulkError={bulkError}
-        bulkResult={bulkResult}
+        bulkBusy={ownsBulkAttempt && bulkBusy}
+        bulkError={ownsBulkAttempt ? bulkError : null}
+        bulkResult={ownsBulkAttempt ? bulkResult : null}
         bulkMessage={bulkMessage}
         setBulkMessage={setBulkMessage}
         bulkDirection={bulkDirection}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useUserDirectoryViewScope, useUserDirectoryLifetime } from './userDirectoryView';
 import { useParams } from 'react-router-dom';
 import {
   Button,
@@ -29,6 +30,7 @@ import { useAuth } from '../../shared/hooks/useAuth';
 import { useModal } from '../../shared/hooks/useModal';
 import { useTenantNavigate } from '../../shared/hooks/useTenantNavigate';
 import { useToast } from '../../shared/notifications/ToastProvider';
+import { getBootstrapAccessLabel } from '../../shared/utils/bootstrapAccess';
 import { parseApiError } from '../../shared/api/apiErrorUtils';
 
 type LifecycleAction = 'deactivate' | 'reactivate' | 'revoke-sessions';
@@ -83,6 +85,13 @@ function Definition({ term, children }: { term: string; children: React.ReactNod
 }
 
 export default function UserDetail() {
+  const scope = useUserDirectoryViewScope();
+  return <UserDetailView key={scope} />;
+}
+
+function UserDetailView() {
+  const captureView = useUserDirectoryLifetime();
+  const latestLoad = React.useRef(0);
   const { userId = '' } = useParams<{ userId: string }>();
   const { tenantNavigate } = useTenantNavigate();
   const { user: currentUser, permissions } = useAuth();
@@ -97,11 +106,16 @@ export default function UserDetail() {
   const [error, setError] = React.useState<string | null>(null);
 
   const platformResource = { type: 'platform' as const, id: null };
+  const canRead = evaluateActionSnapshot(permissions, 'platform.users.read', platformResource).allowed;
   const canDeactivate = evaluateActionSnapshot(permissions, 'platform.users.deactivate', platformResource).allowed;
   const canUpdate = evaluateActionSnapshot(permissions, 'platform.users.update', platformResource).allowed;
 
   const load = React.useCallback(async () => {
-    if (!userId) return;
+    const isCurrentView = captureView();
+    if (!userId || !canRead || !isCurrentView()) { setLoading(false); return; }
+    const request = ++latestLoad.current;
+    const isCurrent = () => isCurrentView() && request === latestLoad.current;
+    setIdentity(null); setAccess(null); setSessions(null); setAudit(null);
     setLoading(true);
     setError(null);
     try {
@@ -111,27 +125,33 @@ export default function UserDetail() {
         userDirectoryApi.sessions(userId),
         userDirectoryApi.audit(userId),
       ]);
+      if (!isCurrent()) return;
       setIdentity(nextIdentity);
       setAccess(nextAccess);
       setSessions(nextSessions);
       setAudit(nextAudit);
     } catch (loadError) {
+      if (!isCurrent()) return;
       setError(parseApiError(loadError, 'Failed to load the user record').message);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [userId]);
+  }, [userId, canRead, captureView]);
 
   React.useEffect(() => { void load(); }, [load]);
 
   const executeLifecycleAction = async (reason?: string) => {
     const action = actionModal.data;
-    if (!action || !reason || !userId) return;
+    const isCurrent = captureView();
+    if (!action || !reason || !userId || !canRead || !isCurrent() || identity?.user.id !== userId) return;
+    if (action === 'deactivate' ? !canDeactivate || currentUser?.id === userId : !canUpdate) return;
+    if (action === 'reactivate' && ['scim', 'ldap'].includes(identity.user.provisioningSource)) return;
     setMutationPending(true);
     try {
       if (action === 'deactivate') await userDirectoryApi.deactivate(userId, reason);
       if (action === 'reactivate') await userDirectoryApi.reactivate(userId, reason);
       if (action === 'revoke-sessions') await userDirectoryApi.revokeSessions(userId, reason);
+      if (!isCurrent()) return;
       notify({
         kind: 'success',
         title: action === 'deactivate' ? 'User deactivated' : action === 'reactivate' ? 'User reactivated' : 'Sessions revoked',
@@ -140,10 +160,11 @@ export default function UserDetail() {
       actionModal.closeModal();
       await load();
     } catch (mutationError) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(mutationError, 'The user lifecycle action failed');
       notify({ kind: 'error', title: 'Action failed', subtitle: parsed.message });
     } finally {
-      setMutationPending(false);
+      if (isCurrent()) setMutationPending(false);
     }
   };
 
@@ -155,6 +176,8 @@ export default function UserDetail() {
     : actionModal.data === 'reactivate'
       ? { title: 'Reactivate user', text: 'Restore access for this locally managed account?', button: 'Reactivate', danger: false }
       : { title: 'Revoke all sessions', text: 'Invalidate every current refresh session for this user?', button: 'Revoke sessions', danger: true };
+
+  if (!canRead) return <InlineNotification kind="error" title="User details unavailable" subtitle="You do not have permission to view this user directory." hideCloseButton />;
 
   return (
     <PageLayout style={{ background: 'var(--cds-background)', minHeight: '100vh' }}>
@@ -230,7 +253,7 @@ export default function UserDetail() {
                     <Definition term="Authentication">{user.authenticationSources.map(sourceLabel).join(', ')}</Definition>
                     <Definition term="Provisioning">{sourceLabel(user.provisioningSource)}</Definition>
                     <Definition term="Provisioning directory">{user.provisioningDirectoryKey || 'Not applicable'}</Definition>
-                    <Definition term="Platform access">{user.platformRole}</Definition>
+                    <Definition term="Platform access">{getBootstrapAccessLabel(user.bootstrapAccess)}</Definition>
                     <Definition term="Last sign-in">{formatTimestamp(user.lastSignInAt)}</Definition>
                     <Definition term="Last provisioned">{formatTimestamp(user.lastProvisionedAt)}</Definition>
                     <Definition term="Provisioning health"><Tag type={statusTagType(user.provisioningHealth)}>{user.provisioningHealth.replace('_', ' ')}</Tag></Definition>
@@ -269,7 +292,7 @@ export default function UserDetail() {
               </TabPanel>
               <TabPanel>
                 <Tile>
-                  <p><strong>Compatibility platform role:</strong> {access?.platformRole || user.platformRole}</p>
+                  <p><strong>Platform access preset:</strong> {getBootstrapAccessLabel(access?.bootstrapAccess || user.bootstrapAccess)}</p>
                   <p className="eg-secondary-text">Evaluated {formatTimestamp(access?.evaluatedAt)}</p>
                 </Tile>
                 {(access?.lineage || []).length > 0 ? <ResponsiveStructuredList

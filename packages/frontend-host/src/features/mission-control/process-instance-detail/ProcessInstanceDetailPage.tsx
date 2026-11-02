@@ -1,3 +1,4 @@
+import { parseTypedVariableValue, parseBulkVariableInput } from './components/variableValues'
 import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
@@ -26,7 +27,7 @@ import { useElementLinkPillOverlay } from './components/hooks/useElementLinkPill
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
-import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { useStarbaseEditBridge } from '../shared/useStarbaseEditBridge'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { getProcessInstanceVariableHistory, modifyProcessInstanceVariables } from './api/processInstances'
 import type { DecisionIo, HistoricDecisionInstanceLite, VariableHistoryTarget } from './components/types'
@@ -38,7 +39,7 @@ import { ApplyModificationsModal } from './components/modals/ApplyModificationsM
 import { useActionDecision } from '../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
-import { useGuardedEngineTask, withEngineContext } from '../shared/engineContext'
+import { withEngineContext } from '../shared/engineContext'
 import {
   SPLIT_PANE_STORAGE_KEY,
   SPLIT_PANE_VERTICAL_STORAGE_KEY,
@@ -84,13 +85,8 @@ export default function ProcessInstanceDetailPage() {
     engineRevisionRef.current += 1
   }
   currentEngineIdRef.current = selectedEngineId
-  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
-  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
-  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
-  React.useEffect(() => {
-    setBridgeError(null)
-    setBridgeDecision(null)
-  }, [selectedEngineId])
+  React.useEffect(() => () => { engineRevisionRef.current += 1 }, [])
+
 
 
   // Early return if no instanceId
@@ -489,29 +485,6 @@ export default function ProcessInstanceDetailPage() {
     previousInteractionEngineIdRef.current = selectedEngineId
   }, [selectedEngineId, setSelectedActivityId])
 
-  const parseTypedValue = React.useCallback((raw: string, type: string) => {
-    if (type === 'String') return raw
-    if (raw.trim() === '') return null
-    if (type === 'Boolean') {
-      if (/^(true|false)$/i.test(raw.trim())) return raw.trim().toLowerCase() === 'true'
-      throw new Error('Boolean values must be true or false')
-    }
-    if (type === 'Integer' || type === 'Long') {
-      const num = Number(raw)
-      if (Number.isNaN(num)) throw new Error('Value must be a number')
-      return type === 'Integer' ? Math.trunc(num) : num
-    }
-    if (type === 'Double') {
-      const num = Number(raw)
-      if (Number.isNaN(num)) throw new Error('Value must be a number')
-      return num
-    }
-    if (type === 'Object' || type === 'Json') {
-      return JSON.parse(raw || '{}')
-    }
-    return raw
-  }, [])
-
   const openAddVariableModal = React.useCallback(() => {
     if (!selectedEngineId) return
     setAddVariableName('')
@@ -551,7 +524,7 @@ export default function ProcessInstanceDetailPage() {
     setAddVariableBusy(true)
     setAddVariableError(null)
     try {
-      const parsed = parseTypedValue(addVariableValue, addVariableType)
+      const parsed = parseTypedVariableValue(addVariableValue, addVariableType)
       await modifyProcessInstanceVariables(instanceId, {
         modifications: { [key]: { value: parsed, type: addVariableType } },
         engineId: requestEngineId,
@@ -569,7 +542,7 @@ export default function ProcessInstanceDetailPage() {
     } finally {
       if (isCurrentRequest()) setAddVariableBusy(false)
     }
-  }, [instanceId, addVariableEngineId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, parseTypedValue, selectedEngineId, varsQ])
+  }, [instanceId, addVariableEngineId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, selectedEngineId, varsQ])
 
   const submitBulkUpload = React.useCallback(async () => {
     if (!instanceId) return
@@ -587,12 +560,12 @@ export default function ProcessInstanceDetailPage() {
     setBulkUploadBusy(true)
     setBulkUploadError(null)
     try {
-      const parsed = JSON.parse(bulkUploadValue || '{}')
+      const parsed = parseBulkVariableInput(bulkUploadValue)
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('Bulk upload JSON must be an object')
       }
 
-      const modifications: Record<string, { value: any; type: string }> = {}
+      const modifications: Record<string, { value: any; type: string }> = Object.create(null)
       for (const [k, v] of Object.entries(parsed)) {
         if (!k) continue
         if (v && typeof v === 'object' && !Array.isArray(v) && 'value' in (v as any) && 'type' in (v as any)) {
@@ -901,41 +874,9 @@ export default function ProcessInstanceDetailPage() {
     processEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(async () => {
-    if (!processEditTarget?.fileId || processVersion === null || !defKey) return
-    setBridgeError(null)
-    setBridgeDecision(null)
-    await runForCurrentEngine(
-      (requestEngineId) => evaluateMissionControlStarbaseBridge({
-        engineId: requestEngineId,
-        projectId: processEditTarget.projectId,
-        fileId: processEditTarget.fileId,
-        definitionId: defId || undefined,
-        definitionKey: defKey,
-        kind: 'process',
-      }),
-      {
-        onSuccess: (bridgeDecision, requestEngineId) => {
-          if (!bridgeDecision.allowed) {
-            setBridgeDecision(bridgeDecision)
-            return
-          }
-          const params = new URLSearchParams({
-            source: 'mission-control',
-            engineId: requestEngineId,
-            process: defKey,
-            version: String(processVersion),
-            deploymentId: String(processEditTarget.engineDeploymentId || ''),
-            mappingSource: String(processEditTarget.mappingSource || ''),
-          })
-          if (processEditTarget.commitId) params.set('commitId', String(processEditTarget.commitId))
-          if (typeof processEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(processEditTarget.fileVersionNumber))
-          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-        },
-        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
-      },
-    )
-  }, [processEditTarget, processVersion, defKey, defId, runForCurrentEngine, tenantNavigate])
+  const starbaseBridge = useStarbaseEditBridge({ engineId: selectedEngineId, kind: 'process',
+    definitionKey: defKey, definitionId: defId, version: processVersion,
+    editTarget: processEditTarget, isFetching: processEditTargetQ.isFetching, viewKey: instanceId || undefined });
 
   // Handle navigation to linked resources
   const handleElementNavigate = React.useCallback((linkInfo: ElementLinkInfo) => {
@@ -1071,9 +1012,9 @@ export default function ProcessInstanceDetailPage() {
             kind="ghost"
             size="sm"
             renderIcon={Launch}
-            onClick={handleEditInStarbase}
-            disabled={!processEditTarget?.canEdit || processEditTargetQ.isFetching}
-            title={processEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+            onClick={starbaseBridge.open}
+            disabled={!starbaseBridge.available || starbaseBridge.isPending}
+            title={starbaseBridge.unavailableReason || 'Edit deployed version in Starbase'}
           >
             Edit
           </Button>
@@ -1117,7 +1058,7 @@ export default function ProcessInstanceDetailPage() {
           {instanceId}
         </BreadcrumbItem>
       </BreadcrumbBar>
-      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={starbaseBridge.decision} error={starbaseBridge.error} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

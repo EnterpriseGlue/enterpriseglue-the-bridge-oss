@@ -1,4 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
+import React from 'react'
+import { advanceBrowserSessionRevision } from '@src/utils/browserSession'
 import { describe, expect, it, vi } from 'vitest'
 import {
   isMissionControlBrowserPath,
@@ -49,6 +51,67 @@ describe('withEngineContext', () => {
 })
 
 describe('useGuardedEngineTask', () => {
+  it.each(['switch', 'aba', 'unmount'])('does not dispatch a saved callback after %s', async change => {
+    const task = vi.fn(async () => 'effect')
+    const handlers = { onSuccess: vi.fn() }
+    const { result, rerender, unmount } = renderHook(({ engineId }) => useGuardedEngineTask(engineId), { initialProps: { engineId: 'engine-a' } })
+    const saved = result.current
+    if (change === 'unmount') unmount()
+    else {
+      rerender({ engineId: 'engine-b' })
+      if (change === 'aba') rerender({ engineId: 'engine-a' })
+    }
+    await expect(saved(task, handlers)).resolves.toBe(false)
+    expect(task).not.toHaveBeenCalled()
+    expect(handlers.onSuccess).not.toHaveBeenCalled()
+  })
+
+  it.each(['success', 'error'])('suppresses late %s after a session replacement', async outcome => {
+    const response = deferred<string>()
+    const handlers = { onSuccess: vi.fn(), onError: vi.fn() }
+    const { result } = renderHook(() => useGuardedEngineTask('engine-a'))
+    const pending = result.current(() => response.promise, handlers)
+    advanceBrowserSessionRevision()
+    if (outcome === 'success') response.resolve('old effect')
+    else response.reject(new Error('old failure'))
+    await expect(pending).resolves.toBe(false)
+    expect(handlers.onSuccess).not.toHaveBeenCalled()
+    expect(handlers.onError).not.toHaveBeenCalled()
+  })
+
+  it('permits a current task after StrictMode effect replay', async () => {
+    const { result } = renderHook(() => useGuardedEngineTask('engine-a'), { wrapper: ({ children }) => React.createElement(React.StrictMode, null, children) })
+    const handlers = { onSuccess: vi.fn() }
+    await expect(result.current(async () => 'current', handlers)).resolves.toBe(true)
+    expect(handlers.onSuccess).toHaveBeenCalledWith('current', 'engine-a')
+  })
+
+  it('permits the current callback after a session-change render while rejecting the saved callback', async () => {
+    const { result, rerender } = renderHook(() => useGuardedEngineTask('engine-a'))
+    const old = result.current
+    advanceBrowserSessionRevision(); rerender()
+    const task = vi.fn(async () => 'current'), handlers = { onSuccess: vi.fn() }
+    await expect(old(task, handlers)).resolves.toBe(false)
+    await expect(result.current(task, handlers)).resolves.toBe(true)
+    expect(task).toHaveBeenCalledOnce()
+  })
+
+  it.each(['success', 'error'])('suppresses late %s after its route unmounts', async (outcome) => {
+    const response = deferred<string>()
+    const onSuccess = vi.fn(), onError = vi.fn()
+    const { result, unmount } = renderHook(() => useGuardedEngineTask('engine-a'))
+    let pending!: Promise<boolean>
+    await act(async () => { pending = result.current(() => response.promise, { onSuccess, onError }) })
+    unmount()
+    await act(async () => {
+      if (outcome === 'success') response.resolve('settled')
+      else response.reject(new Error('settled error'))
+    })
+    await expect(pending).resolves.toBe(false)
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
   it('suppresses deferred success callbacks after A to B to A while preserving the origin engine', async () => {
     const response = deferred<{ allowed: boolean }>()
     const task = vi.fn(() => response.promise)

@@ -1,0 +1,14 @@
+/* Use the bundled WOFF face for viewer icons. The vendor's embedded stylesheet
+ * also declares an EOT-only fallback, which modern browsers cannot decode. A
+ * distinct family prevents a missing glyph from selecting that legacy face. */
+@font-face {
+  font-family: 'enterpriseglue-dmn-viewer';
+  src: url('camunda-dmn-js/dist/assets/dmn-font/font/dmn.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+[class^='dmn-icon-']::before,
+[class*=' dmn-icon-']::before {
+  font-family: 'enterpriseglue-dmn-viewer';
+}

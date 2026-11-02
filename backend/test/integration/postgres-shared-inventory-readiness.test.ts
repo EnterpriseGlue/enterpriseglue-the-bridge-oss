@@ -3,17 +3,27 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it as vitestIt, vi } from 'vitest';
 import { DataSource, type QueryRunner } from 'typeorm';
+import express from 'express';
+import request from 'supertest';
 
 // Inject connection selection and engine transport only. Repositories, policies,
 // transactions, row locks and the competing registry writers are real PostgreSQL.
-const fixture = vi.hoisted(() => ({ database: null as DataSource | null, network: vi.fn<(...args: any[]) => Promise<any>>() }));
+const fixture = vi.hoisted(() => ({ database: null as DataSource | null, network: vi.fn<(...args: any[]) => Promise<any>>(), post: vi.fn<(...args: any[]) => Promise<any>>() }));
+vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({ requireAuth: (req: any, _res: any, next: any) => {
+  const tenantId = req.get('x-fixture-tenant') || '';
+  req.user = { userId: 'controlled-fixture-user' }; req.tenant = { tenantId };
+  return next();
+} }));
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: async () => {
   if (!fixture.database) throw Error('Fixture not initialized'); return fixture.database;
 } }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', async importOriginal => ({
   ...await importOriginal<typeof import('@enterpriseglue/shared/services/bpmn-engine-client.js')>(),
   camundaGet: (...args: any[]) => fixture.network(...args), getDecisionDefinitions: async () => [],
+  camundaPost: (...args: any[]) => fixture.post(...args),
 }));
+import processesRouter from '@enterpriseglue/backend-host/modules/mission-control/processes/routes.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { PostgresAdapter } from '@enterpriseglue/shared/infrastructure/persistence/adapters/PostgresAdapter.js';
 import { installPostgresContextBoundary, assertPostgresContextBoundary } from '@enterpriseglue/shared/infrastructure/persistence/subscribers/TenantRlsSubscriber.js';
@@ -215,6 +225,38 @@ describe('shared readiness with actual restricted PostgreSQL repositories and wr
       expect(rows).toHaveLength(1); expect(rows[0].tenantId).toBe(id); expect(rows[0].tenantMappingVersion).toBe(7);
     }
     expect(getTenantDatabaseContext()).toBeUndefined();
+  });
+
+  it('guards exact process starts through two tenant-scoped PostgreSQL inventories', async () => {
+    const engine = await seed(); await reconcileSharedEngineInventory(engine);
+    const permission = vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(true);
+    const visible = vi.spyOn(permissionService, 'getVisibleRuntimeResources').mockImplementation(async () =>
+      runtime.getRepository(RuntimeResource).findBy({ engineId: engine.id, isActive: true }));
+    const app = express(); app.use(express.json());
+    app.use((req, _res, next) => runWithTenantDatabaseContext({ tenantId: req.get('x-fixture-tenant') || '', tenantSlug: 'controlled-fixture' }, next));
+    app.use(processesRouter);
+    app.use((error: any, _req: any, res: any, _next: any) => res.status(error.statusCode || error.status || 500).json({ error: 'Controlled fixture refusal' }));
+    fixture.post.mockReset(); fixture.post.mockImplementation(async (_engine, path) => ({ id: 'instance-fixture', definitionId: decodeURIComponent(path.split('/')[2]) }));
+    const start = (tenantId: string, index: number) => request(app).post(`/mission-control-api/process-definitions/${definitions[index].id}/start`).set('x-fixture-tenant', tenantId).send({ engineId: engine.id });
+    try {
+      for (const index of [0, 1]) {
+        const response = await start(tenantIds[index], index);
+        expect(response.status).toBe(200); expect(response.body.definitionId).toBe(definitions[index].id);
+      }
+      expect(fixture.post).toHaveBeenCalledTimes(2);
+      for (const [tenantId, index] of [[tenantIds[0], 1], [tenantIds[1], 0], ['', 0], ['foreign-tenant', 0]] as const) {
+        expect((await start(tenantId, index)).status).toBe(403);
+      }
+      fixture.network.mockImplementation(async (_engine, path) => path === '/process-definition/older-a'
+        ? { id: 'older-a', key: definitions[0].key, tenantId: `runtime-${tenantIds[0]}` } : definitions);
+      const older = (tenantId: string) => request(app).post('/mission-control-api/process-definitions/older-a/start').set('x-fixture-tenant', tenantId).send({ engineId: engine.id });
+      expect((await older(tenantIds[0])).status).toBe(200);
+      expect((await older(tenantIds[1])).status).toBe(403);
+      permission.mockResolvedValue(false);
+      expect((await start(tenantIds[0], 0)).status).toBe(403);
+      expect(fixture.post).toHaveBeenCalledTimes(3);
+      expect(fixture.post.mock.calls.map(([, path]) => path)).toEqual(['/process-definition/definition-0/start', '/process-definition/definition-1/start', '/process-definition/older-a/start']);
+    } finally { permission.mockRestore(); visible.mockRestore(); fixture.post.mockReset(); }
   });
 
   it('keeps a tenant RLS-hidden effect source uncovered instead of inferring an empty global drain', async () => {

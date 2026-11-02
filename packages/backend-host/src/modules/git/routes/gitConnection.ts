@@ -86,7 +86,7 @@ router.get('/git-api/project-connection', apiLimiter, requireAuth, validateQuery
 
 // --- POST /git-api/project-connection ---
 
-router.post('/git-api/project-connection', apiLimiter, requireAuth, validateBody(ProjectGitConnectionRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/project-connection', apiLimiter, requireAuth, validateBody(ProjectGitConnectionRequestSchema), requireAction('project.git.repositories.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId, providerId, repositoryName, namespace, defaultBranch, token } = req.body;
 
@@ -169,7 +169,7 @@ router.post('/git-api/project-connection', apiLimiter, requireAuth, validateBody
 
 // --- PUT /git-api/project-connection/token ---
 
-router.put('/git-api/project-connection/token', apiLimiter, requireAuth, validateBody(UpdateProjectGitConnectionTokenRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.put('/git-api/project-connection/token', apiLimiter, requireAuth, validateBody(UpdateProjectGitConnectionTokenRequestSchema), requireAction('project.git.repositories.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId, token } = req.body;
 
@@ -226,7 +226,7 @@ router.put('/git-api/project-connection/token', apiLimiter, requireAuth, validat
 
 // --- DELETE /git-api/project-connection ---
 
-router.delete('/git-api/project-connection', apiLimiter, requireAuth, validateBody(DisconnectProjectGitConnectionRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/git-api/project-connection', apiLimiter, requireAuth, validateBody(DisconnectProjectGitConnectionRequestSchema), requireAction('project.git.repositories.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { projectId } = req.body;
 

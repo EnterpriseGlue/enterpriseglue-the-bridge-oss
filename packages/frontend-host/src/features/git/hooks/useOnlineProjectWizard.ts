@@ -1,21 +1,23 @@
 import React from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, type NavigateOptions } from 'react-router-dom'
 import { gitApi } from '../api/gitApi'
 import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import type { Repository } from '../types/git'
-import { toSafePathSegment } from '../../../utils/safeNavigation'
+import { permissionSnapshotAuthorityKey, permissionSnapshotMatchesSession } from '../../../contexts/authSessionPermissions'
+import { getBrowserSessionRevision } from '../../../utils/browserSession'
+import { listPersonalGitCredentials, savePersonalGitCredential } from '../api/personalCredentials'
+import { beginGitOAuth } from '../api/gitOAuthPopup'
+import { executeProjectCreation, prepareProjectCreation, verifyProjectImportPreview } from '../api/projectCreation'
 import { sanitizePathParam, safeRelativePath } from '../../../shared/utils/sanitize'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
-import type { CreateOnlineProjectRequest, CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
 import type { ProjectImportPreview as SharedProjectImportPreview } from '@enterpriseglue/shared/schemas/starbase/project.js'
-import type { CreateProjectResponse } from '@enterpriseglue/shared/schemas/starbase/project.js'
 import type { GitCredential as ProviderCredential, GitCredentialNamespace as Namespace } from '@enterpriseglue/shared/schemas/git/repository.js'
 
 export type AuthMethod = 'oauth' | 'pat'
@@ -56,8 +58,13 @@ export function useOnlineProjectWizard({
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const queryClient = useQueryClient()
-  const { hasEnginePermission, permissions, refreshPermissions } = useAuth()
+  const { hasEnginePermission, permissions, refreshPermissions, user, sessionRevision } = useAuth()
+  const credentialOwner = user?.session?.principal.id || user?.id || ''
+  const formActor = JSON.stringify([credentialOwner, user?.session?.tenant.id || null, sessionRevision ?? null])
+  const formActorRef = React.useRef(formActor); formActorRef.current = formActor
+  const credentialAuthority = JSON.stringify([credentialOwner, user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)])
   const isExistingProject = !!existingProjectId
+  const localCreateDecision = evaluateActionSnapshot(permissions, 'project.projects.create', { type: 'platform', id: null })
   const gitCreateDecision = evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform', id: null })
   const gitInspectDecision = evaluateActionSnapshot(permissions, 'project.create.git.inspect', { type: 'platform', id: null })
 
@@ -121,6 +128,24 @@ export function useOnlineProjectWizard({
     ? gitInspectDecision.reason || 'Missing permission to inspect remote Git repositories'
     : null
 
+  const credentialScope = JSON.stringify([open, providerId, existingProjectId, credentialAuthority])
+  const credentialScopeRef = React.useRef(credentialScope), credentialLife = React.useRef(0), credentialMounted = React.useRef(true)
+  if (credentialScopeRef.current !== credentialScope) { credentialScopeRef.current = credentialScope; credentialLife.current++ }
+  const credentialSession = React.useRef({ authority: credentialAuthority, revision: getBrowserSessionRevision() })
+  if (credentialSession.current.authority !== credentialAuthority) credentialSession.current = { authority: credentialAuthority, revision: getBrowserSessionRevision() }
+  const authenticationIntent = React.useRef('')
+  authenticationIntent.current = JSON.stringify([authMethod, connectionMode, selectedCredentialId])
+  const credentialActive = React.useRef<number | null>(null), oauthCancel = React.useRef<(() => void) | null>(null)
+  const credentialReadEpoch = React.useRef(0)
+  React.useEffect(() => { credentialMounted.current = true; return () => { credentialMounted.current = false; credentialLife.current++; oauthCancel.current?.() } }, [])
+  React.useEffect(() => () => { oauthCancel.current?.(); oauthCancel.current = null }, [credentialScope])
+  const captureCredentialCheck = () => {
+    const life = credentialLife.current, browser = credentialSession.current.revision, intent = authenticationIntent.current
+    return () => {
+      if (!open || !credentialMounted.current || life !== credentialLife.current || browser !== getBrowserSessionRevision() || intent !== authenticationIntent.current) throw new Error('Git credential context changed')
+    }
+  }
+
   // Reset connection when provider changes
   React.useEffect(() => {
     setConnectionStatus('disconnected')
@@ -132,10 +157,8 @@ export function useOnlineProjectWizard({
     setConnectionMode('select')
     setExistingCredentials([])
     setNamespaces([])
-    if (!isEditConnectedProject) {
-      setNamespace('')
-    }
-  }, [providerId, isEditConnectedProject])
+  }, [providerId, isEditConnectedProject, credentialAuthority, open])
+  React.useEffect(() => { if (!isEditConnectedProject) setNamespace('') }, [providerId, isEditConnectedProject, formActor, open])
 
   // Default connect toggle based on context
   React.useEffect(() => {
@@ -228,10 +251,11 @@ export function useOnlineProjectWizard({
   }, [projectName, existingProjectName, isExistingProject, isEditConnectedProject])
 
   const fetchProviderCredentials = React.useCallback(async () => {
-    if (!providerId) return
-
+    if (!providerId || !credentialOwner) return
+    const scope = credentialScopeRef.current, browser = credentialSession.current.revision, readEpoch = credentialReadEpoch.current
     try {
-      const allCredentials = await fetchList<ProviderCredential>('/git-api/credentials')
+      const allCredentials = await listPersonalGitCredentials(credentialOwner)
+      if (scope !== credentialScopeRef.current || browser !== getBrowserSessionRevision() || !credentialMounted.current || readEpoch !== credentialReadEpoch.current) return
       const providerCreds = allCredentials.filter((c: ProviderCredential) => c.providerId === providerId)
       setExistingCredentials(providerCreds)
 
@@ -245,9 +269,9 @@ export function useOnlineProjectWizard({
         setConnectionMode('new')
       }
     } catch {
-      setConnectionMode('new')
+      if (scope === credentialScopeRef.current && browser === getBrowserSessionRevision() && credentialMounted.current && readEpoch === credentialReadEpoch.current) setConnectionMode('new')
     }
-  }, [providerId])
+  }, [providerId, credentialOwner, credentialAuthority, open])
 
   // Fetch existing credentials for this provider when selected
   React.useEffect(() => {
@@ -256,32 +280,28 @@ export function useOnlineProjectWizard({
     }
   }, [providerId, open, fetchProviderCredentials])
 
-  // Fetch namespaces when credential is selected
+  // A selected credential owns its namespace continuation; an old selection
+  // cannot populate the replacement provider's namespace choices.
   React.useEffect(() => {
-    if (selectedCredentialId && connectionStatus === 'connected') {
-      const fetchNs = async () => {
-        setLoadingNamespaces(true)
-        try {
-          const data = await fetchList<Namespace>(
-            `/git-api/credentials/${selectedCredentialId}/namespaces`
-          )
-          setNamespaces(data)
-          if (data.length > 0 && !namespace) {
-            const userNs = data.find((ns: Namespace) => ns.type === 'user')
-            setNamespace(userNs?.name || data[0].name)
-          }
-        } catch (error) {
-          console.error('Failed to fetch namespaces:', error)
-        } finally {
-          setLoadingNamespaces(false)
-        }
-      }
-      fetchNs()
-    }
-  }, [selectedCredentialId, connectionStatus, namespace])
+    if (!selectedCredentialId || connectionStatus !== 'connected') return
+    let cancelled = false
+    const scope = credentialScopeRef.current, browser = credentialSession.current.revision
+    const current = () => !cancelled && credentialMounted.current && scope === credentialScopeRef.current && browser === getBrowserSessionRevision()
+    setLoadingNamespaces(true)
+    void (async () => {
+      try {
+        const data = await fetchList<Namespace>(`/git-api/credentials/${encodeURIComponent(selectedCredentialId)}/namespaces`)
+        if (!current()) return
+        setNamespaces(data)
+        if (data.length > 0 && !namespace) { const userNs = data.find(ns => ns.type === 'user'); setNamespace(userNs?.name || data[0].name) }
+      } catch { if (current()) setNamespaces([]) }
+      finally { if (current()) setLoadingNamespaces(false) }
+    })()
+    return () => { cancelled = true }
+  }, [selectedCredentialId, connectionStatus, namespace, credentialAuthority, providerId, open])
 
   const providersQuery = useQuery({
-    queryKey: ['git', 'providers'],
+    queryKey: ['git', 'providers', credentialAuthority],
     queryFn: () => gitApi.getProviders(),
     enabled: open,
   })
@@ -292,7 +312,7 @@ export function useOnlineProjectWizard({
   )
 
   const importableEnginesQuery = useQuery({
-    queryKey: ['engines', 'importable-on-project-create'],
+    queryKey: ['engines', 'importable-on-project-create', credentialAuthority],
     queryFn: () => getAccessibleEngines().catch(() => []),
     enabled: open && !isExistingProject,
   })
@@ -331,10 +351,11 @@ export function useOnlineProjectWizard({
     : null
 
   const importPreviewQuery = useQuery({
-    queryKey: ['starbase', 'projects', 'import-preview', selectedImportEngineId],
-    queryFn: () => apiClient.post<EngineImportPreview>('/starbase-api/projects/import-preview', {
-      engineId: selectedImportEngineId,
-    }),
+    queryKey: ['starbase', 'projects', 'import-preview', selectedImportEngineId, credentialAuthority],
+    queryFn: async () => {
+      const engineId = selectedImportEngineId
+      return verifyProjectImportPreview(await apiClient.post('/starbase-api/projects/import-preview', { engineId }), engineId)
+    },
     enabled: open && canImportFromEngine && importFromEngine && !!selectedImportEngineId && canPreviewSelectedImportEngine,
     retry: false,
   })
@@ -362,6 +383,7 @@ export function useOnlineProjectWizard({
   }, [canImportFromEngine, importFromEngine, selectedImportEngineId])
 
   const handleSelectCredential = React.useCallback((credentialId: string) => {
+    credentialReadEpoch.current++
     if (credentialId === 'new') {
       setConnectionMode('new')
       setSelectedCredentialId('')
@@ -380,234 +402,108 @@ export function useOnlineProjectWizard({
     }
   }, [existingCredentials])
 
-  const connectWithPAT = React.useCallback(async () => {
-    if (!token.trim() || !providerId) return
-
-    setConnectionStatus('connecting')
-    setConnectionError(null)
-
+  const acceptCredential = (credential: ProviderCredential) => {
+    setConnectionStatus('connected'); setConnectedUser(credential.name || credential.providerUsername || credential.id)
+    setSelectedCredentialId(credential.id)
+    setExistingCredentials(prev => [...prev.filter(row => row.id !== credential.id), credential])
+    setConnectionMode('select'); setToken(''); setConnectionName('')
+    queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] })
+  }
+  const connectWithPAT = async () => {
+    if (!token.trim() || !providerId || credentialActive.current === credentialLife.current) return
+    const check = captureCredentialCheck(), life = credentialLife.current
+    const request = { providerId, token: token.trim(), name: connectionName.trim() || undefined }
     try {
-      const credential = await apiClient.post<ProviderCredential>('/git-api/credentials', {
-        providerId,
-        token,
-        name: connectionName.trim() || undefined,
-      })
-      setConnectionStatus('connected')
-      setConnectedUser(credential.name || credential.providerUsername || credential.id)
-      setSelectedCredentialId(credential.id)
-      setExistingCredentials((prev: ProviderCredential[]) => {
-        const exists = prev.some((c: ProviderCredential) => c.id === credential.id)
-        if (exists) return prev
-        return [...prev, credential]
-      })
-      setConnectionMode('select')
-      setToken('')
-      setConnectionName('')
-      queryClient.invalidateQueries({ queryKey: ['git', 'credentials'] })
-    } catch (error: unknown) {
-      setConnectionStatus('error')
-      const parsed = parseApiError(error, 'Failed to connect')
-      setConnectionError(parsed.message)
-    }
-  }, [connectionName, providerId, queryClient, token])
-
-  const connectWithOAuth = React.useCallback(async () => {
-    if (!providerId) return
-
-    setConnectionStatus('connecting')
-    setConnectionError(null)
-
+      check(); credentialReadEpoch.current++; credentialActive.current = life; setConnectionStatus('connecting'); setConnectionError(null)
+      const credential = await savePersonalGitCredential(credentialOwner, request, check)
+      check(); acceptCredential(credential)
+    } catch (error) {
+      try { check() } catch { return }
+      setConnectionStatus('error'); setConnectionError(parseApiError(error, 'Failed to connect').message.split(request.token).join('[redacted]'))
+    } finally { if (credentialActive.current === life) credentialActive.current = null }
+  }
+  const connectWithOAuth = async () => {
+    if (!providerId || credentialActive.current === credentialLife.current) return
+    const check = captureCredentialCheck(), life = credentialLife.current
     try {
-      const width = 600
-      const height = 700
-      const left = window.screenX + (window.outerWidth - width) / 2
-      const top = window.screenY + (window.outerHeight - height) / 2
+      check(); credentialReadEpoch.current++; credentialActive.current = life; setConnectionStatus('connecting'); setConnectionError(null)
+      const flow = beginGitOAuth(providerId, credentialOwner, check); oauthCancel.current = flow.cancel
+      const credential = await flow.result
+      check(); acceptCredential(credential)
+    } catch {
+      try { check() } catch { return }
+      setConnectionStatus('error'); setConnectionError('Git authorization was not verified')
+    } finally { if (credentialActive.current === life) { credentialActive.current = null; oauthCancel.current = null } }
+  }
 
-      const safeProviderId = toSafePathSegment(providerId)
-      if (!safeProviderId) {
-        setConnectionStatus('error')
-        setConnectionError('Invalid provider')
-        return
-      }
+  type CreationKind = 'local' | 'online' | 'clone'
+  const [creationBusy, setCreationBusy] = React.useState<CreationKind | null>(null)
+  const [creationNeedsReview, setCreationNeedsReview] = React.useState(false)
+  const creationActive = React.useRef<number | null>(null), creationLife = React.useRef(0)
+  const creationMounted = React.useRef(true)
+  const relevantPermission = connectToGit ? gitCreateDecision : localCreateDecision
+  const creationScope = JSON.stringify([open, existingProjectId, pathname, formActor, projectName, connectToGit,
+    connectToGit ? [repoMode, providerId, namespace, repositoryName, description, isPrivate, selectedExistingRepoUrl, customRepoUrl, conflictStrategy] : null,
+    importFromEngine && canImportFromEngine ? selectedImportEngineId : null, importFromEngine && canImportFromEngine,
+    relevantPermission.allowed, relevantPermission.reason, canPreviewSelectedImportEngine, gitInspectDeniedReason])
+  const creationScopeRef = React.useRef(creationScope)
+  if (creationScopeRef.current !== creationScope) { creationScopeRef.current = creationScope; creationLife.current++ }
+  React.useEffect(() => { creationMounted.current = true; return () => { creationMounted.current = false; creationLife.current++ } }, [])
+  React.useEffect(() => { setCreationNeedsReview(false); setCreationBusy(null); creationActive.current = null }, [open, formActor, existingProjectId])
 
-      const popupUrl = `/git-api/oauth/${encodeURIComponent(safeProviderId)}/authorize/redirect`
+  const creationCurrent = (life: number, browser: number) => creationMounted.current && life === creationLife.current && browser === getBrowserSessionRevision()
+  const credentialAmbiguityReason = connectToGit && existingCredentials.filter(row => row.providerId === providerId).length > 1
+    ? 'This provider has multiple saved credentials; project creation cannot identify one connection' : null
 
-      const popup = window.open(
-        popupUrl,
-        'oauth_popup',
-        `width=${width},height=${height},left=${left},top=${top}`
-      )
-
-      if (!popup) {
-        setConnectionStatus('error')
-        setConnectionError('Popup was blocked')
-        return
-      }
-
-      const pollTimer = setInterval(async () => {
-        if (popup?.closed) {
-          clearInterval(pollTimer)
-
-          const successData = sessionStorage.getItem('oauth_success')
-          if (successData) {
-            try {
-              const { providerUsername } = JSON.parse(successData)
-              setConnectionStatus('connected')
-              setConnectedUser(providerUsername || 'Connected')
-              sessionStorage.removeItem('oauth_success')
-            } catch {
-              await fetchProviderCredentials()
-            }
-          } else {
-            await fetchProviderCredentials()
-          }
-        }
-      }, 500)
-    } catch (error: unknown) {
-      setConnectionStatus('error')
-      const parsed = parseApiError(error, 'Failed to start OAuth')
-      setConnectionError(parsed.message)
+  const runCreation = async (kind: CreationKind) => {
+    const life = creationLife.current, browser = credentialSession.current.revision, actor = formActor, owner = credentialOwner
+    const check = () => { if (!creationCurrent(life, browser)) throw new Error('Project creation context changed') }
+    if (!open || !creationMounted.current || creationActive.current !== null || creationNeedsReview || browser !== getBrowserSessionRevision()) return
+    if (existingProjectId) { setGeneralError('Use project Git connection settings to connect an existing project'); return }
+    const decision = kind === 'local' ? localCreateDecision : gitCreateDecision
+    if (!decision.allowed) { setGeneralError(decision.reason || 'Missing permission to create a project'); return }
+    if (!owner || !projectName.trim()) { setFieldErrors(prev => ({ ...prev, projectName: 'Project name is required' })); return }
+    if ((kind === 'local') === connectToGit || (kind === 'online' && repoMode !== 'new') || (kind === 'clone' && repoMode !== 'existing')) return
+    if (kind !== 'local' && (connectionStatus !== 'connected' || !selectedCredentialId || !providerId)) { setGeneralError('Connect the selected Git provider first'); return }
+    if (credentialAmbiguityReason) { setGeneralError(credentialAmbiguityReason); return }
+    if (kind === 'clone' && gitInspectDeniedReason) { setGeneralError(gitInspectDeniedReason); return }
+    if (importFromEngine && canImportFromEngine && (!selectedImportEngineId || !canPreviewSelectedImportEngine || importPreviewQuery.isFetching || importPreviewQuery.isError || !importPreviewQuery.data?.allowed)) {
+      setFieldErrors(prev => ({ ...prev, importEngineId: 'A verified current engine import preview is required' })); return
     }
-  }, [fetchProviderCredentials, providerId])
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      if (!gitCreateDecision.allowed) {
-        throw new Error(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
-      }
-
-      try {
-        const request: CreateOnlineProjectRequest = {
-          projectName: projectName.trim(),
-          providerId,
-          repositoryName: repositoryName.trim(),
-          namespace: namespace.trim() || undefined,
-          isPrivate,
-          description: description.trim() || undefined,
-          token: authMethod === 'pat' && token ? token : undefined,
-          importFromEngine: importFromEnginePayload,
-        }
-        return await apiClient.post<CreateOnlineProjectResponse>('/git-api/create-online', request)
-      } catch (error) {
-        const parsed = parseApiError(error, 'Failed to create project')
-        if (parsed.field) {
-          setFieldErrors({ [parsed.field]: parsed.message })
-        }
-        throw new Error(parsed.message || 'Failed to create project')
-      }
-    },
-    onSuccess: async (data: CreateOnlineProjectResponse) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] }),
-        refreshPermissions(),
-      ])
-      resetForm()
-      onClose()
-      safeNavigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.project.id))}`), { state: { name: data.project.name } })
-    },
-    onError: (error: Error) => {
-      setGeneralError(error.message)
-    },
-  })
-
-  const createLocalMutation = useMutation({
-    mutationFn: async () => {
-      try {
-        return await apiClient.post<CreateProjectResponse>('/starbase-api/projects', {
-          name: projectName.trim(),
-          importFromEngine: importFromEnginePayload,
-        })
-      } catch (error) {
-        const parsed = parseApiError(error, 'Failed to create project')
-        throw new Error(parsed.message || 'Failed to create project')
-      }
-    },
-    onSuccess: async (data: CreateProjectResponse) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
-        refreshPermissions(),
-      ])
-      resetForm()
-      onClose()
-      safeNavigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.id))}`), { state: { name: data.name } })
-    },
-    onError: (error: Error) => {
-      setGeneralError(error.message)
-    },
-  })
-
-  const initExistingMutation = useMutation({
-    mutationFn: async () => {
-      const remoteUrl = generateRemoteUrl()
-      return gitApi.initRepository({
-        projectId: existingProjectId!,
-        providerId,
-        remoteUrl,
-        namespace: namespace.trim() || undefined,
-      })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
-      queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
-      resetForm()
-      onClose()
-    },
-    onError: (error: Error) => {
-      setGeneralError(error.message)
-    },
-  })
-
-  const cloneExistingMutation = useMutation({
-    mutationFn: async (remoteUrl: string) => {
-      return gitApi.cloneRepository({
-        projectId: existingProjectId!,
-        providerId,
-        remoteUrl,
-        namespace: namespace.trim() || undefined,
-        conflictStrategy,
-      })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
-      queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
-      resetForm()
-      onClose()
-    },
-    onError: (error: Error) => {
-      setGeneralError(error.message)
-    },
-  })
-
-  const cloneNewProjectMutation = useMutation({
-    mutationFn: async (remoteUrl: string) => {
-      if (!gitCreateDecision.allowed) {
-        throw new Error(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
-      }
-
-      return gitApi.cloneFromGit({
-        providerId,
-        repoUrl: remoteUrl,
-        projectName: projectName.trim(),
-        conflictStrategy,
-      })
-    },
-    onSuccess: async (data: { projectId: string; projectName: string }) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] }),
-        refreshPermissions(),
-      ])
-      resetForm()
-      onClose()
-      if (data?.projectId) {
-        safeNavigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.projectId))}`), { state: { name: data.projectName } })
-      }
-    },
-    onError: (error: Error) => {
-      setGeneralError(error.message)
-    },
-  })
+    let plan: ReturnType<typeof prepareProjectCreation>
+    try {
+      plan = prepareProjectCreation(kind, kind === 'local' ? { name: projectName.trim(), importFromEngine: importFromEnginePayload }
+        : kind === 'online' ? { projectName: projectName.trim(), providerId, repositoryName: repositoryName.trim(), namespace: namespace.trim() || undefined, isPrivate, description: description.trim() || undefined, importFromEngine: importFromEnginePayload }
+          : { projectName: projectName.trim(), providerId, repoUrl: selectedExistingRepoUrl || customRepoUrl.trim(), conflictStrategy })
+    } catch { setGeneralError('Project creation request was not verified'); return }
+    creationActive.current = life; setCreationBusy(kind); setFieldErrors({}); setGeneralError(null)
+    let acknowledged = false
+    try {
+      check()
+      const created = await executeProjectCreation(plan, owner, check)
+      check(); acknowledged = true; setCreationNeedsReview(true)
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }), queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })])
+      check()
+      // A successful refresh can advance the permission revision by adding this
+      // project. It must still belong to the original authenticated form session.
+      const refreshed = await refreshPermissions()
+      if (!creationMounted.current || life !== creationLife.current || actor !== formActorRef.current) return
+      if (!permissionSnapshotMatchesSession(user, refreshed)) throw new Error('Project access refresh was not verified')
+      resetForm(); onClose()
+      if (actor === formActorRef.current) safeNavigate(toTenantPath(`/starbase/project/${encodeURIComponent(created.id)}`), { state: { name: created.name } })
+    } catch (error) {
+      if (!creationMounted.current || life !== creationLife.current || actor !== formActorRef.current) return
+      setCreationNeedsReview(true)
+      setGeneralError(acknowledged ? 'Project creation was acknowledged, but access refresh failed. Reconcile the created project before retrying.'
+        : `${parseApiError(error, 'Project creation result was not verified').message}. Reconcile the project and repository before retrying.`)
+    } finally { if (creationMounted.current && creationActive.current === life) { creationActive.current = null; setCreationBusy(null) } }
+  }
+  const createMutation = { isPending: creationActive.current === creationLife.current && creationBusy === 'online', mutate: () => { void runCreation('online') } }
+  const createLocalMutation = { isPending: creationActive.current === creationLife.current && creationBusy === 'local', mutate: () => { void runCreation('local') } }
+  const cloneNewProjectMutation = { isPending: creationActive.current === creationLife.current && creationBusy === 'clone', mutate: (_remoteUrl?: string) => { void runCreation('clone') } }
+  const unsupportedExisting = () => setGeneralError('Use project Git connection settings to connect an existing project')
+  const initExistingMutation = { isPending: false, mutate: unsupportedExisting }
+  const cloneExistingMutation = { isPending: false, mutate: (_remoteUrl?: string) => unsupportedExisting() }
 
   const resetForm = React.useCallback(() => {
     setProjectName(existingProjectName || '')
@@ -634,11 +530,11 @@ export function useOnlineProjectWizard({
     setGeneralError(null)
   }, [existingProjectId, existingProjectName])
 
-  const handleClose = React.useCallback(() => {
-    if (!createMutation.isPending && !initExistingMutation.isPending && !createLocalMutation.isPending && !cloneExistingMutation.isPending && !cloneNewProjectMutation.isPending) {
-      onClose()
-    }
-  }, [createLocalMutation.isPending, createMutation.isPending, cloneExistingMutation.isPending, cloneNewProjectMutation.isPending, initExistingMutation.isPending, onClose])
+  const handleClose = () => {
+    creationLife.current++; creationActive.current = null; setCreationBusy(null)
+    credentialLife.current++; oauthCancel.current?.(); oauthCancel.current = null; setToken(''); setConnectionName(''); setConnectionStatus('disconnected')
+    onClose()
+  }
 
   const generateRemoteUrl = React.useCallback((): string => {
     if (repoMode === 'existing') {
@@ -650,104 +546,28 @@ export function useOnlineProjectWizard({
     return `${baseUrl}/${path}.git`
   }, [customRepoUrl, namespace, repositoryName, repoMode, selectedExistingRepoUrl, selectedProvider])
 
-  const handleSubmit = React.useCallback(() => {
-    setFieldErrors({})
-    setGeneralError(null)
-
-    if (isEditConnectedProject) {
-      onClose()
-      return
-    }
-
-    if (importFromEngine && canImportFromEngine && !selectedImportEngineId) {
-      setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: 'Select an engine to import from' }))
-      return
-    }
-    if (importFromEngine && canImportFromEngine && selectedImportEngineId) {
-      if (!canPreviewSelectedImportEngine) {
-        setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: importPreviewDeniedReason || 'Selected engine is not available for import' }))
-        return
-      }
-      if (importPreviewQuery.isLoading) {
-        setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: 'Import preview is still loading' }))
-        return
-      }
-      if (importPreviewQuery.isError || !importPreviewQuery.data?.allowed) {
-        setFieldErrors((prev: Record<string, string>) => ({ ...prev, importEngineId: 'Selected engine is not available for import' }))
-        return
-      }
-    }
-
-    const remoteUrl = repoMode === 'existing'
-      ? (selectedExistingRepoUrl || customRepoUrl.trim())
-      : generateRemoteUrl()
-
-    if (!connectToGit) {
-      if (isExistingProject) {
-        onClose()
-      } else {
-        if (!projectName.trim()) {
-          setFieldErrors((prev: Record<string, string>) => ({ ...prev, projectName: 'Project name is required' }))
-          return
-        }
-        createLocalMutation.mutate()
-      }
-      return
-    }
-
-    if (gitInspectDeniedReason) {
-      setGeneralError(gitInspectDeniedReason)
-      return
-    }
-    if (repoMode === 'existing' && !remoteUrl) {
-      setFieldErrors((prev: Record<string, string>) => ({ ...prev, repositoryName: 'Select or enter a repository to connect' }))
-      return
-    }
-
-    if (repoMode === 'new') {
-      if (isExistingProject) {
-        initExistingMutation.mutate()
-      } else {
-        if (!gitCreateDecision.allowed) {
-          setGeneralError(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
-          return
-        }
-        createMutation.mutate()
-      }
-    } else {
-      if (isExistingProject) {
-        cloneExistingMutation.mutate(remoteUrl!)
-      } else {
-        if (!projectName.trim()) {
-          setFieldErrors((prev: Record<string, string>) => ({ ...prev, projectName: 'Project name is required' }))
-          return
-        }
-        if (!gitCreateDecision.allowed) {
-          setGeneralError(gitCreateDeniedReason || 'Missing permission to create Git-backed projects')
-          return
-        }
-        cloneNewProjectMutation.mutate(remoteUrl!)
-      }
-    }
-  }, [canImportFromEngine, canPreviewSelectedImportEngine, cloneExistingMutation, cloneNewProjectMutation, connectToGit, createLocalMutation, createMutation, customRepoUrl, generateRemoteUrl, gitCreateDecision.allowed, gitCreateDeniedReason, gitInspectDeniedReason, importFromEngine, importPreviewDeniedReason, importPreviewQuery.data?.allowed, importPreviewQuery.isError, importPreviewQuery.isLoading, initExistingMutation, isEditConnectedProject, isExistingProject, onClose, projectName, repoMode, selectedExistingRepoUrl, selectedImportEngineId])
+  const handleSubmit = () => {
+    if (isExistingProject) { unsupportedExisting(); return }
+    void runCreation(!connectToGit ? 'local' : repoMode === 'new' ? 'online' : 'clone')
+  }
 
   const isConnected = connectionStatus === 'connected'
   const isValid = React.useMemo(() => {
-    if (isEditConnectedProject) return true
+    if (!open || !credentialOwner || creationNeedsReview || isExistingProject) return false
     const importPreviewRequired = importFromEngine && canImportFromEngine && !!selectedImportEngineId
     const importPreviewReady = !importPreviewRequired || (
       canPreviewSelectedImportEngine &&
       importPreviewQuery.data?.allowed === true &&
       !importPreviewQuery.isError &&
-      !importPreviewQuery.isLoading
+      !importPreviewQuery.isFetching
     )
     const importValid = !importFromEngine || !canImportFromEngine || (!!selectedImportEngineId && importPreviewReady)
     if (!importValid) return false
     if (!connectToGit) {
-      return isExistingProject ? true : !!projectName.trim()
+      return localCreateDecision.allowed && !!projectName.trim()
     }
     if (!isExistingProject && !gitCreateDecision.allowed) return false
-    if (!providerId || !isConnected) return false
+    if (!providerId || !isConnected || !selectedCredentialId || credentialAmbiguityReason) return false
     if (!repoMode) return false
     if (gitInspectDeniedReason) return false
     if (repoMode === 'new') {
@@ -755,9 +575,10 @@ export function useOnlineProjectWizard({
     }
     const remoteUrl = generateRemoteUrl()
     return !!remoteUrl && (isExistingProject ? true : !!projectName.trim())
-  }, [canImportFromEngine, canPreviewSelectedImportEngine, connectToGit, generateRemoteUrl, gitCreateDecision.allowed, gitInspectDeniedReason, importFromEngine, importPreviewQuery.data?.allowed, importPreviewQuery.isError, importPreviewQuery.isLoading, isConnected, isEditConnectedProject, isExistingProject, projectName, providerId, repoMode, repositoryName, selectedImportEngineId])
+  }, [open, credentialOwner, creationNeedsReview, localCreateDecision.allowed, selectedCredentialId, credentialAmbiguityReason, importPreviewQuery.isFetching, canImportFromEngine, canPreviewSelectedImportEngine, connectToGit, generateRemoteUrl, gitCreateDecision.allowed, gitInspectDeniedReason, importFromEngine, importPreviewQuery.data?.allowed, importPreviewQuery.isError, importPreviewQuery.isLoading, isConnected, isEditConnectedProject, isExistingProject, projectName, providerId, repoMode, repositoryName, selectedImportEngineId])
 
   const isLoading =
+    (creationActive.current === creationLife.current && creationBusy !== null) ||
     createMutation.isPending ||
     initExistingMutation.isPending ||
     createLocalMutation.isPending ||
@@ -825,7 +646,7 @@ export function useOnlineProjectWizard({
     loadingNamespaces,
     fieldErrors,
     setFieldErrors,
-    generalError,
+    generalError: generalError || credentialAmbiguityReason,
     providersQuery,
     selectedProvider,
     handleSelectCredential,

@@ -60,6 +60,7 @@ export {
   DeploymentSelectSchema,
   DeploymentInsertSchema,
   DeployRequestSchema,
+  VersionedDeployRequestSchema,
   RollbackRequestSchema,
   DeploymentResponseSchema,
   type Deployment,

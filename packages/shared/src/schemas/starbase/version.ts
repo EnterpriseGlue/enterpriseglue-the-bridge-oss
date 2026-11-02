@@ -39,3 +39,11 @@ export const CompareVersionsResponse = z.object({
 
 // Types
 export type Version = z.infer<typeof VersionSchema>;
+
+export const LocalVersionRestoreBodySchema = z.object({}).strict().default({});
+export const LocalVersionRestoreResponseSchema = z.object({
+  restored: z.literal(true),
+  fileId: z.string().min(1),
+  versionId: z.string().min(1),
+  updatedAt: z.number().int().nonnegative().safe(),
+}).strict();

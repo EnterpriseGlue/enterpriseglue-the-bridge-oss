@@ -13,6 +13,11 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { ProjectPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { unixTimestamp, unixTimestampMs } from '@enterpriseglue/shared/utils/id.js';
 
+import { LocalVersionRestoreBodySchema, LocalVersionRestoreResponseSchema } from '@enterpriseglue/shared/schemas/starbase/version.js';
+import { lockFolderProject } from '@enterpriseglue/shared/services/starbase/folder-tree.js';
+import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services/engines/deployment-utils.js';
+import { extractBpmnProcessId, extractDmnDecisionId } from '@enterpriseglue/shared/utils/starbase-xml.js';
+
 const fileIdParamSchema = z.object({ fileId: z.string().uuid() });
 const versionIdParamSchema = z.object({ fileId: z.string().uuid(), versionId: z.string().uuid() });
 const createVersionBodySchema = z.object({
@@ -157,59 +162,31 @@ r.get('/starbase-api/files/:fileId/versions/:versionId', apiLimiter, requireAuth
   });
 }));
 
-r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireAction('project.versions.restore', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
-  const fileId = String(req.params.fileId);
-  const versionId = String(req.params.versionId);
-  const userId = req.user!.userId;
+r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, requireAuth, validateParams(versionIdParamSchema), validateBody(LocalVersionRestoreBodySchema), requireAction('project.versions.restore', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const fileId = String(req.params.fileId), versionId = String(req.params.versionId), userId = req.user!.userId;
   const dataSource = await getDataSource();
-  const versionRepo = dataSource.getRepository(Version);
-  const fileRepo = dataSource.getRepository(File);
-
-  const [file, version] = await Promise.all([
-    fileRepo.findOne({
-      where: { id: fileId },
-      select: ['id', 'projectId'],
-    }),
-    versionRepo.findOne({
-      where: { id: versionId, fileId },
-      select: ['id', 'fileId', 'message', 'xml'],
-    }),
-  ]);
-
-  if (!file) {
-    throw Errors.notFound('File');
-  }
-
-  if (!version) {
-    throw Errors.notFound('Version');
-  }
-
-  const updatedAt = unixTimestamp();
-  const versionCreatedAt = unixTimestampMs();
-
-  await fileRepo.update(
-    { id: fileId },
-    {
-      xml: version.xml,
-      updatedAt,
-    }
-  );
-
-  await versionRepo.insert({
-    id: generateId(),
-    fileId,
-    author: userId,
-    message: `Restored from ${String(version.message || '').trim() || `version ${versionId.substring(0, 8)}`}`,
-    xml: version.xml,
-    createdAt: versionCreatedAt,
+  const owner = await dataSource.getRepository(File).findOne({ where: { id: fileId }, select: ['projectId'] });
+  if (!owner) throw Errors.notFound('File');
+  const receipt = await dataSource.transaction(async manager => {
+    await lockFolderProject(manager, owner.projectId);
+    const files = manager.getRepository(File), versions = manager.getRepository(Version);
+    const file = await files.findOne({ where: { id: fileId, projectId: owner.projectId }, select: ['id', 'projectId', 'type'] });
+    const version = await versions.findOne({ where: { id: versionId, fileId }, select: ['id', 'fileId', 'message', 'xml'] });
+    if (!file) throw Errors.notFound('File');
+    if (!version) throw Errors.notFound('Version');
+    if (!version.xml) throw Errors.conflict('Version content is unavailable for restore');
+    const xml = file.type === 'bpmn' ? sanitizeBpmnXml(version.xml) : file.type === 'dmn' ? sanitizeDmnXml(version.xml) : version.xml;
+    const updatedAt = unixTimestamp();
+    const result = await files.update({ id: fileId, projectId: owner.projectId }, { xml, updatedAt, updatedBy: userId,
+      bpmnProcessId: file.type === 'bpmn' ? extractBpmnProcessId(xml) : null,
+      dmnDecisionId: file.type === 'dmn' ? extractDmnDecisionId(xml) : null });
+    if (result.affected !== 1) throw Errors.notFound('File');
+    await versions.insert({ id: generateId(), fileId, author: userId,
+      message: `Restored from ${String(version.message || '').trim() || `version ${versionId.substring(0, 8)}`}`,
+      xml, createdAt: unixTimestampMs() });
+    return LocalVersionRestoreResponseSchema.parse({ restored: true, fileId, versionId, updatedAt });
   });
-
-  res.json({
-    restored: true,
-    fileId,
-    versionId,
-    updatedAt,
-  });
+  res.json(receipt);
 }));
 
 /**

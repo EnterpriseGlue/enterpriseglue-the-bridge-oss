@@ -1,4 +1,4 @@
-import { ApiError } from './client'
+import { ApiError } from './client.js'
 
 type ParsedApiError = {
   message: string

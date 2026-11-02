@@ -12,6 +12,7 @@ import { Folder as MainFolder } from '@enterpriseglue/shared/infrastructure/pers
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { hashContent, normalizeFolderId } from './vcs-types.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 export class VcsSyncService {
   /**
@@ -180,51 +181,61 @@ export class VcsSyncService {
       return { fileIds, folderIds };
     }
     
-    const lastCommitSnapshots = await snapshotRepo.find({ where: { commitId: baselineCommitId } });
-    
-    const snapshotsByMainFileId = new Map<string, Set<string>>();
-    const snapshotsByKey = new Map<string, Set<string>>();
-    for (const s of lastCommitSnapshots) {
-      const hash = (s as any).contentHash;
-      if (typeof hash !== 'string' || !hash) continue;
-
-      const snapshotMainFileId = (s as any).mainFileId ? String((s as any).mainFileId) : null;
-      if (snapshotMainFileId) {
-        const set = snapshotsByMainFileId.get(snapshotMainFileId) ?? new Set<string>();
-        set.add(hash);
-        snapshotsByMainFileId.set(snapshotMainFileId, set);
-        continue;
-      }
-
-      const key = `${normalizeFolderId((s as any).folderId)}:${(s as any).name}:${(s as any).type}`;
-      const set = snapshotsByKey.get(key) ?? new Set<string>();
-      set.add(hash);
-      snapshotsByKey.set(key, set);
+    const baseline = await dataSource.getRepository(Commit).findOne({
+      where: { id: baselineCommitId, projectId }, select: ['id'],
+    });
+    if (!baseline) throw Errors.conflict('The saved baseline is unavailable for this project');
+    const lastCommitSnapshots = await snapshotRepo.find({ where: { commitId: baseline.id } });
+    const pathKey = (file: { folderId: string | null; name: string; type: string }) =>
+      JSON.stringify([normalizeFolderId(file.folderId), file.name, file.type]);
+    const byMainId = new Map<string, FileSnapshot[]>();
+    const byLegacyPath = new Map<string, FileSnapshot[]>();
+    for (const snapshot of lastCommitSnapshots) {
+      const map = snapshot.mainFileId ? byMainId : byLegacyPath;
+      const key = snapshot.mainFileId || pathKey(snapshot);
+      map.set(key, [...(map.get(key) ?? []), snapshot]);
     }
-    
-    const uncommittedFileIds: string[] = [];
+
+    const uncommittedFileIds = new Set<string>();
     const uncommittedFolderIdsSet = new Set<string>();
+    const currentIds = new Set(currentFiles.map(file => file.id));
+    const currentPaths = new Set(currentFiles.map(pathKey));
     
     for (const file of currentFiles) {
-      const key = `${normalizeFolderId((file as any).folderId)}:${file.name}:${file.type}`;
-      const snapshotHashes = snapshotsByMainFileId.get(String((file as any).id)) ?? snapshotsByKey.get(key);
-      
-      const currentHash = hashContent((file as any).xml || '');
-      
-      if (!snapshotHashes || !snapshotHashes.has(currentHash)) {
-        uncommittedFileIds.push(file.id);
+      const candidates = byMainId.get(file.id) ?? byLegacyPath.get(pathKey(file));
+      const saved = candidates?.length === 1 ? candidates[0] : null;
+      const clean = saved && ['added', 'modified', 'unchanged'].includes(saved.changeType)
+        && saved.name === file.name && saved.type === file.type
+        && normalizeFolderId(saved.folderId) === normalizeFolderId(file.folderId)
+        && saved.content === file.xml && saved.contentHash === hashContent(file.xml);
+      if (!clean) {
+        uncommittedFileIds.add(file.id);
         
         if ((file as any).folderId) {
           let currentFolderId: string | null = (file as any).folderId;
-          while (currentFolderId) {
+          while (currentFolderId && !uncommittedFolderIdsSet.has(currentFolderId)) {
             uncommittedFolderIdsSet.add(currentFolderId);
             currentFolderId = folderParentMap.get(currentFolderId) || null;
           }
         }
       }
     }
-    
-    return { fileIds: uncommittedFileIds, folderIds: Array.from(uncommittedFolderIdsSet) };
+
+    // A saved file can be dirty because it no longer exists. Do not mistake an
+    // empty current query for a clean project or widen a file-scoped save to
+    // acknowledge its missing siblings. Legacy IDs are status markers only;
+    // the ordinary scoped-save route still requires a current project file.
+    for (const saved of lastCommitSnapshots) {
+      if (saved.changeType === 'deleted') continue;
+      const exists = saved.mainFileId ? currentIds.has(saved.mainFileId) : currentPaths.has(pathKey(saved));
+      if (exists) continue;
+      uncommittedFileIds.add(saved.mainFileId || saved.workingFileId);
+      for (const id of this.getAncestorFolderIds(saved.folderId ? [saved.folderId] : [], folderParentMap)) {
+        uncommittedFolderIdsSet.add(id);
+      }
+    }
+
+    return { fileIds: Array.from(uncommittedFileIds), folderIds: Array.from(uncommittedFolderIdsSet) };
   }
 
   /**
@@ -234,7 +245,7 @@ export class VcsSyncService {
     const result = new Set<string>();
     for (const folderId of folderIds) {
       let currentId: string | null = folderId;
-      while (currentId) {
+      while (currentId && !result.has(currentId)) {
         result.add(currentId);
         currentId = parentMap.get(currentId) || null;
       }

@@ -3,7 +3,7 @@
  * Now with automatic token refresh on 401 errors
  */
 
-import { interceptedFetch, getAuthHeaders } from '../../utils/httpInterceptor';
+import { interceptedFetch, getAuthHeaders } from '../../utils/httpInterceptor.js';
 
 export class ApiError extends Error {
   constructor(
@@ -27,6 +27,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 
   if (response.status === 204) {
+    // Settle the empty stream before acknowledging the operation. Some browser
+    // transports otherwise leave it pending and later report an aborted load.
+    await response.text();
     return undefined as T;
   }
 
@@ -292,5 +295,18 @@ export const apiClient = {
       headers: mergeHeaders(options?.headers),
     });
     return handleResponse<T>(response);
+  },
+
+  /** A mutation whose contract acknowledges completion only with HTTP 204. */
+  async deleteNoContent(url: string, options?: RequestInit): Promise<void> {
+    const response = await interceptedFetch(url, {
+      ...options, method: 'DELETE', headers: mergeHeaders(options?.headers),
+    });
+    if (!response.ok) return handleResponse<void>(response);
+    if (response.status !== 204) {
+      try { await response.body?.cancel(); } catch {}
+      throw new ApiError(502, 'Unverified deletion', 'Deletion response was not verified; refresh before retrying.');
+    }
+    await response.text();
   },
 };

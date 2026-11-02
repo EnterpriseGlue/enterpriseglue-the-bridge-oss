@@ -7,6 +7,7 @@ import {
   camundaGet,
   camundaGetWithConnection,
   camundaPost,
+  deleteDeployment,
   fetchBpmnEngineEndpoint,
   MAX_ENGINE_RESPONSE_BYTES,
   resolveBpmnEngineConnection,
@@ -63,6 +64,33 @@ describe('bpmn-engine-client', () => {
         throw new Error('Unexpected repository');
       },
     });
+  });
+
+  it.each([200, 201, 202])('does not acknowledge deployment deletion from HTTP %s', async status => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('{"private":"engine-detail"}', { status, headers: { 'content-type': 'application/json' } }) as any);
+    await expect(deleteDeployment('engine-1', 'deployment/one', false)).rejects.toMatchObject({ code: 'ENGINE_MALFORMED_RESPONSE', statusCode: 502, message: 'The engine returned a malformed response' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('settles an exact noncascading deployment DELETE acknowledgement without retry', async () => {
+    const response = new Response(null, { status: 204 });
+    vi.mocked(fetch).mockResolvedValueOnce(response as any);
+    await expect(deleteDeployment('engine-1', 'deployment/one', false)).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('http://localhost:8080/engine-rest/deployment/deployment%2Fone', expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('does not acknowledge deletion when the HTTP 204 stream fails', async () => {
+    const response = new Response(null, { status: 204 });
+    vi.spyOn(response, 'text').mockRejectedValueOnce(new Error('private-stream-detail'));
+    vi.mocked(fetch).mockResolvedValueOnce(response as any);
+    await expect(deleteDeployment('engine-1', 'deployment-1')).rejects.toMatchObject({ code: 'ENGINE_MALFORMED_RESPONSE', statusCode: 502 });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('preserves an explicit cascading caller and refuses engine conflict without retry', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('private-conflict-detail', { status: 409 }) as any);
+    await expect(deleteDeployment('engine-1', 'deployment-1', true)).rejects.toMatchObject({ code: 'ENGINE_OPERATION_REJECTED', details: expect.objectContaining({ engineStatus: 409 }) });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('http://localhost:8080/engine-rest/deployment/deployment-1?cascade=true', expect.objectContaining({ method: 'DELETE' }));
   });
 
   it.each([

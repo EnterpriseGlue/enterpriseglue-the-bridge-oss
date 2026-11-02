@@ -5,6 +5,7 @@ import CreateOnlineProjectModal from '@src/features/git/components/CreateOnlineP
 
 const hookMocks = vi.hoisted(() => ({
   wizard: null as any,
+  useWizard: vi.fn(),
 }));
 
 vi.mock('@carbon/react', () => ({
@@ -48,7 +49,7 @@ vi.mock('@src/features/git/hooks/useOnlineProjectWizard', async (importOriginal)
   const actual = await importOriginal<typeof import('@src/features/git/hooks/useOnlineProjectWizard')>();
   return {
     ...actual,
-    useOnlineProjectWizard: () => hookMocks.wizard,
+    useOnlineProjectWizard: () => { hookMocks.useWizard(); return hookMocks.wizard; },
   };
 });
 
@@ -64,8 +65,17 @@ vi.mock('@src/features/git/components/CreateOnlineProjectRepoModeFields', () => 
   CreateOnlineProjectRepoModeFields: () => <div>Repo mode</div>,
 }));
 
+vi.mock('@src/features/git/components/ProjectGitSettings', () => ({ ProjectGitSettings: ({ projectId }: any) => <div>Service-token connection for {projectId}</div> }));
+
 describe('CreateOnlineProjectModal', () => {
+  it('routes existing projects to the supported service-token connection instead of metadata-only init/clone', () => {
+    render(<CreateOnlineProjectModal open onClose={vi.fn()} existingProjectId="project-existing" />);
+    expect(screen.getByText('Service-token connection for project-existing')).toBeVisible();
+    expect(hookMocks.useWizard).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
+    hookMocks.useWizard.mockClear();
     hookMocks.wizard = {
       navigate: vi.fn(),
       toTenantPath: (path: string) => path,

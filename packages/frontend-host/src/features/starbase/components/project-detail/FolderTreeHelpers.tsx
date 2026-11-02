@@ -4,8 +4,8 @@
  */
 
 import React from 'react'
-import { apiClient } from '../../../../shared/api/client'
-import { fetchList } from '../../../../shared/api/fetchList';
+import { foldersApi } from '../../../../api/starbase/folders'
+import { FolderListResponseSchema } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 import type { FolderSummary } from './project-detail-utils'
 
 interface LoaderProps {
@@ -17,50 +17,15 @@ interface LoaderProps {
  * Tiny loader component to fetch folders list while modal mounts
  */
 export function FolderLoader({ projectId, onLoaded }: LoaderProps) {
+  const [failed, setFailed] = React.useState(false);
   React.useEffect(() => {
-    let active = true
-    
-    async function run() {
-      try {
-        const data = await fetchList<FolderSummary>(`/starbase-api/projects/${projectId}/folders`)
-        if (active && Array.isArray(data) && data.length > 0) {
-          onLoaded(data)
-          return
-        }
-      } catch {}
-      
-      // Fallback: crawl via contents API (BFS)
-      const out: FolderSummary[] = []
-      const seen = new Set<string>()
-      const queue: (string | null)[] = [null]
-      
-      while (queue.length) {
-        const fid = queue.shift()!
-        try {
-          const c = await apiClient.get<any>(
-            `/starbase-api/projects/${projectId}/contents`,
-            fid ? { folderId: fid } : undefined
-          )
-          const folders: any[] = Array.isArray(c?.folders) ? c.folders : []
-          for (const f of folders) {
-            if (!seen.has(f.id)) {
-              seen.add(f.id)
-              out.push({ id: f.id, name: f.name, parentFolderId: f.parentFolderId ?? null })
-              queue.push(f.id)
-            }
-          }
-        } catch {}
-      }
-      if (active) onLoaded(out)
-    }
-    
-    run()
-    return () => {
-      active = false
-    }
-  }, [projectId, onLoaded])
-  
-  return <div style={{ fontSize: 12, color: '#8d8d8d', marginBottom: 8 }}>Loading folders…</div>
+    let active = true; setFailed(false);
+    void foldersApi.listByProject(projectId).then(rows => { if (active) onLoaded(rows); })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [projectId, onLoaded]);
+  return <div role={failed ? 'alert' : 'status'} style={{ fontSize: 12, marginBottom: 8 }}>{failed ? 'Folder tree unavailable. Refresh before moving items.' : 'Loading folders…'}</div>;
+
 }
 
 interface CurrentPathProps {
@@ -79,6 +44,7 @@ export function CurrentPath({ allFolders, folderId, projectName }: CurrentPathPr
     return m
   }, [allFolders])
   
+  if (!FolderListResponseSchema.safeParse(allFolders).success) return <div role="alert">Folder path unavailable.</div>
   const parts: string[] = []
   let cur: string | null = folderId
   while (cur) {
@@ -174,6 +140,7 @@ export function TreePicker({ allFolders, value, onChange, disabledSet, projectNa
     })
   }
 
+  if (!FolderListResponseSchema.safeParse(allFolders).success) return <div role="alert">Folder tree unavailable.</div>
   const rows: React.ReactElement[] = []
   renderNode('ROOT', true, [], rows)
 

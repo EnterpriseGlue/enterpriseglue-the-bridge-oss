@@ -1,6 +1,7 @@
-import { apiClient } from '../../../../shared/api/client'
-import { fetchList } from '../../../../shared/api/fetchList';
-export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
+import { validateNumericVariableValue } from '../components/variableValues.js'
+import { apiClient } from '../../../../shared/api/client.js'
+import { fetchList } from '../../../../shared/api/fetchList.js';
+export { fetchProcessDefinitionXml } from '../../shared/api/definitions.js'
 import type {
   ActivityInstance,
   ProcessInstanceVariablesModifyRequest,
@@ -16,7 +17,7 @@ import type {
   Incident,
   Job,
   ExternalTask,
-} from '../components/types'
+} from '../components/types.js'
 
 // Types
 export type ProcessInstanceDetail = SharedProcessInstanceDetail
@@ -37,7 +38,27 @@ export async function getProcessInstanceVariables(instanceId: string, engineId?:
 }
 
 export async function modifyProcessInstanceVariables(instanceId: string, body: ProcessInstanceVariablesModifyRequest): Promise<void> {
-  await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+  // UI callers keep parsed JSON for editing and optimistic state. Serialize at
+  // this shared write boundary so edit, add and bulk upload cannot diverge.
+  const modifications = Object.fromEntries(Object.entries(body.modifications).map(([name, input]) => {
+    // The API record parser excludes this reserved key. Reject the whole UI
+    // write explicitly instead of reporting success after silently dropping it.
+    if (name === '__proto__') throw new Error("Variable name '__proto__' is not supported")
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const variable = input as Record<string, unknown>
+      validateNumericVariableValue(variable.value, String(variable.type))
+      if (variable.type === 'Json' && Object.prototype.hasOwnProperty.call(variable, 'value')) {
+        const value = JSON.stringify(variable.value, (_key, item) => {
+          if (typeof item === 'number' && !Number.isFinite(item)) throw new Error('JSON variable numbers must be finite')
+          return item
+        })
+        if (value === undefined) throw new Error('JSON variable value is required')
+        return [name, { ...variable, value }]
+      }
+    }
+    return [name, input]
+  }))
+  await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/variables`, { ...body, modifications }, { credentials: 'include' })
 }
 
 export async function retryProcessInstance(instanceId: string, body: ProcessInstanceRetryRequest): Promise<void> {

@@ -6,6 +6,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -88,14 +89,37 @@ describe('starbase files routes - mutations', () => {
         'project:files:delete',
       ].includes(permission)
     );
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    const source = {
+      connection: { options: { type: 'sqljs' } },
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: projectFindOne };
         if (entity === File) return { find: fileFind, findOne: fileFindOne, insert: fileInsert };
         if (entity === Version) return { insert: versionInsert };
+        if (entity === Folder) return { findOne: vi.fn().mockResolvedValue(null) };
         return {};
       },
-    });
+      transaction: vi.fn(),
+    };
+    source.transaction.mockImplementation(async (work: any) => work(source));
+    vi.mocked(getDataSource).mockResolvedValue(source as any);
+  });
+
+  it('rejects a foreign or missing destination folder before inserting file or version', async () => {
+    const response = await request(app).post(`/starbase-api/projects/${projectId}/files`).send({ name: 'Foreign', type: 'bpmn', folderId: '33333333-3333-4333-8333-333333333333' });
+    expect(response.status).toBe(404); expect(fileInsert).not.toHaveBeenCalled(); expect(versionInsert).not.toHaveBeenCalled();
+  });
+
+  it('creates the file and initial version through one owned transaction', async () => {
+    const source = await getDataSource();
+    const response = await request(app).post(`/starbase-api/projects/${projectId}/files`).send({ name: 'Atomic', type: 'bpmn' });
+    expect(response.status).toBe(201); expect(source.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('denies file import before opening a transaction when create permission is missing', async () => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(false);
+    const source = await getDataSource();
+    const response = await request(app).post(`/starbase-api/projects/${projectId}/files`).send({ name: 'Denied', type: 'bpmn' });
+    expect(response.status).toBe(403); expect(source.transaction).not.toHaveBeenCalled(); expect(fileInsert).not.toHaveBeenCalled();
   });
 
   it('creates a file through project.files.create', async () => {

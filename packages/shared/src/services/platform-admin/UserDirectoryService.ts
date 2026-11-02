@@ -12,6 +12,7 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { ScimUserLink } from '@enterpriseglue/shared/infrastructure/persistence/entities/ScimUserLink.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
 import type {
   UserAuditResponse,
   UserDirectorySummary,
@@ -76,8 +77,9 @@ async function writeLifecycleAudit(manager: EntityManager, input: {
   reason: string;
   sourceType: ProvisioningSource;
 }): Promise<void> {
-  await manager.getRepository(AuditLog).insert({
-    id: generateId(),
+  const rowId = generateId();
+  await runWithPlatformDatabaseCapability({ kind: 'audit-append', rowId }, () => manager.getRepository(AuditLog).insert({
+    id: rowId,
     tenantId: input.tenantId,
     userId: input.actorId,
     action: input.action,
@@ -87,7 +89,7 @@ async function writeLifecycleAudit(manager: EntityManager, input: {
     userAgent: null,
     details: JSON.stringify({ reason: input.reason, sourceType: input.sourceType, outcome: 'success' }),
     createdAt: Date.now(),
-  });
+  }));
 }
 
 export class UserDirectoryService {
@@ -154,6 +156,7 @@ export class UserDirectoryService {
       displayName,
       status: userStatus(user),
       platformRole: context.platformAdministrators.has(user.id) ? 'admin' : 'user',
+      bootstrapAccess: context.platformAdministrators.has(user.id) ? 'admin' : 'user',
       authenticationSources,
       provisioningSource,
       provisioningDirectoryKey: directory?.key || null,
@@ -292,6 +295,10 @@ export class UserDirectoryService {
     const groupsById = new Map(groups.map((group) => [group.id, group]));
     const rolesById = new Map(roles.map((role) => [role.id, role]));
     const now = Date.now();
+    const activeGroupIds = new Set(memberships.filter(membership => {
+      const group = groupsById.get(membership.groupId);
+      return group && !group.isArchived && (membership.expiresAt == null || Number(membership.expiresAt) > now);
+    }).map(membership => membership.groupId));
     const lineage: UserEffectiveAccessResponse['lineage'] = [{
       sourceType: 'manual', sourceId: null, sourceName: 'Platform user compatibility access',
       assignmentType: 'platform_role', assignmentId: `platform-role:${user.id}`,
@@ -313,10 +320,11 @@ export class UserDirectoryService {
       lineage.push({
         sourceType: accessSource(assignment.source), sourceId: assignment.sourceRef, sourceName: assignment.sourceRef,
         assignmentType: 'role', assignmentId: assignment.id, assignmentName: `${role.name} on ${scope}`,
-        active: !role.isArchived && (assignment.expiresAt == null || Number(assignment.expiresAt) > now),
+        active: !role.isArchived && (assignment.expiresAt == null || Number(assignment.expiresAt) > now)
+          && (assignment.principalType !== 'group' || activeGroupIds.has(assignment.principalId || '')),
       });
     }
-    return { userId, platformRole: administrators.has(user.id) ? 'admin' : 'user', lineage, evaluatedAt: now };
+    return { userId, platformRole: administrators.has(user.id) ? 'admin' : 'user', bootstrapAccess: administrators.has(user.id) ? 'admin' : 'user', lineage, evaluatedAt: now };
   }
 
   async sessions(userId: string): Promise<UserSessionsResponse> {
@@ -416,7 +424,7 @@ export class UserDirectoryService {
     const user = await dataSource.getRepository(User).findOneBy({ id: input.userId });
     if (!user) throw Errors.notFound('User', input.userId);
     const source = await this.provisioningSource(dataSource, input.userId, input.tenantId);
-    if (source === 'scim') throw Errors.conflict('This user is directory-managed. Reactivate the assignment in the authoritative directory.');
+    if (source === 'scim' || source === 'ldap') throw Errors.conflict('This user is directory-managed. Reactivate the assignment in the authoritative directory.');
     const changedAt = Date.now();
     const nextVersion = Number(user.authSessionVersion || 0) + 1;
     await dataSource.transaction(async (manager) => {

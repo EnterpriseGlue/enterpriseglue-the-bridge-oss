@@ -1,5 +1,5 @@
 import { camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
-import type { ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessInstanceStartResponse, ProcessInstanceStartRequest } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 export interface ProcessDefinition {
   id: string
@@ -77,6 +77,14 @@ export async function getProcessDefinitionStatistics(
 export interface StartProcessParams {
   variables?: Record<string, any>
   businessKey?: string
+}
+
+export async function startProcessInstanceById(
+  engineId: string,
+  definitionId: string,
+  params: Omit<ProcessInstanceStartRequest, 'engineId'>,
+): Promise<ProcessInstanceStartResponse> {
+  return camundaPost<ProcessInstanceStartResponse>(engineId, `/process-definition/${encodeURIComponent(definitionId)}/start`, params)
 }
 
 export async function startProcessInstance(

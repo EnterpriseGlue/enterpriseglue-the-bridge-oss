@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "id": "variable-write-wiring",
+  "type": "fix",
+  "scope": "workflows",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers"
+  ],
+  "summary": "Bind browser actions to their original context, verify deployment and variable transport, and use explicit directory presentation contracts with permission-based administration.",
+  "userImpact": [
+    "Adding and uploading native JSON variables uses the same serialized engine contract as editing existing variables.",
+    "Process navigation discards action drafts belonging to the previous instance, including when both instances use the same engine.",
+    "Bulk variable writes and completed-history snapshots retain prototype-like variable names as ordinary own fields.",
+    "Reserved variable names are rejected before a bulk write can silently omit them.",
+    "Late authentication responses cannot restore an older browser session or replace newer permissions.",
+    "Save-and-deploy cannot continue against a replacement project, file selection or session.",
+    "Unsafe or out-of-range numeric variable writes are rejected instead of rounding or becoming null.",
+    "Versioned engine deployments reject content or snapshot drift before contacting the engine.",
+    "User administration reads an explicit account access preset without using compatibility role fields for authorization.",
+    "Changing users, sessions or permissions discards old directory loads and lifecycle confirmations.",
+    "Inherited access is shown inactive after membership expiry or group archival; incomplete ownership metadata does not enable manual user creation.",
+    "Locked directory accounts expose the permission-gated unlock action without requiring legacy counters.",
+    "Profile edits no longer resend unchanged account access or active status and overwrite intervening lifecycle changes.",
+    "Account status changes use audited lifecycle actions; legacy profile/delete paths cannot bypass status, ownership, reason or recovery checks, and LDAP reactivation remains directory-owned.",
+    "Shared SaaS profile names stay at their identity/provisioning provider boundary; normalized timestamps and controlled edit fields keep directory presentation consistent.",
+    "Process drafts and deployment continuations discard older session and permission state even when the URL, account or engine ID stays the same.",
+    "An older 401 refresh cannot replay a request under a replacement login or clear its local state; private caches are discarded on same-account session replacement and permission changes.",
+    "Session startup makes one refresh attempt for an expired session and stops on other failures; a pending login-page bootstrap cannot continue after switching tenants.",
+    "Runtime configuration rejects redirects so a same-origin configuration URL cannot delegate API or module settings to another origin.",
+    "Saved diagram views load the canonical project-bound revision endpoint and select the requested file by stable identity; missing revisions no longer display a sibling file or the editable draft.",
+    "Local file versions and Git commit snapshots use separate caches, preventing an equal ID from supplying the wrong preview or restore readiness.",
+    "Restoring a file version changes only the selected file; sibling drafts and file-version history remain independent.",
+    "Pending restore stops when its file, version, session or permissions change, and an unverified preceding save cannot permit restore.",
+    "Saving or restoring one file preserves sibling saved baselines and unsaved drafts. Create Version refuses obsolete preparation and unverified responses.",
+    "Publish uses the saved draft tree without including unsaved siblings. Dirty status recognizes renames, moves, deletion markers and conflicting snapshots.",
+    "Git deployment now sends the reviewed saved revision and keeps its export fixed across provider calls; unverified receipts or requested tags no longer report success.",
+    "Manual and bulk Git sync verify acknowledgements and stop old continuations after cancellation, view/selection changes or session changes. Replacement dialogs retain their own busy/result state.",
+    "Project Git connection settings verify redacted status and matching write acknowledgements, reset private inputs on project/user/view changes, and refresh repository/sync consumers only after a verified current response.",
+    "Personal Git settings and the project wizard validate credential responses, preserve current selection across deferred reads, and verify OAuth completion through the owned popup plus authenticated credential readback.",
+    "Project creation verifies responses and current form/session before navigating; existing-project Git connection uses the supported service-token flow and actual provider record IDs.",
+    "Existing-project uploads retain their original view/session, validate diagram and archive receipts and explain that ZIP archives import at the project root. File and initial-version creation now succeeds or rolls back together.",
+    "Folder creation, rename, move and deletion verify their project tree and responses, keep version saving explicit, and suppress stale dialog/session continuations.",
+    "Deleted files remain visibly pending until a complete project version records their removal; publishing that version preserves deletion instead of retaining removed content.",
+    "Saved-content restores validate every target before writing, refresh diagram identities and commit file contents plus their new version atomically. Current file names, locations and later additions are preserved.",
+    "Local history restore commits file content and its restore-history entry together. Deployed restore verifies the selected snapshot and version mapping, copies only the draft and leaves checkpoint creation to explicit Save. Both clients require verified responses in the original session before clearing private drafts or recording hotfix context.",
+    "Engine deployment deletion describes its full resource scope, preserves saved Starbase versions and keeps cascading off. Confirmations and refreshes are session-bound, duplicate submissions are blocked, and only a settled HTTP 204 acknowledges deletion. Legacy error imports now share the canonical application error class.",
+    "Runtime links from saved history retain their original file, tenant, session and artifact selection. Bridge responses are validated before navigation; ambiguous or invalid runtime artifacts open the saved-file preview instead of selecting a definition by version rank.",
+    "All four Mission Control Edit links bind the selected deployed version and copied edit target to the originating session and route. Obsolete callbacks cannot open a changed file or baseline, and duplicate clicks share one access check.",
+    "The Editor rejects ambiguous deployed-source links, preserves exact integer versions, requires every supplied baseline selector to agree, and scopes preview and confirmation state to the original handoff. Read-only preview requires a commit reference; file-version-only links retain the guarded hotfix path with clear preview availability.",
+    "Opening Mission Control from the Editor preserves the selected engine and one unambiguous deployed definition. Fresh matching metadata and the composite access check are required before navigation; stale results, failed refreshes and denied access cannot redirect the handoff. The action rows wrap to keep the runtime link visible on narrow screens.",
+    "Incoming Mission Control process and decision links preserve the requested version over saved filters. Unavailable or invalid links show a clear action instead of silently selecting the latest version.",
+    "Starting a process uses the exact displayed version. Select one version first; changed permissions or session context discard old start dialogs, and uncertain outcomes cannot be resubmitted automatically.",
+    "Migration uses canonical target arrays and retains the selected source version as engine inventory loads. Changing the plan, variables, selection, execution options or session requires a new review; private navigation selections are scoped to the current user and tenant.",
+    "Migration variables are global, typed and serialized for the engine, validated with the plan and applied inside its migrationPlan. Variable failures block review; execution acknowledgements and duplicate submissions are checked for both modes."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Upgrade the qualified shared/frontend/backend host composition together; no database schema or historical data repair is required.",
+      "Clients that change account status through profile PUT must use the deactivate/reactivate endpoints with an administrator reason. Compatibility DELETE requests also require a reason body; unchanged isActive profile echoes remain accepted and are never persisted."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "deprecated",
+    "changes": [
+      "The frontend write adapter accepts parsed native JSON values and serializes them once for the engine. The external HTTP API and scalar/Java Object contracts are unchanged.",
+      "Proxy deployment requests with options.vcsCommitId return HTTP 409 when project ownership or the exact selected file snapshots do not match. Unversioned requests no longer infer an unverified commit link.",
+      "Directory summaries and effective-access responses add the informational bootstrapAccess enum. Existing compatibility fields remain available; frontend actions continue to use permission snapshots and server guards.",
+      "Security enforcement: status-changing profile PUT returns 409; compatibility DELETE requires the lifecycle reason body and uses audited deactivation; direct SCIM/LDAP profile overrides are rejected.",
+      "The existing commit-files endpoint returns a shared strict snapshot DTO and binds commit reads to the authorized project. Both saved-diagram views use that endpoint; stable file identity takes priority over names.",
+      "File restore uses POST /vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore with the existing restore permission. Older hosts reject that route without whole-project effects; the client has no legacy fallback. Checkpoints keep the existing file-save marker and explicit file-version scope. The original project restore endpoint remains supported. Ambiguous stored snapshots reach validation without timestamp-based selection.",
+      "Publish and dirty-status endpoints preserve HTTP 409 for unavailable or conflicting saved baselines; publish requires a saved draft owned by the requested project and user.",
+      "POST /git-api/deploy-from-version requires a saved version UUID and engine target, preserving existing project/CI-target guards. Older hosts reject the new path without fallback. The legacy deploy endpoint remains supported with a verified complete checkpoint.",
+      "POST /mission-control-api/process-definitions/{id}/start starts an immutable selected definition behind the existing start action/runtime guard and returns its exact definitionId. The key-based compatibility route retains latest-version behavior; the versioned UI has no fallback.",
+      "Migration execution retains the public envelope; the backend puts its variables inside the engine migrationPlan. The canonical shared plan supports optional variables and variableReports uses the engine variable-name map with string diagnostics."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No database schema or stored-variable changes."
+    ]
+  },
+  "security": [
+    "Engine selection, variable-value authorization, tenant routing and stale-response guards remain enforced.",
+    "Process-local action state is remounted on instance navigation instead of being retargeted to another process.",
+    "Unmounted action callbacks cannot refetch or notify through a later tenant/process route; already issued operations retain their original target.",
+    "Browser action lifetimes use monotonically increasing revisions; server authentication, authorization and tenant boundaries remain enforced.",
+    "Commit/project/snapshot validation completes before any versioned engine deployment effect.",
+    "Lifecycle audits use the existing exact-row append capability inside the transaction; unbound or wrong-row audit inserts remain denied under forced RLS, with no database-policy or grant changes.",
+    "Engine callbacks are checked before dispatch and on settlement using their render, mount and browser-session lifetime. Shared refreshes are session/tenant-bound; cancelled callers never replay and server authorization remains authoritative.",
+    "The same-origin runtime configuration boundary rejects redirects before contacting their destination; direct same-origin documents retain explicit API-origin selection.",
+    "Commit snapshot reads bind the authorized project in SQL; restore updates require the target row to belong to that project. Historical diagram content stays separate from draft autosave, with no authorization, database policy or grant relaxation.",
+    "Mixed-resolver authorization actions require explicit scope selection; single-project VCS status resolves the requested project. No grant or database policy change.",
+    "Publication rejects foreign project/owner/tree references and conflicting identities before changing main. Dirty-status baseline lookup is project-bound. Existing grants, database policies and migration floors are unchanged.",
+    "Git and engine delivery share exact source verification. Git export rejects revision drift, foreign/missing versions, ambiguous paths and cyclic folders before resolving a provider. No permission, IAM or database-policy relaxation.",
+    "Manual sync repository and personal-credential queries are authority-bound; bulk queues own their confirmed project scope and recheck session/view lifetime before every request. Existing server permissions remain authoritative.",
+    "Manual and bulk sync keep push/pull permissions distinct and honor explicit action restrictions before dispatch, including while membership presentation is pending.",
+    "Project connection status caches are authority-bound; token requests stay out of the query mutation cache. Late writes cannot update a replacement dialog, and submitted tokens are redacted from displayed failure messages. Server permissions and token validation are unchanged.",
+    "Personal credential lists and UI continuations are bound to the current owner/session. OAuth completion matches origin, popup and server state; storage flags cannot acknowledge connection. Tokens stay out of mutation caches, code/state are removed from callback URLs, and no server authorization or token-validation guard is relaxed.",
+    "Engine import previews are engine-bound metadata; creation refuses ambiguous saved provider credentials and does not replay uncertain writes. No server authorization, endpoint policy or isolation guard is relaxed.",
+    "File import and metadata move destinations must belong to the authorized project; breadcrumb ancestry is project-bound and cycle-checked. Browser XML checks do not replace server authorization, endpoint policy or database isolation.",
+    "Folder ancestry, recursive preview/archive/deletion and file destinations are project-bound and cycle-checked. Ordinary tree writers share a transactional project-row fence; no authorization, RLS policy, migration or privilege change.",
+    "Complete version saves bind reconciliation to the project and owned draft, reject ambiguous file identities before writes, and preserve strict deployment-source checks and empty-project Git-push refusal. File-scoped saves do not acknowledge missing siblings.",
+    "Restore preflight binds retained snapshot hashes, active states, current project/type and distinct targets; owned transaction managers are server-only dependencies. Closed restore bodies prevent implicit scope changes, and authorization, RLS and migration floors are unchanged.",
+    "Migration review owns a detached exact payload and selected instance list. Context-mismatched handoffs cannot broaden into source-wide execution; stale generations and validations cannot authorize a changed draft. Unknown acknowledgements block automatic retries and fallback to another mode."
+  ],
+  "documentation": [
+    "docs/development/mission-control-engine-selection.md",
+    "docs/development/user-directory-contract.md",
+    "docs/reference/configuration.md",
+    "docs/examples/vcs-file-restore.json",
+    "docs/development/testing-engine-tenancy-and-access-control.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "EnterpriseGlue",
+    "pages": [],
+    "reason": "Repairs existing workflow, Git and administration controls without adding a new configuration or administrator procedure."
+  },
+  "knownLimitations": [
+    "Local request-shape and engine fixture checks do not establish live SaaS tenant isolation or staging installation.",
+    "In pooled SaaS, administrator profile-name editing is unavailable because a tenant-filtered query cannot establish global provisioning ownership. Update names at the authenticated identity or provisioning provider."
+  ],
+  "rollback": [
+    "Restore the previous qualified frontend and backend hosts; the previous variable, session and deployment wiring defects may recur."
+  ],
+  "validation": [
+    "Focused frontend adapter, route, editor, retry, modification and history regressions.",
+    "Real pinned Operaton round trip using the actual frontend writer and shared runtime/task/history reader.",
+    "Frontend host typecheck and packed entrypoint verification; release workflow, classifier, aggregate, package-version and documentation contracts.",
+    "Full protected exact-candidate, browser and live two-tenant acceptance remain separate requirements.",
+    "Authentication, two-stage deployment, numeric parser and variable adapter regression tests.",
+    "Actual PostgreSQL deployment revision lookup and drift/foreign-project rejection.",
+    "Admin list/detail navigation, revocation, metadata uncertainty and strict API response-binding tests.",
+    "User directory service and current membership presentation on SQL.js and owned PostgreSQL fixtures.",
+    "Forced PostgreSQL RLS tests exercise audited deactivation/reactivation/session revocation, guarded compatibility paths and strict profile DTO serialization.",
+    "Deferred session/permission/engine transitions, positive same-authority refresh, StrictMode, shared refresh cancellation and owned native loopback HTTP transport sequences.",
+    "Session bootstrap through the actual auth provider, service, API client and HTTP interceptor: one refresh owner, no refresh on non-401 failures, and tenant-switch refusal before the next request.",
+    "Owned native HTTP configuration origins prove redirect refusal, required startup failure, optional fallback and explicit cross-origin API selection without following a redirect.",
+    "Canonical snapshot adapter and viewer regressions, project-authorized route/restore tests and actual PostgreSQL sibling-project snapshot denial.",
+    "Production-built BPMN/DMN viewer and missing-snapshot browser assertions against owned local HTTP responses; the viewer selects the bundled modern WOFF icon face.",
+    "Actual PostgreSQL route, restore, VCS checkpoint and history/backfill integration with sibling-file/project denials; deferred autosave/restore browser component lifetime cases.",
+    "Actual PostgreSQL scoped-save/restore dirty-state and identity regressions, explicit authorization resolver contracts and deferred Create Version lifetime/acknowledgement checks.",
+    "Actual PostgreSQL scoped save to publish to deployment-revision verification, repeated publish/new draft inheritance, metadata/tombstone/duplicate/content-drift negatives and cyclic folder ancestry. Git import/push complete-save callers remain covered locally.",
+    "Native PostgreSQL Git service and push adapter with a simulated provider: dispatch-time draft mutation, invalid source/path, legacy checkpoint, lost ACK, empty SHA, tag uncertainty and verified/unknown unchanged remote head. Browser request/receipt and session-lifetime regressions; exact CI lane selection verified locally.",
+    "Canonical sync request/receipt and malformed/duplicate queue tests; actual sync dialog and project overview controller regressions for cancel/reopen, user/session changes, per-user credentials, receipt errors and confirmed selection cleanup.",
+    "Push-only denial of pull, permitted pull-only confirmation, explicit restriction with a true legacy fallback, and pending-membership denial regressions.",
+    "Actual project-connection component regressions cover malformed/unredacted status, retargeted/empty receipts, per-user cache separation, close/project/user/permission/session lifetimes, duplicate dispatch, private inputs, canonical update/disconnect requests and StrictMode.",
+    "Canonical credential CRUD and owner/provider/kind/id negatives, settings cancel/user/session cases, wizard stale-list/provider cases, popup source/origin/state/readback/cancellation bounds, StrictMode callback-once and redaction checks; native browser popup flow uses simulated provider/API responses.",
+    "Shared HTTP 204 stream-settlement success/failure tests and real browser no-content disconnect coverage; frontend API-origin/XSRF/session wire contracts remain enforced.",
+    "Local/online/clone creation receipt and lifetime regressions, own permission-refresh success, engine-preview binding and actual seeded-provider-ID connection coverage.",
+    "Deferred picker/read/write lifecycle and exact upload receipts, XML namespace/type negatives, archive OpenAPI parity and PostgreSQL import-to-checkpoint/deployment-source verification, version-failure rollback and foreign-folder denial.",
+    "Folder API/tree contracts, actual picker and modal lifetimes, concurrent native PostgreSQL moves, scoped recursive ZIP/deletion and cascade rollback regressions; local browser fixtures remain separate from live SaaS isolation acceptance.",
+    "Native PostgreSQL delete-to-save-to-publish-to-export checks, deletion-only and legacy status cases, scoped-save separation, foreign branch/row and ambiguous-plan refusal; exact root-folder metadata regression.",
+    "Native PostgreSQL multi-file and checkpoint/file-version failure rollback, snapshot tampering/alias/type/state negatives, tombstone filtering, derived BPMN/DMN identity and exact post-restore deployment-source verification; request/OpenAPI and shared selector parity.",
+    "Incoming process and decision links over persisted filters resolve key/version/node atomically; unavailable and invalid links pause resource reads until explicitly cleared. Exact process XML/count/instance and decision XML/history selectors remain engine-bound.",
+    "Exact-definition start request/receipt and action/OpenAPI parity; actual restricted PostgreSQL router isolation, real pinned Operaton older-version execution and browser start-dialog lifetime/duplicate cases.",
+    "Migration wiring regressions cover canonical instructions, selected-version handoff, typed variables, variable reports, context and in-flight races, duplicate dispatch and unverified responses. Use the real pinned Operaton and actual-page browser lanes for engine payload and UI boundaries.",
+    "Release preflight distinguishes Mission Control process-instance migration code from database migration directories; real and unknown migration directories still require migration and rollback notes."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.9",
+      "newVersion": "0.20.10",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.7",
+      "newVersion": "0.23.8",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.6",
+      "newVersion": "0.28.7",
+      "impact": "patch"
+    }
+  ]
+}

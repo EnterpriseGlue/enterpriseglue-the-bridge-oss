@@ -77,6 +77,24 @@ describe('useInstanceModification', () => {
     );
   });
 
+  it('does not refetch or notify after an in-flight modification route unmounts', async () => {
+    let settle!: () => void;
+    vi.mocked(apiClient.post).mockImplementationOnce(() => new Promise<void>(resolve => { settle = resolve; }));
+    const queries = { refetch: vi.fn() };
+    const { result, unmount } = renderHook(() => useInstanceModification({
+      instanceId: 'pi-1', engineId: 'engine-1', status: 'ACTIVE', actQ: queries, incidentsQ: queries, runtimeQ: queries,
+    }));
+    act(() => result.current.setSelectedActivityId('task'));
+    act(() => result.current.addPlanOperation('add'));
+    let pending!: Promise<void>;
+    await act(async () => { pending = result.current.applyModifications(); });
+    expect(apiClient.post).toHaveBeenCalledOnce();
+    unmount();
+    await act(async () => { settle(); await pending; });
+    expect(queries.refetch).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it('does not clear a new A plan when an old A request completes after A to B to A', async () => {
     let resolveRequest!: () => void;
     vi.mocked(apiClient.post).mockImplementationOnce(

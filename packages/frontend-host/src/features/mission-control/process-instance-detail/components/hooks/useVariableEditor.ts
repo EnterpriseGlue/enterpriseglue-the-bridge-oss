@@ -1,3 +1,4 @@
+import { parseTypedVariableValue } from '../variableValues'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
 import { modifyProcessInstanceVariables } from '../../api/processInstances'
@@ -19,6 +20,8 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
   const editingEngineIdRef = useRef<string | undefined>(undefined)
   const editorRevisionRef = useRef(0)
   currentEngineIdRef.current = engineId
+
+  useEffect(() => () => { editorRevisionRef.current += 1 }, [])
 
   const resetVariableEditor = useCallback(() => {
     editorRevisionRef.current += 1
@@ -74,27 +77,9 @@ export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved
     setEditVarBusy(true)
     setEditVarError(null)
     try {
-      let parsed: any = editingVarValue
-      if (editingVarType !== 'String') {
-        if (editingVarValue.trim() === '') {
-          parsed = null
-        } else if (editingVarType === 'Boolean') {
-          if (/^(true|false)$/i.test(editingVarValue.trim())) parsed = editingVarValue.trim().toLowerCase() === 'true'
-          else throw new Error('Boolean values must be true or false')
-        } else if (editingVarType === 'Integer' || editingVarType === 'Long') {
-          const num = Number(editingVarValue)
-          if (Number.isNaN(num)) throw new Error('Value must be a number')
-          parsed = editingVarType === 'Integer' ? Math.trunc(num) : num
-        } else if (editingVarType === 'Double') {
-          const num = Number(editingVarValue)
-          if (Number.isNaN(num)) throw new Error('Value must be a number')
-          parsed = num
-        } else if (editingVarType === 'Object' || editingVarType === 'Json') {
-          parsed = JSON.parse(editingVarValue || '{}')
-        }
-      }
+      const parsed = parseTypedVariableValue(editingVarValue, editingVarType)
       await modifyProcessInstanceVariables(instanceId, {
-        modifications: { [editingVarKey]: { value: editingVarType === 'Json' ? JSON.stringify(parsed) : parsed, type: editingVarType } },
+        modifications: { [editingVarKey]: { value: parsed, type: editingVarType } },
         engineId: requestEngineId,
       })
       if (!isCurrentRequest()) return

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getProcessInstance,
   getProcessInstanceVariables,
+  modifyProcessInstanceVariables,
   getProcessInstanceVariableHistory,
   getProcessInstanceActivityHistory,
   getProcessInstanceActivityTree,
@@ -18,6 +19,7 @@ import { apiClient } from '@src/shared/api/client';
 vi.mock('@src/shared/api/client', () => ({
   apiClient: {
     get: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -89,6 +91,67 @@ describe('processInstances API', () => {
         { credentials: 'include' }
       );
       expect(result).toEqual(mockVariables);
+    });
+  });
+
+  describe('modifyProcessInstanceVariables', () => {
+    it.each([{ nested: [1, true, null] }, [1, false], 'JSON string', false, 42, null].map(value => ({ value })))(
+      'serializes parsed native JSON once at the common write boundary: %j', async ({ value }) => {
+        const variable = Object.freeze({ value, type: 'Json', valueInfo: { transient: true } });
+        const body = Object.freeze({ engineId: 'engine-a', modifications: Object.freeze({ details: variable }) });
+        await modifyProcessInstanceVariables('pi1', body);
+        expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/process-instances/pi1/variables', {
+          engineId: 'engine-a', modifications: { details: { ...variable, value: JSON.stringify(value) } },
+        }, { credentials: 'include' });
+        expect(body.modifications.details.value).toEqual(value);
+      },
+    );
+
+    it('handles a bulk map without changing scalar or serialized Java Object values', async () => {
+      const modifications = {
+        details: { type: 'Json', value: { nested: [1, true] } },
+        list: { type: 'Json', value: ['first', 2] },
+        text: { type: 'String', value: '{not-json}' },
+        count: { type: 'Integer', value: 42 },
+        approved: { type: 'Boolean', value: true },
+        java: { type: 'Object', value: '{"classData":1}', valueInfo: { objectTypeName: 'java.example.Type' } },
+      };
+      await modifyProcessInstanceVariables('pi1', { modifications, engineId: 'engine-b' });
+      expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/process-instances/pi1/variables', {
+        engineId: 'engine-b', modifications: { ...modifications,
+          details: { type: 'Json', value: JSON.stringify(modifications.details.value) },
+          list: { type: 'Json', value: JSON.stringify(modifications.list.value) },
+        },
+      }, { credentials: 'include' });
+    });
+
+    it('retains supported prototype-like names as own fields without changing object prototypes', async () => {
+      const modifications = JSON.parse('{"toString":{"type":"Json","value":{"safe":true}},"constructor":{"type":"String","value":"name"}}');
+      await modifyProcessInstanceVariables('pi1', { modifications, engineId: 'engine-a' });
+      const body = vi.mocked(apiClient.post).mock.calls[0][1] as { modifications: Record<string, unknown> };
+      expect(Object.keys(body.modifications)).toEqual(['toString', 'constructor']);
+      expect(body.modifications.toString).toEqual({ type: 'Json', value: '{"safe":true}' });
+      expect(Object.getPrototypeOf(body.modifications)).toBe(Object.prototype);
+      expect(Object.prototype.hasOwnProperty.call(Object.prototype, 'safe')).toBe(false);
+    });
+
+    it('rejects the reserved key before a mixed bulk write can be silently truncated by the API schema', async () => {
+      const modifications = JSON.parse('{"allowed":{"type":"String","value":"kept"},"__proto__":{"type":"Json","value":{"safe":true}}}');
+      await expect(modifyProcessInstanceVariables('pi1', { modifications, engineId: 'engine-a' }))
+        .rejects.toThrow("Variable name '__proto__' is not supported");
+      expect(apiClient.post).not.toHaveBeenCalled();
+      expect(Object.keys(modifications)).toEqual(['allowed', '__proto__']);
+    });
+
+    it('rejects unserializable JSON before submitting any request', async () => {
+      const cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
+      for (const value of [undefined, cyclic, BigInt(1)]) {
+        await expect(modifyProcessInstanceVariables('pi1', {
+          engineId: 'engine-a', modifications: { details: { type: 'Json', value } },
+        })).rejects.toThrow();
+      }
+      expect(apiClient.post).not.toHaveBeenCalled();
     });
   });
 
@@ -309,5 +372,13 @@ describe('processInstances API', () => {
       expect(result).toEqual(mockDefinitions);
       expect(result).toHaveLength(2);
     });
+  });
+  it.each([[Infinity, 'Double'], [-Infinity, 'Double'], [NaN, 'Double'], [9007199254740992, 'Long'], [1.5, 'Integer'], [2147483648, 'Integer']])('blocks unsafe numeric bulk input %s %s before HTTP', async (value, type) => {
+    await expect(modifyProcessInstanceVariables('pi-1', { engineId: 'e1', modifications: { n: { value, type } } })).rejects.toThrow();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+  it.each([Infinity, { nested: [1, Infinity] }])('rejects non-finite native JSON numbers before HTTP', async value => {
+    await expect(modifyProcessInstanceVariables('pi-1', { engineId: 'e1', modifications: { n: { value, type: 'Json' } } })).rejects.toThrow('JSON variable numbers must be finite');
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,9 @@ import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@aste
 // before any schema is created so that .openapi() is available on instances.
 extendZodWithOpenApi(z);
 
+const { CommitFileSnapshotsResponseSchema, CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema, ProjectCommitRestoreParamsSchema, CommitFileRestoreResponseSchema } = await import('./starbase/commit-snapshot.js');
+const { commitBodySchema } = await import('./starbase/commit.js');
+
 // Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
 const {
   ProjectSchema,
@@ -26,11 +29,15 @@ const {
   RestoreFileFromCommitRequestSchema,
   RestoreFileFromCommitResponseSchema,
   VersionSchema,
+  LocalVersionRestoreBodySchema,
+  LocalVersionRestoreResponseSchema,
   CompareVersionsResponse,
   CommentSchema,
   FolderSchema,
   FolderSchemaRaw,
   FolderSummarySchema,
+  FolderListResponseSchema,
+  ProjectArchiveImportResponseSchema,
   CreateFolderRequest,
   CreateFolderResponseSchema,
   UpdateFolderRequest,
@@ -144,6 +151,8 @@ const {
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceStartResponseSchema,
+  ProcessInstanceStartRequestSchema,
+  ProcessInstanceStartByDefinitionResponseSchema,
   ProcessEditTargetSchema,
   DecisionEditTargetSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
@@ -261,6 +270,7 @@ const {
   GitProviderIdParamsSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
+  VersionedDeployRequestSchema,
   RollbackRequestSchema,
   DeploymentSelectSchema,
   DeploymentResponseSchema,
@@ -891,11 +901,11 @@ registry.registerPath({
   method: 'post',
   path: '/starbase-api/files/{fileId}/versions/{versionId}/restore',
   ...authzExtension('project.versions.restore', 'POST', '/starbase-api/files/{fileId}/versions/{versionId}/restore'),
-  request: { params: z.object({ fileId: z.string(), versionId: z.string() }) },
+  request: { params: z.object({ fileId: z.string().uuid(), versionId: z.string().uuid() }), body: { required: false, content: { 'application/json': { schema: LocalVersionRestoreBodySchema } } } },
   responses: {
     200: {
       description: 'File restored from version',
-      content: { 'application/json': { schema: z.object({ restored: z.boolean(), fileId: z.string(), versionId: z.string(), updatedAt: z.number() }) } },
+      content: { 'application/json': { schema: LocalVersionRestoreResponseSchema } },
     },
     404: { description: 'Not found' },
   },
@@ -927,7 +937,7 @@ registry.registerPath({
 registry.register('Deployment', DeploymentSchema);
 registry.registerPath({ method: 'get', path: '/starbase-api/deployments', ...authzExtension('engine.deployments.read', 'GET', '/starbase-api/deployments'), request: { query: DeploymentQueryParams.partial() }, responses: { 200: { description: 'List deployments', content: { 'application/json': { schema: z.array(DeploymentSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/starbase-api/deployments/{id}', ...authzExtension('engine.deployments.read', 'GET', '/starbase-api/deployments/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Get deployment', content: { 'application/json': { schema: DeploymentSchema } } }, 404: { description: 'Not found' } } });
-registry.registerPath({ method: 'delete', path: '/starbase-api/deployments/{id}', ...authzExtension('engine.deployments.delete', 'DELETE', '/starbase-api/deployments/{id}'), request: { params: z.object({ id: z.string() }), query: z.object({ cascade: z.string().optional() }) }, responses: { 204: { description: 'Deleted' } } });
+registry.registerPath({ method: 'delete', path: '/starbase-api/deployments/{id}', ...authzExtension('engine.deployments.delete', 'DELETE', '/starbase-api/deployments/{id}'), request: { params: z.object({ id: z.string() }), query: z.object({ engineId: z.string(), cascade: z.string().optional() }) }, responses: { 204: { description: 'Engine deployment deleted' }, 502: { description: 'Engine rejection or unverified deletion acknowledgement; reconcile before retrying' } } });
 registry.registerPath({ method: 'post', path: '/starbase-api/deployments', ...authzExemption('POST', '/starbase-api/deployments'), responses: { 501: { description: 'Multipart deployment creation is not implemented on this route' } } });
 registry.registerPath({ method: 'get', path: '/starbase-api/process-definitions/{id}/diagram', ...authzExtension('engine.deployments.read', 'GET', '/starbase-api/process-definitions/{id}/diagram'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Process diagram', content: { 'application/json': { schema: z.unknown() } } } } });
 
@@ -2153,6 +2163,18 @@ registry.registerPath({
   responses: {
     201: { description: 'Deployment successful', content: { 'application/json': { schema: DeploymentResponseSchema } } },
     403: { description: 'Forbidden' },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/git-api/deploy-from-version',
+  ...authzExtension('project-engine-target.deploy.use', 'POST', '/git-api/deploy-from-version'),
+  request: { body: { content: { 'application/json': { schema: VersionedDeployRequestSchema } } } },
+  responses: {
+    201: { description: 'Deployment successful', content: { 'application/json': { schema: DeploymentResponseSchema } } },
+    403: { description: 'Forbidden' },
+    409: { description: 'Saved source, remote commit or requested tag could not be verified; reconcile uncertain effects before retrying' },
   },
 });
 
@@ -3763,7 +3785,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/folders',
   ...authzExtension('project.files.read', 'GET', '/starbase-api/projects/{projectId}/folders'),
   request: { params: z.object({ projectId: z.string() }) },
-  responses: { 200: { description: 'List all folders in project', content: { 'application/json': { schema: z.array(FolderSummarySchema) } } } },
+  responses: { 200: { description: 'List all folders in project', content: { 'application/json': { schema: FolderListResponseSchema } } } },
 });
 
 // POST /starbase-api/projects/:projectId/folders (create folder)
@@ -3834,8 +3856,8 @@ registry.registerPath({
   },
   responses: {
     201: {
-      description: 'Project archive imported',
-      content: { 'application/json': { schema: z.unknown() } },
+      description: 'Project archive imported at the project root',
+      content: { 'application/json': { schema: ProjectArchiveImportResponseSchema } },
     },
   },
 });
@@ -3944,6 +3966,15 @@ registry.registerPath({
 
 // POST /mission-control-api/process-definitions/key/{key}/start
 registry.register('ProcessInstanceStartResponse', ProcessInstanceStartResponseSchema)
+registry.register('ProcessInstanceStartRequest', ProcessInstanceStartRequestSchema)
+registry.register('ProcessInstanceStartByDefinitionResponse', ProcessInstanceStartByDefinitionResponseSchema)
+registry.registerPath({
+  method: 'post',
+  path: '/mission-control-api/process-definitions/{id}/start',
+  ...authzExtension('engine.runtime.process-definitions.start', 'POST', '/mission-control-api/process-definitions/{id}/start'),
+  request: { params: z.object({ id: z.string().min(1) }), body: { content: { 'application/json': { schema: ProcessInstanceStartRequestSchema } } } },
+  responses: { 200: { description: 'Exact definition started; reconcile before retry after an uncertain outcome', content: { 'application/json': { schema: ProcessInstanceStartByDefinitionResponseSchema } } } },
+});
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-definitions/key/{key}/start',
@@ -4063,7 +4094,7 @@ registry.registerPath({
   ...authzExtension('project.vcs.commit.create', 'POST', '/vcs-api/projects/{projectId}/commit'),
   request: {
     params: z.object({ projectId: z.string().uuid() }),
-    body: { content: { 'application/json': { schema: z.object({ message: z.string(), fileIds: z.array(z.string()).optional(), hotfixFromCommitId: z.string().optional(), hotfixFromFileVersion: z.number().optional() }) } } },
+    body: { content: { 'application/json': { schema: commitBodySchema } } },
   },
   responses: { 200: { description: 'Commit created', content: { 'application/json': { schema: z.object({ commitId: z.string(), message: z.string(), fileCount: z.number(), createdAt: z.number() }) } } } },
 });
@@ -4074,7 +4105,10 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/publish',
   ...authzExtension('project.vcs.publish', 'POST', '/vcs-api/projects/{projectId}/publish'),
   request: { params: z.object({ projectId: z.string().uuid() }) },
-  responses: { 200: { description: 'Draft merged to main', content: { 'application/json': { schema: z.object({ success: z.boolean(), mergeCommitId: z.string(), filesChanged: z.number() }) } } } },
+  responses: {
+    200: { description: 'Saved draft tree published to main', content: { 'application/json': { schema: z.object({ success: z.boolean(), mergeCommitId: z.string(), filesChanged: z.number() }) } } },
+    409: { description: 'No owned saved draft, unavailable or ambiguous tree, or a changed draft/main head' },
+  },
 });
 
 // GET /vcs-api/projects/:projectId/commits
@@ -4101,7 +4135,10 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/uncommitted-files',
   ...authzExtension('project.vcs.status.read', 'GET', '/vcs-api/projects/{projectId}/uncommitted-files'),
   request: { params: z.object({ projectId: z.string().uuid() }), query: z.object({ baseline: z.enum(['main', 'draft']).optional() }) },
-  responses: { 200: { description: 'Uncommitted file IDs', content: { 'application/json': { schema: z.object({ hasUncommittedChanges: z.boolean(), uncommittedFileIds: z.array(z.string()), uncommittedFolderIds: z.array(z.string()) }) } } } },
+  responses: {
+    200: { description: 'Uncommitted file IDs against an unambiguous saved file baseline, including content and metadata', content: { 'application/json': { schema: z.object({ hasUncommittedChanges: z.boolean(), uncommittedFileIds: z.array(z.string()), uncommittedFolderIds: z.array(z.string()) }) } } },
+    409: { description: 'Saved baseline is missing or belongs to another project' },
+  },
 });
 
 // GET /vcs-api/projects/:projectId/commits/:commitId/files
@@ -4110,7 +4147,7 @@ registry.registerPath({
   path: '/vcs-api/projects/{projectId}/commits/{commitId}/files',
   ...authzExtension('project.vcs.commits.read', 'GET', '/vcs-api/projects/{projectId}/commits/{commitId}/files'),
   request: { params: z.object({ projectId: z.string().uuid(), commitId: z.string() }) },
-  responses: { 200: { description: 'File snapshots for commit', content: { 'application/json': { schema: z.object({ files: z.array(z.unknown()) }) } } } },
+  responses: { 200: { description: 'File snapshots for commit', content: { 'application/json': { schema: CommitFileSnapshotsResponseSchema } } } },
 });
 
 // POST /vcs-api/projects/:projectId/commits/:commitId/restore
@@ -4118,8 +4155,17 @@ registry.registerPath({
   method: 'post',
   path: '/vcs-api/projects/{projectId}/commits/{commitId}/restore',
   ...authzExtension('project.vcs.commit.restore', 'POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore'),
-  request: { params: z.object({ projectId: z.string().uuid(), commitId: z.string() }) },
-  responses: { 200: { description: 'Files restored from commit', content: { 'application/json': { schema: z.object({ success: z.boolean(), filesRestored: z.number(), newCommitId: z.string() }) } } } },
+  request: { params: ProjectCommitRestoreParamsSchema, body: { required: false, content: { 'application/json': { schema: CommitFileRestoreBodySchema } } } },
+  responses: { 200: { description: 'Files restored from commit', content: { 'application/json': { schema: CommitFileRestoreResponseSchema } } } },
+});
+
+// A separate endpoint makes file scope fail closed against older hosts.
+registry.registerPath({
+  method: 'post',
+  path: '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore',
+  ...authzExtension('project.vcs.commit.restore', 'POST', '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore'),
+  request: { params: CommitFileRestoreParamsSchema, body: { required: false, content: { 'application/json': { schema: CommitFileRestoreBodySchema } } } },
+  responses: { 200: { description: 'Selected file restored from commit', content: { 'application/json': { schema: CommitFileRestoreResponseSchema.extend({ filesRestored: z.literal(1) }) } } } },
 });
 
 // -----------------------------
@@ -5057,8 +5103,8 @@ registry.registerPath({ method: 'post', path: '/api/users/{id}/deactivate', ...a
 registry.registerPath({ method: 'post', path: '/api/users/{id}/reactivate', ...authzExtension('platform.users.update', 'POST', '/api/users/{id}/reactivate'), request: { params: UserDirectoryParamsSchema, body: { content: { 'application/json': { schema: UserReactivateRequestSchema } } } }, responses: { 200: { description: 'Locally managed user reactivated', content: { 'application/json': { schema: UserLifecycleMutationResponseSchema } } }, 409: { description: 'Directory-managed users must be reactivated in their source directory' } } });
 registry.registerPath({ method: 'post', path: '/api/users/{id}/revoke-sessions', ...authzExtension('platform.users.update', 'POST', '/api/users/{id}/revoke-sessions'), request: { params: UserDirectoryParamsSchema, body: { content: { 'application/json': { schema: UserRevokeSessionsRequestSchema } } } }, responses: { 200: { description: 'Every current session revoked and access-session version advanced', content: { 'application/json': { schema: UserLifecycleMutationResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/users/{id}', ...authzExtension('platform.users.read', 'GET', '/api/users/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User details', content: { 'application/json': { schema: PlatformUserResponseSchema } } }, 404: { description: 'Not found' } } });
-registry.registerPath({ method: 'put', path: '/api/users/{id}', ...authzExtension('platform.users.update', 'PUT', '/api/users/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: PlatformUserUpdateRequestSchema } } } }, responses: { 200: { description: 'User updated', content: { 'application/json': { schema: PlatformUserResponseSchema } } } } });
-registry.registerPath({ method: 'delete', path: '/api/users/{id}', ...authzExtension('platform.users.deactivate', 'DELETE', '/api/users/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User deactivated', content: { 'application/json': { schema: UserOperationMessageSchema } } } } });
+registry.registerPath({ method: 'put', path: '/api/users/{id}', ...authzExtension('platform.users.update', 'PUT', '/api/users/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: PlatformUserUpdateRequestSchema } } } }, responses: { 200: { description: 'User updated', content: { 'application/json': { schema: PlatformUserResponseSchema } } }, 409: { description: 'Status transition or source-owned profile edit requires the authoritative lifecycle or identity provider' } } });
+registry.registerPath({ method: 'delete', path: '/api/users/{id}', summary: 'Compatibility alias for audited user deactivation; a reason is required', ...authzExtension('platform.users.deactivate', 'DELETE', '/api/users/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UserDeactivateRequestSchema } } } }, responses: { 200: { description: 'User deactivated', content: { 'application/json': { schema: UserOperationMessageSchema } } }, 409: { description: 'Recovery continuity conflict' } } });
 registry.registerPath({ method: 'delete', path: '/api/users/{id}/permanent', ...authzExtension('platform.users.permanent-delete', 'DELETE', '/api/users/{id}/permanent'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User permanently deleted', content: { 'application/json': { schema: UserOperationMessageSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/users/{id}/unlock', ...authzExtension('platform.users.unlock', 'POST', '/api/users/{id}/unlock'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'User unlocked', content: { 'application/json': { schema: UserOperationMessageSchema } } } } });
 

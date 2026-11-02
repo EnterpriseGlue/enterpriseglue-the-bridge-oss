@@ -3,6 +3,8 @@
  */
 import { z } from 'zod';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { commitBodySchema } from './starbase/commit.js';
+export { commitBodySchema };
 
 // === ID Schemas ===
 export const uuidSchema = z.string().uuid();
@@ -138,13 +140,6 @@ export const createEngineBodySchema = z.object({
 export const updateEngineBodySchema = createEngineBodySchema.partial();
 
 // === VCS/Git Schemas ===
-export const commitBodySchema = z.object({
-  message: z.string().min(1).max(500),
-  fileIds: z.array(uuidSchema).optional(),
-  hotfixFromCommitId: z.string().optional(),
-  hotfixFromFileVersion: z.number().int().positive().optional(),
-});
-
 export const syncBodySchema = z.object({
   projectId: uuidSchema,
   direction: z.enum(['push', 'pull']).default('push'),

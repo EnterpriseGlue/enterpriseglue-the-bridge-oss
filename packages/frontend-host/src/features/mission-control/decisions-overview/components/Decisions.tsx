@@ -19,15 +19,16 @@ import { EngineAccessError, isEngineAccessError } from '../../shared/components/
 import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { apiClient } from '../../../../shared/api/client'
-import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
-import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
+import { useStarbaseEditBridge } from '../../shared/useStarbaseEditBridge'
 import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
 import { useActionDecision } from '../../../../shared/auth/guards'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
 import type { DecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
-import { useGuardedEngineTask, withEngineContext } from '../../shared/engineContext'
+import { withEngineContext } from '../../shared/engineContext'
+import { hasRuntimeDefinitionLink, useRuntimeDefinitionLink } from '../../shared/useRuntimeDefinitionLink'
+import { RuntimeDefinitionLinkNotice } from '../../shared/components/RuntimeDefinitionLinkNotice'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -40,6 +41,7 @@ export default function Decisions() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
+  const definitionLinkPending = hasRuntimeDefinitionLink(searchParams.toString())
   const fromInstanceId = location?.state?.fromInstanceId as string | undefined || searchParams.get('fromInstance') || undefined
 
   const isValidTime = (value: string) => {
@@ -104,13 +106,7 @@ export default function Decisions() {
     [selectedEngineId],
   )
   const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
-  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
-  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
-  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
-  React.useEffect(() => {
-    setBridgeError(null)
-    setBridgeDecision(null)
-  }, [selectedEngineId])
+
 
   const defsQ = useQuery({
     queryKey: ['mission-control', 'decision-defs', selectedEngineId],
@@ -131,33 +127,21 @@ export default function Decisions() {
     return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [defsQ.data])
 
-  // Handle URL query parameter for decision key
-  React.useEffect(() => {
-    const decisionKey = searchParams.get('decision')
-    const nodeId = searchParams.get('node')
-    if (decisionKey && defItems.length > 0) {
-      const matchingDef = defItems.find(d => d.key === decisionKey)
-      if (matchingDef) {
-        setSelectedDefinition(matchingDef)
-        // Clear the URL parameter after applying
-        searchParams.delete('decision')
-        // node is used for deep-linking (optional) - clear it to keep URL clean
-        if (nodeId) searchParams.delete('node')
-        setSearchParams(searchParams, { replace: true })
-      }
-    }
-  }, [searchParams, defItems, setSelectedDefinition, setSearchParams])
+  const applyDefinitionLink = React.useCallback((selection: import('../../shared/useRuntimeDefinitionLink').LinkedDefinition) => {
+    useDecisionsFilterStore.setState({ selectedDefinition: { id: selection.id, key: selection.key, label: selection.label, version: selection.version },
+      selectedVersion: selection.version })
+  }, [])
+  const clearDefinitionLink = React.useCallback(() => {
+    useDecisionsFilterStore.setState({ selectedDefinition: null, selectedVersion: null })
+  }, [])
+  const definitionLink = useRuntimeDefinitionLink({ kind: 'decision', engineId: selectedEngineId, definitions: defsQ.data,
+    ready: defsQ.isSuccess && !defsQ.isFetching, failed: defsQ.isError, apply: applyDefinitionLink, clearSelection: clearDefinitionLink })
 
-  // If `node` is present without `decision`, clear it (prevents stale URLs)
   React.useEffect(() => {
-    const nodeId = searchParams.get('node')
-    if (!nodeId) return
-    const decisionKey = searchParams.get('decision')
-    if (decisionKey) return
-
-    searchParams.delete('node')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, setSearchParams])
+    if (definitionLinkPending || !searchParams.has('node')) return
+    const next = new URLSearchParams(searchParams); next.delete('node')
+    setSearchParams(next, { replace: true })
+  }, [definitionLinkPending, searchParams, setSearchParams])
 
   const currentKey = selectedDefinition?.key || ''
 
@@ -168,32 +152,12 @@ export default function Decisions() {
   }, [defsQ.data, currentKey])
 
   React.useEffect(() => {
-    const rawVersion = searchParams.get('version')
-    if (!rawVersion) return
-
-    const parsedVersion = Number(rawVersion)
-    if (!Number.isFinite(parsedVersion)) {
-      searchParams.delete('version')
-      setSearchParams(searchParams, { replace: true })
-      return
-    }
-
-    if (versions.length === 0) return
-
-    if (versions.includes(parsedVersion) && selectedVersion !== parsedVersion) {
-      setSelectedVersion(parsedVersion)
-    }
-
-    searchParams.delete('version')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, versions, selectedVersion, setSelectedVersion, setSearchParams])
-
-  React.useEffect(() => {
+    if (definitionLinkPending) return
     if (versions.length > 0 && (selectedVersion === null || !versions.includes(selectedVersion))) {
       setSelectedVersion(versions[0])
     }
     if (versions.length === 0) setSelectedVersion(null)
-  }, [versions])
+  }, [versions, definitionLinkPending])
 
 
   const currentDef: DecisionDef | null = React.useMemo(() => {
@@ -212,7 +176,7 @@ export default function Decisions() {
       if (!currentDef) return ''
       return fetchDecisionDefinitionDmnXml(currentDef.id, selectedEngineId)
     },
-    enabled: !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
+    enabled: !definitionLinkPending && !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   // Derived boolean flags from selectedStates
@@ -241,7 +205,7 @@ export default function Decisions() {
       })
       return listDecisionHistory(params)
     },
-    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
+    enabled: !definitionLinkPending && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
 
@@ -264,7 +228,7 @@ export default function Decisions() {
     // The API resolves the selected definition and makes the authoritative
     // runtime-resource decision. The browser snapshot intentionally excludes
     // runtime-resource keys, so it cannot safely gate this request.
-    enabled: !!selectedEngineId && decisionsReadDecision.allowed && !!currentKey && selectedVersion !== null,
+    enabled: !definitionLinkPending && !!selectedEngineId && decisionsReadDecision.allowed && !!currentKey && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -277,43 +241,9 @@ export default function Decisions() {
     decisionEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(async () => {
-    if (!decisionEditTarget?.fileId || selectedVersion === null || !currentKey) return
-    setBridgeError(null)
-    setBridgeDecision(null)
-    await runForCurrentEngine(
-      (requestEngineId) => evaluateMissionControlStarbaseBridge({
-        engineId: requestEngineId,
-        projectId: decisionEditTarget.projectId,
-        fileId: decisionEditTarget.fileId,
-        definitionId: defIdForVersion || undefined,
-        definitionKey: currentKey,
-        decisionDefinitionId: defIdForVersion || undefined,
-        decisionDefinitionKey: currentKey,
-        kind: 'decision',
-      }),
-      {
-        onSuccess: (bridgeDecision, requestEngineId) => {
-          if (!bridgeDecision.allowed) {
-            setBridgeDecision(bridgeDecision)
-            return
-          }
-          const params = new URLSearchParams({
-            source: 'mission-control',
-            engineId: requestEngineId,
-            decision: currentKey,
-            version: String(selectedVersion),
-            deploymentId: String(decisionEditTarget.engineDeploymentId || ''),
-            mappingSource: String(decisionEditTarget.mappingSource || ''),
-          })
-          if (decisionEditTarget.commitId) params.set('commitId', String(decisionEditTarget.commitId))
-          if (typeof decisionEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(decisionEditTarget.fileVersionNumber))
-          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-        },
-        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
-      },
-    )
-  }, [decisionEditTarget, selectedVersion, currentKey, defIdForVersion, runForCurrentEngine, tenantNavigate])
+  const starbaseBridge = useStarbaseEditBridge({ engineId: selectedEngineId, kind: 'decision',
+    definitionKey: currentKey, definitionId: defIdForVersion, version: selectedVersion,
+    editTarget: decisionEditTarget, isFetching: decisionEditTargetQ.isFetching, viewKey: currentKey || undefined });
 
   const rows = React.useMemo(() => {
     const list = historyQ.data || []
@@ -359,6 +289,8 @@ export default function Decisions() {
       </div>
     )
   }
+
+  if (definitionLink.active) return <RuntimeDefinitionLinkNotice error={definitionLink.error} onClear={definitionLink.clear} />
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="page">
@@ -415,9 +347,9 @@ export default function Decisions() {
             kind="ghost"
             size="sm"
             renderIcon={Launch}
-            onClick={handleEditInStarbase}
-            disabled={!decisionEditTarget?.canEdit || decisionEditTargetQ.isFetching}
-            title={decisionEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+            onClick={starbaseBridge.open}
+            disabled={!starbaseBridge.available || starbaseBridge.isPending}
+            title={starbaseBridge.unavailableReason || 'Edit deployed version in Starbase'}
           >
             Edit
           </Button>
@@ -467,7 +399,7 @@ export default function Decisions() {
       {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
         <RuntimeCollectionEmptyState kind="decision_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
       )}
-      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={starbaseBridge.decision} error={starbaseBridge.error} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

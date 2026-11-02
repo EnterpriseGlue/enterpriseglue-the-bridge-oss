@@ -454,6 +454,13 @@ The transition lane:
    preview/apply in the engine administration UI; and
 7. checks routes, action inventory, canonical schemas, and OpenAPI together.
 
+Actions with routes using different resource resolvers require an explicit
+`resourceResolver` at every `requireAction` call. Missing resolver selection
+fails before resource lookup or authorization evaluation. The route inventory
+test checks literal backend call sites; the middleware also enforces the rule
+for dynamically registered actions. Single-project VCS status routes select
+`project.byId`; batch status routes explicitly select their collection resolver.
+
 The runtime lane:
 
 1. holds `requireAction.ts` and the Mission Control runtime-resource filter to
@@ -878,3 +885,250 @@ unlinked test does not close a functional requirement.
 
 The latest complete evidence summary is
 [Engine Tenancy Functional Test Report](./engine-tenancy-functional-test-report.md).
+
+### Project creation and existing-project Git connections
+
+The create-project wizard validates local, online-repository and clone requests
+and their canonical receipts before acknowledging success or navigating. Engine
+import previews are metadata-only and must match the selected engine and their
+file counts; the server still authorizes and prepares the actual import. Creation
+owns the submitted form and authenticated session. Closing or replacing that form
+suppresses late UI continuations without cancelling or undoing an issued write.
+An uncertain receipt or failed access refresh requires reconciliation before retry.
+A successful access refresh may add the created project's permissions, but must
+still match the original authenticated session.
+
+Existing projects use the project service-token connection settings. They do not
+use the legacy metadata-only repository init/clone endpoints as proof of remote
+repository creation or content import. Provider choices come from validated
+provider records, including their seeded UUIDs, rather than provider type names.
+New-project creation uses the single saved provider credential; ambiguous saved
+credentials cannot silently select a different connection. Private token values
+are not copied into project-creation requests or mutation caches. Server action
+permissions, credential validation, endpoint policy and database isolation remain
+authoritative.
+
+### Existing-project file and archive imports
+
+The project contents upload action owns the file-picker, file-read and receipt
+continuation for the original project, folder, authenticated session and action
+availability. A view or authority change suppresses remaining dispatch and UI
+callbacks; it does not cancel an already issued server operation. Duplicate
+selection is blocked while pending. Malformed receipts or failed post-write
+refreshes require reconciliation before another upload in that view.
+
+Diagram uploads parse XML and check the definitions namespace, extension/type
+agreement and unsupported Zeebe extensions before sending the canonical create
+request. This browser validation is feedback, not a server security boundary or
+proof of engine execution. File creation checks destination-folder ownership and
+inserts the file and initial version in one transaction. Metadata moves reject
+foreign-project folders; file breadcrumb reads bind every ancestor to the file's
+project and reject cycles. No migration, RLS policy or privilege change is needed.
+
+ZIP imports preserve their existing project-root destination, even when a folder
+is selected in the browser. Their exact metadata receipt is shared by the route,
+OpenAPI and browser. Counts acknowledge the import request; independent contents
+and version checks remain the verification of resulting state. An imported file
+must still pass ordinary source-bound save and deployment verification.
+
+### Project folder mutations and traversal
+
+Folder creation, rename and move validate the destination and its complete
+ancestry in the authorized project. Preview, archive paths and cascade deletion
+traverse only that project's rows and reject cycles. Ordinary folder-edge writers,
+file insertion/moves and archive import acquire the project row inside their
+transaction before checking the tree; folder deletion collects and removes its
+subtree under the same fence. PostgreSQL concurrency and rollback tests exercise
+this behavior. Cross-database acceptance remains a separate release gate.
+
+Folder operations leave version saving explicit. They do not launch a background
+commit of unrelated project drafts. The move picker consumes the validated
+complete folder list and stays disabled when that list cannot be verified.
+Browser mutations validate canonical receipts and own their dialog, project and
+authenticated-session continuations. An uncertain write stops further dispatch
+in that reviewed view; a closed or replaced view suppresses late success without
+undoing an issued request. Deletion requires a verified informational preview,
+but that preview is not an atomic retained deletion plan. A no-content response
+acknowledges the request; independently reading resulting state is still needed.
+No migration, RLS policy, server permission or privilege is relaxed.
+
+### Saving and publishing file removals
+
+A removed file remains dirty until a complete project save records its deletion.
+Uncommitted-status IDs include stable deleted-file IDs or retained legacy working
+IDs as status markers; they are not permission to read or save a missing file.
+File-scoped saves still require current project files and preserve the saved
+state of unselected siblings, including their pending removals.
+
+Complete saves reconcile only the requested project and its owned draft branch
+before checkpointing. Reconciliation detects duplicate stable/legacy identities
+before issuing writes, records removals as tombstones, and preserves the current
+file's exact nullable folder metadata. An empty new project cannot create a
+version or initialize a draft through a refused save. A project with a retained
+active baseline can explicitly save a deletion-only version. Publication retains
+those tombstones, so removed files are not reintroduced into the published tree.
+
+The ordinary deployment-source checks still require an exact saved revision.
+The Git exporter can delete a removed diagram path while exporting surviving
+reviewed files; an empty-project Git push remains refused. No remote repository
+wipe capability, schema migration, database policy or permission is introduced.
+Checkpoint reconciliation and save are separate database steps; after a failure,
+read the branch and version state before considering another save.
+
+### Atomic saved-content restoration
+
+Project and selected-file restore routes share a closed optional empty request
+body; file scope is explicit in the selected-file URL. Restores verify active
+snapshot contents against their retained hashes and resolve every current target
+in the authorized project before writing. Missing, incompatible, aliased or
+ambiguous targets stop the operation. Tombstones are skipped in project content
+restore and cannot satisfy a selected-file restore.
+
+Content restoration preserves current names and folder locations, retains files
+added after the saved version, and does not recreate removed files. BPMN process
+and DMN decision IDs are derived again from the restored XML using the ordinary
+sanitization path. The restored contents, owned draft rows, new checkpoint, branch
+head and file-version records share one TypeORM transaction. Failure at any of
+those persistence stages rolls them back together. Branch initialization may
+precede this transaction; it does not change file contents.
+
+The transaction manager is an internal server dependency passed through the VCS
+facade, never a request parameter. Transactional file-version bookkeeping errors
+propagate rather than becoming successful restore receipts. Existing callers
+that do not supply a transaction retain their established behavior. A lost commit
+acknowledgement still requires independent state reconciliation before retry.
+
+Local file-history restore uses the same project-row fence and commits the file
+update and its new restore-history entry together. It derives diagram identities
+again and returns a closed receipt bound to the requested file and version.
+Deployed-snapshot restore validates stable or unambiguous legacy identity, raw
+content hash and project/type before copying content into the draft. When both
+commit and semantic file-version selectors are supplied, their retained mapping
+must agree. This endpoint does not launch a background VCS update: an explicit
+Save reconciles the draft and creates its checkpoint.
+
+History and deployed-restore clients validate their response before clearing
+private drafts, recording hotfix context or reloading. History refreshes must also
+succeed. Continuations are bound to the initiating file, selection, permission
+snapshot and browser session; replaced or closed views settle silently. An
+unverified response or failed refresh blocks another submission in that view
+until the caller reloads and reconciles the result. These UI fences do not grant
+server authority or make an uncertain write safe to retry.
+
+### Engine deployment deletion from file history
+
+The history panel deletes the entire selected engine deployment, including its
+definitions and resources; its scope can include files other than the displayed
+file. Saved Starbase versions remain intact. The panel always sends
+`cascade=false`, so running instances are not cascade-deleted and the engine can
+refuse an in-use deployment. The existing engine deployment-delete action
+authorizes the request independently of the project history permission.
+
+Confirmation and refresh belong to the original engine/deployment, file,
+principal, tenant and permission snapshot. Replaced views cannot receive late
+completion callbacks. Each target can be submitted once in that view; a lost
+acknowledgement or failed refresh requires reconciliation rather than another
+DELETE. Both the engine adapter and the browser require HTTP 204 and a settled
+empty response stream. Other success statuses are unverified and do not become
+deletion acknowledgements. Historical deployment lineage is retained.
+
+The legacy and canonical error-handler import paths share one `AppError` class.
+Typed engine failures therefore retain their sanitized HTTP status across the
+service/route boundary instead of becoming generic errors due to class-identity
+drift. This does not change authorization, tenant policies or migration floors.
+
+### Runtime navigation from saved history
+
+Saved-history runtime links require one unambiguous artifact of the displayed
+file type, a canonical key and engine identity, and a positive safe integer
+version. Multiple matching definitions open the saved-file preview rather than
+selecting a runtime definition by version rank.
+
+Both bridge API clients parse the canonical decision response and bind returned
+project, file, engine and target identities to the submitted selectors. Allowed
+responses also require complete identities, no missing actions and matching
+definition/kind lineage. Structured denials retain their reason when early
+resolution cannot supply every identity. Browser response checks do not replace
+the bridge service's authorization or the destination API's guards.
+
+The history panel owns the latest bridge selection and its original file,
+tenant URL, principal/session, permission snapshot and preview lifetime. Late
+allowances, denials and errors cannot navigate or update a replaced view. Query
+parameters are constructed from the captured artifact, without retargeting an
+earlier decision to the current selection.
+
+Mission Control's process overview/detail and decision overview/detail Edit
+links share the reverse handoff. The selected edit-target response must match
+the current engine, definition key, kind and version. Its project/file identities
+and optional commit/file-version selectors are validated and copied before the
+bridge request. Invalid, refreshing or noneditable metadata cannot dispatch.
+Version changes (including switching away and back), instance/route changes,
+permission/session replacement and target updates revoke older callbacks.
+
+Navigation retains only the verified source selectors; absent commit or semantic
+file-version values remain absent. Concurrent clicks in the same selection issue
+one bridge evaluation. A current denial remains visible, while stale denials and
+failures cannot update the replacement selection. These controls preserve the
+server-owned runtime-resource edit-target and composite bridge checks; they do
+not infer fine-grained runtime grants from the browser permission snapshot.
+
+The Editor validates Mission Control source parameters independently. Exactly
+one process or decision key, an engine and a canonical positive integer engine
+version are required; repeated selectors, fractional/coerced versions and
+noncanonical identities cannot start preview or hotfix actions. An ordinary
+Editor URL does not become a deployed-source restore merely by adding commit
+or file-version parameters. When both saved selectors are supplied, both must
+match before the current draft can be treated as the exact baseline.
+
+Preview requires an exact commit reference and uses only the existing saved
+snapshot read path. A file-version-only source can use the server's guarded
+hotfix resolver, but its preview action is unavailable with an explicit reason;
+the client does not guess a commit from ranked or truncated history. Snapshot
+labels describe the requested source, not a verified runtime correlation.
+Dismissal, read-only view and save-first confirmation belong to the original
+file, source URL, route, session and permission lifetime. Replacing that context,
+including switching away and back, revokes retained actions and dialog state.
+Existing server authorization, collaboration ownership and restore-receipt
+verification remain mandatory.
+
+The Editor's Mission Control action uses the same single-definition artifact
+selection as saved history. It requires a deployment for the explicitly selected
+engine and file, with one valid definition of the file's runtime kind. Multiple
+matching deployments or definitions, invalid versions and absent selected-engine
+lineage leave the action unavailable; the client never falls back to another
+engine or chooses a definition by its version rank.
+
+Before opening the runtime view, one refresh must retain the captured deployment
+metadata, followed by the existing composite bridge decision for the exact
+project, file, engine, definition ID and key. A failed refresh cannot adopt cached
+metadata. A changed deployment requires a fresh user selection. The continuation
+is bound to the file, selected engine, route, view, tenant, actor, session and
+permission lifetime; duplicate clicks issue one evaluation, and stale results
+cannot navigate or replace current notices. This read-only path does not change
+the engine selection itself. Composite and destination APIs remain authoritative
+for access; client metadata validation does not confer runtime permission.
+Both Editor action rows wrap so the runtime link remains visible at narrow
+viewports; browser checks must verify the button's viewport boundaries.
+
+### Incoming runtime definition links
+
+Mission Control resolves an incoming process or decision key and optional positive integer version against the selected engine's completed definition query before enabling definition-specific reads. Apply the key, exact version and optional process node together over persisted filters. A key-only link chooses the unique latest version. Missing, invalid, duplicate or ambiguous selectors retain the link and show an explicit clear action; they must not substitute another definition or version. Consuming selectors preserves the engine, source-instance and unrelated query parameters. Client selection does not replace server authorization.
+
+Regression coverage must open links over a different persisted key/version, delay definition loading, reject unavailable and fractional versions, and verify the exact definition IDs used for diagrams, history, activity counts and edit-target lookup. Process count previews wait for the resolved ID when a version is selected. Replaced route/session/engine contexts cannot apply old continuations. Normal process filters retain the all-versions option.
+
+### Starting a selected process version
+
+The overview Start action requires a single resolved definition version. Its dialog binds the engine, immutable definition ID, key, version, route, actor, tenant, session and permission snapshot. Changing any of that context discards the old dialog; duplicate submits and old completions cannot apply to a replacement view. Invalid variable maps, reserved names and nonfinite JSON values fail before dispatch. A failed or mismatched acknowledgement blocks automatic resubmission; verify instances independently before starting another operation.
+
+`POST /mission-control-api/process-definitions/{id}/start` takes the closed shared request (`engineId`, optional `businessKey` and engine-native `variables`) and uses the existing process-start action with the definition-ID runtime guard. The response must contain a nonempty instance ID and the exact `definitionId`. The compatibility `/key/{key}/start` endpoint continues to mean latest by key; the versioned UI does not use it. Tests must trace exact older-version execution, same-key cross-tenant denials, missing context, revoked permission, response loss, malformed receipts and stale dialog lifetimes. No entity or migration changes are involved.
+
+
+### Migration review and engine transport
+
+Migration instructions use `sourceActivityIds` and `targetActivityIds` arrays throughout the wizard, shared request schema and engine transport. Preserve every generated target and explicit false trigger flag; a cleared manual mapping stays unmapped. Inventory and Carbon selector initialization must retain a selected older source version. Auto-map is explicit and cannot replace an existing engine suggestion or manual choice.
+
+A clean validation belongs to one detached plan, exact instance selection, variable set, execution options and authenticated context. Any change invalidates it, including a same-account session or permission replacement. Late generations and validations cannot populate a replacement draft. Review displays immutable options; both execution modes share a synchronous dispatch latch. Require the canonical direct or batch acknowledgement, and block automatic replay after an uncertain outcome. Server runtime-resource and action guards remain authoritative at execution.
+
+Navigation selection storage is scoped to the authenticated user and tenant. Ignore the former global cache; never turn an invalid or different-engine handoff into an empty source-wide selection. Keep variable values and audit reasons out of session storage and query-cache keys.
+
+Migration variables use global process scope. JSON is serialized once as engine `Json`; unsupported local scope and invalid numeric values are refused. The backend places variables inside the engine `migrationPlan` for direct and batch execution. Validate those same variables with the plan, consume `variableReports` as a name-keyed map, and surface its failures before execution. No entity, SQL migration, database privilege or tenant-policy changes are required.

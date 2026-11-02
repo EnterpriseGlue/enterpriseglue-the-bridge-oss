@@ -488,3 +488,13 @@ test('a replacement changelog discards unpublished duplicate sections and preser
   assert.ok(!result.includes('Old unpublished reservation'))
   assert.throws(()=>syncReleaseChangelog(pending,[fragment],'0.30.0','# Changelog\n\n## [0.30.0]\n'),/already published/)
 });
+
+
+test('process-instance migration wiring does not invent a database schema migration', () => {
+  const notes=structuredClone(fragment)
+  notes.database.migrations=[]
+  const coverage=validatePathCoverage(['packages/backend-host/src/modules/mission-control/migration/service.ts'],[notes])
+  assert.ok(!coverage.requirements.includes('database migration notes and rollback'))
+  assert.throws(()=>validatePathCoverage(['packages/shared/src/infrastructure/persistence/migrations/1700000000131-example.ts'],[notes]),/database.migrations/)
+  assert.throws(()=>validatePathCoverage(['other/migration/change.ts'],[notes]),/database.migrations/)
+})

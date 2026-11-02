@@ -1,6 +1,4 @@
 import { Router, Request, Response } from 'express'
-import { generateId } from '@enterpriseglue/shared/utils/id.js'
-import { caseInsensitiveColumn } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js'
@@ -11,30 +9,19 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js'
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js'
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
-import { In, IsNull, Raw } from 'typeorm'
+import { In, IsNull } from 'typeorm'
 import archiver from 'archiver'
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js'
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js'
-import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
 import { projectIdParamSchema, folderIdParamSchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
-import { CreateFolderRequest, FolderSummarySchema, UpdateFolderRequest } from '@enterpriseglue/shared/schemas/starbase/folder.js'
+import { CreateFolderRequest, FolderSummarySchema, FolderListResponseSchema, FolderDeletePreviewSchema, UpdateFolderRequest, ProjectArchiveImportResponseSchema, CreateFolderResponseSchema, UpdateFolderResponseSchema } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 import { buildStarbaseFileName, sanitizeFileNameSegment } from '@enterpriseglue/shared/utils/starbase-filenames.js'
+import { folderService } from '@enterpriseglue/shared/services/starbase/FolderService.js'
+import { readFolderAncestors, collectProjectFolderSubtree, lockFolderProject } from '@enterpriseglue/shared/services/starbase/folder-tree.js'
 import { z } from 'zod'
-
-// Auto-commit helper for folder operations
-async function autoCommitFolderChange(projectId: string, userId: string, message: string): Promise<void> {
-  try {
-    const branch = await vcsService.getUserBranch(projectId, userId)
-    await vcsService.syncFromMainDb(projectId, userId, branch.id)
-    await vcsService.commit(branch.id, userId, message, { source: 'system' })
-    logger.info('Auto-committed folder change', { projectId, userId, message })
-  } catch (error) {
-    logger.error('Failed to auto-commit folder change', { projectId, userId, error })
-  }
-}
 
 const r = Router()
 
@@ -52,134 +39,22 @@ function sanitizeArchivePathSegment(name: string, fallback: string): string {
   return sanitizeFileNameSegment(name, fallback)
 }
 
-async function buildPathForFolder(folderId: string): Promise<string> {
-  const parts: string[] = []
-  let current: string | null = folderId
-  const dataSource = await getDataSource()
-  const folderRepo = dataSource.getRepository(Folder)
-
-  while (current) {
-    const row = await folderRepo.findOne({
-      where: { id: current },
-      select: ['name', 'parentFolderId']
-    })
-
-    if (!row) break
-    parts.unshift(sanitizeArchivePathSegment(String(row.name), 'folder'))
-    current = row.parentFolderId || null
-  }
-
-  return parts.join('/')
-}
-
-function toFolderSummary(row: any) {
-  return { id: String(row.id), name: String(row.name), parentFolderId: rowString(row, 'parent_folder_id') }
-}
-
-/**
- * Get breadcrumb trail for a folder
- * ✨ Migrated to TypeORM
- */
-async function getBreadcrumb(folderId: string | null) {
-  const bc: Array<{ id: string; name: string; parentFolderId: string | null }> = []
-  let current = folderId
+async function getBreadcrumb(projectId: string, folderId: string | null) {
   const dataSource = await getDataSource();
-  const folderRepo = dataSource.getRepository(Folder);
-  
-  while (current) {
-    const row = await folderRepo.findOne({
-      where: { id: current },
-      select: ['id', 'name', 'parentFolderId']
-    });
-    
-    if (!row) break;
-    bc.unshift({ id: String(row.id), name: String(row.name), parentFolderId: row.parentFolderId || null });
-    current = row.parentFolderId || null;
-  }
-  return bc;
+  return (await readFolderAncestors(dataSource, projectId, folderId)).map(row => ({ id: row.id, name: row.name, parentFolderId: row.parentFolderId }));
 }
 
-/**
- * Check if testId is a descendant of ancestorId (prevents cycles)
- * ✨ Migrated to TypeORM
- */
-async function isDescendant(ancestorId: string, testId: string | null): Promise<boolean> {
-  // Walk upward from testId to root; if we hit ancestorId, it's a cycle
-  let current = testId;
-  const dataSource = await getDataSource();
-  const folderRepo = dataSource.getRepository(Folder);
-  
-  while (current) {
-    const row = await folderRepo.findOne({
-      where: { id: current },
-      select: ['parentFolderId']
-    });
-    
-    if (!row) break;
-    if (String(current) === String(ancestorId)) return true;
-    current = row.parentFolderId || null;
-  }
-  return false;
+async function buildPathForFolder(projectId: string, folderId: string): Promise<string> {
+  return (await getBreadcrumb(projectId, folderId)).map(row => sanitizeArchivePathSegment(row.name, 'folder')).join('/');
 }
 
-/**
- * Collect all folders and files in a subtree (for deletion)
- * ✨ Migrated to TypeORM
- */
-async function collectSubtree(rootId: string): Promise<{ folders: string[]; files: string[] }> {
-  const foldersOut: string[] = [];
-  const filesOut: string[] = [];
-  const stack: string[] = [rootId];
-  const dataSource = await getDataSource();
-  const folderRepo = dataSource.getRepository(Folder);
-  const fileRepo = dataSource.getRepository(File);
-  
-  while (stack.length) {
-    const fid = stack.pop() as string;
-    foldersOut.push(fid);
-    
-    // Enqueue child folders
-    const childFolders = await folderRepo.find({
-      where: { parentFolderId: fid },
-      select: ['id']
-    });
-    for (const row of childFolders) {
-      stack.push(String(row.id));
-    }
-    
-    // Collect files in this folder
-    const folderFiles = await fileRepo.find({
-      where: { folderId: fid },
-      select: ['id']
-    });
-    for (const row of folderFiles) {
-      filesOut.push(String(row.id));
-    }
-  }
-  return { folders: foldersOut, files: filesOut };
+async function collectSubtree(projectId: string, rootId: string): Promise<{ folders: string[]; files: string[] }> {
+  return collectProjectFolderSubtree(await getDataSource(), projectId, rootId);
 }
 
-/**
- * Build full path for a file (for ZIP archives)
- * ✨ Migrated to TypeORM
- */
-async function buildPathForFile(folderId: string | null, fileName: string): Promise<string> {
-  const parts: string[] = [sanitizeArchivePathSegment(fileName, 'file')];
-  let current = folderId;
-  const dataSource = await getDataSource();
-  const folderRepo = dataSource.getRepository(Folder);
-  
-  while (current) {
-    const row = await folderRepo.findOne({
-      where: { id: current },
-      select: ['name', 'parentFolderId']
-    });
-    
-    if (!row) break;
-    parts.unshift(sanitizeArchivePathSegment(String(row.name), 'folder'));
-    current = row.parentFolderId || null;
-  }
-  return parts.join('/');
+async function buildPathForFile(projectId: string, folderId: string | null, fileName: string): Promise<string> {
+  const parts = (await getBreadcrumb(projectId, folderId)).map(row => sanitizeArchivePathSegment(row.name, 'folder'));
+  return [...parts, sanitizeArchivePathSegment(fileName, 'file')].join('/');
 }
 
 type ArchiveScope = 'project' | 'folder' | 'selection'
@@ -217,6 +92,28 @@ async function streamZipArchive(params: {
     return res.status(204).end()
   }
 
+  const folderEntries = await Promise.all(
+    folders.map(async (folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentFolderId: folder.parentFolderId,
+      path: await buildPathForFolder(projectId, folder.id),
+    }))
+  )
+
+  const fileEntries = await Promise.all(
+    files.map(async (file) => ({
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      folderId: file.folderId,
+      path: await buildPathForFile(projectId, file.folderId, buildStarbaseFileName(file.name, file.type)),
+      xml: file.xml,
+      bpmnProcessId: file.bpmnProcessId ?? null,
+      dmnDecisionId: file.dmnDecisionId ?? null,
+    }))
+  )
+
   const safeDownloadName = sanitizeArchivePathSegment(downloadName, 'project')
   res.setHeader('Content-Type', 'application/zip')
   res.setHeader('Content-Disposition', `attachment; filename="${safeDownloadName.replace(/"/g, '')}.zip"`)
@@ -239,34 +136,12 @@ async function streamZipArchive(params: {
   })
   archive.pipe(res)
 
-  const folderEntries = await Promise.all(
-    folders.map(async (folder) => ({
-      id: folder.id,
-      name: folder.name,
-      parentFolderId: folder.parentFolderId,
-      path: await buildPathForFolder(folder.id),
-    }))
-  )
-
   folderEntries
     .filter((folder) => folder.path)
     .sort((a, b) => a.path.localeCompare(b.path))
     .forEach((folder) => {
       archive.append('', { name: `${folder.path}/` })
     })
-
-  const fileEntries = await Promise.all(
-    files.map(async (file) => ({
-      id: file.id,
-      name: file.name,
-      type: file.type,
-      folderId: file.folderId,
-      path: await buildPathForFile(file.folderId, buildStarbaseFileName(file.name, file.type)),
-      xml: file.xml,
-      bpmnProcessId: file.bpmnProcessId ?? null,
-      dmnDecisionId: file.dmnDecisionId ?? null,
-    }))
-  )
 
   const manifest = {
     format: 'enterpriseglue.starbase.export',
@@ -331,7 +206,7 @@ r.get('/starbase-api/projects/:projectId/contents', apiLimiter, requireAuth, req
   const fileRepo = dataSource.getRepository(File);
 
   // Breadcrumb
-  const breadcrumb = await getBreadcrumb(folderId);
+  const breadcrumb = await getBreadcrumb(projectId, folderId);
 
   // Get folders in current location
   const foldersResult = await folderRepo.find({
@@ -392,7 +267,7 @@ r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requ
   });
   const out = result.map((r: any) => ({ id: String(r.id), name: String(r.name), parentFolderId: r.parentFolderId || null }));
   
-  res.json(z.array(FolderSummarySchema).parse(out));
+  res.json(FolderListResponseSchema.parse(out));
 }));
 
 /**
@@ -400,43 +275,8 @@ r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requ
  * ✨ Migrated to TypeORM
  */
 r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(CreateFolderRequest), requireAction('project.files.create', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
-  const projectId = String(req.params.projectId);
-  const userId = req.user!.userId;
-  const { name, parentFolderId } = req.body;
-  const parentFolderIdStr = parentFolderId || null;
-  const trimmed = name.trim();
-
-  const id = generateId();
-  const now = unixTimestamp();
-  const dataSource = await getDataSource();
-  const folderRepo = dataSource.getRepository(Folder);
-
-  // Uniqueness (case-insensitive among siblings)
-  const dupCheck = await folderRepo.find({
-    where: {
-      projectId,
-      parentFolderId: parentFolderIdStr ? parentFolderIdStr : IsNull(),
-      name: Raw(alias => `${caseInsensitiveColumn(alias)} = ${caseInsensitiveColumn(':name')}`, { name: trimmed })
-    },
-    select: ['id']
-  });
-  if (dupCheck.length > 0) throw Errors.validation('A folder with this name already exists here');
-
-  await folderRepo.insert({
-    id,
-    projectId,
-    parentFolderId: parentFolderIdStr,
-    name: trimmed,
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: now,
-    updatedAt: now
-  });
-
-  // Auto-commit folder creation to VCS (async, non-blocking)
-  autoCommitFolderChange(projectId, userId, `Created folder: ${trimmed}`).catch((err) => logger.debug('Auto-commit folder creation failed', { err }));
-
-  res.status(201).json({ id, name: trimmed, parentFolderId: parentFolderIdStr, createdAt: now, updatedAt: now });
+  const result = await folderService.create({ ...req.body, projectId: String(req.params.projectId), userId: req.user!.userId });
+  res.status(201).json(CreateFolderResponseSchema.parse(result));
 }));
 
 /**
@@ -444,56 +284,8 @@ r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, val
  * ✨ Migrated to TypeORM
  */
 r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validateParams(folderIdParamSchema), validateBody(UpdateFolderRequest), requireAction('project.files.update', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
-  const folderId = String(req.params.folderId);
-  const userId = req.user!.userId;
-  const { name, parentFolderId } = req.body;
-  const now = unixTimestamp();
-  const dataSource = await getDataSource();
-  const folderRepo = dataSource.getRepository(Folder);
-
-  // Verify user owns the project containing this folder
-  // Read existing folder
-  const row = await folderRepo.findOne({
-    where: { id: folderId },
-    select: ['id', 'projectId', 'parentFolderId', 'name']
-  });
-  if (!row) throw Errors.notFound('Folder', folderId);
-  
-  const projectId = String(row.projectId);
-
-  const currentName = String(row.name);
-  const currentParent = row.parentFolderId || null;
-
-  if (name !== undefined && typeof name !== 'string') {
-    throw Errors.validation('Folder name is required');
-  }
-  const newName = (typeof name === 'string' ? name : currentName).trim();
-  const parentFolderIdStr = typeof parentFolderId === 'string' ? parentFolderId : null;
-  const newParent = parentFolderId === undefined ? currentParent : parentFolderIdStr;
-
-  // Prevent cycles
-  if (await isDescendant(folderId, newParent)) {
-    throw Errors.validation('Cannot move a folder into its descendant');
-  }
-
-  // Uniqueness among siblings
-  const dupCheck = await folderRepo.createQueryBuilder('f')
-    .where('f.projectId = :projectId', { projectId })
-    .andWhere(newParent ? 'f.parentFolderId = :newParent' : 'f.parentFolderId IS NULL', { newParent })
-    .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':newName')}`, { newName })
-    .andWhere('f.id <> :folderId', { folderId })
-    .select(['f.id'])
-    .getMany();
-  if (dupCheck.length > 0) throw Errors.validation('A folder with this name already exists here');
-
-  await folderRepo.update({ id: folderId }, {
-    name: newName,
-    parentFolderId: newParent,
-    updatedBy: userId,
-    updatedAt: now
-  });
-
-  res.json({ id: folderId, name: newName, parentFolderId: newParent, updatedAt: now });
+  const result = await folderService.rename({ ...req.body, folderId: String(req.params.folderId), userId: req.user!.userId });
+  res.json(UpdateFolderResponseSchema.parse(result));
 }));
 
 /**
@@ -507,15 +299,16 @@ r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth,
   const fileRepo = dataSource.getRepository(File);
 
   // Ensure exists
-  await ResourceService.getFolderOrThrow(folderId);
-
-  const subtree = await collectSubtree(folderId);
+  const root = await folderRepo.findOne({ where: { id: folderId }, select: ['id', 'projectId'] });
+  if (!root) throw Errors.notFound('Folder');
+  const projectId = root.projectId;
+  const subtree = await collectSubtree(projectId, folderId);
   
   // File type counts
   let bpmn = 0, dmn = 0, other = 0;
   for (const fid of subtree.files) {
     const fileResult = await fileRepo.findOne({
-      where: { id: fid },
+      where: { id: fid, projectId },
       select: ['type']
     });
     if (fileResult) {
@@ -527,21 +320,11 @@ r.get('/starbase-api/folders/:folderId/delete-preview', apiLimiter, requireAuth,
   // Sample paths
   const samplePaths: string[] = [];
   for (const fid of subtree.folders.slice(0, 10)) {
-    let current: string | null = fid;
-    const parts: string[] = [];
-    while (current) {
-      const folderResult = await folderRepo.findOne({
-        where: { id: current },
-        select: ['name', 'parentFolderId']
-      });
-      if (!folderResult) break;
-      parts.unshift(String(folderResult.name));
-      current = folderResult.parentFolderId || null;
-    }
+    const parts = (await getBreadcrumb(projectId, fid)).map(row => row.name);
     samplePaths.push(parts.join('/'));
   }
 
-  res.json({ folderCount: subtree.folders.length, fileCount: subtree.files.length, filesByType: { bpmn, dmn, other }, samplePaths });
+  res.json(FolderDeletePreviewSchema.parse({ folderCount: subtree.folders.length, fileCount: subtree.files.length, filesByType: { bpmn, dmn, other }, samplePaths }));
 }));
 
 /**
@@ -567,10 +350,7 @@ r.delete('/starbase-api/folders/:folderId', apiLimiter, requireAuth, requireActi
   await ResourceService.getFolderOrThrow(folderId);
 
   // Delete folder and all its contents using cascade delete service
-  await CascadeDeleteService.deleteFolder(folderId);
-
-  // Auto-commit folder deletion to VCS (async, non-blocking)
-  autoCommitFolderChange(projectId, userId, `Deleted folder: ${folderName}`).catch((err) => logger.debug('Auto-commit folder deletion failed', { err }));
+  await CascadeDeleteService.deleteFolder(folderId, projectId);
 
   res.status(204).end();
 }));
@@ -593,11 +373,11 @@ r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, requi
   if (!ownerCheck) throw Errors.notFound('Folder');
 
   const folderName = String(ownerCheck.name || 'folder');
-  const subtree = await collectSubtree(folderId);
+  const subtree = await collectSubtree(String(ownerCheck.projectId), folderId);
 
   const folders = subtree.folders.length
     ? (await folderRepo.find({
-        where: { id: In(subtree.folders) },
+        where: { projectId: String(ownerCheck.projectId), id: In(subtree.folders) },
         select: ['id', 'name', 'parentFolderId']
       })).map((folder) => ({
         id: String(folder.id),
@@ -608,7 +388,7 @@ r.get('/starbase-api/folders/:folderId/download', apiLimiter, requireAuth, requi
 
   const files = subtree.files.length
     ? (await fileRepo.find({
-        where: { id: In(subtree.files) },
+        where: { projectId: String(ownerCheck.projectId), id: In(subtree.files) },
         select: ['id', 'name', 'type', 'folderId', 'xml', 'bpmnProcessId', 'dmnDecisionId']
       })).map((file) => ({
         id: String(file.id),
@@ -700,12 +480,13 @@ r.post('/starbase-api/projects/:projectId/import-zip', apiLimiter, requireAuth, 
 
   const dataSource = await getDataSource()
   const result = await dataSource.transaction(async (manager) => {
-    return applyProjectArchiveToProject({
+    await lockFolderProject(manager, projectId);
+    return ProjectArchiveImportResponseSchema.parse(await applyProjectArchiveToProject({
       manager,
       projectId,
       userId,
       zipBuffer,
-    })
+    }))
   })
 
   res.status(201).json(result)
@@ -740,7 +521,7 @@ r.post('/starbase-api/projects/:projectId/download-selection', apiLimiter, requi
   const fileIdSet = new Set<string>(fileIds)
 
   for (const folder of selectedFolders) {
-    const subtree = await collectSubtree(String(folder.id))
+    const subtree = await collectSubtree(projectId, String(folder.id))
     subtree.folders.forEach((id) => folderIdSet.add(String(id)))
     subtree.files.forEach((id) => fileIdSet.add(String(id)))
   }

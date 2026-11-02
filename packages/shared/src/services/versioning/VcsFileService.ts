@@ -2,9 +2,12 @@
  * VCS File Service - File operations
  */
 
+import type { EntityManager } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/WorkingFile.js';
+import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Branch.js';
 import { File as MainFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { WorkingFileInfo, hashContent, mapWorkingFile, normalizeFolderId } from './vcs-types.js';
@@ -21,9 +24,10 @@ export class VcsFileService {
     type: string,
     content: string,
     folderId?: string | null,
-    mainFileId?: string | null
+    mainFileId?: string | null,
+    manager?: EntityManager
   ): Promise<WorkingFileInfo> {
-    const dataSource = await getDataSource();
+    const dataSource = manager ?? await getDataSource();
     const fileRepo = dataSource.getRepository(WorkingFile);
     const now = Date.now();
     const contentHash = hashContent(content);
@@ -86,8 +90,9 @@ export class VcsFileService {
     }
 
     if (fileId) {
-      await fileRepo.update({ id: fileId }, {
+      await fileRepo.update({ id: fileId, branchId, projectId }, {
         mainFileId: normalizedMainFileId,
+        isDeleted: false,
         name,
         type,
         content,
@@ -96,7 +101,7 @@ export class VcsFileService {
         updatedAt: now,
       });
 
-      const updated = await fileRepo.findOne({ where: { id: fileId } });
+      const updated = await fileRepo.findOne({ where: { id: fileId, branchId, projectId } });
       return mapWorkingFile(updated!);
     } else {
       const newFileId = generateId();
@@ -166,18 +171,22 @@ export class VcsFileService {
   /**
    * Sync files from main database to VCS draft branch
    */
-  async syncFromMainDb(projectId: string, userId: string, branchId: string): Promise<void> {
+  async syncFromMainDb(projectId: string, userId: string, branchId: string, manager?: EntityManager): Promise<void> {
     const syncStart = Date.now();
-    const dataSource = await getDataSource();
+    const dataSource = manager ?? await getDataSource();
     const mainFileRepo = dataSource.getRepository(MainFile);
     const workingFileRepo = dataSource.getRepository(WorkingFile);
+    const branch = await dataSource.getRepository(Branch).findOne({ where: { id: branchId, projectId } });
+    if (!branch || (branch.isDefault ? branch.userId !== null : branch.userId !== userId)) {
+      throw Errors.conflict('The project branch is unavailable for this user');
+    }
     
     // Get all files from main database
     const dbFiles = await mainFileRepo.find({ where: { projectId } });
     
     // Get current VCS working files
     const vcsFiles = await workingFileRepo.find({
-      where: { branchId, isDeleted: false }
+      where: { branchId, projectId }
     });
     
     const now = Date.now();
@@ -186,47 +195,50 @@ export class VcsFileService {
     const legacyVcsFileMap = new Map<string, WorkingFile>();
     for (const file of vcsFiles) {
       if (typeof file.mainFileId === 'string' && file.mainFileId) {
+        if (vcsFileMap.has(file.mainFileId)) throw Errors.conflict('The project branch has ambiguous file identities');
         vcsFileMap.set(file.mainFileId, file);
         continue;
       }
       const legacyKey = `${normalizeFolderId(file.folderId)}:${file.name}:${file.type}`;
       const current = legacyVcsFileMap.get(legacyKey);
-      if (!current || Number(file.updatedAt || 0) > Number(current.updatedAt || 0)) {
-        legacyVcsFileMap.set(legacyKey, file);
-      }
+      if (current) throw Errors.conflict('The project branch has ambiguous legacy file identities');
+      legacyVcsFileMap.set(legacyKey, file);
     }
     const dbFileKeys = new Set<string>();
     const dbFileIds = new Set<string>();
     
     // Collect batch operations instead of sequential awaits
-    const updatePromises: Promise<any>[] = [];
+    const updates: Array<() => Promise<unknown>> = [];
     const newRows: any[] = [];
     
     for (const dbFile of dbFiles) {
       const key = `${normalizeFolderId((dbFile as any).folderId)}:${dbFile.name}:${dbFile.type}`;
       dbFileKeys.add(key);
       dbFileIds.add(String((dbFile as any).id));
-      const existingVcsFile = vcsFileMap.get(String((dbFile as any).id)) ?? legacyVcsFileMap.get(key);
+      const identified = vcsFileMap.get(String((dbFile as any).id));
+      const legacy = legacyVcsFileMap.get(key);
+      if (identified && legacy) throw Errors.conflict('The project branch has ambiguous file identities');
+      const existingVcsFile = identified ?? legacy;
       const content = String((dbFile as any).xml || '');
       const contentHash = hashContent(content);
-      const normalizedFolderId = normalizeFolderId((dbFile as any).folderId);
+      const desiredFolderId = dbFile.folderId ?? null;
 
       if (existingVcsFile) {
-        const existingFolderId = normalizeFolderId(existingVcsFile.folderId);
         if (
-          existingVcsFile.contentHash !== contentHash ||
-          existingFolderId !== normalizedFolderId ||
+          existingVcsFile.isDeleted || existingVcsFile.contentHash !== contentHash ||
+          existingVcsFile.folderId !== desiredFolderId ||
           existingVcsFile.name !== dbFile.name ||
           existingVcsFile.type !== dbFile.type ||
           existingVcsFile.mainFileId !== String((dbFile as any).id)
         ) {
-          updatePromises.push(workingFileRepo.update({ id: existingVcsFile.id }, {
+          updates.push(() => workingFileRepo.update({ id: existingVcsFile.id, branchId, projectId }, {
             mainFileId: String((dbFile as any).id),
             name: dbFile.name,
             type: dbFile.type,
             content,
             contentHash,
-            folderId: (dbFile as any).folderId || '',
+            folderId: desiredFolderId,
+            isDeleted: false,
             updatedAt: now,
           }));
         }
@@ -236,7 +248,7 @@ export class VcsFileService {
           branchId,
           projectId,
           mainFileId: String((dbFile as any).id),
-          folderId: (dbFile as any).folderId || '',
+          folderId: desiredFolderId,
           name: dbFile.name,
           type: dbFile.type,
           content,
@@ -250,25 +262,26 @@ export class VcsFileService {
 
     // Mark deleted files
     for (const vcsFile of vcsFiles) {
+      if (vcsFile.isDeleted) continue;
       if (vcsFile.mainFileId) {
         if (!dbFileIds.has(String(vcsFile.mainFileId))) {
-          updatePromises.push(workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now }));
+          updates.push(() => workingFileRepo.update({ id: vcsFile.id, branchId, projectId }, { isDeleted: true, updatedAt: now }));
         }
       } else {
         const key = `${normalizeFolderId(vcsFile.folderId)}:${vcsFile.name}:${vcsFile.type}`;
         if (!dbFileKeys.has(key)) {
-          updatePromises.push(workingFileRepo.update({ id: vcsFile.id }, { isDeleted: true, updatedAt: now }));
+          updates.push(() => workingFileRepo.update({ id: vcsFile.id, branchId, projectId }, { isDeleted: true, updatedAt: now }));
         }
       }
     }
 
     // Execute all updates in parallel + batch insert new rows
     await Promise.all([
-      ...updatePromises,
+      ...updates.map(update => update()),
       ...(newRows.length > 0 ? [workingFileRepo.insert(newRows)] : []),
     ]);
     
-    logger.info('Synced main DB files to VCS', { projectId, branchId, fileCount: dbFiles.length, updated: updatePromises.length, inserted: newRows.length, ms: Date.now() - syncStart });
+    logger.info('Synced main DB files to VCS', { projectId, branchId, fileCount: dbFiles.length, updated: updates.length, inserted: newRows.length, ms: Date.now() - syncStart });
   }
 }
 

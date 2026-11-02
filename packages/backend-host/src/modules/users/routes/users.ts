@@ -135,12 +135,20 @@ router.get('/api/users/:id', requireAuth, requireAction('platform.users.read'), 
  */
 router.put('/api/users/:id', requireAuth, requireAction('platform.users.update'), validateBody(PlatformUserUpdateRequestSchema), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
-  const { role, ...input } = req.body;
+  const { role, isActive, ...input } = req.body;
+  // Compatibility clients may echo the current flag. Never let profile edits
+  // perform a lifecycle transition or replay a stale flag after this read.
+  if (isActive !== undefined) {
+    const current = await userService.getUser(userId);
+    if (isActive !== current.isActive) {
+      throw Errors.conflict('Change account status through the audited deactivate or reactivate action with a reason');
+    }
+  }
   const requestedPlatformRole = role ?? input.platformRole;
-  const user = await userService.updateUser(
-    userId,
-    requestedPlatformRole ? { ...input, platformRole: requestedPlatformRole } : input
-  );
+  const changes = requestedPlatformRole ? { ...input, platformRole: requestedPlatformRole } : input;
+  const user = Object.keys(changes).length
+    ? await userService.updateUser(userId, changes)
+    : await userService.getUser(userId);
   res.json(user);
 }));
 
@@ -149,14 +157,14 @@ router.put('/api/users/:id', requireAuth, requireAction('platform.users.update')
  * Delete user (soft delete - deactivate)
  * ✨ Migrated to TypeORM
  */
-router.delete('/api/users/:id', requireAuth, requireAction('platform.users.deactivate'), asyncHandler(async (req, res) => {
+router.delete('/api/users/:id', requireAuth, requireAction('platform.users.deactivate'), validateBody(UserDeactivateRequestSchema), asyncHandler(async (req, res) => {
   const id = String(req.params.id);
 
   if (id === req.user!.userId) {
     throw Errors.validation('Cannot delete your own account');
   }
 
-  await userService.deactivateUser(id);
+  await userDirectoryService.deactivate({ userId: id, actorId: req.user!.userId, tenantId: req.tenant?.tenantId || null, reason: req.body.reason });
   res.json({ message: 'User deleted successfully' });
 }));
 

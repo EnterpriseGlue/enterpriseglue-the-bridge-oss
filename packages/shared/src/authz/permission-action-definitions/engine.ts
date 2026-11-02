@@ -1150,7 +1150,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       risk: 'high',
       audit: true,
       category: 'Mission Control Process Definitions',
-      description: 'Start a new process instance from a deployed process definition key.',
+      description: 'Start a new process instance from an exact deployed definition, or the latest version by key.',
       ui: [{ surfaceId: 'mission-control.process-definitions.start', behavior: 'disable', coverage: 'runtime-enforced' }],
       routes: [
         {
@@ -1158,6 +1158,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/mission-control-api/process-definitions/key/{key}/start',
           resourceResolver: 'engine.byId',
           additionalChecks: ['engineId is resolved from request body by action middleware'],
+        },
+        {
+          method: 'POST',
+          route: '/mission-control-api/process-definitions/{id}/start',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from request body by action middleware', 'The exact definition ID resolves the authorized runtime resource and tenant before dispatch'],
         },
       ],
     },

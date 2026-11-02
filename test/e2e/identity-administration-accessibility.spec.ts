@@ -1,6 +1,6 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
-import { captureManualScreenshot } from './utils/manualScreenshots';
+import { captureManualScreenshot, manualScreenshotDirectory } from './utils/manualScreenshots';
 
 const fulfillJson = (route: Route, body: unknown, status = 200) => route.fulfill({
   status,
@@ -35,7 +35,91 @@ async function openIdentitySettings(page: Page, sectionName: keyof typeof settin
   return stack;
 }
 
+async function captureVisibleProviderState(page: Page, fileName: string, target: Locator): Promise<void> {
+  if (!manualScreenshotDirectory) return;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => document.fonts.ready);
+  await target.scrollIntoViewIfNeeded();
+  // The provider list follows the SSO connection controls. Resetting to the
+  // page top would capture those controls instead of the asserted list state.
+  await captureManualScreenshot(page, fileName, { stabilize: false });
+}
+
 test.describe('Identity Provider and Mapping accessibility release checks', () => {
+  test('loads the directory and user access through the shipped response contracts @identity-accessibility', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+    const stack = new MockBrowserIdentityStack();
+    await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await page.goto('/admin/users');
+    await expect(page.getByText('ada.lovelace@example.test', { exact: true })).toBeVisible();
+    await expect(page.getByText('User management unavailable', { exact: true })).toHaveCount(0);
+    await captureManualScreenshot(page, 'admin-directory-contract.jpg');
+
+    await page.goto('/admin/users/browser-directory-user');
+    await expect(page.getByRole('heading', { name: 'Ada Lovelace', exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Effective access', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Process viewer', exact: true })).toBeVisible();
+    await captureManualScreenshot(page, 'admin-user-access-contract.jpg');
+    expect(errors).toEqual([]);
+  });
+
+  test('denies both admin screens when the permission snapshot grants no user access @identity-accessibility', async ({ page }) => {
+    await new MockBrowserIdentityStack().install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+    let directoryReads = 0;
+    await page.route('**/api/authz/me/permissions', (route) => fulfillJson(route, {
+      userId: 'browser-admin-user', tenantId: null, platform: ['platform:dashboard:view'], projects: [], engines: [],
+      generatedAt: Date.now(), authorizationVersion: 'browser-denied-v1',
+    }));
+    await page.route(/\/api\/users\//, (route) => {
+      directoryReads += 1;
+      return fulfillJson(route, { error: 'Unexpected directory read' }, 403);
+    });
+    for (const path of ['/admin/users', '/admin/users/browser-directory-user']) {
+      await page.goto(path);
+      // The outer route guard redirects before either screen can read data.
+      // The legacy administrator label in /auth/me grants no route authority.
+      await expect(page).toHaveURL((url) => ['/', '/t/default', '/t/default/'].includes(url.pathname));
+      await expect(page.getByRole('button', { name: /Deactivate|Revoke sessions/ })).toHaveCount(0);
+    }
+    expect(directoryReads).toBe(0);
+  });
+
+  test('fails closed on a user detail response missing its canonical access preset @identity-accessibility', async ({ page }) => {
+    await new MockBrowserIdentityStack().install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+    await page.route('**/api/users/browser-directory-user/identity-context', (route) => fulfillJson(route, {
+      user: {
+        id: 'browser-directory-user', email: 'ada.lovelace@example.test', firstName: 'Ada', lastName: 'Lovelace',
+        displayName: 'Ada Lovelace', status: 'active', platformRole: 'admin', authenticationSources: ['oidc'],
+        provisioningSource: 'scim', provisioningDirectoryKey: 'entra-workforce', lastSignInAt: null,
+        lastProvisionedAt: null, provisioningHealth: 'healthy',
+      },
+      linkedIdentities: [], fieldOwnership: [], recoveryAdministrator: false,
+    }));
+    await page.goto('/admin/users/browser-directory-user');
+    await expect(page.getByText('User details unavailable', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Deactivate|Revoke sessions/ })).toHaveCount(0);
+  });
+
+  test('keeps both user admin screens usable at 200 percent zoom @identity-accessibility', async ({ page }) => {
+    await new MockBrowserIdentityStack().install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    for (const [path, heading, name] of [
+      ['/admin/users', 'User management', 'directory'],
+      ['/admin/users/browser-directory-user', 'Ada Lovelace', 'detail'],
+    ]) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+      await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      await captureManualScreenshot(page, `admin-${name}-200-percent.jpg`, { stabilize: false });
+    }
+  });
+
   test('supports keyboard-only settings navigation and announces provider and mapping loading errors @identity-accessibility', async ({ page }) => {
     const stack = new MockBrowserIdentityStack();
     await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
@@ -97,7 +181,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     const providersPanel = page.getByLabel('Identity providers', { exact: true });
     await expect(providersPanel.getByText('Managed by configuration', { exact: true })).toBeVisible();
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
-    await captureManualScreenshot(page, '42-provider-config-lock.jpg');
+    await captureVisibleProviderState(page, '42-provider-config-lock.jpg', page.getByRole('menuitem', { name: 'View configuration' }));
     await expect(page.getByRole('menuitem', { name: 'View configuration' })).toBeEnabled();
     await expect(page.getByRole('menuitem', { name: 'Disable provider' })).toHaveCount(0);
     await page.getByRole('menuitem', { name: 'View configuration' }).click();
@@ -143,7 +227,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     const providersPanel = page.getByLabel('Identity providers', { exact: true });
     await expect(providersPanel.getByText('Configuration-linked', { exact: true })).toBeVisible();
     await expect(providersPanel.getByText('Local changes are allowed, but the next configuration apply may overwrite them.', { exact: true })).toBeVisible();
-    await captureManualScreenshot(page, '80-provider-configuration-linked.jpg');
+    await captureVisibleProviderState(page, '80-provider-configuration-linked.jpg', providersPanel.getByText('Configuration-linked', { exact: true }));
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeEnabled();
     await expect(page.getByRole('menuitem', { name: 'Disable provider' })).toBeEnabled();
@@ -208,7 +292,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(providersPanel.getByRole('button', { name: 'View refresh history' })).toBeVisible();
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await expect(page.getByRole('menuitem', { name: 'Continue applying saved data' })).toBeVisible();
-    await captureManualScreenshot(page, '85-saved-membership-application-partial.jpg');
+    await captureVisibleProviderState(page, '85-saved-membership-application-partial.jpg', providersPanel.getByRole('button', { name: 'Provider actions' }));
   });
 
   test('shows a safe provider-connection failure without nested backend diagnostics @identity-accessibility', async ({ page }) => {
@@ -228,7 +312,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(providersPanel.getByText('Review the relevant settings, then try again.', { exact: false })).toBeVisible();
     await expect(providersPanel.getByText('client_secret=should-never-be-rendered', { exact: false })).toHaveCount(0);
     await expect(providersPanel.getByText('IdentityProviderFailure:', { exact: false })).toHaveCount(0);
-    await captureManualScreenshot(page, '44-provider-connection-failure-redacted.jpg');
+    await captureVisibleProviderState(page, '44-provider-connection-failure-redacted.jpg', providersPanel.getByText('Provider connection could not be verified', { exact: false }));
   });
 
   test('keeps each provider step visible above the in-page workflow actions @identity-accessibility', async ({ page }) => {
@@ -239,10 +323,13 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
       sourceRef: null,
     });
     await page.reload();
-    await captureManualScreenshot(page, '18-identity-providers-list.jpg');
     const providersPanel = page.getByLabel('Identity providers', { exact: true });
+    await expect(providersPanel.getByRole('button', { name: 'Provider actions' })).toBeVisible();
+    await expect(page.getByLabel('Connection', { exact: true })).toHaveValue('direct');
+    await expect(page.getByText('SSO connection unavailable', { exact: true })).toHaveCount(0);
+    await captureVisibleProviderState(page, '18-identity-providers-list.jpg', providersPanel.getByRole('button', { name: 'Provider actions' }));
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
-    await captureManualScreenshot(page, '33-identity-provider-enabled-oidc.jpg');
+    await captureVisibleProviderState(page, '33-identity-provider-enabled-oidc.jpg', page.getByRole('menuitem', { name: 'Edit', exact: true }));
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Create provider', exact: true }).click();
     const providerWorkflow = page.getByRole('region', { name: 'Create identity provider' });
@@ -326,6 +413,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
 
     await page.goto('/admin/users');
     await expect(page.getByRole('heading', { name: 'User management' })).toBeVisible();
+    await expect(page.getByText('ada.lovelace@example.test', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Search users')).toBeVisible();
     const directoryFilters = page.getByLabel('User directory filters');
     await expect(directoryFilters.getByLabel('Status')).toBeVisible();

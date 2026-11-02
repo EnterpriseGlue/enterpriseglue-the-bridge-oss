@@ -420,7 +420,7 @@ export const ProjectContentsTable = ({
               kind="secondary"
               renderIcon={Upload}
               disabled={Boolean(uploadUnavailableReason)}
-              title={uploadUnavailableReason ?? undefined}
+              title={uploadUnavailableReason ?? 'Upload BPMN/DMN to this folder; ZIP archives import at the project root'}
               onClick={() => {
                 if (uploadUnavailableReason) return
                 onUploadClick()

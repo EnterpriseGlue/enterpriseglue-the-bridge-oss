@@ -1,4 +1,4 @@
-import { config } from '../config';
+import { config } from '../config.js';
 import { XSRF_COOKIE_NAME, XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 
 export function assertApiRequestUrl(url: string): void {

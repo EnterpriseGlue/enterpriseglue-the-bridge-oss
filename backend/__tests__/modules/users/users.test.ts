@@ -6,7 +6,7 @@ import usersRouter from '../../../../packages/backend-host/src/modules/users/rou
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { errorHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 const permissionGate = vi.hoisted(() => ({
   allowedPermissions: new Set<string>(),
@@ -115,6 +115,9 @@ describe('users routes', () => {
     fixture.use(usersRouter);
     fixture.use(errorHandler);
     vi.clearAllMocks();
+    userDirectoryServiceMock.identityContext.mockResolvedValue({ user: { id: 'user-2', status: 'active', provisioningSource: 'none' } });
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    (userService.getUser as Mock).mockResolvedValue({ id: 'user-2', isActive: true });
     permissionGate.allowedPermissions.clear();
     permissionGate.allowedPermissions.add('platform:user:manage');
 
@@ -458,6 +461,24 @@ describe('users routes', () => {
     expect(userService.updateUser).toHaveBeenCalledWith('user-2', { platformRole: 'admin' });
   });
 
+  it('cannot change account status through a profile update with only users:update', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:update');
+    const response = await request(app).put('/api/users/user-2').send({ isActive: false });
+    expect(response.status).toBe(409);
+    expect(userService.updateUser).not.toHaveBeenCalled();
+    expect(userDirectoryServiceMock.deactivate).not.toHaveBeenCalled();
+  });
+
+  it('discards an unchanged compatibility status flag before editing a profile', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    (userService.updateUser as Mock).mockResolvedValue({ id: 'user-2', firstName: 'Updated' });
+    const response = await request(app).put('/api/users/user-2').send({ firstName: 'Updated', isActive: true });
+    expect(response.status).toBe(200);
+    expect(userService.updateUser).toHaveBeenCalledWith('user-2', { firstName: 'Updated' });
+  });
+
   it('prefers the canonical role over the deprecated platformRole alias when updating platform access', async () => {
     const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
     permissionGate.allowedPermissions.clear();
@@ -475,10 +496,11 @@ describe('users routes', () => {
   it('soft deactivates a user through DELETE /api/users/:id', async () => {
     const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
 
-    const response = await request(app).delete('/api/users/user-2');
+    const response = await request(app).delete('/api/users/user-2').send({ reason: 'Emergency response' });
 
     expect(response.status).toBe(200);
-    expect(userService.deactivateUser).toHaveBeenCalledWith('user-2');
+    expect(userService.deactivateUser).not.toHaveBeenCalled();
+    expect(userDirectoryServiceMock.deactivate).toHaveBeenCalledWith({ userId: 'user-2', actorId: 'user-1', tenantId: null, reason: 'Emergency response' });
   });
 
   it('soft deactivates a user with granular users:deactivate permission', async () => {
@@ -486,10 +508,25 @@ describe('users routes', () => {
     permissionGate.allowedPermissions.clear();
     permissionGate.allowedPermissions.add('platform:users:deactivate');
 
-    const response = await request(app).delete('/api/users/user-2');
+    const response = await request(app).delete('/api/users/user-2').send({ reason: 'Emergency response' });
 
     expect(response.status).toBe(200);
-    expect(userService.deactivateUser).toHaveBeenCalledWith('user-2');
+    expect(userService.deactivateUser).not.toHaveBeenCalled();
+    expect(userDirectoryServiceMock.deactivate).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-2', reason: 'Emergency response' }));
+  });
+
+  it('does not let the compatibility delete bypass lifecycle reason and self guards', async () => {
+    expect((await request(app).delete('/api/users/user-2')).status).toBe(400);
+    expect((await request(app).delete('/api/users/user-1').send({ reason: 'Unsafe self removal' })).status).toBe(400);
+    expect(userDirectoryServiceMock.deactivate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the recovery-continuity failure on compatibility delete', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    userDirectoryServiceMock.deactivate.mockRejectedValueOnce(Errors.conflict('Recovery continuity conflict'));
+    const response = await request(app).delete('/api/users/user-2').send({ reason: 'Unsafe recovery removal' });
+    expect(response.status).toBe(409);
+    expect(userService.deactivateUser).not.toHaveBeenCalled();
   });
 
   it('unlocks a user through POST /api/users/:id/unlock', async () => {

@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import { AuthContext } from '../../../contexts/AuthContext';
 import {
   Modal,
   TextInput,
@@ -23,6 +24,7 @@ import { formatImportPreviewSummary, useOnlineProjectWizard } from '../hooks/use
 import { CreateOnlineProjectExistingConnectionPanel } from './CreateOnlineProjectExistingConnectionPanel';
 import { CreateOnlineProjectAuthSection } from './CreateOnlineProjectAuthSection';
 import { CreateOnlineProjectRepoModeFields } from './CreateOnlineProjectRepoModeFields';
+import { ProjectGitSettings } from './ProjectGitSettings';
 
 
 
@@ -33,7 +35,14 @@ interface CreateOnlineProjectModalProps {
   existingProjectName?: string;
 }
 
-export default function CreateOnlineProjectModal({ open, onClose, existingProjectId, existingProjectName }: CreateOnlineProjectModalProps) {
+export default function CreateOnlineProjectModal(props: CreateOnlineProjectModalProps) {
+  const auth = React.useContext(AuthContext);
+  const formKey = JSON.stringify([props.open, auth?.user?.session?.principal.id || auth?.user?.id, auth?.user?.session?.tenant.id, auth?.sessionRevision]);
+  if (props.existingProjectId) return <ProjectGitSettings projectId={props.existingProjectId} open={props.open} onClose={props.onClose} />;
+  return <NewProjectModal key={formKey} {...props} />;
+}
+
+function NewProjectModal({ open, onClose, existingProjectId, existingProjectName }: CreateOnlineProjectModalProps) {
   const {
     navigate,
     toTenantPath,
@@ -138,6 +147,7 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
       primaryButtonDisabled={isLoading || !isValid}
       size="md"
     >
+      <fieldset disabled={isLoading} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       <p style={{ marginBottom: 'var(--spacing-5)', color: 'var(--color-text-secondary)' }}>
         {isEditConnectedProject
           ? 'This project is already connected to Git. Use this screen to view the current repo settings and manage your Git credentials.'
@@ -396,6 +406,7 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
           />
         )}
       </div>
+      </fieldset>
     </Modal>
   );
 }

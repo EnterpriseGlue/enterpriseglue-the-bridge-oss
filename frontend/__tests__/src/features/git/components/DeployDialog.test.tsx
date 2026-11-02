@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { advanceBrowserSessionRevision } from '@src/utils/browserSession';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DeployDialog from '@src/features/git/components/DeployDialog';
@@ -16,11 +17,12 @@ vi.mock('@carbon/react', () => ({
     primaryButtonText,
     primaryButtonDisabled,
     secondaryButtonText,
+    onRequestSubmit,
   }: any) => open ? (
     <div role="dialog" aria-label={modalHeading}>
       <h1>{modalHeading}</h1>
       {children}
-      {primaryButtonText ? <button disabled={primaryButtonDisabled}>{primaryButtonText}</button> : null}
+      {primaryButtonText ? <button disabled={primaryButtonDisabled} onClick={onRequestSubmit}>{primaryButtonText}</button> : null}
       {secondaryButtonText ? <button>{secondaryButtonText}</button> : null}
     </div>
   ) : null,
@@ -67,7 +69,8 @@ vi.mock('@carbon/react', () => ({
   Tag: ({ children }: any) => <span>{children}</span>,
 }));
 
-vi.mock('@src/shared/api/client', () => ({
+vi.mock('@src/shared/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@src/shared/api/client')>()),
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
@@ -78,13 +81,15 @@ vi.mock('@src/shared/notifications/ToastProvider', () => ({
   useToast: () => ({ notify: vi.fn() }),
 }));
 
+const deploymentSpy = vi.hoisted(() => vi.fn());
+
 vi.mock('@src/features/git/hooks/useDeployment', () => ({
   useDeployment: () => ({
     isPending: false,
     isError: false,
     isSuccess: false,
     error: null,
-    mutateAsync: vi.fn(),
+    mutateAsync: deploymentSpy,
   }),
 }));
 
@@ -329,5 +334,104 @@ describe('Git DeployDialog', () => {
     expect(screen.getByRole('option', { name: 'CI Only Engine — Prod' })).not.toBeDisabled();
     expect(screen.getByText('Create deployment tag')).toBeInTheDocument();
     expect(screen.queryByText('Manual deployment not available')).not.toBeInTheDocument();
+  });
+});
+
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
+
+describe('deployment intent lifetime', () => {
+  beforeEach(() => { vi.clearAllMocks(); deploymentSpy.mockReset().mockResolvedValue({}); });
+  async function setup(git = false, fileIds: string[] = []) {
+    const save = deferred<any>(), engine = deferred<any>();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/git-api/project-connection') return { connected: git, hasToken: git } as any;
+      if (/engine-access$/.test(url)) return { ...manualEngineAccess, accessedEngines: [{ ...manualEngineAccess.accessedEngines[0], ciDeployAllowed: true }] } as any;
+      return {} as any;
+    });
+    vi.mocked(apiClient.post).mockImplementation(async (url: string) => url.includes('/commit') ? save.promise : engine.promise);
+    const onClose = vi.fn(), onSuccess = vi.fn();
+    const tree = (projectId = 'project-A', open = true, ids = fileIds, revision = 1, permissions = basePermissions) => (
+      <AuthContext.Provider value={{ ...authContext, sessionRevision: revision, permissions }}>
+        <QueryClientProvider client={client}><DeployDialog projectId={projectId} fileIds={ids} open={open} onClose={onClose} onDeploySuccess={onSuccess} /></QueryClientProvider>
+      </AuthContext.Provider>
+    );
+    const view = render(tree());
+    fireEvent.change(await screen.findByLabelText('Version title (required)'), { target: { value: 'Reviewed version A' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save version & deploy' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Save version & deploy' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/vcs-api/projects/project-A/commit', expect.objectContaining({ message: 'Reviewed version A' })));
+    return { save, engine, view, tree, onClose, onSuccess, client };
+  }
+  const engineCalls = () => vi.mocked(apiClient.post).mock.calls.filter(([url]) => url.includes('/engines-api/'));
+
+  it('preserves project, files, engine and verified commit across both stages', async () => {
+    const f = await setup(false, ['file-A']);
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    await waitFor(() => expect(engineCalls()).toHaveLength(1));
+    expect(engineCalls()[0]).toEqual(['/engines-api/engines/engine-1/deployments', {
+      resources: { fileIds: ['file-A'] }, options: { deploymentName: 'Reviewed version A', enableDuplicateFiltering: true, deployChangedOnly: true, vcsCommitId: 'commit-A' },
+    }, { credentials: 'include' }]);
+    await act(async () => f.engine.resolve({ id: 'deployment-A' }));
+    await waitFor(() => expect(f.onSuccess).toHaveBeenCalledOnce());
+    f.view.unmount(); f.client.clear();
+  });
+
+  it.each(['project', 'files', 'session', 'authorization', 'availability', 'close-reopen', 'A-B-A', 'unmount'] as const)('stops before the second write after %s changes', async change => {
+    const f = await setup(false, ['file-A']);
+    if (change === 'project') f.view.rerender(f.tree('project-B'));
+    if (change === 'files') f.view.rerender(f.tree('project-A', true, ['file-B']));
+    if (change === 'session') f.view.rerender(f.tree('project-A', true, ['file-A'], 2));
+    if (change === 'authorization') f.view.rerender(f.tree('project-A', true, ['file-A'], 1, { ...basePermissions, authorizationVersion: 'changed' }));
+    if (change === 'availability') f.view.rerender(f.tree('project-A', true, ['file-A'], 1, { ...basePermissions, platformActionAvailability: { allowedActions: [], restrictions: {} } }));
+    if (change === 'close-reopen') { f.view.rerender(f.tree('project-A', false)); f.view.rerender(f.tree()); }
+    if (change === 'A-B-A') { f.view.rerender(f.tree('project-B')); f.view.rerender(f.tree()); }
+    if (change === 'unmount') f.view.unmount();
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    expect(engineCalls()).toHaveLength(0); expect(deploymentSpy).not.toHaveBeenCalled();
+    expect(f.onSuccess).not.toHaveBeenCalled(); expect(f.onClose).not.toHaveBeenCalled();
+    f.view.unmount(); f.client.clear();
+  });
+
+  it('does not apply completion to a replacement project after engine dispatch', async () => {
+    const f = await setup(); await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    await waitFor(() => expect(engineCalls()).toHaveLength(1));
+    f.view.rerender(f.tree('project-B'));
+    await act(async () => f.engine.resolve({ id: 'deployment-A' }));
+    expect(f.onSuccess).not.toHaveBeenCalled(); expect(f.onClose).not.toHaveBeenCalled();
+    expect(engineCalls()).toHaveLength(1);
+    expect(screen.queryByText('Deployment successful')).not.toBeInTheDocument();
+    f.view.unmount(); f.client.clear();
+  });
+
+  it('requires the save receipt to contain a commit before dispatch', async () => {
+    const f = await setup(); await act(async () => f.save.resolve({}));
+    expect(await screen.findByText('Saved version was not verified; deployment stopped')).toBeInTheDocument();
+    expect(engineCalls()).toHaveLength(0); f.view.unmount(); f.client.clear();
+  });
+
+  it.each([false, true])('binds Git deployment to its original project (switch=%s)', async change => {
+    const f = await setup(true); if (change) f.view.rerender(f.tree('project-B'));
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    if (change) expect(deploymentSpy).not.toHaveBeenCalled();
+    else await waitFor(() => expect(deploymentSpy).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-A', engineId: 'engine-1', vcsCommitId: 'commit-A', assertCurrent: expect.any(Function) })));
+    expect(engineCalls()).toHaveLength(0); f.view.unmount(); f.client.clear();
+  });
+
+  it('does not continue Git deployment after a browser session changes before React rerenders', async () => {
+    const f = await setup(true);
+    advanceBrowserSessionRevision();
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    expect(deploymentSpy).not.toHaveBeenCalled(); expect(f.onSuccess).not.toHaveBeenCalled();
+    f.view.unmount(); f.client.clear();
+  });
+
+  it('does not start Git publication from a save confirmed under older permissions', async () => {
+    const f = await setup(true);
+    f.view.rerender(f.tree('project-A', true, [], 1, { ...basePermissions, platform: [], authorizationVersion: 'changed' }));
+    await act(async () => f.save.resolve({ commitId: 'commit-A' }));
+    expect(deploymentSpy).not.toHaveBeenCalled(); expect(engineCalls()).toHaveLength(0);
+    expect(f.onSuccess).not.toHaveBeenCalled(); expect(f.onClose).not.toHaveBeenCalled();
+    f.view.unmount(); f.client.clear();
   });
 });

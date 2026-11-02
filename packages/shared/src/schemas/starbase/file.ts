@@ -79,17 +79,17 @@ export const UpdateFileMetadataResponseSchema = z.object({
 });
 
 export const RestoreFileFromCommitRequestSchema = z.object({
-  commitId: z.string().min(1).optional(),
+  commitId: z.string().min(1).max(200).refine(value => value === value.trim(), { message: 'Noncanonical checkpoint identity' }).optional(),
   fileVersionNumber: z.number().int().positive().optional(),
-}).refine((value) => Boolean(value.commitId) || typeof value.fileVersionNumber === 'number', {
+}).strict().refine((value) => Boolean(value.commitId) || typeof value.fileVersionNumber === 'number', {
   message: 'commitId or fileVersionNumber is required',
 });
 
 export const RestoreFileFromCommitResponseSchema = z.object({
   restored: z.literal(true),
   fileId: z.string().uuid(),
-  commitId: z.string(),
-  fileVersionNumber: z.number().int().nullable(),
+  commitId: z.string().min(1),
+  fileVersionNumber: z.number().int().positive().nullable(),
   updatedAt: z.number(),
 }).strict();
 

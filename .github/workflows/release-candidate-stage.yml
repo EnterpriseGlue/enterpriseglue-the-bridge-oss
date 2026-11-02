@@ -479,6 +479,11 @@ jobs:
           done
           exit 1
 
+      - name: Qualify native JSON writes and runtime/task/completed-history reads
+        env:
+          OPERATON_VARIABLE_FIXTURE_URL: http://127.0.0.1:18080/engine-rest
+        run: pnpm run test:operaton-variable-values
+
       - name: Run real Operaton process overview, detail, BPMN, variables, health, and console gate
         shell: bash
         run: |

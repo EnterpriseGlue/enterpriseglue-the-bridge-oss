@@ -1,9 +1,14 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { CommitFileRestoreParamsSchema, CommitFileRestoreBodySchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import versioningRouter from '../../../../packages/backend-host/src/modules/versioning/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Branch } from '@enterpriseglue/shared/db/entities/Branch.js';
+import { Commit } from '@enterpriseglue/shared/db/entities/Commit.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
@@ -92,6 +97,144 @@ describe('versioning routes', () => {
     };
   }
 
+  const snapshot = { id: 'snapshot-1', mainFileId: fileId, folderId: null, name: 'Invoice', type: 'bpmn', content: '<definitions/>', changeType: 'modified' };
+
+  function restoreStore(files: any[], update: Mock, saved: any[] = [snapshot]) {
+    const find = vi.fn().mockResolvedValue(files);
+    const manager = { connection: { options: { type: 'sqljs' } }, getRepository: (entity: unknown): any => {
+      if (entity === Project) return projectRepository();
+      if (entity === Branch) return { findOne: vi.fn().mockResolvedValue({ id: 'branch-1', projectId, userId: 'user-1', isDefault: false }) };
+      if (entity === FileSnapshot) return { find: vi.fn().mockResolvedValue(saved.map(row => ({ ...row, commitId: 'commit-1', contentHash: row.content === null ? null : createHash('sha256').update(row.content).digest('hex').slice(0, 16) }))) };
+      return { find, update };
+    } };
+    return { manager, find, getRepository: manager.getRepository, transaction: vi.fn(async (run: (manager: any) => Promise<unknown>) => run(manager)) };
+  }
+
+
+  it('binds the canonical snapshot read to the route-authorized project and typed response', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (vcsService.getCommitSnapshots as Mock).mockResolvedValue([snapshot]);
+    const response = await request(app).get(`/vcs-api/projects/${projectId}/commits/commit-1/files`);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ files: [snapshot] });
+    expect(vcsService.getCommitSnapshots).toHaveBeenCalledWith('commit-1', projectId);
+  });
+
+  it('denies snapshot reads without the existing project permission', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (permissionService.hasPermission as Mock).mockResolvedValue(false);
+    expect((await request(app).get(`/vcs-api/projects/${projectId}/commits/commit-1/files`)).status).toBe(403);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 0])('keeps restore updates within the authorized project and requires one affected row (%s)', async affected => {
+    const update = vi.fn().mockResolvedValue({ affected });
+    const store = restoreStore([{ id: fileId, projectId, name: 'Invoice', type: 'bpmn', folderId: null }], update);
+    (getDataSource as Mock).mockResolvedValue(store);
+    (vcsService.getCommitSnapshots as Mock).mockResolvedValue([snapshot]);
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'branch-1' });
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'restored' });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/restore`);
+    expect(vcsService.getCommitSnapshots).toHaveBeenCalledWith('commit-1', projectId, store.manager);
+    expect(update).toHaveBeenCalledWith({ id: fileId, projectId }, expect.objectContaining({ xml: snapshot.content }));
+    if (affected === 1) expect(response.status).toBe(200);
+    else { expect(response.status).toBeGreaterThanOrEqual(400); expect(vcsService.commit).not.toHaveBeenCalled(); }
+  });
+
+  it('validates the documented file-scoped request and keeps no-body project restore compatible', () => {
+    const example = JSON.parse(readFileSync(new URL('../../../../docs/examples/vcs-file-restore.json', import.meta.url), 'utf8'));
+    expect(CommitFileRestoreParamsSchema.parse(example.params)).toEqual(example.params);
+    expect(CommitFileRestoreBodySchema.parse(example.body)).toEqual({});
+    expect(CommitFileRestoreBodySchema.parse(undefined)).toEqual({});
+  });
+
+  it.each([{ fileId: 'not-a-uuid' }, { fileId, fileIds: [fileId] }, { command: 'restore' }])('rejects malformed or widened restore scope before reading snapshots (%j)', async body => {
+    expect((await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/${fileId}/restore`).send(body)).status).toBe(400);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('retains the existing restore permission on the distinct file restore route', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (permissionService.hasPermission as Mock).mockResolvedValue(false);
+    expect((await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/${fileId}/restore`)).status).toBe(403);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed file identity before querying snapshots', async () => {
+    expect((await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/not-a-uuid/restore`)).status).toBe(400);
+    expect(vcsService.getCommitSnapshots).not.toHaveBeenCalled();
+  });
+
+  it('restores and checkpoints only the file selected by the version panel', async () => {
+    const siblingId = '33333333-3333-4333-8333-333333333333';
+    const ownFile = { id: fileId, projectId, name: 'Invoice renamed', type: 'bpmn', folderId: null, xml: '<draft/>' };
+    const sibling = { ...ownFile, id: siblingId, name: 'Sibling', xml: '<sibling-draft/>' };
+    const update = vi.fn().mockResolvedValue({ affected: 1 });
+    const saved = [snapshot, { ...snapshot, id: 'sibling-snapshot', mainFileId: siblingId, name: 'Sibling', content: '<sibling-saved/>' }];
+    const store = restoreStore([ownFile, sibling], update, saved);
+    (getDataSource as Mock).mockResolvedValue(store);
+    (vcsService.getCommitSnapshots as Mock).mockResolvedValue([snapshot, { ...snapshot, id: 'sibling-snapshot', mainFileId: siblingId, name: 'Sibling', content: '<sibling-saved/>' }]);
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'branch-1' });
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'restored' });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commits/commit-1/files/${fileId}/restore`);
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({ id: fileId, projectId }, expect.objectContaining({ xml: snapshot.content }));
+    expect(store.find).toHaveBeenCalledWith({ where: { projectId } });
+    expect(vcsService.syncFromMainDb).not.toHaveBeenCalled();
+    expect(vcsService.saveFile).toHaveBeenCalledTimes(1);
+    expect(vcsService.commit).toHaveBeenCalledWith('branch-1', 'user-1', expect.any(String), { source: 'file-save', fileIds: [fileId] }, store.manager);
+    expect(response.body.filesRestored).toBe(1);
+  });
+
+  it.each(['status', 'uncommitted-files'])('denies the requested project on %s even when a sibling project is visible', async suffix => {
+    const siblingId = '33333333-3333-4333-8333-333333333333';
+    const find = vi.fn().mockResolvedValue([{ id: projectId }, { id: siblingId }]);
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository({ find }) });
+    (permissionService.hasPermission as Mock).mockImplementation(async (_permission, context) => context.resourceId === siblingId);
+    expect((await request(app).get(`/vcs-api/projects/${projectId}/${suffix}`)).status).toBe(403);
+    expect(find).not.toHaveBeenCalled();
+    expect(vcsService.getUncommittedIds).not.toHaveBeenCalled();
+    expect(vcsService.getMainBranch).not.toHaveBeenCalled();
+  });
+
+  it('passes an absent draft head as null instead of the string null', async () => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: () => projectRepository() });
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'draft', headCommitId: null });
+    (vcsService.getUncommittedIds as Mock).mockResolvedValue({ fileIds: [], folderIds: [] });
+    expect((await request(app).get(`/vcs-api/projects/${projectId}/uncommitted-files?baseline=draft`)).status).toBe(200);
+    expect(vcsService.getUncommittedIds).toHaveBeenCalledWith(projectId, { baselineCommitId: null, treatNoBaselineAsAll: false });
+  });
+
+  it.each([false, true])('reconciles complete saves before committing and stops on sync failure=%s', async fail => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Project ? projectRepository() : { find: vi.fn().mockResolvedValue([{ id: fileId }]) } });
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'draft-branch-1' });
+    (vcsService.syncFromMainDb as Mock).mockImplementation(async () => { if (fail) throw new Error('Synthetic reconciliation failure'); });
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'commit-1', message: 'Whole version', createdAt: 1 });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Whole version' });
+    expect(vcsService.syncFromMainDb).toHaveBeenCalledExactlyOnceWith(projectId, 'user-1', 'draft-branch-1');
+    expect(vcsService.saveFile).not.toHaveBeenCalled();
+    if (fail) { expect(response.status).toBe(500); expect(vcsService.commit).not.toHaveBeenCalled(); }
+    else { expect(response.status).toBe(200); expect(vi.mocked(vcsService.syncFromMainDb).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(vcsService.commit).mock.invocationCallOrder[0]); }
+  });
+
+  it.each([false, true])('accepts an empty project only with a retained saved removal=%s', async retained => {
+    (getDataSource as Mock).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === Project) return projectRepository();
+      if (entity === Branch) return { findOne: vi.fn().mockResolvedValue(retained ? { id: 'draft-branch-1', headCommitId: 'prior' } : null) };
+      if (entity === Commit) return { findOne: vi.fn().mockResolvedValue({ id: 'prior' }) };
+      if (entity === FileSnapshot) return { find: vi.fn().mockResolvedValue([{ changeType: 'added' }]) };
+      return { find: vi.fn().mockResolvedValue([]) };
+    } });
+    (vcsService.getUserBranch as Mock).mockResolvedValue({ id: 'draft-branch-1' });
+    (vcsService.syncFromMainDb as Mock).mockResolvedValue(undefined);
+    (vcsService.commit as Mock).mockResolvedValue({ id: 'commit-1', message: 'Review removals', createdAt: 1 });
+    const response = await request(app).post(`/vcs-api/projects/${projectId}/commit`).send({ message: 'Review removals' });
+    expect(response.status).toBe(retained ? 200 : 400);
+    if (retained) expect(response.body.fileCount).toBe(0);
+    else { expect(vcsService.getUserBranch).not.toHaveBeenCalled(); expect(vcsService.syncFromMainDb).not.toHaveBeenCalled(); expect(vcsService.commit).not.toHaveBeenCalled(); }
+  });
+
   it('scopes file-save commits to the selected file ids for offline-like save flow', async () => {
     const fileFind = vi.fn().mockResolvedValue([
       {
@@ -133,6 +276,7 @@ describe('versioning routes', () => {
     expect(fileFind).toHaveBeenCalledWith({
       where: { projectId, id: expect.any(Object) },
     });
+    expect(vcsService.syncFromMainDb).not.toHaveBeenCalled();
     expect(vcsService.saveFile).toHaveBeenCalledTimes(1);
     expect(vcsService.saveFile).toHaveBeenCalledWith(
       'draft-branch-1',

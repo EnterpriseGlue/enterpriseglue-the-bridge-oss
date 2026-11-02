@@ -38,6 +38,8 @@ export function useInstanceRetry({
   const retryRevisionRef = useRef(0)
   currentEngineIdRef.current = engineId
 
+  useEffect(() => () => { retryRevisionRef.current += 1 }, [])
+
   const closeRetryModal = useCallback(() => {
     retryRevisionRef.current += 1
     setRetryModalOpen(false)

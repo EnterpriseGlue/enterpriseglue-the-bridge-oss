@@ -1,4 +1,4 @@
-import { apiClient } from '../../../../shared/api/client'
+import { apiClient } from '../../../../shared/api/client.js'
 import type { ProcessDefXml } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { DecisionDefinitionXml } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 

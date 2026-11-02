@@ -13,6 +13,9 @@ import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
+import { lockFolderProject } from '@enterpriseglue/shared/services/starbase/folder-tree.js';
+import { selectCommitFileSnapshot } from '@enterpriseglue/shared/utils/commit-snapshot.js';
+import { hashContent } from '@enterpriseglue/shared/services/versioning/vcs-types.js';
 import { Brackets, IsNull } from 'typeorm';
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
@@ -55,7 +58,7 @@ const restoreFromCommitBodySchema = RestoreFileFromCommitRequestSchema;
 /**
  * Get folder breadcrumb trail
  */
-async function getFolderBreadcrumb(folderId: string | null): Promise<Array<{ id: string; name: string }>> {
+async function getFolderBreadcrumb(folderId: string | null, projectId: string): Promise<Array<{ id: string; name: string }>> {
   if (!folderId) return [];
   
   const bc: Array<{ id: string; name: string }> = [];
@@ -63,13 +66,16 @@ async function getFolderBreadcrumb(folderId: string | null): Promise<Array<{ id:
   const dataSource = await getDataSource();
   const folderRepo = dataSource.getRepository(Folder);
   
+  const visited = new Set<string>();
   while (current) {
+    if (visited.has(current)) throw Errors.validation('Folder ancestry is invalid');
+    visited.add(current);
     const row = await folderRepo.findOne({
-      where: { id: current },
-      select: ['id', 'name', 'parentFolderId']
+      where: { id: current, projectId },
+      select: ['id', 'projectId', 'name', 'parentFolderId']
     });
     
-    if (!row) break;
+    if (!row || row.projectId !== projectId) throw Errors.notFound('Folder');
     bc.unshift({ id: row.id, name: row.name });
     current = row.parentFolderId || null;
   }
@@ -132,7 +138,7 @@ const EMPTY_DMN = `<?xml version="1.0" encoding="UTF-8"?>
  * List files by project
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, requireAction('project.files.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
 
   const dataSource = await getDataSource();
@@ -187,51 +193,59 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
   const xml = fileType === 'dmn' ? sanitizeDmnXml(xml0) : sanitizeBpmnXml(xml0)
 
   const dataSource = await getDataSource();
-  const fileRepo = dataSource.getRepository(File);
-  const versionRepo = dataSource.getRepository(Version);
-  
-  // Prevent duplicate names per project/folder/type
-  const dupCheck = await fileRepo.find({
-    where: {
-      projectId,
-      folderId: folderId ? folderId : IsNull(),
-      name: fileName,
-      type: fileType
-    },
-    select: ['id']
-  });
-  if (dupCheck.length > 0) {
-    throw Errors.conflict('A file with this name already exists in this folder.');
-  }
-  
   const bpmnProcessId = fileType === 'bpmn' ? extractBpmnProcessId(xml) : null;
   const dmnDecisionId = fileType === 'dmn' ? extractDmnDecisionId(xml) : null;
+  await dataSource.transaction(async manager => {
+    await lockFolderProject(manager, projectId);
+    const fileRepo = manager.getRepository(File);
+    const versionRepo = manager.getRepository(Version);
+    if (folderId) {
+      const folder = await manager.getRepository(Folder).findOne({ where: { id: folderId, projectId }, select: ['id', 'projectId'] });
+      if (!folder || folder.projectId !== projectId) throw Errors.notFound('Folder');
+    }
 
-  await fileRepo.insert({
-    id: fileId,
-    projectId,
-    folderId: folderId ?? null,
-    name: fileName,
-    type: fileType,
-    xml,
-    bpmnProcessId,
-    dmnDecisionId,
-    createdBy: userId,
-    updatedBy: userId,
-    createdAt: now,
-    updatedAt: now
+    // Prevent duplicate names per project/folder/type
+    const dupCheck = await fileRepo.find({
+      where: {
+        projectId,
+        folderId: folderId ? folderId : IsNull(),
+        name: fileName,
+        type: fileType
+      },
+      select: ['id']
+    });
+    if (dupCheck.length > 0) {
+      throw Errors.conflict('A file with this name already exists in this folder.');
+    }
+
+
+    await fileRepo.insert({
+      id: fileId,
+      projectId,
+      folderId: folderId ?? null,
+      name: fileName,
+      type: fileType,
+      xml,
+      bpmnProcessId,
+      dmnDecisionId,
+      createdBy: userId,
+      updatedBy: userId,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    // Initial version v1
+    await versionRepo.insert({
+      id: generateId(),
+      fileId,
+      author: 'system',
+      message: 'Initial import',
+      xml,
+      createdAt: now
+    });
+
   });
-  
-  // Initial version v1
-  await versionRepo.insert({
-    id: generateId(),
-    fileId,
-    author: 'system',
-    message: 'Initial import',
-    xml,
-    createdAt: now
-  });
-  
+
   res.status(201).json({
     id: fileId,
     name: fileName,
@@ -269,7 +283,7 @@ r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, requireAction('pro
   const projectName = projectResult ? projectResult.name : 'Project';
   
   // Get folder breadcrumb
-  const folderBreadcrumb = await getFolderBreadcrumb(found.folderId);
+  const folderBreadcrumb = await getFolderBreadcrumb(found.folderId, found.projectId);
   const ty = String(found.type || '').toLowerCase();
   const xml = ty === 'dmn'
     ? sanitizeDmnXml(String(found.xml || ''))
@@ -456,121 +470,44 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
  * Restore a single file from a deployed commit/version snapshot
  */
 r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(restoreFromCommitBodySchema), requireAction('project.files.restore', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
-  const fileId = String(req.params.fileId);
-  const userId = req.user!.userId;
-  const { commitId: rawCommitId, fileVersionNumber } = req.body as { commitId?: string; fileVersionNumber?: number };
-
+  const fileId = String(req.params.fileId), userId = req.user!.userId;
+  const request = req.body as { commitId?: string; fileVersionNumber?: number };
   const dataSource = await getDataSource();
-  const fileRepo = dataSource.getRepository(File);
-  const commitRepo = dataSource.getRepository(Commit);
-  const snapshotRepo = dataSource.getRepository(FileSnapshot);
-  const fileCommitVersionRepo = dataSource.getRepository(FileCommitVersion);
-
-  const fileRow = await fileRepo.findOne({
-    where: { id: fileId },
-    select: ['id', 'projectId', 'name', 'type', 'folderId']
-  });
-  if (!fileRow) throw Errors.notFound('File');
-
-  let commitId = rawCommitId ? String(rawCommitId) : null;
-  if (!commitId && typeof fileVersionNumber === 'number') {
-    const versionRow = await fileCommitVersionRepo.findOne({
-      where: { fileId, versionNumber: Number(fileVersionNumber) },
-      select: ['commitId']
-    });
-    if (versionRow?.commitId) {
-      commitId = String(versionRow.commitId);
+  const owner = await dataSource.getRepository(File).findOne({ where: { id: fileId }, select: ['projectId'] });
+  if (!owner) throw Errors.notFound('File');
+  const receipt = await dataSource.transaction(async manager => {
+    await lockFolderProject(manager, owner.projectId);
+    const fileRepo = manager.getRepository(File), versions = manager.getRepository(FileCommitVersion);
+    const file = await fileRepo.findOne({ where: { id: fileId, projectId: owner.projectId }, select: ['id', 'projectId', 'name', 'type', 'folderId'] });
+    if (!file) throw Errors.notFound('File');
+    let commitId = request.commitId;
+    if (request.fileVersionNumber !== undefined) {
+      const mapped = await versions.findOne({ where: { projectId: owner.projectId, fileId, versionNumber: request.fileVersionNumber }, select: ['commitId'] });
+      if (!mapped) throw Errors.conflict('The selected file version could not be verified');
+      if (commitId && mapped.commitId !== commitId) throw Errors.conflict('Commit and file-version selectors disagree');
+      commitId = mapped.commitId;
     }
-  }
-
-  if (!commitId) {
-    throw Errors.notFound('Version commit');
-  }
-
-  const commitRow = await commitRepo.findOne({
-    where: { id: commitId, projectId: String(fileRow.projectId) },
-    select: ['id'],
+    if (!commitId) throw Errors.notFound('Version commit');
+    if (!await manager.getRepository(Commit).findOne({ where: { id: commitId, projectId: owner.projectId }, select: ['id'] })) throw Errors.notFound('Version commit');
+    const version = await versions.findOne({ where: { projectId: owner.projectId, fileId, commitId }, select: ['versionNumber'] });
+    const legacy = { commitId, mainFileId: IsNull(), name: file.name, type: file.type };
+    const legacyLocations = file.folderId === null ? [{ ...legacy, folderId: IsNull() }, { ...legacy, folderId: '' }] : [{ ...legacy, folderId: file.folderId }];
+    const snapshots = await manager.getRepository(FileSnapshot).find({ where: [{ commitId, mainFileId: fileId }, ...legacyLocations] });
+    const selected = selectCommitFileSnapshot(snapshots, file);
+    const snapshot = snapshots.find(row => row.id === selected?.id);
+    if (!snapshot || !snapshot.content || snapshot.contentHash !== hashContent(snapshot.content)) throw Errors.conflict('Saved file snapshot is unavailable or unverified');
+    const xml = file.type === 'dmn' ? sanitizeDmnXml(snapshot.content) : file.type === 'bpmn' ? sanitizeBpmnXml(snapshot.content) : snapshot.content;
+    const updatedAt = unixTimestamp();
+    const changed = await fileRepo.update({ id: fileId, projectId: owner.projectId }, { xml, updatedAt, updatedBy: userId,
+      bpmnProcessId: file.type === 'bpmn' ? extractBpmnProcessId(xml) : null,
+      dmnDecisionId: file.type === 'dmn' ? extractDmnDecisionId(xml) : null });
+    if (changed.affected !== 1) throw Errors.notFound('File');
+    // This copies a deployed source into the draft. Ordinary explicit save owns
+    // VCS reconciliation; no detached write may outlive this response.
+    return RestoreFileFromCommitResponseSchema.parse({ restored: true, fileId, commitId,
+      fileVersionNumber: version ? Number(version.versionNumber) : null, updatedAt });
   });
-  if (!commitRow) {
-    throw Errors.notFound('Version commit');
-  }
-
-  const resolvedVersionRow = await fileCommitVersionRepo.findOne({
-    where: { fileId, commitId },
-    select: ['versionNumber'],
-  });
-  const resolvedFileVersionNumber = resolvedVersionRow && Number.isFinite(Number(resolvedVersionRow.versionNumber))
-    ? Number(resolvedVersionRow.versionNumber)
-    : (typeof fileVersionNumber === 'number' ? Number(fileVersionNumber) : null);
-
-  const qb = snapshotRepo.createQueryBuilder('fs')
-    .where('fs.commitId = :commitId', { commitId })
-    .andWhere(new Brackets((where) => {
-      where.where('fs.mainFileId = :fileId', { fileId });
-      where.orWhere(new Brackets((legacy) => {
-        legacy.where('fs.mainFileId IS NULL')
-          .andWhere('fs.name = :name', { name: String(fileRow.name) })
-          .andWhere('fs.type = :type', { type: String(fileRow.type) });
-
-        if (fileRow.folderId === null || typeof fileRow.folderId === 'undefined') {
-          legacy.andWhere('(fs.folderId IS NULL OR fs.folderId = :empty)', { empty: '' });
-        } else {
-          legacy.andWhere('fs.folderId = :folderId', { folderId: String(fileRow.folderId) });
-        }
-      }));
-    }));
-
-  const snapshots = await qb.getMany();
-  if (snapshots.length === 0) {
-    throw Errors.notFound('File snapshot');
-  }
-
-  const score = (s: FileSnapshot) => {
-    let v = 0;
-    if (s.content) v += 10;
-    if (s.changeType !== 'unchanged') v += 5;
-    if (s.changeType === 'deleted') v -= 20;
-    return v;
-  };
-
-  const snapshot = [...snapshots].sort((a, b) => score(b) - score(a))[0];
-  if (!snapshot.content || snapshot.changeType === 'deleted') {
-    throw Errors.conflict('Snapshot content is unavailable for restore');
-  }
-
-  const now = unixTimestamp();
-  const type = String(fileRow.type);
-  const restoredXml = type === 'dmn'
-    ? sanitizeDmnXml(String(snapshot.content || ''))
-    : (type === 'bpmn' ? sanitizeBpmnXml(String(snapshot.content || '')) : String(snapshot.content || ''));
-  const bpmnProcessId = type === 'bpmn' ? extractBpmnProcessId(restoredXml) : null;
-  const dmnDecisionId = type === 'dmn' ? extractDmnDecisionId(restoredXml) : null;
-
-  await fileRepo.update({ id: fileId }, {
-    xml: restoredXml,
-    bpmnProcessId,
-    dmnDecisionId,
-    updatedBy: userId,
-    updatedAt: now,
-  });
-
-  syncFileUpdate(
-    fileRow.projectId,
-    userId,
-    fileId,
-    fileRow.name,
-    fileRow.type,
-    restoredXml,
-    fileRow.folderId
-  ).catch(() => {});
-
-  res.json(RestoreFileFromCommitResponseSchema.parse({
-    restored: true,
-    fileId,
-    commitId,
-    fileVersionNumber: resolvedFileVersionNumber,
-    updatedAt: now,
-  }));
+  res.json(receipt);
 }));
 
 /**
@@ -593,21 +530,24 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
 
-  const projectResult = await fileRepo.findOne({
-    where: { id: fileId },
-    select: ['projectId', 'name', 'type', 'folderId', 'xml']
+  const ownerLookup = await fileRepo.findOne({ where: { id: fileId }, select: ['projectId'] });
+  if (!ownerLookup) throw Errors.notFound('File');
+  const { projectResult, nextFolderId } = await dataSource.transaction(async manager => {
+    await lockFolderProject(manager, ownerLookup.projectId);
+    const repo = manager.getRepository(File);
+    const projectResult = await repo.findOne({ where: { id: fileId, projectId: ownerLookup.projectId }, select: ['projectId', 'name', 'type', 'folderId', 'xml'] });
+    if (!projectResult) throw Errors.notFound('File');
+    if (folderId) {
+      const folder = await manager.getRepository(Folder).findOne({ where: { id: String(folderId), projectId: projectResult.projectId }, select: ['id', 'projectId'] });
+      if (!folder || folder.projectId !== projectResult.projectId) throw Errors.notFound('Folder');
+    }
+    const updates: { name?: string; folderId?: string | null; updatedAt: number } = { updatedAt: now };
+    if (newName !== undefined) updates.name = newName;
+    if (folderId !== undefined) updates.folderId = folderId === null ? null : String(folderId);
+    const nextFolderId = folderId !== undefined ? (folderId === null ? null : String(folderId)) : (projectResult.folderId ?? null);
+    await repo.update({ id: fileId, projectId: projectResult.projectId }, updates);
+    return { projectResult, nextFolderId };
   });
-  if (!projectResult) {
-    throw Errors.notFound('File');
-  }
-
-  // Build dynamic UPDATE
-  const updates: any = { updatedAt: now };
-  if (newName !== undefined) updates.name = newName;
-  if (folderId !== undefined) updates.folderId = folderId === null ? null : String(folderId);
-  const nextFolderId = folderId !== undefined ? (folderId === null ? null : String(folderId)) : (projectResult.folderId ?? null);
-
-  await fileRepo.update({ id: fileId }, updates);
 
   syncFileUpdate(
     projectResult.projectId,

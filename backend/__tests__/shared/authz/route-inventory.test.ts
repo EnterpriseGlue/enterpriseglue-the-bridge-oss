@@ -1,3 +1,8 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+import { listAuthzActions } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { describe, expect, it } from 'vitest';
 import { useOpenApiFixture } from '../../../test/utils/openapi-fixture.js';
 import {
@@ -988,7 +993,10 @@ describe('authorization route inventory validation', () => {
         risk: 'high',
         category: 'Project Versions',
         surfaceId: 'project.vcs.commit.restore',
-        routes: [['POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore', 'project.byId']],
+        routes: [
+          ['POST', '/vcs-api/projects/{projectId}/commits/{commitId}/restore', 'project.byId'],
+          ['POST', '/vcs-api/projects/{projectId}/commits/{commitId}/files/{fileId}/restore', 'project.byId'],
+        ],
       },
     ];
 
@@ -1312,4 +1320,29 @@ describe('authorization route inventory validation', () => {
       }),
     ]));
   });
+});
+
+
+it('requires explicit resolver bindings for every literal multi-resolver backend action call', () => {
+  const ambiguous = new Set(listAuthzActions().filter(action => new Set(action.routes?.map(route => route.resourceResolver)).size > 1).map(action => action.actionId));
+  const root = fileURLToPath(new URL('../../../../packages/backend-host/src/', import.meta.url));
+  const violations: string[] = [];
+  for (const relative of readdirSync(root, { recursive: true, encoding: 'utf8' })) {
+    if (!relative.endsWith('.ts') || relative.endsWith('.test.ts')) continue;
+    const file = path.join(root, relative);
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'requireAction'
+        && node.arguments[0] && ts.isStringLiteral(node.arguments[0]) && ambiguous.has(node.arguments[0].text)) {
+        const options = node.arguments[1];
+        const explicit = options && ts.isObjectLiteralExpression(options) && options.properties.some(property =>
+          ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === 'resourceResolver'
+          && ts.isStringLiteral(property.initializer) && property.initializer.text.length > 0);
+        if (!explicit) violations.push(`${relative}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  expect(violations).toEqual([]);
 });

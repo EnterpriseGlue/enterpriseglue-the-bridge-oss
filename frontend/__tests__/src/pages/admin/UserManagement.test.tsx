@@ -19,7 +19,7 @@ function makeUser(overrides: Partial<AdminManagedUser> = {}): AdminManagedUser {
     email: 'user@example.com',
     firstName: 'Test',
     lastName: 'User',
-    platformRole: 'user',
+    bootstrapAccess: 'user',
     isActive: true,
     isEmailVerified: true,
     mustResetPassword: false,
@@ -50,7 +50,7 @@ describe('UserManagement', () => {
   it('prefers explicit adminStatus when rendering an established admin account', () => {
     const status = getUserDisplayStatus(makeUser({
       email: 'admin@example.com',
-      platformRole: 'admin',
+      bootstrapAccess: 'admin',
       adminStatus: 'active',
       isEmailVerified: false,
       lastLoginAt: Date.now(),
@@ -59,9 +59,9 @@ describe('UserManagement', () => {
     expect(status).toEqual({ label: 'Active', tagType: 'green' })
   })
 
-  it('reads bootstrap access from the legacy user wire field', () => {
-    expect(getUserBootstrapAccess(makeUser({ platformRole: 'admin' }))).toBe('admin')
-    expect(getUserBootstrapAccess(makeUser({ platformRole: 'user' }))).toBe('user')
+  it('reads the explicit directory access preset without a legacy-field adapter', () => {
+    expect(getUserBootstrapAccess(makeUser({ bootstrapAccess: 'admin' }))).toBe('admin')
+    expect(getUserBootstrapAccess(makeUser({ bootstrapAccess: 'user' }))).toBe('user')
   })
 
   it('uses the canonical role field for user-management writes', () => {
@@ -72,10 +72,9 @@ describe('UserManagement', () => {
       sendEmail: true,
       role: 'admin',
     })
-    expect(toUpdateUserRequest({ firstName: 'Admin', bootstrapAccess: 'user', isActive: true })).toEqual({
+    expect(toUpdateUserRequest({ firstName: 'Admin', bootstrapAccess: 'user' })).toEqual({
       firstName: 'Admin',
       lastName: undefined,
-      isActive: true,
       role: 'user',
     })
   })
@@ -222,4 +221,19 @@ describe('UserManagement', () => {
     expect(formatUserRoleAssignmentScope(makeAssignment())).toBe('engine engine-1')
     expect(formatUserRoleAssignmentSummary(makeAssignment())).toBe('Engine Operator on engine engine-1')
   })
+  it('uses canonical locked status even when the directory summary omits legacy counters', () => {
+    const user = makeUser({ directoryStatus: 'locked', lockedUntil: undefined, failedLoginAttempts: undefined });
+    expect(getUserDisplayStatus(user)).toEqual({ label: 'Locked', tagType: 'blue' });
+    expect(getUserRowActions(user, { currentUserId: 'actor', localLoginDisabled: false, permissions: { canUnlockUsers: true } }).canUnlock).toBe(true);
+    expect(getUserRowActions(user, { currentUserId: 'actor', localLoginDisabled: false, permissions: { canUnlockUsers: false } }).canUnlock).toBe(false);
+  });
+  it('does not resend unchanged account access or active status during a profile edit', () => {
+    const original = makeUser({ bootstrapAccess: 'admin', isActive: true });
+    expect(toUpdateUserRequest({ firstName: 'Renamed', lastName: 'User', bootstrapAccess: 'admin' }, original))
+      .toEqual({ firstName: 'Renamed' });
+    expect(toUpdateUserRequest({ bootstrapAccess: 'user' }, original)).toEqual({ role: 'user' });
+    expect(toUpdateUserRequest({ firstName: 'Test', lastName: 'User', bootstrapAccess: 'admin' }, original)).toEqual({});
+    const legacy = { firstName: 'Renamed', isActive: false };
+    expect(toUpdateUserRequest(legacy, original)).toEqual({ firstName: 'Renamed' });
+  });
 });

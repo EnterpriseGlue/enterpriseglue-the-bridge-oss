@@ -139,7 +139,7 @@ router.delete('/git-api/locks/:lockId', apiLimiter, requireAuth, requireAction('
  * GET /git-api/locks
  * List active locks for a project
  */
-router.get('/git-api/locks', apiLimiter, requireAuth, requireAction('project.git.locks.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/locks', apiLimiter, requireAuth, requireAction('project.git.locks.read', { resourceResolver: 'project.byId', resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
 
   if (!projectId) {

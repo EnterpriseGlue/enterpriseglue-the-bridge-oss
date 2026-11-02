@@ -1,6 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UserDetail from '@src/pages/admin/UserDetail';
 
@@ -13,34 +13,41 @@ const api = vi.hoisted(() => ({
   reactivate: vi.fn(),
   revokeSessions: vi.fn(),
 }));
+const authState = vi.hoisted(() => ({ user: { id: 'admin-1' }, sessionRevision: 1, permissions: { userId: 'admin-1', tenantId: null, platform: ['platform:users:view', 'platform:users:update', 'platform:users:deactivate'], projects: [], engines: [], authorizationVersion: 'v1', generatedAt: 1 } }));
 const notify = vi.hoisted(() => vi.fn());
 const tenantNavigate = vi.hoisted(() => vi.fn());
 
 vi.mock('@src/api/platform-admin/userDirectory', () => ({ userDirectoryApi: api }));
 vi.mock('@src/shared/notifications/ToastProvider', () => ({ useToast: () => ({ notify }) }));
-vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => ({ user: { id: 'admin-1' }, permissions: {} }) }));
+vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => authState }));
 vi.mock('@src/shared/hooks/useTenantNavigate', () => ({
   useTenantNavigate: () => ({ tenantNavigate, toTenantPath: (path: string) => `/t/default${path}` }),
 }));
-vi.mock('@src/shared/auth/guards', () => ({ evaluateActionSnapshot: () => ({ allowed: true }) }));
 
 const summary = {
   id: 'user-2', email: 'person@example.test', firstName: 'Directory', lastName: 'Person', displayName: 'Directory Person',
-  status: 'active' as const, platformRole: 'user', authenticationSources: ['oidc' as const], provisioningSource: 'scim' as const,
+  status: 'active' as const, platformRole: 'user', bootstrapAccess: 'user', authenticationSources: ['oidc' as const], provisioningSource: 'scim' as const,
   provisioningDirectoryKey: 'entra-workforce', lastSignInAt: 1000, lastProvisionedAt: 1100, provisioningHealth: 'healthy' as const,
 };
 
+function Navigation() {
+  const navigate = useNavigate();
+  return <><button onClick={() => navigate('/admin/users/next')}>Next user</button><button onClick={() => navigate('/admin/users/user-2')}>First user</button></>;
+}
 function renderDetail() {
   return render(
     <MemoryRouter initialEntries={['/admin/users/user-2']}>
-      <Routes><Route path="/admin/users/:userId" element={<UserDetail />} /></Routes>
+      <Navigation /><Routes><Route path="/admin/users/:userId" element={<UserDetail />} /></Routes>
     </MemoryRouter>,
   );
 }
 
 describe('UserDetail', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    authState.permissions.platform = ['platform:users:view', 'platform:users:update', 'platform:users:deactivate'];
+    authState.permissions.authorizationVersion = 'v1';
+    authState.sessionRevision = 1;
     api.identityContext.mockResolvedValue({
       user: summary,
       linkedIdentities: [{
@@ -54,7 +61,7 @@ describe('UserDetail', () => {
       recoveryAdministrator: false,
     });
     api.effectiveAccess.mockResolvedValue({
-      userId: 'user-2', platformRole: 'user', evaluatedAt: 1200,
+      userId: 'user-2', platformRole: 'user', bootstrapAccess: 'user', evaluatedAt: 1200,
       lineage: [{ sourceType: 'directory_mapping', sourceId: 'mapping-1', sourceName: 'Finance group mapping', assignmentType: 'role', assignmentId: 'role-1', assignmentName: 'Process viewer', active: true }],
     });
     api.sessions.mockResolvedValue({
@@ -121,5 +128,49 @@ describe('UserDetail', () => {
     await waitFor(() => expect(api.deactivate).toHaveBeenCalledWith('user-2', 'Confirmed employee departure'));
     await waitFor(() => expect(api.identityContext).toHaveBeenCalledTimes(2));
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'User deactivated' }));
+  });
+  it('does not display the old user or retain its confirmation when navigating to another user', async () => {
+    renderDetail(); await screen.findByText('Directory Person');
+    fireEvent.click(screen.getByRole('button', { name: /Deactivate$/ }));
+    await screen.findByRole('dialog', { name: 'Deactivate user' });
+    api.identityContext.mockResolvedValue({ user: { ...summary, id: 'next', displayName: 'Next Person' }, linkedIdentities: [], fieldOwnership: [], recoveryAdministrator: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Next user' }));
+    await screen.findByText('Next Person');
+    expect(screen.queryByRole('dialog', { name: 'Deactivate user' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Directory Person')).not.toBeInTheDocument();
+    expect(api.deactivate).not.toHaveBeenCalled();
+  });
+  it('ignores an old load after an A to B to A route transition', async () => {
+    let resolveOld!: (value: any) => void;
+    api.identityContext.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    renderDetail(); await waitFor(() => expect(api.identityContext).toHaveBeenCalledOnce());
+    api.identityContext.mockResolvedValue({ user: { ...summary, displayName: 'Current record' }, linkedIdentities: [], fieldOwnership: [], recoveryAdministrator: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Next user' }));
+    await screen.findByText('Current record');
+    fireEvent.click(screen.getByRole('button', { name: 'First user' }));
+    await screen.findByText('Current record');
+    await act(async () => resolveOld({ user: summary, linkedIdentities: [], fieldOwnership: [], recoveryAdministrator: false }));
+    expect(screen.queryByText('Directory Person')).not.toBeInTheDocument();
+  });
+  it('does not notify or reload a different user when an issued action completes late', async () => {
+    let finish!: (value: any) => void; api.deactivate.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    renderDetail(); await screen.findByText('Directory Person');
+    fireEvent.click(screen.getByRole('button', { name: /Deactivate$/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Deactivate user' });
+    fireEvent.change(within(dialog).getByLabelText('Audit reason'), { target: { value: 'Reviewed departure' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Deactivate$/ }));
+    await waitFor(() => expect(api.deactivate).toHaveBeenCalledWith('user-2', 'Reviewed departure'));
+    fireEvent.click(screen.getByRole('button', { name: 'Next user' }));
+    await waitFor(() => expect(api.identityContext).toHaveBeenCalledWith('next'));
+    const count = api.identityContext.mock.calls.length;
+    await act(async () => finish({ userId: 'user-2', status: 'deactivated', authSessionVersion: 2, changedAt: 3 }));
+    expect(notify).not.toHaveBeenCalled(); expect(api.identityContext).toHaveBeenCalledTimes(count);
+  });
+  it('uses action permissions rather than the displayed administrator preset', async () => {
+    authState.permissions.platform = ['platform:users:view'];
+    api.identityContext.mockResolvedValue({ user: { ...summary, bootstrapAccess: 'admin' }, linkedIdentities: [], fieldOwnership: [], recoveryAdministrator: false });
+    renderDetail(); await screen.findByText('Platform Admin');
+    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revoke sessions' })).not.toBeInTheDocument();
   });
 });

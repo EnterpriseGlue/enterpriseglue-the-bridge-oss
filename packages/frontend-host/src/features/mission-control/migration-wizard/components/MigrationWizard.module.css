@@ -1,70 +1,17 @@
-/* Fix ComboBox dropdown being clipped inside table cells */
-
-/* The mapping section container */
 .mappingSection {
-  overflow: visible !important;
+  min-width: 0;
 }
 
-/* Table wrapper */
+/* Keep wide mappings scrollable within the page. ComboBoxes use Carbon's
+   auto-aligned floating menus so their options are not clipped by this scroller. */
 .mappingTable {
-  overflow: visible !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
-/* All table elements need overflow visible */
-.mappingTable :global(table),
-.mappingTable :global(.cds--data-table),
-.mappingTable :global(.cds--data-table-content) {
-  overflow: visible !important;
-}
-
-.mappingTable :global(thead),
-.mappingTable :global(tbody),
-.mappingTable :global(.cds--data-table thead),
-.mappingTable :global(.cds--data-table tbody) {
-  overflow: visible !important;
-}
-
-.mappingTable :global(tr),
-.mappingTable :global(.cds--data-table tr) {
-  overflow: visible !important;
-}
-
-.mappingTable :global(td),
-.mappingTable :global(th),
-.mappingTable :global(.cds--data-table td),
-.mappingTable :global(.cds--data-table th) {
-  overflow: visible !important;
-}
-
-/* Ensure ComboBox wrapper allows overflow */
-.mappingTable :global(.cds--list-box__wrapper) {
-  overflow: visible !important;
-}
-
-.mappingTable :global(.cds--list-box) {
-  overflow: visible !important;
-  position: relative !important;
-}
-
-/* Dropdown menu styling - keep absolute positioning */
-.mappingTable :global(.cds--list-box__menu) {
-  z-index: 9999 !important;
-  max-height: 300px !important;
-  overflow-y: auto !important;
-}
-
-/* Override Carbon Content overflow if it's clipping */
-:global(.cds--content) {
-  overflow: visible !important;
-}
-
-/* Override any parent containers that might clip */
-:global(.cds--data-table-container) {
-  overflow: visible !important;
-}
-
-:global(.cds--table-container) {
-  overflow: visible !important;
+.mappingTable :global(table) {
+  min-width: 600px;
 }
 
 /* Widen the filter overflow menu so labels don't truncate */

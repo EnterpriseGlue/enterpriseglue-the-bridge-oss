@@ -4,6 +4,7 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import type { AdminUserStatus, LegacyPlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { Notification } from '@enterpriseglue/shared/infrastructure/persistence/entities/Notification.js';
@@ -19,6 +20,7 @@ import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persiste
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { ScimUserLink } from '@enterpriseglue/shared/infrastructure/persistence/entities/ScimUserLink.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js';
 import { hashPassword, generatePassword } from '@enterpriseglue/shared/utils/password.js';
@@ -93,15 +95,15 @@ function toUserDTO(
     isEmailVerified: Boolean(user.isEmailVerified),
     mustResetPassword: Boolean(user.mustResetPassword),
     adminStatus: resolveAdminUserStatus(user, pendingInvitationUserIds),
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-    lastLoginAt: user.lastLoginAt,
+    createdAt: Number(user.createdAt),
+    updatedAt: Number(user.updatedAt),
+    lastLoginAt: user.lastLoginAt == null ? null : Number(user.lastLoginAt),
     createdByUserId: user.createdByUserId,
   };
 
   if (options.includeAdmin) {
-    dto.failedLoginAttempts = user.failedLoginAttempts;
-    dto.lockedUntil = user.lockedUntil;
+    dto.failedLoginAttempts = Number(user.failedLoginAttempts || 0);
+    dto.lockedUntil = user.lockedUntil == null ? null : Number(user.lockedUntil);
   }
 
   return dto;
@@ -273,10 +275,22 @@ export class UserService {
       const existing = await userRepo.findOneBy({ id });
       if (!existing) throw Errors.notFound('User', id);
 
+      if (input.isActive !== undefined && input.isActive !== Boolean(existing.isActive)) {
+        throw Errors.conflict('Change account status through the audited deactivate or reactivate action with a reason');
+      }
+      // A tenant-scoped query cannot prove that a global account has no
+      // provisioning owner in another tenant. Keep shared profile fields at
+      // their authenticated provider boundary; do not widen RLS to infer absence.
+      if (config.tenancyMode === 'pooled' && (input.firstName !== undefined || input.lastName !== undefined)) {
+        throw Errors.conflict('Shared SaaS profile fields must be updated through the authenticated identity or provisioning provider');
+      }
+      if (existing.authProvider === 'ldap' || existing.authProvider === 'scim' || await manager.getRepository(ScimUserLink).exist({ where: { userId: id } })) {
+        throw Errors.conflict('This user is directory-managed. Update the profile in the authoritative directory.');
+      }
+
       const updateData: any = { updatedAt: Date.now() };
       if (input.firstName !== undefined) updateData.firstName = input.firstName;
       if (input.lastName !== undefined) updateData.lastName = input.lastName;
-      if (input.isActive !== undefined) updateData.isActive = input.isActive;
 
       await userRepo.update({ id }, updateData);
       const nextIsActive = updateData.isActive ?? existing.isActive;

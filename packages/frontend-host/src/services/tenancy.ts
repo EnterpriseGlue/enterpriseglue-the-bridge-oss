@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import { TenancyCapabilitiesSchema } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js';
 import { config } from '../config.js';
-import { apiFetch } from '../utils/apiFetch';
+import { apiFetch } from '../utils/apiFetch.js';
 import { registerFeatureOverride } from '../enterprise/extensionRegistry.js';
 
 export type TenancyCapabilities = z.infer<typeof TenancyCapabilitiesSchema>;

@@ -87,15 +87,15 @@ describe('starbase versions routes', () => {
       if (id === otherFileId) {
         return { id: otherFileId, projectId: otherProjectId, xml: '<quote />' };
       }
-      return { id: fileId, projectId, xml: '<bpmn />' };
+      return { id: fileId, projectId, type: 'bpmn', xml: '<bpmn />' };
     });
-    fileUpdate = vi.fn().mockResolvedValue(undefined);
+    fileUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     projectFindOne = vi.fn().mockImplementation(async ({ where }: any) => ({
       id: String(where?.id || projectId),
       tenantId: 'tenant-default',
     }));
 
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    const manager = { connection: { options: { type: 'sqljs' } },
       getRepository: (entity: unknown) => {
         if (entity === Version) {
           return {
@@ -117,7 +117,8 @@ describe('starbase versions routes', () => {
         }
         return {};
       },
-    });
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({ ...manager, transaction: vi.fn(async (run: any) => run(manager)) });
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
       [
         'project:files:view',
@@ -293,7 +294,7 @@ describe('starbase versions routes', () => {
       resourceId: projectId,
     }));
     expect(fileUpdate).toHaveBeenCalledWith(
-      { id: fileId },
+      { id: fileId, projectId },
       expect.objectContaining({
         xml: '<bpmn restored="yes" />',
         updatedAt: expect.any(Number),

@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, Errors, AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
-import { DeploymentResponseSchema, DeploymentSelectSchema, DeployRequestSchema, RollbackRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
+import { DeploymentResponseSchema, DeploymentSelectSchema, DeployRequestSchema, VersionedDeployRequestSchema, RollbackRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
 import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
@@ -31,16 +31,7 @@ async function canViewProjectDeployments(req: Request, projectId: string): Promi
  * POST /git-api/deploy
  * Deploy a project (commit + push + tag)
  */
-router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployRequestSchema), requireAction('project.deploy.create', { resourceIdFrom: 'body' }), requireCompositeAction('project.deploy.create', {
-  kind: 'deployment',
-  mode: 'ci',
-  projectIdFrom: 'body',
-  engineIdFrom: 'body',
-  optionalWhenMissingEngineId: true,
-  legacyAutoGrant: false,
-  attachDeployContext: false,
-  hideUnauthorizedEngine: false,
-}), asyncHandler(async (req: Request, res: Response) => {
+const deploymentHandler = asyncHandler(async (req: Request, res: Response) => {
   const validated = req.body;
   const userId = req.user!.userId;
   const engineId = typeof validated.engineId === 'string' ? validated.engineId.trim() : '';
@@ -72,10 +63,13 @@ router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployReque
       environment: validated.environment,
       createTag: validated.createTag,
       tagName: validated.tagName,
+      vcsCommitId: validated.vcsCommitId,
     });
+    if (validated.vcsCommitId && result.vcsCommitId !== validated.vcsCommitId) throw Errors.conflict('Git deployment version was not verified; reconcile before retrying');
 
     res.status(201).json(DeploymentResponseSchema.parse(result));
   } catch (e: any) {
+    if (e instanceof AppError) throw e;
     const msg = String(e?.message || '')
 
     if (msg.includes('Project is not connected to Git')) {
@@ -140,7 +134,28 @@ router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployReque
       hint: 'Check your Git connection settings and token permissions, then try again.',
     })
   }
-}));
+});
+
+router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployRequestSchema), requireAction('project.deploy.create', { resourceIdFrom: 'body' }), requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'ci',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+  optionalWhenMissingEngineId: true,
+  legacyAutoGrant: false,
+  attachDeployContext: false,
+  hideUnauthorizedEngine: false,
+}), deploymentHandler);
+router.post('/git-api/deploy-from-version', apiLimiter, requireAuth, validateBody(VersionedDeployRequestSchema), requireAction('project.deploy.create', { resourceIdFrom: 'body' }), requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'ci',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+  optionalWhenMissingEngineId: false,
+  legacyAutoGrant: false,
+  attachDeployContext: false,
+  hideUnauthorizedEngine: false,
+}), deploymentHandler);
 
 /**
  * Shared helper for listing deployments
@@ -159,7 +174,7 @@ async function listDeployments(projectId: string, limit: number) {
  * GET /git-api/deployments
  * List deployments for a project (query param style)
  */
-router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   const limit = parseInt(req.query.limit as string) || 50;
 
@@ -178,7 +193,7 @@ router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('proje
  * GET /git-api/projects/:projectId/deployments
  * List deployments for a project (REST style)
  */
-router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const limit = parseInt(req.query.limit as string) || 50;
 
@@ -235,7 +250,7 @@ router.post('/git-api/rollback', apiLimiter, requireAuth, validateBody(RollbackR
  * GET /git-api/commits
  * Get commit history for a project
  */
-router.get('/git-api/commits', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/commits', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceResolver: 'project.byId', resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   const limit = parseInt(req.query.limit as string) || 100;
 

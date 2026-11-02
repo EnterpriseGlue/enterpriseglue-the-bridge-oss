@@ -46,9 +46,9 @@ describe('VcsCommitService', () => {
     expect(mainFileRepo.findOne).not.toHaveBeenCalled();
   });
 
-  it('does not leak file-save commits to unrelated files via snapshot fallback', async () => {
+  it.each(['file-save'])('does not leak %s commits to unrelated files via snapshot fallback', async source => {
     const commitRepo = {
-      findOne: vi.fn().mockResolvedValue({ source: 'file-save' }),
+      findOne: vi.fn().mockResolvedValue({ source }),
     };
     const versionRepo = {
       findOne: vi.fn().mockResolvedValue(null),
@@ -118,8 +118,10 @@ describe('VcsCommitService', () => {
 
   it('keeps snapshots for distinct main files separate even when legacy keys match', async () => {
     const snapshotQb = {
+      innerJoin: vi.fn().mockReturnThis(),
       leftJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
       getRawMany: vi.fn().mockResolvedValue([
         {
@@ -158,7 +160,7 @@ describe('VcsCommitService', () => {
     });
 
     const service = new VcsCommitService();
-    await expect(service.getCommitSnapshots('commit-1')).resolves.toEqual([
+    await expect(service.getCommitSnapshots('commit-1', 'project-1')).resolves.toEqual([
       {
         id: 'snapshot-a',
         mainFileId: 'file-a',
@@ -178,6 +180,18 @@ describe('VcsCommitService', () => {
         changeType: 'modified',
       },
     ]);
+    expect(snapshotQb.innerJoin).toHaveBeenCalledWith(Commit, 'vc', 'fs.commitId = vc.id');
+    expect(snapshotQb.andWhere).toHaveBeenCalledWith('vc.projectId = :projectId', { projectId: 'project-1' });
+  });
+
+  it.each([[], ['one', 'one'], [''], null, 'one'])('rejects malformed explicit commit scope before database access (%j)', async fileIds => {
+    await expect(new VcsCommitService().commit('branch', 'user', 'Scoped save', { fileIds } as any)).rejects.toMatchObject({ statusCode: 400 });
+    expect(getDataSource).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unbound snapshot read before opening a database connection', async () => {
+    await expect(new VcsCommitService().getCommitSnapshots('commit-1', '')).rejects.toThrow('project is required');
+    expect(getDataSource).not.toHaveBeenCalled();
   });
 
   it('falls back to legacy snapshot history when no explicit file versions exist', async () => {

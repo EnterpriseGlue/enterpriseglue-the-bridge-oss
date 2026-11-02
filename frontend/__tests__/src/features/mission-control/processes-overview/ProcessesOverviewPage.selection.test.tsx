@@ -13,9 +13,12 @@ import {
   listSavedProcessFilters,
 } from '@src/features/mission-control/processes-overview/api/processDefinitions';
 import { useProcessesFilterStore } from '@src/features/mission-control/shared/stores/processesFilterStore';
+import { apiClient } from '@src/shared/api/client';
 
 const engineSelectorMocks = vi.hoisted(() => ({ selectedEngineId: 'engine-1' }));
 const tenantNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock('@src/shared/api/client', async original => ({ ...await original<typeof import('@src/shared/api/client')>(), apiClient: { get: vi.fn().mockResolvedValue({ canShowEditButton: false }), post: vi.fn() } }));
 
 vi.mock('@src/shared/hooks/useTenantNavigate', () => ({
   useTenantNavigate: () => ({
@@ -122,7 +125,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
   const splitPane = await vi.importActual<typeof import('@src/features/mission-control/shared/hooks/useSplitPaneState')>('@src/features/mission-control/shared/hooks/useSplitPaneState');
   return {
     useProcessesData: () => ({
-      defsQ: { data: [{ id: 'def-1', key: 'order-process', name: 'Order Process', version: 1 }] },
+      defsQ: { data: [{ id: 'def-1', key: 'order-process', name: 'Order Process', version: 1 }], isSuccess: true, isFetching: false, isError: false },
       defItems: [{ id: 'order-process', label: 'Order Process', key: 'order-process', version: 1 }],
       versions: [1],
       currentKey: 'order-process',
@@ -208,6 +211,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
 describe('ProcessesOverviewPage selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(apiClient.post).mockResolvedValue({ id: 'started-1', definitionId: 'def-1' });
     engineSelectorMocks.selectedEngineId = 'engine-1';
     useProcessesFilterStore.getState().reset();
     vi.mocked(listSavedProcessFilters).mockResolvedValue([]);
@@ -368,6 +372,29 @@ describe('ProcessesOverviewPage selection', () => {
     expect(startButton).toHaveAttribute('title', 'Missing permission engine:process:start');
   });
 
+  it('starts the displayed exact definition rather than the latest version by key', async () => {
+    useProcessesFilterStore.setState({ selectedProcess: { id: 'order-process', key: 'order-process', label: 'Order Process', version: 1 }, selectedVersion: 1 });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<AuthContext.Provider value={bulkAuthContext}><QueryClientProvider client={qc}><MemoryRouter initialEntries={['/mission-control/processes']}><ProcessesOverviewPage /></MemoryRouter></QueryClientProvider></AuthContext.Provider>);
+    fireEvent.click(await screen.findByRole('button', { name: /^Start$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Start process' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledOnce());
+    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/process-definitions/def-1/start', { engineId: 'engine-1' }, { credentials: 'include' });
+  });
+
+  it('does not dispatch a start after permissions are revoked with the dialog open', async () => {
+    useProcessesFilterStore.setState({ selectedProcess: { id: 'order-process', key: 'order-process', label: 'Order Process', version: 1 }, selectedVersion: 1 });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (auth: AuthContextValue) => <AuthContext.Provider value={auth}><QueryClientProvider client={qc}><MemoryRouter initialEntries={['/mission-control/processes']}><ProcessesOverviewPage /></MemoryRouter></QueryClientProvider></AuthContext.Provider>;
+    const view = render(ui(bulkAuthContext));
+    fireEvent.click(await screen.findByRole('button', { name: /^Start$/i }));
+    expect(await screen.findByRole('button', { name: 'Start process' })).toBeVisible();
+    await act(async () => view.rerender(ui(deniedAuthContext)));
+    const submit = screen.queryByRole('button', { name: 'Start process' });
+    if (submit) fireEvent.click(submit);
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
   it('saves the current process filter when saved-filter manage is allowed', async () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -398,7 +425,7 @@ describe('ProcessesOverviewPage selection', () => {
         name: 'Operations incidents',
         engineId: 'engine-1',
         defKeys: ['order-process'],
-        version: null,
+        version: '1',
         active: true,
         incidents: true,
         completed: false,

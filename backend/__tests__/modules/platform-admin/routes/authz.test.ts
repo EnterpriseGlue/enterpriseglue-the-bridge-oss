@@ -3,6 +3,7 @@ import request from 'supertest';
 import express from 'express';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { BridgeDecisionResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import authzRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/authz.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
@@ -1472,6 +1473,13 @@ describe('platform-admin authz routes', () => {
   });
 
 
+  it.each(['/api/mission-control/bridge/starbase-edit/evaluate', '/api/starbase/bridge/mission-control/evaluate'])('emits the canonical source-bound bridge receipt at %s', async route => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+    const response = await request(app).post(route).send({ engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', definitionKey: 'invoice', kind: 'process' });
+    expect(response.status).toBe(200);
+    expect(BridgeDecisionResponseSchema.parse(response.body)).toMatchObject({ allowed: true, reasonCode: 'allowed', missingActions: [], engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', targetId: 'target-1', lineage: { kind: 'process', definitionKey: 'invoice' } });
+  });
+
   it('evaluates Mission Control to Starbase bridge access', async () => {
     vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
 
@@ -1570,6 +1578,22 @@ describe('platform-admin authz routes', () => {
       engineId: 'engine-1',
       targetId: 'target-1',
     });
+  });
+
+  it.each(['process', 'decision'])('retains the Editor runtime %s definition selectors in the canonical decision', async kind => {
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(true);
+    const source = await getDataSource();
+    vi.mocked(getDataSource).mockResolvedValue({ ...source, getRepository: (entity: any) => entity.name === 'File'
+      ? { findOne: vi.fn().mockResolvedValue({ id: 'file-1', projectId: 'project-1', name: kind === 'decision' ? 'invoice.dmn' : 'invoice.bpmn', type: kind === 'decision' ? 'dmn' : 'bpmn' }) }
+      : source.getRepository(entity) } as any);
+    const selectors = { kind, definitionId: 'invoice:3:def', definitionKey: 'invoice',
+      ...(kind === 'decision' ? { decisionDefinitionId: 'invoice:3:def', decisionDefinitionKey: 'invoice' } : {}) };
+    const response = await request(app).post('/api/starbase/bridge/mission-control/evaluate')
+      .send({ engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', ...selectors });
+    expect(response.status).toBe(200);
+    expect(BridgeDecisionResponseSchema.parse(response.body)).toMatchObject({ allowed: true, reasonCode: 'allowed',
+      missingActions: [], engineId: 'engine-1', projectId: 'project-1', fileId: 'file-1', targetId: 'target-1',
+      lineage: { ...selectors, fileType: kind === 'decision' ? 'dmn' : 'bpmn' } });
   });
 
   it('denies Starbase to Mission Control bridge access when engine runtime permission is missing', async () => {

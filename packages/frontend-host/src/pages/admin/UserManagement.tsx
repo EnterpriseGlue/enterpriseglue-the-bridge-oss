@@ -1,3 +1,6 @@
+import { useRef } from 'react';
+import { getTenancyCapabilities } from '../../services/tenancy';
+import { useUserDirectoryViewScope, useUserDirectoryLifetime } from './userDirectoryView';
 import { useState, useEffect } from 'react';
 import {
   DataTable,
@@ -51,7 +54,8 @@ import {
 import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationRevealData } from '../../shared/utils/invitationFlow';
 import type { RoleAssignment } from '../../features/platform-admin/hooks/useAuthzApi';
 
-export type AdminManagedUser = User & {
+export type AdminManagedUser = Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'isActive' | 'isEmailVerified' | 'mustResetPassword' | 'createdAt' | 'lastLoginAt'> & {
+  bootstrapAccess: BootstrapAccessValue;
   adminStatus?: 'active' | 'inactive' | 'pending'
   authProvider?: string
   failedLoginAttempts?: number
@@ -89,16 +93,11 @@ type UserEditForm = {
   firstName?: string;
   lastName?: string;
   bootstrapAccess?: BootstrapAccessValue;
-  isActive?: boolean;
 }
 
-// The response retains a compatibility field until session/profile contract
-// retirement. Browser writes use the canonical `role` request field.
-const USER_BOOTSTRAP_ACCESS_RESPONSE_FIELD = `platform${'Role'}`;
-
-export function getUserBootstrapAccess(user: object | null | undefined): BootstrapAccessValue {
-  const candidate = user ? (user as Record<string, unknown>)[USER_BOOTSTRAP_ACCESS_RESPONSE_FIELD] : undefined;
-  return candidate === 'admin' ? 'admin' : 'user';
+/** Presentation only; action permission snapshots authorize all operations. */
+export function getUserBootstrapAccess(user: Pick<AdminManagedUser, 'bootstrapAccess'> | null | undefined): BootstrapAccessValue {
+  return user?.bootstrapAccess ?? 'user';
 }
 
 export function toCreateUserRequest(form: UserInviteForm, normalizedEmail: string): CreateUserRequest {
@@ -111,21 +110,25 @@ export function toCreateUserRequest(form: UserInviteForm, normalizedEmail: strin
   };
 }
 
-export function toUpdateUserRequest(form: UserEditForm): UpdateUserRequest {
-  return {
-    firstName: form.firstName,
-    lastName: form.lastName,
-    isActive: form.isActive,
-    role: form.bootstrapAccess,
-  };
+export function toUpdateUserRequest(
+  form: UserEditForm,
+  original?: Pick<AdminManagedUser, 'firstName' | 'lastName' | 'bootstrapAccess'>,
+): UpdateUserRequest {
+  const request: UpdateUserRequest = {};
+  if (form.firstName !== undefined && (!original || form.firstName !== (original.firstName || ''))) request.firstName = form.firstName;
+  if (form.lastName !== undefined && (!original || form.lastName !== (original.lastName || ''))) request.lastName = form.lastName;
+  if (form.bootstrapAccess !== undefined && (!original || form.bootstrapAccess !== original.bootstrapAccess)) request.role = form.bootstrapAccess;
+  return request;
 }
 
-export function getUserDisplayStatus(user: AdminManagedUser): { label: 'Active' | 'Inactive' | 'Pending'; tagType: 'green' | 'red' | 'blue' } {
+export function getUserDisplayStatus(user: AdminManagedUser): { label: 'Active' | 'Inactive' | 'Pending' | 'Locked'; tagType: 'green' | 'red' | 'blue' } {
   if (user.directoryStatus === 'deactivated') {
     return { label: 'Inactive', tagType: 'red' };
   }
 
-  if (user.directoryStatus === 'invited' || user.directoryStatus === 'locked') {
+  if (user.directoryStatus === 'locked') return { label: 'Locked', tagType: 'blue' };
+
+  if (user.directoryStatus === 'invited') {
     return { label: 'Pending', tagType: 'blue' };
   }
 
@@ -179,6 +182,7 @@ export function getUserRowActions(
   const isDirectoryManaged = user.provisioningSource === 'scim' || user.provisioningSource === 'ldap'
   const isLocked = Boolean(
     user.isActive && (
+      user.directoryStatus === 'locked' ||
       (user.lockedUntil && Number(user.lockedUntil) > now) ||
       (Number(user.failedLoginAttempts || 0) > 0)
     )
@@ -273,6 +277,14 @@ const defaultCreateForm: UserInviteForm = {
  * Admin-only interface for managing users
  */
 export default function UserManagement() {
+  const scope = useUserDirectoryViewScope();
+  return <UserManagementView key={scope} />;
+}
+
+function UserManagementView() {
+  const sharedProfileFields = getTenancyCapabilities().mode === 'pooled';
+  const captureView = useUserDirectoryLifetime();
+  const latestLoad = useRef(0);
   const { user: currentUser, permissions, hasPlatformPermission } = useAuth();
   const { notify } = useToast();
   const { tenantNavigate } = useTenantNavigate();
@@ -282,7 +294,8 @@ export default function UserManagement() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [authenticationFilter, setAuthenticationFilter] = useState('all');
   const [provisioningFilter, setProvisioningFilter] = useState('all');
-  const [authoritativeProvisioning, setAuthoritativeProvisioning] = useState(false);
+  const [authoritativeProvisioning, setAuthoritativeProvisioning] = useState<boolean | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(true);
 
   const platformResource = { type: 'platform' as const, id: null };
   const usersReadDecision = evaluateActionSnapshot(permissions, 'platform.users.read', platformResource);
@@ -330,46 +343,50 @@ export default function UserManagement() {
   const permanentDeleteModal = useModal<AdminManagedUser>();
   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
 
-  // Redirect if not admin
-  if (!canAccessUserManagement) {
-    return (
-      <div style={{ padding: 'var(--spacing-7)' }}>
-        <h1>Unauthorized</h1>
-        <p>You must be an administrator to manage users.</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (canViewUsers) void loadUsers(); else setLoading(false);
+  }, [canViewUsers]);
 
   useEffect(() => {
-    loadUsers();
-  }, []);
-
-  useEffect(() => {
+    if (!canAccessUserManagement) return;
+    const isCurrent = captureView();
     apiClient.get<{ ssoRequired: boolean; emailConfigured: boolean }>('/api/t/default/invitations/capabilities')
       .then((result) => {
+        if (!isCurrent()) return;
         setLocalLoginDisabled(Boolean(result?.ssoRequired));
         setEmailConfigured(Boolean(result?.emailConfigured));
       })
       .catch(() => {
+        if (!isCurrent()) return;
         setLocalLoginDisabled(false);
         setEmailConfigured(true);
       });
   }, []);
 
   useEffect(() => {
-    apiClient.get<IdentityProvisioningDirectoryListResponse>('/api/identity/provisioning-directories', { status: 'active', limit: 1, offset: 0 })
-      .then((result) => setAuthoritativeProvisioning(result.items.some((directory) => directory.authoritative && directory.status === 'active')))
-      .catch(() => setAuthoritativeProvisioning(false));
-  }, []);
+    if (!canCreateUsers) return;
+    const isCurrent = captureView();
+    apiClient.get<IdentityProvisioningDirectoryListResponse>('/api/identity/provisioning-directories', { status: 'active', limit: 200, offset: 0 })
+      .then((result) => {
+        if (!isCurrent()) return;
+        const authoritative = result.items.some(directory => directory.authoritative && directory.status === 'active');
+        // A partial page cannot establish the absence of an authoritative directory.
+        setAuthoritativeProvisioning(authoritative ? true : result.total === result.items.length ? false : null);
+      })
+      .catch(() => { if (isCurrent()) setAuthoritativeProvisioning(null); })
+      .finally(() => { if (isCurrent()) setOwnershipLoading(false); });
+  }, [canCreateUsers]);
 
   useEffect(() => {
     if (!createModal.isOpen) {
       return;
     }
 
+    const isCurrent = captureView();
     setCreateCapabilitiesLoading(true);
     apiClient.get<{ ssoRequired: boolean; emailConfigured: boolean }>('/api/t/default/invitations/capabilities')
       .then((result) => {
+        if (!isCurrent()) return;
         const capabilities = {
           ssoRequired: Boolean(result?.ssoRequired),
           emailConfigured: Boolean(result?.emailConfigured),
@@ -382,6 +399,7 @@ export default function UserManagement() {
         }));
       })
       .catch(() => {
+        if (!isCurrent()) return;
         setLocalLoginDisabled(false);
         setEmailConfigured(true);
         setCreateForm((current: UserInviteForm) => ({
@@ -389,7 +407,7 @@ export default function UserManagement() {
           sendEmail: true,
         }));
       })
-      .finally(() => setCreateCapabilitiesLoading(false));
+      .finally(() => { if (isCurrent()) setCreateCapabilitiesLoading(false); });
   }, [createModal.isOpen]);
 
   const resetCreateInviteForm = () => {
@@ -409,15 +427,20 @@ export default function UserManagement() {
   };
 
   const loadUsers = async () => {
+    const isCurrentView = captureView();
+    if (!canViewUsers || !isCurrentView()) return;
+    const request = ++latestLoad.current;
+    const isCurrent = () => isCurrentView() && request === latestLoad.current;
     try {
       setLoading(true);
       const response = await userDirectoryApi.list({ limit: 200, offset: 0 });
+      if (!isCurrent()) return;
       setUsers(response.items.map((entry): AdminManagedUser => ({
         id: entry.id,
         email: entry.email,
         firstName: entry.firstName || undefined,
         lastName: entry.lastName || undefined,
-        platformRole: entry.platformRole as User['platformRole'],
+        bootstrapAccess: entry.bootstrapAccess,
         isActive: entry.status !== 'deactivated',
         isEmailVerified: entry.status !== 'invited',
         mustResetPassword: false,
@@ -435,15 +458,18 @@ export default function UserManagement() {
         provisioningHealth: entry.provisioningHealth,
       })));
     } catch (err) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(err, 'Failed to load users');
       notify({ kind: 'error', title: 'Failed to load users', subtitle: parsed.message });
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
   const handleCreateUser = async () => {
-    if (!canCreateUsers || authoritativeProvisioning) return;
+    const isCurrent = captureView();
+    if (!isCurrent()) return;
+    if (!canCreateUsers || authoritativeProvisioning !== false) return;
 
     try {
       setCreateLoading(true);
@@ -451,8 +477,10 @@ export default function UserManagement() {
 
       const normalizedEmail = String(createForm.email || '').trim().toLowerCase();
       const result = await authService.createUser(toCreateUserRequest(createForm, normalizedEmail));
+      if (!isCurrent()) return;
 
       await loadUsers();
+      if (!isCurrent()) return;
 
       if (!result.emailSent && result.inviteUrl && result.oneTimePassword) {
         setCreateInviteReveal({
@@ -471,85 +499,103 @@ export default function UserManagement() {
 
       handleCloseCreateModal();
     } catch (err) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(err, 'Failed to create user');
       notify({ kind: 'error', title: 'Failed to create user', subtitle: parsed.message });
     } finally {
-      setCreateLoading(false);
+      if (isCurrent()) setCreateLoading(false);
     }
   };
-
   const handleEditUser = async () => {
+    const isCurrent = captureView();
+    if (!isCurrent()) return;
     if (!editingUser || !actionPermissions.canUpdateUsers) return;
 
     try {
       setEditLoading(true);
 
-      await authService.updateUser(editingUser.id, toUpdateUserRequest(editForm));
+      const request = toUpdateUserRequest(editForm, editingUser);
+      if (Object.keys(request).length === 0) { editModal.closeModal(); return; }
+      await authService.updateUser(editingUser.id, request);
+      if (!isCurrent()) return;
       notify({ kind: 'success', title: 'User updated successfully!' });
       await loadUsers();
+      if (!isCurrent()) return;
 
       editModal.closeModal();
       setEditingUser(null);
       setEditForm({});
     } catch (err) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(err, 'Failed to update user');
       notify({ kind: 'error', title: 'Failed to update user', subtitle: parsed.message });
     } finally {
-      setEditLoading(false);
+      if (isCurrent()) setEditLoading(false);
     }
   };
-
   const handleDeleteUser = async (reason?: string) => {
+    const isCurrent = captureView();
+    if (!isCurrent()) return;
     if (!deleteModal.data || !reason || (!actionPermissions.canDeactivateUsers && !actionPermissions.canSoftDeleteUsers)) return;
 
     try {
       setDeleteLoading(true);
 
       await userDirectoryApi.deactivate(deleteModal.data.id, reason);
+      if (!isCurrent()) return;
       notify({ kind: 'success', title: 'User deactivated successfully!' });
       await loadUsers();
+      if (!isCurrent()) return;
 
       deleteModal.closeModal();
     } catch (err) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(err, 'Failed to deactivate user');
       notify({ kind: 'error', title: 'Failed to deactivate user', subtitle: parsed.message });
     } finally {
-      setDeleteLoading(false);
+      if (isCurrent()) setDeleteLoading(false);
     }
   };
-
   const handlePermanentDeleteUser = async () => {
+    const isCurrent = captureView();
+    if (!isCurrent()) return;
     if (!permanentDeleteModal.data || !actionPermissions.canPermanentDeleteUsers) return;
 
     try {
       setPermanentDeleteLoading(true);
 
       await authService.deleteUserPermanently(permanentDeleteModal.data.id);
+      if (!isCurrent()) return;
       notify({ kind: 'success', title: 'User permanently deleted successfully!' });
       await loadUsers();
+      if (!isCurrent()) return;
 
       permanentDeleteModal.closeModal();
     } catch (err) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(err, 'Failed to delete user permanently');
       notify({ kind: 'error', title: 'Failed to delete user permanently', subtitle: parsed.message });
     } finally {
-      setPermanentDeleteLoading(false);
+      if (isCurrent()) setPermanentDeleteLoading(false);
     }
   };
-
   const handleUnlockUser = async (userId: string) => {
+    const isCurrent = captureView();
+    if (!isCurrent()) return;
     if (!actionPermissions.canUnlockUsers) return;
 
     try {
       await authService.unlockUser(userId);
+      if (!isCurrent()) return;
       notify({ kind: 'success', title: 'User account unlocked successfully!' });
       await loadUsers();
+      if (!isCurrent()) return;
     } catch (err) {
+      if (!isCurrent()) return;
       const parsed = parseApiError(err, 'Failed to unlock user');
       notify({ kind: 'error', title: 'Failed to unlock user', subtitle: parsed.message });
     }
   };
-
   const openEditModal = (user: AdminManagedUser) => {
     if (!actionPermissions.canUpdateUsers || user.provisioningSource === 'scim' || user.provisioningSource === 'ldap') return;
 
@@ -559,7 +605,6 @@ export default function UserManagement() {
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       bootstrapAccess: getUserBootstrapAccess(user),
-      isActive: user.isActive,
     });
     editModal.openModal(user);
   };
@@ -626,6 +671,10 @@ export default function UserManagement() {
   });
   const noCreateDeliveryOptions = createDeliveryOptions.length === 0;
 
+  if (!canAccessUserManagement) {
+    return <InlineNotification kind="error" title="User management unavailable" subtitle="You do not have permission to manage this user directory." hideCloseButton />;
+  }
+
   return (
     <PageLayout padding="0" style={{ paddingBlock: 'var(--spacing-7)' }}>
       <PlatformGrid className="eg-user-directory-grid">
@@ -641,6 +690,11 @@ export default function UserManagement() {
               />
             </div>
 
+            {canCreateUsers && !ownershipLoading && authoritativeProvisioning === null && <InlineNotification
+              kind="warning" title="Manual user creation unavailable"
+              subtitle="Provisioning ownership could not be verified. Reload before creating a user."
+              hideCloseButton lowContrast
+            />}
             {authoritativeProvisioning && (
               <InlineNotification
                 className="eg-user-directory-notification"
@@ -683,7 +737,7 @@ export default function UserManagement() {
           <SelectItem value="scim" text="SCIM 2.0" />
           <SelectItem value="ldap" text="LDAP" />
         </Select>
-        {canCreateUsers && !authoritativeProvisioning && (
+        {canCreateUsers && authoritativeProvisioning === false && (
           <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
             {localLoginDisabled ? 'Grant access' : 'Invite user'}
           </Button>
@@ -1021,17 +1075,17 @@ export default function UserManagement() {
             id="edit-firstName"
             labelText="First Name"
             placeholder="John"
-            value={editForm.firstName}
+            value={editForm.firstName ?? ''}
             onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-            disabled={editLoading}
+            disabled={editLoading || sharedProfileFields}
           />
           <TextInput
             id="edit-lastName"
             labelText="Last Name"
             placeholder="Doe"
-            value={editForm.lastName}
+            value={editForm.lastName ?? ''}
             onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-            disabled={editLoading}
+            disabled={editLoading || sharedProfileFields}
           />
         </div>
         <Select
@@ -1053,16 +1107,8 @@ export default function UserManagement() {
         <div style={{ marginTop: 'var(--spacing-3)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
           {getBootstrapAccessDescription(editForm.bootstrapAccess)}
         </div>
-        <Select
-          id="edit-isActive"
-          labelText="Status"
-          value={editForm.isActive ? 'active' : 'inactive'}
-          onChange={(e) => setEditForm({ ...editForm, isActive: e.target.value === 'active' })}
-          disabled={editLoading || editingUser?.id === currentUser?.id}
-        >
-          <SelectItem value="active" text="Active" />
-          <SelectItem value="inactive" text="Inactive" />
-        </Select>
+        <p className="eg-secondary-text">Change account status using the audited deactivate or reactivate action in user details.</p>
+        {sharedProfileFields && <p className="eg-secondary-text">Shared SaaS profile fields are managed by the authenticated identity or provisioning provider.</p>}
       </FormModal>
 
       {/* Delete Confirmation Modal */}

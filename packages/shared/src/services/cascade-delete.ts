@@ -5,6 +5,8 @@ import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
 import { Comment } from '@enterpriseglue/shared/infrastructure/persistence/entities/Comment.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
+import { Errors } from '../middleware/errorHandler.js';
+import { lockFolderProject, collectProjectFolderSubtree } from './starbase/folder-tree.js';
 import { vcsService } from './versioning/index.js';
 
 /**
@@ -79,14 +81,15 @@ export class CascadeDeleteService {
    * 
    * @param folderId - Folder ID to delete
    */
-  static async deleteFolder(folderId: string): Promise<void> {
+  static async deleteFolder(folderId: string, expectedProjectId?: string): Promise<void> {
     const dataSource = await getDataSource();
     
-    // Collect all folders and files in the subtree (read-only, outside transaction)
-    const subtree = await this.collectSubtree(folderId);
-    
-    // Delete all resources in a single transaction
-    await dataSource.transaction(async (manager) => {
+    const root = await dataSource.getRepository(Folder).findOne({ where: { id: folderId }, select: ['id', 'projectId'] });
+    if (!root || (expectedProjectId !== undefined && root.projectId !== expectedProjectId)) throw Errors.notFound('Folder');
+    const projectId = root.projectId;
+    await dataSource.transaction(async manager => {
+      await lockFolderProject(manager, projectId);
+      const subtree = await collectProjectFolderSubtree(manager, projectId, folderId);
       // Delete comments for each file
       for (const fileId of subtree.files) {
         await manager.getRepository(Comment).delete({ fileId });
@@ -99,12 +102,12 @@ export class CascadeDeleteService {
       
       // Delete all files
       for (const fileId of subtree.files) {
-        await manager.getRepository(File).delete({ id: fileId });
+        await manager.getRepository(File).delete({ id: fileId, projectId });
       }
       
       // Delete folders bottom-up (children before parents)
       for (const folderIdToDelete of subtree.folders.reverse()) {
-        await manager.getRepository(Folder).delete({ id: folderIdToDelete });
+        await manager.getRepository(Folder).delete({ id: folderIdToDelete, projectId });
       }
     });
   }
@@ -149,39 +152,9 @@ export class CascadeDeleteService {
     rootFolderId: string
   ): Promise<{ folders: string[]; files: string[] }> {
     const dataSource = await getDataSource();
-    const folderRepo = dataSource.getRepository(Folder);
-    const fileRepo = dataSource.getRepository(File);
-    
-    const foldersOut: string[] = [];
-    const filesOut: string[] = [];
-    const stack: string[] = [rootFolderId];
-    
-    while (stack.length > 0) {
-      const currentFolderId = stack.pop() as string;
-      foldersOut.push(currentFolderId);
-      
-      // Find child folders
-      const childFolders = await folderRepo.find({
-        where: { parentFolderId: currentFolderId },
-        select: ['id'],
-      });
-      
-      for (const row of childFolders) {
-        stack.push(row.id);
-      }
-      
-      // Collect files in this folder
-      const folderFiles = await fileRepo.find({
-        where: { folderId: currentFolderId },
-        select: ['id'],
-      });
-      
-      for (const row of folderFiles) {
-        filesOut.push(row.id);
-      }
-    }
-    
-    return { folders: foldersOut, files: filesOut };
+    const root = await dataSource.getRepository(Folder).findOne({ where: { id: rootFolderId }, select: ['id', 'projectId'] });
+    if (!root) throw Errors.notFound('Folder');
+    return collectProjectFolderSubtree(dataSource, root.projectId, rootFolderId);
   }
 
   /**

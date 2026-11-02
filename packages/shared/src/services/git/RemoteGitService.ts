@@ -9,6 +9,8 @@ import { File as FileEntity } from '@enterpriseglue/shared/infrastructure/persis
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
 import { In } from 'typeorm';
+import { captureGitDeploymentSource } from './deployment-source.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { createHash } from 'crypto';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { vcsService } from '../versioning/index.js';
@@ -135,9 +137,14 @@ class RemoteGitService {
       message?: string;
       patterns?: string[];
       userId?: string; // Required for VCS commit
+      vcsCommitId?: string; // Exact reviewed version for deployment
     }
   ): Promise<PushToRemoteResult> {
+    options = { ...options, patterns: options.patterns ? [...options.patterns] : undefined };
+    const dataSource = await getDataSource();
+    const source = options.vcsCommitId !== undefined ? await captureGitDeploymentSource(dataSource, projectId, options.vcsCommitId) : null;
     const client = await this.getClient(providerId, token);
+    if (source) await client.testWriteAccess(options.repo);
     const branch = options.branch || 'main';
 
     const totalStart = Date.now();
@@ -148,7 +155,6 @@ class RemoteGitService {
 
     // Get files from main Starbase DB (not VCS) to reflect current UI state
     // This ensures file moves/renames are captured even if VCS isn't updated
-    const dataSource = await getDataSource();
     const gitRepoRepo = dataSource.getRepository(GitRepository);
     const fileRepo = dataSource.getRepository(FileEntity);
     const folderRepo = dataSource.getRepository(Folder);
@@ -158,6 +164,8 @@ class RemoteGitService {
       where: { projectId },
       select: ['id', 'lastCommitSha', 'lastPushedManifest', 'lastPushedManifestUpdatedAt']
     });
+    if (source && !repoRow?.id) throw Errors.conflict('The Git deployment repository is unavailable');
+    if (source) await gitRepoRepo.update({ id: repoRow!.id, projectId }, { lastValidatedAt: Date.now() });
     mark('loadRepoManifestMs', manifestStart);
 
     let previousManifest: Record<string, string> | null = null;
@@ -179,18 +187,20 @@ class RemoteGitService {
       try {
         const branches = await client.getBranches(options.repo);
         const remoteBranch = branches.find((b) => b.name === branch);
+        if (source && !remoteBranch?.sha) throw Errors.conflict('The remote deployment branch is unavailable');
         if (remoteBranch?.sha && remoteBranch.sha !== repoRow.lastCommitSha) {
           remoteDrift = true;
           previousManifest = null;
         }
       } catch (e) {
+        if (source) throw Errors.conflict('Remote branch state could not be verified for this saved deployment');
         logger.warn('Failed to check remote branch head for drift', { projectId, repo: options.repo, branch, error: e });
       }
     }
     mark('remoteDriftCheckMs', driftCheckStart);
 
     const loadFilesStart = Date.now();
-    const filesToPush = await fileRepo.find({
+    const filesToPush = source?.files ?? await fileRepo.find({
       where: { projectId, type: In(['bpmn', 'dmn']) },
       select: ['id', 'folderId', 'name', 'type', 'updatedAt']
     });
@@ -198,7 +208,7 @@ class RemoteGitService {
 
     // Build folder path map from main DB folders (reflects current Starbase UI state)
     const loadFoldersStart = Date.now();
-    const projectFolders = await folderRepo.find({ where: { projectId } });
+    const projectFolders = source?.folders ?? await folderRepo.find({ where: { projectId } });
     mark('loadFoldersMs', loadFoldersStart);
     
     // Build folder path lookup (folderId -> full path)
@@ -237,7 +247,7 @@ class RemoteGitService {
     };
 
     const lastManifestUpdatedAtMs = normalizeTimestampMs(repoRow?.lastPushedManifestUpdatedAt ?? null);
-    const hasBaselineManifest = Boolean(previousManifest && lastManifestUpdatedAtMs);
+    const hasBaselineManifest = !source && Boolean(previousManifest && lastManifestUpdatedAtMs);
 
     const filesNeedingHash: string[] = [];
     const filePathById = new Map<string, string>();
@@ -268,12 +278,12 @@ class RemoteGitService {
 
     const loadChangedFilesStart = Date.now();
     const uniqueFileIds = Array.from(new Set(filesNeedingHash));
-    const filesWithContent = uniqueFileIds.length
+    const filesWithContent = source?.files ?? (uniqueFileIds.length
       ? await fileRepo.find({
           where: { id: In(uniqueFileIds) },
           select: ['id', 'xml'],
         })
-      : [];
+      : []);
     mark('loadChangedFilesMs', loadChangedFilesStart);
 
     const contentById = new Map(filesWithContent.map((f) => [f.id, String((f as any).xml || '')]));
@@ -367,6 +377,7 @@ class RemoteGitService {
       createBranch: true,
       deletions,
     });
+    if (source && (!commit?.sha || commit.sha.trim() !== commit.sha)) throw Errors.conflict('Git deployment commit was not verified; reconcile before retrying');
     mark('pushMs', pushStart);
 
     const persistStart = Date.now();
@@ -382,8 +393,8 @@ class RemoteGitService {
     mark('persistManifestMs', persistStart);
 
     // Create VCS commit to keep VCS in sync with remote push
-    let vcsCommitId: string | null = null;
-    if (options.userId && (pushedFilesCount > 0 || deletionsCount > 0)) {
+    let vcsCommitId: string | null = options.vcsCommitId ?? null;
+    if (!source && options.userId && (pushedFilesCount > 0 || deletionsCount > 0)) {
       const vcsStart = Date.now();
       try {
         const mainBranch = await vcsService.getMainBranch(projectId);

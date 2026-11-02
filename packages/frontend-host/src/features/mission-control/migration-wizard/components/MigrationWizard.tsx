@@ -29,27 +29,10 @@ import { useMigrationData } from '../hooks'
 import { typeCategory, toHumanName, parseActivities, normalizeName } from '../utils'
 import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { withEngineContext } from '../../shared/engineContext'
-
-const MIGRATION_SESSION_KEY = 'migration-wizard-state'
-
-export interface MigrationSessionState {
-  instanceIds: string[]
-  engineId?: string
-  selectedKey?: string
-  selectedVersion?: number
-}
-
-export function loadMigrationSession(): MigrationSessionState {
-  try {
-    const raw = sessionStorage.getItem(MIGRATION_SESSION_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { instanceIds: [] }
-}
-
-export function saveMigrationSession(data: MigrationSessionState) {
-  try { sessionStorage.setItem(MIGRATION_SESSION_KEY, JSON.stringify(data)) } catch {}
-}
+import { AuthContext } from '../../../../contexts/AuthContext'
+import { permissionSnapshotAuthorityKey } from '../../../../contexts/authSessionPermissions'
+import { loadMigrationSession, saveMigrationSession, parseMigrationSession, type MigrationSessionState } from '../utils/migrationSession'
+export { loadMigrationSession, saveMigrationSession, type MigrationSessionState } from '../utils/migrationSession'
 
 export default function MigrationWizard() {
   const { tenantNavigate, tenantSlug, navigate } = useTenantNavigate()
@@ -65,38 +48,25 @@ export default function MigrationWizard() {
     }
   }, [tenantSlug, location.pathname, state, navigate])
 
-  // Coerce version to a valid number or undefined
-  const toVersion = (v: any): number | undefined => {
-    if (v == null) return undefined
-    const n = Number(v)
-    return isNaN(n) ? undefined : n
-  }
-
-  // Persist navigation state in sessionStorage so it survives page refresh
-  const { candidateInstanceIds, originEngineId, preselectedKey, preselectedVersion } = React.useMemo(() => {
-    if (state?.instanceIds?.length && typeof state.engineId === 'string' && state.engineId.trim()) {
-      const data = {
-        instanceIds: state.instanceIds as string[],
-        engineId: state.engineId.trim(),
-        selectedKey: state.selectedKey as string | undefined,
-        selectedVersion: toVersion(state.selectedVersion),
-      }
-      saveMigrationSession(data)
-      return {
-        candidateInstanceIds: data.instanceIds,
-        originEngineId: data.engineId,
-        preselectedKey: data.selectedKey,
-        preselectedVersion: data.selectedVersion,
-      }
+  const auth=React.useContext(AuthContext)
+  const principal=auth?.user?.session?.principal.id||auth?.user?.id||auth?.permissions?.userId
+  const storageScope=auth?.isAuthenticated&&!auth.isLoading&&principal&&tenantSlug?JSON.stringify([principal,auth.user?.session?.tenant.id,tenantSlug]):''
+  const authority=JSON.stringify([storageScope,auth?.sessionRevision,permissionSnapshotAuthorityKey(auth?.permissions)])
+  const navigationOwner=React.useRef({key:location.key,authority:storageScope?authority:null as string|null})
+  if(navigationOwner.current.key!==location.key)navigationOwner.current={key:location.key,authority:storageScope?authority:null}
+  if(navigationOwner.current.authority===null&&storageScope)navigationOwner.current.authority=authority
+  const navigationOwned=!!storageScope&&navigationOwner.current.authority===authority
+  const handoff=React.useMemo<{selection:MigrationSessionState;invalid:boolean}>(()=>{
+    if(!navigationOwned)return {selection:{instanceIds:[]},invalid:false}
+    if(state&&Object.prototype.hasOwnProperty.call(state,'instanceIds')){
+      const parsed=parseMigrationSession(state)
+      return {selection:parsed||{instanceIds:[]},invalid:!parsed}
     }
-    const saved = loadMigrationSession()
-    return {
-      candidateInstanceIds: saved.instanceIds || [],
-      originEngineId: saved.engineId,
-      preselectedKey: saved.selectedKey,
-      preselectedVersion: toVersion(saved.selectedVersion),
-    }
-  }, [state])
+    return {selection:loadMigrationSession(storageScope),invalid:false}
+  },[state,storageScope,authority,navigationOwned])
+  React.useEffect(()=>{try{sessionStorage.removeItem('migration-wizard-state')}catch{}},[])
+  React.useEffect(()=>{if(navigationOwned&&!handoff.invalid)saveMigrationSession(handoff.selection,storageScope)},[handoff,storageScope,navigationOwned])
+  const {instanceIds:candidateInstanceIds,engineId:originEngineId,selectedKey:preselectedKey,selectedVersion:preselectedVersion}=handoff.selection
 
   // Use extracted data hook
   const migrationData = useMigrationData({
@@ -104,6 +74,7 @@ export default function MigrationWizard() {
     originEngineId,
     preselectedKey,
     preselectedVersion,
+    selectionInvalid: handoff.invalid,
   })
   const {
     defsQ,
@@ -169,11 +140,7 @@ export default function MigrationWizard() {
     selectedEngineId,
   } = migrationData
 
-  const previousEngineIdRef = React.useRef(selectedEngineId)
-  React.useEffect(() => {
-    if (previousEngineIdRef.current !== selectedEngineId) setReviewModalOpen(false)
-    previousEngineIdRef.current = selectedEngineId
-  }, [selectedEngineId])
+  React.useEffect(()=>{setReviewModalOpen(false)},[migrationData.reviewKey])
 
   // Diagram control APIs
   const srcViewerApi = React.useRef<any>(null)
@@ -218,8 +185,8 @@ export default function MigrationWizard() {
   const targetNameToId = React.useMemo(() => {
     const map = new Map<string, string>()
     for (const a of targetActivities) {
-      const key = norm(a.name || a.id)
-      if (key && !map.has(key)) map.set(key, a.id)
+      const key = `${typeCategory(a.type)}:${norm(a.name || a.id)}`
+      if (key) map.set(key,map.has(key)?'':a.id)
     }
     return map
   }, [targetActivities, norm])
@@ -233,7 +200,7 @@ export default function MigrationWizard() {
     const srcId = Array.isArray(ins?.sourceActivityIds) ? ins.sourceActivityIds[0] : undefined
     if (!srcId) return
     const srcMeta = sourceActivities.get(srcId)
-    const match = targetNameToId.get(norm(srcMeta?.name || srcId))
+    const match = targetNameToId.get(`${typeCategory(srcMeta?.type || '')}:${norm(srcMeta?.name || srcId)}`)
     if (match) setOverrides(prev => ({ ...prev, [idx]: match }))
   }, [basePlan, sourceActivities, targetNameToId, norm])
 
@@ -244,15 +211,15 @@ export default function MigrationWizard() {
     const instructions: any[] = Array.isArray((basePlan as any)?.instructions) ? (basePlan as any).instructions : []
     for (let idx = 0; idx < instructions.length; idx++) {
       const ins = instructions[idx]
-      if (ins?.targetActivityId) continue // already suggested by engine
+      if (ins?.targetActivityIds?.length || Object.prototype.hasOwnProperty.call(overrides,idx)) continue // already suggested by engine
       const srcId = Array.isArray(ins?.sourceActivityIds) ? ins.sourceActivityIds[0] : undefined
       if (!srcId) continue
       const srcMeta = sourceActivities.get(srcId)
-      const match = targetNameToId.get(norm(srcMeta?.name || srcId))
+      const match = targetNameToId.get(`${typeCategory(srcMeta?.type || '')}:${norm(srcMeta?.name || srcId)}`)
       if (match) next[idx] = match
     }
     if (Object.keys(next).length > 0) setOverrides(prev => ({ ...prev, ...next }))
-  }, [basePlan, sourceActivities, targetNameToId, norm])
+  }, [basePlan, sourceActivities, targetNameToId, norm, overrides])
 
   // Per-row reset: clear override, trigger override, and removed state for a single row
   const resetRow = React.useCallback((idx: number) => {
@@ -261,21 +228,14 @@ export default function MigrationWizard() {
     setRemoved(prev => { const next = { ...prev }; delete next[idx]; return next })
   }, [])
 
-  // Auto-map by functional name when engine plan lacks targets
-  React.useEffect(() => {
-    if (!basePlan) return
-    if (targetActivities.length === 0 || sourceActivities.size === 0) return
-    runAutoMap()
-  }, [basePlan, targetActivities, sourceActivities, runAutoMap])
-
   // Count visible mapped instructions (same filter logic as the table rows)
   const visibleMappedCount = React.useMemo(() => {
     let count = 0
     for (let idx = 0; idx < planInstructions.length; idx++) {
       const ins = planInstructions[idx]
       const isExcluded = !!removed[idx]
-      const baseTgt = ins?.targetActivityId ?? (Array.isArray(ins?.targetActivityIds) ? ins.targetActivityIds[0] : undefined)
-      const tgtId = overrides[idx] || baseTgt
+      const baseTgt = ins.targetActivityIds[0]
+      const tgtId = Object.prototype.hasOwnProperty.call(overrides,idx) ? overrides[idx] : baseTgt
       const mapped = !!tgtId
       const srcId = Array.isArray(ins.sourceActivityIds) ? ins.sourceActivityIds[0] : undefined
       const isActive = Array.isArray(ins.sourceActivityIds) ? ins.sourceActivityIds.some((sid: string) => activeSet.has(sid)) : false
@@ -292,7 +252,7 @@ export default function MigrationWizard() {
     try {
       const { response: data, stale } = await validateMutation.mutateAsync()
       if (stale) return
-      const reports = data.instructionReports
+      const reports = [...data.instructionReports, ...Object.values(data.variableReports || {})]
       const hasIssues = reports.some((rep) => (rep.failures?.length || 0) > 0 || (rep.warnings?.length || 0) > 0)
       if (hasIssues) {
         setValidation(data)
@@ -307,9 +267,10 @@ export default function MigrationWizard() {
 
   return (
     <div style={{ padding: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-4)' }}>
+      {[migrationData.selectionError,migrationData.varsError,migrationData.generationError,migrationData.executionError].filter((message):message is string=>!!message).map(message=><InlineNotification key={message} kind="warning" title="Migration needs review" subtitle={message} hideCloseButton lowContrast />)}
 
       <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', padding: 'var(--spacing-3)', display: 'grid', gap: 'var(--spacing-3)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', columnGap: 'var(--spacing-3)', alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', columnGap: 'var(--spacing-3)', alignItems: 'end' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', columnGap: 'var(--spacing-2)', alignItems: 'end' }}>
             <ComboBox
               id="src-key"
@@ -321,6 +282,7 @@ export default function MigrationWizard() {
               disabled={lockSource}
               onChange={({ selectedItem }: any) => {
                 const val = selectedItem?.key
+                if(val===srcKey)return
                 setSrcKey(val); setSrcVer(undefined); setPlan(null); setValidation(null)
               }}
             />
@@ -330,7 +292,7 @@ export default function MigrationWizard() {
               label={srcVer != null ? String(srcVer) : 'Select source version'}
               items={versionsForKey(srcKey) as any}
               itemToString={(it: any) => (it != null ? String(it) : '')}
-              selectedItem={srcVer as any}
+              selectedItem={(srcVer ?? null) as any}
               disabled={lockSource}
               onChange={({ selectedItem }: any) => {
                 if (selectedItem == null) return
@@ -349,6 +311,7 @@ export default function MigrationWizard() {
               selectedItem={processItems.find(p => p.key === tgtKey) || null}
               onChange={({ selectedItem }: any) => {
                 const val = selectedItem?.key
+                if(val===tgtKey)return
                 setTgtKey(val); setTgtVer(undefined); setPlan(null); setValidation(null)
               }}
             />
@@ -358,7 +321,7 @@ export default function MigrationWizard() {
               label={tgtVer != null ? String(tgtVer) : 'Select target version'}
               items={versionsForKey(tgtKey) as any}
               itemToString={(it: any) => (it != null ? String(it) : '')}
-              selectedItem={tgtVer as any}
+              selectedItem={(tgtVer ?? null) as any}
               onChange={({ selectedItem }: any) => {
                 if (selectedItem == null) return
                 const val = typeof selectedItem === 'number' ? selectedItem : Number(selectedItem)
@@ -374,7 +337,7 @@ export default function MigrationWizard() {
       )}
 
       <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', padding: 'var(--spacing-2)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 'var(--spacing-2)', alignItems: 'stretch', height: 400 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', columnGap: 'var(--spacing-2)', alignItems: 'stretch', height: 400 }}>
           <div style={{ border: '1px solid var(--color-border-primary)', position: 'relative' }}>
             {!sourceXmlQ.data && srcKey && srcVer ? (
               <div style={{ padding: 'var(--spacing-2)', fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>Loading source...</div>
@@ -450,7 +413,7 @@ export default function MigrationWizard() {
             {planInstructions.map((ins: any, idx: number) => {
                 const isExcluded = !!removed[idx]
                 const baseTgt = (ins as any).targetActivityId ?? (Array.isArray((ins as any).targetActivityIds) ? (ins as any).targetActivityIds[0] : undefined)
-                const tgtId = overrides[idx] || baseTgt
+                const tgtId = Object.prototype.hasOwnProperty.call(overrides,idx) ? overrides[idx] : baseTgt
                 const mapped = !!tgtId
                 const status: 'Auto'|'Manual'|'Unmapped'|'Excluded' = isExcluded
                   ? 'Excluded'
@@ -506,6 +469,7 @@ export default function MigrationWizard() {
                       ) : (
                         <div style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center' }}>
                           <ComboBox
+                            autoAlign
                             id={`tgt-${idx}`}
                             items={items}
                             selectedItem={selectedItem}
@@ -594,7 +558,7 @@ export default function MigrationWizard() {
       </div>
 
       {validation && (() => {
-        const reports = validation.instructionReports
+        const reports = [...validation.instructionReports, ...Object.values(validation.variableReports || {})]
         const errorCount = reports.reduce((sum, rep) => sum + (rep.failures?.length || 0), 0)
         const warningCount = reports.reduce((sum, rep) => sum + (rep.warnings?.length || 0), 0)
         if (errorCount === 0 && warningCount === 0) return null
@@ -638,7 +602,7 @@ export default function MigrationWizard() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {validation.instructionReports.flatMap((rep) => {
+                {[...validation.instructionReports, ...Object.entries(validation.variableReports || {}).map(([name,rep]) => ({failures:rep.failures?.map(message=>({message,errorMessage:undefined,warningMessage:undefined})),warnings:rep.warnings?.map(message=>({message,errorMessage:undefined,warningMessage:undefined})),instruction:{sourceActivityIds:[name],targetActivityIds:[],targetActivityId:undefined}}))].flatMap((rep) => {
                   const src = (rep.instruction?.sourceActivityIds || []).join(', ')
                   const tgt = rep.instruction?.targetActivityId || rep.instruction?.targetActivityIds?.join(', ') || ''
                   const failures = (rep.failures || []).map((failure) => ({ level: 'Error' as const, msg: failure.errorMessage || failure.message || 'Validation failure' }))
@@ -664,16 +628,18 @@ export default function MigrationWizard() {
 
       <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', padding: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
         <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>Execute</div>
+        <ExecutionOptionsPanel skipCustomListeners={skipCustomListeners} onSkipCustomListenersChange={setSkipCustomListeners} skipIoMappings={skipIoMappings} onSkipIoMappingsChange={setSkipIoMappings} idPrefix="migration-draft" />
+        <Checkbox id="migration-update-events" labelText="Regenerate the plan with updated event triggers" checked={updateEventTriggers} onChange={(_,data)=>setUpdateEventTriggers(!!data.checked)} />
         <div style={{ fontSize: 'var(--text-12)', display: 'grid', rowGap: 'var(--spacing-1)' }}>
           <div>Instances selected: {instanceIds.length}</div>
           <div>Plan instructions: {visibleMappedCount}</div>
           <div>Affected instances: {previewQ.data?.count ?? '—'}</div>
         </div>
-        <div className={styles.centeredBtn} style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'center' }}>
+        <div className={styles.centeredBtn} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', alignItems: 'center' }}>
           <Button
             size="md"
             kind="primary"
-            disabled={!plan || validateMutation.isPending}
+            disabled={!migrationData.canReview || validateMutation.isPending}
             onClick={handleReviewAndExecute}
           >
             {validateMutation.isPending ? 'Validating…' : 'Review & Execute'}
@@ -699,42 +665,23 @@ export default function MigrationWizard() {
         onRequestClose={() => setVarsOpen(false)}
         onRequestSubmit={() => setVarsOpen(false)}
       >
-        <div style={{ display: 'grid', gap: 'var(--spacing-3)', minWidth: 900 }}>
-          {varRows.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 200px 160px 72px', columnGap: 'var(--spacing-3)', fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
-              <div>Name</div>
-              <div>Value</div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                Type
-                <button type="button" title="String: text, Boolean: true/false, Long: integer, Double: decimal, JSON: object/array, Date: ISO date" style={{ background: 'none', border: 'none', cursor: 'help', padding: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-tertiary)', lineHeight: 0 }}>
-                  <Information size={12} />
-                </button>
-              </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                Scope
-                <button type="button" title="GLOBAL: variable is set on the process instance. LOCAL: variable is set on the current activity scope only." style={{ background: 'none', border: 'none', cursor: 'help', padding: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-tertiary)', lineHeight: 0 }}>
-                  <Information size={12} />
-                </button>
-              </div>
-              <div></div>
-            </div>
-          )}
+        <div style={{ display: 'grid', gap: 'var(--spacing-3)', minWidth: 0 }}>
           {varRows.length === 0 && (
             <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)' }}>
               No variables defined. Variables set here will be applied to all migrated instances. Use this to initialize new variables required by the target process version, or to override existing values.
             </div>
           )}
           {varRows.map((row, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '280px 1fr 200px 160px 72px', columnGap: 'var(--spacing-3)', alignItems: 'center' }}>
-              <TextInput size="sm" id={`var-name-${i}`} labelText="Name" hideLabel value={row.name} onChange={(e: any) => setVarRows(prev => prev.map((r, idx) => idx===i ? { ...r, name: e.target.value } : r))} placeholder="variableName" />
-              <TextInput size="sm" id={`var-val-${i}`} labelText="Value" hideLabel value={row.value} onChange={(e: any) => setVarRows(prev => prev.map((r, idx) => idx===i ? { ...r, value: e.target.value } : r))} placeholder={row.type === 'Boolean' ? 'true / false' : row.type === 'Long' ? '42' : row.type === 'Double' ? '3.14' : row.type === 'JSON' ? '{"key": "value"}' : row.type === 'Date' ? '2025-01-01T00:00:00.000+0000' : 'value'} />
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', columnGap: 'var(--spacing-3)', alignItems: 'center' }}>
+              <TextInput size="sm" id={`var-name-${i}`} labelText="Name" value={row.name} onChange={(e: any) => setVarRows(prev => prev.map((r, idx) => idx===i ? { ...r, name: e.target.value } : r))} placeholder="variableName" />
+              <TextInput size="sm" id={`var-val-${i}`} labelText="Value" value={row.value} onChange={(e: any) => setVarRows(prev => prev.map((r, idx) => idx===i ? { ...r, value: e.target.value } : r))} placeholder={row.type === 'Boolean' ? 'true / false' : row.type === 'Long' ? '42' : row.type === 'Double' ? '3.14' : row.type === 'JSON' ? '{"key": "value"}' : row.type === 'Date' ? '2025-01-01T00:00:00.000+0000' : 'value'} />
               <div style={{ width: '100%' }}>
                 <Dropdown
                   size="sm"
                   id={`var-type-${i}`}
                   ariaLabel="Type"
-                  direction="top"
-                  titleText=""
+                  autoAlign
+                  titleText="Type"
                   label={row.type}
                   items={['String','Boolean','Long','Double','JSON','Date'] as any}
                   itemToString={(it: any) => String(it || '')}
@@ -747,10 +694,10 @@ export default function MigrationWizard() {
                   size="sm"
                   id={`var-scope-${i}`}
                   ariaLabel="Scope"
-                  direction="top"
-                  titleText=""
+                  autoAlign
+                  titleText="Scope"
                   label={row.scope}
-                  items={['GLOBAL','LOCAL'] as any}
+                  items={['GLOBAL'] as any}
                   itemToString={(it: any) => String(it || '')}
                   selectedItem={row.scope as any}
                   onChange={({ selectedItem }: any) => setVarRows(prev => prev.map((r, idx) => idx===i ? { ...r, scope: String(selectedItem) as any } : r))}
@@ -775,8 +722,8 @@ export default function MigrationWizard() {
           for (let idx = 0; idx < planInstructions.length; idx++) {
             const ins = planInstructions[idx]
             const isExcluded = !!removed[idx]
-            const baseTgt = ins?.targetActivityId ?? (Array.isArray(ins?.targetActivityIds) ? ins.targetActivityIds[0] : undefined)
-            const tgtId = overrides[idx] || baseTgt
+            const baseTgt = ins.targetActivityIds[0]
+            const tgtId = Object.prototype.hasOwnProperty.call(overrides,idx) ? overrides[idx] : baseTgt
             const mapped = !!tgtId
             const isActive = Array.isArray(ins.sourceActivityIds) ? ins.sourceActivityIds.some((sid: string) => activeSet.has(sid)) : false
             if (showActiveOnly && !isActive) continue
@@ -791,8 +738,8 @@ export default function MigrationWizard() {
           for (let idx = 0; idx < planInstructions.length; idx++) {
             const ins = planInstructions[idx]
             const isExcluded = !!removed[idx]
-            const baseTgt = ins?.targetActivityId ?? (Array.isArray(ins?.targetActivityIds) ? ins.targetActivityIds[0] : undefined)
-            const tgtId = overrides[idx] || baseTgt
+            const baseTgt = ins.targetActivityIds[0]
+            const tgtId = Object.prototype.hasOwnProperty.call(overrides,idx) ? overrides[idx] : baseTgt
             const mapped = !!tgtId
             const isActive = Array.isArray(ins.sourceActivityIds) ? ins.sourceActivityIds.some((sid: string) => activeSet.has(sid)) : false
             if (showActiveOnly && !isActive) continue
@@ -819,6 +766,8 @@ export default function MigrationWizard() {
         onClose={() => setReviewModalOpen(false)}
         onExecuteBatch={(auditReason) => { executeMutation.mutate(auditReason); setReviewModalOpen(false) }}
         onExecuteDirect={(auditReason) => { executeDirectMutation.mutate(auditReason); setReviewModalOpen(false) }}
+        batchDeniedReason={!migrationData.reviewApproved?'Review the current plan before executing.':null}
+        directDeniedReason={!migrationData.reviewApproved?'Review the current plan before executing.':null}
         batchPending={executeMutation.isPending}
         directPending={executeDirectMutation.isPending}
       />

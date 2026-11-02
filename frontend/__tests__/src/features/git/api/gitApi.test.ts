@@ -183,7 +183,7 @@ describe('gitApi', () => {
 
   describe('deployments', () => {
     it('deploys changes', async () => {
-      const mockResponse = { deploymentId: 'd1', success: true, message: 'Deployed' };
+      const mockResponse = { deploymentId: 'd1', commitSha: 'abcdef1', filesChanged: 1 };
       const deployData = { projectId: 'p1', message: 'Deploy v1.0' };
       vi.mocked(apiClient.post).mockResolvedValue(mockResponse);
       
@@ -191,6 +191,36 @@ describe('gitApi', () => {
       
       expect(apiClient.post).toHaveBeenCalledWith('/git-api/deploy', deployData, { credentials: 'include' });
       expect(result).toEqual(mockResponse);
+    });
+
+    it.each([{}, { deploymentId: '', commitSha: 'abc1234', filesChanged: 1 },
+      { deploymentId: 'd1', commitSha: '', filesChanged: 1 }, { deploymentId: 'd1', commitSha: 'abc1234', filesChanged: -1 }])('rejects an unverified deployment response %j', async response => {
+      vi.mocked(apiClient.post).mockResolvedValue(response);
+      await expect(gitApi.deploy({ projectId: 'p1', message: 'Reviewed' })).rejects.toThrow('receipt was not verified');
+    });
+
+    it('keeps the confirmed revision across an asynchronous response and refuses a different acknowledgement', async () => {
+      let finish!: (value: unknown) => void;
+      vi.mocked(apiClient.post).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      const request = { projectId: 'p1', message: 'Reviewed', vcsCommitId: 'version-A' };
+      const operation = gitApi.deploy(request); request.vcsCommitId = 'version-B';
+      const rejection = expect(operation).rejects.toThrow('version was not verified');
+      finish({ deploymentId: 'd1', commitSha: 'abcdef1', filesChanged: 1, vcsCommitId: 'version-B' });
+      await rejection;
+      expect(vi.mocked(apiClient.post).mock.calls[0][1]).toMatchObject({ vcsCommitId: 'version-A' });
+    });
+
+    it.each([undefined, 'another-tag'])('does not acknowledge a missing or wrong requested Git tag', async tag => {
+      vi.mocked(apiClient.post).mockResolvedValue({ deploymentId: 'd1', commitSha: 'abcdef1', filesChanged: 1, tag });
+      await expect(gitApi.deploy({ projectId: 'p1', message: 'Reviewed', createTag: true, tagName: 'reviewed-tag' })).rejects.toThrow('tag was not verified');
+    });
+
+    it('uses the versioned route and never falls back when an older host returns 404', async () => {
+      const unavailable = Object.assign(new Error('Missing versioned route'), { status: 404 });
+      vi.mocked(apiClient.post).mockRejectedValue(unavailable);
+      const request = { projectId: 'p1', message: 'Reviewed', vcsCommitId: 'reviewed-version' };
+      await expect(gitApi.deploy(request)).rejects.toBe(unavailable);
+      expect(apiClient.post).toHaveBeenCalledExactlyOnceWith('/git-api/deploy-from-version', request, { credentials: 'include' });
     });
 
     it('gets deployments for project', async () => {

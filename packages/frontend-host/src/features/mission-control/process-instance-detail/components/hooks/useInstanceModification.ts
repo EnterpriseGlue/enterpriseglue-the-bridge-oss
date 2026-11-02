@@ -33,6 +33,8 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
   const modificationRevisionRef = useRef(0)
   currentEngineIdRef.current = engineId
 
+  useEffect(() => () => { modificationRevisionRef.current += 1 }, [])
+
   const bindModificationToCurrentEngine = useCallback(() => {
     if (!modificationEngineIdRef.current) {
       modificationRevisionRef.current += 1

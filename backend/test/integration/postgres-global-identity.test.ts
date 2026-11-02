@@ -1,5 +1,6 @@
 import { ssoConnectionService } from '@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js';
 import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
+import { PlatformUserResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -33,7 +34,7 @@ import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persiste
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoSyncRun.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
-import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
+import { runWithPlatformDatabaseCapability, getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 import { requireCloudAccountOrTenantAuth, requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import identityRoutes from '@enterpriseglue/backend-host/modules/auth/routes/identity-oidc.js';
 import refreshRoutes from '@enterpriseglue/backend-host/modules/auth/routes/refresh.js';
@@ -317,8 +318,8 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await admin.query(`CREATE FUNCTION ${schema}.reject_manual_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.details::jsonb->>'sourceRef'='manual-platform-administrator' THEN RAISE EXCEPTION 'fixture manual audit failure'; END IF; RETURN NEW; END $$`);
     await admin.query(`CREATE TRIGGER reject_manual_audit BEFORE INSERT ON ${schema}.audit_logs FOR EACH ROW EXECUTE FUNCTION ${schema}.reject_manual_audit()`);
     try {
-      await expect(userService.updateUser(target.id, { platformRole: 'user', lastName: 'must roll back' })).rejects.toThrow('Failed transaction requires rollback');
-      expect((await runtime.getRepository(User).findOneBy({ id: target.id }))!.lastName).toBe(before.lastName);
+      await expect(userService.updateUser(target.id, { platformRole: 'user' })).rejects.toThrow('Failed transaction requires rollback');
+      expect((await runtime.getRepository(User).findOneBy({ id: target.id }))!.updatedAt).toBe(before.updatedAt);
       expect((await adminMemberships(target.id))).toHaveLength(1);
       expect((await runtime.getRepository(RefreshToken).findOneBy({ id: tokenId }))!.revokedAt).toBeNull();
     } finally {
@@ -351,17 +352,39 @@ describe('verified global OIDC callback and renewable sessions under forced Post
 
   it.each(['updateUser', 'deactivateUser'] as const)('removes only the canonical inactive user baseline through %s', async method => {
     const target = await userService.createPendingUser({ email: `baseline-${method}@example.test`, createdByUserId: 'fixture-operator' });
+    const profile = await userService.getUser(target.id);
+    expect(PlatformUserResponseSchema.parse(profile)).toEqual(profile);
+    await expect(userService.updateUser(target.id, { firstName: 'Unverified ownership override' })).rejects.toMatchObject({ statusCode: 409 });
     const baseline = () => runWithPlatformDatabaseCapability({ kind: 'authenticated-account', userId: target.id }, () =>
       runtime.getRepository(AuthzGroupMembership).findBy({ userId: target.id, groupId: 'system.group.authenticated_users' }));
     expect(await baseline()).toHaveLength(1);
     await expect(runtime.transaction(manager => authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, target.id))).rejects.toThrow('persisted inactive user');
     await expect(runtime.transaction(manager => authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, 'unknown-user'))).rejects.toThrow('persisted inactive user');
-    if (method === 'updateUser') await userService.updateUser(target.id, { isActive: false });
-    else await userService.deactivateUser(target.id);
+    const { userDirectoryService } = await import('@enterpriseglue/shared/services/platform-admin/UserDirectoryService.js');
+    if (method === 'updateUser') {
+      await expect(userService.updateUser(target.id, { isActive: false })).rejects.toMatchObject({ statusCode: 409 });
+      expect(await baseline()).toHaveLength(1);
+      await userDirectoryService.deactivate({ userId: target.id, actorId: 'fixture-operator', tenantId: null, reason: 'Fixture containment' });
+    } else await userService.deactivateUser(target.id);
     expect(await baseline()).toHaveLength(0);
     expect((await runtime.getRepository(User).findOneBy({ id: target.id }))!.isActive).toBe(false);
-    await userService.updateUser(target.id, { isActive: true });
+    await expect(userService.updateUser(target.id, { isActive: true })).rejects.toMatchObject({ statusCode: 409 });
+    await userDirectoryService.reactivate({ userId: target.id, actorId: 'fixture-operator', tenantId: null, reason: 'Fixture restoration' });
     expect(await baseline()).toHaveLength(1);
+    const revocation = await userDirectoryService.revokeSessions({ userId: target.id, actorId: 'fixture-operator', tenantId: null, reason: 'Fixture session invalidation' });
+    expect(revocation.authSessionVersion).toBe(3);
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
+    const audits = await admin.query(`SELECT action, details FROM ${schema}.audit_logs WHERE resource_id=$1`, [target.id]);
+    expect(audits).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'identity.user.reactivate' }),
+      expect.objectContaining({ action: 'identity.user.sessions.revoke' }),
+    ]));
+    if (method === 'updateUser') expect(audits).toContainEqual(expect.objectContaining({ action: 'identity.user.deactivate' }));
+    const forbidden = { id: randomUUID(), tenantId: null, userId: 'fixture-operator', action: 'identity.user.deactivate', resourceType: 'user', resourceId: target.id,
+      ipAddress: null, userAgent: null, details: '{}', createdAt: Date.now() };
+    await expect(runtime.getRepository(AuditLog).insert(forbidden)).rejects.toThrow('row-level security');
+    await expect(runWithPlatformDatabaseCapability({ kind: 'audit-append', rowId: randomUUID() }, () => runtime.getRepository(AuditLog).insert(forbidden))).rejects.toThrow('row-level security');
+    expect(getPlatformDatabaseCapability()).toBeUndefined();
   });
 
   it('creates a tenant and its audited owner assignment from the platform context without leaking tenant scope', async () => {

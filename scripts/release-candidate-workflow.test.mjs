@@ -121,6 +121,18 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /results\.every\(\(result\) => result === 'success'\)/)
 })
 
+test('real variable transport runs in the required existing pinned-engine qualification', async () => {
+  const job = stage.slice(stage.indexOf('  qualify-operaton-browser:\n'), stage.indexOf('  stage-application-images:\n'))
+  const command = 'pnpm run test:operaton-variable-values'
+  assert.match(job, /OPERATON_VARIABLE_FIXTURE_URL: http:\/\/127\.0\.0\.1:18080\/engine-rest/)
+  assert(job.indexOf('Start pinned Operaton 2.1.0') < job.indexOf(command))
+  assert(job.indexOf(command) < job.indexOf('Run real Operaton process overview'))
+  const step = job.slice(job.indexOf('      - name: Qualify native JSON'), job.indexOf('      - name: Run real Operaton process overview'))
+  assert.doesNotMatch(step, /continue-on-error|if:|\|\| true/)
+  const manifest = JSON.parse(await read('../package.json'))
+  assert.match(manifest.scripts['test:operaton-variable-values'], /test\/qualification\/operaton-variable-values\.test\.ts/)
+})
+
 test('candidate signatures bind the schema-epoch manifest in the image, chart, payload and receipt', async () => {
   const receiptContract = await read('./release-candidate-receipt.mjs')
   assert.match(stage, /node scripts\/schema-epoch-manifest\.mjs verify/)

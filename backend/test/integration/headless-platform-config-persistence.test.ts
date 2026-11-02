@@ -2,11 +2,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const migrationTestEnv = (name: string, fallback: string): string =>
   process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
 
 const schema = `headless_config_${Date.now()}`;
+const adminDatabase = migrationTestEnv('POSTGRES_DATABASE', 'postgres');
+const fixtureDatabase = `headless_config_${randomUUID().replace(/-/g, '')}`;
+let databaseCreated = false;
 let bundleDirectory = '';
 let bundlePath = '';
 const baseEnv = {
@@ -14,7 +18,7 @@ const baseEnv = {
   POSTGRES_PORT: migrationTestEnv('POSTGRES_PORT', '5432'),
   POSTGRES_USER: migrationTestEnv('POSTGRES_USER', 'postgres'),
   POSTGRES_PASSWORD: migrationTestEnv('POSTGRES_PASSWORD', 'postgres'),
-  POSTGRES_DATABASE: migrationTestEnv('POSTGRES_DATABASE', 'postgres'),
+  POSTGRES_DATABASE: fixtureDatabase,
 };
 
 function applyEnvironment(): void {
@@ -39,7 +43,7 @@ function applyEnvironment(): void {
   process.env.EG_CONFIG_FAIL_CLOSED = 'true';
 }
 
-async function createPool() {
+async function createPool(database = baseEnv.POSTGRES_DATABASE) {
   const pgModule = await import('pg');
   const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
   return new Pool({
@@ -47,7 +51,7 @@ async function createPool() {
     port: Number(baseEnv.POSTGRES_PORT),
     user: baseEnv.POSTGRES_USER,
     password: baseEnv.POSTGRES_PASSWORD,
-    database: baseEnv.POSTGRES_DATABASE,
+    database,
     ssl: false,
   });
 }
@@ -232,6 +236,11 @@ const files = {
 
 describe('headless platform configuration persistence', () => {
   beforeAll(async () => {
+    // initializeDatabase may move main into the configured schema. Keep that
+    // legitimate bootstrap behavior away from the shared integration database.
+    const admin = await createPool(adminDatabase);
+    try { await admin.query(`CREATE DATABASE "${fixtureDatabase}"`); databaseCreated = true; }
+    finally { await admin.end(); }
     bundleDirectory = await mkdtemp(join(tmpdir(), 'enterpriseglue-headless-config-'));
     bundlePath = join(bundleDirectory, 'bundle.json');
     await writeFile(bundlePath, `${JSON.stringify({ bundle, files })}\n`, { mode: 0o600 });
@@ -245,7 +254,11 @@ describe('headless platform configuration persistence', () => {
       const { closeDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
       await closeDataSource();
     } finally {
-      await dropSchema();
+      if (databaseCreated) {
+        const admin = await createPool(adminDatabase);
+        try { await admin.query(`DROP DATABASE "${fixtureDatabase}" WITH (FORCE)`); }
+        finally { await admin.end(); }
+      }
       if (bundleDirectory) await rm(bundleDirectory, { recursive: true, force: true });
     }
   });
@@ -257,6 +270,8 @@ describe('headless platform configuration persistence', () => {
     const { runConfigBundleBootstrap } = await import('../../../packages/backend-host/src/services/configBundleBootstrap.js');
 
     await initializeDatabase();
+    const { getDataSource: getInitialDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
+    expect((await getInitialDataSource()).options).toMatchObject({ database: fixtureDatabase });
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({
       mode: 'apply',
       status: 'applied',

@@ -169,10 +169,11 @@ class AuthService {
   }
 
   /**
-   * Delete user (admin only)
+   * Deactivate user through the audited lifecycle action (admin only).
    */
-  async deleteUser(id: string): Promise<void> {
-    await apiClient.delete(`${API_BASE_URL}/users/${id}`);
+  async deleteUser(id: string, reason?: string): Promise<void> {
+    if (!reason || reason.trim().length < 3 || reason.trim().length > 500) throw new Error('An administrator reason (3–500 characters) is required');
+    await apiClient.post(`${API_BASE_URL}/users/${encodeURIComponent(id)}/deactivate`, { reason });
   }
 
   async deleteUserPermanently(id: string): Promise<void> {

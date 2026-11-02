@@ -8,8 +8,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, InlineNotification, ProgressIndicator, ProgressStep, Toggle, Dropdown } from '@carbon/react';
 import { TrashCan } from '@carbon/icons-react';
 import { apiClient } from '../../../shared/api/client';
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
+import { useProjectActionFence } from '../../starbase/hooks/useProjectActionFence';
+import { getBrowserSessionRevision } from '../../../utils/browserSession';
+import { getProjectCommitSnapshots, selectCommitFileSnapshot } from '../api/commitSnapshots';
+import { FILE_SCOPED_COMMIT_SOURCES } from '@enterpriseglue/shared/utils/commit-snapshot.js';
+import type { CommitFileSnapshot as FileSnapshot } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { fetchList } from '../../../shared/api/fetchList';
 import { evaluateStarbaseMissionControlBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz';
+import { LocalVersionRestoreResponseSchema } from '@enterpriseglue/shared/schemas/starbase/version.js';
+import { CommitFileRestoreResponseSchema } from '@enterpriseglue/shared/schemas/starbase/commit-snapshot.js';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice';
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate';
@@ -21,6 +29,7 @@ import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-ac
 import type { FileDeploymentSummary as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 import { getAccessibleEngines, getEngineEnvironmentTags } from '../../mission-control/engines/api/engines';
+import { getMissionControlTarget, type MissionControlTarget } from '../utils/missionControlTarget';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -31,6 +40,7 @@ interface GitVersionsPanelProps {
   fileId?: string;
   fileName?: string;
   fileType?: 'bpmn' | 'dmn';
+  fileFolderId?: string | null;
   hasUnsavedVersion?: boolean;
   lastEditedAt?: number | null;
   saveMode?: 'git' | 'local';
@@ -38,6 +48,15 @@ interface GitVersionsPanelProps {
   onVersionSaveSuccess?: () => void;
   canRestoreVersion?: boolean;
   restoreVersionUnavailableReason?: string | null;
+}
+
+interface RestoreIntent {
+  projectId: string;
+  fileId: string;
+  commitId: string;
+  saveMode: 'git' | 'local';
+  assertCurrent: () => void;
+  isCurrent: () => boolean;
 }
 
 interface VcsCommit {
@@ -67,7 +86,7 @@ interface LocalVersionDetail extends LocalVersion {
   xml: string;
 }
 
-const MANUAL_SOURCES = new Set(['manual', 'restore', 'file-save']);
+const MANUAL_SOURCES = new Set<string>(['manual', 'restore', ...FILE_SCOPED_COMMIT_SOURCES]);
 const AUTO_SAVE_BEFORE_RESTORE_MESSAGE = 'Auto-saved before restore';
 
 function isManualCommit(commit: VcsCommit): boolean {
@@ -92,14 +111,6 @@ function getSourceLabel(source: string | undefined): string | null {
   }
 }
 
-interface FileSnapshot {
-  id: string;
-  name: string;
-  type: string;
-  content: string | null;
-  changeType: string;
-}
-
 type EngineWithAccess = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>;
 
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean;
@@ -115,14 +126,6 @@ interface DeploymentBadge {
   engineId: string;
   engineDeploymentId: string;
   deleteDecision: UiAuthzDecision;
-}
-
-type MissionControlTarget = {
-  engineId: string;
-  path: '/mission-control/processes' | '/mission-control/decisions';
-  keyParam: 'process' | 'decision';
-  key: string;
-  version: number;
 }
 
 function formatTime(timestamp: number): string {
@@ -258,26 +261,6 @@ function getDeploymentVersion(row: LatestDeploymentByFile, fileType: 'bpmn' | 'd
   return Math.max(...versions);
 }
 
-function getMissionControlTarget(row: LatestDeploymentByFile, fileType: 'bpmn' | 'dmn'): MissionControlTarget | null {
-  const desiredKind = fileType === 'dmn' ? 'decision' : 'process';
-  const artifacts = Array.isArray(row.artifacts) ? row.artifacts : [];
-  const matches = artifacts
-    .filter((artifact) => String(artifact?.kind || '') === desiredKind && String(artifact?.key || ''))
-    .sort((a, b) => Number(b?.version || 0) - Number(a?.version || 0));
-  const best = matches[0];
-  const key = String(best?.key || '');
-  const version = Number(best?.version);
-  const engineId = String(row.engineId || '');
-  if (!engineId || !key || !Number.isFinite(version)) return null;
-  return {
-    engineId,
-    path: fileType === 'dmn' ? '/mission-control/decisions' : '/mission-control/processes',
-    keyParam: fileType === 'dmn' ? 'decision' : 'process',
-    key,
-    version,
-  };
-}
-
 function normalizeTimestamp(value: number): number {
   return value > 1_000_000_000_000 ? value : value * 1000;
 }
@@ -296,6 +279,7 @@ export default function GitVersionsPanel({
   fileId,
   fileName,
   fileType = 'bpmn',
+  fileFolderId = null,
   hasUnsavedVersion,
   lastEditedAt,
   saveMode = 'git',
@@ -305,17 +289,17 @@ export default function GitVersionsPanel({
   restoreVersionUnavailableReason,
 }: GitVersionsPanelProps) {
   const queryClient = useQueryClient();
-  const { tenantNavigate } = useTenantNavigate();
-  const { hasEnginePermission, hasProjectPermission, permissions } = useAuth();
+  const { tenantNavigate, tenantSlug, effectivePathname } = useTenantNavigate();
+  const { hasEnginePermission, hasProjectPermission, permissions, user, sessionRevision } = useAuth();
   const [selectedCommit, setSelectedCommit] = useState<VcsCommit | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewXml, setPreviewXml] = useState<string | null>(null);
   const [deploymentPendingDelete, setDeploymentPendingDelete] = useState<DeploymentBadge | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const [showSystemVersions, setShowSystemVersions] = useState(false);
   const [environmentFilter, setEnvironmentFilter] = useState<{ id: string; label: string } | null>({ id: 'all', label: 'All environments' });
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [bridgeDecision, setBridgeDecision] = useState<BridgeDecisionResponse | null>(null);
+  const bridgeRequest = React.useRef(0);
   const projectResource = React.useMemo(() => ({ type: 'project' as const, id: projectId }), [projectId]);
   const localVersionsReadDecision = evaluateActionSnapshot(permissions, 'project.versions.read', projectResource);
   const localVersionsRestoreDecision = evaluateActionSnapshot(permissions, 'project.versions.restore', projectResource);
@@ -419,18 +403,23 @@ export default function GitVersionsPanel({
 
   // Fetch file snapshots for selected commit
   const snapshotsQuery = useQuery({
-    queryKey: ['vcs', 'commit-files', projectId, selectedCommit?.id],
+    queryKey: saveMode === 'local'
+      ? ['starbase', 'version-file', projectId, fileId, selectedCommit?.id]
+      : ['vcs', 'commit-files', projectId, selectedCommit?.id],
     queryFn: async () => {
       if (saveMode === 'local') {
         if (!fileId || !selectedCommit?.id) {
           return { files: [] as FileSnapshot[] };
         }
         const version = await apiClient.get<LocalVersionDetail>(
-          `/starbase-api/files/${fileId}/versions/${selectedCommit.id}`
+          `/starbase-api/files/${encodeURIComponent(fileId)}/versions/${encodeURIComponent(selectedCommit.id)}`
         );
+        if (version.fileId !== fileId) throw new Error('Saved version does not match the requested file');
         return {
           files: [{
             id: version.id,
+            mainFileId: fileId,
+            folderId: fileFolderId,
             name: fileName || 'Version',
             type: fileType,
             content: version.xml,
@@ -438,27 +427,29 @@ export default function GitVersionsPanel({
           }],
         };
       }
-      return apiClient.get<{ files: FileSnapshot[] }>(
-        `/vcs-api/projects/${projectId}/commits/${selectedCommit!.id}/files`
-      );
+      return getProjectCommitSnapshots(projectId, selectedCommit!.id);
     },
     enabled: !!selectedCommit && previewOpen && (saveMode === 'local' ? !!fileId : !!projectId && canReadVcsCommits),
   });
 
   // Restore mutation
-  const autoSaveBeforeRestore = React.useCallback(async () => {
+  const autoSaveBeforeRestore = React.useCallback(async (assertCurrent: () => void) => {
+    assertCurrent();
     if (!hasUnsavedVersion) return;
     if (!beforeVersionSave) {
       throw new Error('Unable to preserve unsaved changes before restore');
     }
 
     await beforeVersionSave();
+    assertCurrent();
 
     if (saveMode === 'local') {
       if (!fileId) throw new Error('Missing fileId for local pre-restore save');
-      await apiClient.post(`/starbase-api/files/${fileId}/versions`, {
+      const saved = await apiClient.post<{ id?: string }>(`/starbase-api/files/${encodeURIComponent(fileId)}/versions`, {
         message: AUTO_SAVE_BEFORE_RESTORE_MESSAGE,
       });
+      assertCurrent();
+      if (typeof saved?.id !== 'string' || !saved.id.trim()) throw new Error('Saved version was not verified; restore stopped');
       queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
       queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
     } else {
@@ -470,7 +461,9 @@ export default function GitVersionsPanel({
       if (fileId) {
         body.fileIds = [fileId];
       }
-      await apiClient.post(`/vcs-api/projects/${projectId}/commit`, body);
+      const saved = await apiClient.post<{ commitId?: string }>(`/vcs-api/projects/${encodeURIComponent(projectId)}/commit`, body);
+      assertCurrent();
+      if (typeof saved?.commitId !== 'string' || !saved.commitId.trim()) throw new Error('Saved version was not verified; restore stopped');
       queryClient.setQueryData(
         ['uncommitted-files', projectId, 'draft'],
         (prev: any) => {
@@ -488,6 +481,7 @@ export default function GitVersionsPanel({
       queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId, 'draft'] });
     }
 
+    assertCurrent();
     onVersionSaveSuccess?.();
   }, [beforeVersionSave, fileId, hasUnsavedVersion, onVersionSaveSuccess, projectId, queryClient, saveMode, vcsCommitCreateUnavailableReason]);
 
@@ -498,76 +492,102 @@ export default function GitVersionsPanel({
     ? baseRestoreUnavailableReason
     : baseRestoreUnavailableReason || vcsCommitRestoreUnavailableReason;
 
+  const restoreAuthority = JSON.stringify([projectId, fileId, saveMode, restoreUnavailableReason,
+    vcsCommitCreateUnavailableReason, user?.session?.principal.id || user?.id || null,
+    user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)]);
+  const restoreScope = JSON.stringify([restoreAuthority, previewOpen, selectedCommit?.id]);
+  const restoreScopeRef = React.useRef(restoreScope);
+  const restoreLifetimeRef = React.useRef(0);
+  const submittedRestoreRef = React.useRef<number | null>(null);
+  if (restoreScopeRef.current !== restoreScope) {
+    restoreScopeRef.current = restoreScope;
+    restoreLifetimeRef.current += 1;
+  }
+  React.useEffect(() => () => { restoreLifetimeRef.current += 1; }, []);
+  React.useEffect(() => { setPreviewOpen(false); setSelectedCommit(null); }, [restoreAuthority]);
+
   const restoreMutation = useMutation({
-    mutationFn: async (commitId: string) => {
+    mutationFn: async (intent: RestoreIntent) => {
+      intent.assertCurrent();
       if (restoreUnavailableReason) {
         throw new Error(restoreUnavailableReason);
       }
 
-      await autoSaveBeforeRestore();
-      if (saveMode === 'local') {
-        if (!fileId) throw new Error('Missing fileId for local restore');
-        return apiClient.post(`/starbase-api/files/${fileId}/versions/${commitId}/restore`);
-      }
-      return apiClient.post(`/vcs-api/projects/${projectId}/commits/${commitId}/restore`);
-    },
-    onSuccess: () => {
-      if (saveMode === 'local') {
-        if (fileId) {
-          queryClient.invalidateQueries({ queryKey: ['versions', fileId] });
-          queryClient.invalidateQueries({ queryKey: ['versions-panel', 'local', projectId, fileId] });
-          try {
-            sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`);
-          } catch {}
-        }
+      if (!fileId) throw new Error('Missing fileId for file restore');
+      await autoSaveBeforeRestore(intent.assertCurrent);
+      intent.assertCurrent();
+      const local = intent.saveMode === 'local';
+      const raw = await apiClient.post(local
+        ? `/starbase-api/files/${encodeURIComponent(intent.fileId)}/versions/${encodeURIComponent(intent.commitId)}/restore`
+        : `/vcs-api/projects/${encodeURIComponent(intent.projectId)}/commits/${encodeURIComponent(intent.commitId)}/files/${encodeURIComponent(intent.fileId)}/restore`);
+      intent.assertCurrent();
+      if (local) {
+        const receipt = LocalVersionRestoreResponseSchema.safeParse(raw);
+        if (!receipt.success || receipt.data.fileId !== intent.fileId || receipt.data.versionId !== intent.commitId) throw new Error('Restore response was not verified; refresh before retrying.');
       } else {
-        queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
-        if (fileId) {
-          try {
-            sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`);
-          } catch {}
-        }
+        const receipt = CommitFileRestoreResponseSchema.safeParse(raw);
+        if (!receipt.success || receipt.data.filesRestored !== 1) throw new Error('Restore response was not verified; refresh before retrying.');
       }
-      queryClient.invalidateQueries({ queryKey: ['file'] });
-      setPreviewOpen(false);
-      setSelectedCommit(null);
-      // Clear local XML history so restored content takes effect
-      if (fileId) {
-        localStorage.removeItem(`xml-history-${fileId}`);
+      return raw;
+    },
+    onSuccess: async (_data, intent) => {
+      if (!intent.isCurrent()) return;
+      const { fileId, projectId, saveMode } = intent;
+      const keys = saveMode === 'local' ? [['versions', fileId], ['versions-panel', 'local', projectId, fileId]] : [['vcs', 'commits', projectId]];
+      for (const queryKey of [...keys, ['file', fileId]]) {
+        intent.assertCurrent();
+        await queryClient.invalidateQueries({ queryKey }, { throwOnError: true });
       }
-      // Reload to show restored content
+      intent.assertCurrent();
+      try { sessionStorage.removeItem(`starbase:lastEditedAt:${fileId}`); } catch {}
+      try { localStorage.removeItem(`xml-history-${fileId}`); } catch {}
+      setPreviewOpen(false); setSelectedCommit(null);
       window.location.reload();
     },
   });
 
+  const historyAuthority = JSON.stringify([projectId, fileId, saveMode,
+    user?.session?.principal.id || user?.id || null, user?.session?.tenant.id || null,
+    sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)]);
+  const submittedDeletions = React.useRef({ authority: historyAuthority, targets: new Set<string>() });
+  if (submittedDeletions.current.authority !== historyAuthority) submittedDeletions.current = { authority: historyAuthority, targets: new Set() };
+  const [deletionError, setDeletionError] = useState<string | null>(null);
+  const deletionDecision = evaluateActionSnapshot(permissions, 'engine.deployments.delete', { type: 'engine', id: deploymentPendingDelete?.engineId || null });
+  const deletionFence = useProjectActionFence(JSON.stringify([historyAuthority, deploymentPendingDelete?.engineId, deploymentPendingDelete?.engineDeploymentId]));
+  React.useEffect(() => { setDeploymentPendingDelete(null); setDeletionError(null); }, [historyAuthority]);
+  const deletionKey = (engineId?: string | null, deploymentId?: string | null) => JSON.stringify([engineId, deploymentId]);
   const deleteDeploymentMutation = useMutation({
-    mutationFn: async (deployment: DeploymentBadge) => {
-      if (!deployment.engineDeploymentId || !deployment.engineId) {
-        throw new Error('Deployment delete unavailable for this record');
-      }
-      if (!deployment.deleteDecision.allowed) {
-        throw new Error(deployment.deleteDecision.reason || 'Deployment delete unavailable');
-      }
-      const params = new URLSearchParams({
-        engineId: deployment.engineId,
-        cascade: 'false',
-      });
-      return apiClient.delete(
-        `/starbase-api/deployments/${encodeURIComponent(deployment.engineDeploymentId)}?${params.toString()}`,
-        { credentials: 'include' }
-      );
-    },
-    onSuccess: () => {
-      setDeploymentPendingDelete(null);
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, 'latest'] });
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, fileId, 'history'] });
+    mutationFn: async (intent: { engineId: string; deploymentId: string; projectId: string;
+      operation: NonNullable<ReturnType<typeof deletionFence.begin>> }) => {
+      const { operation } = intent;
+      try {
+        operation.check();
+        const params = new URLSearchParams({ engineId: intent.engineId, cascade: 'false' });
+        await apiClient.deleteNoContent(`/starbase-api/deployments/${encodeURIComponent(intent.deploymentId)}?${params.toString()}`, { credentials: 'include' });
+        operation.check();
+        await queryClient.invalidateQueries({ queryKey: ['engine-deployments', intent.projectId] }, { throwOnError: true });
+        operation.check();
+        setDeploymentPendingDelete(null);
+      } catch (error) {
+        try {
+          operation.check(); operation.markUncertain();
+          setDeletionError(parseApiError(error, 'Delete failed').message);
+        } catch {}
+      } finally { operation.finish(); }
     },
   });
+  const handleDeleteDeployment = () => {
+    const engineId = deploymentPendingDelete?.engineId, deploymentId = deploymentPendingDelete?.engineDeploymentId;
+    if (!engineId || !deploymentId || submittedDeletions.current.targets.has(deletionKey(engineId, deploymentId))) return;
+    const operation = deletionFence.begin(saveMode === 'git' && hasEngineAccess && canReadProjectDeployments && deletionDecision.allowed);
+    if (!operation) return;
+    submittedDeletions.current.targets.add(deletionKey(engineId, deploymentId)); setDeletionError(null);
+    deleteDeploymentMutation.mutate({ engineId, deploymentId, projectId, operation });
+  };
 
   const openCommitPreview = React.useCallback((commit: VcsCommit) => {
+    bridgeRequest.current += 1;
     setSelectedCommit(commit);
-    setPreviewXml(null); // Reset preview XML
     setPreviewOpen(true);
   }, []);
 
@@ -578,14 +598,17 @@ export default function GitVersionsPanel({
   const handleClosePreview = () => {
     setPreviewOpen(false);
     setSelectedCommit(null);
-    setPreviewXml(null);
   };
 
   const handleRestore = () => {
-    if (restoreUnavailableReason) return;
-    if (selectedCommit) {
-      restoreMutation.mutate(selectedCommit.id);
-    }
+    if (restoreUnavailableReason || !fileId || !selectedCommit || restoreMutation.isPending || submittedRestoreRef.current === restoreLifetimeRef.current) return;
+    const lifetime = restoreLifetimeRef.current;
+    const session = getBrowserSessionRevision();
+    const isCurrent = () => lifetime === restoreLifetimeRef.current && session === getBrowserSessionRevision();
+    submittedRestoreRef.current = lifetime;
+    restoreMutation.mutate({ projectId, fileId, commitId: selectedCommit.id, saveMode, isCurrent,
+      assertCurrent: () => { if (!isCurrent()) throw new Error('Restore context changed; review the selected version again'); },
+    });
   };
 
   const deploymentsForFile = React.useMemo(() => {
@@ -679,62 +702,9 @@ export default function GitVersionsPanel({
     return map;
   }, [deploymentsForFile, fileType, activeEnvironment, environmentColorByName, getDeploymentDeleteDecision, hasEngineAccess]);
 
-  // Extract XML from snapshots when loaded
-  React.useEffect(() => {
-    if (snapshotsQuery.data?.files) {
-      const files = snapshotsQuery.data.files;
-
-      const score = (s: FileSnapshot) => {
-        let v = 0;
-        if (s.content) v += 10;
-        if (s.changeType !== 'unchanged') v += 5;
-        if (s.changeType === 'deleted') v -= 20;
-        return v;
-      };
-
-      const pickBest = (candidates: FileSnapshot[]) => {
-        let best: FileSnapshot | undefined;
-        for (const c of candidates) {
-          if (!best || score(c) > score(best)) best = c;
-        }
-        return best;
-      };
-
-      // Prefer the most recent snapshot for this exact file (name + type)
-      let file: FileSnapshot | undefined;
-
-      if (fileName) {
-        const exactMatches = files.filter((f) => f.name === fileName && f.type === fileType);
-        if (exactMatches.length > 0) {
-          file = pickBest(exactMatches);
-        } else {
-          const nameMatches = files.filter((f) => f.name === fileName);
-          if (nameMatches.length > 0) {
-            file = pickBest(nameMatches);
-          }
-        }
-      }
-
-      // Fallbacks: latest by type, then any file with content
-      if (!file) {
-        const typeMatches = files.filter((f) => f.type === fileType);
-        if (typeMatches.length > 0) {
-          file = pickBest(typeMatches);
-        }
-      }
-
-      if (!file) {
-        const anyWithContent = files.filter((f) => f.content);
-        if (anyWithContent.length > 0) {
-          file = pickBest(anyWithContent);
-        }
-      }
-
-      if (file?.content) {
-        setPreviewXml(file.content);
-      }
-    }
-  }, [snapshotsQuery.data, fileName, fileType]);
+  const previewXml = previewOpen && selectedCommit ? selectCommitFileSnapshot(snapshotsQuery.data?.files || [], {
+    id: fileId, name: fileName, type: fileType, folderId: fileFolderId,
+  })?.content ?? null : null;
 
   const handleJumpToCommit = React.useCallback((commit: VcsCommit, event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -742,45 +712,41 @@ export default function GitVersionsPanel({
     openCommitPreview(commit);
   }, [openCommitPreview]);
 
-  const handleOpenMissionControl = React.useCallback(async (target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
+  const bridgeAuthority = JSON.stringify([historyAuthority, tenantSlug, effectivePathname, previewOpen,
+    selectedCommit?.id, hasEngineAccess, canReadVcsCommits, canReadProjectDeployments]);
+  const bridgeFence = useProjectActionFence(bridgeAuthority);
+  React.useEffect(() => { setBridgeError(null); setBridgeDecision(null); }, [bridgeAuthority]);
+  const handleOpenMissionControl = async (target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
     if (!target) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setBridgeError(null);
-    setBridgeDecision(null);
+    event.preventDefault(); event.stopPropagation();
+    const intent = { ...target };
+    const checkView = bridgeFence.capture(), request = ++bridgeRequest.current;
+    const checkCurrent = () => { checkView(); if (request !== bridgeRequest.current) throw new Error('Bridge selection changed'); };
     try {
-      const bridgeDecision = await evaluateStarbaseMissionControlBridge({
-        projectId,
-        fileId,
-        engineId: target.engineId,
-        definitionKey: target.keyParam === 'process' ? target.key : undefined,
-        decisionDefinitionKey: target.keyParam === 'decision' ? target.key : undefined,
-        kind: target.keyParam === 'decision' || fileType === 'dmn' ? 'decision' : 'process',
+      checkCurrent(); setBridgeError(null); setBridgeDecision(null);
+      const decision = await evaluateStarbaseMissionControlBridge({
+        projectId, fileId, engineId: intent.engineId,
+        definitionKey: intent.keyParam === 'process' ? intent.key : undefined,
+        decisionDefinitionKey: intent.keyParam === 'decision' ? intent.key : undefined,
+        kind: intent.keyParam === 'decision' ? 'decision' : 'process',
       });
-      if (!bridgeDecision.allowed) {
-        setBridgeDecision(bridgeDecision);
-        return;
-      }
+      checkCurrent();
+      if (!decision.allowed) { setBridgeDecision(decision); return; }
+      const params = new URLSearchParams({ engineId: intent.engineId, [intent.keyParam]: intent.key, version: String(intent.version) });
+      tenantNavigate(`${intent.path}?${params.toString()}`);
     } catch (error) {
-      setBridgeError(parseApiError(error, 'Unable to evaluate Mission Control access').message);
-      return;
+      try { checkCurrent(); setBridgeError(parseApiError(error, 'Unable to evaluate Mission Control access').message); } catch {}
     }
-    const params = new URLSearchParams({
-      engineId: target.engineId,
-      [target.keyParam]: target.key,
-      version: String(target.version),
-    });
-    tenantNavigate(`${target.path}?${params.toString()}`);
-  }, [fileId, fileType, projectId, tenantNavigate]);
+  };
 
-  const handleDeploymentClick = React.useCallback((commit: VcsCommit, target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleDeploymentClick = (commit: VcsCommit, target: MissionControlTarget | null, event: React.MouseEvent<HTMLButtonElement>) => {
     if (target) {
       void handleOpenMissionControl(target, event);
       return;
     }
     setBridgeError(null);
     handleJumpToCommit(commit, event);
-  }, [handleOpenMissionControl, handleJumpToCommit]);
+  };
 
   const showDeploymentUi = saveMode === 'git' && hasEngineAccess && canReadProjectDeployments;
 
@@ -1027,11 +993,13 @@ export default function GitVersionsPanel({
                         const badgeStyle = { ...getEnvironmentBadgeStyle(deployment.color), cursor: 'pointer' } as React.CSSProperties;
                         const title = deployment.target ? 'Open in Mission Control' : 'Jump to Starbase version';
                         const canDeleteDeployment = Boolean(deployment.engineId && deployment.engineDeploymentId);
-                        const deleteDisabled = deleteDeploymentMutation.isPending ||
+                        const submitted = submittedDeletions.current.targets.has(deletionKey(deployment.engineId, deployment.engineDeploymentId));
+                        const deleteDisabled = deletionFence.pending || submitted ||
                           !canDeleteDeployment ||
                           !deployment.deleteDecision.allowed;
                         const deleteTitle = !canDeleteDeployment
                           ? 'Deployment delete unavailable for this record'
+                          : submitted ? 'Deletion already submitted; reload and reconcile before retrying.'
                           : deployment.deleteDecision.allowed
                             ? `Delete deployment ${deployment.label} ${deployment.versionLabel}`
                             : deployment.deleteDecision.reason || 'Deployment delete unavailable';
@@ -1059,7 +1027,7 @@ export default function GitVersionsPanel({
                                   event.preventDefault();
                                   event.stopPropagation();
                                   if (deleteDisabled) return;
-                                  setDeploymentPendingDelete(deployment);
+                                  setDeletionError(null); setDeploymentPendingDelete(deployment);
                                 }}
                                 style={{
                                   width: 18,
@@ -1145,7 +1113,7 @@ export default function GitVersionsPanel({
         secondaryButtonText="Close"
         onRequestSubmit={handleRestore}
         onRequestClose={handleClosePreview}
-        primaryButtonDisabled={restoreMutation.isPending || !previewXml || Boolean(restoreUnavailableReason)}
+        primaryButtonDisabled={restoreMutation.isPending || submittedRestoreRef.current === restoreLifetimeRef.current || !previewXml || Boolean(restoreUnavailableReason)}
       >
         <div style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
           {/* Loading state */}
@@ -1164,7 +1132,7 @@ export default function GitVersionsPanel({
             />
           )}
 
-          {restoreMutation.isError && (
+          {restoreMutation.isError && submittedRestoreRef.current === restoreLifetimeRef.current && (
             <InlineNotification
               kind="error"
               title="Restore failed"
@@ -1237,41 +1205,35 @@ export default function GitVersionsPanel({
       <Modal
         open={Boolean(deploymentPendingDelete)}
         danger
-        modalHeading="Delete deployment record"
+        modalHeading="Delete engine deployment"
         modalLabel={deploymentPendingDelete ? `${deploymentPendingDelete.label} ${deploymentPendingDelete.versionLabel}` : ''}
-        primaryButtonText={deleteDeploymentMutation.isPending ? 'Deleting...' : 'Delete deployment'}
+        primaryButtonText={deletionFence.pending ? 'Deleting...' : 'Delete deployment'}
         secondaryButtonText="Cancel"
-        onRequestSubmit={() => {
-          if (deploymentPendingDelete) {
-            deleteDeploymentMutation.mutate(deploymentPendingDelete);
-          }
-        }}
+        onRequestSubmit={handleDeleteDeployment}
         onRequestClose={() => {
-          if (!deleteDeploymentMutation.isPending) {
-            setDeploymentPendingDelete(null);
-          }
+          if (!deletionFence.pending) { setDeploymentPendingDelete(null); setDeletionError(null); }
         }}
-        primaryButtonDisabled={deleteDeploymentMutation.isPending || !deploymentPendingDelete?.deleteDecision.allowed}
+        primaryButtonDisabled={deletionFence.pending || deletionFence.blocked || !deletionDecision.allowed || submittedDeletions.current.targets.has(deletionKey(deploymentPendingDelete?.engineId, deploymentPendingDelete?.engineDeploymentId))}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
-          {deleteDeploymentMutation.isError && (
+          {deletionError && (
             <InlineNotification
               kind="error"
               title="Delete failed"
-              subtitle={parseApiError(deleteDeploymentMutation.error, 'Delete failed').message}
+              subtitle={deletionError}
               lowContrast
               hideCloseButton
             />
           )}
-          {deploymentPendingDelete?.deleteDecision.allowed ? (
+          {deletionDecision.allowed ? (
             <p style={{ margin: 0 }}>
-              This removes the deployment record from the selected engine. It does not delete the Starbase version.
+              This deletes the entire deployment from the selected engine, including its process and decision definitions and resources. It does not cascade-delete running instances; the engine can refuse deletion while the deployment is in use. Saved Starbase versions are preserved.
             </p>
           ) : (
             <InlineNotification
               kind="warning"
               title="Delete unavailable"
-              subtitle={deploymentPendingDelete?.deleteDecision.reason || 'Missing deployment delete permission'}
+              subtitle={deletionDecision.reason || 'Missing deployment delete permission'}
               lowContrast
               hideCloseButton
             />

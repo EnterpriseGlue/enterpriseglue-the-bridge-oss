@@ -1,7 +1,5 @@
-import React, { useState } from 'react'
-import { Modal, Button, Tag, Checkbox, Toggletip, ToggletipButton, ToggletipContent, InlineNotification, TextArea } from '@carbon/react'
-import { Information } from '@carbon/icons-react'
-import { ExecutionOptionsPanel } from '../../../shared/components/ExecutionOptionsPanel'
+import React, { useState, useEffect, useRef } from 'react'
+import { Modal, Button, Tag, InlineNotification, TextArea } from '@carbon/react'
 
 interface ApplyMigrationModalProps {
   open: boolean
@@ -39,12 +37,8 @@ export function ApplyMigrationModal({
   affectedCount,
   variableCount,
   skipCustomListeners,
-  onSkipCustomListenersChange,
   skipIoMappings,
-  onSkipIoMappingsChange,
   updateEventTriggers,
-  onUpdateEventTriggersChange,
-  eventInstructionCount,
   payload,
   onClose,
   onExecuteBatch,
@@ -56,6 +50,8 @@ export function ApplyMigrationModal({
 }: ApplyMigrationModalProps) {
   const [showPayload, setShowPayload] = useState(false)
   const [auditReason, setAuditReason] = useState('')
+  const submitted=useRef(false)
+  useEffect(()=>{submitted.current=false;setAuditReason('');setShowPayload(false)},[open])
   const busy = batchPending || directPending
   const batchUnavailableReason = batchDeniedReason || null
   const directUnavailableReason = directDeniedReason || null
@@ -71,9 +67,10 @@ export function ApplyMigrationModal({
       primaryButtonText={batchPending ? 'Creating batch...' : 'Create migration batch'}
       secondaryButtonText="Cancel"
       primaryButtonDisabled={busy || !!batchUnavailableReason || auditReasonMissing}
-      onRequestClose={onClose}
+      onRequestClose={()=>{if(!busy&&!submitted.current)onClose()}}
       onRequestSubmit={() => {
-        if (batchUnavailableReason || auditReasonMissing) return
+        if (busy || submitted.current || batchUnavailableReason || auditReasonMissing) return
+        submitted.current=true
         onExecuteBatch(auditReasonValue)
       }}
       size="md"
@@ -110,45 +107,12 @@ export function ApplyMigrationModal({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-          <div style={{ fontWeight: 'var(--font-weight-semibold)' }}>Options</div>
-          <ExecutionOptionsPanel
-            skipCustomListeners={skipCustomListeners}
-            onSkipCustomListenersChange={onSkipCustomListenersChange}
-            skipIoMappings={skipIoMappings}
-            onSkipIoMappingsChange={onSkipIoMappingsChange}
-            idPrefix="mig-modal"
-          />
-          <div>
-            <Checkbox
-              id="mig-modal-update-triggers"
-              labelText={
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  {`Update event triggers${eventInstructionCount > 0 ? ` (${eventInstructionCount} event${eventInstructionCount === 1 ? '' : 's'})` : ''}`}
-                  <Toggletip align="bottom" autoAlign>
-                    <ToggletipButton label="Learn more about Update event triggers">
-                      <Information size={14} />
-                    </ToggletipButton>
-                    <ToggletipContent>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <p style={{ margin: 0, fontSize: 'var(--text-12)' }}>
-                          <strong>What it does:</strong> Event subscriptions (message, timer, signal) on migrated activities are updated to match the target process definition.
-                        </p>
-                        <p style={{ margin: 0, fontSize: 'var(--text-12)' }}>
-                          <strong>When to use:</strong> Enable when the target version has changed event definitions that should take effect immediately after migration.
-                        </p>
-                        <p style={{ margin: 0, fontSize: 'var(--text-12)' }}>
-                          <strong>Impact:</strong> Existing event subscriptions are replaced. Disable to keep original subscriptions from the source version.
-                        </p>
-                      </div>
-                    </ToggletipContent>
-                  </Toggletip>
-                </span>
-              }
-              checked={updateEventTriggers}
-              onChange={(_: any, data: any) => onUpdateEventTriggersChange(!!data.checked)}
-            />
-          </div>
+        <div style={{display:'grid',gap:'var(--spacing-2)'}}>
+          <strong>Reviewed options</strong>
+          <div>Skip custom listeners: {skipCustomListeners?'Yes':'No'}</div>
+          <div>Skip IO mappings: {skipIoMappings?'Yes':'No'}</div>
+          <div>Update event triggers: {updateEventTriggers?'Yes':'No'}</div>
+          <div>Change options in the wizard and review the plan again before executing.</div>
         </div>
 
         <TextArea
@@ -176,7 +140,8 @@ export function ApplyMigrationModal({
             disabled={busy || !!directUnavailableReason || auditReasonMissing}
             title={directUnavailableReason || (auditReasonMissing ? 'Audit reason is required' : undefined)}
             onClick={() => {
-              if (directUnavailableReason || auditReasonMissing) return
+              if (busy || submitted.current || directUnavailableReason || auditReasonMissing) return
+              submitted.current=true
               onExecuteDirect(auditReasonValue)
             }}
           >

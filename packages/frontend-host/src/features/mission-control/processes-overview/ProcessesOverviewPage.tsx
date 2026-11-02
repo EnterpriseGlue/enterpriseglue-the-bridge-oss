@@ -29,7 +29,7 @@ import { EngineAccessError, isEngineAccessError } from '../shared/components/Eng
 import { RuntimeCollectionEmptyState } from '../shared/components/RuntimeCollectionEmptyState'
 import { apiClient } from '../../../shared/api/client'
 import { fetchList } from '../../../shared/api/fetchList';
-import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { useStarbaseEditBridge } from '../shared/useStarbaseEditBridge'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { LoadingState } from '../../shared/components/LoadingState'
@@ -37,9 +37,12 @@ import { evaluateActionSnapshot, summarizeBulkActionUnavailableReasons, WhyUnava
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
-import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessInstanceIncident } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
-import { useGuardedEngineTask, withEngineContext } from '../shared/engineContext'
+import { withEngineContext } from '../shared/engineContext'
+import { hasRuntimeDefinitionLink, useRuntimeDefinitionLink } from '../shared/useRuntimeDefinitionLink'
+import { RuntimeDefinitionLinkNotice } from '../shared/components/RuntimeDefinitionLinkNotice'
+import { useStartProcess } from './hooks/useStartProcess'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -219,16 +222,11 @@ export default function ProcessesOverviewPage() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
+  const definitionLinkPending = hasRuntimeDefinitionLink(searchParams.toString())
   const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
-  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
-  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const selectedEngineId = useSelectedEngine()
-  const runForCurrentEngine = useGuardedEngineTask(selectedEngineId)
-  React.useEffect(() => {
-    setBridgeError(null)
-    setBridgeDecision(null)
-  }, [selectedEngineId])
+
   const withSelectedEngine = React.useCallback(
     (path: string) => withEngineContext(path, selectedEngineId),
     [selectedEngineId],
@@ -305,10 +303,11 @@ export default function ProcessesOverviewPage() {
 
   // Local UI state
   const currentEngineIdRef = React.useRef(selectedEngineId)
-  const lastRenderedEngineIdRef = React.useRef(selectedEngineId)
+  const interactionScope = JSON.stringify([selectedEngineId, definitionLinkPending ? searchParams.toString() : null])
+  const lastRenderedEngineIdRef = React.useRef(interactionScope)
   const engineRevisionRef = React.useRef(0)
-  if (lastRenderedEngineIdRef.current !== selectedEngineId) {
-    lastRenderedEngineIdRef.current = selectedEngineId
+  if (lastRenderedEngineIdRef.current !== interactionScope) {
+    lastRenderedEngineIdRef.current = interactionScope
     engineRevisionRef.current += 1
   }
   currentEngineIdRef.current = selectedEngineId
@@ -316,7 +315,7 @@ export default function ProcessesOverviewPage() {
     engineId: string | null
     selectedMap: Record<string, boolean>
   }>({ engineId: selectedEngineId ?? null, selectedMap: {} })
-  const selectedMap = engineSelection.engineId === (selectedEngineId ?? null)
+  const selectedMap = !definitionLinkPending && engineSelection.engineId === (selectedEngineId ?? null)
     ? engineSelection.selectedMap
     : {}
   const setSelectedMap = React.useCallback<React.Dispatch<React.SetStateAction<Record<string, boolean>>>>((update) => {
@@ -338,12 +337,7 @@ export default function ProcessesOverviewPage() {
   const [retryModalInstanceId, setRetryModalInstanceId] = React.useState<string | null>(null)
   const [retryModalEngineId, setRetryModalEngineId] = React.useState<string | null>(null)
   const [retryModalEngineRevision, setRetryModalEngineRevision] = React.useState<number | null>(null)
-  const [startProcessOpen, setStartProcessOpen] = React.useState(false)
-  const [startProcessEngineId, setStartProcessEngineId] = React.useState<string | null>(null)
-  const [startBusinessKey, setStartBusinessKey] = React.useState('')
-  const [startVariablesJson, setStartVariablesJson] = React.useState('')
-  const [startBusy, setStartBusy] = React.useState(false)
-  const [startError, setStartError] = React.useState<string | null>(null)
+
   const [saveFilterOpen, setSaveFilterOpen] = React.useState(false)
   const [saveFilterEngineId, setSaveFilterEngineId] = React.useState<string | null>(null)
   const [saveFilterName, setSaveFilterName] = React.useState('')
@@ -359,18 +353,13 @@ export default function ProcessesOverviewPage() {
   const bulkDeleteModal = useModal()
   const detailsModal = useModal<{ instanceId: string; engineId: string; engineRevision: number }>()
 
-  const previousInteractionEngineIdRef = React.useRef(selectedEngineId)
+  const previousInteractionEngineIdRef = React.useRef(interactionScope)
   React.useEffect(() => {
-    if (previousInteractionEngineIdRef.current === selectedEngineId) return
+    if (previousInteractionEngineIdRef.current === interactionScope) return
     setEngineSelection({ engineId: selectedEngineId ?? null, selectedMap: {} })
     setRetryModalInstanceId(null)
     setRetryModalEngineId(null)
     setRetryModalEngineRevision(null)
-    setStartProcessOpen(false)
-    setStartProcessEngineId(null)
-    setStartBusinessKey('')
-    setStartVariablesJson('')
-    setStartError(null)
     setSaveFilterOpen(false)
     setSaveFilterEngineId(null)
     setSaveFilterName('')
@@ -382,7 +371,7 @@ export default function ProcessesOverviewPage() {
     bulkSuspendModal.closeModal()
     bulkActivateModal.closeModal()
     bulkDeleteModal.closeModal()
-    previousInteractionEngineIdRef.current = selectedEngineId
+    previousInteractionEngineIdRef.current = interactionScope
   }, [
     bulkActivateModal.closeModal,
     bulkDeleteModal.closeModal,
@@ -390,6 +379,7 @@ export default function ProcessesOverviewPage() {
     bulkSuspendModal.closeModal,
     detailsModal.closeModal,
     selectedEngineId,
+    interactionScope,
     terminateModal.closeModal,
   ])
 
@@ -417,6 +407,7 @@ export default function ProcessesOverviewPage() {
     // Navigation snapshots intentionally omit that lineage.
     processDefinitionsEnabled: true,
     processInstancesEnabled: true,
+    definitionLinkPending,
   })
 
   const modalData = useProcessesModalData({
@@ -603,51 +594,29 @@ export default function ProcessesOverviewPage() {
     deleteFilterMutation.mutate(selectedSavedFilter.id)
   }, [deleteFilterMutation, notifyDeniedAction, savedFiltersManageDecision, selectedSavedFilter])
 
-  // If we were navigated here from a call activity link pill, auto-select the process from the URL
-  React.useEffect(() => {
-    const processKey = searchParams.get('process')
-    if (!processKey || defItems.length === 0) return
-    const matching = defItems.find((d) => d.key === processKey)
-    if (matching) {
-      setSelectedProcess(matching as any)
-      // Clear the URL parameter after applying
-      searchParams.delete('process')
-      setSearchParams(searchParams, { replace: true })
-    }
-  }, [searchParams, defItems, setSelectedProcess, setSearchParams])
-
-  React.useEffect(() => {
-    const rawVersion = searchParams.get('version')
-    if (!rawVersion) return
-
-    const parsedVersion = Number(rawVersion)
-    if (!Number.isFinite(parsedVersion)) {
-      searchParams.delete('version')
-      setSearchParams(searchParams, { replace: true })
-      return
-    }
-
-    if (versions.length === 0) return
-
-    if (versions.includes(parsedVersion) && selectedVersion !== parsedVersion) {
-      setSelectedVersion(parsedVersion)
-    }
-
-    searchParams.delete('version')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, versions, selectedVersion, setSelectedVersion, setSearchParams])
+  const applyDefinitionLink = React.useCallback((selection: import('../shared/useRuntimeDefinitionLink').LinkedDefinition) => {
+    useProcessesFilterStore.setState({ selectedProcess: { id: selection.key, key: selection.key, label: selection.label, version: selection.version },
+      selectedVersion: selection.version, flowNode: selection.node })
+  }, [])
+  const clearDefinitionLink = React.useCallback(() => {
+    useProcessesFilterStore.setState({ selectedProcess: null, selectedVersion: null, flowNode: '' })
+  }, [])
+  const definitionLink = useRuntimeDefinitionLink({ kind: 'process', engineId: selectedEngineId, definitions: defsQ.data,
+    ready: defsQ.isSuccess && !defsQ.isFetching, failed: defsQ.isError, apply: applyDefinitionLink, clearSelection: clearDefinitionLink })
 
   // If we were navigated here from a link pill, auto-select the node (activity id)
   React.useEffect(() => {
+    if (definitionLinkPending) return
     const nodeId = searchParams.get('node')
     if (!nodeId) return
 
     setFlowNode(nodeId)
 
     // Clear the URL parameter after applying
-    searchParams.delete('node')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, setFlowNode, setSearchParams])
+    const next = new URLSearchParams(searchParams)
+    next.delete('node')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setFlowNode, setSearchParams, definitionLinkPending])
 
   const fromInstanceId = location?.state?.fromInstanceId as string | undefined || searchParams.get('fromInstance') || undefined
 
@@ -661,7 +630,7 @@ export default function ProcessesOverviewPage() {
     }),
     // The endpoint resolves the selected process definition before checking
     // access. Do not gate it with the runtime-resource-free UI snapshot.
-    enabled: !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
+    enabled: !definitionLinkPending && !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -674,40 +643,9 @@ export default function ProcessesOverviewPage() {
     processEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(async () => {
-    if (!processEditTarget?.fileId || selectedVersion === null || !selectedProcess?.key) return
-    setBridgeError(null)
-    setBridgeDecision(null)
-    await runForCurrentEngine(
-      (requestEngineId) => evaluateMissionControlStarbaseBridge({
-        engineId: requestEngineId,
-        projectId: processEditTarget.projectId,
-        fileId: processEditTarget.fileId,
-        definitionKey: selectedProcess.key,
-        kind: 'process',
-      }),
-      {
-        onSuccess: (bridgeDecision, requestEngineId) => {
-          if (!bridgeDecision.allowed) {
-            setBridgeDecision(bridgeDecision)
-            return
-          }
-          const params = new URLSearchParams({
-            source: 'mission-control',
-            engineId: requestEngineId,
-            process: selectedProcess.key,
-            version: String(selectedVersion),
-            deploymentId: String(processEditTarget.engineDeploymentId || ''),
-            mappingSource: String(processEditTarget.mappingSource || ''),
-          })
-          if (processEditTarget.commitId) params.set('commitId', String(processEditTarget.commitId))
-          if (typeof processEditTarget.fileVersionNumber === 'number') params.set('fileVersion', String(processEditTarget.fileVersionNumber))
-          tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-        },
-        onError: (error) => setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access')),
-      },
-    )
-  }, [processEditTarget, selectedVersion, selectedProcess?.key, runForCurrentEngine, tenantNavigate])
+  const starbaseBridge = useStarbaseEditBridge({ engineId: selectedEngineId, kind: 'process',
+    definitionKey: selectedProcess?.key, definitionId: defIdForVersion, version: selectedVersion,
+    editTarget: processEditTarget, isFetching: processEditTargetQ.isFetching, viewKey: selectedProcess?.key || undefined });
 
   // Viewer API for managing BPMN diagram
   const [viewerApi, setViewerApi] = React.useState<any>(null)
@@ -1008,9 +946,16 @@ export default function ProcessesOverviewPage() {
   const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
   const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
   const migrateTitle = migrateEligibility.summary || 'Migrate'
-  const startTitle = startProcessDecision.allowed
-    ? 'Start process instance'
-    : startProcessDecision.reason || 'Action unavailable'
+  const startProcess = useStartProcess({ engineId: selectedEngineId, target: !definitionLinkPending && selectedProcess?.key && selectedVersion && defIdForVersion
+    ? { id: defIdForVersion, key: selectedProcess.key, version: selectedVersion } : null, allowed: startProcessDecision.allowed,
+    onStarted: async (receipt, check) => {
+      const result = await instQ.refetch()
+      check()
+      showAlert(result.isError ? `Process instance ${receipt.id} started; refresh the instance list.` : `Process instance started ${receipt.id}`, result.isError ? 'warning' : 'info')
+    } })
+  const startTitle = !startProcessDecision.allowed ? startProcessDecision.reason || 'Action unavailable'
+    : startProcess.blocked ? 'Check the previous start outcome before trying again.'
+    : !startProcess.available ? 'Select a single process version to start.' : `Start process instance (v${selectedVersion})`
   const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
   const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
   const bulkMigrateDiagnosticDecision = migrateEligibility.firstDeniedDecision
@@ -1075,66 +1020,6 @@ export default function ProcessesOverviewPage() {
     }
   }
 
-  const closeStartProcessModal = React.useCallback(() => {
-    if (startBusy) return
-    setStartProcessOpen(false)
-    setStartProcessEngineId(null)
-    setStartError(null)
-  }, [startBusy])
-
-  const handleStartProcess = React.useCallback(async () => {
-    if (!selectedProcess?.key) return
-    if (!selectedEngineId || startProcessEngineId !== selectedEngineId) {
-      setStartError('Select an engine')
-      return
-    }
-    const requestEngineId = startProcessEngineId
-    const requestEngineRevision = engineRevisionRef.current
-    const isCurrentRequest = () => (
-      currentEngineIdRef.current === requestEngineId
-      && engineRevisionRef.current === requestEngineRevision
-    )
-
-    let variables: unknown
-    const trimmedVariables = startVariablesJson.trim()
-    if (trimmedVariables) {
-      try {
-        variables = JSON.parse(trimmedVariables)
-      } catch {
-        setStartError('Variables must be valid JSON')
-        return
-      }
-    }
-
-    setStartBusy(true)
-    setStartError(null)
-    try {
-      const payload: Record<string, unknown> = { engineId: requestEngineId }
-      const businessKey = startBusinessKey.trim()
-      if (businessKey) payload.businessKey = businessKey
-      if (variables !== undefined) payload.variables = variables
-      const started = await apiClient.post<ProcessInstanceStartResponse>(
-        `/mission-control-api/process-definitions/key/${encodeURIComponent(selectedProcess.key)}/start`,
-        payload,
-        { credentials: 'include' }
-      )
-      if (!isCurrentRequest()) return
-      setStartProcessOpen(false)
-      setStartProcessEngineId(null)
-      setStartBusinessKey('')
-      setStartVariablesJson('')
-      await instQ.refetch()
-      if (!isCurrentRequest()) return
-      const startedId = started?.id ? ` ${started.id}` : ''
-      showAlert(`Process instance started${startedId}`, 'info')
-    } catch (error) {
-      if (isCurrentRequest()) {
-        setStartError(getUiErrorMessage(error, 'Failed to start process instance'))
-      }
-    } finally {
-      if (isCurrentRequest()) setStartBusy(false)
-    }
-  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startProcessEngineId, startVariablesJson])
 
   const onRowClick = (rowId: string) => {
     if (selectedEngineId) detailsModal.openModal({
@@ -1163,6 +1048,8 @@ export default function ProcessesOverviewPage() {
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
   }
+
+  if (definitionLink.active) return <RuntimeDefinitionLinkNotice error={definitionLink.error} onClear={definitionLink.clear} />
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="processes">
@@ -1220,12 +1107,8 @@ export default function ProcessesOverviewPage() {
                 kind="primary"
                 size="sm"
                 renderIcon={Play}
-                onClick={() => {
-                  setStartError(null)
-                  setStartProcessEngineId(selectedEngineId ?? null)
-                  setStartProcessOpen(true)
-                }}
-                disabled={!selectedProcess?.key || !startProcessDecision.allowed}
+                onClick={startProcess.open}
+                disabled={!startProcess.available || startProcess.pending || startProcess.blocked}
                 title={startTitle}
               >
                 Start
@@ -1236,9 +1119,9 @@ export default function ProcessesOverviewPage() {
                 kind="ghost"
                 size="sm"
                 renderIcon={Launch}
-                onClick={handleEditInStarbase}
-                disabled={!processEditTarget?.canEdit || processEditTargetQ.isFetching}
-                title={processEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+                onClick={starbaseBridge.open}
+                disabled={!starbaseBridge.available || starbaseBridge.isPending}
+                title={starbaseBridge.unavailableReason || 'Edit deployed version in Starbase'}
               >
                 Edit
               </Button>
@@ -1279,7 +1162,7 @@ export default function ProcessesOverviewPage() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
-      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={starbaseBridge.decision} error={starbaseBridge.error} />
       {defsQ.error && !engineAccessError && (
         <InlineNotification
           kind="error"
@@ -1751,38 +1634,39 @@ export default function ProcessesOverviewPage() {
       </Modal>
 
       <Modal
-        open={startProcessOpen}
-        modalHeading={`Start ${selectedProcess?.label || selectedProcess?.key || 'process'}`}
-        primaryButtonText={startBusy ? 'Starting...' : 'Start process'}
+        open={startProcess.isOpen}
+        modalHeading={`Start ${selectedProcess?.label || selectedProcess?.key || 'process'} (v${selectedVersion})`}
+        primaryButtonText={startProcess.pending ? 'Starting...' : 'Start process'}
         secondaryButtonText="Cancel"
-        primaryButtonDisabled={startBusy || !selectedProcess?.key}
-        onRequestClose={closeStartProcessModal}
-        onRequestSubmit={handleStartProcess}
+        primaryButtonDisabled={startProcess.pending || startProcess.blocked || !startProcess.available}
+        onRequestClose={startProcess.close}
+        onRequestSubmit={startProcess.submit}
         size="sm"
       >
         <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
-          {startError ? (
+          {startProcess.error ? (
             <InlineNotification
               lowContrast
               kind="error"
-              title="Failed to start process"
-              subtitle={startError}
+              title={startProcess.blocked ? 'Process start needs review' : 'Cannot start process'}
+              subtitle={startProcess.error}
+              hideCloseButton
             />
           ) : null}
           <TextInput
             id="start-process-business-key"
             labelText="Business key"
-            value={startBusinessKey}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setStartBusinessKey(event.target.value)}
-            disabled={startBusy}
+            value={startProcess.businessKey}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => startProcess.setBusinessKey(event.target.value)}
+            disabled={startProcess.pending || startProcess.blocked}
             placeholder="Optional business key"
           />
           <TextArea
             id="start-process-variables"
             labelText="Variables JSON"
-            value={startVariablesJson}
-            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setStartVariablesJson(event.target.value)}
-            disabled={startBusy}
+            value={startProcess.variablesJson}
+            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => startProcess.setVariablesJson(event.target.value)}
+            disabled={startProcess.pending || startProcess.blocked}
             placeholder={'{\n  "customerId": { "value": "C-100", "type": "String" }\n}'}
             rows={6}
           />

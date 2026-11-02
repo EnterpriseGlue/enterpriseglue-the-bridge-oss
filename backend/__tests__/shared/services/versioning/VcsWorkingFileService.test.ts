@@ -76,7 +76,7 @@ describe('VcsWorkingFileService', () => {
 
     await service.saveFile('branch-1', 'project-1', null, 'Invoice', 'bpmn', '<xml />', null, 'file-b');
 
-    expect(update).toHaveBeenCalledWith({ id: 'wf-legacy' }, expect.objectContaining({
+    expect(update).toHaveBeenCalledWith({ id: 'wf-legacy', branchId: 'branch-1', projectId: 'project-1' }, expect.objectContaining({
       mainFileId: 'file-b',
       name: 'Invoice',
       type: 'bpmn',

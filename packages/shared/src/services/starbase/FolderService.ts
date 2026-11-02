@@ -5,10 +5,12 @@
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js';
-import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
-import { IsNull, Raw } from 'typeorm';
-import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
+import { IsNull } from 'typeorm';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
+import { CreateFolderRequest, UpdateFolderRequest } from '../../schemas/starbase/folder.js';
+import { CascadeDeleteService } from '../cascade-delete.js';
+import { lockFolderProject, readFolderAncestors } from './folder-tree.js';
 import { caseInsensitiveColumn } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js';
 
 export interface CreateFolderInput {
@@ -70,145 +72,49 @@ class FolderServiceImpl {
    * Create a new folder
    */
   async create(input: CreateFolderInput): Promise<FolderResult> {
+    const request = CreateFolderRequest.parse({ name: input.name, parentFolderId: input.parentFolderId });
     const dataSource = await getDataSource();
-    const folderRepo = dataSource.getRepository(Folder);
-    const now = unixTimestamp();
-    const folderId = generateId();
-    const trimmedName = input.name.trim();
-
-    // Check for duplicate names (case-insensitive)
-    const dupCheck = await folderRepo.createQueryBuilder('f')
-      .where('f.projectId = :projectId', { projectId: input.projectId })
-      .andWhere(input.parentFolderId 
-        ? 'f.parentFolderId = :parentFolderId' 
-        : 'f.parentFolderId IS NULL', 
-        input.parentFolderId ? { parentFolderId: input.parentFolderId } : {})
-      .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':name')}`, { name: trimmedName })
-      .getMany();
-
-    if (dupCheck.length > 0) {
-      throw Errors.conflict('A folder with this name already exists here');
-    }
-
-    await folderRepo.insert({
-      id: folderId,
-      projectId: input.projectId,
-      parentFolderId: input.parentFolderId || null,
-      name: trimmedName,
-      createdAt: now,
-      updatedAt: now,
+    return dataSource.transaction(async manager => {
+      await lockFolderProject(manager, input.projectId);
+      const parentFolderId = request.parentFolderId || null;
+      await readFolderAncestors(manager, input.projectId, parentFolderId);
+      const repo = manager.getRepository(Folder);
+      const duplicate = await repo.createQueryBuilder('f').where('f.projectId = :projectId', { projectId: input.projectId })
+        .andWhere(parentFolderId ? 'f.parentFolderId = :parentFolderId' : 'f.parentFolderId IS NULL', { parentFolderId })
+        .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':name')}`, { name: request.name }).getMany();
+      if (duplicate.length) throw Errors.conflict('A folder with this name already exists here');
+      const now = unixTimestamp(), row = { id: generateId(), projectId: input.projectId, parentFolderId, name: request.name,
+        createdBy: input.userId, updatedBy: input.userId, createdAt: now, updatedAt: now };
+      await repo.insert(row); return row;
     });
-
-    return {
-      id: folderId,
-      projectId: input.projectId,
-      parentFolderId: input.parentFolderId || null,
-      name: trimmedName,
-      createdAt: now,
-      updatedAt: now,
-    };
   }
 
-  /**
-   * Rename or move a folder
-   */
   async rename(input: RenameFolderInput): Promise<FolderResult> {
+    const request = UpdateFolderRequest.parse({ name: input.name, parentFolderId: input.parentFolderId });
+    const existing = await this.getByIdOrThrow(input.folderId);
     const dataSource = await getDataSource();
-    const folderRepo = dataSource.getRepository(Folder);
-    const now = unixTimestamp();
-
-    const folder = await this.getByIdOrThrow(input.folderId);
-
-    const updates: Record<string, unknown> = { updatedAt: now };
-    
-    if (input.name !== undefined) {
-      const trimmedName = input.name.trim();
-      
-      // Check for duplicate names if renaming
-      const targetParentId = input.parentFolderId !== undefined 
-        ? input.parentFolderId 
-        : folder.parentFolderId;
-      
-      const qb = folderRepo.createQueryBuilder('f')
-        .where('f.projectId = :projectId', { projectId: folder.projectId })
-        .andWhere(targetParentId 
-          ? 'f.parentFolderId = :parentFolderId' 
-          : 'f.parentFolderId IS NULL',
-          targetParentId ? { parentFolderId: targetParentId } : {})
-        .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':name')}`, { name: trimmedName })
-        .andWhere('f.id != :folderId', { folderId: input.folderId });
-      
-      const dupCheck = await qb.getMany();
-
-      if (dupCheck.length > 0) {
-        throw Errors.conflict('A folder with this name already exists here');
-      }
-      
-      updates.name = trimmedName;
-    }
-    
-    if (input.parentFolderId !== undefined) {
-      // Prevent circular references
-      if (input.parentFolderId === input.folderId) {
-        throw Errors.validation('Cannot move folder into itself');
-      }
-      updates.parentFolderId = input.parentFolderId;
-    }
-
-    await folderRepo.update({ id: input.folderId }, updates);
-
-    return {
-      ...folder,
-      name: input.name?.trim() ?? folder.name,
-      parentFolderId: input.parentFolderId !== undefined ? input.parentFolderId : folder.parentFolderId,
-      updatedAt: now,
-    };
-  }
-
-  /**
-   * Delete a folder and all its contents
-   */
-  async delete(folderId: string): Promise<void> {
-    const dataSource = await getDataSource();
-    const folderRepo = dataSource.getRepository(Folder);
-    const fileRepo = dataSource.getRepository(File);
-    const folder = await this.getByIdOrThrow(folderId);
-
-    // Get all nested folder IDs recursively
-    const allFolderIds = await this.getAllNestedFolderIds(folder.projectId, folderId);
-    allFolderIds.push(folderId);
-
-    // Delete all files in these folders
-    for (const fId of allFolderIds) {
-      await fileRepo.delete({ folderId: fId });
-    }
-
-    // Delete all folders (children first)
-    for (const fId of allFolderIds.reverse()) {
-      await folderRepo.delete({ id: fId });
-    }
-  }
-
-  /**
-   * Get all nested folder IDs recursively
-   */
-  private async getAllNestedFolderIds(projectId: string, parentId: string): Promise<string[]> {
-    const dataSource = await getDataSource();
-    const folderRepo = dataSource.getRepository(Folder);
-    const result: string[] = [];
-
-    const children = await folderRepo.find({
-      where: { projectId, parentFolderId: parentId },
-      select: ['id']
+    return dataSource.transaction(async manager => {
+      await lockFolderProject(manager, existing.projectId);
+      const repo = manager.getRepository(Folder);
+      const row = await repo.findOne({ where: { id: input.folderId, projectId: existing.projectId } });
+      if (!row) throw Errors.notFound('Folder');
+      const parentFolderId = request.parentFolderId === undefined ? row.parentFolderId : request.parentFolderId;
+      const ancestors = await readFolderAncestors(manager, row.projectId, parentFolderId);
+      if (ancestors.some(parent => parent.id === row.id)) throw Errors.validation('Cannot move a folder into itself or its descendant');
+      const name = request.name ?? row.name;
+      const duplicate = await repo.createQueryBuilder('f').where('f.projectId = :projectId', { projectId: row.projectId })
+        .andWhere(parentFolderId ? 'f.parentFolderId = :parentFolderId' : 'f.parentFolderId IS NULL', { parentFolderId })
+        .andWhere(`${caseInsensitiveColumn('f.name')} = ${caseInsensitiveColumn(':name')}`, { name })
+        .andWhere('f.id <> :id', { id: row.id }).getMany();
+      if (duplicate.length) throw Errors.conflict('A folder with this name already exists here');
+      const updatedAt = unixTimestamp();
+      await repo.update({ id: row.id, projectId: row.projectId }, { name, parentFolderId, updatedBy: input.userId, updatedAt });
+      return { id: row.id, projectId: row.projectId, name, parentFolderId, createdAt: Number(row.createdAt), updatedAt };
     });
+  }
 
-    for (const child of children) {
-      result.push(child.id);
-      const nested = await this.getAllNestedFolderIds(projectId, child.id);
-      result.push(...nested);
-    }
-
-    return result;
+  async delete(folderId: string): Promise<void> {
+    await CascadeDeleteService.deleteFolder(folderId);
   }
 
   /**
@@ -218,6 +124,7 @@ class FolderServiceImpl {
     const dataSource = await getDataSource();
     const folderRepo = dataSource.getRepository(Folder);
     
+    if (parentFolderId) await readFolderAncestors(dataSource, projectId, parentFolderId);
     const whereClause: any = { projectId };
     
     if (parentFolderId !== undefined) {
@@ -244,22 +151,10 @@ class FolderServiceImpl {
     
     const dataSource = await getDataSource();
     const folderRepo = dataSource.getRepository(Folder);
-    const breadcrumb: Array<{ id: string; name: string }> = [];
-    let currentId: string | null = folderId;
-
-    while (currentId) {
-      const row = await folderRepo.findOne({
-        where: { id: currentId },
-        select: ['id', 'name', 'parentFolderId']
-      });
-
-      if (!row) break;
-
-      breadcrumb.unshift({ id: row.id, name: row.name });
-      currentId = row.parentFolderId || null;
-    }
-
-    return breadcrumb;
+    const root = await folderRepo.findOne({ where: { id: folderId }, select: ['id', 'projectId'] });
+    if (!root) throw Errors.notFound('Folder');
+    const rows = await readFolderAncestors(dataSource, root.projectId, folderId);
+    return rows.map(row => ({ id: row.id, name: row.name }));
   }
 }
 

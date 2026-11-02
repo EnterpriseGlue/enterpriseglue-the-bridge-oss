@@ -216,7 +216,10 @@ export function validatePathCoverage(changedFiles, fragments, { exempt = false, 
   const any = (predicate) => fragments.some(predicate)
   const pathsMatch = (pattern) => relevant.some((file) => pattern.test(file))
 
-  if (pathsMatch(/(^|\/)migrations?\//i)) {
+  // Mission Control migrates running process instances, not the database schema.
+  // All other migration directories keep their existing database-note requirement.
+  if (relevant.some(file => /(^|\/)migrations?\//i.test(file)
+    && !/(?:^|\/)(?:modules|features)\/mission-control\/migration\//.test(file))) {
     requirements.push('database migration notes and rollback')
     if (!any((fragment) => fragment.database.migrations.length > 0 && fragment.rollback.length > 0)) {
       fail('Migration changes require database.migrations and rollback release notes.')

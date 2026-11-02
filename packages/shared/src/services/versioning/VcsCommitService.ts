@@ -2,6 +2,8 @@
  * VCS Commit Service - Commit operations
  */
 
+import type { EntityManager } from 'typeorm';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Branch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Branch.js';
 import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entities/Commit.js';
@@ -9,6 +11,7 @@ import { WorkingFile } from '@enterpriseglue/shared/infrastructure/persistence/e
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { File as MainFile } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { FILE_SCOPED_COMMIT_SOURCES, isFileScopedCommitSource } from '../../utils/commit-snapshot.js';
 import { Brackets, In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
@@ -43,153 +46,113 @@ export class VcsCommitService {
   /**
    * Create a commit from current working files
    */
-  async commit(branchId: string, userId: string, message: string, options?: VcsCommitOptions): Promise<CommitInfo> {
-    const dataSource = await getDataSource();
+  async commit(branchId: string, userId: string, message: string, options?: VcsCommitOptions, manager?: EntityManager): Promise<CommitInfo> {
+    // Copy scope before the first await. Empty or partial scope must never
+    // silently become a project-wide save.
+    const captured = { ...options };
+    const fileIds = captured.fileIds;
+    if (fileIds !== undefined && (!Array.isArray(fileIds) || fileIds.length === 0
+      || fileIds.some(id => typeof id !== 'string' || !id.trim())
+      || new Set(fileIds).size !== fileIds.length)) {
+      throw Errors.validation('File scope must contain distinct non-empty file IDs');
+    }
+    const scopedIds = fileIds === undefined ? null : [...fileIds];
+    if (scopedIds && captured.source && !isFileScopedCommitSource(captured.source)) {
+      throw Errors.validation('File-scoped commits require the file-save source');
+    }
+    const dataSource = manager ?? await getDataSource();
     const branchRepo = dataSource.getRepository(Branch);
     const commitRepo = dataSource.getRepository(Commit);
     const fileRepo = dataSource.getRepository(WorkingFile);
     const snapshotRepo = dataSource.getRepository(FileSnapshot);
-    const now = Date.now();
-    
-    // Get branch info
     const branch = await branchRepo.findOne({ where: { id: branchId } });
-    if (!branch) {
-      throw new Error('Branch not found');
-    }
-    
-    // Get current working files
-    const files = await fileRepo.find({ where: { branchId } });
+    if (!branch) throw new Error('Branch not found');
 
-    // Load previous snapshots for this branch head
-    const previousSnapshotsByWorkingId = new Map<string, {
-      workingFileId: string;
-      contentHash: string | null;
-      name: string;
-      type: string;
-      folderId: string | null;
-    }>();
-
+    const workingFiles = await fileRepo.find({ where: { branchId, projectId: branch.projectId } });
+    let previousSnapshots: FileSnapshot[] = [];
     if (branch.headCommitId) {
-      const previousSnapshots = await snapshotRepo.find({
-        where: { commitId: branch.headCommitId },
-        select: ['workingFileId', 'contentHash', 'name', 'type', 'folderId']
+      const parent = await commitRepo.findOne({ where: { id: branch.headCommitId, projectId: branch.projectId }, select: ['id'] });
+      if (!parent) throw Errors.conflict('The saved branch head is unavailable for this project');
+      previousSnapshots = await snapshotRepo.find({ where: { commitId: branch.headCommitId } });
+    }
+    const previousByWorkingId = new Map(previousSnapshots.map(snapshot => [snapshot.workingFileId, snapshot]));
+    const previousByMainId = new Map(previousSnapshots.filter(snapshot => snapshot.mainFileId).map(snapshot => [snapshot.mainFileId!, snapshot]));
+    let files = workingFiles;
+    const selectedMainIdByWorkingId = new Map<string, string>();
+    if (scopedIds) {
+      const identities = previousSnapshots.map(snapshot => snapshot.mainFileId
+        ? `id:${snapshot.mainFileId}` : `legacy:${buildSnapshotKey(snapshot.folderId, snapshot.name, snapshot.type)}`);
+      if (new Set(identities).size !== identities.length || previousByWorkingId.size !== previousSnapshots.length) {
+        throw Errors.conflict('The saved branch head contains ambiguous file identities');
+      }
+      const targets = await dataSource.getRepository(MainFile).find({
+        where: { projectId: branch.projectId, id: In(scopedIds) },
+        select: ['id', 'name', 'type', 'folderId'],
       });
+      if (targets.length !== scopedIds.length) throw Errors.conflict('One or more selected files are unavailable in this project');
+      files = targets.map(target => {
+        const identified = workingFiles.filter(file => file.mainFileId === target.id);
+        const matches = identified.length ? identified : workingFiles.filter(file => !file.mainFileId
+          && file.name === target.name && file.type === target.type
+          && normalizeFolderId(file.folderId) === normalizeFolderId(target.folderId));
+        if (matches.length !== 1) throw Errors.conflict('One or more selected working files are unavailable or ambiguous');
+        selectedMainIdByWorkingId.set(matches[0].id, target.id);
+        return matches[0];
+      });
+    }
 
-      for (const snap of previousSnapshots) {
-        previousSnapshotsByWorkingId.set(snap.workingFileId, {
-          workingFileId: snap.workingFileId,
-          contentHash: snap.contentHash,
-          name: snap.name,
-          type: snap.type,
-          folderId: snap.folderId,
+    type PlannedSnapshot = Pick<FileSnapshot, 'workingFileId' | 'mainFileId' | 'folderId' | 'name' | 'type' | 'content' | 'contentHash' | 'changeType'>;
+    const planned: PlannedSnapshot[] = files.map(file => {
+      const previous = (file.mainFileId ? previousByMainId.get(file.mainFileId) : undefined) ?? previousByWorkingId.get(file.id);
+      const contentHash = file.content === null ? null : hashContent(file.content);
+      const unchanged = previous && contentHash === previous.contentHash && file.content === previous.content
+        && file.name === previous.name && file.type === previous.type
+        && normalizeFolderId(file.folderId) === normalizeFolderId(previous.folderId);
+      return {
+        workingFileId: file.id, mainFileId: selectedMainIdByWorkingId.get(file.id) ?? file.mainFileId ?? null, folderId: file.folderId,
+        name: file.name, type: file.type, content: file.content, contentHash,
+        changeType: file.isDeleted ? 'deleted' : !previous ? 'added' : unchanged ? 'unchanged' : 'modified',
+      };
+    });
+    if (scopedIds) {
+      const selectedWorkingIds = new Set(files.map(file => file.id));
+      const selectedMainIds = new Set(scopedIds);
+      // Unselected entries come from the immutable saved tree, never their
+      // current working rows. This also preserves tombstones and removed rows.
+      for (const previous of previousSnapshots) {
+        if (selectedWorkingIds.has(previous.workingFileId) || (previous.mainFileId && selectedMainIds.has(previous.mainFileId))) continue;
+        planned.push({
+          workingFileId: previous.workingFileId, mainFileId: previous.mainFileId, folderId: previous.folderId,
+          name: previous.name, type: previous.type, content: previous.content, contentHash: previous.contentHash,
+          changeType: previous.changeType === 'deleted' ? 'deleted' : 'unchanged',
         });
       }
     }
-    
-    // Create content hash for the commit
-    const commitHash = hashContent(JSON.stringify(files.map(f => ({ id: f.id, hash: f.contentHash }))));
-    
-    // Get next version number for this project
+    planned.sort((a, b) => a.workingFileId < b.workingFileId ? -1 : a.workingFileId > b.workingFileId ? 1 : 0);
+    const commitHash = hashContent(JSON.stringify(planned.map(file => ({
+      id: file.workingFileId, mainFileId: file.mainFileId, name: file.name, type: file.type,
+      folderId: file.folderId, hash: file.contentHash, deleted: file.changeType === 'deleted',
+    }))));
+    const now = Date.now();
     const maxVersionResult = await commitRepo.createQueryBuilder('c')
       .select('COALESCE(MAX(c.versionNumber), 0)', 'maxVersion')
-      .where('c.projectId = :projectId', { projectId: branch.projectId })
-      .getRawOne();
-    const nextVersionNumber = (maxVersionResult?.maxVersion ?? 0) + 1;
-    
-    // Create commit
+      .where('c.projectId = :projectId', { projectId: branch.projectId }).getRawOne();
     const commitId = generateId();
     const commit = {
-      id: commitId,
-      projectId: branch.projectId,
-      branchId,
-      parentCommitId: branch.headCommitId,
-      userId,
-      message,
-      hash: commitHash,
-      versionNumber: nextVersionNumber,
-      source: options?.source ?? 'manual',
-      isRemote: options?.isRemote ?? false,
-      hotfixFromCommitId: options?.hotfixFromCommitId ?? null,
-      hotfixFromFileVersion: options?.hotfixFromFileVersion ?? null,
+      id: commitId, projectId: branch.projectId, branchId, parentCommitId: branch.headCommitId, userId, message,
+      hash: commitHash, versionNumber: (maxVersionResult?.maxVersion ?? 0) + 1,
+      source: scopedIds ? 'file-save' : captured.source ?? 'manual', isRemote: captured.isRemote ?? false,
+      hotfixFromCommitId: captured.hotfixFromCommitId ?? null, hotfixFromFileVersion: captured.hotfixFromFileVersion ?? null,
       createdAt: now,
     };
-    
     await commitRepo.insert(commit);
-    
-    // Pre-load previous snapshot content for reuse on unchanged files
-    const prevContentByWorkingId = new Map<string, { content: string | null; contentHash: string | null }>();
-    if (branch.headCommitId) {
-      const prevSnapshots = await snapshotRepo.find({
-        where: { commitId: branch.headCommitId },
-        select: ['workingFileId', 'content', 'contentHash']
-      });
-      for (const snap of prevSnapshots) {
-        prevContentByWorkingId.set(snap.workingFileId, { content: snap.content, contentHash: snap.contentHash });
-      }
-    }
-
-    // Create file snapshots with accurate changeType per file (batched)
-    const snapshotRows: any[] = [];
-    for (const file of files) {
-      let changeType: string;
-      let snapshotContent = file.content;
-      let snapshotContentHash = file.contentHash;
-
-      const previous = branch.headCommitId
-        ? previousSnapshotsByWorkingId.get(file.id)
-        : undefined;
-
-      if (file.isDeleted) {
-        changeType = 'deleted';
-      } else if (!branch.headCommitId || !previous) {
-        changeType = 'added';
-      } else {
-        const contentUnchanged = (file.contentHash ?? null) === (previous.contentHash ?? null);
-        const nameUnchanged = file.name === previous.name;
-        const typeUnchanged = file.type === previous.type;
-        const folderUnchanged = (file.folderId ?? null) === (previous.folderId ?? null);
-
-        if (contentUnchanged && nameUnchanged && typeUnchanged && folderUnchanged) {
-          changeType = 'unchanged';
-          const prevContent = prevContentByWorkingId.get(file.id);
-          if (prevContent) {
-            snapshotContent = prevContent.content;
-            snapshotContentHash = prevContent.contentHash;
-          }
-        } else {
-          changeType = 'modified';
-        }
-      }
-
-      snapshotRows.push({
-        id: generateId(),
-        commitId,
-        workingFileId: file.id,
-        mainFileId: file.mainFileId ?? null,
-        folderId: file.folderId,
-        name: file.name,
-        type: file.type,
-        content: snapshotContent,
-        contentHash: snapshotContentHash,
-        changeType,
-      });
-    }
-
-    if (snapshotRows.length > 0) {
-      await snapshotRepo.insert(snapshotRows);
-    }
-    
-    // Update branch head
+    if (planned.length) await snapshotRepo.insert(planned.map(snapshot => ({ ...snapshot, id: generateId(), commitId })));
     await branchRepo.update({ id: branchId }, { headCommitId: commitId, updatedAt: now });
-    
     logger.info('Commit created', { commitId, branchId, userId, message });
-    
-    // Persist file version numbers for non-auto commits
-    await this.updateFileCommitVersionsOnCommit(branch.projectId, commitId, message, now, options?.fileIds ?? null);
-    
+    await this.updateFileCommitVersionsOnCommit(branch.projectId, commitId, message, now, scopedIds, manager);
     return mapCommit(commit);
   }
-  
+
   /**
    * Get commit history for a branch
    */
@@ -209,7 +172,7 @@ export class VcsCommitService {
   /**
    * Get file snapshots for a specific commit
    */
-  async getCommitSnapshots(commitId: string): Promise<{
+  async getCommitSnapshots(commitId: string, projectId: string, manager?: EntityManager): Promise<{
     id: string;
     mainFileId: string | null;
     folderId: string | null;
@@ -218,13 +181,14 @@ export class VcsCommitService {
     content: string | null;
     changeType: string;
   }[]> {
-    const dataSource = await getDataSource();
+    if (!projectId) throw new Error('A project is required to read commit snapshots');
+    const dataSource = manager ?? await getDataSource();
     const snapshotRepo = dataSource.getRepository(FileSnapshot);
-    const fileRepo = dataSource.getRepository(WorkingFile);
     
     const snapshots = await snapshotRepo.createQueryBuilder('fs')
-      .leftJoin(WorkingFile, 'wf', 'fs.workingFileId = wf.id')
+      .innerJoin(Commit, 'vc', 'fs.commitId = vc.id')
       .where('fs.commitId = :commitId', { commitId })
+      .andWhere('vc.projectId = :projectId', { projectId })
       .select([
         'fs.id AS id',
         'fs.mainFileId AS "mainFileId"',
@@ -232,49 +196,13 @@ export class VcsCommitService {
         'fs.type AS type',
         'fs.content AS content',
         'fs.changeType AS "changeType"',
-        'fs.folderId AS "folderId"',
-        'wf.updatedAt AS "workingUpdatedAt"'
+        'fs.folderId AS "folderId"'
       ])
       .getRawMany();
 
-    const bestByKey = new Map<string, (typeof snapshots)[number]>();
-
-    const score = (s: (typeof snapshots)[number]) => {
-      let v = 0;
-      if (s.content) v += 10;
-      if (s.changeType !== 'unchanged') v += 5;
-      if (s.changeType === 'deleted') v -= 20;
-      return v;
-    };
-
-    for (const s of snapshots) {
-      const key = s.mainFileId
-        ? `main:${String(s.mainFileId)}`
-        : buildSnapshotKey(s.folderId ?? null, s.name, s.type);
-      const current = bestByKey.get(key);
-      if (!current) {
-        bestByKey.set(key, s);
-        continue;
-      }
-
-      const sScore = score(s);
-      const currentScore = score(current);
-
-      if (sScore > currentScore) {
-        bestByKey.set(key, s);
-        continue;
-      }
-
-      if (sScore === currentScore) {
-        const sUpdatedAt = s.workingUpdatedAt ?? 0;
-        const currentUpdatedAt = current.workingUpdatedAt ?? 0;
-        if (sUpdatedAt > currentUpdatedAt) {
-          bestByKey.set(key, s);
-        }
-      }
-    }
-
-    return [...bestByKey.values()].map(s => ({
+    // Preserve duplicate identities so readers and restores can reject ambiguity.
+    // Current working-file timestamps must not choose a historical snapshot.
+    return snapshots.map(s => ({
       id: s.id,
       mainFileId: s.mainFileId ? String(s.mainFileId) : null,
       folderId: s.folderId ?? null,
@@ -307,7 +235,7 @@ export class VcsCommitService {
       where: { id: commitId },
       select: ['source']
     });
-    if (commitRow?.source === 'file-save') {
+    if (isFileScopedCommitSource(commitRow?.source)) {
       logger.debug('commitHasFile skipped snapshot fallback for file-scoped save', { commitId, fileId });
       return false;
     }
@@ -390,7 +318,7 @@ export class VcsCommitService {
     const qb = commitRepo.createQueryBuilder('c')
       .innerJoin(FileSnapshot, 'fs', 'fs.commitId = c.id')
       .where('c.projectId = :projectId', { projectId })
-      .andWhere('(c.source IS NULL OR c.source <> :fileSaveSource)', { fileSaveSource: 'file-save' })
+      .andWhere('(c.source IS NULL OR c.source NOT IN (:...fileScopedSources))', { fileScopedSources: [...FILE_SCOPED_COMMIT_SOURCES] })
       .andWhere(new Brackets((where) => {
         where.where('fs.mainFileId = :fileId', { fileId });
         where.orWhere(new Brackets((legacy) => {
@@ -537,7 +465,8 @@ export class VcsCommitService {
     commitId: string,
     message: string,
     createdAt: number,
-    explicitFileIds?: string[] | null
+    explicitFileIds?: string[] | null,
+    manager?: EntityManager
   ): Promise<void> {
     const msgLower = (message || '').toLowerCase();
     if (
@@ -549,7 +478,7 @@ export class VcsCommitService {
     }
 
     try {
-      const dataSource = await getDataSource();
+      const dataSource = manager ?? await getDataSource();
       const snapshotRepo = dataSource.getRepository(FileSnapshot);
       const mainFileRepo = dataSource.getRepository(MainFile);
       const versionRepo = dataSource.getRepository(FileCommitVersion);
@@ -592,11 +521,11 @@ export class VcsCommitService {
         });
 
         if (insertValues.length > 0) {
-          await versionRepo.createQueryBuilder()
+          const insert = versionRepo.createQueryBuilder()
             .insert()
-            .values(insertValues)
-            .orIgnore()
-            .execute();
+            .values(insertValues);
+          if (!manager) insert.orIgnore();
+          await insert.execute();
         }
 
         logger.debug('Updated file_commit_versions on explicit file-scoped commit', { projectId, commitId, affectedFiles: scopedFileIds.length });
@@ -652,7 +581,7 @@ export class VcsCommitService {
         const nextVersionNumber = maxVersion + 1;
         maxVersionsByFileId.set(fileId, nextVersionNumber);
 
-        await versionRepo.createQueryBuilder()
+        const insert = versionRepo.createQueryBuilder()
           .insert()
           .values({
             projectId,
@@ -660,14 +589,15 @@ export class VcsCommitService {
             commitId,
             versionNumber: nextVersionNumber,
             createdAt,
-          })
-          .orIgnore()
-          .execute();
+          });
+        if (!manager) insert.orIgnore();
+        await insert.execute();
       }
 
       logger.debug('Updated file_commit_versions on commit', { projectId, commitId, affectedFiles: affectedSnapshots.length });
     } catch (error) {
       logger.warn('Failed to update file_commit_versions on commit', { projectId, commitId, error });
+      if (manager) throw error;
     }
   }
 }

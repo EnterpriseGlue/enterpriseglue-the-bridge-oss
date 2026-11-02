@@ -93,4 +93,20 @@ describe('useDeployment', () => {
 
     expect(gitApi.rollback).toHaveBeenCalledWith({ projectId: 'project-1', commitSha: 'abc123' });
   });
+  it('uses an explicit project snapshot after hook options change and keeps its guard off the wire', async () => {
+    vi.mocked(gitApi.deploy).mockResolvedValue({ deploymentId: 'd', commitSha: 'sha', filesChanged: 1 });
+    const { result, rerender } = renderHook(({ id }) => useDeployment(id), { initialProps: { id: 'project-A' }, wrapper: createWrapper() });
+    rerender({ id: 'project-B' });
+    const guard = vi.fn();
+    await act(async () => { await result.current.mutateAsync({ projectId: 'project-A', engineId: 'engine-A', message: 'reviewed', assertCurrent: guard }); });
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(gitApi.deploy).toHaveBeenCalledWith({ projectId: 'project-A', engineId: 'engine-A', message: 'reviewed' });
+  });
+  it('does not dispatch Git after the intent has expired', async () => {
+    const { result } = renderHook(() => useDeployment('project-A'), { wrapper: createWrapper() });
+    await act(async () => {
+      await expect(result.current.mutateAsync({ message: 'reviewed', assertCurrent: () => { throw new Error('expired'); } })).rejects.toThrow('expired');
+    });
+    expect(gitApi.deploy).not.toHaveBeenCalled();
+  });
 });

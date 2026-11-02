@@ -829,7 +829,7 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
   return camundaGetUsingConnection<T>(engineId, await getEngine(engineId), path, params)
 }
 
-async function camundaSendWithConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
+async function camundaSendWithConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any, expectNoContent = false): Promise<T> {
   const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
   try {
     const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
@@ -839,7 +839,15 @@ async function camundaSendWithConnection<T = unknown>(engineId: string, cfg: Eng
       await res.text().catch(() => '')
       throw new BpmnEngineOperationError({ method, path, status: res.status, connectionMode: diagnostics.connectionMode })
     }
-    const decoded = await decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
+    if (expectNoContent && res.status !== 204) {
+      await res.text().catch(() => '')
+      throw new BpmnEngineMalformedResponseError({ method, path, connectionMode: diagnostics.connectionMode })
+    }
+    let decoded: T
+    if (expectNoContent) {
+      try { await res.text() } catch { throw new BpmnEngineMalformedResponseError({ method, path, connectionMode: diagnostics.connectionMode }) }
+      decoded = undefined as T
+    } else decoded = await decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
     await auditBpmnEngineOperation({ engineId, method, path, connectionMode: diagnostics.connectionMode })
     return decoded
   } catch (error) {
@@ -906,9 +914,9 @@ export const getEngineVersion = async (engineId: string): Promise<EngineVersion 
 // -----------------------------
 export const getDeployments = <T = Deployment[]>(engineId: string, params?: Record<string, any>) => camundaGet<T>(engineId, '/deployment', params)
 export const getDeployment = <T = Deployment>(engineId: string, id: string) => camundaGet<T>(engineId, `/deployment/${encodeURIComponent(id)}`)
-export const deleteDeployment = <T = void>(engineId: string, id: string, cascade?: boolean) => {
+export const deleteDeployment = async <T = void>(engineId: string, id: string, cascade?: boolean) => {
   const query = cascade ? `?cascade=true` : ''
-  return camundaDelete<T>(engineId, `/deployment/${encodeURIComponent(id)}${query}`)
+  return camundaSendWithConnection<T>(engineId, await getEngine(engineId), 'DELETE', `/deployment/${encodeURIComponent(id)}${query}`, undefined, true)
 }
 export const getProcessDefinitionDiagram = <T = string>(engineId: string, id: string) => camundaGet<T>(engineId, `/process-definition/${encodeURIComponent(id)}/diagram`)
 

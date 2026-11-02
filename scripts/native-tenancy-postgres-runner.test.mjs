@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-function runFixture(t, scenario) {
+function runFixture(t, scenario, args = []) {
   const root = mkdtempSync(join(tmpdir(), 'eg-rls-runner-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = join(root, 'bin');
@@ -39,11 +39,12 @@ process.exit(process.env.FIXTURE_SCENARIO === 'timeout' || count < 3 ? 1 : 0);
   executable('sleep', 'process.exit(0);');
   executable('corepack', `
 if (!/^[a-f0-9]{64}$/.test(process.env.MIGRATION_TEST_POSTGRES_CONTAINER || '')) process.exit(98);
+if (process.env.USER_DIRECTORY_DISPOSABLE_POSTGRES !== 'true') process.exit(97);
 require('node:fs').appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify(['tests', ...process.argv.slice(2)]) + '\\n');
 process.exit(process.env.FIXTURE_SCENARIO === 'test-failure' ? 17 : 0);
 `);
   const calls = join(root, 'calls.jsonl');
-  const result = spawnSync('bash', [fileURLToPath(new URL('./run-native-tenancy-postgres-rls.sh', import.meta.url))], {
+  const result = spawnSync('bash', [fileURLToPath(new URL('./run-native-tenancy-postgres-rls.sh', import.meta.url)), ...args], {
     env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, FIXTURE_SCENARIO: scenario,
       FIXTURE_COUNT: join(root, 'count'), FIXTURE_CALLS: calls },
     encoding: 'utf8', timeout: 30000,
@@ -61,6 +62,8 @@ test('ignores temporary socket readiness and waits for the real TCP server', (t)
   const tests = calls.find(([command]) => command === 'tests');
   assert.ok(tests.includes('test/integration/nativeTenantRls.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-context-boundary.test.ts'));
+  assert.ok(tests.includes('test/integration/postgres-deployment-revision.test.ts'));
+  assert.ok(tests.includes('__tests__/shared/services/platform-admin/userDirectoryService.integration.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-global-identity.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-shared-inventory-readiness.test.ts'));
   assert.ok(tests.includes('test/integration/postgres-schema-epoch-bridge.test.ts'));
@@ -87,3 +90,13 @@ for (const [scenario, code] of [['create-failure', 9], ['start-failure', 9], ['t
     }
   });
 }
+
+test('targeted deployment revision lane includes the real file restore integration', t => {
+  const { result, calls } = runFixture(t, 'success', ['--deployment-revision']);
+  assert.equal(result.status, 0, result.stderr);
+  const tests = calls.find(([command]) => command === 'tests');
+  assert.ok(tests.includes('test/integration/postgres-deployment-revision.test.ts'));
+  assert.ok(tests.includes('test/integration/postgres-file-restore.test.ts'));
+  assert.ok(!tests.includes('test/integration/nativeTenantRls.test.ts'));
+  assert.equal(tests[tests.indexOf('--config') + 1], 'vitest.integration.config.ts');
+});

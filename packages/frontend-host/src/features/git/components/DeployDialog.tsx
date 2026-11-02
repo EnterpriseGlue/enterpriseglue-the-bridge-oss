@@ -5,7 +5,10 @@
  * Engines tagged with CI/CD-only environments are shown but disabled.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../../../shared/hooks/useAuth';
+import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions';
+import { getBrowserSessionRevision } from '../../../utils/browserSession';
 import {
   Modal,
   TextInput,
@@ -29,6 +32,15 @@ import { WhyUnavailableLink } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import type { DeployRequest } from '../types/git';
 import type { ConnectedEngine } from '../../starbase/utils/deployEligibility';
+
+interface DeploymentIntent {
+  projectId: string;
+  fileIds: string[];
+  versionMessage: string;
+  engineId: string;
+  deploymentName: string;
+  assertCurrent: () => void;
+}
 
 type DeploymentMode = 'manual' | 'ci';
 
@@ -102,6 +114,7 @@ function buildDeployDiagnosticDecision(
 
 export default function DeployDialog({ projectId, fileIds, open, onClose, onDeploySuccess }: DeployDialogProps) {
   const deployment = useDeployment(projectId);
+  const { user, permissions, sessionRevision } = useAuth();
   const { notify } = useToast();
   const queryClient = useQueryClient();
   const scopedFileIds = (fileIds || []).map(String).filter(Boolean);
@@ -128,9 +141,10 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   const canGitDeploy = !isFileScopedDeploy && gitConnected && gitHasToken;
 
   const engineDeployment = useMutation({
-    mutationFn: async (params: { engineId: string; deploymentName: string; vcsCommitId?: string }) => {
+    mutationFn: async (params: DeploymentIntent & { vcsCommitId: string }) => {
+      params.assertCurrent();
       return createEngineDeployment(params.engineId, {
-        resources: isFileScopedDeploy ? { fileIds: scopedFileIds } : { projectId },
+        resources: params.fileIds.length ? { fileIds: params.fileIds } : { projectId: params.projectId },
         options: {
           deploymentName: params.deploymentName,
           enableDuplicateFiltering: true,
@@ -142,12 +156,13 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   });
 
   const saveVersion = useMutation({
-    mutationFn: async (versionMessage: string) => {
-      const body: { message: string; fileIds?: string[] } = { message: versionMessage }
-      if (isFileScopedDeploy) {
-        body.fileIds = scopedFileIds
-      }
-      return apiClient.post<{ commitId?: string }>(`/vcs-api/projects/${projectId}/commit`, body)
+    mutationFn: async (intent: DeploymentIntent) => {
+      intent.assertCurrent();
+      const body: { message: string; fileIds?: string[] } = { message: intent.versionMessage }
+      if (intent.fileIds.length) body.fileIds = intent.fileIds
+      const result = await apiClient.post<{ commitId?: string }>(`/vcs-api/projects/${intent.projectId}/commit`, body);
+      if (typeof result?.commitId !== 'string' || !result.commitId.trim()) throw new Error('Saved version was not verified; deployment stopped');
+      return result;
     },
   })
 
@@ -200,72 +215,83 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
 
   const selectedEngine = deployableEngines.find(e => e.engineId === selectedEngineId);
 
-  const isPending = saveVersion.isPending || (canGitDeploy ? deployment.isPending : engineDeployment.isPending);
-  const isError = saveVersion.isError || (canGitDeploy ? deployment.isError : engineDeployment.isError);
-  const isSuccess = canGitDeploy ? deployment.isSuccess : engineDeployment.isSuccess;
-  const activeError = saveVersion.error || (canGitDeploy ? deployment.error : engineDeployment.error);
   const trimmedVersionTitle = versionTitle.trim()
   const trimmedVersionDescription = versionDescription.trim()
   const semanticVersionMessage = trimmedVersionDescription
     ? `${trimmedVersionTitle} — ${trimmedVersionDescription}`
     : trimmedVersionTitle
 
+  // A two-stage write belongs to the view/session in which it was confirmed.
+  // Capture inputs in mutation variables as React Query updates hook options on rerender.
+  const scope = JSON.stringify([
+    open, projectId, scopedFileIds, selectedEngineId, canGitDeploy,
+    user?.session?.principal.id || user?.id || null,
+    user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions),
+  ]);
+  const scopeRef = useRef(scope);
+  const lifetimeRef = useRef(0);
+  const activeAttemptRef = useRef<number | null>(null);
+  const submittedLifetimeRef = useRef<number | null>(null);
+  if (scopeRef.current !== scope) {
+    scopeRef.current = scope;
+    lifetimeRef.current += 1;
+  }
+  useEffect(() => () => { lifetimeRef.current += 1; }, []);
+  const ownsMutationState = submittedLifetimeRef.current === lifetimeRef.current;
+  const isPending = ownsMutationState && (saveVersion.isPending || (canGitDeploy ? deployment.isPending : engineDeployment.isPending));
+  const isError = ownsMutationState && (saveVersion.isError || (canGitDeploy ? deployment.isError : engineDeployment.isError));
+  const isSuccess = ownsMutationState && (canGitDeploy ? deployment.isSuccess : engineDeployment.isSuccess);
+  const activeError = ownsMutationState ? saveVersion.error || (canGitDeploy ? deployment.error : engineDeployment.error) : null;
+
   const handleDeploy = async () => {
-    if (!trimmedVersionTitle || !selectedEngineId) {
-      return;
-    }
-
+    if (isPending || !open || !trimmedVersionTitle || !selectedEngineId) return;
+    const lifetime = lifetimeRef.current;
+    const browserSession = getBrowserSessionRevision();
+    if (activeAttemptRef.current === lifetime) return;
+    activeAttemptRef.current = lifetime;
+    submittedLifetimeRef.current = lifetime;
+    const isCurrent = () => lifetimeRef.current === lifetime && browserSession === getBrowserSessionRevision();
+    const intent: DeploymentIntent = {
+      projectId, fileIds: [...scopedFileIds], versionMessage: semanticVersionMessage,
+      engineId: selectedEngineId, deploymentName: trimmedVersionTitle,
+      assertCurrent: () => { if (!isCurrent()) throw new Error('Deployment context changed; review the target again'); },
+    };
+    const gitParams: DeployRequest = {
+      projectId, engineId: selectedEngineId, message: trimmedVersionTitle,
+      createTag, environment: selectedEngine?.environment?.name,
+      ...(createTag && tagName ? { tagName } : {}),
+    };
+    const gitDeploy = canGitDeploy;
+    const fileDeploy = isFileScopedDeploy;
     try {
-      const versionResult = await saveVersion.mutateAsync(semanticVersionMessage)
-      const savedCommitId = versionResult?.commitId
-
-      if (canGitDeploy) {
-        const deployParams: Omit<DeployRequest, 'projectId'> = {
-          engineId: selectedEngineId,
-          message: trimmedVersionTitle,
-          createTag,
-          environment: selectedEngine?.environment?.name,
-        };
-
-        if (createTag && tagName) {
-          deployParams.tagName = tagName;
-        }
-
-        await deployment.mutateAsync(deployParams);
+      const versionResult = await saveVersion.mutateAsync(intent);
+      if (!isCurrent()) return;
+      const savedCommitId = versionResult?.commitId;
+      if (typeof savedCommitId !== 'string' || !savedCommitId.trim()) throw new Error('Saved version was not verified; deployment stopped');
+      if (gitDeploy) {
+        await deployment.mutateAsync({ ...gitParams, vcsCommitId: savedCommitId, assertCurrent: intent.assertCurrent });
       } else {
-        await engineDeployment.mutateAsync({
-          engineId: selectedEngineId,
-          deploymentName: trimmedVersionTitle,
-          vcsCommitId: savedCommitId,
-        });
+        await engineDeployment.mutateAsync({ ...intent, vcsCommitId: savedCommitId });
       }
+      if (!isCurrent()) return;
 
-      // Invalidate caches so versions panel and Mission Control button refresh immediately
-      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['engine-deployments', projectId, 'latest'] });
-
+      queryClient.invalidateQueries({ queryKey: ['vcs', 'commits', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['uncommitted-files', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['engine-deployments', intent.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['engine-deployments', intent.projectId, 'latest'] });
       onDeploySuccess?.();
-
       notify({
-        kind: 'success',
-        title: 'Deployment successful',
-        subtitle: canGitDeploy
+        kind: 'success', title: 'Deployment successful',
+        subtitle: gitDeploy
           ? 'Version saved, then committed and pushed to Git repository.'
-          : isFileScopedDeploy
-            ? 'Version saved, then current file deployed to engine.'
-            : 'Version saved, then project files deployed to engine.',
+          : fileDeploy ? 'Version saved, then current file deployed to engine.' : 'Version saved, then project files deployed to engine.',
       });
-
       onClose();
-      setVersionTitle('');
-      setVersionDescription('');
-      setSelectedEngineId('');
-      setCreateTag(false);
-      setTagName('');
+      setVersionTitle(''); setVersionDescription(''); setSelectedEngineId(''); setCreateTag(false); setTagName('');
     } catch (error) {
-      console.error('Deployment failed:', error);
+      if (isCurrent()) console.error('Deployment failed:', error);
+    } finally {
+      if (activeAttemptRef.current === lifetime) activeAttemptRef.current = null;
     }
   };
 
