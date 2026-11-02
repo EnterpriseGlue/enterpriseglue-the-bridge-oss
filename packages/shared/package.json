@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.28.8",
+  "version": "0.28.9",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
