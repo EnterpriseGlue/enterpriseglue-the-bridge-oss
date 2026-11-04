@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.8...v0.35.9) (2026-11-04)
+
+### Changes
+
+- **mission-control:** Returns generic not-found responses for missing runtime process instances without changing tenant or runtime authorization.
+
+Full upgrade, compatibility and verification details: [v0.35.9 release notes](docs/releases/v0.35.9.md).
+
 ## [0.35.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.7...v0.35.8) (2026-11-04)
 
 ### Changes
