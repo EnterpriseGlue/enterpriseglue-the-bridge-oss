@@ -77,6 +77,25 @@ test('all versioned skills have portable instructions and UI metadata', () => {
   }
 })
 
+test('delivery skills pair local-first feedback with frozen acceptance and applicable evidence reuse', () => {
+  for (const skill of ['enterpriseglue-new-change', 'enterpriseglue-test', 'enterpriseglue-ship']) {
+    const instructions = readFileSync(join(pluginRoot, 'skills', skill, 'SKILL.md'), 'utf8')
+    assert.match(instructions, /one coherent[\s\S]*capability/, `${skill} reviewable capability`)
+    assert.match(instructions, /targeted tests and affected checks/, `${skill} development feedback`)
+    assert.match(instructions, /full relevant local gate/, `${skill} acceptance milestone`)
+    assert.match(instructions, /frozen/, `${skill} frozen revision`)
+    assert.match(instructions, /Reuse passing evidence while source, dependencies, configuration and environment/, `${skill} evidence applicability`)
+    assert.match(instructions, /Later edits|After edits/, `${skill} changed-revision checks`)
+    assert.match(instructions, /known failures/, `${skill} no CI debugging shortcut`)
+    assert.match(instructions, /protected CI/, `${skill} independent acceptance`)
+  }
+  const testing = readFileSync(join(pluginRoot, 'skills/enterpriseglue-test/SKILL.md'), 'utf8')
+  assert.match(testing, /PostgreSQL-only feedback does not establish portability/)
+  assert.match(testing, /cross-database,[\s\S]*browser, image, security and aggregate acceptance/)
+  const shipping = readFileSync(join(pluginRoot, 'skills/enterpriseglue-ship/SKILL.md'), 'utf8')
+  assert.match(shipping, /publication, deployment, production or destructive-action authority/)
+})
+
 test('OSS delivery has no write path to the retired EE repository', () => {
   const workflowRoot = join(root, '.github/workflows')
   const workflowText = readdirSync(workflowRoot)

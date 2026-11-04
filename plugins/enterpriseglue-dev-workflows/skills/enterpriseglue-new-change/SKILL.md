@@ -11,6 +11,22 @@ explicitly authorizes `/ship` or the equivalent shipping action. Do not invoke
 shipping automatically because the change is finished or the user asked to fix
 an issue. A skill mention in a question is not authorization to execute it.
 
+## Local-first delivery cadence
+
+Integrate one coherent, independently reviewable capability with its related
+tests and technical docs. Complete the relevant UI, API, persistence and
+operational workflow together. Split for repository ownership, review size,
+risk or independent rollout; do not create a PR for each helper or file.
+
+Develop with targeted tests and affected checks. Once the capability is frozen,
+run the full relevant local gate using supported runtimes and CI commands,
+review the combined diff, then submit one ready PR when shipping is authorized.
+Reuse passing evidence while source, dependencies, configuration and environment
+remain applicable; a new turn or skill invocation does not require another run.
+After edits, rerun affected checks and the full gate when impact warrants.
+Never push known failures merely to obtain CI feedback. Record unavailable local
+checks for required protected CI or authorized staging acceptance.
+
 1. Read `../../references/repository-lifecycle.json` and run the plugin-root
    lifecycle guard for the `write` operation before creating a branch or
    worktree. Stop when the repository is retired.

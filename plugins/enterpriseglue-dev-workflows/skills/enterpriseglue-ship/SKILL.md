@@ -11,6 +11,23 @@ implementation request and `/new-change` are not shipping authorization.
 Release Please PRs belong to `enterpriseglue-release`; `/ship` cannot merge
 them, enable their auto-merge, dispatch publication, or create release tags.
 
+## Local-first submission cadence
+
+Ship one coherent capability with its related tests and technical docs. Develop
+with targeted tests and affected checks, then review the combined diff and run
+the full relevant local gate at the frozen ready-PR revision before submission.
+Split for repository ownership, review size, risk or independent rollout, not
+for individual helpers, files or intermediate edits.
+
+Reuse passing evidence while source, dependencies, configuration and environment
+remain applicable. Starting shipping or a new turn does not require another
+full run. Later edits require affected checks and the full gate when impact
+warrants. Do not push known failures merely to obtain CI feedback, weaken
+assertions or omit required security, database, browser or protected checks.
+Record checks unavailable locally and complete them in protected CI or
+authorized staging. Local success does not establish live acceptance or grant
+publication, deployment, production or destructive-action authority.
+
 1. Read `../../references/repository-lifecycle.json` and run the plugin-root
    lifecycle guard for the `write` operation. Stop when the repository is
    retired; historical-audit permission never authorizes shipping.
