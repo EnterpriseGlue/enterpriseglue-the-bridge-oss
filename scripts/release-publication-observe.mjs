@@ -9,6 +9,23 @@ import { readPublicationApi } from './release-publication-approval.mjs'
 import { hashBytes } from './lib/release-publication-record.mjs'
 import { observePublication, resumePublication } from './lib/release-publication-observation.mjs'
 
+export function missingDistributionAssets(release, tag) {
+  assert.equal(release.tag_name, tag)
+  assert.equal(release.draft, false)
+  assert.ok(Array.isArray(release.assets))
+  assert.ok(release.assets.every(asset => asset && typeof asset.name === 'string' && asset.name.length > 0))
+  const names = release.assets.map(asset => asset.name)
+  assert.equal(names.length, new Set(names).size, 'Ambiguous duplicate distribution assets.')
+  const absent = ['enterpriseglue-distribution-lock-' + tag + '.json', 'enterpriseglue-distribution-lock-' + tag + '.sigstore.json',
+    'enterpriseglue-frontend-static-' + tag + '.tar.gz', 'enterpriseglue-plugin-deployment-kit-' + tag + '.tar.gz',
+    'enterpriseglue-plugin-toolchain-' + tag + '.json', 'enterpriseglue-plugin-toolchain-airgap-' + tag + '.tar.gz']
+    .filter(name => !names.includes(name))
+  // Do not turn a partially populated attachment set into overwrite authority.
+  // Existing bytes require independent reconciliation before a publisher retry.
+  assert.ok(absent.length === 0 || absent.length === 6, 'Partial distribution attachments require independent reconciliation.')
+  return absent
+}
+
 export function productionObservers({ record, artifacts, evidence, repository = process.env.GITHUB_REPOSITORY,
   runCommand = (binary, args) => execFileSync(binary, args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 120000 }).trim() }) {
   assert.equal(repository, 'EnterpriseGlue/enterpriseglue-the-bridge-oss')
@@ -96,6 +113,10 @@ export function productionObservers({ record, artifacts, evidence, repository = 
       for (const [name, value] of [['pluginInstaller', lock.pluginToolchain.installer], ['pluginManager', lock.pluginToolchain.manager],
         ['runtimeChart', lock.pluginToolchain.runtimeChart.subject], ['installerRbacChart', lock.pluginToolchain.installerRbacChart.subject],
         ['managerChart', lock.pluginToolchain.managerChart.subject]]) assert.ok(value.endsWith(`@${expected(name)}`))
+      // A complete authenticated release listing proves absence. Failed API
+      // reads, bad signatures and payload drift remain unknown/conflicting.
+      const absent = missingDistributionAssets(api(`releases/tags/${tag}`), tag)
+      if (absent.length) return { status: 'missing', digest, missingAssets: absent }
       command('gh', ['release', 'download', tag, '--repo', repository, '--pattern', `enterpriseglue-*${tag}*`, '--dir', directory, '--clobber'])
       command('node', ['scripts/enterpriseglue-distribution-lock.mjs', 'verify', '--lock', file, '--root', directory])
       assert.ok(readFileSync(join(directory, `enterpriseglue-plugin-toolchain-airgap-${tag}.tar.gz`)).length)
