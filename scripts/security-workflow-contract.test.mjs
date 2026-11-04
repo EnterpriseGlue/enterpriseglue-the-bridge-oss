@@ -45,8 +45,10 @@ test('every Trivy CLI lane uses the same authenticated release pins without the 
     assert.equal(installer(workflow), trivyInstaller, name);
     assert.doesNotMatch(workflow, /uses: aquasecurity\/setup-trivy@/);
   }
-  assert.match(trivyInstaller, /https:\/\/github.com\/aquasecurity\/trivy\/releases\/download\/v0\.70\.0\//);
-  assert.doesNotMatch(trivyInstaller, /get\.trivy\.dev|\$\{\{|curl[^\n]*\|\s*(?:ba)?sh/);
+  const downloadLine = trivyInstaller.split('\n').find(line => line.trim().startsWith('"https://'));
+  assert.equal(downloadLine?.trim(), '"https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_${asset}.tar.gz"');
+  assert.equal(trivyInstaller.includes('get.trivy.dev'), false);
+  assert.doesNotMatch(trivyInstaller, /\$\{\{|curl[^\n]*\|\s*(?:ba)?sh/);
   assert.match(trivyInstaller, /8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9/);
   assert.match(trivyInstaller, /2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d/);
   assert.ok(trivyInstaller.indexOf('sha256sum -c') < trivyInstaller.indexOf('tar -xzf'));
