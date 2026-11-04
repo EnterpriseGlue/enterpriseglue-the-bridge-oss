@@ -158,6 +158,7 @@ test('runner never invokes TypeORM synchronize and executes only the signed sche
   assert.deepEqual(upgradedPackages?.split(/\\\n/).map((line) => line.trim()), [
     "'nodejs-26=26.12.1-r2' 'c-ares>=1.34.9-r0'",
     "'ca-certificates-bundle>=20260909-r3'",
+    "'libexpat1=2.10.0-r0'",
     "'zlib>=1.3.2.1_rc20260921-r0'",
     "'glibc-2.44>=2.44-r8'",
     "'glibc-2.44-dev>=2.44-r8'",

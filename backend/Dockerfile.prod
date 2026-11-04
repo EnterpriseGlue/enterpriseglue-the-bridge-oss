@@ -74,7 +74,8 @@ FROM runtime-root AS runtime-base
 USER root
 RUN set -eux; \
     apk upgrade --no-cache; \
-    apk add --no-cache --upgrade 'ca-certificates-bundle>=20260909-r3' 'libcurl-openssl4>=8.23.0-r0' 'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7'; \
+    apk add --no-cache --upgrade 'ca-certificates-bundle>=20260909-r3' 'libcurl-openssl4>=8.23.0-r0' 'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7' 'libexpat1=2.10.0-r0'; \
+    apk --no-network info --installed 'libexpat1=2.10.0-r0'; \
     runtime_tools="$(apk info | awk '/^(nodejs|npm|node-gyp|corepack)(-|$)/')"; \
     apk del --no-network ${runtime_tools}; \
     apk add --no-cache 'nodejs-24=24.22.1-r2' 'c-ares>=1.34.9-r0' \
