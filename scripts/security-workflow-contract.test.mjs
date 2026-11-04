@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 const nightly = readFileSync(
@@ -26,6 +29,55 @@ const postgresImageSmoke = readFileSync(
   new URL('./e2e-smoke-postgres-images.sh', import.meta.url),
   'utf8',
 );
+
+function installer(workflow) {
+  const match = /- name: Setup Trivy\n        shell: bash\n        run: \|\n((?:          .*\n)+)/.exec(workflow);
+  assert.ok(match, 'checksum-pinned Trivy installer is required');
+  return match[1].split('\n').slice(0, -1).map(line => line.slice(10)).join('\n') + '\n';
+}
+
+const trivyInstaller = installer(dockerImages);
+test('every Trivy CLI lane uses the same authenticated release pins without the unavailable redirect service', () => {
+  const scripts = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts;
+  assert.match(scripts['test:ci-contracts'], /scripts\/security-workflow-contract\.test\.mjs/);
+  for (const name of ['ci.yml', 'ci-core-reusable.yml', 'docker-images.yml', 'security-nightly-reusable.yml']) {
+    const workflow = readFileSync(new URL('../.github/workflows/' + name, import.meta.url), 'utf8');
+    assert.equal(installer(workflow), trivyInstaller, name);
+    assert.doesNotMatch(workflow, /uses: aquasecurity\/setup-trivy@/);
+  }
+  assert.match(trivyInstaller, /https:\/\/github.com\/aquasecurity\/trivy\/releases\/download\/v0\.70\.0\//);
+  assert.doesNotMatch(trivyInstaller, /get\.trivy\.dev|\$\{\{|curl[^\n]*\|\s*(?:ba)?sh/);
+  assert.match(trivyInstaller, /8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9/);
+  assert.match(trivyInstaller, /2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d/);
+  assert.ok(trivyInstaller.indexOf('sha256sum -c') < trivyInstaller.indexOf('tar -xzf'));
+  assert.ok(trivyInstaller.indexOf('Version: 0.70.0') < trivyInstaller.indexOf('GITHUB_PATH'));
+  assert.match(trivyInstaller, /--proto '=https' --proto-redir '=https' --tlsv1\.2/);
+  assert.match(trivyInstaller, /--connect-timeout 10 --max-time 120/);
+});
+
+for (const scenario of ['unsupported', 'download-failure', 'checksum-mismatch', 'existing-directory', 'existing-symlink']) {
+  test(`Trivy installation fails closed for ${scenario} without publishing an executable path`, () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'eg-trivy-installer-'));
+    try {
+      const bin = path.join(root, 'bin'); mkdirSync(bin);
+      const runner = path.join(root, 'runner'); mkdirSync(runner);
+      const destination = path.join(runner, 'enterpriseglue-trivy-0.70.0');
+      if (scenario === 'existing-directory') mkdirSync(destination);
+      if (scenario === 'existing-symlink') {
+        const result = spawnSync('ln', ['-s', path.join(root, 'absent'), destination]); assert.equal(result.status, 0);
+      }
+      const executable = (name, value) => writeFileSync(path.join(bin, name), value, { mode: 0o755 });
+      executable('uname', `#!/bin/sh\nif [ "$1" = '-s' ]; then echo '${scenario === 'unsupported' ? 'Darwin' : 'Linux'}'; else echo x86_64; fi\n`);
+      executable('curl', '#!/bin/sh\nprintf called > "$RUNNER_TEMP/download-called"\nif [ "$INSTALL_TEST_SCENARIO" = download-failure ]; then exit 22; fi\nwhile [ "$#" -gt 0 ]; do if [ "$1" = --output ]; then shift; printf corrupt > "$1"; exit 0; fi; shift; done\nexit 1\n');
+      const githubPath = path.join(root, 'github-path');
+      const result = spawnSync('bash', ['-c', trivyInstaller], { env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH,
+        RUNNER_TEMP: runner, GITHUB_PATH: githubPath, INSTALL_TEST_SCENARIO: scenario }, encoding: 'utf8', timeout: 10_000 });
+      assert.equal(result.error, undefined); assert.notEqual(result.status, 0);
+      assert.equal(existsSync(githubPath), false); assert.equal(existsSync(path.join(destination, 'trivy')), false);
+      assert.equal(existsSync(path.join(runner, 'download-called')), ['download-failure', 'checksum-mismatch'].includes(scenario));
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+}
 
 test('nightly preserves evidence before enforcing the high and critical gate', () => {
   assert.match(nightly, /echo "critical=\$\{critical_total\}"/);

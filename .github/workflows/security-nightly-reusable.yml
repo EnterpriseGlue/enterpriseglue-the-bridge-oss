@@ -71,10 +71,31 @@ jobs:
       # -- Trivy scans --------------------------------------------------------
 
       - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-        with:
-          version: v0.70.0
-          cache: false
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pins authenticated against the official v0.70.0 signed checksum manifest.
+          # Keep this self-contained for reusable-workflow consumers.
+          case "$(uname -s)/$(uname -m)" in
+            Linux/x86_64) asset=Linux-64bit; checksum=8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9 ;;
+            Linux/aarch64|Linux/arm64) asset=Linux-ARM64; checksum=2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d ;;
+            *) echo 'Unsupported Trivy runner platform' >&2; exit 1 ;;
+          esac
+          install_dir="${RUNNER_TEMP:?}/enterpriseglue-trivy-0.70.0"
+          [[ ! -e "$install_dir" && ! -L "$install_dir" ]]
+          download_dir="$(mktemp -d "${RUNNER_TEMP}/eg-trivy-download.XXXXXX")"
+          trap 'rm -rf -- "$download_dir"' EXIT
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 120 \
+            --output "$download_dir/trivy.tar.gz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_${asset}.tar.gz"
+          printf '%s  %s\n' "$checksum" "$download_dir/trivy.tar.gz" | sha256sum -c > /dev/null
+          tar -xzf "$download_dir/trivy.tar.gz" -C "$download_dir" trivy
+          mkdir "$install_dir"
+          install -m 0755 "$download_dir/trivy" "$install_dir/trivy"
+          version="$("$install_dir/trivy" --version)"
+          [[ "${version%%$'\n'*}" == 'Version: 0.70.0' ]]
+          printf '%s\n' "$install_dir" >> "${GITHUB_PATH:?}"
 
       - name: Trivy scan backend image
         # Defer failure until reports are uploaded and the tracking issue is updated.
