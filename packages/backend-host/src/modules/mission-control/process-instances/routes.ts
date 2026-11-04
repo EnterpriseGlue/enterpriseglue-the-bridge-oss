@@ -16,6 +16,7 @@ import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQue
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
 import { ProcessInstanceDetailSchema, ProcessInstanceSchema, ProcessInstanceVariablesModifyRequestSchema, RuntimeActivityInstanceTreeSchema, VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { presentRuntimeVariables, preventVariableResponseCaching, requireVariableValueAccess } from '../shared/variable-visibility.js'
+import { withProcessInstanceLookupError, rethrowProcessInstanceLookupError } from '../shared/process-instance-lookup-error.js'
 
 const r = Router()
 
@@ -27,12 +28,12 @@ const processInstanceListQuerySchema = z.object({
   maxResults: z.coerce.number().int().positive().optional(),
 })
 
-const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+const requireProcessInstanceAction = (actionId: string) => withProcessInstanceLookupError(requireRuntimeDefinitionAction(actionId, {
   resourceKind: 'process_definition',
   definitionPath: 'process-instance',
   resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
   engineIdFrom: 'any',
-})
+}))
 
 // List process instances
 r.get('/mission-control-api/process-instances', requireAuth, requireRuntimeCollectionAction('engine.runtime.process-instances.read', { resourceKind: 'process_definition' }), validateQuery(processInstanceListQuerySchema), asyncHandler(async (req: Request, res: Response) => {
@@ -74,7 +75,7 @@ r.get('/mission-control-api/process-instances', requireAuth, requireRuntimeColle
 r.get('/mission-control-api/process-instances/:id', requireAuth, requireProcessInstanceAction('engine.runtime.process-instances.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
-  const data = await getProcessInstance(engineId, instanceId)
+  const data = await getProcessInstance(engineId, instanceId).catch(rethrowProcessInstanceLookupError)
   if (req.query.includeActionDecisions !== 'true') return res.json(ProcessInstanceDetailSchema.parse(data))
   const [withDecisions] = await addRuntimeProcessInstanceActionDecisions({
     userId: req.user!.userId,
@@ -91,7 +92,7 @@ r.get('/mission-control-api/process-instances/:id', requireAuth, requireProcessI
 r.get('/mission-control-api/process-instances/:id/variables', requireAuth, requireProcessInstanceAction('engine.runtime.process-instances.variables.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
-  const data = await getProcessInstanceVariables(engineId, instanceId)
+  const data = await getProcessInstanceVariables(engineId, instanceId).catch(rethrowProcessInstanceLookupError)
   preventVariableResponseCaching(res)
   res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data)))
 }))
@@ -100,7 +101,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireAuth, requi
 r.get('/mission-control-api/process-instances/:id/activity-instances', requireAuth, requireProcessInstanceAction('engine.runtime.process-instances.activity-tree.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
-  const data = await getActivityInstances(engineId, instanceId)
+  const data = await getActivityInstances(engineId, instanceId).catch(rethrowProcessInstanceLookupError)
   res.json(RuntimeActivityInstanceTreeSchema.parse(data))
 }))
 

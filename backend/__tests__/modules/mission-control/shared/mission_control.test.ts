@@ -786,6 +786,67 @@ describe('mission-control shared mission_control routes', () => {
     expect(getHistoricProcessInstanceById).not.toHaveBeenCalled();
   });
 
+  it('returns a generic 404 for an engine-wide missing runtime process without leaking its ID or engine URL', async () => {
+    vi.mocked(getProcessInstanceById).mockRejectedValueOnce(new BpmnEngineOperationError({
+      method: 'GET', path: '/process-instance/foreign-process', status: 404,
+    }));
+    const response = await request(app).get('/mission-control-api/process-instances/foreign-process').query({ engineId: 'engine-77' });
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Process instance not found', code: 'NOT_FOUND' });
+  });
+
+  it.each(['', '/variables', '/history/activity-instances', '/execution-details', '/jobs', '/variable-history', '/incidents', '/failed-external-tasks'])('returns not found when the resource-aware authorization lookup cannot resolve the runtime instance%s', async suffix => {
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine
+      ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+      : { findOne: vi.fn().mockResolvedValue(null) } });
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(false);
+    vi.mocked(camundaGet).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'GET', path: '/process-instance/missing', status: 404 }));
+    const response = await request(app).get(`/mission-control-api/process-instances/missing${suffix}`).query({ engineId: 'engine-77' });
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Process instance not found', code: 'NOT_FOUND' });
+    expect(getProcessInstanceById).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403, 429, 500, 503])('preserves upstream %s as a rejected operation rather than a tenant denial or missing process', async (status) => {
+    vi.mocked(getProcessInstanceById).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'GET', path: '/process-instance/known', status }));
+    const response = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-77' });
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('ENGINE_OPERATION_REJECTED');
+    expect(response.body.details.engineStatus).toBe(status);
+  });
+
+  it('does not treat a lookalike application error as a typed engine lookup response', async () => {
+    vi.mocked(getProcessInstanceById).mockRejectedValueOnce(new AppError('ENGINE_OPERATION_REJECTED', 'Unverified engine failure', 502, { engineStatus: 404, operationClass: 'engine.read' }));
+    const response = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-77' });
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('ENGINE_OPERATION_REJECTED');
+  });
+
+  it('does not convert a mutating engine operation 404 into a runtime lookup denial', async () => {
+    vi.mocked(getProcessInstanceById).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'POST', path: '/process-instance/known', status: 404 }));
+    const response = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-77' });
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('ENGINE_OPERATION_REJECTED');
+  });
+
+  it('preserves local authorization denial and sanitizes unknown runtime lookup errors', async () => {
+    vi.mocked(getProcessInstanceById).mockRejectedValueOnce(Errors.forbidden('Access denied'));
+    const denied = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-77' });
+    expect(denied.status).toBe(403);
+    vi.mocked(getProcessInstanceById).mockRejectedValueOnce(new Error('synthetic-private-engine-body'));
+    const unknown = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-77' });
+    expect(unknown.status).toBe(500);
+    expect(unknown.body).toEqual({ error: 'Failed to load process instance', code: 'INTERNAL_ERROR' });
+  });
+
+  it('rejects a foreign engine before any runtime instance transport or handler lookup', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'foreign-tenant', tenancyMode: 'dedicated' }) }) });
+    const response = await request(app).get('/mission-control-api/process-instances/foreign-process').query({ engineId: 'engine-77' });
+    expect(response.status).toBe(404);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(getProcessInstanceById).not.toHaveBeenCalled();
+  });
+
   it('denies shared process instance reads when instance view permission is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 

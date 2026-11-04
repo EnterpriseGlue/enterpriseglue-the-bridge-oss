@@ -30,7 +30,7 @@ import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/v
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
-import { BpmnEngineOperationError } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { processInstanceLookupError, withProcessInstanceLookupError } from './process-instance-lookup-error.js'
 import { presentHistoricVariables, presentRuntimeVariables, presentVariableHistory, preventVariableResponseCaching, requireVariableValueFilterAccess } from './variable-visibility.js'
 import {
   filterRuntimeItemsByProcessDefinitionKeys,
@@ -74,22 +74,14 @@ const r = Router()
 
 // Process instances inherit authorization from their process definition key.
 // The guard resolves the instance from the engine before it evaluates access.
-const requireProcessInstanceAction = (actionId: string) => requireRuntimeDefinitionAction(actionId, {
+const requireProcessInstanceAction = (actionId: string) => withProcessInstanceLookupError(requireRuntimeDefinitionAction(actionId, {
   resourceKind: 'process_definition',
   definitionPath: 'process-instance',
   resourceKeyFields: ['definitionKey', 'processDefinitionKey'],
   engineIdFrom: 'any',
-})
+}))
 
-// Resolve a missing ID within the selected, authorized engine as not found.
-// Do not reclassify upstream authentication, transport, or malformed-response errors.
-function historicProcessLookupError(error: unknown): unknown {
-  return error instanceof BpmnEngineOperationError
-    && error.details?.engineStatus === 404
-    && error.details?.operationClass === 'engine.read'
-    ? Errors.notFound('Process instance')
-    : error
-}
+const historicProcessLookupError = processInstanceLookupError
 
 const requireHistoricProcessInstanceAction = (actionId: string): RequestHandler => {
   const guard = requireRuntimeDefinitionAction(actionId, {
@@ -267,8 +259,10 @@ r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction
       includeDetailActions: true,
     })
     res.json(ProcessInstanceDetailSchema.parse(withDecisions))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load process instance')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load process instance')
   }
 }))
 
@@ -279,8 +273,10 @@ r.get('/mission-control-api/process-instances/:id/variables', requireProcessInst
     const data = await getProcessInstanceVariables(engineId, instanceId)
     preventVariableResponseCaching(res)
     res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data)))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load instance variables')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load instance variables')
   }
 }))
 
@@ -291,8 +287,10 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', r
     const data = await listProcessInstanceActivityHistory(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
     res.json(ActivityInstanceListSchema.parse(redacted))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load activity instances history')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load activity instances history')
   }
 }))
 
@@ -308,8 +306,10 @@ r.get('/mission-control-api/process-instances/:id/execution-details', requirePro
       ...redacted,
       variables: await presentHistoricVariables(req, data.variables),
     }))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load execution details')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load execution details')
   }
 }))
 
@@ -320,8 +320,10 @@ r.get('/mission-control-api/process-instances/:id/jobs', requireProcessInstanceA
     const data = await listProcessInstanceJobs(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
     res.json(ProcessInstanceJobListSchema.parse(redacted))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load jobs')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load jobs')
   }
 }))
 
@@ -373,8 +375,10 @@ r.get('/mission-control-api/process-instances/:id/variable-history', requireProc
     const data = await getProcessInstanceVariableHistory(engineId, instanceId, variableInstanceId)
     preventVariableResponseCaching(res)
     res.json(z.array(VariableHistoryEntrySchema).parse(await presentVariableHistory(req, data)))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load variable history')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load variable history')
   }
 }))
 
@@ -385,8 +389,10 @@ r.get('/mission-control-api/process-instances/:id/incidents', requireProcessInst
     const data = await listProcessInstanceIncidents(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
     res.json(ProcessInstanceIncidentListSchema.parse(redacted))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load incidents')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load incidents')
   }
 }))
 
@@ -461,8 +467,10 @@ r.get('/mission-control-api/process-instances/:id/failed-external-tasks', requir
     const instanceId = String(req.params.id)
     const data = await listFailedExternalTasks(engineId, instanceId)
     res.json(ProcessInstanceExternalTaskListSchema.parse(data))
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Failed to load external tasks')
+  } catch (error) {
+    const normalized = processInstanceLookupError(error)
+    if (normalized instanceof AppError) throw normalized
+    throw Errors.internal('Failed to load external tasks')
   }
 }))
 

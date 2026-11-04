@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { errorHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { BpmnEngineOperationError } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import * as engineClient from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import processInstancesRouter from '../../../../../packages/backend-host/src/modules/mission-control/process-instances/routes.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
@@ -77,6 +80,7 @@ describe('mission-control process-instances routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(processInstancesRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -420,4 +424,50 @@ describe('mission-control process-instances routes', () => {
     expect(response.status).toBe(403);
     expect(listProcessInstances).not.toHaveBeenCalled();
   });
+  it('returns generic not found if the instance disappears after its engine-wide guard', async () => {
+    vi.mocked(getProcessInstance).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'GET', path: '/process-instance/completed', status: 404 }));
+    const response = await request(app).get('/mission-control-api/process-instances/completed').query({ engineId: 'engine-1' });
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Process instance not found', code: 'NOT_FOUND' });
+  });
+  it('returns not found if variables disappear between authorization and the handler', async () => {
+    vi.mocked(getProcessInstanceVariables).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'GET', path: '/process-instance/completed/variables', status: 404 }));
+    const response = await request(app).get('/mission-control-api/process-instances/completed/variables').query({ engineId: 'engine-1' });
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe('NOT_FOUND');
+  });
+  it.each([401, 403, 429, 500, 503])('keeps typed upstream %s distinct from a missing modular runtime instance', async status => {
+    vi.mocked(getProcessInstance).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'GET', path: '/process-instance/known', status }));
+    const response = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-1' });
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('ENGINE_OPERATION_REJECTED');
+    expect(response.body.details.engineStatus).toBe(status);
+  });
+  it('keeps a local authorization denial intact', async () => {
+    vi.mocked(getProcessInstance).mockRejectedValueOnce(Errors.forbidden('Access denied'));
+    const response = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-1' });
+    expect(response.status).toBe(403);
+  });
+  it('does not reclassify a typed engine write 404', async () => {
+    vi.mocked(getProcessInstance).mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'POST', path: '/process-instance/known', status: 404 }));
+    const response = await request(app).get('/mission-control-api/process-instances/known').query({ engineId: 'engine-1' });
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('ENGINE_OPERATION_REJECTED');
+  });
+
+  it('classifies resource-aware guard lookup404 before the modular handler without granting resource access', async () => {
+    vi.mocked(getDataSource).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine
+      ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+      : { findOne: vi.fn().mockResolvedValue(null) } } as any);
+    vi.mocked(permissionService.hasPermission).mockResolvedValue(false);
+    const lookup = vi.spyOn(engineClient, 'camundaGet').mockRejectedValueOnce(new BpmnEngineOperationError({ method: 'GET', path: '/process-instance/missing', status: 404 }));
+    try {
+      const response = await request(app).get('/mission-control-api/process-instances/missing').query({ engineId: 'engine-1' });
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Process instance not found', code: 'NOT_FOUND' });
+      expect(getProcessInstance).not.toHaveBeenCalled();
+      expect(lookup).toHaveBeenCalledTimes(1);
+    } finally { lookup.mockRestore(); }
+  });
+
 });

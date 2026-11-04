@@ -1,0 +1,81 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "runtime-process-not-found",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Returns generic not-found responses for missing runtime process instances without changing tenant or runtime authorization.",
+  "userImpact": [
+    "Completed or unknown process IDs queried through an authorized engine no longer become internal errors on runtime instance endpoints."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Runtime process-instance authorization and read handlers classify only typed engine.read HTTP404 as generic NOT_FOUND.",
+      "Historic process-instance handling shares the same classification; other typed errors retain their identity and unknown errors remain sanitized.",
+      "Documents all nine runtime instance-read paths at explicit tenant and tenant-host compatibility URLs, including required engine selectors, authentication and typed error envelopes."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "No schema or persisted-data changes."
+    ]
+  },
+  "security": [
+    "Authentication, engine tenancy, runtime-resource permissions and private engine transport remain mandatory.",
+    "Unknown errors and upstream response bodies are not disclosed; upstream authorization or availability failures are not classified as not found."
+  ],
+  "documentation": [
+    "docs/development/testing-engine-tenancy-and-access-control.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "Engineering",
+    "pages": [],
+    "reason": "Technical HTTP error classification; no changed administrator setup or user workflow."
+  },
+  "knownLimitations": [
+    "A published image remains immutable; deployments require a newly qualified forward release."
+  ],
+  "rollback": [
+    "Revert the application image; there are no data changes to undo."
+  ],
+  "validation": [
+    "Both production and modular routers cover engine-wide and resource-aware missing IDs, concurrent removal between guard and handler, foreign engine denial, typed upstream failures and lookalikes.",
+    "Protected candidate, current exact-image security, database portability and post-upgrade API denial acceptance remain required."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.10",
+      "newVersion": "0.23.11",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.9",
+      "newVersion": "0.28.10",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.12",
+      "newVersion": "0.20.13",
+      "impact": "patch"
+    }
+  ]
+}
