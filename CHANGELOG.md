@@ -6,12 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.8...v0.35.9) (2026-11-04)
 
+### Changes
 
-### Bug Fixes
+- **mission-control:** Returns generic not-found responses for missing runtime process instances without changing tenant or runtime authorization.
 
-* **authz:** register runtime instance tenant read aliases ([8c9df01](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8c9df01277f48c33ce7292279fd1a87c4292cbf8))
-* **mission-control:** preserve missing runtime process responses ([ba1df48](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ba1df48a8a9ba748f1a7815d79b1748b90db43d7))
-* **mission-control:** return not found for missing runtime instances ([93fb7a6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/93fb7a60ae5895367e8ba437e455d6d128dd0ae3))
+Full upgrade, compatibility and verification details: [v0.35.9 release notes](docs/releases/v0.35.9.md).
 
 ## [0.35.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.7...v0.35.8) (2026-11-04)
 
