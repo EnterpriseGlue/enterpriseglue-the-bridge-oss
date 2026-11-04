@@ -1,0 +1,61 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "runtime-expat-security",
+  "type": "fix",
+  "scope": "security",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "security"
+  ],
+  "summary": "Pin the fixed Expat library in backend, frontend and managed-shard bootstrap runtime images.",
+  "userImpact": [
+    "New runtime images include Expat 2.10.0-r0 to address CVE-2026-113351 and CVE-2026-115506."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Deploy the qualified replacement images through the normal migration, tenant-isolation and routing gates. Existing image digests remain immutable."
+    ]
+  },
+  "configuration": [
+    "No application configuration or credential changes are required."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This OS-library correction adds no schema, ledger, grant or application-data changes. Other changes already present in a deployed release retain their own rollback requirements."
+    ]
+  },
+  "security": [
+    "Install and verify the exact libexpat1=2.10.0-r0 package using the existing signed APK repositories. Preserve scanner, severity and ignore policies."
+  ],
+  "documentation": [
+    "Release notes identify the corrected library and affected runtime images."
+  ],
+  "knownLimitations": [
+    "Both native architectures and exact published images still require protected candidate qualification before installation."
+  ],
+  "rollback": [
+    "Use a previously qualified image only while its current security and database compatibility checks remain valid. An affected old image is not an acceptable security rollback."
+  ],
+  "validation": [
+    "All three production Dockerfiles built successfully for native linux/arm64. Each final runtime contains the exact Expat 2.10.0-r0 package and retains UID 65532.",
+    "The exact locally built backend, frontend and managed-shard bootstrap images passed the pinned Trivy scanner with zero unignored findings across UNKNOWN, LOW, MEDIUM, HIGH and CRITICAL, using the applicable November 3 vulnerability database and unchanged ignore policy.",
+    "Affected dependency-security and bootstrap contracts passed 27 tests; CI contracts passed 218 tests and change detection passed 120 tests. Frozen offline installation, release-note preflight and package-version discipline passed locally.",
+    "Local image checks do not replace native AMD64, five-database, browser and exact protected candidate qualification. Publication and deployment remain separate gates."
+  ],
+  "packages": [],
+  "customerDocumentation": {
+    "impact": "none",
+    "reason": "Runtime OS library correction only; existing deployment instructions and public application behavior are unchanged.",
+    "owner": "runtime-maintainers",
+    "pages": []
+  }
+}

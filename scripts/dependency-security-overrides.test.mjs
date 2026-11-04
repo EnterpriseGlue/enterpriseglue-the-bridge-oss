@@ -372,6 +372,8 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
     assert.match(source, /libcrypt1-2\.44>=2\.44-r8/);
     assert.match(source, /ca-certificates-bundle>=20260909-r3/);
     assert.match(source, /libcurl-openssl4>=8\.23\.0-r0/);
+    assert.ok(source.includes("'libexpat1=2.10.0-r0'"), `${relative} must invalidate the affected Expat layer`);
+    assert.ok(source.includes("apk --no-network info --installed 'libexpat1=2.10.0-r0'"), `${relative} must verify the fixed installed Expat package`);
     for (const name of ['libbrotlicommon1', 'libbrotlidec1', 'libbrotlienc1']) {
       assert.ok(source.includes(`${name}>=1.2.0-r7`), `${relative} must invalidate cached vulnerable Brotli packages`);
     }
