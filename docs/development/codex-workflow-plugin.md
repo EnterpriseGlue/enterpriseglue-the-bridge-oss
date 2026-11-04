@@ -106,6 +106,22 @@ Repository scripts and tests remain the authority for deterministic behavior;
 skills select and orchestrate those commands rather than duplicating product
 logic.
 
+## Local-first verification cadence
+
+The new-change, test and ship skills integrate one independently reviewable
+capability with its related tests and technical documentation. Focused checks
+support development; the full relevant local gate runs against the frozen
+ready-PR or candidate revision, followed by one protected submission. Split for
+repository ownership, review size, risk or independent rollout boundaries.
+
+Reuse passing evidence while source, dependencies, configuration and environment
+remain applicable. After edits, rerun affected checks and the full gate when
+impact warrants. Persistence feedback includes the deployment's primary database;
+required portability, browser, image, security and aggregate acceptance remain
+milestone gates. Unavailable local checks must complete in protected CI or
+authorized staging. These rules preserve shipping, publication and deployment
+authorization boundaries and do not establish live end-to-end acceptance.
+
 ## Bounded diagnosis and delivery preflight
 
 Before qualification or staging mutation, the delivery skill checks available

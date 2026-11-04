@@ -5,6 +5,27 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
 
 # EnterpriseGlue /test
 
+## Local-first verification cadence
+
+During development, use targeted tests and affected checks for one coherent
+capability. Cover its relevant UI, API, service, persistence and operational
+workflow together. Run the full relevant local gate once at the frozen,
+ready-PR or candidate milestone, using supported runtimes and CI commands.
+Inspect aggregate scripts and avoid repeating checks they already cover.
+
+Reuse passing evidence while source, dependencies, configuration and environment
+remain applicable. A new turn, skill invocation or handoff does not require
+another full run. Later edits require affected checks and the full gate when
+impact warrants; never present an earlier revision's results as final evidence.
+
+For persistence development, include the deployment's primary database lane
+(PostgreSQL for current Cloud SaaS staging). Run required cross-database,
+browser, image, security and aggregate acceptance at the frozen milestone;
+PostgreSQL-only feedback does not establish portability. Run a particular lane
+earlier when its platform or harness is directly affected. Record checks that
+cannot run locally and complete them in required protected CI or authorized
+staging; never weaken assertions or push known failures to save a local run.
+
 1. Read `../../references/repository-lifecycle.json` before selecting the test
    target. Exclude retired repositories unless the user explicitly requests a
    read-only historical assessment; do not repair or modernize them.
@@ -21,7 +42,9 @@ description: Use when the user says /test, test this EnterpriseGlue branch, run 
      variants), OpenAPI, public schemas, JSON configuration, TypeORM, or
      documentation parity:
      `enterpriseglue-contract-parity`;
-   - migration portability: `pnpm run test:engine-tenancy:database-matrix`.
+   - persistence development: affected adapter checks and the primary database;
+   - final migration portability: `pnpm run test:engine-tenancy:database-matrix`
+     once the persistence contract is frozen for the ready PR or candidate.
 4. Check PostgreSQL, Docker, browsers, ports, worktree-local environment, and
    stack identity before lanes that require them. Preserve existing services
    and evidence; do not reuse another worktree's Compose identity as test
