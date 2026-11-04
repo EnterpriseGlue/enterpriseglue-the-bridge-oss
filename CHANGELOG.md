@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.7...v0.35.8) (2026-11-04)
+
+### Changes
+
+- **security:** Pin the fixed Expat library in backend, frontend and managed-shard bootstrap runtime images.
+
+Full upgrade, compatibility and verification details: [v0.35.8 release notes](docs/releases/v0.35.8.md).
+
 ## [0.35.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.6...v0.35.7) (2026-11-02)
 
 ### Changes
