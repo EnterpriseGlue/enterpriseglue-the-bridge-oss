@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.7...v0.35.8) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ci:** pin verified Trivy release downloads ([b3dd98d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b3dd98d9233eedd70bef1e4584bb1973c94100bf))
+* **security:** pin fixed Expat in production runtime images ([b6ef7a4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b6ef7a4d45ec176f53ac7a09eaa10849e0590aff))
+* **security:** pin fixed Expat in production runtime images ([0d16205](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0d16205d8961e44569149650dc5fcbdf81bcc63a))
+
 ## [0.35.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.6...v0.35.7) (2026-11-02)
 
 ### Changes
