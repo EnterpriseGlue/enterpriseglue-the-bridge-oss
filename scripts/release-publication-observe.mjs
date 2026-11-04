@@ -16,10 +16,14 @@ export function missingDistributionAssets(release, tag) {
   assert.ok(release.assets.every(asset => asset && typeof asset.name === 'string' && asset.name.length > 0))
   const names = release.assets.map(asset => asset.name)
   assert.equal(names.length, new Set(names).size, 'Ambiguous duplicate distribution assets.')
-  return ['enterpriseglue-distribution-lock-' + tag + '.json', 'enterpriseglue-distribution-lock-' + tag + '.sigstore.json',
+  const absent = ['enterpriseglue-distribution-lock-' + tag + '.json', 'enterpriseglue-distribution-lock-' + tag + '.sigstore.json',
     'enterpriseglue-frontend-static-' + tag + '.tar.gz', 'enterpriseglue-plugin-deployment-kit-' + tag + '.tar.gz',
     'enterpriseglue-plugin-toolchain-' + tag + '.json', 'enterpriseglue-plugin-toolchain-airgap-' + tag + '.tar.gz']
     .filter(name => !names.includes(name))
+  // Do not turn a partially populated attachment set into overwrite authority.
+  // Existing bytes require independent reconciliation before a publisher retry.
+  assert.ok(absent.length === 0 || absent.length === 6, 'Partial distribution attachments require independent reconciliation.')
+  return absent
 }
 
 export function productionObservers({ record, artifacts, evidence, repository = process.env.GITHUB_REPOSITORY,

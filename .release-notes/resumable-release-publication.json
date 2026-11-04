@@ -52,7 +52,8 @@
   ],
   "knownLimitations": [
     "Local wire fixtures do not establish protected publisher acceptance. The non-publishing canary and exact frozen-source recovery must pass before declaring publication complete.",
-    "Publication does not establish staging installation, routing, tenant qualification or production readiness."
+    "Publication does not establish staging installation, routing, tenant qualification or production readiness.",
+    "Partially uploaded distribution attachment sets require independent reconciliation of existing bytes before another publisher retry. Only complete absence is classified as recoverable missing attachments."
   ],
   "rollback": [
     "Revert the publication controls and stop new recovery dispatches. Preserve existing releases, semantic tags, signed receipts and immutable locks."

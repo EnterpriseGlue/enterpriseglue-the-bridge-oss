@@ -189,6 +189,9 @@ move or recreate the tag.
   read retry after signing; invalid signatures and other registry errors stop
   immediately. This retry never signs again. Failed publisher attempts retain
   the small original/current receipts and distribution-lock diagnostics.
+  A completely absent distribution attachment set is recoverable. A partial
+  set requires independent reconciliation of existing bytes before retry;
+  missing files never authorize overwriting unverified existing attachments.
 - If public plugin packages still need publication, dispatch
   `Publish Plugin/API Packages` with the same `source_ref`, `release_tag`, and
   `dry_run=false`. The workflow publishes the retained candidate tarballs in

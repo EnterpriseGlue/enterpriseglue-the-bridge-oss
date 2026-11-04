@@ -141,8 +141,19 @@ test('signature-read deadline and foreign subjects stop without another read',as
 test('complete release metadata classifies absent distribution assets as missing; ambiguous metadata rejects',()=>{
   const release={tag_name:'v0.35.9',draft:false,assets:[]},absent=missingDistributionAssets(release,'v0.35.9');assert.equal(absent.length,6)
   release.assets=absent.map(name=>({name}));assert.deepEqual(missingDistributionAssets(release,'v0.35.9'),[])
+  assert.throws(()=>missingDistributionAssets({...release,assets:[release.assets[0]]},'v0.35.9'),/independent reconciliation/)
   assert.throws(()=>missingDistributionAssets({...release,tag_name:'v0.35.8'},'v0.35.9'))
   assert.throws(()=>missingDistributionAssets({...release,assets:[{name:'duplicate'},{name:'duplicate'}]},'v0.35.9'))
+})
+
+test('partial attachment metadata becomes unknown and cannot dispatch a publisher over existing unverified bytes',async()=>{
+  const {record}=recordFixture(),tag=record.identity.releaseTag
+  const observed=await observePublication(record,adapters({distribution:()=>{
+    missingDistributionAssets({tag_name:tag,draft:false,assets:[{name:'enterpriseglue-distribution-lock-'+tag+'.json'}]},tag)
+    return {status:'missing'}
+  }}))
+  assert.equal(observed.observations.find(value=>value.name==='distribution').status,'unknown')
+  await assert.rejects(resumePublication(observed,{explicitRecovery:true,dispatch:()=>assert.fail('No overwrite or retry authority.')}))
 })
 
 test('toolchain workflow uses exact protected controller code while retaining frozen source and original/attempt diagnostics',()=>{
