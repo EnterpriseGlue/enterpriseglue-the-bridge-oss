@@ -6,12 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.7...v0.35.8) (2026-11-04)
 
+### Changes
 
-### Bug Fixes
+- **security:** Pin the fixed Expat library in backend, frontend and managed-shard bootstrap runtime images.
 
-* **ci:** pin verified Trivy release downloads ([b3dd98d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b3dd98d9233eedd70bef1e4584bb1973c94100bf))
-* **security:** pin fixed Expat in production runtime images ([b6ef7a4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b6ef7a4d45ec176f53ac7a09eaa10849e0590aff))
-* **security:** pin fixed Expat in production runtime images ([0d16205](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0d16205d8961e44569149650dc5fcbdf81bcc63a))
+Full upgrade, compatibility and verification details: [v0.35.8 release notes](docs/releases/v0.35.8.md).
 
 ## [0.35.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.6...v0.35.7) (2026-11-02)
 
