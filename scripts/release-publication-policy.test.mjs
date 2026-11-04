@@ -4,13 +4,18 @@ import { execFileSync } from 'node:child_process'
 import test from 'node:test'
 import { readPublicationApi } from './release-publication-approval.mjs'
 import './release-publication-record.test.mjs'
-import { detailedNotesMarker, resolveReleasePublication, validateReleasePublicationApproval } from './lib/release-publication-policy.mjs'
+import { detailedNotesMarker, resolveReleasePublication, validateReleasePublicationApproval, isPublicationRepairPath } from './lib/release-publication-policy.mjs'
 
 const sha = 'a'.repeat(40)
 const repository = 'EnterpriseGlue/enterpriseglue-the-bridge-oss'
 const approvedInputs = { publish_release: true, source_ref: sha, release_tag: 'v0.30.0', release_pr: '900', required_prs: '[551,554]' }
 const publicationContext = { eventName: 'workflow_dispatch', ref: 'refs/heads/main', sha,
   commitMessage: 'chore(main)!: release 0.30.0', manifestVersion: '0.30.0', latestTag: 'v0.29.3', inputs: approvedInputs }
+
+test('the publisher static-contract checker is a narrow publication-control repair path, without admitting scanner or payload changes',()=>{
+  assert.equal(isPublicationRepairPath('scripts/check-plugin-toolchain-release-policy.mjs'),true)
+  for(const path of ['scripts/check-plugin-toolchain-release-policy.mjs.backup','scripts/check-plugin-platform-production-images.sh','backend/Dockerfile.prod','pnpm-lock.yaml','.trivyignore','packages/backend-host/package.json'])assert.equal(isPublicationRepairPath(path),false,path)
+})
 
 test('closed-PR history retains every page and pending-release field without retrieving PR bodies', () => {
   const pending = { number: 900, merged_at: '2026-10-09', merge_commit_sha: sha, head: { ref: 'release-please--branches--main' },

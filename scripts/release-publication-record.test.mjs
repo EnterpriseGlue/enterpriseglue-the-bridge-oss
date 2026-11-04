@@ -171,6 +171,12 @@ test('toolchain workflow uses exact protected controller code while retaining fr
   assert.doesNotMatch(distribution,/oras resolve .*\|\| true/)
 })
 
+test('the full publisher static-policy check runs in the fast publication gate before the expensive native canary',()=>{
+  const result=spawnSync(process.execPath,['scripts/check-plugin-toolchain-release-policy.mjs'],{encoding:'utf8',timeout:10000})
+  assert.equal(result.status,0,result.stderr.slice(-2000))
+  assert.equal(JSON.parse(result.stdout).status,'passed')
+})
+
 test('actual workflow extracts new protected controls from a shallow frozen checkout without advancing the payload source',()=>{
   const directory=mkdtempSync(join(tmpdir(),'eg-toolchain-control-source-'))
   try {

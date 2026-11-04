@@ -29,7 +29,8 @@
   "configuration": [
     "Candidate-backed toolchain publication loads recovery controls from the exact protected workflow revision while keeping the qualified source checkout unchanged.",
     "The original authenticated toolchain receipt remains in the distribution; the current attempt receipt is retained separately.",
-    "An explicitly authorized recovery still requires the frozen source and reviewed recovery_prs, with renewed current security acceptance."
+    "An explicitly authorized recovery still requires the frozen source and reviewed recovery_prs, with renewed current security acceptance.",
+    "The existing publisher static-contract checker is included in the narrowly reviewed publication-repair path list and runs in the fast publication regression gate. Scanner policy, manifests, lockfiles, Dockerfiles and payload paths remain excluded."
   ],
   "api": {
     "compatibility": "none",

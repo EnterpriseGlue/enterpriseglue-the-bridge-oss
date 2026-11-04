@@ -342,7 +342,17 @@ assert.match(
   workflow,
   /oras push "\$distribution_tag"[\s\S]*--disable-path-validation[\s\S]*application\/vnd\.enterpriseglue\.distribution-lock\.v1\+json/,
 );
-assert.match(workflow, /oras resolve "\$distribution_tag"/);
+const receiptControls = await readFile(
+  new URL('./release-publication-toolchain-receipt.mjs', import.meta.url),
+  'utf8',
+);
+assert.match(workflow, /release-publication-toolchain-receipt\.mjs" resolve-distribution "\$RELEASE_TAG"/);
+assert.match(workflow, /if \[\[ "\$distribution_digest" == absent \]\]/);
+assert.doesNotMatch(workflow.slice(workflow.indexOf('          distribution_tag=')), /oras resolve .*\|\| true/);
+assert.match(workflow, /git show "\$GITHUB_WORKFLOW_SHA:scripts\/release-publication-toolchain-receipt\.mjs"/);
+assert.ok(workflow.includes('[[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]'));
+assert.ok(receiptControls.includes("const registry = 'ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution'"));
+assert.ok(receiptControls.includes("const repository = 'EnterpriseGlue/enterpriseglue-the-bridge-oss'"));
 assert.match(workflow, /oras manifest fetch "\$distribution_reference"/);
 assert.match(workflow, /oras blob fetch --output "\$published_lock"/);
 assert.match(
@@ -353,10 +363,11 @@ assert.match(
   workflow,
   /cosign sign --yes --registry-referrers-mode=oci-1-1[\s\S]*"\$distribution_reference"/,
 );
-assert.match(
-  workflow,
-  /cosign verify[\s\S]*--certificate-identity "\$CERTIFICATE_IDENTITY"[\s\S]*"\$distribution_reference"/,
-);
+assert.match(workflow, /verify-signature "\$distribution_reference"/);
+assert.ok(receiptControls.includes("['verify', '--certificate-identity', signer, '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', subject]"));
+assert.ok(receiptControls.includes("'/.github/workflows/plugin-toolchain-release.yml@refs/heads/main'"));
+assert.match(receiptControls, /const deadline = now\(\) \+ 30000/);
+assert.match(receiptControls, /attempt < 5/);
 assert.match(workflow, /gh release upload "\$RELEASE_TAG"/);
 assert.match(workflow, /enterpriseglue-frontend-static-\$RELEASE_TAG\.tar\.gz/);
 assert.match(workflow, /enterpriseglue-plugin-deployment-kit-\$RELEASE_TAG\.tar\.gz/);
