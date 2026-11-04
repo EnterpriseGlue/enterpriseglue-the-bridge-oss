@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { scanBackendAuthzRoutes } from '@enterpriseglue/shared/authz/backend-route-scanner.js';
+import { getAuthzActionDefinition, validateAuthzRouteInventory } from '@enterpriseglue/shared/authz/index.js';
 import { useOpenApiFixture } from '../../../../test/utils/openapi-fixture.js';
 
 describe('runtime instance lookup source-to-OpenAPI parity', () => {
@@ -25,6 +26,22 @@ describe('runtime instance lookup source-to-OpenAPI parity', () => {
     expect(mounts).toContain('router.use(processInstancesRoute)');
     expect(mounts).toMatch(/app\.use\('\/t\/:tenantSlug', createTenantScopedRouter\(/);
     expect(mounts).toMatch(/app\.use\(createTenantScopedRouter\(/);
+  });
+
+  it('keeps the generated operations in the strict action inventory with identical alias checks', () => {
+    const document = generateOpenApi();
+    expect(validateAuthzRouteInventory(document, {
+      requireOpenApiForActionRoutes: true,
+      requireAuthzClassificationForOpenApiOperations: true,
+    }).issues).toEqual([]);
+    for (const { normalizedRoute } of reads) {
+      const actionId = document.paths[normalizedRoute].get['x-enterpriseglue-authz'].actionId;
+      const action = getAuthzActionDefinition(actionId)!;
+      const canonical = action.routes!.find(route => route.method === 'GET' && route.route === normalizedRoute)!;
+      const alias = action.routes!.find(route => route.method === 'GET' && route.route === `/t/{tenantSlug}${normalizedRoute}`);
+      expect(canonical, normalizedRoute).toBeDefined();
+      expect(alias, normalizedRoute).toEqual({ ...canonical, route: `/t/{tenantSlug}${canonical.route}` });
+    }
   });
 
   for (const prefix of ['', '/t/{tenantSlug}']) {
