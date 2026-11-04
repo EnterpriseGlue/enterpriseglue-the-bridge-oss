@@ -830,6 +830,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
           additionalChecks: ['engineId is resolved from query string by action middleware'],
         },
         {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from query string by action middleware'],
+        },
+        {
           method: 'POST',
           route: '/mission-control-api/process-instances/preview-count',
           resourceResolver: 'engine.byId',
@@ -851,6 +857,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
         {
           method: 'GET',
           route: '/mission-control-api/process-instances/{id}/variables',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from query string by action middleware', 'variable values require engine:variables:value:view and are never sent when denied'],
+        },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/variables',
           resourceResolver: 'engine.byId',
           additionalChecks: ['engineId is resolved from query string by action middleware', 'variable values require engine:variables:value:view and are never sent when denied'],
         },
@@ -876,6 +888,15 @@ export const ENGINE_AUTHZ_ACTIONS = [
             'values require engine:variables:value:view; permitted values are passed through the PII redaction service',
           ],
         },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/variable-history',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engineId is resolved from query string by action middleware',
+            'values require engine:variables:value:view; permitted values are passed through the PII redaction service',
+          ],
+        },
       ],
     },
   {
@@ -895,6 +916,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
           resourceResolver: 'engine.byId',
           additionalChecks: ['engineId is resolved from query string by action middleware'],
         },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/activity-instances',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from query string by action middleware'],
+        },
       ],
     },
   {
@@ -911,6 +938,15 @@ export const ENGINE_AUTHZ_ACTIONS = [
         {
           method: 'GET',
           route: '/mission-control-api/process-instances/{id}/history/activity-instances',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engineId is resolved from query string by action middleware',
+            'response payload is passed through the PII redaction service',
+          ],
+        },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/history/activity-instances',
           resourceResolver: 'engine.byId',
           additionalChecks: [
             'engineId is resolved from query string by action middleware',
@@ -939,6 +975,15 @@ export const ENGINE_AUTHZ_ACTIONS = [
             'response payload is passed through the PII redaction service',
           ],
         },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/execution-details',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engineId is resolved from query string by action middleware',
+            'response payload is passed through the PII redaction service',
+          ],
+        },
       ],
     },
   {
@@ -955,6 +1000,15 @@ export const ENGINE_AUTHZ_ACTIONS = [
         {
           method: 'GET',
           route: '/mission-control-api/process-instances/{id}/incidents',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engineId is resolved from query string by action middleware',
+            'response payload is passed through the PII redaction service',
+          ],
+        },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/incidents',
           resourceResolver: 'engine.byId',
           additionalChecks: [
             'engineId is resolved from query string by action middleware',
@@ -1429,6 +1483,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
           resourceResolver: 'engine.byId',
           additionalChecks: ['engineId is resolved from query string by action middleware'],
         },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/failed-external-tasks',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from query string by action middleware'],
+        },
       ],
     },
   {
@@ -1787,6 +1847,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
         {
           method: 'GET',
           route: '/mission-control-api/process-instances/{id}/jobs',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from query string by action middleware'],
+        },
+        {
+          method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-instances/{id}/jobs',
           resourceResolver: 'engine.byId',
           additionalChecks: ['engineId is resolved from query string by action middleware'],
         },

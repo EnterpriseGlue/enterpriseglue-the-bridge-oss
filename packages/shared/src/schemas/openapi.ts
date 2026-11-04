@@ -1073,8 +1073,54 @@ registry.registerPath({
   },
 });
 
+const ProcessInstanceErrorSchema = z.object({
+  error: z.string(),
+  code: z.string(),
+  field: z.string().optional(),
+  details: z.unknown().optional(),
+});
+const processInstanceErrorResponse = (description: string, code?: string) => ({
+  description,
+  content: { 'application/json': { schema: code
+    ? ProcessInstanceErrorSchema.extend({ code: z.literal(code) })
+    : ProcessInstanceErrorSchema } },
+});
+// These guarded reads share explicit tenant and tenant-host compatibility mounts.
+function registerProcessInstanceRead(config: Parameters<typeof registry.registerPath>[0]) {
+  const query = config.request?.query as z.ZodObject<any> | undefined;
+  for (const tenantScoped of [false, true]) {
+    registry.registerPath({
+      ...config,
+      path: `${tenantScoped ? '/t/{tenantSlug}' : ''}${config.path}`,
+      description: tenantScoped
+        ? 'Read within the selected tenant and authorized engine.'
+        : 'Compatibility path; pooled deployments require a verified tenant hostname.',
+      security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+      request: {
+        ...config.request,
+        params: tenantScoped
+          ? z.object({ tenantSlug: TenantSlugSchema, id: z.string().min(1) })
+          : z.object({ id: z.string().min(1) }),
+        query: (query || z.object({})).extend({ engineId: z.string().min(1) }),
+      },
+      responses: {
+        ...config.responses,
+        400: {
+          description: 'Missing or invalid engine selector, query or tenant context',
+          content: { 'application/json': { schema: z.union([ProcessInstanceErrorSchema, InvalidQueryParametersResponseSchema]) } },
+        },
+        401: processInstanceErrorResponse('Authentication required or invalid credentials'),
+        403: processInstanceErrorResponse('Tenant, engine or runtime-resource access denied', 'FORBIDDEN'),
+        404: processInstanceErrorResponse('Tenant, engine or process not found; missing process IDs return a generic message', 'NOT_FOUND'),
+        500: processInstanceErrorResponse('Internal failure; unknown lookup errors are sanitized'),
+        502: processInstanceErrorResponse('Typed engine operation, transport or malformed-response failure'),
+      },
+    });
+  }
+}
+
 // GET /mission-control-api/process-instances/{id}
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}',
   ...authzExtension('engine.runtime.process-instances.read', 'GET', '/mission-control-api/process-instances/{id}'),
@@ -1086,7 +1132,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/variables
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/variables',
   ...authzExtension('engine.runtime.process-instances.variables.read', 'GET', '/mission-control-api/process-instances/{id}/variables'),
@@ -1096,7 +1142,7 @@ registry.registerPath({
   },
 });
 
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/variable-history',
   ...authzExtension('engine.runtime.process-instances.variable-history.read', 'GET', '/mission-control-api/process-instances/{id}/variable-history'),
@@ -1111,7 +1157,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/history/activity-instances
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/history/activity-instances',
   ...authzExtension('engine.runtime.process-instances.activity-history.read', 'GET', '/mission-control-api/process-instances/{id}/history/activity-instances'),
@@ -1122,7 +1168,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/execution-details
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/execution-details',
   ...authzExtension('engine.runtime.process-instances.execution-details.read', 'GET', '/mission-control-api/process-instances/{id}/execution-details'),
@@ -1141,7 +1187,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/incidents
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/incidents',
   ...authzExtension('engine.runtime.process-instances.incidents.read', 'GET', '/mission-control-api/process-instances/{id}/incidents'),
@@ -1214,18 +1260,6 @@ registry.registerPath({
 
 // The same handler is mounted at the explicit tenant path and the root-shaped
 // compatibility path. In pooled mode the latter requires a verified tenant host.
-const HistoricProcessErrorSchema = z.object({
-  error: z.string(),
-  code: z.string(),
-  field: z.string().optional(),
-  details: z.unknown().optional(),
-});
-const historicProcessErrorResponse = (description: string, code?: string) => ({
-  description,
-  content: { 'application/json': { schema: code
-    ? HistoricProcessErrorSchema.extend({ code: z.literal(code) })
-    : HistoricProcessErrorSchema } },
-});
 for (const tenantScoped of [false, true]) {
   registry.registerPath({
     method: 'get',
@@ -1246,12 +1280,12 @@ for (const tenantScoped of [false, true]) {
         description: 'Historic process instance details, including engine-native extension fields',
         content: { 'application/json': { schema: MissionControlProcessInstanceDetailSchema } },
       },
-      400: historicProcessErrorResponse('Missing or invalid engine selector or tenant context'),
-      401: historicProcessErrorResponse('Authentication required or invalid credentials'),
-      403: historicProcessErrorResponse('Tenant, engine or runtime-resource access denied', 'FORBIDDEN'),
-      404: historicProcessErrorResponse('Tenant, engine or process not found; missing process IDs return a generic message', 'NOT_FOUND'),
-      500: historicProcessErrorResponse('Internal failure; unknown historic lookup errors are sanitized'),
-      502: historicProcessErrorResponse('Typed engine operation, transport or malformed-response failure'),
+      400: processInstanceErrorResponse('Missing or invalid engine selector or tenant context'),
+      401: processInstanceErrorResponse('Authentication required or invalid credentials'),
+      403: processInstanceErrorResponse('Tenant, engine or runtime-resource access denied', 'FORBIDDEN'),
+      404: processInstanceErrorResponse('Tenant, engine or process not found; missing process IDs return a generic message', 'NOT_FOUND'),
+      500: processInstanceErrorResponse('Internal failure; unknown historic lookup errors are sanitized'),
+      502: processInstanceErrorResponse('Typed engine operation, transport or malformed-response failure'),
     },
   });
 }
@@ -4032,7 +4066,7 @@ const RuntimeActivityInstanceTreeOpenApiSchema = z.object({
   childActivityInstances: z.array(z.object({ id: z.string().nullable().optional(), activityId: z.string().nullable().optional() }).passthrough()).nullable().optional(),
   childTransitionInstances: z.array(z.object({ id: z.string().nullable().optional(), activityId: z.string().nullable().optional() }).passthrough()).nullable().optional(),
 }).passthrough();
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/activity-instances',
   ...authzExtension('engine.runtime.process-instances.activity-tree.read', 'GET', '/mission-control-api/process-instances/{id}/activity-instances'),
@@ -4041,7 +4075,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/jobs
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/jobs',
   ...authzExtension('engine.runtime.jobs.read', 'GET', '/mission-control-api/process-instances/{id}/jobs'),
@@ -4050,7 +4084,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/failed-external-tasks
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/failed-external-tasks',
   ...authzExtension('engine.runtime.external-tasks.read', 'GET', '/mission-control-api/process-instances/{id}/failed-external-tasks'),

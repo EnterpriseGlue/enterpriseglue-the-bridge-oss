@@ -1141,3 +1141,7 @@ tenant check and runtime-resource permission lookup must still run; a foreign
 engine must be rejected before instance transport. Upstream 401/403, throttling,
 transport and availability errors must retain their failure classification. Test
 that unknown errors expose no engine URL, credentials or upstream response body.
+
+Runtime process-instance reads use the same typed not-found classification as historic detail. Exercise both production compatibility and modular routers: engine-wide handler reads and resource-aware guard lookups must return generic `NOT_FOUND` only for a typed engine read 404. A process completing between authorization and the handler follows the same rule. Foreign engines remain denied before transport; upstream authentication, availability, write failures and lookalike errors must retain their original classification.
+
+The source-to-OpenAPI check inventories all nine instance-read paths from both routers and verifies their explicit tenant and tenant-host compatibility operations, engine selectors, authentication, success contracts and safe errors. It also validates the complete strict authorization route inventory and requires each tenant alias to retain the canonical resolver and additional checks. Keep the frontend's engine-selected detail read aligned with these operations.
