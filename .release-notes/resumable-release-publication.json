@@ -15,26 +15,21 @@
     "operators",
     "developers"
   ],
-  "summary": "Complete frozen release publication with source-bound image-workflow handoffs, authenticated package observations and retained security evidence without scanner caches.",
+  "summary": "Resume frozen toolchain distribution publication without changing its authenticated original receipt or immutable lock.",
   "userImpact": [
-    "Publication failures can resume the approved candidate without creating another software release or rebuilding its artifacts.",
-    "Publication status distinguishes qualified, approved, publishing, partially published and verified published outcomes.",
-    "Automatic chart/toolchain handoffs no longer mistake a decorated image-run title for a different workflow; package observations use the declared GitHub registry authentication."
+    "A failed publisher can complete the same qualified release while preserving its original toolchain receipt and immutable distribution lock.",
+    "Operators can distinguish a missing release attachment from an unknown registry or signature failure."
   ],
   "upgrade": {
     "required": false,
     "instructions": [
-      "Install workflow plugin 0.1.16 and the reviewed protected-main publication workflows; use the frozen source and explicit recovery_prs when repairing an already qualified release."
+      "Install the reviewed protected publication controls, then use the existing frozen-source recovery protocol. No application, package or database upgrade is introduced by this control repair."
     ]
   },
   "configuration": [
-    "An explicit identity_signature_recovery_run may recover an unsigned pre-tag identity only from the original failed protected run's authenticated artifact; it preserves the frozen release and separately reviewed recovery_prs.",
-    "Explicit release dispatch retains source_ref, release_tag, release_pr and required_prs; optional recovery_prs lists every reviewed publication-only repair after the frozen source.",
-    "Signed publication identities and append-only observations are stored in enterpriseglue-oss-release-publication on GHCR.",
-    "Release Publication Reconcile automatically observes publisher completion. Manual resume=true renews approval and security acceptance before dispatching only incomplete publishers.",
-    "GitHub history reads project merge state, branch names and labels one bounded page at a time; the workflow plugin advances independently to 0.1.16.",
-    "Explicit prepare_replacement=true may supersede an unpublished reserved release PR and regenerate one replacement candidate at the same version. Neither tag nor GitHub release may exist.",
-    "Publication artifacts retain named authority records, all ten architecture/role scan reports, vulnerability database metadata and observation evidence; the root-owned scanner cache is excluded."
+    "Candidate-backed toolchain publication loads recovery controls from the exact protected workflow revision while keeping the qualified source checkout unchanged.",
+    "The original authenticated toolchain receipt remains in the distribution; the current attempt receipt is retained separately.",
+    "An explicitly authorized recovery still requires the frozen source and reviewed recovery_prs, with renewed current security acceptance."
   ],
   "api": {
     "compatibility": "none",
@@ -44,34 +39,28 @@
     "migrations": [],
     "rollbackSupported": true,
     "notes": [
-      "The publication-control changes introduce no database migration or application-runtime change. Other capabilities in this release retain their own migration requirements."
+      "This publication-only change modifies no application runtime or database schema."
     ]
   },
   "security": [
-    "Unsigned identity repair compares every original record byte after authenticating GitHub artifact custody, independently reconstructs the approved candidate identity, requires absent GitHub release/tag and fresh exact-image security, and verifies the real new signature without replacing the identity tag or bypassing transparency logging.",
-    "Automatic events remain non-publishing. Frozen batch ancestry, generated-document and managed-comment equality, exact candidate signatures and immutable payload hashes remain mandatory.",
-    "Recovery requires explicit first-party repair PRs and a strict path allowlist. Application sources, dependency locks, package manifests, Dockerfiles, charts, migrations, scanner policy and unknown paths cannot qualify as publication-only repairs.",
-    "Fresh scans cover all five exact image roles on AMD64 and ARM64 under the pinned scanner and unchanged severity/ignore policy, with current vulnerability database metadata and hashed reports.",
-    "Unknown registry state and immutable conflicts stop recovery writes. Scratch canary records are marked as fixtures and cannot enter the production publication repository.",
-    "Upstream publication authority binds the exact Docker Images workflow path, owning/head repositories, successful event and immutable source, while retaining protected-main, exact-tag and signed-candidate guards. Display titles are not workflow authority."
+    "The existing distribution must independently verify against the fixed protected toolchain signer and GitHub OIDC issuer before its receipt is used. Source, version, images, charts and archive hashes must match the qualified candidate; any content drift stops publication.",
+    "Signature visibility handling retries only the same bounded verification read when the exact missing-signature diagnostic is returned. Invalid signatures, access failures and unknown registry responses stop immediately; signing is never retried by this helper.",
+    "Published semantic tags and immutable locks are never replaced. Only a definite absent distribution permits first-publication receipt creation."
   ],
   "documentation": [
-    "Technical release/versioning documentation and the artifact-promotion runbook define frozen identity, workflow authority, observation states, retry conditions and recovery commands.",
-    "Maintained ship, release and watch skills describe the same protocol and keep deployment approval separate.",
-    "Replacement preparation preserves the prior published changelog bytes, removes superseded unpublished sections and keeps metadata-only release PRs separate from the code-PR batch."
+    "The artifact-promotion runbook describes original-receipt custody, separate attempt provenance and bounded signature verification."
   ],
   "knownLimitations": [
-    "Observed registry publication does not establish Cloud installation, route promotion or production deployment.",
-    "A content change requires a new generated document and qualified candidate; only reviewed publication-only repairs may reuse frozen artifacts."
+    "Local wire fixtures do not establish protected publisher acceptance. The non-publishing canary and exact frozen-source recovery must pass before declaring publication complete.",
+    "Publication does not establish staging installation, routing, tenant qualification or production readiness."
   ],
   "rollback": [
-    "To roll back publication-control changes, revert the reviewed tooling and stop new recovery dispatches. Retain signed records and existing releases; never delete or repoint published tags. This tooling rollback requires no package or database rollback; follow the separate rollback guidance for other capabilities in the release."
+    "Revert the publication controls and stop new recovery dispatches. Preserve existing releases, semantic tags, signed receipts and immutable locks."
   ],
   "validation": [
-    "Node 24.19.0 / pnpm 11.0.8: all 71 publication-record regressions passed, including actual Bash guards accepting decorated upstream names and rejecting wrong paths, repositories, fork heads, branches, events, sources and recovery tags. Explicit rejection paths also passed on the local Bash runtime.",
-    "The integrated local gate passed 181 CI contracts and the self-validating aggregate, 95 classifier/routing tests, 169 release-note/tooling tests, seven documentation-boundary tests, package-version discipline, both publisher policy checks, Actionlint and the combined diff check.",
-    "The supplemental non-publishing authorization canary passed all 12 scenarios, including the actual verifier's rejection of an unstaged fixture candidate; it performed no publication or registry writes. Hosted protected CI, source-level non-publishing release readiness and the authorization canary also passed before PR #577 merged.",
-    "The maintained immutable webhook schema requires the selected path and repository fields. The publication-control changes preserve application source, dependencies, database, package/chart payloads and scanner policy. Exact release-artifact and current security acceptance are required independently for the frozen release candidate."
+    "Local publication-record, approval, batch and non-publishing authorization regressions pass, including shallow-source control extraction, run-provenance drift, exact promoted chart namespaces, corrupt payloads and bounded signature reads.",
+    "The real public-registry read independently verifies the existing distribution signature and preserves its original receipt while matching the exact candidate source, image and chart bindings. This is read-only evidence, not protected publisher acceptance.",
+    "The expanded CI contract gate and self-validating aggregate, deterministic classifier fixtures, publisher policy checks and Actionlint pass. Protected CI, the required non-publishing canary and actual frozen-source recovery remain required."
   ],
   "packages": []
 }

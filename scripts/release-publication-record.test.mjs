@@ -8,7 +8,8 @@ import { createPublicationRecord, assertSamePublication, validatePublicationReco
 import { observePublication, resumePublication } from './lib/release-publication-observation.mjs'
 import { reconcileHistoricalReleaseLabels, reservedVersionCommitOverride, prepareReplacementMetadata } from './release-publication-labels.mjs'
 import { createSecurityProof, SECURITY_ROLES, validateSecurityProof } from './lib/release-publication-security.mjs'
-import { productionObservers } from './release-publication-observe.mjs'
+import { productionObservers, missingDistributionAssets } from './release-publication-observe.mjs'
+import { selectOriginalReceipt, retainedReceipt, verifyDistributionSignature } from './release-publication-toolchain-receipt.mjs'
 import { createHash } from 'node:crypto'
 import { verifyFailedIdentityArtifact, readIdentityArchive, verifyUnsignedIdentityManifest } from './release-publication-signature-recovery.mjs'
 
@@ -31,6 +32,156 @@ export function recordFixture() {
 
 const passing = () => ({status: 'verified'})
 const adapters = changes => ({ release: passing, oci: passing, package: passing, distribution: passing, workflow: passing, ...changes })
+
+function toolchainReceiptFixture() {
+  const {candidate} = recordFixture()
+  const chartNames={runtimeChart:'enterpriseglue-plugin-runtime',installerRbacChart:'enterpriseglue-plugin-installer-rbac',managerChart:'enterpriseglue-plugin-manager'}
+  for(const [key,name]of Object.entries(chartNames))candidate.subjects[key].subject='ghcr.io/enterpriseglue/release-candidates/charts/'+candidate.sourceRevision+'/'+name+'@sha256:'+'b'.repeat(64)
+  const current = {schemaVersion:'enterpriseglue-plugin-toolchain-release/v1',version:'0.2.14',sourceRevision:candidate.sourceRevision,
+    installer:candidate.subjects.pluginInstaller.subject,managerVersion:'0.1.14',manager:candidate.subjects.pluginManager.subject,
+    ...Object.fromEntries(['runtimeChart','installerRbacChart','managerChart'].map(key => [key,{subject:'ghcr.io/enterpriseglue/charts/'+chartNames[key]+'@sha256:'+'b'.repeat(64),archiveSha256:'c'.repeat(64)}])),
+    workflowRun:'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/actions/runs/22222222222',customerCiRequired:false,customerBuildRequired:false}
+  const original = {...structuredClone(current),workflowRun:'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/actions/runs/11111111111'}
+  const lock = {schemaVersion:'enterpriseglue-distribution-lock/v1',version:candidate.releaseTag.slice(1),sourceRevision:candidate.sourceRevision,
+    application:Object.fromEntries(['backend','frontend'].map(key=>[key,{subject:candidate.subjects[key].subject,platforms:['linux/amd64','linux/arm64']}])),pluginToolchain:original}
+  return {candidate,current,original,lock}
+}
+
+test('recovery preserves the authenticated original run in the immutable lock and keeps current attempt provenance separate', () => {
+  const f=toolchainReceiptFixture(),before=JSON.stringify(f)
+  assert.notEqual(JSON.stringify(f.lock),JSON.stringify({...f.lock,pluginToolchain:f.current}), 'Reproduce run-dependent immutable byte drift.')
+  const selected=selectOriginalReceipt(f.current,f.lock,f.candidate)
+  assert.deepEqual(selected,f.original)
+  assert.equal(JSON.stringify(f),before)
+  selected.workflowRun=f.current.workflowRun
+  assert.notEqual(selected.workflowRun,f.original.workflowRun,'Selection returns a detached copy.')
+})
+
+for (const [name,mutate] of [
+  ['source',f=>f.lock.sourceRevision='e'.repeat(40)],['tag',f=>f.lock.version='99.0.0'],
+  ['backend',f=>f.lock.application.backend.subject+='0'],['platforms',f=>f.lock.application.frontend.platforms.reverse()],
+  ['installer',f=>f.lock.pluginToolchain.installer+='0'],['manager',f=>f.lock.pluginToolchain.manager+='0'],
+  ['chart subject',f=>f.lock.pluginToolchain.runtimeChart.subject+='0'],['chart bytes',f=>f.lock.pluginToolchain.managerChart.archiveSha256='d'.repeat(64)],
+  ['foreign candidate chart namespace',f=>f.candidate.subjects.runtimeChart.subject=f.candidate.subjects.runtimeChart.subject.replace('/release-candidates/','/foreign/')],
+  ['foreign published chart namespace',f=>f.lock.pluginToolchain.runtimeChart.subject=f.lock.pluginToolchain.runtimeChart.subject.replace('/charts/','/foreign/')],
+  ['unknown field',f=>f.lock.pluginToolchain.authorized=true],['unknown chart field',f=>f.lock.pluginToolchain.runtimeChart.authorized=true],
+  ['foreign run',f=>f.lock.pluginToolchain.workflowRun='https://github.com/other/repo/actions/runs/11111111111'],
+  ['version',f=>f.lock.pluginToolchain.version='99.0.0'],['receipt source',f=>f.lock.pluginToolchain.sourceRevision='e'.repeat(40)],
+  ['customer build',f=>f.lock.pluginToolchain.customerBuildRequired=true],['unqualified candidate',f=>f.candidate.status='pending'],
+]) test('retained toolchain rejects '+name+' drift instead of rewriting the immutable lock',()=>{
+  const f=toolchainReceiptFixture();mutate(f);assert.throws(()=>selectOriginalReceipt(f.current,f.lock,f.candidate))
+})
+
+test('retained receipt wire authenticates exact digest before reading bounded hash-checked payload bytes',async()=>{
+  const f=toolchainReceiptFixture(),bytes=JSON.stringify(f.lock),layer='sha256:'+createHash('sha256').update(bytes).digest('hex')
+  const manifest=JSON.stringify({layers:[{mediaType:'application/vnd.enterpriseglue.distribution-lock.v1+json',digest:layer,size:Buffer.byteLength(bytes)}]})
+  const digest='sha256:'+createHash('sha256').update(manifest).digest('hex'),calls=[]
+  const selected=await retainedReceipt(f.current,f.candidate,{verify:async subject=>{assert.ok(subject.endsWith('@'+digest));calls.push('verify')},run:async(name,args)=>{
+    assert.equal(name,'oras');calls.push(args[0]+':'+args[1]);if(args[0]==='resolve')return digest
+    if(args[0]==='manifest'){assert.equal(calls.at(-2),'verify');return manifest}
+    assert.deepEqual(args.slice(0,4),['blob','fetch','--output','-']);assert.ok(args[4].endsWith('@'+layer));return bytes
+  }})
+  assert.deepEqual(selected,f.original)
+  assert.equal(calls.length,4)
+})
+
+for(const defect of ['signature','manifest hash','duplicate layer','oversized layer','blob hash'])test('retained receipt wire rejects '+defect+' corruption',async()=>{
+  const f=toolchainReceiptFixture(),bytes=JSON.stringify(f.lock),layer={mediaType:'application/vnd.enterpriseglue.distribution-lock.v1+json',digest:'sha256:'+createHash('sha256').update(bytes).digest('hex'),size:Buffer.byteLength(bytes)}
+  if(defect==='oversized layer')layer.size=131073
+  const manifest=JSON.stringify({layers:defect==='duplicate layer'?[layer,layer]:[layer]})
+  const digest='sha256:'+createHash('sha256').update(manifest).digest('hex')
+  await assert.rejects(retainedReceipt(f.current,f.candidate,{verify:async()=>{if(defect==='signature')throw Error('invalid signature')},run:async(name,args)=>{
+    if(args[0]==='resolve')return digest
+    if(args[0]==='manifest')return manifest+(defect==='manifest hash'?' ':'')
+    return defect==='blob hash'?bytes+' ':bytes
+  }}))
+})
+
+for (const failure of ['unauthorized: authentication required','HTTP 403','i/o timeout','other: not found']) {
+  test('unknown distribution resolution stops without adopting a current receipt: '+failure,async()=>{
+    const f=toolchainReceiptFixture();let calls=0
+    await assert.rejects(retainedReceipt(f.current,f.candidate,{run:async()=>{calls++;throw Object.assign(Error('registry fixture'),{stderr:failure})},verify:()=>assert.fail('No signature or payload read after failed resolve.')}))
+    assert.equal(calls,1)
+  })
+}
+
+test('only a definite missing immutable distribution allows a first current receipt',async()=>{
+  const f=toolchainReceiptFixture()
+  const selected=await retainedReceipt(f.current,f.candidate,{run:async(name,args)=>{throw Object.assign(Error('absent'),{stderr:'Error response from registry: failed to resolve digest: '+args[1]+': not found'})},verify:()=>assert.fail('Absent distribution has no signature.')})
+  assert.deepEqual(selected,f.current)
+})
+
+test('signature visibility recovery repeats only fixed GET verification with the same signer and issuer',async()=>{
+  let count=0,pauses=0
+  const subject='ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution@sha256:'+'a'.repeat(64)
+  await verifyDistributionSignature(subject,{pause:async()=>{pauses++},run:async(name,args,timeout)=>{
+    count++;assert.equal(name,'cosign');assert.equal(args[0],'verify');assert.equal(args.at(-1),subject)
+    assert.equal(args[args.indexOf('--certificate-identity')+1],'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/plugin-toolchain-release.yml@refs/heads/main')
+    assert.equal(args[args.indexOf('--certificate-oidc-issuer')+1],'https://token.actions.githubusercontent.com');assert.ok(timeout>0&&timeout<=30000)
+    if(count<3)throw Object.assign(Error('fixture'),{stderr:'Error: no signatures found\nerror during command execution: no signatures found\n'})
+  }})
+  assert.equal(count,3);assert.equal(pauses,2)
+})
+
+for(const failure of ['invalid signature','HTTP 403','certificate identity mismatch','no signatures found\nHTTP 500'])test('signature verification fails immediately on '+failure,async()=>{
+  let count=0;await assert.rejects(verifyDistributionSignature('ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution@sha256:'+'a'.repeat(64),{pause:()=>assert.fail('No retry permitted.'),run:async()=>{count++;throw Object.assign(Error('fixture'),{stderr:failure})}}));assert.equal(count,1)
+})
+
+test('persistent missing signature has a fixed attempt bound and never signs',async()=>{
+  let count=0;await assert.rejects(verifyDistributionSignature('ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution@sha256:'+'a'.repeat(64),{pause:async()=>{},run:async(name,args)=>{count++;assert.equal(args[0],'verify');throw Object.assign(Error('fixture'),{stderr:'error during command execution: no signatures found'})}}));assert.equal(count,5)
+})
+
+test('signature-read deadline and foreign subjects stop without another read',async()=>{
+  let clock=0,calls=0
+  await assert.rejects(verifyDistributionSignature('ghcr.io/enterpriseglue/releases/enterpriseglue-oss-distribution@sha256:'+'a'.repeat(64),{now:()=>clock,pause:async()=>{clock=30001},run:async()=>{calls++;throw Object.assign(Error('fixture'),{stderr:'error during command execution: no signatures found'})}}))
+  assert.equal(calls,1)
+  await assert.rejects(verifyDistributionSignature('ghcr.io/other/image@sha256:'+'a'.repeat(64),{run:()=>assert.fail('No foreign registry read.')}))
+})
+
+test('complete release metadata classifies absent distribution assets as missing; ambiguous metadata rejects',()=>{
+  const release={tag_name:'v0.35.9',draft:false,assets:[]},absent=missingDistributionAssets(release,'v0.35.9');assert.equal(absent.length,6)
+  release.assets=absent.map(name=>({name}));assert.deepEqual(missingDistributionAssets(release,'v0.35.9'),[])
+  assert.throws(()=>missingDistributionAssets({...release,tag_name:'v0.35.8'},'v0.35.9'))
+  assert.throws(()=>missingDistributionAssets({...release,assets:[{name:'duplicate'},{name:'duplicate'}]},'v0.35.9'))
+})
+
+test('toolchain workflow uses exact protected controller code while retaining frozen source and original/attempt diagnostics',()=>{
+  const workflow=readFileSync(new URL('../.github/workflows/plugin-toolchain-release.yml',import.meta.url),'utf8')
+  assert.ok(workflow.includes('git show "$GITHUB_WORKFLOW_SHA:scripts/release-publication-toolchain-receipt.mjs"'))
+  assert.ok(workflow.includes('ref: ${{ env.SOURCE_REF }}'))
+  assert.ok(workflow.includes('git fetch --no-tags --depth=1 origin "$GITHUB_WORKFLOW_SHA"'))
+  assert.ok(workflow.includes('[[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]'))
+  assert.ok(workflow.includes('"$RECEIPT/attempt-release.json" "$RECEIPT/selected-release.json" "$CANDIDATE_RECEIPT"'))
+  assert.match(workflow,/Retain the non-secret toolchain receipt\n\s+if: always\(\)/)
+  assert.match(workflow,/cmp --silent "\$LOCK" "\$published_lock"/)
+  const distribution=workflow.slice(workflow.indexOf('          distribution_tag='))
+  assert.ok(distribution.includes('resolve-distribution "$RELEASE_TAG"'))
+  assert.ok(distribution.includes('if [[ "$distribution_digest" == absent ]]'))
+  assert.doesNotMatch(distribution,/oras resolve .*\|\| true/)
+})
+
+test('actual workflow extracts new protected controls from a shallow frozen checkout without advancing the payload source',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'eg-toolchain-control-source-'))
+  try {
+    const origin=join(directory,'origin'),checkout=join(directory,'checkout'),temp=join(directory,'temp')
+    mkdirSync(origin);mkdirSync(temp)
+    const env={PATH:process.env.PATH,HOME:directory,GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',GIT_AUTHOR_NAME:'fixture',GIT_AUTHOR_EMAIL:'fixture@invalid',GIT_COMMITTER_NAME:'fixture',GIT_COMMITTER_EMAIL:'fixture@invalid'}
+    const git=(cwd,args)=>{const r=spawnSync('git',args,{cwd,env,encoding:'utf8',timeout:10000});assert.equal(r.status,0,r.stderr);return r.stdout.trim()}
+    git(origin,['init','-b','main']);writeFileSync(join(origin,'payload.txt'),'frozen payload\n');git(origin,['add','.']);git(origin,['commit','-m','fixture source'])
+    const source=git(origin,['rev-parse','HEAD']);git(origin,['branch','frozen'])
+    mkdirSync(join(origin,'scripts'));const control=readFileSync(new URL('./release-publication-toolchain-receipt.mjs',import.meta.url));writeFileSync(join(origin,'scripts/release-publication-toolchain-receipt.mjs'),control)
+    git(origin,['add','.']);git(origin,['commit','-m','fixture protected control']);const revision=git(origin,['rev-parse','HEAD'])
+    git(directory,['clone','--no-local','--depth=1','--branch','frozen','file://'+origin,checkout])
+    assert.equal(existsSync(join(checkout,'scripts/release-publication-toolchain-receipt.mjs')),false)
+    const workflow=readFileSync(new URL('../.github/workflows/plugin-toolchain-release.yml',import.meta.url),'utf8')
+    const start=workflow.indexOf('          [[ "$GITHUB_WORKFLOW_SHA" =~'),end=workflow.indexOf('          cp "$RECEIPT/release.json"',start)
+    assert.ok(start>0&&end>start);const shell=workflow.slice(start,end).replace(/^          /gm,'')
+    const result=spawnSync('bash',['-euo','pipefail','-c',shell],{cwd:checkout,env:{...env,RUNNER_TEMP:temp,GITHUB_WORKFLOW_SHA:revision,SOURCE_REF:source},encoding:'utf8',timeout:10000})
+    assert.equal(result.status,0,result.stderr);assert.equal(git(checkout,['rev-parse','HEAD']),source)
+    assert.equal(readFileSync(join(checkout,'payload.txt'),'utf8'),'frozen payload\n')
+    assert.deepEqual(readFileSync(join(temp,'release-publication-toolchain-receipt.mjs')),control)
+  } finally { rmSync(directory,{recursive:true,force:true}) }
+})
 
 function identityRecoveryFixture() {
   const {candidate, authorization: old} = recordFixture()

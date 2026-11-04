@@ -127,6 +127,7 @@ test('release publication policy and legacy skill entrypoints select their maint
     'scripts/release-publication-observe.mjs','scripts/release-publication-record.mjs','scripts/release-publication-record-store.sh',
     'scripts/release-publication-security.sh','scripts/release-publication-labels.mjs','scripts/release-publication-ledger-canary.mjs',
     'scripts/release-publication-signature-recovery.mjs',
+    'scripts/release-publication-toolchain-receipt.mjs',
     '.github/workflows/release-publication-reconcile.yml']) {
     const result = classifyChangedFiles([path]);
     assert.equal(result.workflow_or_release, true);

@@ -583,6 +583,20 @@ jobs:
               customerBuildRequired: false
             }' > "$RECEIPT/release.json"
 
+          # The source checkout stays frozen. Recovery controls come only from
+          # the exact protected workflow revision, never from request data.
+          [[ "$GITHUB_WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ ]]
+          publication_tool="$RUNNER_TEMP/release-publication-toolchain-receipt.mjs"
+          git fetch --no-tags --depth=1 origin "$GITHUB_WORKFLOW_SHA"
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          git show "$GITHUB_WORKFLOW_SHA:scripts/release-publication-toolchain-receipt.mjs" > "$publication_tool"
+          cp "$RECEIPT/release.json" "$RECEIPT/attempt-release.json"
+          if [[ -n "${CANDIDATE_RECEIPT:-}" ]]; then
+            node "$publication_tool" select \
+              "$RECEIPT/attempt-release.json" "$RECEIPT/selected-release.json" "$CANDIDATE_RECEIPT"
+            mv "$RECEIPT/selected-release.json" "$RECEIPT/release.json"
+          fi
+
       - name: Build, sign, and verify the generic air-gap toolchain
         shell: bash
         run: |
@@ -797,13 +811,13 @@ jobs:
             "$LOCK" >/dev/null
 
           distribution_tag="$DISTRIBUTION_REPOSITORY:$RELEASE_TAG"
-          distribution_digest="$(oras resolve "$distribution_tag" 2>/dev/null || true)"
-          if [[ -z "$distribution_digest" ]]; then
+          distribution_digest="$(node "$RUNNER_TEMP/release-publication-toolchain-receipt.mjs" resolve-distribution "$RELEASE_TAG")"
+          if [[ "$distribution_digest" == absent ]]; then
             oras push "$distribution_tag" \
               --disable-path-validation \
               --artifact-type application/vnd.enterpriseglue.distribution-lock.v1+json \
               "$LOCK:application/vnd.enterpriseglue.distribution-lock.v1+json" >/dev/null
-            distribution_digest="$(oras resolve "$distribution_tag")"
+            distribution_digest="$(node "$RUNNER_TEMP/release-publication-toolchain-receipt.mjs" resolve-distribution "$RELEASE_TAG")"
           fi
           [[ "$distribution_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           distribution_reference="$DISTRIBUTION_REPOSITORY@$distribution_digest"
@@ -820,10 +834,8 @@ jobs:
           }
           cosign sign --yes --registry-referrers-mode=oci-1-1 \
             "$distribution_reference"
-          cosign verify \
-            --certificate-identity "$CERTIFICATE_IDENTITY" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            "$distribution_reference" >/dev/null
+          node "$RUNNER_TEMP/release-publication-toolchain-receipt.mjs" \
+            verify-signature "$distribution_reference"
 
           gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
@@ -836,13 +848,17 @@ jobs:
             "$AIRGAP_ARCHIVE"
 
       - name: Retain the non-secret toolchain receipt
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: enterpriseglue-plugin-toolchain-${{ steps.version.outputs.version }}-${{ inputs.source_ref }}
           path: |
             ${{ runner.temp }}/enterpriseglue-plugin-toolchain-receipt/release.json
+            ${{ runner.temp }}/enterpriseglue-plugin-toolchain-receipt/attempt-release.json
             ${{ runner.temp }}/enterpriseglue-plugin-toolchain-receipt/toolchain-airgap-import-receipt.json
             ${{ runner.temp }}/enterpriseglue-plugin-toolchain-receipt/toolchain-airgap/toolchain-airgap.json
             ${{ runner.temp }}/enterpriseglue-plugin-toolchain-receipt/toolchain-airgap/toolchain-airgap.sigstore.json
+            ${{ runner.temp }}/enterpriseglue-distribution/enterpriseglue-distribution-lock-*.json
+            ${{ runner.temp }}/enterpriseglue-distribution/published-enterpriseglue-distribution-lock-*.json
           if-no-files-found: error
           retention-days: 30
