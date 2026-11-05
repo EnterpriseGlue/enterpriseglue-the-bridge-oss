@@ -6,14 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.35.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.9...v0.35.10) (2026-11-05)
 
+### Changes
 
-### Bug Fixes
+- **release-authorization:** Resume frozen toolchain distribution publication without changing its authenticated original receipt or immutable lock.
+- **mission-control:** Resolve opaque process-definition identifiers in instance lists and verify live process existence before reading variables.
 
-* **mission-control:** handle opaque instance definitions and missing variables ([4300983](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4300983eb7caa255a41431f9552b1c141418b045))
-* **mission-control:** handle opaque instance definitions and missing variables ([0b0d532](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0b0d532ef7348f7d9a0bb09183d65486c5b10d58))
-* **release:** preserve frozen distribution receipt during recovery ([c6a9650](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c6a96500b71e01dce17431d3fa306408fba26124))
-* **release:** preserve frozen distribution receipt during recovery ([73acac2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/73acac222e45c06436cb466c0773e1325181b159))
-* **release:** stop recovery over partial attachment sets ([8903f57](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8903f577d5d019f7c21fb6cc7878a3905b62c20f))
+Full upgrade, compatibility and verification details: [v0.35.10 release notes](docs/releases/v0.35.10.md).
 
 ## [0.35.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.8...v0.35.9) (2026-11-04)
 
