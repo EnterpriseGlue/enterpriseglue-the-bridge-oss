@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.35.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.9...v0.35.10) (2026-11-05)
+
+### Changes
+
+- **release-authorization:** Resume frozen toolchain distribution publication without changing its authenticated original receipt or immutable lock.
+- **mission-control:** Resolve opaque process-definition identifiers in instance lists and verify live process existence before reading variables.
+
+Full upgrade, compatibility and verification details: [v0.35.10 release notes](docs/releases/v0.35.10.md).
+
 ## [0.35.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.8...v0.35.9) (2026-11-04)
 
 ### Changes
