@@ -1060,19 +1060,6 @@ registry.registerPath({
   },
 });
 
-// GET /mission-control-api/process-instances
-registry.registerPath({
-  method: 'get',
-  path: '/mission-control-api/process-instances',
-  ...authzExtension('engine.runtime.process-instances.read', 'GET', '/mission-control-api/process-instances'),
-  request: {
-    query: ProcessInstanceCollectionQueryParamsSchema,
-  },
-  responses: {
-    200: { description: 'List process instances (runtime + historic)', content: { 'application/json': { schema: z.array(MissionControlProcessInstanceSchema) } } },
-  },
-});
-
 const ProcessInstanceErrorSchema = z.object({
   error: z.string(),
   code: z.string(),
@@ -1088,6 +1075,7 @@ const processInstanceErrorResponse = (description: string, code?: string) => ({
 // These guarded reads share explicit tenant and tenant-host compatibility mounts.
 function registerProcessInstanceRead(config: Parameters<typeof registry.registerPath>[0]) {
   const query = config.request?.query as z.ZodObject<any> | undefined;
+  const params = config.path.includes('{id}') ? z.object({ id: z.string().min(1) }) : z.object({});
   for (const tenantScoped of [false, true]) {
     registry.registerPath({
       ...config,
@@ -1099,8 +1087,8 @@ function registerProcessInstanceRead(config: Parameters<typeof registry.register
       request: {
         ...config.request,
         params: tenantScoped
-          ? z.object({ tenantSlug: TenantSlugSchema, id: z.string().min(1) })
-          : z.object({ id: z.string().min(1) }),
+          ? params.extend({ tenantSlug: TenantSlugSchema })
+          : params,
         query: (query || z.object({})).extend({ engineId: z.string().min(1) }),
       },
       responses: {
@@ -1118,6 +1106,17 @@ function registerProcessInstanceRead(config: Parameters<typeof registry.register
     });
   }
 }
+
+// GET /mission-control-api/process-instances and its mounted tenant alias.
+registerProcessInstanceRead({
+  method: 'get',
+  path: '/mission-control-api/process-instances',
+  ...authzExtension('engine.runtime.process-instances.read', 'GET', '/mission-control-api/process-instances'),
+  request: { query: ProcessInstanceCollectionQueryParamsSchema },
+  responses: {
+    200: { description: 'List authorized process instances (runtime + historic)', content: { 'application/json': { schema: z.array(MissionControlProcessInstanceSchema) } } },
+  },
+});
 
 // GET /mission-control-api/process-instances/{id}
 registerProcessInstanceRead({

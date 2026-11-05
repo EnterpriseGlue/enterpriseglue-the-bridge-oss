@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "runtime-instance-identity-and-variables",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": ["users", "developers", "operators"],
+  "summary": "Resolve opaque process-definition identifiers in instance lists and verify live process existence before reading variables.",
+  "userImpact": ["Active and completed instance lists support engine-generated opaque definition IDs.", "Missing or completed runtime processes return not-found for variable reads."],
+  "upgrade": {"required": false, "instructions": ["Upgrade the backend host package or host image through the ordinary release process."]},
+  "configuration": [],
+  "api": {"compatibility": "additive", "changes": ["Existing instance-list and variable-read behavior is restored.", "OpenAPI now includes the existing tenant-scoped list route with its required engine selector, authentication and error contracts."]},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": ["No schema or data migration."]},
+  "security": ["Authorization, runtime tenant filters and variable redaction are preserved. An engine error is classified as not-found only after a typed parent lookup proves absence."],
+  "documentation": ["docs/development/mission-control-engine-selection.md"],
+  "customerDocumentation": {"impact": "none", "owner": "maintainers", "pages": [], "reason": "This restores documented instance-list and variable-read behavior without adding user-facing configuration."},
+  "knownLimitations": ["Real engine, browser and protected release acceptance remain required before publication."],
+  "rollback": ["Restore the previous host image using the ordinary guarded deployment process."],
+  "validation": ["Targeted service, route, schema and authorization regression checks."],
+  "packages": [
+    {"name": "@enterpriseglue/backend-host", "previousVersion": "0.23.11", "newVersion": "0.23.12", "impact": "patch"},
+    {"name": "@enterpriseglue/shared", "previousVersion": "0.28.10", "newVersion": "0.28.11", "impact": "patch"},
+    {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.20.13", "newVersion": "0.20.14", "impact": "patch"}
+  ]
+}
