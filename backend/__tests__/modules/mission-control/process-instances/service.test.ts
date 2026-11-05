@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   listProcessInstances,
   getProcessInstance,
@@ -26,8 +27,10 @@ describe('process-instances service', () => {
   });
 
   it('gets process instance variables', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce({ id: 'inst-1' } as any).mockResolvedValueOnce({ amount: { value: 84, type: 'Integer' } } as any);
     const result = await getProcessInstanceVariables('engine-1', 'inst-1');
-    expect(result).toBeDefined();
+    expect(result).toEqual({ amount: { value: 84, type: 'Integer' } });
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-instance/inst-1');
   });
 
   it('gets activity instances', async () => {

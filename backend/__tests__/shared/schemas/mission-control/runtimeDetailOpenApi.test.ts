@@ -11,13 +11,13 @@ describe('runtime instance lookup source-to-OpenAPI parity', () => {
     content: readFileSync(new URL(`../../../../../packages/backend-host/src/modules/mission-control/${path}`, import.meta.url), 'utf8'),
   }));
   const reads = sources.flatMap(source => scanBackendAuthzRoutes([source]).routes)
-    .filter(route => route.method === 'GET' && route.route.startsWith('/mission-control-api/process-instances/:id'));
+    .filter(route => route.method === 'GET' && (route.route === '/mission-control-api/process-instances' || route.route.startsWith('/mission-control-api/process-instances/:id')));
   const mounts = readFileSync(new URL('../../../../../packages/backend-host/src/routes/index.ts', import.meta.url), 'utf8');
   const caller = readFileSync(new URL('../../../../../packages/frontend-host/src/features/mission-control/process-instance-detail/api/processInstances.ts', import.meta.url), 'utf8');
 
   it('discovers both guarded implementations and their production mounts', () => {
-    expect(reads).toHaveLength(11); // Eight compatibility reads and three modular reads.
-    expect(new Set(reads.map(route => route.normalizedRoute)).size).toBe(9);
+    expect(reads).toHaveLength(13); // Compatibility/modular list reads and eleven detail reads.
+    expect(new Set(reads.map(route => route.normalizedRoute)).size).toBe(10);
     expect(reads.every(route => route.authenticated)).toBe(true);
     for (const source of sources) {
       expect(source.content).toContain('withProcessInstanceLookupError(requireRuntimeDefinitionAction(');
@@ -54,9 +54,9 @@ describe('runtime instance lookup source-to-OpenAPI parity', () => {
         expect(operation.responses['200']?.content?.['application/json']?.schema, normalizedRoute).toBeDefined();
         expect(operation.security).toEqual([{ BearerAuth: [] }, { AccessTokenCookie: [] }]);
         expect(operation.parameters).toEqual(expect.arrayContaining([
-          expect.objectContaining({ name: 'id', in: 'path', required: true }),
           expect.objectContaining({ name: 'engineId', in: 'query', required: true }),
         ]));
+        expect(operation.parameters.some((parameter: any) => parameter.name === 'id' && parameter.in === 'path' && parameter.required)).toBe(normalizedRoute.includes('{id}'));
         expect(operation.parameters.some((parameter: any) => parameter.name === 'tenantSlug' && parameter.in === 'path' && parameter.required)).toBe(Boolean(prefix));
         for (const status of [401, 403, 404, 500, 502]) {
           expect(operation.responses[String(status)].content['application/json'].schema.required).toEqual(['error', 'code']);

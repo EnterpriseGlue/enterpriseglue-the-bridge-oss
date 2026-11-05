@@ -6,6 +6,7 @@ import {
   getHistoricDecisionInstances,
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import { ProcessInstanceSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
 
 let getActivityCountsByState: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getActivityCountsByState;
 let getProcessInstanceVariables: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariables;
@@ -44,10 +45,11 @@ describe('mission-control-service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(camundaGet).mockReset();
   });
 
   it('reads the live process-variable endpoint instead of history so accepted edits are visible', async () => {
-    vi.mocked(camundaGet).mockResolvedValueOnce({
+    vi.mocked(camundaGet).mockResolvedValueOnce({ id: 'proc-1' } as any).mockResolvedValueOnce({
       requestBody: { value: { foo: 'bar' }, type: 'Json' },
       validStatuses: { value: ['ISSUED', 'LAPSED'], type: 'Object' },
     } as any);
@@ -59,6 +61,49 @@ describe('mission-control-service', () => {
       validStatuses: { value: ['ISSUED', 'LAPSED'], type: 'Object' },
     });
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-instance/proc-1/variables');
+  });
+
+  it('resolves opaque definition IDs once per collection and preserves runtime tenant lineage', async () => {
+    const id = 'opaque-definition-id';
+    vi.mocked(camundaGet).mockImplementation(async (_engine, path) => {
+      if (path === '/process-instance') return [
+        { id: 'instance-1', definitionId: id, tenantId: 'runtime-blue', suspended: false },
+        { id: 'instance-2', definitionId: id, tenantId: 'runtime-blue', suspended: false },
+      ] as any;
+      if (path === '/process-definition/' + id) return { id, key: 'a-long-definition-key', version: 7, tenantId: 'runtime-blue' } as any;
+      return [] as any;
+    });
+    const rows = await listProcessInstancesDetailed('engine-1', { active: 'true', tenantIdIn: ['runtime-blue'] });
+    expect(rows).toHaveLength(2);
+    expect(rows.every(row => row.processDefinitionKey === 'a-long-definition-key' && row.version === 7 && row.tenantId === 'runtime-blue')).toBe(true);
+    expect(ProcessInstanceSchema.array().safeParse(rows).success).toBe(true);
+    expect(vi.mocked(camundaGet).mock.calls.filter(([, path]) => path === '/process-definition/' + id)).toHaveLength(1);
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-instance', expect.objectContaining({ tenantIdIn: ['runtime-blue'] }));
+  });
+
+  it('resolves opaque completed definition IDs without publishing a non-finite version', async () => {
+    const id = 'opaque-history-definition';
+    vi.mocked(camundaGet).mockImplementation(async (_engine, path) => {
+      if (path === '/history/process-instance') return [{ id: 'completed-1', processDefinitionId: id, processDefinitionKey: 'long-key', state: 'COMPLETED', tenantId: null }] as any;
+      if (path === '/process-definition/' + id) return { id, key: 'long-key', version: 4, tenantId: null } as any;
+      throw new Error('unexpected engine path');
+    });
+    const rows = await listProcessInstancesDetailed('engine-1', { completed: 'true', withoutTenantId: true });
+    expect(rows).toEqual([expect.objectContaining({ id: 'completed-1', processDefinitionKey: 'long-key', version: 4, state: 'COMPLETED', tenantId: null })]);
+    expect(ProcessInstanceSchema.array().safeParse(rows).success).toBe(true);
+  });
+
+  for (const [name, change] of [
+    ['identity', { id: 'foreign-id' }], ['key', { key: 'foreign-key' }],
+    ['tenant', { tenantId: 'runtime-red' }], ['version', { version: Number.NaN }],
+    ['zero version', { version: 0 }],
+  ] as const) it(`rejects opaque definition ${name} drift instead of guessing metadata`, async () => {
+    vi.mocked(camundaGet).mockImplementation(async (_engine, path) => {
+      if (path === '/process-instance') return [{ id: 'instance-1', definitionId: 'opaque', tenantId: 'runtime-blue' }] as any;
+      if (path === '/process-definition/opaque') return { id: 'opaque', key: 'expected', version: 1, tenantId: 'runtime-blue', ...change } as any;
+      throw new Error('unexpected engine path');
+    });
+    await expect(listProcessInstancesDetailed('engine-1', { active: 'true', processDefinitionKey: 'expected', tenantIdIn: ['runtime-blue'] })).rejects.toThrow('Process definition identity');
   });
 
   it('passes shared runtime-tenant filters through the compatibility definition list', async () => {
@@ -129,7 +174,7 @@ describe('mission-control-service', () => {
   });
 
   it('keeps compatibility with engines that return an unwrapped variable value', async () => {
-    vi.mocked(camundaGet).mockResolvedValueOnce({ legacyVar: 'ok' } as any);
+    vi.mocked(camundaGet).mockResolvedValueOnce({ id: 'proc-1' } as any).mockResolvedValueOnce({ legacyVar: 'ok' } as any);
 
     const result = await getProcessInstanceVariables('engine-1', 'proc-1');
 

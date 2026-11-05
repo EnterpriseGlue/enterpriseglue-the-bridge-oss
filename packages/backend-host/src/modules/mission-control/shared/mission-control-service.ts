@@ -15,6 +15,7 @@ import {
   getHistoricDecisionInstances,
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import { readLiveProcessVariables } from './runtime-process-variables.js'
 
 export async function listProcessDefinitions(engineId: string, params: {
   key?: string
@@ -238,6 +239,34 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     tenantId?: string | null
   }> = []
   const seen = new Set<string>()
+  const definitionMetadata = new Map<string, Promise<{ key: string; version: number; tenantId: string | null }>>()
+  async function definitionIdentity(id: unknown, expectedKey: unknown, tenantId: unknown) {
+    if (typeof id !== 'string' || !id) throw new Error('Process definition identity is unavailable')
+    // Short definitions use key:version:id. Engines may use an opaque ID when
+    // that compound value exceeds their identifier limit; it is not a key.
+    const compound = /^(.+):([1-9][0-9]*):[^:]+$/.exec(id)
+    if (compound && Number.isSafeInteger(Number(compound[2]))) {
+      if (typeof expectedKey === 'string' && expectedKey !== compound[1]) throw new Error('Process definition identity mismatch')
+      return { key: compound[1]!, version: Number(compound[2]) }
+    }
+    let pending = definitionMetadata.get(id)
+    if (!pending) {
+      pending = getProcessDefinitionById(engineId, id).then(definition => {
+        if (definition?.id !== id || typeof definition.key !== 'string' || !definition.key ||
+          !Number.isSafeInteger(definition.version) || definition.version < 1 ||
+          (definition.tenantId !== undefined && definition.tenantId !== null && typeof definition.tenantId !== 'string')) throw new Error('Process definition identity is unavailable')
+        return { key: definition.key as string, version: definition.version as number,
+          tenantId: typeof definition.tenantId === 'string' ? definition.tenantId : null }
+      })
+      definitionMetadata.set(id, pending)
+    }
+    const definition = await pending
+    if ((typeof expectedKey === 'string' && expectedKey !== definition.key) ||
+      (typeof tenantId === 'string' ? tenantId : null) !== (typeof definition.tenantId === 'string' ? definition.tenantId : null)) {
+      throw new Error('Process definition identity mismatch')
+    }
+    return { key: definition.key, version: definition.version }
+  }
 
   async function pushRuntime(params: Record<string, any>) {
     const runtime = await camundaGet<any[]>(engineId, '/process-instance', {
@@ -249,13 +278,11 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     for (const r of runtime) {
       if (seen.has(r.id)) continue
       seen.add(r.id)
-      const defId: string | undefined = r.definitionId
-      const defKey = typeof defId === 'string' ? defId.split(':')[0] : (processDefinitionKey || undefined)
-      const defVer = typeof defId === 'string' ? Number(defId.split(':')[1]) : undefined
+      const definition = await definitionIdentity(r.definitionId, processDefinitionKey, r.tenantId)
       out.push({
         id: r.id,
-        processDefinitionKey: defKey,
-        version: defVer,
+        processDefinitionKey: definition.key,
+        version: definition.version,
         superProcessInstanceId: r.superProcessInstanceId || null,
         rootProcessInstanceId: r.rootProcessInstanceId || null,
         startTime: null,
@@ -404,12 +431,11 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
       if ((wantCanceled && isCanceled) || (wantCompleted && !isCanceled)) {
         if (seen.has(h.id)) continue
         seen.add(h.id)
-        const defId = h.processDefinitionId as string | undefined
-        const defVer = defId ? Number(defId.split(':')[1]) : undefined
+        const definition = await definitionIdentity(h.processDefinitionId, h.processDefinitionKey, h.tenantId)
         out.push({
           id: h.id,
-          processDefinitionKey: h.processDefinitionKey,
-          version: defVer,
+          processDefinitionKey: definition.key,
+          version: definition.version,
           superProcessInstanceId: h.superProcessInstanceId || null,
           rootProcessInstanceId: h.rootProcessInstanceId || null,
           startTime: h.startTime || null,
@@ -455,10 +481,7 @@ export async function getProcessInstanceVariables(engineId: string, id: string) 
   // router. Its endpoint must therefore read the same live state that the
   // variable editor updates. History is an audit trail and can legitimately
   // lag a runtime write; using it here made an accepted edit appear lost.
-  const runtimeVariables = await camundaGet<Record<string, any>>(
-    engineId,
-    `/process-instance/${encodeURIComponent(id)}/variables`,
-  )
+  const runtimeVariables = await readLiveProcessVariables(engineId, id)
   const out: Record<string, { value: any; type: string }> = {}
   for (const [name, variable] of Object.entries(runtimeVariables || {})) {
     if (!name || variable === undefined) continue

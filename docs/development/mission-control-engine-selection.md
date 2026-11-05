@@ -25,6 +25,20 @@ other consumers of `useSelectedEngine`.
 
 ## Variable transport
 
+Runtime variable reads verify the same engine's live process identity before
+requesting variables. This gives absent or completed processes the ordinary
+typed not-found response even when an engine's variables endpoint reports an
+internal error for an absent process. A process that ends between reads is
+classified as absent only after a further parent read proves 404; authentication,
+transport and genuine engine errors retain their existing classification.
+
+Instance collections accept both compound `key:version:id` definition identifiers
+and opaque engine-generated identifiers. Opaque identifiers are resolved through
+the same engine's definition metadata, cached per request, with exact identity,
+key, version and runtime-tenant checks. The collection must never publish a
+guessed definition key or a non-finite version. Tenant query filters and result
+authorization filtering still apply.
+
 The shared engine client requests `deserializeValues=false` for runtime, task,
 and historic variable reads. Native `Json` values are parsed from their serialized
 JSON representation before response presentation and permission-based redaction.
