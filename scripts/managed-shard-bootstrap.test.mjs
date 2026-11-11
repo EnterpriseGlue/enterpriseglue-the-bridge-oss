@@ -160,14 +160,14 @@ test('runner never invokes TypeORM synchronize and executes only the signed sche
     "'ca-certificates-bundle>=20260909-r3'",
     "'libexpat1=2.10.0-r0'",
     "'zlib>=1.3.2.1_rc20260921-r0'",
-    "'glibc-2.44>=2.44-r8'",
-    "'glibc-2.44-dev>=2.44-r8'",
-    "'glibc-2.44-locale-posix>=2.44-r8'",
-    "'ld-linux-2.44>=2.44-r8'",
+    "'glibc-2.44>=2.44-r16'",
+    "'glibc-2.44-dev>=2.44-r16'",
+    "'glibc-2.44-locale-posix>=2.44-r16'",
+    "'ld-linux-2.44>=2.44-r16'",
     "'libcurl-openssl4>=8.23.0-r0'",
     "'libbrotlicommon1>=1.2.0-r7' 'libbrotlidec1>=1.2.0-r7' 'libbrotlienc1>=1.2.0-r7'",
     'wget',
-    "'libcrypt1-2.44>=2.44-r8'",
+    "'libcrypt1-2.44>=2.44-r16'",
   ])
   assert.match(dockerfile, /RUN apk del --no-network node-gyp && ! apk info -e node-gyp/)
   assert.doesNotMatch(dockerfile, /EG_MANAGED_SHARD_BOOTSTRAP_ENABLED/)
