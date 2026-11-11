@@ -14,7 +14,7 @@ import { DataSource } from 'typeorm';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import request from 'supertest';
-import { createApp } from '@enterpriseglue/backend-host/app.js';
+import { installBrowserRequestProtection } from '@enterpriseglue/backend-host/middleware/browser-request-protection.js';
 import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 import { MockOidcProvider } from '../identity-mocks/index.js';
 
@@ -105,7 +105,9 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await owner.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${runtimeName}`);
     runtime=build(runtimeName);await runtime.initialize();assertPostgresContextBoundary(runtime);database.current=runtime;
     vi.stubGlobal('fetch',protocol.fetch.bind(protocol));
-    app = createApp({ registerRoutes: false, includeRateLimiting: false, includeDocs: false, registerFinalMiddleware: false });
+    app = express();
+    app.use(express.json(), express.urlencoded({ extended: false }));
+    installBrowserRequestProtection(app);
     app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);app.use(cloudEmailRoutes);
     app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
     app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,
