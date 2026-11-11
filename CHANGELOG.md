@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.36.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.10...v0.36.0) (2026-11-11)
+
+
+### Features
+
+* **config-bundles:** apply bundle directories at startup and live ([14e9688](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/14e96888bb7a78bafaede8577d7be7eebb470e11))
+* **config-bundles:** apply bundle directories at startup and live ([c03fb42](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c03fb42bd8ec50f403ddaa231c3ee17b7673239b))
+
+
+### Bug Fixes
+
+* **mission-control:** filter BPMN badges by process start time ([0ef8e0c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0ef8e0cff92d72a63b4e477c58abbd81548dd5fb))
+* **mission-control:** filter BPMN badges by process start time ([ae63b13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ae63b1325a2dca3dd7dee6b3df2b652d09d7999e))
+* **mission-control:** hide tenancy controls for managed engines ([7c2de69](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7c2de69f554815cca7c248b5aad01caafab54bad))
+* **mission-control:** hide tenancy controls for managed engines ([bd57156](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bd57156e2b07dd64fefc152790c732d66f2008fe))
+* **security:** raise the Wolfi glibc runtime floor ([e567c45](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e567c453126f4503fa6c5abdd9117319b7fd1249))
+* **security:** raise the Wolfi glibc runtime floor ([70b3f73](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/70b3f735833d309c582400af9e88c3308c283b13))
+* **security:** update Go networking in plugin acquisition images ([bc47eef](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bc47eef0d386a6aae38c8ea35e2f0c7f26010321))
+* **security:** update Go networking in plugin acquisition images ([aa492c8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/aa492c821337b3205d9d27ae155d2e80059c2e66))
+
 ## [0.35.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.9...v0.35.10) (2026-11-05)
 
 ### Changes
