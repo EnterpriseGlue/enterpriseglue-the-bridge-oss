@@ -81,3 +81,30 @@ describe('runtime instance lookup source-to-OpenAPI parity', () => {
     });
   }
 });
+
+describe('activity badge count API', () => {
+  const generateOpenApi = useOpenApiFixture();
+
+  it('documents the optional start-time bounds on both mounted routes', () => {
+    const filePath = 'packages/backend-host/src/modules/mission-control/shared/mission_control.ts';
+    const content = readFileSync(new URL(`../../../../../${filePath}`, import.meta.url), 'utf8');
+    const routes = scanBackendAuthzRoutes([{ filePath, content }]).routes.filter(route => route.route.endsWith('/activity-counts-by-state'));
+    expect(routes).toHaveLength(1);
+    expect(routes[0]).toMatchObject({ method: 'GET', authenticated: true });
+
+    const { paths } = generateOpenApi();
+    for (const prefix of ['', '/t/{tenantSlug}']) {
+      const operation = paths[`${prefix}${routes[0].normalizedRoute}`]?.get;
+      expect(operation?.['x-enterpriseglue-authz'].actionId).toBe('engine.runtime.process-definitions.read');
+      expect(operation.parameters).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: 'engineId', in: 'query', required: true }),
+        expect.objectContaining({ name: 'startedAfter', in: 'query', required: false, schema: expect.objectContaining({ format: 'date-time' }) }),
+        expect.objectContaining({ name: 'startedBefore', in: 'query', required: false, schema: expect.objectContaining({ format: 'date-time' }) }),
+      ]));
+      expect(operation.responses['200'].content['application/json'].schema.required).toEqual([
+        'active', 'incidents', 'suspended', 'canceled', 'completed',
+      ]);
+      expect(operation.responses['400']).toBeDefined();
+    }
+  });
+});

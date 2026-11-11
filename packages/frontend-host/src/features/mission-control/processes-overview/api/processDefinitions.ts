@@ -7,6 +7,7 @@ import type {
 import type {
   ActivityCountByActivityId,
   ActivityCountsByState as SharedActivityCountsByState,
+  ActivityCountsByStateQueryParams,
   ActivityInstance,
   ProcessDefinition as SharedProcessDefinition,
   ProcessInstance as SharedProcessInstance,
@@ -41,9 +42,16 @@ export async function getActiveActivityCounts(definitionId: string, engineId?: s
   return apiClient.get<Record<string, number>>(`/mission-control-api/process-definitions/${definitionId}/active-activity-counts${params}`, undefined, { credentials: 'include' })
 }
 
-export async function fetchActivityCountsByState(definitionId: string, engineId?: string): Promise<ActivityCountsByState> {
-  const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<ActivityCountsByState>(`/mission-control-api/process-definitions/${definitionId}/activity-counts-by-state${params}`, undefined, { credentials: 'include' })
+export async function fetchActivityCountsByState(
+  definitionId: string,
+  { engineId, startedAfter, startedBefore }: ActivityCountsByStateQueryParams = {},
+): Promise<ActivityCountsByState> {
+  const params = new URLSearchParams()
+  if (engineId) params.set('engineId', engineId)
+  if (startedAfter) params.set('startedAfter', startedAfter)
+  if (startedBefore) params.set('startedBefore', startedBefore)
+  const query = params.size ? `?${params}` : ''
+  return apiClient.get<ActivityCountsByState>(`/mission-control-api/process-definitions/${encodeURIComponent(definitionId)}/activity-counts-by-state${query}`, undefined, { credentials: 'include' })
 }
 
 export type GetProcessInstancesParams = Omit<

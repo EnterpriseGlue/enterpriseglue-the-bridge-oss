@@ -278,6 +278,73 @@ describe('mission-control-service', () => {
     });
   });
 
+  it('counts activities from processes started within the inclusive range across all badge states', async () => {
+    const processDefinitionId = 'invoice:1:id';
+    const startedAfter = '2026-11-09T09:50:00.000Z';
+    const startedBefore = '2026-11-09T10:02:59.999Z';
+    const endTime = '2026-11-09T10:10:00.000Z';
+    const process = (id: string, startTime = startedAfter) => ({ id, startTime, processDefinitionId });
+    const activity = (processInstanceId: string, activityId = 'approve') => ({ processInstanceId, activityId });
+    const endEvent = (processInstanceId: string, activityId = 'end') => ({
+      ...activity(processInstanceId, activityId),
+      activityType: 'noneEndEvent',
+      endTime,
+    });
+    vi.mocked(camundaGet).mockImplementation(async (_engine, path, query) => {
+      expect(query?.processDefinitionId).toBe(processDefinitionId);
+      if (path === '/history/process-instance') return [
+        process('active'),
+        process('incident'),
+        process('suspended', startedBefore),
+        { ...process('canceled'), state: 'EXTERNALLY_TERMINATED', endTime },
+        { ...process('completed', startedBefore), endTime },
+        { ...process('old', '2026-11-09T09:49:59.999Z'), endTime },
+        process('older-active', '2026-11-09T09:40:00.000Z'),
+        process('late', '2026-11-09T10:03:00.000Z'),
+        { ...process('other-version'), processDefinitionId: 'invoice:2:id' },
+      ] as any;
+      if (path === '/process-instance') return [{ id: 'suspended' }] as any;
+      if (path === '/incident') return [activity('incident'), activity('older-active')] as any;
+      if (path === '/history/activity-instance') {
+        expect(query).not.toHaveProperty('startedBefore');
+        if (query?.unfinished) return [
+          { ...activity('active'), startTime: '2026-11-09T10:05:00.000Z' },
+          activity('incident'), activity('suspended'), activity('older-active'), activity('late'), activity('other-version'),
+        ] as any;
+        if (query?.canceled) return [
+          activity('canceled'), activity('canceled'), activity('active'), activity('old'),
+        ] as any;
+        return [
+          endEvent('completed'), endEvent('canceled'), endEvent('old'),
+          { ...endEvent('completed', 'early-branch-end'), endTime: '2026-11-09T10:00:00.000Z' },
+        ] as any;
+      }
+      throw new Error(`Unexpected engine path: ${path}`);
+    });
+
+    await expect(getActivityCountsByState('engine-1', processDefinitionId, { startedAfter, startedBefore })).resolves.toEqual({
+      active: { approve: 1 },
+      incidents: { approve: 1 },
+      suspended: { approve: 1 },
+      canceled: { approve: 1 },
+      completed: { end: 1 },
+    });
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/history/process-instance', {
+      processDefinitionId,
+      startedAfter: '2026-11-09T09:50:00.000+0000',
+      startedBefore: '2026-11-09T10:02:59.999+0000',
+    });
+  });
+
+  it('returns empty badges when the start-time filter matches no processes', async () => {
+    vi.mocked(camundaGet).mockResolvedValue([]);
+
+    await expect(getActivityCountsByState('engine-1', 'def-1', { startedBefore: '2026-11-09T10:02:59.999Z' })).resolves.toEqual({
+      active: {}, incidents: {}, suspended: {}, canceled: {}, completed: {},
+    });
+    expect(camundaGet).toHaveBeenCalledTimes(1);
+  });
+
   it('aggregates lazy execution details and filters tasks by taskId when provided', async () => {
     vi.mocked(getHistoricVariableInstances).mockResolvedValueOnce([
       { id: 'var-1', name: 'approvalReason', value: 'Need manager sign-off', type: 'String' },

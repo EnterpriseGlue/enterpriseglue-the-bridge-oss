@@ -709,10 +709,9 @@ export default function ProcessesOverviewPage() {
 
   // Function to apply activity count badges for selected states only
   const applyBadges = React.useCallback(() => {
-    if (!viewerApi || !countsByStateQ.data || countsByStateQ.isLoading) return
-
-    // Clear existing badges
+    if (!viewerApi) return
     viewerApi.clearBadges()
+    if (!countsByStateQ.data || countsByStateQ.isPlaceholderData) return
 
     // Get element registry to access shape dimensions
     const elementRegistry = viewerApi.getInternals().elementRegistry
@@ -774,7 +773,7 @@ export default function ProcessesOverviewPage() {
         viewerApi.addBadge(actId, badge, position)
       }
     }
-  }, [viewerApi, countsByStateQ.data, countsByStateQ.isLoading, active, incidents, suspendedFlag, canceled, completed])
+  }, [viewerApi, countsByStateQ.data, countsByStateQ.isPlaceholderData, active, incidents, suspendedFlag, canceled, completed])
 
   // Combined callback for onDiagramReset - applies badges AND extracts flow nodes
   const handleDiagramReset = React.useCallback(() => {

@@ -176,10 +176,12 @@ export function useProcessesData({
     enabled: processDefinitionsEnabled && !definitionLinkPending && !!defIdForVersion && !!selectedEngineId,
   })
 
-  // Fetch activity counts by state for badges
+  const startedAfter = toIso(dateFrom, timeFrom, 'from') ?? undefined
+  const startedBefore = toIso(dateTo, timeTo, 'to') ?? undefined
+
   const countsByStateQ = useQuery({
-    queryKey: ['mission-control', 'def-counts-by-state', defIdForVersion, selectedEngineId],
-    queryFn: () => fetchActivityCountsByState(defIdForVersion!, selectedEngineId),
+    queryKey: ['mission-control', 'def-counts-by-state', defIdForVersion, selectedEngineId, startedAfter, startedBefore],
+    queryFn: () => fetchActivityCountsByState(defIdForVersion!, { engineId: selectedEngineId, startedAfter, startedBefore }),
     enabled: processDefinitionsEnabled && !definitionLinkPending && !!defIdForVersion && !!selectedEngineId,
   })
 
@@ -217,26 +219,21 @@ export function useProcessesData({
 
   // Fetch process instances based on filters (filtered by engine)
   const instQ = useQuery({
-    queryKey: ['mission-control', 'instances', selectedEngineId, currentKey, selectedVersion, defIdForVersion, active, suspended, incidents, completed, canceled, flowNode, dateFrom, dateTo, timeFrom, timeTo],
-    queryFn: () => {
-      const startedAfter = toIso(dateFrom, timeFrom, 'from')
-      const startedBefore = toIso(dateTo, timeTo, 'to')
-
-      return listProcessInstances({
-        engineId: selectedEngineId || undefined,
-        active: active || undefined,
-        completed: completed || undefined,
-        canceled: canceled || undefined,
-        withIncidents: incidents || undefined,
-        suspended: suspended || undefined,
-        processDefinitionId: selectedVersion && defIdForVersion ? defIdForVersion : undefined,
-        processDefinitionKey: !selectedVersion && currentKey ? currentKey : undefined,
-        activityId: flowNode || undefined,
-        startedAfter: startedAfter || undefined,
-        startedBefore: startedBefore || undefined,
-        includeActionDecisions: true,
-      })
-    },
+    queryKey: ['mission-control', 'instances', selectedEngineId, currentKey, selectedVersion, defIdForVersion, active, suspended, incidents, completed, canceled, flowNode, startedAfter, startedBefore],
+    queryFn: () => listProcessInstances({
+      engineId: selectedEngineId || undefined,
+      active: active || undefined,
+      completed: completed || undefined,
+      canceled: canceled || undefined,
+      withIncidents: incidents || undefined,
+      suspended: suspended || undefined,
+      processDefinitionId: selectedVersion && defIdForVersion ? defIdForVersion : undefined,
+      processDefinitionKey: !selectedVersion && currentKey ? currentKey : undefined,
+      activityId: flowNode || undefined,
+      startedAfter,
+      startedBefore,
+      includeActionDecisions: true,
+    }),
     enabled: processInstancesEnabled && !definitionLinkPending && !!selectedEngineId && (!selectedVersion || !!defIdForVersion),
   })
 

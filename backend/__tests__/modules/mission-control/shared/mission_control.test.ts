@@ -166,7 +166,7 @@ describe('mission-control shared mission_control routes', () => {
     expect(response.body).toEqual({ bpmn20Xml: '' });
   });
 
-  it('reads five-state activity counts through process-definition action permission', async () => {
+  it('reads five-state activity counts for the requested process start-time range', async () => {
     const counts = {
       active: { approve: 2 },
       incidents: { approve: 1 },
@@ -176,13 +176,23 @@ describe('mission-control shared mission_control routes', () => {
     };
     vi.mocked(getActivityCountsByState).mockResolvedValueOnce(counts as any);
 
+    const bounds = { startedAfter: '2026-11-09T09:50:00.000Z', startedBefore: '2026-11-09T10:02:59.999Z' };
     const response = await request(app)
       .get('/mission-control-api/process-definitions/pd-1/activity-counts-by-state')
-      .query({ engineId: 'engine-77' });
+      .query({ engineId: 'engine-77', ...bounds });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(counts);
-    expect(getActivityCountsByState).toHaveBeenCalledWith('engine-77', 'pd-1');
+    expect(getActivityCountsByState).toHaveBeenCalledWith('engine-77', 'pd-1', expect.objectContaining(bounds));
+  });
+
+  it('rejects invalid activity count dates instead of returning unfiltered totals', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/activity-counts-by-state')
+      .query({ engineId: 'engine-77', startedAfter: 'invalid' });
+
+    expect(response.status).toBe(400);
+    expect(getActivityCountsByState).not.toHaveBeenCalled();
   });
 
   it('fails closed for resource-aware process-instance preview counts because aggregate responses cannot be post-filtered', async () => {

@@ -165,6 +165,7 @@ const {
   ProcessInstanceExternalTaskListSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  ActivityCountsByStateQueryParamsSchema,
   MigrationActiveSourcesRequestSchema,
   MigrationActiveSourcesResponseSchema,
   MigrationAsyncExecuteResponseSchema,
@@ -4018,12 +4019,12 @@ registry.registerPath({
 // -----------------------------
 
 // GET /mission-control-api/process-definitions/{id}/activity-counts-by-state
-registry.registerPath({
+registerProcessInstanceRead({
   method: 'get',
   path: '/mission-control-api/process-definitions/{id}/activity-counts-by-state',
   ...authzExtension('engine.runtime.process-definitions.read', 'GET', '/mission-control-api/process-definitions/{id}/activity-counts-by-state'),
-  request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Activity counts grouped by state', content: { 'application/json': { schema: ActivityCountsByStateSchema } } } },
+  request: { params: z.object({ id: z.string() }), query: ActivityCountsByStateQueryParamsSchema },
+  responses: { 200: { description: 'Activity counts by state for processes started within the supplied bounds. With neither bound, returns counts for the entire definition.', content: { 'application/json': { schema: ActivityCountsByStateSchema } } } },
 });
 
 // POST /mission-control-api/process-definitions/key/{key}/start
