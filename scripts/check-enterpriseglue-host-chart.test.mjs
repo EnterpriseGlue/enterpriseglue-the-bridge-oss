@@ -52,6 +52,36 @@ function documents(rendered) {
   return rendered.split(/^---\s*$/m).filter((document) => document.trim())
 }
 
+test('email signup protection enables both workloads and binds the secret only to the split API', async (t) => {
+  const defaults = await render(t)
+  assert.equal(defaults.status, 0, defaults.stderr)
+  assert.doesNotMatch(defaults.stdout, /EG_.*TURNSTILE/)
+  const cloudEmailSignupProtection = {
+    enabled: true, siteKey: 'synthetic-site-key', secret: { name: 'cloud-signup-verification', key: 'credential' },
+  }
+  const result = await render(t, { cloudEmailSignupProtection })
+  assert.equal(result.status, 0, result.stderr)
+  const rendered = documents(result.stdout)
+  const api = rendered.find(document => document.includes('# Source: enterpriseglue-host/templates/backend-deployment.yaml'))
+  const frontend = rendered.find(document => document.includes('# Source: enterpriseglue-host/templates/frontend-deployment.yaml'))
+  assert.match(api, /name: EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY\n\s+value: "synthetic-site-key"/)
+  assert.match(api, /name: EG_CLOUD_EMAIL_TURNSTILE_SECRET\n\s+valueFrom:\n\s+secretKeyRef:\n\s+name: "cloud-signup-verification"\n\s+key: "credential"\n\s+optional: false/)
+  assert.match(frontend, /name: EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED, value: "true"/)
+  for (const document of rendered.filter(document => document !== api)) {
+    assert.doesNotMatch(document, /EG_CLOUD_EMAIL_TURNSTILE_|cloud-signup-verification|synthetic-site-key/)
+  }
+  const missingKey = await render(t, { cloudEmailSignupProtection: { ...cloudEmailSignupProtection, siteKey: '' } })
+  assert.notEqual(missingKey.status, 0)
+  const unified = await render(t, { cloudEmailSignupProtection, workers: { enabled: false } })
+  assert.notEqual(unified.status, 0)
+  assert.match(unified.stderr, /requires the split API runtime/)
+  const shared = await render(t, { cloudEmailSignupProtection: {
+    ...cloudEmailSignupProtection, secret: { name: 'enterpriseglue-secrets', key: 'credential' },
+  } })
+  assert.notEqual(shared.status, 0)
+  assert.match(shared.stderr, /requires a dedicated API-only Secret/)
+})
+
 for (const mode of ['validate', 'apply']) {
   test(`apiConfigBundle ${mode} mounts only the declared file and credential in the split API`, async (t) => {
     const result = await render(t, { apiConfigBundle: { ...enabled, mode } })

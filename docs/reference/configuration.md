@@ -50,7 +50,7 @@ only to the configured API origin; API redirects are rejected. Static assets
 and the runtime-config document do not receive token headers. Safe GET lock
 streams retain their native EventSource transport and require no token header.
 
-Login, invitation completion and passkey/SSO session issuance generate a fresh
+Login, invitation completion and email-link, passkey or SSO session issuance generate a fresh
 token bound to the newly issued session. Refresh renews the token before the
 frontend retries; concurrent failed requests share one refresh. Logout clears
 the cookie using the configured domain and path. Safe API requests bootstrap or
@@ -58,6 +58,14 @@ renew a missing/invalid token. Signature validation rejects tokens from another
 session, even if both cookie and header match. Same-session renewal changes the
 browser cookie but does not revoke previously issued pairs independently of the
 authentication session.
+
+In managed Cloud, an email link expires after 15 minutes. Its GET endpoint
+establishes a browser proof. The CSRF-protected continuation consumes that
+proof in the same database transaction that creates or signs in the account.
+Email-link sessions carry the `email_link` authentication method and no MFA
+assurance. Access and refresh check current eligibility, including active
+platform-administrator membership. Optional passkey registration requires the
+signed-in Cloud account and binds its challenge to that exact session.
 
 For split frontend/API origins, allow credentialed requests from the exact
 frontend origin and permit `X-XSRF-TOKEN` in `Access-Control-Allow-Headers`.
@@ -196,6 +204,22 @@ rollback qualification gates pass for the intended deployment.
   OIDC/SAML providers and returns the verified session to `/cloud/onboarding`.
   It requires pooled, Cloud-required tenancy and remains disabled for ordinary
   self-hosted deployments.
+- `EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY` and `EG_CLOUD_EMAIL_TURNSTILE_SECRET`:
+  Configure the managed email signup widget as a pair on the backend. Mount the
+  secret from the deployment's credential store. Register the public app
+  hostname and use the `cloud_email_signup` action. The backend validates
+  Siteverify, the exact hostname and action, the challenge age, and local
+  one-time consumption before looking up the email address.
+- `EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED`: Set to `true` on the frontend
+  container when the backend widget keys are set. The frontend content security
+  policy then allows the exact Turnstile script and frame origin. The signup
+  challenge endpoint returns only the public site key.
+- The host Helm chart's `cloudEmailSignupProtection` values enable both
+  workloads together. Set the public `siteKey` and reference the dedicated
+  API Secret with `secret.name` and `secret.key`.
+- The managed email signup endpoint rejects disposable addresses using a
+  versioned, packaged CC0 list. Update the packaged dataset from the recorded
+  upstream source and verify ordinary addresses and blocked subdomains.
 - `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
   tenant release assignment and release-effect cohort operations. Do not reuse a
   service-account token or expose it in frontend runtime configuration.

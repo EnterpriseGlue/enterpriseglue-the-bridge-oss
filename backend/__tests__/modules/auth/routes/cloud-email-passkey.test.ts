@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { createHash } from 'node:crypto';
@@ -92,7 +92,11 @@ describe('Cloud email-and-passkey signup', () => {
     }),
   };
   const challengeRepo = {
-    insert: vi.fn(async (value: Partial<CloudPasskeyChallenge>) => { challenges.push(value); return { affected: 1 }; }),
+    insert: vi.fn(async (value: Partial<CloudPasskeyChallenge>) => {
+      if (challenges.some(record => record.tokenHash === value.tokenHash)) throw Error('unique constraint');
+      challenges.push(value);
+      return { affected: 1 };
+    }),
     findOneBy: vi.fn(async (where: { tokenHash: string }) => challenges.find((record) => record.tokenHash === where.tokenHash && Number(record.expiresAt) > Date.now()) || null),
     delete: vi.fn(async (where: { id: string; tokenHash: string }) => {
       const index = challenges.findIndex((record) => record.id === where.id && record.tokenHash === where.tokenHash);
@@ -124,7 +128,8 @@ describe('Cloud email-and-passkey signup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     pending.clear(); users.clear(); credentials.length = 0; challenges.length = 0;
-    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true });
+    Object.assign(config, { tenancyMode: 'pooled', tenancyCloudRequired: true, cloudAccountIdentityEnabled: true,
+      cloudEmailTurnstileSiteKey: undefined, cloudEmailTurnstileSecret: undefined });
     vi.mocked(getDataSource).mockResolvedValue(dataSource as never);
     vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
     vi.mocked(sendEmailWithConfig).mockResolvedValue({ success: true });
@@ -135,6 +140,42 @@ describe('Cloud email-and-passkey signup', () => {
     vi.mocked(verifyAuthenticationResponse).mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 1 } } as never);
     vi.mocked(authSessionService.issue).mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 300, tenantId: null });
     vi.mocked(authzGroupService.ensureAuthenticatedUserMembershipWithManager).mockResolvedValue({ id: 'baseline', created: true });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('blocks disposable domains and their subdomains before database or email calls', async () => {
+    for (const email of ['test@mailinator.com', 'test@sub.mailinator.com']) {
+      const response = await request(app).post('/api/auth/cloud-signup/email/request').send({ email });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('permanent email address');
+    }
+    expect(getDataSource).not.toHaveBeenCalled();
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it('validates the configured hostname and action and consumes a challenge only once across requests', async () => {
+    config.cloudEmailTurnstileSiteKey = 'public-test-site-key';
+    config.cloudEmailTurnstileSecret = 'private-test-secret';
+    const settings = await request(app).get('/api/auth/cloud-signup/email/challenge');
+    expect(settings.body).toEqual({ siteKey: 'public-test-site-key' });
+    expect(settings.headers['cache-control']).toBe('no-store');
+    const path = '/api/auth/cloud-signup/email/request';
+    expect((await request(app).post(path).send({ email: 'new@example.test' })).status).toBe(400);
+    const result = { success: true, hostname: 'app.staging.enterpriseglue.ai', action: 'cloud_email_signup', challenge_ts: new Date().toISOString() };
+    const verify = vi.fn().mockImplementation(async () => Response.json(result))
+      .mockImplementationOnce(async () => Response.json({ ...result, action: 'other_action' }))
+      .mockImplementationOnce(async () => Response.json({ ...result, hostname: 'other.example.test' }));
+    vi.stubGlobal('fetch', verify);
+    const call = (email: string) => request(app).post(path).send({ email, turnstileToken: 'synthetic-provider-token' });
+    expect((await call('new@example.test')).status).toBe(400);
+    expect((await call('new@example.test')).status).toBe(400);
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+    const pair = await Promise.all([call('first@example.test'), call('second@example.test')]);
+    expect(pair.map(response => response.status).sort()).toEqual([202, 400]);
+    expect(sendVerificationEmail).toHaveBeenCalledTimes(1);
+    expect(verify.mock.calls.every(([url]) => url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify')).toBe(true);
+    expect(challenges).toHaveLength(1);
+    expect(challenges[0]?.tokenHash).not.toContain('synthetic-provider-token');
   });
 
   it('fails closed outside managed Cloud mode', async () => {
@@ -167,7 +208,7 @@ describe('Cloud email-and-passkey signup', () => {
     const token = verification.searchParams.get('token')!;
     const verified = await request(app).get(`${verification.pathname}${verification.search}`);
     expect(verified.status).toBe(302);
-    expect(verified.headers.location).toBe(`https://app.staging.enterpriseglue.ai/signup/email/passkey${intent === 'documentation' ? '?intent=documentation' : ''}`);
+    expect(verified.headers.location).toBe(`https://app.staging.enterpriseglue.ai/signup/email/${intent === 'documentation' ? 'passkey?intent=documentation' : 'continue'}`);
     expect(users.size).toBe(0);
     const browserCookie = `cloud_email_signup_proof=${token}`;
     const options = await request(app).post('/api/auth/cloud-signup/email/passkey/options').set('Cookie', browserCookie).send({});
