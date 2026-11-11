@@ -1,0 +1,55 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "managed-engine-tenancy-details",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators"
+  ],
+  "summary": "Omits tenant mapping controls and diagnostics from the details dialog for engines registered by a managed workload.",
+  "userImpact": [
+    "Managed engines still show their runtime access settings."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [],
+  "documentation": [
+    "The engine details dialog uses the inventory registration source to decide whether to mount the tenancy panel."
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "mission-control",
+    "pages": [],
+    "reason": "Managed workload registration exposes no customer tenancy configuration procedure."
+  },
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend release."
+  ],
+  "validation": [
+    "Engine details tests cover managed-workload and external API registrations."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.15",
+      "newVersion": "0.20.16",
+      "impact": "patch"
+    }
+  ]
+}

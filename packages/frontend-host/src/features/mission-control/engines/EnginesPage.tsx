@@ -1468,12 +1468,16 @@ function EngineRegistrationSection({ engine }: { engine: EngineInventory }) {
         <EngineRegistrationDetail label="Configuration ownership" value={engine.ownershipMode ? formatEngineRegistrationStatus(engine.ownershipMode) : '-'} />
         <EngineRegistrationDetail label="Last configuration apply" value={formatEngineTimestamp(engine.lastAppliedAt)} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
-        <EngineRegistrationDetail label="Who can use this engine" value={engine.tenancyMode === 'shared' ? 'Multiple tenants' : 'One tenant'} tagValue={engine.tenancyMode || 'dedicated'} />
-        <EngineRegistrationDetail label="Tenant owner" value={engine.tenantId || (engine.tenancyMode === 'shared' ? 'Set per runtime resource' : '-')} />
-        <EngineRegistrationDetail label="How resources map to tenants" value={formatEngineRegistrationStatus(engine.tenantMappingStrategy)} />
-        <EngineRegistrationDetail label="Tenant mapping version" value={String(engine.tenantMappingVersion || 0)} />
-        <EngineRegistrationDetail label="Tenant resolution" value={formatEngineRegistrationStatus(engine.tenantResolutionStatus)} tagValue={engine.tenantResolutionStatus || undefined} />
-        <EngineRegistrationDetail label="Last tenant reconciliation" value={formatEngineTimestamp(engine.lastTenantReconciledAt)} />
+        {engine.registrationSource !== 'managed_workload' && (
+          <>
+            <EngineRegistrationDetail label="Who can use this engine" value={engine.tenancyMode === 'shared' ? 'Multiple tenants' : 'One tenant'} tagValue={engine.tenancyMode || 'dedicated'} />
+            <EngineRegistrationDetail label="Tenant owner" value={engine.tenantId || (engine.tenancyMode === 'shared' ? 'Set per runtime resource' : '-')} />
+            <EngineRegistrationDetail label="How resources map to tenants" value={formatEngineRegistrationStatus(engine.tenantMappingStrategy)} />
+            <EngineRegistrationDetail label="Tenant mapping version" value={String(engine.tenantMappingVersion || 0)} />
+            <EngineRegistrationDetail label="Tenant resolution" value={formatEngineRegistrationStatus(engine.tenantResolutionStatus)} tagValue={engine.tenantResolutionStatus || undefined} />
+            <EngineRegistrationDetail label="Last tenant reconciliation" value={formatEngineTimestamp(engine.lastTenantReconciledAt)} />
+          </>
+        )}
         <EngineRegistrationDetail label="How access is granted" value={engine.runtimeAccessScope === 'resource_aware' ? 'Selected runtime resources' : 'Whole engine'} />
         <EngineRegistrationDetail label="How EnterpriseGlue connects" value={engine.connectionMode === 'customer_sidecar' ? 'Customer gateway or sidecar' : 'Directly to the engine'} />
         <EngineRegistrationDetail label="How EnterpriseGlue authenticates" value={formatEngineAuthentication(engine)} />
@@ -1744,6 +1748,7 @@ export default function Engines() {
   }
 
   const editingActions = editing ? getActionsForEngine(editing) : null
+  const isManagedCloudEngine = editing?.registrationSource === 'managed_workload'
   const isConfigLocked = Boolean(editing && isConfigLockedEngine(editing))
   const isEngineEnvironmentOnlyEditable = Boolean(editing && !editingActions?.canEdit && editingActions?.canSetEnvironment)
   const isEngineFormReadOnly = Boolean(editing && (isConfigLocked || (!editingActions?.canEdit && !editingActions?.canSetEnvironment)))
@@ -2340,7 +2345,7 @@ export default function Engines() {
         size="lg"
       >
         {editing && engineDetailSections.includes('registration') && <EngineRegistrationSection engine={editing} />}
-        {editing && (
+        {editing && !isManagedCloudEngine && (
           <EngineTenancyPanel
             engine={editing}
             canManage={Boolean(editingActions?.canEdit && !isConfigLocked && !isExternallyManagedEngine(editing))}
@@ -2648,8 +2653,10 @@ export default function Engines() {
 
         <EngineFormSection
           id="engine-access-settings"
-          title="Tenant ownership and runtime access"
-          description="Tenant ownership decides which tenant owns runtime data. Runtime access decides whether access is granted for the whole engine or for selected resources. Neither setting creates user-group mappings."
+          title={isManagedCloudEngine ? 'Runtime access' : 'Tenant ownership and runtime access'}
+          description={isManagedCloudEngine
+            ? 'Choose whether access is granted for the whole engine or for selected resources.'
+            : 'Tenant ownership decides which tenant owns runtime data. Runtime access decides whether access is granted for the whole engine or for selected resources. Neither setting creates user-group mappings.'}
         >
           {!editing && (
             <ExplainedDropdown
@@ -2690,7 +2697,7 @@ export default function Engines() {
               />
             </>
           )}
-          {editing && (
+          {editing && !isManagedCloudEngine && (
             <InlineNotification
               lowContrast
               kind="info"
@@ -2708,7 +2715,7 @@ export default function Engines() {
             onChange={(runtimeAccessScope) => setForm((current: EngineMutationForm) => ({ ...current, runtimeAccessScope: runtimeAccessScope as RuntimeAccessScope }))}
             disabled={form.tenancyMode === 'shared' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
           />
-          {form.tenancyMode === 'shared' && (
+          {!isManagedCloudEngine && form.tenancyMode === 'shared' && (
             <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.8125rem' }}>
               Shared engines always use selected-resource access so tenant boundaries can be enforced.
             </p>
