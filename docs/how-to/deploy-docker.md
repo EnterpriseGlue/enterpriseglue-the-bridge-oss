@@ -105,6 +105,9 @@ To validate or apply a bundle during startup, set `EG_CONFIG_BOOTSTRAP_MODE` in 
 EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run dev
 ```
 
+`EG_CONFIG_BUNDLE_HOST_PATH` also accepts a bundle directory such as
+`./config/bundles`. The overlay mounts it read-only at the same container path.
+
 ## Start (Production)
 ```bash
 pnpm run prod

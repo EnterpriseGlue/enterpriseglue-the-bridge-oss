@@ -304,15 +304,15 @@ and engine governance. See
 for the file inventory, secret-reference rules, startup ordering, export
 round-trip, and authoritative-removal procedure.
 
-- `EG_CONFIG_BUNDLE_PATH`: Absolute path to one JSON payload with `bundle` and `files` properties, or a folder-style ZIP archive containing `bundle.json` and its declared imported JSON files.
+- `EG_CONFIG_BUNDLE_PATH`: Absolute path to a JSON envelope with `bundle` and `files` properties, a folder-style ZIP archive, or a directory of top-level JSON envelopes processed in lexical filename order.
 - `EG_CONFIG_BOOTSTRAP_MODE`: `disabled`, `validate`, or `apply`; default `disabled`.
-- `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted payload; rejects unexpected content.
+- `EG_CONFIG_EXPECTED_SHA256`: Optional SHA-256 of the mounted file or the ordered directory digest defined in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md#bundle-directories).
 - `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required `platform` target assertion for
   an OSS `apply` bootstrap. It does not select or route to a native pooled
   tenant.
 - `EG_CONFIG_FAIL_CLOSED`: `true` or `false`; defaults to `true` in production and controls whether a configured bootstrap failure stops startup.
 - `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT`: `true` or `false`; default `false`. When enabled, validation and apply bootstrap modes require every referenced `env://`, `file://`, or `docker://` secret to be available, and apply is bound to that availability check.
-- `EG_CONFIG_MAX_BYTES`: Maximum payload size; defaults to `1048576`.
+- `EG_CONFIG_MAX_BYTES`: Maximum size per bundle; defaults to `1048576`.
 - `EG_CONFIG_SECRET_PROVIDER`: `env`, `file`, or `docker`; defaults to `env`.
 - `EG_CONFIG_SECRET_FILE_ROOT`: Required root directory for `file://` secret references when the provider is `file`; optional Docker secret mount root, which defaults to `/run/secrets` when the provider is `docker`.
 

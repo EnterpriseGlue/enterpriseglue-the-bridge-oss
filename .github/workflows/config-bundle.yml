@@ -8,7 +8,7 @@ on:
         required: true
         type: environment
       bundle_path:
-        description: Repository-relative path to the JSON bundle
+        description: Repository-relative path to a JSON bundle or directory of JSON bundles
         required: true
         default: config/enterpriseglue.json
         type: string
@@ -76,11 +76,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: 11.0.8
-
       - name: Validate workflow inputs
         shell: bash
         run: |
@@ -88,11 +83,17 @@ jobs:
           test -n "$ENTERPRISEGLUE_API_URL"
           test -n "$ENTERPRISEGLUE_API_TOKEN"
           test -n "$ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE"
-          case "$BUNDLE_PATH" in
-            *.json) ;;
-            *) echo "bundle_path must name a JSON file" >&2; exit 64 ;;
-          esac
-          git ls-files --error-unmatch -- "$BUNDLE_PATH" >/dev/null
+          bundle_type="$(git cat-file -t "HEAD:$BUNDLE_PATH")"
+          if [[ -L "$BUNDLE_PATH" ]] ||
+             ! { [[ "$bundle_type" == tree && -d "$BUNDLE_PATH" ]] ||
+                 [[ "$bundle_type" == blob && -f "$BUNDLE_PATH" && "$BUNDLE_PATH" == *.json ]]; }; then
+            echo "bundle_path must name a tracked JSON file or directory" >&2
+            exit 64
+          fi
+          if [[ -n "$(git status --porcelain --untracked-files=all --ignored -- ":(literal)$BUNDLE_PATH")" ]]; then
+            echo "bundle_path must match the checked-out revision" >&2
+            exit 64
+          fi
           if [[ "$OPERATION" == "apply" && "$CONFIRM_APPLY" != "APPLY" ]]; then
             echo "Apply requires confirm_apply=APPLY" >&2
             exit 64
@@ -102,49 +103,18 @@ jobs:
             exit 64
           fi
 
-      - name: Validate configuration bundle
+      - name: Preview or apply configuration bundles
+        id: bundles
         shell: bash
         run: |
           set -euo pipefail
-          pnpm authz:config validate "$BUNDLE_PATH"
+          node scripts/config-bundle.mjs "$OPERATION" "$BUNDLE_PATH" --summary | tee "$RUNNER_TEMP/config-bundle-$OPERATION.json"
 
-      - name: Preview configuration bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm authz:config preview "$BUNDLE_PATH" | tee config-bundle-preview.json
-
-      - name: Upload preview receipt
+      - name: Upload bundle results
+        if: ${{ !cancelled() && (steps.bundles.outcome == 'success' || steps.bundles.outcome == 'failure') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: config-bundle-preview-${{ github.run_id }}
-          path: config-bundle-preview.json
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Apply configuration bundle
-        if: inputs.operation == 'apply'
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/config-bundle.mjs apply "$BUNDLE_PATH" | tee config-bundle-apply.json
-          APPLY_RUN_ID="$(node -e "const receipt=require('./config-bundle-apply.json'); if (!receipt.applyRunId) process.exit(1); process.stdout.write(receipt.applyRunId)")"
-          node scripts/config-bundle.mjs wait "$APPLY_RUN_ID" | tee config-bundle-reconciliation.json
-
-      - name: Upload apply receipt
-        if: inputs.operation == 'apply'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: config-bundle-apply-${{ github.run_id }}
-          path: config-bundle-apply.json
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload reconciliation receipt
-        if: inputs.operation == 'apply'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: config-bundle-reconciliation-${{ github.run_id }}
-          path: config-bundle-reconciliation.json
+          name: config-bundle-${{ inputs.operation }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/config-bundle-${{ inputs.operation }}.json
           if-no-files-found: error
           retention-days: 30

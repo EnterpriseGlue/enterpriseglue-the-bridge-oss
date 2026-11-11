@@ -9,9 +9,14 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import type { EngineTenantReferenceResolver } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyProvisioningService.js';
-import { readConfigBundleFile } from './configBundleFileIngress.js';
+import { ConfigReferenceKeySchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import {
+  configBundleSha256, isConfigBundleDirectory, listConfigBundleDirectory, parseConfigBundleFile,
+  readConfigBundleDirectoryEntry, readConfigBundleFile, type ConfigBundleFileReadResult,
+} from './configBundleFileIngress.js';
 import { providerBootstrapCapability } from './configBundleBootstrapScope.js';
 import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 export const CONFIG_BOOTSTRAP_ISSUE_CODES = [
   'bundle_path_missing', 'bundle_read_failed', 'hash_mismatch', 'validation_failed',
@@ -44,7 +49,11 @@ class ConfigBootstrapFailure extends Error {
   constructor(readonly issueCode: ConfigBootstrapIssueCode) { super(SAFE_MESSAGES[issueCode]); }
 }
 
-let status: ConfigBootstrapStatus = { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null };
+function initialStatus(mode: ConfigBootstrapStatus['mode']): ConfigBootstrapStatus {
+  return { mode, status: mode === 'disabled' ? 'disabled' : 'failed', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null };
+}
+
+let status = initialStatus('disabled');
 
 export function getConfigBootstrapStatus(): ConfigBootstrapStatus {
   return { ...status };
@@ -91,16 +100,24 @@ async function persistBootstrapReceipt(applyRunId: string | null, bootstrap: Con
   }
 }
 
-export async function runConfigBundleBootstrap(options: {
+type ConfigBundleBootstrapOptions = {
   tenantReferenceResolver?: EngineTenantReferenceResolver | null;
-} = {}): Promise<ConfigBootstrapStatus> {
-  const mode = config.configBootstrapMode;
+};
+
+async function runBundle(
+  mode: Exclude<ConfigBootstrapStatus['mode'], 'disabled'>,
+  read: () => Promise<ConfigBundleFileReadResult>,
+  options: ConfigBundleBootstrapOptions,
+  expectedHash?: string,
+  filename?: string,
+): Promise<ConfigBootstrapStatus> {
+  let status = initialStatus(mode);
+  let bundleKey: string | null = null;
   let secretPreflight: ConfigBootstrapStatus['secretPreflight'] = 'not_required';
   let phase: 'read' | 'hash' | 'validate' | 'preflight' | 'apply' | 'identity' = 'read';
   let applyRunId: string | null = null;
   let failureRecorded = false;
-  status = { mode, status: mode === 'disabled' ? 'disabled' : 'failed', hash: null, message: null, reconciliation: 'not_run', secretPreflight, issueCode: null };
-  if (mode === 'disabled') return getConfigBootstrapStatus();
+  const diagnostics = () => filename === undefined ? status : { ...status, filename, bundleKey };
 
   const recordFailure = async (error: unknown) => {
     const issueCode = error instanceof ConfigBootstrapFailure
@@ -112,16 +129,19 @@ export async function runConfigBundleBootstrap(options: {
               : 'apply_failed';
     status = { mode, status: 'failed', hash: status.hash, message: SAFE_MESSAGES[issueCode], reconciliation: status.reconciliation, secretPreflight, issueCode };
     await persistBootstrapReceipt(applyRunId, status);
-    logger.error('Configuration bootstrap failed', status);
+    logger.error('Configuration bootstrap failed', diagnostics());
     failureRecorded = true;
   };
 
   try {
-    if (!config.configBundlePath) throw new ConfigBootstrapFailure('bundle_path_missing');
-    const { payload, sha256: hash } = await readConfigBundleFile(config.configBundlePath, config.configMaxBytes);
+    const { payload, sha256: hash } = await read();
+    if (filename !== undefined) {
+      const key = (payload.bundle as { metadata?: { key?: unknown } } | null)?.metadata?.key;
+      bundleKey = ConfigReferenceKeySchema.safeParse(key).data ?? null;
+    }
     status = { ...status, hash };
     phase = 'hash';
-    if (config.configExpectedSha256 && hash !== config.configExpectedSha256.toLowerCase()) throw new ConfigBootstrapFailure('hash_mismatch');
+    if (expectedHash && hash !== expectedHash) throw new ConfigBootstrapFailure('hash_mismatch');
     phase = 'validate';
     const capability = config.tenancyMode === 'pooled' ? providerBootstrapCapability(payload) : null;
     if (capability && (!config.configExpectedSha256 || config.configExpectedTenantScope !== 'platform'
@@ -143,7 +163,12 @@ export async function runConfigBundleBootstrap(options: {
     const execute = async () => {
       try {
         if (mode === 'apply') {
-          if (!config.configExpectedTenantScope) throw new ConfigBootstrapFailure('tenant_scope_missing');
+          const expectedTenantScope = config.configExpectedTenantScope;
+          if (!expectedTenantScope) throw new ConfigBootstrapFailure('tenant_scope_missing');
+          // Directory bundles on a standalone host share the live API's
+          // persistence scope. Keep the startup assertion and the legacy
+          // single-file and pooled capability paths intact.
+          const tenantId = filename !== undefined && config.tenancyMode === 'single' ? OSS_DEFAULT_TENANT_ID : null;
           phase = 'apply';
           const result = await configBundleApplyService.apply({
             ...previewPayload,
@@ -151,7 +176,8 @@ export async function runConfigBundleBootstrap(options: {
             expectedPreviewHash: canonicalHash,
             expectedSecretPreflightHash: checkedSecretPreflight?.availabilityHash,
             idempotencyKey: `bootstrap:${hash}`,
-            expectedTenantScope: config.configExpectedTenantScope,
+            expectedTenantScope: tenantId && expectedTenantScope === 'platform' ? tenantId : expectedTenantScope,
+            ...(tenantId ? { tenantId } : {}),
             actorId: 'system:config-bootstrap',
           }, {
             ...settings,
@@ -199,7 +225,7 @@ export async function runConfigBundleBootstrap(options: {
         }
         status = { mode, status: mode === 'apply' ? 'applied' : 'validated', hash, message: null, reconciliation: mode === 'apply' && status.reconciliation !== 'pending' ? 'completed' : status.reconciliation, secretPreflight, issueCode: null };
         await persistBootstrapReceipt(applyRunId, status, Boolean(capability && mode === 'apply'));
-        logger.info('Configuration bootstrap completed', status);
+        logger.info('Configuration bootstrap completed', diagnostics());
       } catch (error) {
         // Failure receipts are written before the capability lease is revoked.
         await recordFailure(error);
@@ -210,7 +236,77 @@ export async function runConfigBundleBootstrap(options: {
     else await execute();
   } catch (error) {
     if (!failureRecorded) await recordFailure(error);
-    throw new Error(status.message || SAFE_MESSAGES.apply_failed);
   }
+  return status;
+}
+
+async function runDirectory(
+  path: string,
+  mode: Exclude<ConfigBootstrapStatus['mode'], 'disabled'>,
+  options: ConfigBundleBootstrapOptions,
+  expectedHash?: string,
+): Promise<ConfigBootstrapStatus> {
+  const { root, filenames } = await listConfigBundleDirectory(path);
+  const verifiedHashes = new Map<string, string>();
+  const read = (filename: string) => readConfigBundleDirectoryEntry(root, filename, config.configMaxBytes);
+  const aggregate = initialStatus(mode);
+  if (expectedHash) {
+    for (const filename of filenames) {
+      try {
+        verifiedHashes.set(filename, configBundleSha256(await read(filename)));
+      } catch {
+        logger.error('Configuration bootstrap input could not be verified', { filename, issueCode: 'bundle_read_failed' });
+        throw new ConfigBootstrapFailure('bundle_read_failed');
+      }
+    }
+    aggregate.hash = configBundleSha256(JSON.stringify([...verifiedHashes]));
+    if (aggregate.hash !== expectedHash) {
+      return { ...aggregate, issueCode: 'hash_mismatch', message: SAFE_MESSAGES.hash_mismatch };
+    }
+  }
+
+  for (const filename of filenames) {
+    const result = await runBundle(mode, async () => {
+      const source = await read(filename);
+      const hash = configBundleSha256(source);
+      if (expectedHash && verifiedHashes.get(filename) !== hash) throw new ConfigBootstrapFailure('hash_mismatch');
+      return parseConfigBundleFile(filename, source, config.configMaxBytes, hash);
+    }, options, undefined, filename);
+
+    if (result.status === 'failed' && !aggregate.issueCode) {
+      aggregate.issueCode = result.issueCode;
+      aggregate.message = result.message;
+    }
+    if (result.reconciliation === 'pending') aggregate.reconciliation = 'pending';
+    if (result.secretPreflight === 'failed' || aggregate.secretPreflight === 'not_required') {
+      aggregate.secretPreflight = result.secretPreflight;
+    }
+  }
+
+  if (!aggregate.issueCode) {
+    aggregate.status = mode === 'apply' ? 'applied' : 'validated';
+    if (mode === 'apply') aggregate.reconciliation = 'completed';
+  }
+  return aggregate;
+}
+
+export async function runConfigBundleBootstrap(options: ConfigBundleBootstrapOptions = {}): Promise<ConfigBootstrapStatus> {
+  const mode = config.configBootstrapMode;
+  status = initialStatus(mode);
+  if (mode === 'disabled') return getConfigBootstrapStatus();
+
+  try {
+    const path = config.configBundlePath;
+    if (!path) throw new ConfigBootstrapFailure('bundle_path_missing');
+    const expectedHash = config.configExpectedSha256?.toLowerCase();
+    status = await isConfigBundleDirectory(path)
+      ? await runDirectory(path, mode, options, expectedHash)
+      : await runBundle(mode, () => readConfigBundleFile(path, config.configMaxBytes), options, expectedHash);
+  } catch (error) {
+    const issueCode = error instanceof ConfigBootstrapFailure ? error.issueCode : 'bundle_read_failed';
+    status = { ...status, issueCode, message: SAFE_MESSAGES[issueCode] };
+    logger.error('Configuration bootstrap failed', status);
+  }
+  if (status.status === 'failed') throw new Error(status.message || SAFE_MESSAGES.apply_failed);
   return getConfigBootstrapStatus();
 }

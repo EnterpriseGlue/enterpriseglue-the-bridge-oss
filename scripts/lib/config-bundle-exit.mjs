@@ -24,6 +24,6 @@ export function reconciliationExitCode(result) {
 
 export function reconciliationWaitState(tasks) {
   if (!Array.isArray(tasks) || tasks.length === 0) return 'completed';
-  if (tasks.some((task) => task?.status === 'cancelled')) return 'failed';
+  if (tasks.some((task) => task?.status === 'cancelled' || task?.failed > 0)) return 'failed';
   return tasks.every((task) => task?.status === 'completed') ? 'completed' : 'pending';
 }

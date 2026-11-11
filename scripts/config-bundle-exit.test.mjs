@@ -20,4 +20,5 @@ test('wait state completes only after every durable task completes', () => {
   assert.equal(reconciliationWaitState([{ status: 'queued' }]), 'pending');
   assert.equal(reconciliationWaitState([{ status: 'completed' }, { status: 'completed' }]), 'completed');
   assert.equal(reconciliationWaitState([{ status: 'cancelled' }]), 'failed');
+  assert.equal(reconciliationWaitState([{ status: 'completed', failed: 1 }]), 'failed');
 });

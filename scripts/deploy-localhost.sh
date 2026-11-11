@@ -168,8 +168,8 @@ check_env() {
       error "EG_CONFIG_BUNDLE_PATH is required when configuration bootstrap is enabled"
     [[ "$EG_CONFIG_BUNDLE_PATH" = /* ]] || \
       error "EG_CONFIG_BUNDLE_PATH must be absolute for a host-based deployment"
-    [[ -f "$EG_CONFIG_BUNDLE_PATH" ]] || \
-      error "EG_CONFIG_BUNDLE_PATH does not exist or is not a file: $EG_CONFIG_BUNDLE_PATH"
+    [[ -f "$EG_CONFIG_BUNDLE_PATH" || -d "$EG_CONFIG_BUNDLE_PATH" ]] || \
+      error "EG_CONFIG_BUNDLE_PATH does not exist or is not a file or directory: $EG_CONFIG_BUNDLE_PATH"
     log "✅ Authorization configuration bootstrap input is readable (${EG_CONFIG_BOOTSTRAP_MODE})"
   fi
   
