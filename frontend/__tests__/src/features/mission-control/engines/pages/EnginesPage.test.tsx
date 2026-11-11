@@ -123,6 +123,47 @@ describe('EnginesPage', () => {
     expect(typeof EnginesPage).toBe('function');
   });
 
+  it.each([
+    { registrationSource: 'managed_workload', showTenancy: false },
+    { registrationSource: 'external_api', showTenancy: true },
+  ])('controls tenancy details for $registrationSource registrations', async ({ registrationSource, showTenancy }) => {
+    authState.permissions.engines = [
+      { resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW] },
+    ];
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/engines-api/engines') return [{
+        id: 'engine-1',
+        name: 'Operaton',
+        type: 'operaton',
+        baseUrl: 'https://engine.example.test',
+        registrationSource,
+        lifecycleStatus: 'active',
+        tenancyMode: 'dedicated',
+        tenantId: 'tenant-1',
+      }];
+      return [];
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Operaton' }));
+    await screen.findByText('Engine details');
+
+    const tenancyLabels = [
+      'Tenant ownership and tenant mappings',
+      'Tenant mapping version',
+      'Last tenant reconciliation',
+      'Tenant ownership and runtime access',
+      'Change tenant ownership in the Tenancy panel above',
+    ];
+    for (const label of tenancyLabels) {
+      if (showTenancy) {
+        expect(screen.getByText(label)).toBeInTheDocument();
+      } else {
+        expect(screen.queryByText(label)).not.toBeInTheDocument();
+      }
+    }
+  });
+
   it('builds stable metadata filters from engine labels and matches exact values', () => {
     const options = getEngineMetadataFilterOptions([
       { labels: { country: 'TR', domain: 'payments' } },

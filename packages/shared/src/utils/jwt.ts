@@ -25,7 +25,7 @@ export interface JwtPayload {
   /** Marks a break-glass session that must retain live platform-administrator membership. */
   recovery?: 'platform_administrator';
   /** Verified authentication method and assurance carried across refreshes. */
-  authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap' | 'passkey';
+  authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap' | 'passkey' | 'email_link';
   /** True only when a trusted authenticator/IdP supplied configured MFA evidence. */
   mfaVerified?: boolean;
   /**
@@ -59,6 +59,16 @@ export type UserJwtPayload = JwtPayload & {
 
 /** Request identity after middleware has refreshed user profile data from persistence. */
 export type AuthenticatedUserJwtPayload = UserJwtPayload & { email: string };
+
+export function hasCloudAccountAuthentication(payload: Pick<JwtPayload, 'authenticationMethod' | 'mfaVerified'>): boolean {
+  switch (payload.authenticationMethod) {
+    case 'oidc':
+    case 'saml': return true;
+    case 'passkey': return payload.mfaVerified === true;
+    case 'email_link': return payload.mfaVerified !== true;
+    default: return false;
+  }
+}
 
 /**
  * Accept pre-principal user tokens during the migration, but make the

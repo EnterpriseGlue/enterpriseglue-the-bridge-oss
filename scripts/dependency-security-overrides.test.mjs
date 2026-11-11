@@ -366,10 +366,10 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
   for (const relative of ['backend/Dockerfile.prod', 'frontend/Dockerfile.prod', 'infra/docker/managed-shard-bootstrap/Dockerfile']) {
     const source = await readFile(new URL(relative, root), 'utf8');
     assert.match(source, /zlib>=1\.3\.2\.1_rc20260921-r0/);
-    assert.match(source, /glibc-2\.44>=2\.44-r8/);
-    assert.match(source, /glibc-2\.44-locale-posix>=2\.44-r8/);
-    assert.match(source, /ld-linux-2\.44>=2\.44-r8/);
-    assert.match(source, /libcrypt1-2\.44>=2\.44-r8/);
+    assert.match(source, /glibc-2\.44>=2\.44-r16/);
+    assert.match(source, /glibc-2\.44-locale-posix>=2\.44-r16/);
+    assert.match(source, /ld-linux-2\.44>=2\.44-r16/);
+    assert.match(source, /libcrypt1-2\.44>=2\.44-r16/);
     assert.match(source, /ca-certificates-bundle>=20260909-r3/);
     assert.match(source, /libcurl-openssl4>=8\.23\.0-r0/);
     assert.ok(source.includes("'libexpat1=2.10.0-r0'"), `${relative} must invalidate the affected Expat layer`);
@@ -379,6 +379,7 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
     }
   }
   const backend = await readFile(new URL('backend/Dockerfile.prod', root), 'utf8');
+  assert.match(backend, /glibc-2\.44-dev>=2\.44-r16/);
   assert.match(backend, /nodejs-24=24\.22\.1-r2/);
   assert.ok(backend.includes('c-ares>=1.34.9-r0'));
   const bootstrap = await readFile(new URL('infra/docker/managed-shard-bootstrap/Dockerfile', root), 'utf8');

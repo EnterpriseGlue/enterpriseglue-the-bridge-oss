@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "wolfi-glibc-runtime-floor",
+  "type": "security",
+  "scope": "runtime-images",
+  "breaking": false,
+  "audiences": ["operators", "security"],
+  "summary": "Require the patched Wolfi glibc runtime in the backend, frontend, and managed-shard bootstrap images.",
+  "userImpact": ["Rebuilt runtime images include the patched glibc packages and use the existing deployment configuration."],
+  "upgrade": {
+    "required": true,
+    "instructions": ["Use the qualified runtime image digests for this release, including the Oracle backend digest for deployments that require Oracle Native Network Encryption."]
+  },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["Raise the Wolfi glibc 2.44 package floor to 2.44-r16 to address CVE-2026-84243. The backend runtime is shared by the standard and Oracle images."],
+  "documentation": ["docs/how-to/deploy-docker.md", "docs/reference/oracle-network-security.md"],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "The runtime package update requires the existing image upgrade procedure."
+  },
+  "knownLimitations": [],
+  "rollback": ["Use a previously qualified digest with the patched glibc runtime or a qualified forward build."],
+  "validation": ["Dockerfile contract tests verify the patched package floors. Protected image qualification scans the exact release digests."],
+  "packages": []
+}

@@ -715,6 +715,7 @@ export function getPublicRoutes(): RouteObject[] {
     { path: '/documentation/access', element: <DocumentationAccess /> },
     { path: '/signup', element: <Signup /> },
     { path: '/signup/email', element: <CloudEmailAuth /> },
+    { path: '/signup/email/continue', element: <CloudEmailAuth /> },
     { path: '/signup/email/passkey', element: <CloudEmailAuth /> },
     { path: '/signup/email/signin', element: <CloudEmailAuth /> },
     { path: '/signup/microsoft/email', element: <CloudMicrosoftEmail /> },

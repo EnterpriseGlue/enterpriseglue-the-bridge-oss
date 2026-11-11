@@ -739,6 +739,9 @@ export default function Login() {
           <Button as={RouterLink} to="/signup/email/signin" kind="ghost" size="md" className="eg-login-secondary-action">
             Sign in with a passkey
           </Button>
+          <Button as={RouterLink} to="/signup/email" kind="ghost" size="md" className="eg-login-secondary-action">
+            Email me a sign-in link
+          </Button>
         </>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>

@@ -18,7 +18,8 @@ const bpmnRequestContext = vi.hoisted(() => ({
   updateBpmnEngineRequestContext: vi.fn(),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/shared/utils/jwt.js')>(),
   verifyToken: vi.fn(),
   normalizeUserJwtPayload: (payload: any) => {
     const principalType = payload.principalType ?? 'user';

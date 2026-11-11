@@ -5,6 +5,7 @@ API_UPSTREAM_DEFAULT="backend:8787"
 API_UPSTREAM="${API_UPSTREAM:-$API_UPSTREAM_DEFAULT}"
 RUNTIME_API_BASE_URL="${EG_FRONTEND_RUNTIME_API_BASE_URL:-}"
 RUNTIME_CONFIG_REQUIRED="${EG_FRONTEND_RUNTIME_CONFIG_REQUIRED:-false}"
+TURNSTILE_ENABLED="${EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED:-false}"
 
 TEMPLATE_PATH="/nginx-site.conf.template"
 OUTPUT_PATH="/tmp/nginx-site.conf"
@@ -16,6 +17,17 @@ case "$RUNTIME_CONFIG_REQUIRED" in
     echo "EG_FRONTEND_RUNTIME_CONFIG_REQUIRED must be true or false." >&2
     exit 1
     ;;
+esac
+
+TURNSTILE_SCRIPT_SRC=""
+TURNSTILE_FRAME_SRC="'none'"
+case "$TURNSTILE_ENABLED" in
+  true)
+    TURNSTILE_SCRIPT_SRC=" https://challenges.cloudflare.com"
+    TURNSTILE_FRAME_SRC="https://challenges.cloudflare.com"
+    ;;
+  false) ;;
+  *) echo "EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED must be true or false." >&2; exit 1 ;;
 esac
 
 RUNTIME_API_CONNECT_SRC=""
@@ -43,6 +55,8 @@ if [ -f "$TEMPLATE_PATH" ]; then
   /busybox/sed \
     -e "s|\${API_UPSTREAM}|${API_UPSTREAM}|g" \
     -e "s|\${RUNTIME_API_CONNECT_SRC}|${RUNTIME_API_CONNECT_SRC}|g" \
+    -e "s|\${TURNSTILE_SCRIPT_SRC}|${TURNSTILE_SCRIPT_SRC}|g" \
+    -e "s|\${TURNSTILE_FRAME_SRC}|${TURNSTILE_FRAME_SRC}|g" \
     "$TEMPLATE_PATH" > "$OUTPUT_PATH"
 fi
 
