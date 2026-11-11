@@ -214,6 +214,9 @@ rollback qualification gates pass for the intended deployment.
   container when the backend widget keys are set. The frontend content security
   policy then allows the exact Turnstile script and frame origin. The signup
   challenge endpoint returns only the public site key.
+- The host Helm chart's `cloudEmailSignupProtection` values enable both
+  workloads together. Set the public `siteKey` and reference the dedicated
+  API Secret with `secret.name` and `secret.key`.
 - The managed email signup endpoint rejects disposable addresses using a
   versioned, packaged CC0 list. Update the packaged dataset from the recorded
   upstream source and verify ordinary addresses and blocked subdomains.

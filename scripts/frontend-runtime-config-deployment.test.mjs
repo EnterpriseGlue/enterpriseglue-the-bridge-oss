@@ -115,6 +115,8 @@ test('every supported container deployment passes runtime frontend configuration
     /^\s+RUNTIME_API_CONNECT_SRC: ""$/m,
     'the stock Nginx qualification image must resolve the production CSP placeholder',
   );
+  assert.match(pooledQualification, /^\s+TURNSTILE_SCRIPT_SRC: ""$/m);
+  assert.match(pooledQualification, /^\s+TURNSTILE_FRAME_SRC: "'none'"$/m);
 });
 
 test('operator examples and the configuration matrix expose both runtime controls', () => {
