@@ -472,12 +472,12 @@ describe('connected OCI plugin acquisition', () => {
     expect(dockerfile).toContain(
       'github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3',
     );
-    expect(dockerfile.match(/golang\.org\/x\/crypto@v0\.57\.0/g)).toHaveLength(
+    expect(dockerfile.match(/golang\.org\/x\/crypto@v0\.58\.0/g)).toHaveLength(
       2,
     );
-    expect(dockerfile.match(/golang\.org\/x\/net@v0\.60\.0/g)).toHaveLength(2);
+    expect(dockerfile.match(/golang\.org\/x\/net@v0\.62\.0/g)).toHaveLength(2);
     expect(dockerfile).toContain('golang.org/x/mod@v0.41.0');
-    expect(dockerfile).toContain('golang.org/x/text@v0.42.0');
+    expect(dockerfile).toContain('golang.org/x/text@v0.43.0');
     expect(dockerfile).toContain('google.golang.org/grpc@v1.83.2');
     expect(dockerfile).toContain('github.com/klauspost/compress@v1.18.7');
     expect(dockerfile).toContain('github.com/klauspost/compress[[:space:]]+v1\\.18\\.7([[:space:]]|$)');
