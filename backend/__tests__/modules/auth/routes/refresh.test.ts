@@ -21,7 +21,8 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
+vi.mock('@enterpriseglue/shared/utils/jwt.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/shared/utils/jwt.js')>(),
   verifyToken: vi.fn(),
   generateAccessToken: vi.fn(),
   normalizeUserJwtPayload: (payload: any) => {

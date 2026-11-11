@@ -41,6 +41,11 @@ import { runWithPlatformDatabaseCapability, getPlatformDatabaseCapability } from
 import { requireCloudAccountOrTenantAuth, requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import identityRoutes from '@enterpriseglue/backend-host/modules/auth/routes/identity-oidc.js';
 import refreshRoutes from '@enterpriseglue/backend-host/modules/auth/routes/refresh.js';
+import cloudEmailRoutes from '@enterpriseglue/backend-host/modules/auth/routes/cloud-email-passkey.js';
+import { generateRegistrationOptions, verifyRegistrationResponse } from '@enterpriseglue/backend-host/modules/auth/routes/cloud-passkey-webauthn.js';
+import { sendVerificationEmail } from '@enterpriseglue/shared/services/email/auth.js';
+import { mockCloudPasskeyCredential } from '../../__tests__/fixtures/cloudPasskeyCredential.js';
+import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
 import tenantRoutes from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { parseSignedOidcState } from '@enterpriseglue/backend-host/modules/auth/routes/sso-state.js';
@@ -58,6 +63,15 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { seedGitProviders } from '@enterpriseglue/shared/db/seed/gitProviders.js';
 import { setupStatusService } from '@enterpriseglue/shared/services/admin/SetupStatusService.js';
+
+vi.mock('@enterpriseglue/shared/services/email/auth.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/shared/services/email/auth.js')>(),
+  sendVerificationEmail: vi.fn(),
+}));
+vi.mock('@enterpriseglue/backend-host/modules/auth/routes/cloud-passkey-webauthn.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/backend-host/modules/auth/routes/cloud-passkey-webauthn.js')>(),
+  generateRegistrationOptions: vi.fn(), verifyRegistrationResponse: vi.fn(),
+}));
 
 const suffix=randomUUID().replace(/-/g,'').slice(0,10);
 const schema=`global_${suffix}`, ownerName=`owner_${suffix}`, runtimeName=`runtime_${suffix}`, password=`fixture_${suffix}`;
@@ -91,9 +105,10 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     runtime=build(runtimeName);await runtime.initialize();assertPostgresContextBoundary(runtime);database.current=runtime;
     vi.stubGlobal('fetch',protocol.fetch.bind(protocol));
     app=express();app.use(express.json());app.use(express.urlencoded({extended:false}));app.use(cookieParser());
-    app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);
+    app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);app.use(cloudEmailRoutes);
     app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
-    app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,tenantId:req.user!.tenantId}));
+    app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,
+      tenantId:req.user!.tenantId, authenticationMethod:req.user!.authenticationMethod, mfaVerified:req.user!.mfaVerified}));
     app.get('/tenant-only-probe',requireAuth,(_req,res)=>res.json({ok:true}));
     app.get('/tenant-permissions-probe',requireAuth,(req,res,next)=>{
       permissionService.getCurrentUserPermissions(req.user!.userId,req.tenant!.tenantId)
@@ -529,5 +544,35 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const sessions=await runtime.getRepository(RefreshToken).findBy({userId:user.id,tenantId:target.id});
     expect(sessions).not.toHaveLength(0);expect(sessions.every(row=>row.identityProviderId===providerId)).toBe(true);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
+  });
+  it('renews an email-link session and binds optional passkey enrollment to that exact session under RLS', async () => {
+    vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
+    vi.mocked(generateRegistrationOptions).mockResolvedValue({ challenge: 'local-fixture-challenge' } as never);
+    vi.mocked(verifyRegistrationResponse).mockResolvedValue({ verified: true, registrationInfo: { credential: {
+      id: 'optional-fixture-passkey', publicKey: new Uint8Array([1, 2, 3]), counter: 0, transports: ['internal'],
+    } } } as never);
+    const browser = request.agent(server);
+    expect((await browser.post('/api/auth/cloud-passkey/register/options').send({})).status).toBe(401);
+    const email = 'link-and-passkey@example.test';
+    const sent = await browser.post('/api/auth/cloud-signup/email/request').send({ email });
+    expect(sent.status, sent.body.error).toBe(202);
+    const url = new URL(vi.mocked(sendVerificationEmail).mock.lastCall![0].verificationUrl);
+    expect((await browser.get(`${url.pathname}${url.search}`)).status).toBe(302);
+    const signedIn = await browser.post('/api/auth/cloud-signup/email/complete').send({});
+    expect(signedIn.status, signedIn.body.error).toBe(201);
+    const probe = await browser.get('/cloud-probe');
+    expect(probe.status, probe.body.error).toBe(200);
+    expect(probe.body).toMatchObject({ sessionClass: 'cloud_account', authenticationMethod: 'email_link' });
+    expect(probe.body.mfaVerified).toBeUndefined();
+    expect((await browser.get('/tenant-only-probe')).status).toBe(401);
+    expect((await browser.post('/api/auth/refresh').send({})).status).toBe(200);
+    expect((await browser.post('/api/auth/cloud-passkey/register/options').send({})).status).toBe(200);
+    const enrolled = await browser.post('/api/auth/cloud-passkey/register/complete').send(mockCloudPasskeyCredential);
+    expect(enrolled.status, enrolled.body.error).toBe(201);
+    expect((await browser.post('/api/auth/cloud-passkey/register/complete').send(mockCloudPasskeyCredential)).status).toBe(401);
+    expect(await runtime.getRepository(CloudPasskey).countBy({ userId: probe.body.userId })).toBe(1);
+    await runtime.transaction(manager => authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, probe.body.userId));
+    expect((await browser.get('/cloud-probe')).status).toBe(401);
+    expect((await browser.post('/api/auth/refresh').send({})).status).toBe(401);
   });
 });

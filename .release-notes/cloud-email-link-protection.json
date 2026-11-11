@@ -1,0 +1,79 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-email-link-protection",
+  "type": "fix",
+  "scope": "cloud-authentication",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "security"
+  ],
+  "summary": "Allow verified email links to establish managed Cloud sessions and protect link requests with optional Turnstile verification.",
+  "userImpact": [
+    "An account can sign in by email link and add a passkey afterward.",
+    "Email signup refuses known disposable email domains."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Set EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY and EG_CLOUD_EMAIL_TURNSTILE_SECRET together to enable server verification.",
+    "Set EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED=true on the matching frontend image."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds public email challenge configuration and an email proof completion endpoint.",
+      "Adds an optional passkey registration flow for verified Cloud email sessions."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Email proofs and Turnstile tokens are single-use.",
+    "Administrator eligibility is rechecked for email-only sessions."
+  ],
+  "documentation": [
+    "docs/reference/configuration.md"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the prior host and frontend together."
+  ],
+  "validation": [
+    "Targeted authentication, frontend, deployment and PostgreSQL isolation tests passed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.12",
+      "newVersion": "0.28.13",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.0",
+      "newVersion": "0.24.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.16",
+      "newVersion": "0.20.17",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "cloud-email-sign-in"
+    ]
+  }
+}

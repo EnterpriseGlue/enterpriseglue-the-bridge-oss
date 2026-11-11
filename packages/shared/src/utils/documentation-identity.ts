@@ -11,7 +11,7 @@ const sourceSchema = z.object({
   principalType: z.literal('user'), principalId: z.string().min(1).max(255),
   userId: z.string().min(1).max(255), type: z.literal('access'),
   sessionId: z.uuid(), authSessionVersion: z.number().int().nonnegative(),
-  authenticationMethod: z.enum(['local', 'oidc', 'saml', 'ldap', 'passkey']),
+  authenticationMethod: z.enum(['local', 'oidc', 'saml', 'ldap', 'passkey', 'email_link']),
   mfaVerified: z.boolean().optional(), sessionClass: z.literal('cloud_account').optional(),
   tenantId: z.string().min(1).max(255).optional(), tenantSlug: z.string().min(1).max(63).optional(),
 }).strict();

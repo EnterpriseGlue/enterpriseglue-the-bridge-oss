@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { AppBaseEntity } from './BaseEntity.js';
 
-/** Single-use browser-bound passkey assertion challenge. */
+/** Short-lived browser challenge or namespaced authentication replay record. */
 @Entity({ name: 'cloud_passkey_challenges', schema: 'main' })
 @Index('uq_cloud_passkey_challenges_token', ['tokenHash'], { unique: true })
 @Index('idx_cloud_passkey_challenges_expires', ['expiresAt'])

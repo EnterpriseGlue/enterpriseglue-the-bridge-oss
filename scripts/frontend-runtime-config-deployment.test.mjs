@@ -74,6 +74,17 @@ test('the production frontend image has a stable container-start runtime documen
   assert.match(nginx, /connect-src 'self'\$\{RUNTIME_API_CONNECT_SRC\}/);
 });
 
+test('only the opt-in frontend policy allows the fixed Turnstile script and frame origin', () => {
+  const entrypoint = read('frontend/nginx-entrypoint.sh');
+  const nginx = read('frontend/nginx.conf');
+  assert.match(entrypoint, /EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED:-false/);
+  assert.match(entrypoint, /TURNSTILE_FRAME_SRC="'none'"/);
+  assert.match(entrypoint, /TURNSTILE_SCRIPT_SRC=" https:\/\/challenges\.cloudflare\.com"/);
+  assert.match(entrypoint, /TURNSTILE_FRAME_SRC="https:\/\/challenges\.cloudflare\.com"/);
+  assert.match(nginx, /script-src 'self'\$\{TURNSTILE_SCRIPT_SRC\}/);
+  assert.match(nginx, /frame-src \$\{TURNSTILE_FRAME_SRC\}/);
+});
+
 test('every supported container deployment passes runtime frontend configuration', () => {
   for (const path of [
     'infra/docker/compose/docker-compose.yml',
