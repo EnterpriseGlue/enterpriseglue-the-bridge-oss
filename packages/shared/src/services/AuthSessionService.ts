@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { runWithPlatformDatabaseCapability } from './platform-database-context.js';
+import { tenantLoginPolicyService } from './platform-admin/TenantLoginPolicyService.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
@@ -96,6 +97,7 @@ class AuthSessionService {
     });
     if (!session || persistedSessionClass(session) !== (source.sessionClass || null)
       || !await bcrypt.compare(input.refreshToken, session.tokenHash)) throw denied();
+    await tenantLoginPolicyService.requireCompanySso({ tenantId: input.tenantId, tenantSlug: input.tenantSlug }, source, session, dataSource);
     const provider = session.identityProviderId
       ? await runWithPlatformDatabaseCapability({kind:'session-account',providerId:session.identityProviderId,userId:user.id}, () => dataSource.getRepository(IdentityProvider).findOneBy({
           id: session.identityProviderId!,

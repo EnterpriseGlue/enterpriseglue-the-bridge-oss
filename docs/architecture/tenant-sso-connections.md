@@ -90,6 +90,22 @@ Catalogue administration is platform-only in pooled mode.
 Tenant selectors receive only assigned profile keys, names and enabled state.
 They do not receive proxy hostnames, assignments or trust references.
 
+## Company SSO-only sign-in
+
+In managed Cloud, the tenant **SSO only** setting requires an active direct
+provider owned by that tenant. The backend checks the current provider and
+signed session lineage during tenant access, refresh and tenant switching.
+Enabling the setting also blocks already-issued tenant sessions that used a
+different method. The user's account and organization membership are retained.
+
+If the tenant provider is unavailable, a platform administrator can start a
+recovery session with `POST /api/auth/recovery/login`. With the same session and
+its CSRF token, send `POST /api/t/{tenantSlug}/tenant/login-policy/recover` for
+the affected tenant. The operation requires `platform.tenants.manage`, records
+the actor and previous mode, and restores the automatic sign-in mode while
+preserving the provider selection. Verify the organization's login methods
+before asking the tenant administrator to repair and re-enable company SSO.
+
 PUT requires the `expectedVersion` returned by GET. Updates use a database
 compare-and-set fence; stale edits return a conflict. Draft tests use a stored,
 scoped direct OIDC provider selected by `providerKey`; arbitrary test URLs are
