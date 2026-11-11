@@ -740,6 +740,13 @@ jobs:
           --oracle-env .artifacts/release-candidate-smoke/oracle.env
           --force-oracle
 
+      - name: Qualify the Operaton Compose download on exact candidate images
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          EG_BACKEND_IMAGE_REF: ${{ needs.stage-application-images.outputs.backend_image }}@${{ needs.stage-application-images.outputs.backend_digest }}
+          EG_FRONTEND_IMAGE_REF: ${{ needs.stage-application-images.outputs.frontend_image }}@${{ needs.stage-application-images.outputs.frontend_digest }}
+        run: python3 scripts/test-selfhost-operaton-kit.py --live --tag "$RELEASE_TAG"
+
       - name: Set up Node.js for candidate browser qualification
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

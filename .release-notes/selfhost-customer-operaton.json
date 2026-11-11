@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "selfhost-customer-operaton",
+  "type": "feature",
+  "scope": "docker-compose",
+  "breaking": false,
+  "audiences": ["administrators", "operators", "developers"],
+  "summary": "Add a standalone Compose package for EnterpriseGlue with a customer-provided Operaton engine, optional sidecar, and first-launch access configuration.",
+  "userImpact": ["A configured local administrator can access the engine on first sign-in. Optional OIDC configuration grants platform and engine access through identity-provider roles."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": ["The package includes deployment settings, versioned image inputs, and templates for direct Operaton and customer-sidecar OIDC connections."],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["The setup service uses the existing authenticated configuration API. Configuration references engine and identity-provider credentials through separate read-only secret mounts."],
+  "documentation": ["docs/how-to/deploy-docker.md", "docs/reference/configuration.md"],
+  "customerDocumentation": { "impact": "required", "owner": "documentation-maintainers", "pages": ["self-hosted-quickstart"] },
+  "knownLimitations": ["The customer supplies the Operaton distribution, any sidecar, and the identity-provider application registration."],
+  "rollback": ["Restore the previous reviewed package and configuration using the documented configuration preview and rollback process."],
+  "validation": ["Release candidate CI starts the built download on the exact backend and frontend image digests and checks local admin access, a deployed process definition, and repeat launch."],
+  "packages": []
+}

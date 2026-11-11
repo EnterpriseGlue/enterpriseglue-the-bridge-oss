@@ -1,0 +1,41 @@
+{
+  "bundle": {
+    "apiVersion": "enterpriseglue.ai/v1beta1",
+    "kind": "EnterpriseGlueConfigBundle",
+    "metadata": {
+      "key": "platform.local-operaton",
+      "owner": "customer-operations"
+    },
+    "tenantKey": "default",
+    "mode": "additive",
+    "imports": [
+      "./engines.json"
+    ]
+  },
+  "files": {
+    "./engines.json": {
+      "engines": [
+        {
+          "key": "engine.customer-operaton",
+          "name": "Customer Operaton",
+          "type": "operaton",
+          "externalId": "customer-operaton",
+          "baseUrl": "https://operaton:8080/engine-rest",
+          "connectionMode": "direct",
+          "auth": {
+            "type": "basic",
+            "username": "enterpriseglue",
+            "passwordRef": "docker://engine-password"
+          },
+          "tenancy": {
+            "mode": "dedicated",
+            "tenantRef": {
+              "type": "default"
+            }
+          },
+          "runtimeAccessScope": "engine_wide"
+        }
+      ]
+    }
+  }
+}

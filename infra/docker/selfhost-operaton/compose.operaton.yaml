@@ -1,0 +1,111 @@
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+
+  backend:
+    env_file: !reset []
+    environment:
+      NODE_ENV: production
+      API_PORT: "8787"
+      DATABASE_TYPE: postgres
+      EG_TENANCY_MODE: single
+      EG_DATABASE_STARTUP_MODE: apply
+      EG_RUNTIME_ROLE: all
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_SCHEMA: main
+      POSTGRES_USER: ${POSTGRES_USER:-enterpriseglue}
+      POSTGRES_DATABASE: ${POSTGRES_DB:-enterpriseglue}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_SSL: "false"
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      EG_ENGINE_ALLOWED_HOSTS: ${EG_ENGINE_ALLOWED_HOSTS:?Set EG_ENGINE_ALLOWED_HOSTS in .env}
+      EG_ENGINE_ALLOW_PRIVATE_HOSTS: "true"
+      EG_ALLOW_INSECURE_ENGINE_HTTP: ${EG_ALLOW_INSECURE_ENGINE_HTTP:-false}
+      EG_IDENTITY_PROVIDER_ALLOWED_HOSTS: ${EG_IDENTITY_PROVIDER_ALLOWED_HOSTS:-}
+      EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS: ${EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS:-false}
+      EG_CONFIG_SECRET_PROVIDER: docker
+      EG_CONFIG_SECRET_FILE_ROOT: /run/secrets
+      CONFIG_BUNDLE_RUNTIME_RECONCILIATION_INTERVAL_MS: "2000"
+      CONFIG_BUNDLE_IDENTITY_REPLAY_INTERVAL_MS: "2000"
+      NODE_EXTRA_CA_CERTS: ${EG_EXTRA_CA_FILE:-}
+    volumes:
+      - type: bind
+        source: ./secrets
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+
+  operaton:
+    image: ${OPERATON_IMAGE:?Set OPERATON_IMAGE to the customer distribution}
+    restart: unless-stopped
+    env_file:
+      - path: ./operaton.env
+        required: false
+    networks:
+      - enterpriseglue-network
+
+  sidecar:
+    image: ${OPERATON_SIDECAR_IMAGE:-local/customer-sidecar:configure-me}
+    profiles: [sidecar]
+    restart: unless-stopped
+    env_file:
+      - path: ./sidecar.env
+        required: false
+    depends_on:
+      operaton:
+        condition: service_started
+    networks:
+      - enterpriseglue-network
+
+  setup:
+    image: ${EG_BACKEND_IMAGE_REF:-${BACKEND_IMAGE:-ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend}:${IMAGE_TAG:?Set IMAGE_TAG to a released EnterpriseGlue version}}
+    entrypoint: ["node", "/opt/compose/setup.mjs"]
+    environment:
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+    volumes:
+      - ./setup.mjs:/opt/compose/setup.mjs:ro
+      - type: bind
+        source: ${EG_OPERATON_BUNDLE:-./enterpriseglue-config.json}
+        target: /opt/compose/bundle.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${EG_OPERATON_POLICY_BUNDLE:-./policy.disabled.json}
+        target: /opt/compose/policy.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      backend:
+        condition: service_healthy
+      operaton:
+        condition: service_started
+      sidecar:
+        condition: service_started
+        required: false
+    networks:
+      - enterpriseglue-network
+
+  frontend:
+    environment:
+      API_UPSTREAM: backend:8787
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    ports: !override
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/usr/bin/wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/login"]
+      interval: 5s
+      timeout: 3s
+      retries: 12

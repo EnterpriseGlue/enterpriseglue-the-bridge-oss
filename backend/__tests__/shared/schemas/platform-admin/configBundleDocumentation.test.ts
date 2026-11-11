@@ -228,3 +228,18 @@ describe('published machine-readable JSON examples', () => {
     expect(JSON.stringify(envelope)).not.toMatch(/"(?:password|clientSecret|credential|token)"\s*:/);
   });
 });
+
+describe('standalone Operaton Compose bundle examples', () => {
+  const directory = resolve(repoRoot, 'infra/docker/selfhost-operaton/examples');
+
+  for (const filename of readdirSync(directory).filter((entry) => entry.endsWith('.json'))) {
+    it(`compiles ${filename} with the runtime bundle contract`, async () => {
+      const { configBundlePreviewService } = await import(
+        '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js'
+      );
+      const example = JSON.parse(readFileSync(resolve(directory, filename), 'utf8'));
+      const { preview } = configBundlePreviewService.compile(ConfigBundleRequestSchema.parse(example));
+      expect(preview.valid, JSON.stringify(preview.errors, null, 2)).toBe(true);
+    });
+  }
+});

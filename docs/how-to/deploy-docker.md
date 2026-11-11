@@ -6,6 +6,77 @@ Audience: Developers and architects.
 
 All Compose deployment paths can optionally mount an authorization configuration bundle. Bootstrap remains disabled unless a bundle host path and `EG_CONFIG_BOOTSTRAP_MODE=validate` or `apply` are configured. The complete validation, readiness, secret, and rollback contract is documented in [Deploy Authorization Configuration](./deploy-authorization-config.md).
 
+## Standalone package with customer Operaton
+
+The `enterpriseglue-operaton-vX.Y.Z.zip` release asset combines the standalone
+published-image stack with a customer-supplied Operaton service. It uses one
+single-tenant EnterpriseGlue instance and one registered Operaton engine. From
+the extracted package, prepare `.env`, the bundle, and its secrets, then start
+the stack:
+
+```bash
+docker compose up -d --wait
+```
+
+The archive includes `compose.yaml`, the matching host and Operaton Compose
+files, `compose.customer.yaml` for distribution-specific settings, and
+`.env.example` with the application image tag set to the release. Use a Compose
+version that supports `include`, `!reset`, and `!override` (2.24.4 or later).
+For immutable deployments, supply `EG_BACKEND_IMAGE_REF` and
+`EG_FRONTEND_IMAGE_REF` for that same release. To build the archive locally
+from the corresponding source, run:
+
+```bash
+python3 scripts/build-selfhost-operaton-kit.py vX.Y.Z enterpriseglue-operaton-vX.Y.Z.zip
+```
+
+| Package input | Contract |
+| --- | --- |
+| `.env` | Set the customer image in `OPERATON_IMAGE`, the initial admin email and password, JWT and encryption keys, PostgreSQL password, and exact engine and IdP hosts. Keep `FRONTEND_URL` aligned with the browser-facing origin. |
+| `compose.customer.yaml` | Add the customer's engine database, volumes, runtime arguments, or sidecar-specific wiring. EnterpriseGlue's PostgreSQL volume stores EnterpriseGlue data. |
+| `operaton.env` and `sidecar.env` | Optional environment files for the customer containers. Set `COMPOSE_PROFILES=sidecar` and `OPERATON_SIDECAR_IMAGE` to run a sidecar in the project. |
+| `enterpriseglue-config.json` | Copy and customize `direct.json`, `sidecar.json`, or `sidecar-oidc.json` from `examples/`. Use one dedicated `operaton` engine with a stable key and external ID. The setup job uses the ID to locate the registered engine. `EG_OPERATON_BUNDLE` can select another reviewed file. |
+| `secrets/` | Mount EnterpriseGlue credential files read-only. Names match the bundle's `docker://` references. Use the exact credential bytes and grant read access to the backend container user (UID 65532 in the published image). Keep downstream Operaton credentials in the customer's sidecar configuration. |
+
+The frontend publishes on `127.0.0.1`. Backend, database, and engine services
+use the private Compose network. For SSO, provide a browser-trusted HTTPS
+reverse proxy for the frontend, set `FRONTEND_URL` to its origin, and register
+the matching callback at the IdP. The OIDC example maps exact provider roles
+to groups and assigns platform administration and engine operation separately.
+See [Auth and SSO Setup](auth-sso.md) and the
+[sidecar readiness runbook](customer-sidecar-readiness-runbook.md) for the
+provider and transport contracts.
+
+For a sidecar authenticated by a peer channel such as mTLS, select
+`EG_OPERATON_POLICY_BUNDLE=./examples/peer-auth-policy.json` and configure
+`auth.type` as `none` on a `customer_sidecar` engine. The customer-provided
+transport must enforce peer authentication. The setup service applies the
+explicit deployment policy before validating the engine bundle. On an
+existing installation, review the policy bundle's default deployment roles
+against the stored settings before applying it. The policy and engine apply
+commit separately, so the policy can remain active after a later setup failure.
+
+The backend seeds the local recovery account and becomes ready. The setup
+service then uses the recovery session to resolve that account's ID and apply
+an engine-scoped operator assignment alongside the configured roles. It checks
+secret availability, compares the configuration against persisted state, applies
+the reviewed bundle, and reads process definitions through EnterpriseGlue. The
+frontend waits for the setup service to exit successfully on first startup.
+The setup step reports sanitized failures and can be retried after correcting
+the input. Use `docker compose logs setup` to identify the failed stage and
+check backend logs for policy and connection diagnostics.
+
+Reruns reuse the configured engine and assignment. Preserve bundle and engine
+keys, the external ID, and the database volume. Use the current recovery
+credential in `.env` after a password rotation. The installer does not apply
+conflicts, removals, or changes that require acknowledgement. Use the
+[configuration preview and apply workflow](deploy-authorization-config.md)
+for those changes. An apply and the subsequent connection check are separate
+steps, so a failed connection can leave a valid registration in the database.
+Correct the endpoint or credential and rerun Compose. For rollback, preview
+and restore the previous reviewed bundle and matching archive while retaining
+the volume.
+
 ## Services (Dev)
 The default compose file `infra/docker/compose/docker-compose.yml` defines:
 - **db**: PostgreSQL 18 container

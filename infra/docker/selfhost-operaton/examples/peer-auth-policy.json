@@ -1,0 +1,24 @@
+{
+  "bundle": {
+    "apiVersion": "enterpriseglue.ai/v1beta1",
+    "kind": "EnterpriseGlueConfigBundle",
+    "metadata": {
+      "key": "platform.operaton-peer-auth",
+      "owner": "customer-operations"
+    },
+    "tenantKey": "default",
+    "mode": "additive",
+    "imports": [
+      "./platform-settings.json"
+    ]
+  },
+  "files": {
+    "./platform-settings.json": {
+      "platformSettings": {
+        "deployment": {
+          "credentiallessCustomerSidecarsEnabled": true
+        }
+      }
+    }
+  }
+}
