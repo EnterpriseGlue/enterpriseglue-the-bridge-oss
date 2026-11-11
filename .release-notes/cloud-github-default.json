@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "cloud-github-default",
+  "type": "fix",
+  "scope": "git",
+  "breaking": false,
+  "audiences": [
+    "administrators",
+    "operators",
+    "developers"
+  ],
+  "summary": "Seed an active GitHub provider when a managed Cloud tenant is created.",
+  "userImpact": [
+    "New managed Cloud organizations can select GitHub when connecting a repository."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Deploy the shared and host packages from the same qualified release."
+    ]
+  },
+  "configuration": [
+    "The default GitHub provider uses the configured OAuth client when one is available. Personal access token support remains available."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "The provider record and the new organization are written in the same transaction and tenant scope."
+    ]
+  },
+  "security": [
+    "The provider remains subject to the existing tenant isolation and connection authorization checks."
+  ],
+  "documentation": [
+    "docs/architecture/postgresql-context-boundary.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "EnterpriseGlue",
+    "pages": [],
+    "reason": "Restores the existing GitHub repository connection flow for new managed organizations."
+  },
+  "knownLimitations": [
+    "Existing organizations retain their configured providers."
+  ],
+  "rollback": [
+    "Use the previous qualified host. Any provider records created before rollback remain scoped to their organizations."
+  ],
+  "validation": [
+    "Focused tenant-service and restricted PostgreSQL tests cover the new default, existing self-hosted seeding and transaction rollback."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.12",
+      "newVersion": "0.28.13",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.0",
+      "newVersion": "0.24.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.16",
+      "newVersion": "0.20.17",
+      "impact": "patch"
+    }
+  ]
+}

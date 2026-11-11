@@ -440,17 +440,26 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(audits).toHaveLength(1);
     expect(audits[0]).toMatchObject({ userId: target.id, resourceId: assignments[0].id });
     expect(await runtime.getRepository(AuditLog).findBy({ tenantId: created.id })).toEqual([]);
+    const providers = runtime.getRepository(GitProvider);
+    const tenantProviders = await runWithTenantDatabaseContext({ tenantId: created.id, tenantSlug: created.slug }, () => providers.find());
+    expect(tenantProviders).toEqual([expect.objectContaining({ tenantId: created.id, type: 'github', isActive: true })]);
+    expect(await providers.find()).toEqual([]);
+    expect(await runWithTenantDatabaseContext({ tenantId: 'tenant-default', tenantSlug: 'default' }, () =>
+      providers.findBy({ tenantId: created.id }))).toEqual([]);
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('rolls back tenant creation and owner assignment together when the tenant audit fails', async () => {
+  it('rolls back tenant creation, GitHub defaults and owner assignment when the tenant audit fails', async () => {
     const target = await userService.createPendingUser({ email: 'tenant-rollback@example.test', createdByUserId: 'fixture-operator' });
+    const readProviderCount = async () => (await admin.query(`SELECT COUNT(*)::int AS count FROM ${schema}.git_providers`))[0].count;
+    const providerCount = await readProviderCount();
     await admin.query(`CREATE FUNCTION ${schema}.reject_tenant_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='authz.role_assignment.create' THEN RAISE EXCEPTION 'fixture tenant audit failure'; END IF; RETURN NEW; END $$`);
     await admin.query(`CREATE TRIGGER reject_tenant_audit BEFORE INSERT ON ${schema}.audit_logs FOR EACH ROW EXECUTE FUNCTION ${schema}.reject_tenant_audit()`);
     try {
       await expect(tenantService.create({ name: 'Rollback tenant', slug: 'rollback-tenant', ownerUserId: target.id })).rejects.toThrow('fixture tenant audit failure');
       expect(await runtime.getRepository(Tenant).countBy({ slug: 'rollback-tenant' })).toBe(0);
       expect(await runtime.getRepository(RbacRoleAssignment).countBy({ principalId: target.id, scopeType: 'tenant' })).toBe(0);
+      expect(await readProviderCount()).toBe(providerCount);
       expect(getTenantDatabaseContext()).toBeUndefined();
     } finally {
       await admin.query(`DROP TRIGGER reject_tenant_audit ON ${schema}.audit_logs`);

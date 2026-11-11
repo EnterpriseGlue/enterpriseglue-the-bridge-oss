@@ -1,5 +1,6 @@
 import { TenantLoginPolicy } from '../../infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { seedCloudGitHubProvider } from '../../db/seed/gitProviders.js';
 import { resolveTxt } from 'node:dns/promises';
 import { In, IsNull, MoreThan, type EntityManager } from 'typeorm';
 import { config } from '@enterpriseglue/shared/config/index.js';
@@ -165,11 +166,14 @@ export class TenantService {
           createdAt: now,
           updatedAt: now,
         });
-        await runWithTenantDatabaseContext({tenantId,tenantSlug:slug},()=>manager.getRepository(TenantLoginPolicy).insert({
-          id:generateId(),tenantId,localPasswordMode:'auto',providerSelectionMode:'chooser',
-          ssoConnectionJson:JSON.stringify({connection:{mode:'direct'},lastTest:null,ownershipMode:'manual',sourceRef:null,driftStatus:null}),
-          createdAt:now,updatedAt:now,updatedByUserId:ownerUserId,
-        }));
+        await runWithTenantDatabaseContext({ tenantId, tenantSlug: slug }, async () => {
+          await manager.getRepository(TenantLoginPolicy).insert({
+            id: generateId(), tenantId, localPasswordMode: 'auto', providerSelectionMode: 'chooser',
+            ssoConnectionJson: JSON.stringify({ connection: { mode: 'direct' }, lastTest: null, ownershipMode: 'manual', sourceRef: null, driftStatus: null }),
+            createdAt: now, updatedAt: now, updatedByUserId: ownerUserId,
+          });
+          if (config.tenancyCloudRequired) await seedCloudGitHubProvider(manager, tenantId);
+        });
         if (ownerUserId) {
           // The registry row now exists in this transaction. Scope its owner
           // assignment and audit to that canonical tenant, not the caller's
