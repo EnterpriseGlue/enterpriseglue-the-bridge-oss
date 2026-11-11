@@ -21,7 +21,8 @@
   },
   "configuration": [
     "Set EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY and EG_CLOUD_EMAIL_TURNSTILE_SECRET together to enable server verification.",
-    "Set EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED=true on the matching frontend image."
+    "Set EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED=true on the matching frontend image.",
+    "Set cloudEmailSignupProtection.enabled, siteKey and secretRef in split-runtime Helm deployments."
   ],
   "api": {
     "compatibility": "additive",
@@ -51,21 +52,21 @@
   ],
   "packages": [
     {
-      "name": "@enterpriseglue/shared",
-      "previousVersion": "0.28.12",
-      "newVersion": "0.28.13",
-      "impact": "patch"
-    },
-    {
       "name": "@enterpriseglue/backend-host",
-      "previousVersion": "0.24.0",
-      "newVersion": "0.24.1",
+      "previousVersion": "0.24.1",
+      "newVersion": "0.24.2",
       "impact": "patch"
     },
     {
       "name": "@enterpriseglue/frontend-host",
-      "previousVersion": "0.20.16",
-      "newVersion": "0.20.17",
+      "previousVersion": "0.20.17",
+      "newVersion": "0.20.18",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.13",
+      "newVersion": "0.28.14",
       "impact": "patch"
     }
   ],
