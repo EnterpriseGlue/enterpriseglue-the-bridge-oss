@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DataSource, getMetadataArgsStorage } from 'typeorm';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import type { Pool } from 'pg';
 import express from 'express';
 import request from 'supertest';
@@ -20,6 +21,8 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { CloudEmailSignup } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudEmailSignup.js';
 import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
 import { CloudPasskeyChallenge } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskeyChallenge.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { PLATFORM_ADMINISTRATORS_GROUP_ID } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { mockCloudPasskeyCredential as credential } from '../../__tests__/fixtures/cloudPasskeyCredential.js';
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
@@ -51,7 +54,7 @@ const env = (name: string, fallback: string) =>
   process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
 const schema = `cloud_passkey_${Date.now()}`;
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
-const entities = [User, CloudEmailSignup, CloudPasskey, CloudPasskeyChallenge];
+const entities = [User, CloudEmailSignup, CloudPasskey, CloudPasskeyChallenge, AuthzGroupMembership];
 const originalSchemas: Array<{ table: { schema?: string }; schema?: string }> = [];
 let pool: Pool;
 let dataSource: DataSource;
@@ -167,5 +170,59 @@ describe('Cloud email/passkey lifecycle on disposable PostgreSQL', () => {
       .set('Cookie', `cloud_passkey_login_proof=${loginToken}`).send(assertion);
     expect(loginReplay.status).toBe(401);
     expect(await dataSource.getRepository(User).count()).toBe(1);
+  }, 60_000);
+
+  it('redeems an email link once, returns to the same account and rejects it after administrator promotion', async () => {
+    const email = 'email-only@example.com';
+    const begin = async () => {
+      const requested = await request(app).post('/api/auth/cloud-signup/email/request').send({ email });
+      expect(requested.status, JSON.stringify(requested.body)).toBe(202);
+      const url = new URL(vi.mocked(sendVerificationEmail).mock.lastCall![0].verificationUrl);
+      const verified = await request(app).get(`${url.pathname}${url.search}`);
+      expect(verified.headers.location).toBe('https://app.staging.enterpriseglue.ai/signup/email/continue');
+      return `cloud_email_signup_proof=${url.searchParams.get('token')}`;
+    };
+    const complete = (cookie: string) => request(app).post('/api/auth/cloud-signup/email/complete').set('Cookie', cookie).send({});
+    const signupProof = await begin();
+    const first = await Promise.all([complete(signupProof), complete(signupProof)]);
+    expect(first.map(response => response.status).sort()).toEqual([201, 401]);
+    const repo = dataSource.getRepository(User);
+    const account = await repo.findOneByOrFail({ email });
+    expect(account).toMatchObject({ authProvider: 'email_link', isEmailVerified: true, platformRole: 'user' });
+    expect(authSessionService.issue).toHaveBeenLastCalledWith(expect.objectContaining({ id: account.id }), expect.objectContaining({
+      sessionClass: 'cloud_account', authenticationMethod: 'email_link',
+    }));
+    expect(vi.mocked(authSessionService.issue).mock.lastCall?.[1]?.mfaVerified).toBeUndefined();
+    expect(await dataSource.getRepository(CloudPasskey).countBy({ userId: account.id })).toBe(0);
+    expect((await complete(await begin())).status).toBe(200);
+    expect(await repo.countBy({ email })).toBe(1);
+    const proofBeforePromotion = await begin();
+    await dataSource.getRepository(AuthzGroupMembership).insert({ id: 'test-admin-membership', userId: account.id,
+      groupId: PLATFORM_ADMINISTRATORS_GROUP_ID, tenantId: null, source: 'manual', expiresAt: null,
+      createdAt: Date.now(), updatedAt: Date.now() });
+    expect((await complete(proofBeforePromotion)).status).toBe(401);
+  }, 60_000);
+
+  it('admits only one email request when the provider accepts the same challenge concurrently', async () => {
+    config.cloudEmailTurnstileSiteKey = 'synthetic-public-key';
+    config.cloudEmailTurnstileSecret = 'synthetic-secret';
+    const provider = vi.fn(async () => Response.json({
+      success: true, hostname: 'app.staging.enterpriseglue.ai', action: 'cloud_email_signup', challenge_ts: new Date().toISOString(),
+    }));
+    vi.stubGlobal('fetch', provider);
+    vi.mocked(sendVerificationEmail).mockClear();
+    try {
+      const send = (email: string) => request(app).post('/api/auth/cloud-signup/email/request')
+        .send({ email, turnstileToken: 'synthetic-shared-challenge' });
+      const responses = await Promise.all([send('first@example.test'), send('second@example.test')]);
+      expect(responses.map(response => response.status).sort()).toEqual([202, 400]);
+      expect(provider).toHaveBeenCalledTimes(2);
+      expect(sendVerificationEmail).toHaveBeenCalledTimes(1);
+      expect(await dataSource.getRepository(CloudPasskeyChallenge).count()).toBe(1);
+    } finally {
+      config.cloudEmailTurnstileSiteKey = undefined;
+      config.cloudEmailTurnstileSecret = undefined;
+      vi.unstubAllGlobals();
+    }
   }, 60_000);
 });

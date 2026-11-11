@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { normalizeUserJwtPayload, verifyToken, type AuthenticatedUserJwtPayload, type JwtPayload, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+import { hasCloudAccountAuthentication, normalizeUserJwtPayload, verifyToken, type AuthenticatedUserJwtPayload, type JwtPayload, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { Errors, AppError } from './errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -10,7 +10,7 @@ import { requireDocumentationGatewaySecret, verifyDocumentationGrant, verifyDocu
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { getActivePlatformAdministratorUserIds, isCloudEmailLinkAccount } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
@@ -188,8 +188,7 @@ async function authenticateBrowserSession(
   if (cloudAccountSession && (!allowCloudAccount
     || !managedCloudAccountSessionsEnabled()
     || !payload.sessionId
-    || !['oidc', 'saml', 'passkey'].includes(payload.authenticationMethod || '')
-    || (payload.authenticationMethod === 'passkey' && payload.mfaVerified !== true)
+    || !hasCloudAccountAuthentication(payload)
     || req.tenant !== undefined)) {
     throw Errors.unauthorized('Cloud account session is not valid for this route');
   }
@@ -203,6 +202,10 @@ async function authenticateBrowserSession(
   }
   if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
     throw Errors.unauthorized('Session has been revoked');
+  }
+  if (payload.authenticationMethod === 'email_link' && (!managedCloudAccountSessionsEnabled() ||
+    !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) {
+    throw Errors.unauthorized('Sign in again using an eligible account method');
   }
   const session = await requireCurrentBrowserSession(payload, dataSource);
   if (payload.recovery === 'platform_administrator'
@@ -392,6 +395,8 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       const recoveryIsCurrent = payload.recovery !== 'platform_administrator'
         || (await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId);
       if (user && recoveryIsCurrent && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
+        if (payload.authenticationMethod === 'email_link' && (!managedCloudAccountSessionsEnabled() ||
+          !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) return next();
         const session = await requireCurrentBrowserSession(payload, dataSource);
         req.user = { ...payload, email: user.email };
         // Optional authentication must establish the same tenant-aware request

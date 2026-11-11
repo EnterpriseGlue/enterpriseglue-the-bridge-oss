@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import bcrypt from 'bcryptjs';
-import { normalizeUserJwtPayload, verifyToken, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+import { hasCloudAccountAuthentication, normalizeUserJwtPayload, verifyToken, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -12,7 +12,7 @@ import { IsNull, MoreThan } from 'typeorm';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
-import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { getActivePlatformAdministratorUserIds, isCloudEmailLinkAccount } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
@@ -64,8 +64,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   const cloudAccountSession = payload.sessionClass === 'cloud_account';
   if (cloudAccountSession && (!managedCloudAccountSessionsEnabled()
     || !payload.sessionId
-    || !['oidc', 'saml', 'passkey'].includes(payload.authenticationMethod || '')
-    || (payload.authenticationMethod === 'passkey' && payload.mfaVerified !== true)
+    || !hasCloudAccountAuthentication(payload)
     || req.tenant !== undefined)) {
     throw Errors.unauthorized('Invalid cloud account session');
   }
@@ -95,6 +94,10 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
   if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
     throw Errors.unauthorized('Session has been revoked');
+  }
+  if (payload.authenticationMethod === 'email_link' && (!managedCloudAccountSessionsEnabled() ||
+    !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) {
+    throw Errors.unauthorized('Sign in again using an eligible account method');
   }
   if (cloudAccountSession && !user.isEmailVerified) {
     throw Errors.forbidden('Email verification required');
