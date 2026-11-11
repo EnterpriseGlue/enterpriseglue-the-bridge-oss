@@ -6,7 +6,7 @@ import { XSRF_COOKIE_NAME, XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils
 export function installBrowserRequestProtection(app: express.Express): void {
   app.use((req, res, next) => {
     const cookieHeader = req.headers.cookie;
-    const cookies: Record<string, string> = Object.create(null);
+    const cookies = new Map<string, string>();
     let duplicateXsrfCookie = false;
 
     if (typeof cookieHeader === 'string' && cookieHeader.length > 0) {
@@ -14,17 +14,17 @@ export function installBrowserRequestProtection(app: express.Express): void {
         const [nameRaw, ...rest] = part.trim().split('=');
         if (!nameRaw || nameRaw === '__proto__' || nameRaw === 'constructor' || nameRaw === 'prototype') continue;
 
-        if (nameRaw === XSRF_COOKIE_NAME && nameRaw in cookies) duplicateXsrfCookie = true;
+        if (nameRaw === XSRF_COOKIE_NAME && cookies.has(nameRaw)) duplicateXsrfCookie = true;
         const valueRaw = rest.join('=') || '';
         try {
-          cookies[nameRaw] = decodeURIComponent(valueRaw);
+          cookies.set(nameRaw, decodeURIComponent(valueRaw));
         } catch {
-          cookies[nameRaw] = valueRaw;
+          cookies.set(nameRaw, valueRaw);
         }
       }
     }
 
-    req.cookies = cookies;
+    req.cookies = Object.setPrototypeOf(Object.fromEntries(cookies), null);
     res.locals.duplicateXsrfCookie = duplicateXsrfCookie;
     next();
   });
