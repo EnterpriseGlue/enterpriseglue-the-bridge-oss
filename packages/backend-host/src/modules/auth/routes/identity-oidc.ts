@@ -33,10 +33,12 @@ import { In, IsNull, type FindOptionsWhere } from 'typeorm';
 import { verifyFederatedLogoutState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { AuthenticatedIdentityProviderLinksSchema, AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
+import { CloudMicrosoftEmailCompleteSchema, CloudMicrosoftEmailDestinationSchema, CloudMicrosoftEmailRequestSchema } from '@enterpriseglue/shared/schemas/auth/cloud-microsoft-email.js';
 import { PublicLoginMethodsResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
 import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import { buildSignedOidcState, buildSignedSamlState, createSamlRequestId, getSsoRedirectUrl, parseSignedOidcState, parseSignedSamlState, parseInvitationEnrollmentContext, type AccountLinkContext, type SsoState } from './sso-state.js';
+import { beginMicrosoftEmailProof, consumeMicrosoftEmailProof, microsoftCloudIssuer, microsoftProviderRevision, requestMicrosoftEmailProof, verifyMicrosoftEmailProof } from './cloud-microsoft-email-proof.js';
 
 const router = Router();
 const stateCookie = 'identity_oidc_state';
@@ -606,13 +608,36 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       if(!parsed.ssoConnectionVersion&&!callbackNetwork.legacy)throw Errors.unauthorized('SSO connection changed; restart sign-in');
       const verifiedClaims = await genericOidcService.exchangeCode(rawConfiguration, { code: callback.code as string, codeVerifier: verifier, nonce: parsed.nonce }, providerSecretContext(req, provider), {tenantId:provider.tenantId,expectedVersion:parsed.ssoConnectionVersion});
       if(parsed.ssoConnectionVersion&&(await ssoConnectionService.resolve(provider.tenantId)).version!==parsed.ssoConnectionVersion)throw Errors.unauthorized('SSO connection changed; restart sign-in');
-      const claims = genericOidcService.withCallbackUser(rawConfiguration, verifiedClaims, callback?.user);
+      let claims = genericOidcService.withCallbackUser(rawConfiguration, verifiedClaims, callback?.user);
       const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
       const evidence = {
         mfaVerified: assurance.mfaVerified,
         subjectId: claims.sub,
         sessionId: typeof claims.sid === 'string' ? claims.sid : null,
       };
+      if (config.tenancyMode === 'pooled' && config.tenancyCloudRequired && config.cloudAccountIdentityEnabled &&
+          !provider.tenantId && !parsed.accountLink && !parsed.enrollment && rawConfiguration.issuerUrl === microsoftCloudIssuer) {
+        const linked = await runWithPlatformDatabaseCapability({ kind: 'provider-proof', providerId: provider.id, subjectId: claims.sub }, async () =>
+          (await getDataSource()).getRepository(ExternalIdentity).findOneBy({
+            providerId: provider.id, tenantId: IsNull(), subjectId: claims.sub, status: 'active',
+          }));
+        if (!claims.tid || (linked?.directoryTenantId && linked.directoryTenantId !== claims.tid)) {
+          throw Errors.unauthorized('Microsoft sign-in does not match the linked directory');
+        }
+        if (!linked?.emailHint) {
+          const destination = CloudMicrosoftEmailDestinationSchema.safeParse(parsed.returnTo);
+          if (!destination.success) throw Errors.unauthorized('Microsoft sign-in is missing account details');
+          await beginMicrosoftEmailProof(res, {
+            providerId: provider.id, providerRevision: microsoftProviderRevision(provider.configurationJson, Number(provider.updatedAt)),
+            subjectId: claims.sub, directoryTenantId: claims.tid, providerSessionId: evidence.sessionId,
+            mfaVerified: evidence.mfaVerified, destination: destination.data,
+          });
+          return;
+        }
+        // Returning users are matched by the already-linked subject. Microsoft
+        // profile email values never update the local account's verified address.
+        claims = { ...claims, email: linked.emailHint, email_verified: false };
+      }
       const enrolled = parsed.enrollment ? await identityProviderProvisioningService.enrollOidcInvitation(provider, claims, parsed.enrollment,
         enrollmentEvidence(req, { subjectId: evidence.subjectId, sessionId: evidence.sessionId }, evidence.mfaVerified)) : null;
       const user = enrolled
@@ -654,6 +679,43 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
     throw error;
   }
 }
+
+router.post('/api/auth/cloud-signup/microsoft/email/request', apiLimiter, identityFlowLimiter, authLimiter,
+  validateBody(CloudMicrosoftEmailRequestSchema), asyncHandler(async (req, res) => {
+    await requestMicrosoftEmailProof(req, String(req.body.email).trim().toLowerCase());
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(202).json({ success: true });
+  }));
+
+router.get('/api/auth/cloud-signup/microsoft/email/verify', apiLimiter, identityFlowLimiter, asyncHandler(verifyMicrosoftEmailProof));
+
+router.post('/api/auth/cloud-signup/microsoft/email/complete', apiLimiter, identityFlowLimiter, authLimiter,
+  asyncHandler(async (req, res) => {
+    const proof = await consumeMicrosoftEmailProof(req, res);
+    const provider = await runWithPlatformDatabaseCapability({ kind: 'provider-lookup', providerId: proof.providerId }, () => directProviderById(proof.providerId));
+    requireDirectOidc(provider);
+    if (provider.tenantId || configuration(provider).issuerUrl !== microsoftCloudIssuer ||
+        microsoftProviderRevision(provider.configurationJson, Number(provider.updatedAt)) !== proof.providerRevision) {
+      throw Errors.unauthorized('Microsoft sign-in settings changed. Sign in again.');
+    }
+    try {
+      const user = await identityProviderProvisioningService.reconcileOidcLogin(provider, {
+        sub: proof.subjectId, tid: proof.directoryTenantId, email: proof.email, email_verified: true,
+      });
+      if (!user.isActive) throw Errors.forbidden('Your account has been deactivated');
+      await setProviderSession(req, res, user, provider, {
+        mfaVerified: proof.mfaVerified, subjectId: proof.subjectId, sessionId: proof.providerSessionId,
+      });
+      await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider',
+        resourceId: provider.id, details: { providerKey: provider.key, protocol: 'oidc' } }));
+      res.json(CloudMicrosoftEmailCompleteSchema.parse({ destination: proof.destination }));
+    } catch (error) {
+      if (error instanceof IdentityProviderAccountLinkRequiredError) {
+        throw Errors.conflict('This email is already in use. Sign in with your existing method, then connect Microsoft from your profile.');
+      }
+      throw error;
+    }
+  }));
 
 async function completeSamlLogin(req: Request, res: Response): Promise<void> {
   const samlResponse = typeof req.body?.SAMLResponse === 'string' ? req.body.SAMLResponse : '';

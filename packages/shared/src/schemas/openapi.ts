@@ -4263,6 +4263,35 @@ registry.registerPath({
   request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login', '/documentation/access']) }).strict() },
   responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding, organization login or documentation access' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
+const { CloudMicrosoftEmailRequestSchema, CloudMicrosoftEmailCompleteSchema } = await import('./auth/cloud-microsoft-email.js');
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/microsoft/email/request',
+  ...authzExemption('POST', '/api/auth/cloud-signup/microsoft/email/request'),
+  request: { body: { content: { 'application/json': { schema: CloudMicrosoftEmailRequestSchema } } } },
+  responses: {
+    202: { description: 'Verification message accepted for delivery', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } },
+    400: { description: 'Invalid email address' }, 401: { description: 'Missing or expired Microsoft browser proof' },
+    403: { description: 'Missing or invalid browser CSRF token' }, 404: { description: 'Cloud signup is disabled' },
+    503: { description: 'Outbound email is unavailable' },
+  },
+});
+registry.registerPath({
+  method: 'get', path: '/api/auth/cloud-signup/microsoft/email/verify',
+  ...authzExemption('GET', '/api/auth/cloud-signup/microsoft/email/verify'),
+  request: { query: z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }) },
+  responses: { 302: { description: 'Sets a short-lived mailbox proof cookie on the initiating browser' },
+    401: { description: 'Invalid, replaced or expired proof' }, 404: { description: 'Cloud signup is disabled' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/microsoft/email/complete',
+  ...authzExemption('POST', '/api/auth/cloud-signup/microsoft/email/complete'),
+  responses: {
+    200: { description: 'Consumes the proofs and issues a Cloud session', content: { 'application/json': { schema: CloudMicrosoftEmailCompleteSchema } } },
+    401: { description: 'Missing, invalid, expired or consumed proof, or provider changed' },
+    403: { description: 'Invalid browser CSRF token or deactivated account' }, 404: { description: 'Cloud signup or the provider is unavailable' },
+    409: { description: 'An existing account must link Microsoft from a signed-in session' },
+  },
+});
 registry.registerPath({
   method: 'post', path: '/api/auth/cloud-signup/email/request',
   ...authzExemption('POST', '/api/auth/cloud-signup/email/request'),

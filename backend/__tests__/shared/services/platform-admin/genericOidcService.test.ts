@@ -51,14 +51,19 @@ describe('GenericOidcService endpoint policy', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
-  it('accepts Microsoft Entra organizations discovery and verifies the tenant-specific token issuer', async () => {
+  it.each([
+    { authority: 'organizations', tenantId: '11111111-2222-4333-8444-555555555555', tenantScopedKey: false },
+    { authority: 'common', tenantId: '11111111-2222-4333-8444-555555555555', tenantScopedKey: false },
+    { authority: 'common', tenantId: '9188040d-6c67-4c5b-b112-36a304b66dad', tenantScopedKey: true },
+  ])('validates Microsoft $authority token and signing-key issuers ($tenantId)', async ({ authority, tenantId, tenantScopedKey }) => {
     const signingKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const signingJwk = signingKeys.publicKey.export({ format: 'jwk' });
-    const tenantId = '11111111-2222-4333-8444-555555555555';
     const clientId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
     const issuer = `https://login.microsoftonline.com/${tenantId}/v2.0`;
+    const authorityOrigin = `https://login.microsoftonline.com/${authority}`;
+    const issuerTemplate = 'https://login.microsoftonline.com/{tenantid}/v2.0';
     const entraConfiguration = {
-      issuerUrl: 'https://login.microsoftonline.com/organizations/v2.0',
+      issuerUrl: `${authorityOrigin}/v2.0`,
       clientId,
       callbackUrl: 'http://localhost:5173/api/auth/identity/callback',
       scopes: ['openid', 'profile', 'email'],
@@ -66,10 +71,10 @@ describe('GenericOidcService endpoint policy', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: URL | RequestInfo) => {
       const url = String(input);
       if (url.endsWith('/.well-known/openid-configuration')) return new Response(JSON.stringify({
-        issuer: 'https://login.microsoftonline.com/{tenantid}/v2.0',
-        authorization_endpoint: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize',
-        token_endpoint: 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token',
-        jwks_uri: 'https://login.microsoftonline.com/organizations/discovery/v2.0/keys',
+        issuer: issuerTemplate,
+        authorization_endpoint: `${authorityOrigin}/oauth2/v2.0/authorize`,
+        token_endpoint: `${authorityOrigin}/oauth2/v2.0/token`,
+        jwks_uri: `${authorityOrigin}/discovery/v2.0/keys`,
       }), { status: 200 });
       if (url.endsWith('/oauth2/v2.0/token')) {
         return new Response(JSON.stringify({ id_token: jwt.sign({
@@ -79,20 +84,20 @@ describe('GenericOidcService endpoint policy', () => {
         }) }), { status: 200 });
       }
       if (url.endsWith('/discovery/v2.0/keys')) return new Response(JSON.stringify({
-        keys: [{ ...signingJwk, kid: 'entra-signing-key', alg: 'RS256', use: 'sig' }],
+        keys: [{ ...signingJwk, kid: 'entra-signing-key', alg: 'RS256', use: 'sig', issuer: tenantScopedKey ? issuer : issuerTemplate }],
       }), { status: 200 });
       throw new Error(`Unexpected URL ${url}`);
     }));
 
     await expect(genericOidcService.testConnection(entraConfiguration)).resolves.toMatchObject({
-      issuer: 'https://login.microsoftonline.com/{tenantid}/v2.0',
+      issuer: issuerTemplate,
     });
     await expect(genericOidcService.exchangeCode(entraConfiguration, {
       code: 'entra-code', codeVerifier: 'entra-verifier', nonce: 'nonce-entra',
     })).resolves.toMatchObject({ sub: 'entra-subject-1', tid: tenantId });
   });
 
-  it('rejects a Microsoft Entra organizations token whose issuer and tid disagree', async () => {
+  it.each(['token', 'signing key'])('rejects a Microsoft token when its %s issuer disagrees with tid', async invalidIssuer => {
     const signingKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const signingJwk = signingKeys.publicKey.export({ format: 'jwk' });
     const tenantId = '11111111-2222-4333-8444-555555555555';
@@ -109,11 +114,12 @@ describe('GenericOidcService endpoint policy', () => {
       if (url.endsWith('/oauth2/v2.0/token')) return new Response(JSON.stringify({ id_token: jwt.sign({
         tid: tenantId, nonce: 'nonce-entra',
       }, signingKeys.privateKey, {
-        algorithm: 'RS256', keyid: 'entra-signing-key', issuer: `https://login.microsoftonline.com/${otherTenantId}/v2.0`,
+        algorithm: 'RS256', keyid: 'entra-signing-key',
+        issuer: `https://login.microsoftonline.com/${invalidIssuer === 'token' ? otherTenantId : tenantId}/v2.0`,
         audience: clientId, subject: 'entra-subject-1', expiresIn: 300,
       }) }), { status: 200 });
       if (url.endsWith('/discovery/v2.0/keys')) return new Response(JSON.stringify({
-        keys: [{ ...signingJwk, kid: 'entra-signing-key', alg: 'RS256', use: 'sig' }],
+        keys: [{ ...signingJwk, kid: 'entra-signing-key', alg: 'RS256', use: 'sig', issuer: `https://login.microsoftonline.com/${otherTenantId}/v2.0` }],
       }), { status: 200 });
       throw new Error(`Unexpected URL ${url}`);
     }));

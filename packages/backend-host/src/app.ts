@@ -121,8 +121,13 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     exposedHeaders: [XSRF_HEADER_NAME], // Expose the same token to non-cookie API clients
   }));
 
-  // Logging
-  app.use(morgan('dev', {
+  // Keep one-time proofs and provider callback parameters out of request logs.
+  morgan.token('eg-url', (req) => {
+    const url = req.url ?? '';
+    const [path] = url.split('?', 1);
+    return /^\/api\/(?:t\/[^/]+\/)?auth\/(?:identity\/callback|cloud-signup\/(?:microsoft\/)?email\/verify)\/?$/i.test(path) ? path : url;
+  });
+  app.use(morgan(':method :eg-url :status :response-time ms - :res[content-length]', {
     stream: {
       write: (message: string) => {
         const line = String(message || '').trim();
@@ -183,6 +188,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
       // Skip CSRF for login/refresh and CSRF token fetch (these endpoints validate credentials directly)
       if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/csrf-token') return true;
       if (req.method === 'POST' && /^\/api\/(?:t\/[^/]+\/)?auth\/identity\/callback$/.test(req.path)) return true;
+      if (/^\/api\/auth\/cloud-signup\/microsoft\/email\/(?:request|complete)\/?$/i.test(req.path)) return false;
 
       const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
       const hasBearer = authHeader.startsWith('Bearer ');
