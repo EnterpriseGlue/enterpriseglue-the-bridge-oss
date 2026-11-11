@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-x-net-security",
+  "type": "security",
+  "scope": "plugin-toolchain",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Rebuild the plugin installer and manager acquisition tools with the fixed Go x/net module.",
+  "userImpact": [
+    "Plugin acquisition and signature verification retain their existing interfaces."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Adopt the qualified installer and manager images when they are published."
+    ]
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Pin golang.org/x/net to v0.62.0 in both acquisition tool builds to address CVE-2026-78661. Update the minimum x/crypto and x/text versions required by that module."
+  ],
+  "documentation": [
+    "packages/plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md",
+    "packages/plugin-manager/CONTAINER_THIRD_PARTY_NOTICES.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "This embedded toolchain dependency update requires no customer configuration or procedure change."
+  },
+  "knownLimitations": [
+    "Exact image and cross-architecture qualification remain required before publication."
+  ],
+  "rollback": [
+    "Prefer the next qualified forward build. Older image digests carry the affected module."
+  ],
+  "validation": [
+    "Both native Linux ARM64 images build with emitted Cosign binaries reporting the fixed x/net module.",
+    "Local Trivy HIGH and CRITICAL scans pass for the rebuilt installer and manager images. The protected image and cross-architecture checks remain required."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.14",
+      "newVersion": "0.2.15",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.14",
+      "newVersion": "0.1.15",
+      "impact": "patch"
+    }
+  ]
+}
