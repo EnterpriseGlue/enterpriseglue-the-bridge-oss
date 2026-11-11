@@ -1,0 +1,38 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-organization-request-identity",
+  "type": "feat",
+  "scope": "cloud-onboarding",
+  "breaking": false,
+  "audiences": ["operators", "security"],
+  "summary": "Bind managed Cloud organization requests to a verified account and deliver request notifications through the host email service.",
+  "userImpact": ["Organization request emails reflect the verified requester and the current request status."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [
+    "Set EG_CLOUD_ORGANIZATION_REVIEW_EMAIL and configure the default host email provider.",
+    "Use the exact HTTPS application origin and match the release controller credentials to the serving release."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds an opt-in requester claim to the existing platform Cloud identity exchange.",
+      "Adds a private, release-bound endpoint for organization notifications."
+    ]
+  },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "The host rechecks the authenticated account and its current session before attesting requester identity.",
+    "The notification endpoint accepts fixed message types and checks the verified recipient."
+  ],
+  "documentation": ["docs/reference/configuration.md"],
+  "knownLimitations": ["Requires a compatible Cloud control plane and a configured email sender."],
+  "rollback": ["Restore a compatible control plane and host together."],
+  "validation": ["Focused notification, authorization and restricted PostgreSQL requester-attestation checks passed."],
+  "packages": [],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": ["cloud-organization-requests"]
+  }
+}

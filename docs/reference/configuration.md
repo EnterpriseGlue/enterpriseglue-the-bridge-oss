@@ -196,6 +196,12 @@ rollback qualification gates pass for the intended deployment.
   OIDC/SAML providers and returns the verified session to `/cloud/onboarding`.
   It requires pooled, Cloud-required tenancy and remains disabled for ordinary
   self-hosted deployments.
+- `EG_CLOUD_ORGANIZATION_REVIEW_EMAIL`: Reviewer address for managed Cloud
+  organization request notifications. Configure the default host email
+  provider and use the public HTTPS application origin for notification links.
+  The private notification endpoint accepts only the release controller token
+  and the exact serving release ID. Requester emails go to the verified
+  account on the request.
 - `EG_TENANT_RELEASE_CONTROLLER_TOKEN`: Dedicated private controller secret for
   tenant release assignment and release-effect cohort operations. Do not reuse a
   service-account token or expose it in frontend runtime configuration.

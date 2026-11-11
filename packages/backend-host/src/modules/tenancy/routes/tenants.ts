@@ -16,6 +16,8 @@ import { tenantWorkloadLifecycleService } from '@enterpriseglue/shared/services/
 import { managedEngineWorkloadRegistrationService } from '@enterpriseglue/shared/services/platform-admin/ManagedEngineWorkloadRegistrationService.js';
 import { tenantCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/TenantCloudIdentityService.js';
 import { platformCloudIdentityService } from '@enterpriseglue/shared/services/platform-admin/PlatformCloudIdentityService.js';
+import { sendCloudOrganizationNotification } from '@enterpriseglue/shared/services/email/cloud-organization.js';
+import { CloudOrganizationNotificationSchema } from '@enterpriseglue/shared/schemas/platform-admin/cloud-organization-notification.js';
 import { tenantReleaseWorkAssignmentService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseWorkAssignmentService.js';
 import { tenantReleaseActivationService } from '@enterpriseglue/shared/services/platform-admin/TenantReleaseActivationService.js';
 import { TenantReleaseActivationRequestSchema, SignedTenantReleaseActivationReceiptSchema } from '@enterpriseglue/shared/schemas/platform-admin/tenant-release-activation.js';
@@ -156,6 +158,16 @@ function requireTenantReleaseController(req: { headers: Record<string, unknown> 
 router.get('/api/workloads/tenancy/capabilities', workloadScope, (_req, res) => {
   res.json(tenancyCapabilities(true));
 });
+
+router.post('/api/workloads/cloud/organization-notifications', requireTenantReleaseController,
+  validateBody(CloudOrganizationNotificationSchema), asyncHandler(async (req, res) => {
+    if (Object.keys(req.query).length || !config.tenantPlacementReleaseId ||
+        req.get('x-enterpriseglue-release-id') !== config.tenantPlacementReleaseId) {
+      throw Errors.validation('Notification requires the exact serving Cloud release');
+    }
+    await sendCloudOrganizationNotification(req.body);
+    res.status(204).end();
+  }));
 
 router.post('/api/workloads/tenants', workloadScope, validateBody(TenantWorkloadCreateRequestSchema), asyncHandler(async (req, res) => {
   const idempotencyKey = requiredHeader(req, 'idempotency-key');
@@ -481,9 +493,10 @@ router.post('/api/platform/cloud-identity', requireCloudAccountOrTenantAuth, val
   if (action === 'platform.tenants.self_create' && !config.cloudAccountIdentityEnabled) {
     throw Errors.notFound('Cloud account onboarding');
   }
+  const requester = req.body.includeRequester === true ? await platformCloudIdentityService.organizationRequester(req.user!) : undefined;
   res.setHeader('cache-control', 'no-store');
   res.json(PlatformCloudIdentityResponseSchema.parse({
-    ...platformCloudIdentityService.issue({ userId: req.user!.userId, shardId, action }),
+    ...platformCloudIdentityService.issue({ userId: req.user!.userId, shardId, action, ...(requester ? { requester } : {}) }),
     action,
   }));
 }));
