@@ -13,8 +13,9 @@ import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { DataSource } from 'typeorm';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import { createApp } from '@enterpriseglue/backend-host/app.js';
+import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 import { MockOidcProvider } from '../identity-mocks/index.js';
 
 // Only connection selection is injected. Repositories, transactions, TypeORM
@@ -104,7 +105,7 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await owner.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${runtimeName}`);
     runtime=build(runtimeName);await runtime.initialize();assertPostgresContextBoundary(runtime);database.current=runtime;
     vi.stubGlobal('fetch',protocol.fetch.bind(protocol));
-    app=express();app.use(express.json());app.use(express.urlencoded({extended:false}));app.use(cookieParser());
+    app = createApp({ registerRoutes: false, includeRateLimiting: false, includeDocs: false, registerFinalMiddleware: false });
     app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);app.use(cloudEmailRoutes);
     app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
     app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,
@@ -140,6 +141,10 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     protocol.setTokenClaims({sub:subject,email,email_verified:true,nonce:parsed.nonce});
     const callback=await browser.get('/api/auth/identity/callback').query({state,code:'verified-code'});
     return {browser,callback};
+  }
+  async function browserPost(browser: ReturnType<typeof request.agent>, path: string, body: object = {}) {
+    const csrf = await browser.get('/api/csrf-token').expect(200);
+    return browser.post(path).set(XSRF_HEADER_NAME, csrf.body.csrfToken).send(body);
   }
   it('preserves and repairs global administrator authority under forced RLS without promoting tenant administrators', async () => {
     const administrator = await userService.createPendingUser({ email: 'ownership-admin@example.test', platformRole: 'admin', createdByUserId: 'fixture-operator' });
@@ -526,9 +531,9 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await runtime.getRepository(Tenant).insert({...target,id:'tenant-session-b',slug:'tenant-session-b'});
     await runWithTenantDatabaseContext({tenantId:target.id,tenantSlug:target.slug},()=>tenantService.addMember(target.id,user.id,'member','fixture-operator'));
     vi.mocked(logger.error).mockClear();vi.mocked(logger.warn).mockClear();
-    const refused=await browser.post('/api/auth/switch-tenant').send({tenantSlug:'tenant-session-b'});
+    const refused=await browserPost(browser, '/api/auth/switch-tenant', {tenantSlug:'tenant-session-b'});
     expect(refused.status,JSON.stringify(refused.body)).toBe(403);
-    const switched=await browser.post('/api/auth/switch-tenant').send({tenantSlug:target.slug});
+    const switched=await browserPost(browser, '/api/auth/switch-tenant', {tenantSlug:target.slug});
     expect(switched.status,JSON.stringify(switched.body)).toBe(200);
     expect(switched.body).toEqual({tenantId:target.id,tenantSlug:target.slug});
     const probe=await browser.get('/tenant-permissions-probe');
@@ -558,7 +563,8 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(sent.status, sent.body.error).toBe(202);
     const url = new URL(vi.mocked(sendVerificationEmail).mock.lastCall![0].verificationUrl);
     expect((await browser.get(`${url.pathname}${url.search}`)).status).toBe(302);
-    const signedIn = await browser.post('/api/auth/cloud-signup/email/complete').send({});
+    expect((await browser.post('/api/auth/cloud-signup/email/complete').send({})).status).toBe(403);
+    const signedIn = await browserPost(browser, '/api/auth/cloud-signup/email/complete');
     expect(signedIn.status, signedIn.body.error).toBe(201);
     const probe = await browser.get('/cloud-probe');
     expect(probe.status, probe.body.error).toBe(200);
@@ -566,10 +572,10 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(probe.body.mfaVerified).toBeUndefined();
     expect((await browser.get('/tenant-only-probe')).status).toBe(401);
     expect((await browser.post('/api/auth/refresh').send({})).status).toBe(200);
-    expect((await browser.post('/api/auth/cloud-passkey/register/options').send({})).status).toBe(200);
-    const enrolled = await browser.post('/api/auth/cloud-passkey/register/complete').send(mockCloudPasskeyCredential);
+    expect((await browserPost(browser, '/api/auth/cloud-passkey/register/options')).status).toBe(200);
+    const enrolled = await browserPost(browser, '/api/auth/cloud-passkey/register/complete', mockCloudPasskeyCredential);
     expect(enrolled.status, enrolled.body.error).toBe(201);
-    expect((await browser.post('/api/auth/cloud-passkey/register/complete').send(mockCloudPasskeyCredential)).status).toBe(401);
+    expect((await browserPost(browser, '/api/auth/cloud-passkey/register/complete', mockCloudPasskeyCredential)).status).toBe(401);
     expect(await runtime.getRepository(CloudPasskey).countBy({ userId: probe.body.userId })).toBe(1);
     await runtime.transaction(manager => authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, probe.body.userId));
     expect((await browser.get('/cloud-probe')).status).toBe(401);

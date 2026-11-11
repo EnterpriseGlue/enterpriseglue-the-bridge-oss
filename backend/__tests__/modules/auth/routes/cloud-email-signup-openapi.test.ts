@@ -37,6 +37,6 @@ describe('Cloud email signup route contract', () => {
     expect(request).toMatchObject({ required: ['email'], additionalProperties: false, properties: {
       turnstileToken: { type: 'string', minLength: 1, maxLength: 2048 },
     } });
-    expect(paths[`${prefix}/complete`].post.responses).toMatchObject({ '200': {}, '201': {}, '401': {}, '404': {} });
+    expect(paths[`${prefix}/complete`].post.responses).toMatchObject({ '200': {}, '201': {}, '401': {}, '403': {}, '404': {} });
   });
 });

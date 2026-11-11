@@ -4291,6 +4291,7 @@ registry.registerPath({
     200: { description: 'Consumes the proof and signs in the existing Cloud email-link account', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } },
     201: { description: 'Consumes the proof and creates a signed-in Cloud email-link account', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } },
     401: { description: 'Missing, ineligible, expired or consumed email proof' },
+    403: { description: 'Missing or invalid browser CSRF token' },
     404: { description: 'Managed Cloud account identity is disabled' },
   },
 });
