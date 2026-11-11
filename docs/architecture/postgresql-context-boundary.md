@@ -89,9 +89,12 @@ than reported as a successful empty scan. Provider-only bootstrap rejects an
 unexpected global identity/runtime continuation instead of silently treating a
 hidden queue as drained. Existing single-mode queue behavior is unchanged.
 
-Git provider defaults belong to the existing active canonical `tenant-default`,
-consistent with the tenant backfill migration; startup does not invent a new
-tenant or create unrestricted global defaults.
+The legacy pooled startup seeds Git provider defaults for the existing active
+canonical `tenant-default`, consistent with the tenant backfill migration.
+Cloud tenant creation seeds a single active GitHub provider in the same
+transaction and tenant context as the new tenant's login policy. A failed
+creation rolls back that provider, and ordinary RLS isolates the provider from
+other tenants and unscoped queries.
 
 Shared-engine readiness is a successful reconciliation snapshot, not perpetual
 authority. Publication locks and rechecks the engine, tenant lifecycle and
