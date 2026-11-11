@@ -22,7 +22,7 @@
   "configuration": [
     "Set EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY and EG_CLOUD_EMAIL_TURNSTILE_SECRET together to enable server verification.",
     "Set EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED=true on the matching frontend image.",
-    "Set cloudEmailSignupProtection.enabled, siteKey and secretRef in split-runtime Helm deployments."
+    "Set cloudEmailSignupProtection.enabled, siteKey and the dedicated secret reference in split-runtime Helm deployments."
   ],
   "api": {
     "compatibility": "additive",
