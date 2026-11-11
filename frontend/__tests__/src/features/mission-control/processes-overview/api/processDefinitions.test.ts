@@ -97,6 +97,18 @@ describe('processDefinitions api', () => {
       );
       expect(result).toEqual(mockCounts);
     });
+
+    it('encodes the definition and optional process start-time bounds', async () => {
+      const { apiClient } = await import('@src/shared/api/client');
+      const startedAfter = '2026-11-09T13:50:00.000+04:00';
+      await fetchActivityCountsByState('order:1:id', { engineId: 'engine-1', startedAfter });
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/mission-control-api/process-definitions/order%3A1%3Aid/activity-counts-by-state?engineId=engine-1&startedAfter=2026-11-09T13%3A50%3A00.000%2B04%3A00',
+        undefined,
+        { credentials: 'include' }
+      );
+    });
   });
 
   describe('listProcessInstances', () => {

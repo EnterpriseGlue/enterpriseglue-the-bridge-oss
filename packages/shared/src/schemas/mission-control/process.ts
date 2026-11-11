@@ -100,6 +100,12 @@ export const ActivityCountsByStateSchema = z.object({
   completed: ActivityCountByActivityIdSchema,
 });
 
+export const ActivityCountsByStateQueryParamsSchema = z.object({
+  engineId: z.string().optional(),
+  startedAfter: z.iso.datetime({ offset: true }).describe('Inclusive lower bound on the process instance start time.').optional(),
+  startedBefore: z.iso.datetime({ offset: true }).describe('Inclusive upper bound on the process instance start time.').optional(),
+});
+
 // Runtime variable values can carry engine-specific serialization metadata.
 // Keep the common display and scope fields explicit without dropping adapter
 // extensions after PII redaction.
@@ -276,6 +282,7 @@ export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
 export type ProcessInstanceDetail = z.infer<typeof ProcessInstanceDetailSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
+export type ActivityCountsByStateQueryParams = z.infer<typeof ActivityCountsByStateQueryParamsSchema>;
 export type PreviewCountRequest = z.infer<typeof PreviewCountRequest>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
 export type ProcessInstanceCollectionQueryParams = z.infer<typeof ProcessInstanceCollectionQueryParamsSchema>;

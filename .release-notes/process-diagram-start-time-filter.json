@@ -1,0 +1,72 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "process-diagram-start-time-filter",
+  "type": "fix",
+  "scope": "mission control",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "developers"
+  ],
+  "summary": "Apply the process start-time range to Mission Control BPMN activity badges.",
+  "userImpact": [
+    "The BPMN diagram counts only instances whose process start time falls within the range selected for the table."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The activity counts by state endpoint accepts optional startedAfter and startedBefore timestamps."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Both URL forms enforce the existing process-definition read permission on the selected engine and definition."
+  ],
+  "documentation": [
+    "OpenAPI documents both optional process start-time bounds."
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "maintainers",
+    "pages": [],
+    "reason": "The existing start-time filter applies to the diagram without changing the controls or steps used to set it."
+  },
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous frontend and backend images together."
+  ],
+  "validation": [
+    "Regression coverage exercises start-time filtering for the process table and diagram badges.",
+    "A local Chromium run against Operaton verifies filtered active and completed badges and restores the full counts when the filter is cleared."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.12",
+      "newVersion": "0.23.13",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.14",
+      "newVersion": "0.20.15",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.11",
+      "newVersion": "0.28.12",
+      "impact": "patch"
+    }
+  ]
+}

@@ -132,9 +132,38 @@ describe('useProcessesData', () => {
     await waitFor(() => expect(listProcessInstances).toHaveBeenCalledWith(expect.objectContaining({ processDefinitionId: 'target:3:id', activityId: 'Task_target', engineId: 'engine-1' })));
     expect(fetchProcessDefinitionXml).toHaveBeenCalledWith('target:3:id', 'engine-1');
     expect(getActiveActivityCounts).toHaveBeenCalledWith('target:3:id', 'engine-1');
-    expect(fetchActivityCountsByState).toHaveBeenCalledWith('target:3:id', 'engine-1');
+    expect(fetchActivityCountsByState).toHaveBeenCalledWith('target:3:id', { engineId: 'engine-1' });
     expect(fetchPreviewCount).toHaveBeenCalledWith(expect.objectContaining({ processDefinitionId: 'target:3:id', engineId: 'engine-1' }));
     expect(vi.mocked(fetchPreviewCount).mock.calls.every(([body]) => body.processDefinitionId === 'target:3:id' && !body.processDefinitionKey)).toBe(true);
     expect(setSelectedVersion).not.toHaveBeenCalled();
+  });
+
+  it('reloads badge counts with the same start-time bounds as the instance table', async () => {
+    vi.mocked(listProcessDefinitions).mockResolvedValue([
+      { id: 'order-process:1:id', key: 'order-process', version: 1 },
+    ]);
+    const options = { selectedVersion: 1, dateFrom: '', timeFrom: '', dateTo: '', timeTo: '' };
+    const { result, rerender } = renderProcessesData(options);
+    await waitFor(() => expect(result.current.countsByStateQ.isSuccess).toBe(true));
+    expect(fetchActivityCountsByState).toHaveBeenLastCalledWith('order-process:1:id', { engineId: 'engine-1' });
+
+    Object.assign(options, { dateFrom: '2026-11-09', timeFrom: '13:50', dateTo: '2026-11-09', timeTo: '14:02' });
+    rerender();
+    const bounds = {
+      startedAfter: new Date(2026, 10, 9, 13, 50).toISOString(),
+      startedBefore: new Date(2026, 10, 9, 14, 2, 59, 999).toISOString(),
+    };
+    await waitFor(() => {
+      expect(listProcessInstances).toHaveBeenLastCalledWith(expect.objectContaining(bounds));
+      expect(fetchActivityCountsByState).toHaveBeenLastCalledWith('order-process:1:id', { engineId: 'engine-1', ...bounds });
+    });
+
+    options.dateFrom = '';
+    options.dateTo = '';
+    rerender();
+    await waitFor(() => {
+      expect(listProcessInstances).toHaveBeenLastCalledWith(expect.objectContaining({ startedAfter: undefined, startedBefore: undefined }));
+      expect(fetchActivityCountsByState).toHaveBeenLastCalledWith('order-process:1:id', { engineId: 'engine-1' });
+    });
   });
 });

@@ -15,7 +15,28 @@ import {
   getHistoricDecisionInstances,
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import type { ActivityCountsByState, ActivityCountsByStateQueryParams } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { HistoricActivityInstance } from '@enterpriseglue/shared/types/bpmn-engine-api.js'
 import { readLiveProcessVariables } from './runtime-process-variables.js'
+
+type ProcessStartTimeFilter = Pick<ActivityCountsByStateQueryParams, 'startedAfter' | 'startedBefore'>
+type ProcessStartTimeRange = { after: number; before: number }
+
+function getProcessStartTimeRange({ startedAfter, startedBefore }: ProcessStartTimeFilter): ProcessStartTimeRange | undefined {
+  const after = Date.parse(startedAfter ?? '')
+  const before = Date.parse(startedBefore ?? '')
+  if (isNaN(after) && isNaN(before)) return
+  return { after: isNaN(after) ? -Infinity : after, before: isNaN(before) ? Infinity : before }
+}
+
+function startsWithinRange(startTime: string | null | undefined, { after, before }: ProcessStartTimeRange) {
+  const timestamp = Date.parse(startTime ?? '')
+  return timestamp >= after && timestamp <= before
+}
+
+function isCanceledProcessInstance({ deleteReason, state }: { deleteReason?: string | null; state?: string | null }) {
+  return !!deleteReason || state === 'EXTERNALLY_TERMINATED' || state === 'INTERNALLY_TERMINATED'
+}
 
 export async function listProcessDefinitions(engineId: string, params: {
   key?: string
@@ -81,7 +102,105 @@ export async function getActiveActivityCounts(engineId: string, definitionId: st
   return counts
 }
 
-export async function getActivityCountsByState(engineId: string, definitionId: string) {
+async function getActivityCountsInStartTimeRange(
+  engineId: string,
+  definitionId: string,
+  range: ProcessStartTimeRange,
+): Promise<ActivityCountsByState> {
+  type HistoricProcess = {
+    id: string
+    processDefinitionId: string
+    startTime?: string | null
+    endTime?: string | null
+    state?: string
+    deleteReason?: string | null
+  }
+  const result: ActivityCountsByState = {
+    active: Object.create(null),
+    incidents: Object.create(null),
+    suspended: Object.create(null),
+    canceled: Object.create(null),
+    completed: Object.create(null),
+  }
+  const toEngineDate = (time: number) => Number.isFinite(time)
+    ? new Date(time).toISOString().replace(/Z$/, '+0000')
+    : undefined
+  const startedAfter = toEngineDate(range.after)
+  const processes = await camundaGet<HistoricProcess[]>(engineId, '/history/process-instance', {
+    processDefinitionId: definitionId,
+    startedAfter,
+    startedBefore: toEngineDate(range.before),
+  })
+  const matching = new Map(processes
+    .filter(p => p.processDefinitionId === definitionId && startsWithinRange(p.startTime, range))
+    .map(p => [p.id, p]))
+  if (matching.size === 0) return result
+
+  // A matching process can reach a node after the upper bound. The activity
+  // queries use only the lower bound to reduce the amount of history read.
+  const activityQuery = { processDefinitionId: definitionId, startedAfter }
+  const [running, suspended, incidents, canceled, completed] = await Promise.all([
+    camundaGet<HistoricActivityInstance[]>(engineId, '/history/activity-instance', { ...activityQuery, unfinished: true }),
+    camundaGet<{ id: string }[]>(engineId, '/process-instance', { processDefinitionId: definitionId, suspended: true }),
+    camundaGet<{ processInstanceId: string; activityId: string }[]>(engineId, '/incident', { processDefinitionId: definitionId }),
+    camundaGet<HistoricActivityInstance[]>(engineId, '/history/activity-instance', { ...activityQuery, canceled: true }),
+    camundaGet<HistoricActivityInstance[]>(engineId, '/history/activity-instance', { ...activityQuery, finished: true }),
+  ])
+
+  function increment(state: keyof ActivityCountsByState, activityId: string) {
+    const counts = result[state]
+    counts[activityId] = (counts[activityId] ?? 0) + 1
+  }
+
+  const suspendedIds = new Set(suspended.map(p => p.id))
+  const incidentCounts = new Map<string, number>()
+  for (const { processInstanceId, activityId } of incidents) {
+    const process = matching.get(processInstanceId)
+    if (!process || process.endTime || !activityId) continue
+    const key = JSON.stringify([processInstanceId, activityId])
+    incidentCounts.set(key, (incidentCounts.get(key) ?? 0) + 1)
+    increment('incidents', activityId)
+  }
+  for (const { processInstanceId, activityId } of running) {
+    const process = matching.get(processInstanceId)
+    if (!process || process.endTime || !activityId) continue
+    if (suspendedIds.has(processInstanceId)) {
+      increment('suspended', activityId)
+      continue
+    }
+    const key = JSON.stringify([processInstanceId, activityId])
+    const incidentsAtActivity = incidentCounts.get(key) ?? 0
+    if (incidentsAtActivity > 0) {
+      incidentCounts.set(key, incidentsAtActivity - 1)
+      continue
+    }
+    increment('active', activityId)
+  }
+
+  const canceledAtActivity = new Set<string>()
+  for (const { processInstanceId, activityId } of canceled) {
+    const process = matching.get(processInstanceId)
+    if (!process?.endTime || !isCanceledProcessInstance(process) || !activityId) continue
+    const key = JSON.stringify([processInstanceId, activityId])
+    if (canceledAtActivity.has(key)) continue
+    canceledAtActivity.add(key)
+    increment('canceled', activityId)
+  }
+  for (const { processInstanceId, activityId, activityType, endTime } of completed) {
+    const process = matching.get(processInstanceId)
+    if (!process?.endTime || !endTime || isCanceledProcessInstance(process) || !activityId) continue
+    if (activityType?.toLowerCase().includes('endevent') &&
+      Math.abs(Date.parse(endTime) - Date.parse(process.endTime)) <= 1000) {
+      increment('completed', activityId)
+    }
+  }
+  return result
+}
+
+export async function getActivityCountsByState(engineId: string, definitionId: string, filter: ProcessStartTimeFilter = {}) {
+  const range = getProcessStartTimeRange(filter)
+  if (range) return getActivityCountsInStartTimeRange(engineId, definitionId, range)
+
   const [stats, suspendedInstances, canceledItems, completedItems] = await Promise.all([
     camundaGet<any[]>(engineId, `/process-definition/${encodeURIComponent(definitionId)}/statistics`, { incidents: true }),
     camundaGet<any[]>(engineId, `/process-instance`, { processDefinitionId: definitionId, suspended: true }),
@@ -411,7 +530,7 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
 
     const hist = await camundaGet<any[]>(engineId, '/history/process-instance', histParams)
     for (const h of hist) {
-      const isCanceled = !!h.deleteReason || h.state === 'EXTERNALLY_TERMINATED' || h.state === 'INTERNALLY_TERMINATED'
+      const isCanceled = isCanceledProcessInstance(h)
 
       if (activityId) {
         if (isCanceled) {
@@ -457,19 +576,8 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     return tB - tA
   })
 
-  const afterTs = startedAfter ? new Date(startedAfter).getTime() : NaN
-  const beforeTs = startedBefore ? new Date(startedBefore).getTime() : NaN
-  if (!isNaN(afterTs) || !isNaN(beforeTs)) {
-    out = out.filter((o: any) => {
-      const t = o.startTime ? new Date(o.startTime).getTime() : NaN
-      if (isNaN(t)) return false
-      if (!isNaN(afterTs) && t < afterTs) return false
-      if (!isNaN(beforeTs) && t > beforeTs) return false
-      return true
-    })
-  }
-
-  return out
+  const range = getProcessStartTimeRange({ startedAfter, startedBefore })
+  return range ? out.filter(o => startsWithinRange(o.startTime, range)) : out
 }
 
 export async function getProcessInstanceById(engineId: string, id: string) {

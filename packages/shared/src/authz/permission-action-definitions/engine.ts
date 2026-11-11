@@ -1173,6 +1173,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
         },
         {
           method: 'GET',
+          route: '/t/{tenantSlug}/mission-control-api/process-definitions/{id}/activity-counts-by-state',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engineId is resolved from query string by action middleware'],
+        },
+        {
+          method: 'GET',
           route: '/mission-control-api/process-definitions/key/{key}/statistics',
           resourceResolver: 'engine.byId',
           additionalChecks: ['engineId is resolved from query string by action middleware'],

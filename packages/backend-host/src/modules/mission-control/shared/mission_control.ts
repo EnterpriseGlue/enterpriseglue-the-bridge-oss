@@ -43,6 +43,7 @@ import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-d
 import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  ActivityCountsByStateQueryParamsSchema,
   ActivityInstanceListSchema,
   ProcessDefinitionSchema,
   ProcessInstanceIncidentListSchema,
@@ -179,13 +180,12 @@ r.get('/mission-control-api/process-definitions/:id/active-activity-counts', req
   }
 }))
 
-// Activity counts by state for a specific process definition
-// Returns: { active: { actId: count }, incidents: { actId: count }, suspended: { actId: count }, canceled: { actId: count }, completed: { actId: count } }
-r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), asyncHandler(async (req: Request, res: Response) => {
+// Activity counts by state for a specific process definition and optional start-time range
+r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition', definitionPath: 'process-definition' }), validateQuery(ActivityCountsByStateQueryParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
-    const result = await getActivityCountsByState(engineId, definitionId)
+    const result = await getActivityCountsByState(engineId, definitionId, req.query)
     res.json(ActivityCountsByStateSchema.parse(result))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity counts by state')
