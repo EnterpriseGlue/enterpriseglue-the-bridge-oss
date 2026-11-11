@@ -47,8 +47,8 @@ shift 2
 [[ -f "$ENV_FILE" ]] || { echo "Missing deployment environment file: $ENV_FILE" >&2; exit 1; }
 
 if [[ -n "${EG_CONFIG_BUNDLE_HOST_PATH:-}" ]]; then
-  if [[ "$ACTION" == "up" && ! -f "$EG_CONFIG_BUNDLE_HOST_PATH" ]]; then
-    echo "EG_CONFIG_BUNDLE_HOST_PATH must reference an existing JSON or ZIP bundle: $EG_CONFIG_BUNDLE_HOST_PATH" >&2
+  if [[ "$ACTION" == "up" && ! -f "$EG_CONFIG_BUNDLE_HOST_PATH" && ! -d "$EG_CONFIG_BUNDLE_HOST_PATH" ]]; then
+    echo "EG_CONFIG_BUNDLE_HOST_PATH must reference an existing JSON or ZIP bundle or a bundle directory: $EG_CONFIG_BUNDLE_HOST_PATH" >&2
     exit 1
   fi
   COMPOSE_FILES+=( -f "$COMPOSE_DIR/docker-compose.config-bundle.yml" )

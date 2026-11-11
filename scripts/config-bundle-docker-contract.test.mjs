@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -78,15 +78,17 @@ test('the local fail-closed rehearsal exercises only sanitized bootstrap failure
   assert.match(rehearsal, /docker logs "\$container_id" 2>&1 \| grep -Fq "\$expected_message"/);
 });
 
-test('the Compose harness preserves bundle paths with spaces and rejects a missing bundle before startup', () => {
+test('the Compose harness accepts files and directories with spaces and rejects a missing bundle before startup', () => {
   const directory = mkdtempSync(join(tmpdir(), 'enterpriseglue-compose-bundle-'));
   const envFile = join(directory, 'production.env');
   const bundlePath = join(directory, 'reviewed bundle.json');
+  const bundleDirectory = join(directory, 'reviewed bundles');
   const missingBundlePath = join(directory, 'missing bundle.json');
   const fakeDocker = join(directory, 'docker');
   const invocationLog = join(directory, 'docker-invocation.txt');
   writeFileSync(envFile, 'DUMMY=true\n', 'utf8');
   writeFileSync(bundlePath, '{"bundle":"test"}\n', 'utf8');
+  mkdirSync(bundleDirectory);
   writeFileSync(fakeDocker, `#!/bin/sh
 printf 'bundle=%s\\n' "$EG_CONFIG_BUNDLE_HOST_PATH" > "$DOCKER_INVOCATION_LOG"
 printf 'args=%s\\n' "$*" >> "$DOCKER_INVOCATION_LOG"
@@ -110,6 +112,13 @@ printf 'args=%s\\n' "$*" >> "$DOCKER_INVOCATION_LOG"
     assert.match(invocation, new RegExp(`bundle=${bundlePath.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}`));
     assert.match(invocation, /docker-compose\.config-bundle\.yml/);
     assert.match(invocation, / config/);
+
+    const up = spawnSync('bash', [script, 'source', 'up'], {
+      encoding: 'utf8',
+      env: { ...baseEnv, EG_CONFIG_BUNDLE_HOST_PATH: bundleDirectory },
+    });
+    assert.equal(up.status, 0, up.stderr);
+    assert.ok(readFileSync(invocationLog, 'utf8').includes(`bundle=${bundleDirectory}\n`));
 
     const missing = spawnSync('bash', [script, 'source', 'up'], {
       encoding: 'utf8',

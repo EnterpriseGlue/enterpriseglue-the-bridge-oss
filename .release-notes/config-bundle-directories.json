@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "id": "config-bundle-directories",
+  "type": "feature",
+  "scope": "config-bundles",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Process a directory of configuration bundles in filename order at startup or through the live CLI and CI workflow, and report every bundle even if one fails.",
+  "userImpact": [
+    "Operators can use one directory for initial configuration and updates to a running instance."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "EG_CONFIG_BUNDLE_PATH accepts a directory of JSON envelopes as well as existing JSON and ZIP files.",
+    "When supplied for a directory, EG_CONFIG_EXPECTED_SHA256 covers ordered filenames and the SHA-256 of each file's exact bytes."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Live apply uses the existing authenticated preview and apply API. Public startup diagnostics retain their sanitized aggregate shape."
+  ],
+  "documentation": [
+    "docs/how-to/deploy-authorization-config.md",
+    "docs/reference/configuration.md",
+    "docs/reference/configuration-matrix.md"
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": ["configuration-bundles"]
+  },
+  "knownLimitations": [
+    "Bundles commit individually. An unsuccessful directory run can include successful applies.",
+    "Standalone directory startup and live apply target the default tenant. Existing platform-scoped single-file bootstrap objects require ownership review before switching input modes."
+  ],
+  "rollback": [
+    "Apply the previous reviewed configuration through the existing preview and apply workflow."
+  ],
+  "validation": [
+    "PostgreSQL integration verified that startup and live CLI apply both continue after a failed middle bundle, and that live apply updates the same records created at startup.",
+    "Startup regression tests cover existing single-file JSON and ZIP inputs, validation mode, and directory hash verification."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.23.13",
+      "newVersion": "0.24.0",
+      "impact": "minor"
+    }
+  ]
+}

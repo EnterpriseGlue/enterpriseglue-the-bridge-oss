@@ -60,7 +60,7 @@ EG_CONFIG_EXPECTED_TENANT_SCOPE=platform
 EG_CONFIG_FAIL_CLOSED=true
 ```
 
-Use `validate` first, review `/health` and `/ready`, then change to `apply` only for an approved hash-bound startup apply. The deployment script rejects enabled bootstrap with a missing, relative, or unreadable `EG_CONFIG_BUNDLE_PATH`. Keep file-backed secrets outside the bundle and configure `EG_CONFIG_SECRET_FILE_ROOT` separately.
+Use `validate` first, review `/health` and `/ready`, then change to `apply` for an approved hash-bound startup apply. `EG_CONFIG_BUNDLE_PATH` can also be an absolute path to a directory of JSON envelopes. Keep file-backed secrets outside the bundle and configure `EG_CONFIG_SECRET_FILE_ROOT` separately.
 
 ## Incremental deploy (after first install)
 

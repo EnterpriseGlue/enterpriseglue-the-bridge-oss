@@ -50,10 +50,44 @@ Related guides:
 
 Support two apply paths that use the same validation and apply services:
 
-1. **Bootstrap file (implemented):** optional JSON payload path read by the backend after migrations and catalog seeding. The optional Docker/OpenShift read-only mounts are available.
+1. **Startup bootstrap:** optional JSON or ZIP file, or directory of JSON envelopes, read by the backend after migrations and catalog seeding. Mount the input read-only.
 2. **CI/CD API apply (implemented):** recommended for later updates because preview, approval, apply, export, and run status are explicit deployment stages.
 
 Do not make automatic startup apply the default. Existing standalone installations must still start without a bundle.
+
+### Bundle directories
+
+Set `EG_CONFIG_BUNDLE_PATH=/etc/enterpriseglue/config/bundles` for startup, or run
+`pnpm authz:config apply ./bundles` against a running instance. Both paths
+process top-level `*.json` bundle envelopes in lexical filename order. Use
+numeric prefixes to make ordering explicit, for example `01-platform.json`,
+`10-engine-a.json`, and `20-engine-b.json`. Each file contains the existing
+`bundle` and `files` envelope. Keep an engine and its engine-scoped assignments
+in the same bundle as required by the bundle validator.
+
+On a standalone OSS host, directory startup and live apply both use the
+default tenant's persistence scope. Before moving an already-applied legacy
+single-file bootstrap into a directory, review ownership of its existing
+platform-scoped objects. Switching input modes does not migrate them.
+
+Each apply completes its required reconciliation before the next file is
+attempted. A failure is recorded for that file and processing continues.
+Successful applies stay committed. Startup `validate` mode checks each bundle
+against current platform settings without persisting changes.
+
+For hash-bound directory startup, use the SHA-256 of the UTF-8 JSON string
+produced by `JSON.stringify` on the ordered array of
+`[filename, lowercaseHexSha256OfFileBytes]` pairs. This verifies every filename
+and file's exact bytes before any apply. An unverifiable directory fails
+before writes. The backend checks the approved per-file hash again before
+using each file. Single-file hashes continue to cover that file's exact bytes.
+
+Startup logs report each filename, its bundle key when available, its outcome,
+and an issue code on failure. Health and readiness expose the sanitized
+aggregate result. For live apply, the CLI prints a JSON summary with one
+result per file and exits nonzero if any file failed. Use the apply run ID in
+the report to inspect persisted run history. Live failures are reported by
+the command and CI run.
 
 Engine bundles may import both `./engines.json` and
 `./engine-tenant-mappings.json`. Dedicated entries resolve and persist one
@@ -145,9 +179,9 @@ is never a bundle field or EnterpriseGlue secret reference.
 
 | Variable | Values | Purpose |
 | --- | --- | --- |
-| `EG_CONFIG_BUNDLE_PATH` | Absolute JSON or ZIP file path | Read-only bootstrap bundle location; ZIP archives contain `bundle.json` and declared imported JSON files |
+| `EG_CONFIG_BUNDLE_PATH` | Absolute JSON or ZIP file path, or directory of JSON envelopes | Read-only startup input |
 | `EG_CONFIG_BOOTSTRAP_MODE` | `disabled`, `validate`, `apply` | Startup behavior; default `disabled` |
-| `EG_CONFIG_EXPECTED_SHA256` | SHA-256 or empty | Reject an unexpected mounted bundle |
+| `EG_CONFIG_EXPECTED_SHA256` | SHA-256 or empty | Verify exact file bytes or the ordered directory digest described above |
 | `EG_CONFIG_EXPECTED_TENANT_SCOPE` | `platform` | Required target scope for OSS bootstrap apply; it is a fail-closed assertion, not a native pooled-tenant selector |
 | `EG_CONFIG_FAIL_CLOSED` | `true`, `false` | Keep readiness false when configured bootstrap validation/apply fails; production default `true` |
 | `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT` | `true`, `false` | Require all bundle secret references to be available before configured startup validation or apply; default `false` |
@@ -179,9 +213,9 @@ load process environment
 -> become ready
 ```
 
-`/health` is the liveness/diagnostic endpoint. `/ready` is the readiness endpoint and returns `503` when bootstrap configuration has failed. Production fail-closed mode stops startup before the server listens; non-fail-closed mode preserves `/health` diagnostics while keeping `/ready` false.
+`/health` is the liveness/diagnostic endpoint. `/ready` is the readiness endpoint and returns `503` when bootstrap configuration has failed. If any bundle failed, production fail-closed mode stops startup after the full directory is attempted and before the server listens. Non-fail-closed mode preserves `/health` diagnostics while keeping `/ready` false.
 
-Both JSON endpoints expose only the bounded bootstrap mode/status, full bundle hash for receipt correlation, reconciliation and secret-preflight enums, and a stable issue code with generic operator-safe text. They never return bundle contents, file paths, object keys, provider identifiers, secret references, or raw exceptions. `/metrics` exposes the same state as three dependency-free Prometheus metrics without the hash: `enterpriseglue_config_bootstrap_ready`, `enterpriseglue_config_bootstrap_applied`, and `enterpriseglue_config_bootstrap_info`. Startup logs use the identical sanitized status object.
+Both JSON endpoints expose only the bounded bootstrap mode/status, bundle or verified directory hash, reconciliation and secret-preflight enums, and a stable issue code with generic operator-safe text. They never return bundle contents, file paths, object keys, provider identifiers, secret references, or raw exceptions. `/metrics` exposes the same state as three dependency-free Prometheus metrics without the hash: `enterpriseglue_config_bootstrap_ready`, `enterpriseglue_config_bootstrap_applied`, and `enterpriseglue_config_bootstrap_info`.
 
 When bootstrap mode is `apply`, the persisted configuration apply-run receipt gains a `bootstrap` object after required startup reconciliation finishes or fails. This keeps the deployment receipt correlated to the canonical hash while preserving the same sanitized status contract; the Configuration Bundles UI displays that startup outcome in recent runs and run details.
 
@@ -272,12 +306,19 @@ schema validate
 -> archive receipt and sanitized diff
 ```
 
-Machine access uses a dedicated API client with the `config:bundle:manage` scope and a scoped role assignment that grants `platform:authz:roles:manage`. Both checks are required. It must not use a human Platform Admin token; issue and rotate the reveal-once machine token through the deployment secret store.
+Machine access uses a dedicated API client with the `config:bundle:manage`
+scope and a platform-scoped role granting the required bundle permissions.
+Issue and rotate the reveal-once machine token through the deployment secret
+store.
 
 ### Create A Least-Privilege Configuration Client
 
 1. In **Platform Settings > Access Control > API clients**, create an API client with only **Configuration bundles** selected.
-2. In **Role Library**, create a platform-scoped custom role containing only `platform:authz:roles:manage` unless a broader reviewed configuration role already exists.
+2. In **Role Library**, create a platform-scoped custom role with
+   `platform:config-bundles:preview`, `platform:config-bundles:apply`, and
+   `platform:config-bundles:view` for preview, apply, and reconciliation
+   status respectively. Add `platform:config-bundles:export` if the client
+   also needs to export bundles.
 3. In **Assignments**, assign that role to the API client at platform scope.
 4. Store the reveal-once token as the target GitHub Environment's `ENTERPRISEGLUE_CONFIG_TOKEN` secret. Record its prefix, owner, target environment, and rotation date outside the bundle.
 5. Revoke or rotate the token immediately after a suspected leak. A client without the scope, without the RBAC role assignment, or after revocation cannot preview, apply, export, or read bundle history.
@@ -291,8 +332,8 @@ export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"
 export ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"
 # Set a stable key for one CI run. Reusing it with different bundle input is rejected.
 export ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY="release-2026-07-13-001"
-# Native pooled OSS bundles remain platform/default-scoped in this release.
-export ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="platform"
+# The live OSS configuration API targets the default tenant.
+export ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="tenant-default"
 # Optional: none skips stored snapshots, preview reports bounded membership
 # changes without replaying snapshots, and apply performs the bounded replay.
 export ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE="apply"
@@ -314,6 +355,9 @@ pnpm authz:config preview ./enterpriseglue-config.json
 # Repeats preview and applies using the canonical hash returned by that exact
 # preview. Do not modify the file between preview approval and this command.
 pnpm authz:config apply ./enterpriseglue-config.json
+
+# Apply every bundle in a directory to the running backend.
+pnpm authz:config apply ./bundles
 
 # Wait for any durable stored-identity replay continuation created by an apply.
 # Default timeout is five minutes; both values are milliseconds.
@@ -445,15 +489,20 @@ and revocation evidence from that environment.
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
-- `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for an API client with `config:bundle:manage` and an RBAC assignment granting `platform:authz:roles:manage`;
+- `ENTERPRISEGLUE_CONFIG_TOKEN` as an Environment secret for the configuration API client described above;
 - `ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE` as an Environment variable
-  (`platform` for OSS; this assertion does not select a native pooled tenant);
+  (`tenant-default` for the live OSS API; startup uses `platform`);
 - `identity_reconciliation_mode` is selected on workflow dispatch: `apply` is backward-compatible default behavior, `preview` records bounded stored-snapshot impact without replaying snapshots, and `none` skips that replay;
 - required reviewers for environments that permit `apply`.
 
 When a bounded API `apply` replay is truncated, EnterpriseGlue records one durable continuation task per affected provider. Enable `CONFIG_BUNDLE_IDENTITY_REPLAY_INTERVAL_MS` on the backend to continue those pages. Startup bundle applies instead drain only the new apply run before readiness, within a 100-page/500-identity-per-page budget. The worker leases each task, cancels stale queued work when a newer bundle supersedes the same provider, and retries transient failures with capped exponential backoff. Inspect continuation state from the apply-run details in Platform Settings or `GET /api/authz/config-bundles/runs/{id}/identity-replay-tasks`.
 
-Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential. Each apply includes the GitHub repository, immutable revision, workflow name, and run id in the persisted audit event alongside the authenticated API-client identity; these are bounded provenance fields, never secrets.
+For live bundles that queue engine or runtime-resource materialization, enable
+`CONFIG_BUNDLE_RUNTIME_RECONCILIATION_INTERVAL_MS` on the backend worker.
+The CLI waits up to `ENTERPRISEGLUE_CONFIG_RECONCILIATION_TIMEOUT_MS` per
+bundle for its queued work before reporting the result.
+
+Set `bundle_path` to a tracked JSON file or directory. Dispatch `preview` against an immutable reviewed commit SHA, inspect the uploaded JSON report, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation, serializes runs per environment, and uploads the per-bundle report even if an apply fails. Directory apply polls both identity replay and runtime reconciliation when they are queued. Each apply includes the GitHub repository, immutable revision, workflow name, and run ID in the persisted audit event alongside the authenticated API-client identity.
 
 The corresponding authenticated routes are:
 

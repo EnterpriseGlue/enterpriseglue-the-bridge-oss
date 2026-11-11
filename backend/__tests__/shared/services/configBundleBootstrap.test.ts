@@ -13,6 +13,9 @@ const config = vi.hoisted(() => ({
   tenancyMode: 'single' as 'single' | 'pooled',
 }));
 const open = vi.hoisted(() => vi.fn());
+const statPath = vi.hoisted(() => vi.fn());
+const readdir = vi.hoisted(() => vi.fn());
+const realpath = vi.hoisted(() => vi.fn());
 const stat = vi.hoisted(() => vi.fn());
 const readFile = vi.hoisted(() => vi.fn());
 const close = vi.hoisted(() => vi.fn());
@@ -31,7 +34,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({ getRepository: () => ({ findOne: findApplyRun, update: updateApplyRun }) }),
 }));
 vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({ logger: bootstrapLogger }));
-vi.mock('node:fs/promises', () => ({ open }));
+vi.mock('node:fs/promises', () => ({ open, readdir, realpath, stat: statPath }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js', () => ({
   configBundlePreviewService: { preview },
 }));
@@ -53,6 +56,20 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeRecon
 
 import { getConfigBootstrapMetrics, getConfigBootstrapStatus, runConfigBundleBootstrap } from '../../../../packages/backend-host/src/services/configBundleBootstrap.js';
 
+function mountDirectory(files: Record<string, Buffer>): void {
+  config.configBundlePath = '/etc/enterpriseglue/config/bundles';
+  statPath.mockResolvedValue({ isDirectory: () => true });
+  realpath.mockImplementation(async (path) => path);
+  readdir.mockResolvedValue(Object.keys(files).map(name => ({ name, isFile: () => true })));
+  open.mockImplementation(async (path: string) => {
+    const source = files[path.split('/').at(-1)!];
+    return { stat, readFile: async () => source, close };
+  });
+}
+
+const bundleBytes = (key: string) => Buffer.from(JSON.stringify({ bundle: { metadata: { key } }, files: {} }));
+const sha256 = (source: Buffer | string) => createHash('sha256').update(source).digest('hex');
+
 describe('configBundleBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,6 +80,7 @@ describe('configBundleBootstrap', () => {
     config.configRequireSecretPreflight = false;
     config.configMaxBytes = 1024 * 1024;
     config.tenancyMode = 'single';
+    statPath.mockResolvedValue({ isDirectory: () => false });
     stat.mockResolvedValue({ isFile: () => true, size: 2 });
     readFile.mockResolvedValue('{}');
     close.mockResolvedValue(undefined);
@@ -83,7 +101,86 @@ describe('configBundleBootstrap', () => {
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ mode: 'disabled', status: 'disabled', hash: null });
 
     expect(open).not.toHaveBeenCalled();
+    expect(statPath).not.toHaveBeenCalled();
     expect(preview).not.toHaveBeenCalled();
+  });
+
+  it('continues an ordered directory after a failed apply and sanitizes aggregate diagnostics', async () => {
+    mountDirectory({
+      '20-engine-b.json': bundleBytes('engine.b'),
+      '10-engine-a.json': bundleBytes('engine.a'),
+      '01-platform.json': bundleBytes('platform.base'),
+    });
+    config.configExpectedTenantScope = 'platform';
+    const applied = { applyRunId: 'apply-run-1', reconciliation: { runtimeReconciliation: { status: 'queued' } } };
+    apply.mockResolvedValueOnce(applied)
+      .mockRejectedValueOnce(new Error('private failure details'))
+      .mockImplementationOnce(async () => {
+        expect(drainRuntimeApplyRun).toHaveBeenCalledTimes(1);
+        return applied;
+      });
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle apply failed');
+    expect(apply.mock.calls.map(([input]) => input.bundle.metadata.key)).toEqual(['platform.base', 'engine.a', 'engine.b']);
+    expect(getPlatformSettings).toHaveBeenCalledTimes(3);
+    expect(bootstrapLogger.info.mock.calls.map(([, result]) => result.filename)).toEqual(['01-platform.json', '20-engine-b.json']);
+    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({
+      filename: '10-engine-a.json', bundleKey: 'engine.a', status: 'failed', issueCode: 'apply_failed',
+    }));
+    expect(JSON.stringify(getConfigBootstrapStatus())).not.toMatch(/engine\.a|\.json|private failure details/);
+    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'apply_failed' });
+  });
+
+  it('verifies ordered directory bytes before writes and reports malformed files individually', async () => {
+    const files = {
+      '20-engine-b.json': bundleBytes('engine.b'),
+      '10-engine-a.json': Buffer.from('{ malformed JSON'),
+      '01-platform.json': bundleBytes('platform.base'),
+    };
+    mountDirectory(files);
+    config.configExpectedTenantScope = 'platform';
+    config.configExpectedSha256 = '0'.repeat(64);
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle hash verification failed');
+    expect(apply).not.toHaveBeenCalled();
+
+    config.configExpectedSha256 = sha256(JSON.stringify(Object.entries(files).sort().map(([name, source]) => [name, sha256(source)])));
+    apply.mockResolvedValue({ applyRunId: 'apply-run-1' });
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle could not be read');
+    expect(apply.mock.calls.map(([input]) => input.bundle.metadata.key)).toEqual(['platform.base', 'engine.b']);
+    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({
+      filename: '10-engine-a.json', bundleKey: null, issueCode: 'bundle_read_failed',
+    }));
+    expect(getConfigBootstrapStatus()).toMatchObject({ hash: config.configExpectedSha256, status: 'failed' });
+  });
+
+  it('validates a directory without applying any bundle', async () => {
+    mountDirectory({ '02-second.json': bundleBytes('platform.second'), '01-first.json': bundleBytes('platform.first') });
+    config.configBootstrapMode = 'validate';
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'validated', issueCode: null });
+    expect(bootstrapLogger.info.mock.calls.map(([, result]) => [result.filename, result.status]))
+      .toEqual([['01-first.json', 'validated'], ['02-second.json', 'validated']]);
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('rejects a file changed after directory verification and still applies the remaining approved files', async () => {
+    const files = {
+      '01-platform.json': bundleBytes('platform.base'),
+      '10-engine-a.json': bundleBytes('engine.a'),
+      '20-engine-b.json': bundleBytes('engine.b'),
+    };
+    mountDirectory(files);
+    config.configExpectedTenantScope = 'platform';
+    config.configExpectedSha256 = sha256(JSON.stringify(Object.entries(files).map(([name, source]) => [name, sha256(source)])));
+    apply.mockImplementationOnce(async () => {
+      files['10-engine-a.json'] = bundleBytes('engine.replaced');
+      return { applyRunId: 'apply-run-1' };
+    }).mockResolvedValueOnce({ applyRunId: 'apply-run-1' });
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle hash verification failed');
+    expect(apply.mock.calls.map(([input]) => input.bundle.metadata.key)).toEqual(['platform.base', 'engine.b']);
+    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({
+      filename: '10-engine-a.json', status: 'failed', issueCode: 'hash_mismatch',
+    }));
   });
 
   it('rejects a bootstrap apply without an explicit expected tenant scope', async () => {

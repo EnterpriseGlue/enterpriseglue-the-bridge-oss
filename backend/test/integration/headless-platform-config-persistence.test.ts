@@ -1,8 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import express from 'express';
 
 const migrationTestEnv = (name: string, fallback: string): string =>
   process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
@@ -127,7 +133,8 @@ const files = {
     roles: [{
       key: 'custom.headless-auditor', name: 'Headless auditor',
       description: 'Role assembled entirely from headless configuration.', scope: 'platform',
-      permissions: ['platform:config-bundles:preview', 'platform:custom:headless-audit'], ownershipMode: 'config_locked',
+        permissions: ['platform:config-bundles:apply', 'platform:config-bundles:preview', 'platform:custom:headless-audit'],
+        ownershipMode: 'config_locked',
     }],
   },
   './assignments.json': {
@@ -508,5 +515,79 @@ describe('headless platform configuration persistence', () => {
     expect((await restartedDataSource.getRepository(AdminConfigObjectOwnership).findBy({
       sourceRef: 'config_bundle:platform.headless-e2e', active: true,
     }))).toHaveLength(8);
+  }, 120_000);
+
+  it('persists successful directory bundles after a failure at startup and through the live API', async () => {
+    const { initializeDatabase } = await import('@enterpriseglue/shared/db/run-migrations.js');
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    const { OSS_DEFAULT_TENANT_ID } = await import('@enterpriseglue/shared/authz/tenant-scope.js');
+    const { getDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
+    const { AuthzGroup } = await import('@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js');
+    const { runConfigBundleBootstrap, getConfigBootstrapStatus } = await import('../../../packages/backend-host/src/services/configBundleBootstrap.js');
+    const { default: authzRoutes } = await import('../../../packages/backend-host/src/modules/platform-admin/routes/authz.js');
+    const { errorHandler } = await import('@enterpriseglue/shared/middleware/errorHandler.js');
+
+    const directory = await mkdtemp(join(bundleDirectory, 'round-trip-'));
+    const invalidFile = join(directory, '10-invalid.json');
+    async function writeBundles(stage: string): Promise<void> {
+      for (const [filename, suffix] of [['20-third.json', 'third'], ['01-first.json', 'first']]) {
+        await writeFile(join(directory, filename), JSON.stringify({
+          bundle: {
+            apiVersion: bundle.apiVersion, kind: bundle.kind, tenantKey: bundle.tenantKey,
+            metadata: { key: `platform.directory-${suffix}`, owner: bundle.metadata.owner },
+            mode: 'additive', imports: ['./groups.json'],
+          },
+          files: { './groups.json': { groups: [{ key: `group.directory-${suffix}`, name: `${stage} ${suffix}` }] } },
+        }));
+      }
+      await writeFile(invalidFile, '{ invalid JSON');
+    }
+
+    await initializeDatabase();
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+    const groups = (await getDataSource()).getRepository(AuthzGroup);
+    const previousPath = config.configBundlePath;
+    await writeBundles('Startup');
+    config.configBundlePath = directory;
+    try {
+      await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle could not be read');
+      expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'bundle_read_failed' });
+      await unlink(invalidFile);
+      await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+    } finally {
+      config.configBundlePath = previousPath;
+    }
+    const first = await groups.findOneByOrFail({ key: 'group.directory-first', tenantId: OSS_DEFAULT_TENANT_ID });
+    const third = await groups.findOneByOrFail({ key: 'group.directory-third', tenantId: OSS_DEFAULT_TENANT_ID });
+    expect(first.name).toBe('Startup first');
+    expect(third.name).toBe('Startup third');
+
+    await writeBundles('Live');
+    const app = express();
+    app.use(express.json());
+    app.use(authzRoutes);
+    app.use(errorHandler);
+    const server = app.listen(0, '127.0.0.1');
+    try {
+      await once(server, 'listening');
+      const apiUrl = 'http://127.0.0.1:' + (server.address() as AddressInfo).port;
+      const liveApply = promisify(execFile)(process.execPath, [
+        fileURLToPath(new URL('../../../scripts/config-bundle.mjs', import.meta.url)), 'apply', directory,
+      ], { env: {
+        ...process.env,
+        ENTERPRISEGLUE_API_URL: apiUrl,
+        ENTERPRISEGLUE_API_TOKEN: process.env.HEADLESS_API_CLIENT_TOKEN!,
+        ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE: OSS_DEFAULT_TENANT_ID,
+      }, timeout: 15_000 });
+      await expect(liveApply).rejects.toMatchObject({ code: 2 });
+      const report = await liveApply.catch((error) => JSON.parse(error.stdout));
+      expect(report.bundles.map(({ status }: { status: string }) => status)).toEqual(['applied', 'failed', 'applied']);
+      expect(server.listening).toBe(true);
+      expect(getConfigBootstrapStatus()).toMatchObject({ status: 'applied' });
+      expect(await groups.findBy({ key: first.key })).toMatchObject([{ id: first.id, name: 'Live first' }]);
+      expect(await groups.findBy({ key: third.key })).toMatchObject([{ id: third.id, name: 'Live third' }]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
   }, 120_000);
 });

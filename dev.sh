@@ -142,8 +142,8 @@ esac
 # The configuration bootstrap overlay is deliberately opt-in. A normal local
 # start must not mount an arbitrary host file or enable config bootstrap.
 if [[ -n "${EG_CONFIG_BUNDLE_HOST_PATH:-}" ]]; then
-  if [[ ! -f "$EG_CONFIG_BUNDLE_HOST_PATH" ]]; then
-    echo "EG_CONFIG_BUNDLE_HOST_PATH must reference an existing JSON or ZIP bundle: $EG_CONFIG_BUNDLE_HOST_PATH" >&2
+  if [[ ! -f "$EG_CONFIG_BUNDLE_HOST_PATH" && ! -d "$EG_CONFIG_BUNDLE_HOST_PATH" ]]; then
+    echo "EG_CONFIG_BUNDLE_HOST_PATH must reference an existing JSON or ZIP bundle or a bundle directory: $EG_CONFIG_BUNDLE_HOST_PATH" >&2
     exit 1
   fi
   COMPOSE_ARGS+=( -f "$COMPOSE_DIR/docker-compose.config-bundle.yml" )
