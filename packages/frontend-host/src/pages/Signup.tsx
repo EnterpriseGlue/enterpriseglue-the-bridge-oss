@@ -43,10 +43,9 @@ export default function Signup() {
   }
   if (cloudSignupAvailable) {
     return (
-      <PublicAuthShell title={documentation ? "Create your EnterpriseGlue account" : "Create your Cloud account"} description={documentation ? "Create a free account to read documentation. No Cloud organization or workspace is required." : "Use an available identity provider, then create your EnterpriseGlue organization."}>
+      <PublicAuthShell title={documentation ? "Create your EnterpriseGlue account" : "Create your Cloud account"} description={documentation ? "Create a free account to read documentation." : "Create an account to request an EnterpriseGlue organization."}>
         <Stack gap={5}>
           {error ? <InlineNotification kind="error" lowContrast hideCloseButton title="Signup unavailable" subtitle={error} /> : null}
-          {!error && providers?.length === 0 ? <InlineNotification kind="info" lowContrast hideCloseButton title="No signup method configured" subtitle="A Cloud account identity provider must be configured before signup can continue." /> : null}
           {providers?.length ? <div className="eg-login-provider-list">
             {providers.map((provider, index) => <LoginProviderButton
               key={provider.id}
@@ -61,7 +60,7 @@ export default function Signup() {
               <Email size={20} aria-hidden="true" className="eg-login-provider-logo" />
               <span className="eg-login-provider-button__action">Continue with email</span>
             </Link>
-            <p id="cloud-email-signup-description" className="eg-login-email-description">Verify your email, then create a passkey for secure sign-in.</p>
+            <p id="cloud-email-signup-description" className="eg-login-email-description">We’ll send you a one-time sign-in link. You can add a passkey after signing in.</p>
           </div>}
           {error ? <Button kind="secondary" onClick={() => void load()}>Retry</Button> : null}
           <Button as={Link} kind="ghost" to={documentation ? "/documentation/access" : "/login"} renderIcon={Login}>Already have an account?</Button>
