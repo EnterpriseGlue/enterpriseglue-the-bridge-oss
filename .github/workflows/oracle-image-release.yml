@@ -195,8 +195,29 @@ jobs:
           subject-name: ${{ steps.publication.outputs.image }}
           subject-digest: ${{ steps.publication.outputs.digest }}
           push-to-registry: true
+      - name: Sign and verify the publication receipt in GHCR
+        env:
+          IMAGE: ${{ steps.publication.outputs.image }}
+          DIGEST: ${{ steps.publication.outputs.digest }}
+        run: |
+          set -euo pipefail
+          subject="$IMAGE@$DIGEST"
+          predicate_type=https://enterpriseglue.ai/attestations/oracle-image-publication/v1
+          signer="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/oracle-image-release.yml@$GITHUB_REF"
+          cosign attest --yes --type "$predicate_type" --predicate oracle-image-publication.json "$subject"
+          verified=$(cosign verify-attestation --type "$predicate_type" \
+            --certificate-identity "$signer" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-github-workflow-sha "$GITHUB_SHA" "$subject")
+          # The receipt variable belongs to jq.
+          # shellcheck disable=SC2016
+          jq -se --slurpfile receipt oracle-image-publication.json \
+            'any(.[]; (.payload | @base64d | fromjson | .predicate) == $receipt[0])' <<< "$verified" >/dev/null
+          printf 'Oracle image and signed publication receipt verified in GHCR.\n\n    %s\n' "$subject" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: archive
         if: always()
+        continue-on-error: true
         with:
           name: oracle-image-publication-${{ inputs.release_tag }}
           path: |
@@ -204,3 +225,8 @@ jobs:
             oracle-image-publication.json
             oracle-*-security
           if-no-files-found: warn
+      - name: Report supplementary archive failure
+        if: ${{ always() && steps.archive.outcome == 'failure' }}
+        run: |
+          echo '::warning::GitHub Actions could not archive the Oracle evidence files. Check the registry receipt verification step for publication status.'
+          echo 'GitHub Actions evidence archive failed. Check the registry receipt verification step for publication status.' >> "$GITHUB_STEP_SUMMARY"

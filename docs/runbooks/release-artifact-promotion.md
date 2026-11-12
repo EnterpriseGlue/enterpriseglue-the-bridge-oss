@@ -237,6 +237,29 @@ The retained publication receipt records the released source, protected
 controller revision, original qualification run and unchanged architecture
 image IDs separately.
 
+The Oracle publisher signs the receipt as an attestation on the immutable
+GHCR digest and verifies the signed payload before reporting success. The
+GitHub Actions archive provides a supplementary copy of the receipt and scan
+reports. An archive failure raises a workflow warning. Required scans,
+signatures, provenance, and registry receipt verification still gate success.
+
+Retrieve the receipt using the published digest and the protected workflow
+identity.
+
+```bash
+cosign verify-attestation \
+  --type https://enterpriseglue.ai/attestations/oracle-image-publication/v1 \
+  --certificate-identity https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/oracle-image-release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  'ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend-oracle@sha256:<digest>' |
+  jq -r '.payload | @base64d | fromjson | .predicate'
+```
+
+For an older image without this receipt attestation, verify the published
+manifest, its two platform signatures, build provenance, and per-platform
+SBOM attestations directly in GHCR. Keep the version tag pinned while
+recovering this evidence.
+
 ```bash
 gh workflow run oracle-image-release.yml --ref main \
   -f source_ref=<frozen-release-SHA> -f release_tag=vX.Y.Z \
