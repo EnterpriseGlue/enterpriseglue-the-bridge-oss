@@ -48,26 +48,7 @@
   "validation": [
     "Restricted PostgreSQL tests verified profile linking, one user identity, tenant enforcement, refresh and authorized policy recovery."
   ],
-  "packages": [
-    {
-      "name": "@enterpriseglue/backend-host",
-      "previousVersion": "0.24.2",
-      "newVersion": "0.24.3",
-      "impact": "patch"
-    },
-    {
-      "name": "@enterpriseglue/frontend-host",
-      "previousVersion": "0.20.18",
-      "newVersion": "0.20.19",
-      "impact": "patch"
-    },
-    {
-      "name": "@enterpriseglue/shared",
-      "previousVersion": "0.28.14",
-      "newVersion": "0.28.15",
-      "impact": "patch"
-    }
-  ],
+  "packages": [],
   "customerDocumentation": {
     "impact": "required",
     "owner": "documentation-maintainers",

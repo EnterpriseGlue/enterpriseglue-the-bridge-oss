@@ -39,7 +39,10 @@ const tenantService = vi.hoisted(() => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({ loginMethodService }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', () => ({ genericOidcService }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/shared/services/platform-admin/GenericOidcService.js')>(),
+  genericOidcService,
+}));
 vi.mock('@enterpriseglue/shared/services/platform-admin/GenericSamlService.js', () => ({ genericSamlService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js', () => ({ samlAssertionReplayService }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js', () => ({ IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService }));
