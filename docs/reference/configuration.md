@@ -210,6 +210,10 @@ rollback qualification gates pass for the intended deployment.
   The private notification endpoint accepts only the release controller token
   and the exact serving release ID. Requester emails go to the verified
   account on the request.
+  Onboarding can request a claim with
+  `{"action":"platform.tenants.self_create","includeRequester":true}`.
+  The host derives the requester email and sign-in method from the current
+  verified session.
 - The global Microsoft provider can use the `common/v2.0` issuer for work,
   school and personal accounts. Use the application’s exact neutral callback
   URL and the `openid email profile` scopes. A new Microsoft subject verifies

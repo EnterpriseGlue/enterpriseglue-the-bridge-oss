@@ -2994,7 +2994,13 @@ registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
 registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
 registry.register('TenantCloudIdentityResponse', TenantCloudIdentityResponseSchema);
 registry.register('PlatformCloudIdentityClaims', PlatformCloudIdentityClaimsSchema);
-registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityRequestSchema);
+const PlatformCloudIdentityOpenApiRequest = PlatformCloudIdentityRequestSchema.openapi({
+  oneOf: [
+    { not: { required: ['includeRequester'] } },
+    { required: ['includeRequester'], properties: { action: { type: 'string', enum: ['platform.tenants.self_create'] } } },
+  ],
+});
+registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityOpenApiRequest);
 registry.register('PlatformCloudIdentityResponse', PlatformCloudIdentityResponseSchema);
 registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
 registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
@@ -3235,7 +3241,7 @@ registry.registerPath({
     'platform.tenants.read',
     'platform.tenants.manage',
   ], 'POST', '/api/platform/cloud-identity'),
-  request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityRequestSchema } } } },
+  request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityOpenApiRequest } } } },
   responses: {
     200: { description: 'Short-lived identity for exactly one authorized platform tenant action', content: { 'application/json': { schema: PlatformCloudIdentityResponseSchema } } },
     400: { description: 'The requested action is missing, unsupported, or malformed' },

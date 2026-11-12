@@ -54,6 +54,11 @@ describe('native tenant contracts', () => {
       .toEqual({ action: 'platform.tenants.self_create' });
     expect(PlatformCloudIdentityRequestSchema.parse({ action: 'platform.tenants.read' }))
       .toEqual({ action: 'platform.tenants.read' });
+    expect(PlatformCloudIdentityRequestSchema.parse({ action: 'platform.tenants.self_create', includeRequester: true }))
+      .toEqual({ action: 'platform.tenants.self_create', includeRequester: true });
+    expect(PlatformCloudIdentityRequestSchema.safeParse({ action: 'platform.tenants.read', includeRequester: true }).success).toBe(false);
+    expect(PlatformCloudIdentityRequestSchema.safeParse({ action: 'platform.tenants.manage', includeRequester: true }).success).toBe(false);
+    expect(PlatformCloudIdentityRequestSchema.safeParse({ action: 'platform.tenants.self_create', includeRequester: false }).success).toBe(false);
     expect(PlatformCloudIdentityResponseSchema.parse({
       token: 'a'.repeat(32), expiresIn: 90, action: 'platform.tenants.manage',
     }).expiresIn).toBe(90);

@@ -52,7 +52,12 @@ describe('platform Cloud identity OpenAPI', () => {
       type: 'object',
       additionalProperties: false,
       required: ['action'],
-      properties: { action: { enum: ['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage'] } },
+      properties: { action: { enum: ['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage'] },
+        includeRequester: { type: 'boolean', enum: [true] } },
+      oneOf: [
+        { not: { required: ['includeRequester'] } },
+        { required: ['includeRequester'], properties: { action: { enum: ['platform.tenants.self_create'] } } },
+      ],
     });
     expect(responseSchema).toMatchObject({
       type: 'object',
@@ -60,7 +65,19 @@ describe('platform Cloud identity OpenAPI', () => {
       required: ['token', 'expiresIn', 'action'],
       properties: { expiresIn: { enum: [90] } },
     });
-    expect(document.components.schemas.PlatformCloudIdentityClaims).toMatchObject({ type: 'object' });
+    const claims = document.components.schemas.PlatformCloudIdentityClaims.oneOf;
+    expect(claims).toHaveLength(2);
+    expect(claims[0]).toMatchObject({
+      type: 'object', additionalProperties: false,
+      properties: { schemaVersion: { enum: ['platform-cloud-identity.enterpriseglue.io/v1'] } },
+    });
+    expect(claims[0].properties).not.toHaveProperty('requester');
+    expect(claims[1]).toMatchObject({
+      type: 'object', additionalProperties: false,
+      properties: { schemaVersion: { enum: ['platform-cloud-identity.enterpriseglue.io/v2'] },
+        action: { enum: ['platform.tenants.self_create'] } },
+    });
+    expect(claims[1].required).toContain('requester');
     expect(exchange.responses).toHaveProperty('403');
     expect(exchange.responses).toHaveProperty('503');
     expect(document.paths['/api/platform/tenants'].get.responses).not.toHaveProperty('503');

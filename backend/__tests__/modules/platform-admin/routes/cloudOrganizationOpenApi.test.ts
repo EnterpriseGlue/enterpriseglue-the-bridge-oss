@@ -35,7 +35,13 @@ describe('Cloud organization request host contract', () => {
     const claim = paths[identity].post;
     expect(claim.description).toContain('platform.tenants.self_create');
     const requestSchema = claim.requestBody.content['application/json'].schema;
-    expect(requestSchema.properties.includeRequester).toMatchObject({ type: 'boolean', enum: [true] });
-    expect(requestSchema.required).not.toContain('includeRequester');
+    expect(requestSchema).toMatchObject({
+      required: ['action'],
+      properties: { includeRequester: { type: 'boolean', enum: [true] } },
+      oneOf: [
+        { not: { required: ['includeRequester'] } },
+        { required: ['includeRequester'], properties: { action: { enum: ['platform.tenants.self_create'] } } },
+      ],
+    });
   });
 });
