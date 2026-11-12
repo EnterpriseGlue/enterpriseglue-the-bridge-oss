@@ -2,7 +2,7 @@
   "$schema": "./schema.json",
   "schemaVersion": 1,
   "id": "cloud-microsoft-account-verification",
-  "type": "feat",
+  "type": "feature",
   "scope": "cloud-authentication",
   "breaking": false,
   "audiences": [
