@@ -33,8 +33,17 @@ describe('Signup', () => {
     const email = screen.getByRole('link', { name: 'Continue with email' });
     expect(email).toHaveAttribute('href', '/signup/email');
     expect(email).toHaveClass('eg-login-provider-button', 'eg-login-provider-button--email');
-    expect(email).toHaveAccessibleDescription('Verify your email, then create a passkey for secure sign-in.');
+    expect(email).toHaveAccessibleDescription('We’ll send you a one-time sign-in link. You can add a passkey after signing in.');
+    expect(screen.getByText('Create an account to request an EnterpriseGlue organization.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Already have an account/i })).toHaveAttribute('href', '/login');
+  });
+
+  it('offers email signup when no other providers are enabled', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue([]);
+    render(<MemoryRouter><Signup /></MemoryRouter>);
+
+    expect(await screen.findByRole('link', { name: 'Continue with email' })).toHaveAttribute('href', '/signup/email');
+    expect(screen.queryByText('No signup method configured')).not.toBeInTheDocument();
   });
 
   it('preserves the self-hosted administrator-created account message when Cloud signup is disabled', async () => {

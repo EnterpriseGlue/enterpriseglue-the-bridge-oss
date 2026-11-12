@@ -11,7 +11,8 @@
   ],
   "summary": "Expose a dashboard slot for first-run project and engine setup actions.",
   "userImpact": [
-    "A compatible Cloud plugin can guide new workspace administrators into the existing setup flows."
+    "A compatible Cloud plugin can guide new workspace administrators into the existing setup flows.",
+    "Cloud signup describes organization requests and explains that email sign-in works with a one-time link and offers optional passkey setup."
   ],
   "upgrade": {
     "required": false,

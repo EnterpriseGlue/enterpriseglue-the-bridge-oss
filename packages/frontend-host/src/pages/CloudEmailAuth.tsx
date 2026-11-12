@@ -128,7 +128,7 @@ export default function CloudEmailAuth() {
     : mode === 'register' ? 'Create your passkey' : mode === 'signin' ? 'Sign in with a passkey'
       : emailSignedIn ? 'Add a passkey' : 'Sign in with your email link';
   const description = mode === 'request'
-    ? (documentation ? 'We’ll email you a verification link. Then you can create a passkey.' : 'We’ll send a one-time sign-in link to your email address.')
+    ? 'We’ll send a one-time sign-in link to your email address.'
     : mode === 'register'
       ? 'Your email is verified. Save a passkey to this device or password manager to secure your EnterpriseGlue account.'
       : mode === 'signin' ? 'Use the passkey you created for your EnterpriseGlue account.'
