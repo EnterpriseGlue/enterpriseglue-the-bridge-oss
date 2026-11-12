@@ -9,6 +9,17 @@ split runtime, API replicas serve HTTP without running background pollers and wo
 pollers without listening publicly. Set `workers.enabled=false` to retain the historical combined
 process. That option and `EG_RUNTIME_ROLE=all` preserve self-hosted compatibility.
 
+## Frontend upstream TLS
+
+The default frontend upstream is the chart's HTTP API service. Set
+`frontend.upstream.scheme: https` and provide the address of a deployment-owned
+TLS gateway in `frontend.upstream.address`. The chart can mount existing CA and
+client credential Secrets on the frontend, and `frontend.upstream.readinessHost`
+sets the HTTP Host header for the proxied readiness probe. The configuration
+reference covers Secret keys, certificate rotation, and
+`networkPolicy.allowDirectFrontendToApi` for enforcing the gateway route.
+[Frontend upstream TLS settings](../../../../docs/reference/configuration.md#frontend-nginx-upstream-tls)
+
 ## Database authority
 
 The pre-install/pre-upgrade migration hook uses `database.migrationSecretName` and applies schema

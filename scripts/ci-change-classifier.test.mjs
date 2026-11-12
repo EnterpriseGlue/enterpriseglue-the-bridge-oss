@@ -365,6 +365,21 @@ test('frontend bundle delivery changes retain focused acceptance and execute the
   assert.match(workflow, /- name: Build frontend and enforce public bundle budgets[\s\S]*?pnpm --filter frontend-host run build[\s\S]*?pnpm --filter webmodeler-frontend run build/);
 });
 
+test('frontend upstream TLS runtime and contract checks select the application image lane', () => {
+  for (const path of [
+    'frontend/nginx-entrypoint.sh',
+    'scripts/frontend-upstream-tls.test.mjs',
+    'scripts/frontend-runtime-config-deployment.test.mjs',
+  ]) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.unknown_high_risk, false, path);
+    assert.equal(result.run_ci_images, true, path);
+    assert.equal(result.run_database_matrix, false, path);
+  }
+  const notes = classifyChangedFiles(['.release-notes/frontend-upstream-tls.json']);
+  assert.equal(notes.run_ci_images, false);
+});
+
 test('diagram-readiness release fixes select focused UI, engine-browser, and image contracts', () => {
   const result = classifyChangedFiles([
     'packages/frontend-host/src/features/mission-control/process-instance-detail/ProcessInstanceDetailPage.tsx',

@@ -199,6 +199,11 @@ Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 | API_BASE_URL | No | empty in prod | Preferred compose-level env alias for API origin; consumed at frontend image build time |
 | VITE_API_BASE_URL | No | mapped from `API_BASE_URL` | Frontend runtime variable exposed by Vite |
 | API_UPSTREAM | No | `backend:${API_PORT}` | Frontend Nginx runtime upstream override |
+| API_UPSTREAM_SCHEME | No | `http` | Frontend NGINX upstream transport. Set `https` for verified TLS to a deployment-owned endpoint. |
+| API_UPSTREAM_TLS_CA_FILE | No | Image CA bundle | Optional mounted PEM CA bundle for the HTTPS upstream. |
+| API_UPSTREAM_TLS_SERVER_NAME | No | Upstream hostname | Optional DNS name for upstream SNI and certificate verification. |
+| API_UPSTREAM_TLS_CLIENT_CERT_FILE | For mTLS | — | Mounted PEM client certificate and any intermediates. |
+| API_UPSTREAM_TLS_CLIENT_KEY_FILE | For mTLS | — | Mounted unencrypted PEM private key matching the client certificate. |
 | EG_FRONTEND_RUNTIME_API_BASE_URL | No | empty | Container-start browser API origin override; absolute HTTP(S), no credentials/query/fragment; generated into the same-origin runtime configuration document |
 | EG_FRONTEND_RUNTIME_CONFIG_REQUIRED | No | `false` | Fail frontend startup when the generated runtime document does not provide a usable API base URL |
 | EG_XSRF_COOKIE_DOMAIN | No | host-only | Backend-only explicit shared parent domain for the application XSRF-TOKEN cookie on split frontend/API subdomains; must contain FRONTEND_URL. Names are fixed: XSRF-TOKEN and X-XSRF-TOKEN. |

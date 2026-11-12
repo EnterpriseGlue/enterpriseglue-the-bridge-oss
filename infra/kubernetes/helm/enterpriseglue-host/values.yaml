@@ -36,6 +36,18 @@ cloudEmailSignupProtection:
 
 frontend:
   replicas: 2
+  upstream:
+    # Leave address empty to use the chart's HTTP backend service.
+    address: ""
+    scheme: http
+    # Optional public HTTP Host header for the proxied readiness check.
+    readinessHost: ""
+    tls:
+      serverName: ""
+      # Optional existing Secrets. The CA Secret supplies ca.crt and the
+      # client Secret supplies tls.crt and tls.key.
+      caSecretName: ""
+      clientSecretName: ""
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { cpu: "1", memory: 512Mi }
@@ -181,8 +193,9 @@ ingress:
 
 networkPolicy:
   enabled: true
-  # Selectors identify the ingress-controller pods allowed to reach only the
-  # frontend. The backend is reachable only from frontend pods in this release.
+  # Turn off direct frontend-to-API access once the TLS gateway is in service.
+  allowDirectFrontendToApi: true
+  # Selectors identify the ingress-controller pods allowed to reach the frontend.
   ingressNamespaceSelector: {}
   ingressPodSelector: {}
 

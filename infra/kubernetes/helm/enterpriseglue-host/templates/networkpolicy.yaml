@@ -43,6 +43,7 @@ spec:
               {{- end }}
       ports:
         - { protocol: TCP, port: 8080 }
+{{- if or (not (hasKey .Values.networkPolicy "allowDirectFrontendToApi")) .Values.networkPolicy.allowDirectFrontendToApi }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -63,5 +64,6 @@ spec:
               {{- include "enterpriseglue-host.selectorLabels" (dict "root" . "component" "frontend") | nindent 14 }}
       ports:
         - { protocol: TCP, port: 8787 }
+{{- end }}
 {{- end }}
 

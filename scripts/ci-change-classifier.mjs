@@ -186,7 +186,9 @@ const classifiers = {
   application_container: [
     /^patches\/[^/]+\.patch$/,
     /^(?:backend|frontend)\/Dockerfile(?:\.prod|\.oracle-dev)?$/,
+    /^frontend\/nginx-entrypoint\.sh$/,
     /^infra\/docker\//,
+    /^scripts\/frontend-(?:runtime-config-deployment|upstream-tls)\.test\.mjs$/,
     /^scripts\/(?:smoke-images-local|e2e-smoke-postgres-images|run-trivy-image-scan|check-release-dockerfile-pins)/,
     /^\.github\/workflows\/(?:docker-images|docker-images-reusable|security-nightly|security-nightly-reusable)\.yml$/,
   ],

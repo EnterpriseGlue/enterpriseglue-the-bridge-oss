@@ -61,7 +61,7 @@ spec:
             failureThreshold: 6
           livenessProbe:
             httpGet:
-              path: /health
+              path: /_enterpriseglue/frontend-health
               port: http
             initialDelaySeconds: 20
             periodSeconds: 15

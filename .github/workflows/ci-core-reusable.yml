@@ -544,6 +544,14 @@ jobs:
             -t eg-local-frontend:pr \
             .
 
+      - name: Set up Node for frontend image verification
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Verify frontend upstream TLS
+        run: node --test scripts/frontend-upstream-tls.test.mjs
+
       - name: Export local images
         run: |
           docker save eg-local-backend:pr | gzip -1 > eg-local-backend-pr.tar.gz
